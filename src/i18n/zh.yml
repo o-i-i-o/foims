@@ -1,0 +1,55 @@
+# Chinese language resources
+
+# System messages
+system:
+  start: "启动IPMA服务器..."
+  config_loaded: "加载配置成功: {{config}}"
+  db_pool_created: "数据库连接池创建成功"
+  init_mode_enabled: "初始化模式已启用: 仅初始化路由可用"
+  init_mode_disabled: "初始化模式已禁用: 完整应用路由可用"
+  auto_https_enabled: "自动HTTPS已启用: 自动将HTTP重定向到HTTPS"
+  http_server_started: "HTTP服务器运行在 http://{{address}}:{{port}}"
+  https_server_started: "HTTPS服务器运行在 https://{{address}}:{{port}}"
+  http_version: "HTTP版本: {{version}}"
+  cert_type: "证书类型: {{type}}"
+  cert_generated: "自签名证书生成成功"
+  http3_server_started: "HTTP/3服务器启动成功"
+  connection_error: "连接错误: {{error}}"
+  stream_error: "流错误: {{error}}"
+
+# API messages
+api:
+  success: "操作成功"
+  failed: "操作失败"
+  login_failed: "用户名或密码错误"
+  invalid_email_or_code: "邮箱或验证码错误"
+  account_disabled: "账户已被禁用，请联系管理员"
+  device_validation_failed: "设备验证失败"
+  missing_field: "缺少必填字段: {{field}}"
+  invalid_type: "字段类型错误: {{info}}"
+  json_error: "JSON格式错误: {{error}}"
+
+# Log messages
+log:
+  output_to: "日志输出到: {{path}}"
+  database_connected: "数据库连接成功"
+  database_error: "数据库错误: {{error}}"
+  user_login: "用户 {{username}} 从 {{ip}} 登录"
+  user_logout: "用户 {{username}} 登出"
+  user_created: "用户 {{username}} 创建"
+  user_updated: "用户 {{username}} 更新"
+  user_deleted: "用户 {{username}} 删除"
+  resource_created: "{{resource}} {{name}} 创建"
+  resource_updated: "{{resource}} {{name}} 更新"
+  resource_deleted: "{{resource}} {{name}} 删除"
+
+# Error messages
+error:
+  internal_server: "内部服务器错误"
+  not_found: "资源未找到"
+  unauthorized: "未授权访问"
+  forbidden: "访问被禁止"
+  bad_request: "请求参数错误"
+  validation_failed: "验证失败"
+  database_error: "数据库错误"
+  network_error: "网络错误"

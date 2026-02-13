@@ -1,0 +1,1025 @@
+// 国际化支持
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+use uuid::Uuid;
+use validator::{Validate, ValidationError};
+
+// 验证房间类型（字符串版本）
+pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError> {
+    let room_type_lower = room_type.to_lowercase();
+    if room_type_lower == "office" || room_type_lower == "data_center" {
+        Ok(())
+    } else {
+        Err(ValidationError::new("房间类型必须是office或data_center"))
+    }
+}
+
+// 验证房间类型（Option版本）
+pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationError> {
+    let room_type_lower = room_type.to_lowercase();
+    if room_type_lower == "office" || room_type_lower == "data_center" {
+        Ok(())
+    } else {
+        Err(ValidationError::new("房间类型必须是office或data_center"))
+    }
+}
+
+// 将房间类型转换为数据库存储格式（大写）
+pub fn to_db_room_type(room_type: &str) -> String {
+    let room_type_lower = room_type.to_lowercase();
+    match room_type_lower.as_str() {
+        "office" => "OFFICE".to_string(),
+        "data_center" => "DATA_CENTER".to_string(),
+        _ => room_type_lower,
+    }
+}
+
+// 位置信息模型
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Position {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub rotation: f64,
+}
+
+// 布局保存请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct LayoutSaveRequest {
+    pub r#type: String, // workstation, network_region 或 cabinet
+    pub room_id: Option<Uuid>,
+    pub network_region_id: Option<Uuid>,
+    pub cabinet_id: Option<Uuid>,
+    pub layout: Vec<LayoutItem>,
+}
+
+// 布局项
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct LayoutItem {
+    pub id: Uuid,
+    pub position: Position,
+    pub element_type: String, // workstation 或 door
+}
+
+// 用户模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct User {
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
+    pub role: String,
+    pub status: bool,
+    pub two_factor_enabled: bool,
+    pub two_factor_verified: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UserCreate {
+    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    pub username: String,
+    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    pub password: String,
+    #[validate(email(message = "请输入有效的邮箱地址"))]
+    pub email: String,
+    #[validate(length(min = 1, max = 20, message = "角色长度必须在1到20个字符之间"))]
+    pub role: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UserUpdate {
+    #[validate(email(message = "请输入有效的邮箱地址"))]
+    pub email: Option<String>,
+    #[validate(length(min = 1, max = 20, message = "角色长度必须在1到20个字符之间"))]
+    pub role: Option<String>,
+    pub status: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UserLogin {
+    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    pub username: String,
+    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    pub password: String,
+    pub remember_me: Option<bool>,
+}
+
+// 密码找回请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct ForgotPasswordRequest {
+    #[validate(email(message = "请输入有效的邮箱地址"))]
+    pub email: String,
+}
+
+// 密码重置请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct ResetPasswordRequest {
+    #[validate(length(min = 1))]
+    pub token: String,
+    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    pub new_password: String,
+}
+
+// 2FA相关模型
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TwoFactorEnableRequest {
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    pub code: String,
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TwoFactorVerifyRequest {
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    pub code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TwoFactorDisableRequest {
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    pub code: String,
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TwoFactorInitRequest {
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TwoFactorConfigResponse {
+    pub secret: String,
+    pub qr_code: String,
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TwoFactorLoginRequest {
+    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    pub username: String,
+    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    pub password: String,
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    pub two_factor_code: String,
+    pub remember_me: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SendTwoFactorCodeRequest {
+    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    pub username: String,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SendLoginCodeRequest {
+    #[validate(email(message = "请输入有效的邮箱地址"))]
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct EmailLoginRequest {
+    #[validate(email(message = "请输入有效的邮箱地址"))]
+    pub email: String,
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    pub code: String,
+    pub remember_me: Option<bool>,
+}
+
+// 网络区域模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct NetworkRegion {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkRegionCreate {
+    #[validate(length(min = 1, max = 20, message = "网络区域名称长度必须在1到20个字符之间"))]
+    pub name: String,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkRegionUpdate {
+    #[validate(length(min = 1, max = 20, message = "网络区域名称长度必须在1到20个字符之间"))]
+    pub name: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 网络模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Network {
+    pub id: Uuid,
+    pub name: String,
+    pub network_region_id: Uuid,
+    pub network_region: String,
+    pub ipv4_cidr: Option<String>,
+    pub ipv6_cidr: Option<String>,
+    pub ipv4_gateway: Option<String>,
+    pub ipv6_gateway: Option<String>,
+    pub ipv4_dns: Option<String>,
+    pub ipv6_dns: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkCreate {
+    #[validate(length(min = 1, max = 50, message = "网络名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub network_region_id: Uuid,
+    pub ipv4_cidr: Option<String>,
+    pub ipv6_cidr: Option<String>,
+    pub ipv4_gateway: Option<String>,
+    pub ipv6_gateway: Option<String>,
+    pub ipv4_dns: Option<String>,
+    pub ipv6_dns: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkUpdate {
+    #[validate(length(min = 1, max = 50, message = "网络名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    pub network_region_id: Option<Uuid>,
+    pub ipv4_cidr: Option<String>,
+    pub ipv6_cidr: Option<String>,
+    pub ipv4_gateway: Option<String>,
+    pub ipv6_gateway: Option<String>,
+    pub ipv4_dns: Option<String>,
+    pub ipv6_dns: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 工位-交换机端口关联模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct WorkstationPort {
+    pub id: Uuid,
+    pub workstation_id: Uuid,
+    pub workstation_name: Option<String>,
+    pub switch_port_id: Uuid,
+    pub switch_port_number: Option<String>,
+    pub switch_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 工位-交换机端口关联模型（带交换机端口信息）
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct WorkstationPortWithSwitchPort {
+    pub id: Uuid,
+    pub workstation_id: Uuid,
+    pub switch_port_id: Uuid,
+    pub switch_id: Option<Uuid>,
+    pub switch_name: String,
+    pub port_number: String,
+    pub port_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 房间模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Room {
+    pub id: Uuid,
+    pub name: String,
+    pub room_type: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 房间网络关联模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct RoomNetwork {
+    pub id: Uuid,
+    pub room_id: Uuid,
+    pub network_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 门模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Door {
+    pub id: Uuid,
+    pub room_id: Uuid,
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub rotation: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带网络列表的房间模型
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RoomWithNetworks {
+    pub id: Uuid,
+    pub name: String,
+    pub room_type: String,
+    pub description: Option<String>,
+    pub networks: Vec<NetworkInfo>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 网络信息模型，用于返回房间关联的网络列表
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct NetworkInfo {
+    pub id: Uuid,
+    pub name: String,
+    pub network_region: String,
+    pub network_region_id: Uuid,
+    pub ipv4_cidr: Option<String>,
+    pub ipv6_cidr: Option<String>,
+}
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct RoomNetworkDetail {
+    pub room_id: Uuid,
+    pub room_name: String,
+    pub room_type: String,
+    pub description: Option<String>,
+    pub network_id: Option<Uuid>,
+    pub network_name: Option<String>,
+    pub network_region: Option<String>,
+    pub network_region_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 机柜-网络关联详情模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CabinetNetworkDetail {
+    pub cabinet_id: Uuid,
+    pub cabinet_name: String,
+    pub room_id: Uuid,
+    pub capacity: i32,
+    pub description: Option<String>,
+    pub network_id: Option<Uuid>,
+    pub network_name: Option<String>,
+    pub network_region: Option<String>,
+    pub network_region_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct RoomCreate {
+    #[validate(length(min = 1, max = 50, message = "房间名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    #[validate(custom(
+        function = "validate_room_type_string",
+        message = "房间类型必须是office或data_center"
+    ))]
+    pub room_type: String,
+    pub network_ids: Vec<Uuid>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct RoomUpdate {
+    #[validate(length(min = 1, max = 50, message = "房间名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    #[validate(custom(
+        function = "validate_room_type_option",
+        message = "房间类型必须是office或data_center"
+    ))]
+    pub room_type: Option<String>,
+    pub network_ids: Option<Vec<Uuid>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 机柜网络关联模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CabinetNetwork {
+    pub id: Uuid,
+    pub cabinet_id: Uuid,
+    pub network_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 机柜模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Cabinet {
+    pub id: Uuid,
+    pub name: String,
+    pub room_id: Uuid,
+    pub capacity: i32,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带网络列表的机柜模型
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CabinetWithNetworks {
+    pub id: Uuid,
+    pub name: String,
+    pub room_id: Uuid,
+    pub capacity: i32,
+    pub networks: Vec<NetworkInfo>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetCreate {
+    #[validate(length(min = 1, max = 50, message = "机柜名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub room_id: Uuid,
+    #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
+    pub capacity: i32,
+    pub network_ids: Vec<Uuid>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetUpdate {
+    #[validate(length(min = 1, max = 50, message = "机柜名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    pub room_id: Option<Uuid>,
+    #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
+    pub capacity: Option<i32>,
+    pub network_ids: Option<Vec<Uuid>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 工位模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Workstation {
+    pub id: Uuid,
+    pub name: String,
+    pub room_id: Uuid,
+    pub room_name: Option<String>,
+    pub manager: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带房间和交换机端口信息的工位模型
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkstationWithDetails {
+    pub id: Uuid,
+    pub name: String,
+    pub room_id: Uuid,
+    pub room_name: String,
+    pub manager: Option<String>,
+    pub ports: Vec<WorkstationPortWithSwitchPort>,
+    pub ips: Vec<IpManager>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 工位创建请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct WorkstationCreate {
+    #[validate(length(min = 1, max = 50, message = "工位名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub room_id: Uuid,
+    #[validate(length(max = 50, message = "管理人长度不能超过50个字符"))]
+    pub manager: Option<String>,
+    pub ports: Option<Vec<WorkstationPortCreate>>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 工位端口创建请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct WorkstationPortCreate {
+    pub switch_port_id: Uuid,
+}
+
+// 工位更新请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct WorkstationUpdate {
+    #[validate(length(min = 1, max = 50, message = "工位名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    pub room_id: Option<Uuid>,
+    pub manager: Option<String>,
+    #[validate(length(min = 0, message = "端口列表不能为空"))]
+    pub ports: Option<Vec<WorkstationPortCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 机位-交换机端口关联模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CabinetPositionPort {
+    pub id: Uuid,
+    pub position_id: Uuid,
+    pub switch_port_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 机位-交换机端口关联模型（带交换机端口信息）
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CabinetPositionPortWithSwitchPort {
+    pub id: Uuid,
+    pub position_id: Uuid,
+    pub switch_port_id: Uuid,
+    pub switch_id: Uuid,
+    pub switch_name: String,
+    pub port_number: String,
+    pub port_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 机位模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CabinetPosition {
+    pub id: Uuid,
+    pub name: String,
+    pub cabinet_id: Uuid,
+    pub start_u: i32,
+    pub end_u: i32,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带机柜和网络端口信息的机位模型
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CabinetPositionWithDetails {
+    pub id: Uuid,
+    pub name: String,
+    pub cabinet_id: Uuid,
+    pub cabinet_name: String,
+    pub start_u: i32,
+    pub end_u: i32,
+    pub ports: Vec<CabinetPositionPortWithSwitchPort>,
+    pub ips: Vec<IpManager>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 机位创建请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetPositionCreate {
+    #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub cabinet_id: Uuid,
+    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
+    pub start_u: i32,
+    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
+    pub end_u: i32,
+    pub ports: Option<Vec<CabinetPositionPortCreate>>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 交换机端口关联创建请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetPositionPortCreate {
+    pub switch_port_id: Uuid,
+}
+
+// 机位更新请求
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetPositionUpdate {
+    #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
+    pub start_u: Option<i32>,
+    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
+    pub end_u: Option<i32>,
+    #[validate(length(min = 0, message = "端口列表不能为空"))]
+    pub ports: Option<Vec<CabinetPositionPortCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// IP模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct IpManager {
+    pub id: Uuid,
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub device_type: Option<String>,
+    pub network_id: Uuid,
+    pub ip_address: String,
+    pub ip_version: i16, // 4 for IPv4, 6 for IPv6
+    pub mac_address: Option<String>,
+    pub hostname: Option<String>,
+    pub status: String,
+    pub last_seen: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带工位和网络名称的IP模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct IpManagerWithNames {
+    pub id: Uuid,
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub device_type: Option<String>,
+    pub device_name: Option<String>,
+    pub network_id: Uuid,
+    pub workstation_name: Option<String>,
+    pub cabinet_position_name: Option<String>,
+    pub network_name: String,
+    pub network_region: String,
+    pub ip_address: String,
+    pub ip_version: i16,
+    pub mac_address: Option<String>,
+    pub hostname: Option<String>,
+    pub status: String,
+    pub last_seen: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct IpManagerCreate {
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub device_type: Option<String>,
+    pub network_id: Uuid,
+    pub network_region_id: Option<Uuid>,
+    pub ip_address: String,
+    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct IpManagerUpdate {
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub switch_id: Option<Uuid>,
+    pub device_type: Option<String>,
+    pub network_id: Option<Uuid>,
+    pub ip_address: Option<String>,
+    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
+    #[validate(length(max = 20, message = "状态长度不能超过20个字符"))]
+    pub status: Option<String>,
+    pub ip_version: Option<i16>,
+}
+
+// 操作日志模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct OperationLog {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub username: String,
+    pub action: String,
+    pub operation_type: String,
+    pub resource_type: String,
+    pub resource_id: Uuid,
+    pub details: Option<serde_json::Value>,
+    pub result: bool,
+    pub ip_address: String,
+    pub created_at: DateTime<Utc>,
+}
+
+// 任务执行日志模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct TaskLog {
+    pub id: Uuid,
+    pub task_name: String,
+    pub status: String,
+    pub details: serde_json::Value,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration: Option<i32>,
+}
+
+// 登录日志模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct LoginLog {
+    pub id: Uuid,
+    pub username: String,
+    pub ip_address: String,
+    pub user_agent: Option<String>,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+// 通知模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Notification {
+    pub id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub title: String,
+    pub content: String,
+    pub notification_type: String,
+    pub read: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+// 交换机模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Switch {
+    pub id: Uuid,
+    pub name: String,
+    pub network_region_id: Uuid,
+    pub network_id: Uuid,
+    pub ip_address: String,
+    pub mac_address: Option<String>,
+    pub model: Option<String>,
+    pub vendor: Option<String>,
+    pub management_ip: Option<String>,
+    pub location: Option<String>,
+    pub snmp_version: String,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: i32,
+    pub parent_switch_id: Option<Uuid>,
+    pub parent_port_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带上级交换机信息的交换机模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct SwitchWithParent {
+    pub id: Uuid,
+    pub name: String,
+    pub network_region_id: Uuid,
+    pub network_id: Uuid,
+    pub ip_address: String,
+    pub mac_address: Option<String>,
+    pub model: Option<String>,
+    pub vendor: Option<String>,
+    pub management_ip: Option<String>,
+    pub location: Option<String>,
+    pub snmp_version: String,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: i32,
+    pub parent_switch_id: Option<Uuid>,
+    pub parent_switch_name: Option<String>,
+    pub parent_port_id: Option<Uuid>,
+    pub parent_port_number: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SwitchCreate {
+    #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    pub network_region_id: Option<Uuid>,
+    pub network_id: Option<Uuid>,
+    pub ip_address: Option<String>,
+    #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
+    pub model: Option<String>,
+    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
+    pub vendor: Option<String>,
+    #[validate(length(max = 50, message = "管理IP长度不能超过50个字符"))]
+    pub management_ip: Option<String>,
+    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    pub location: Option<String>,
+    pub snmp_version: Option<String>,
+    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    pub snmp_community: Option<String>,
+    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
+    pub parent_switch_id: Option<Uuid>,
+    pub parent_port_id: Option<Uuid>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SwitchUpdate {
+    #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
+    pub model: Option<String>,
+    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
+    pub vendor: Option<String>,
+    #[validate(length(max = 50, message = "管理IP长度不能超过50个字符"))]
+    pub management_ip: Option<String>,
+    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    pub location: Option<String>,
+    pub snmp_version: Option<String>,
+    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    pub snmp_community: Option<String>,
+    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
+    pub parent_switch_id: Option<Uuid>,
+    pub parent_port_id: Option<Uuid>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// 交换机端口模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct SwitchPort {
+    pub id: Uuid,
+    pub switch_id: Uuid,
+    pub port_number: String,
+    pub port_name: Option<String>,
+    pub port_type: String,
+    pub vlan_id: Option<i32>,
+    pub status: String,
+    pub speed: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 带交换机信息的端口模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct SwitchPortWithSwitch {
+    pub id: Uuid,
+    pub switch_id: Uuid,
+    pub switch_name: String,
+    pub switch_ip: String,
+    pub port_number: String,
+    pub port_name: Option<String>,
+    pub port_type: String,
+    pub vlan_id: Option<i32>,
+    pub status: String,
+    pub speed: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SwitchPortCreate {
+    #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
+    pub port_number: String,
+    #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
+    pub port_name: Option<String>,
+    pub port_type: Option<String>,
+    pub vlan_id: Option<i32>,
+    pub status: Option<String>,
+    #[validate(length(max = 20, message = "速率长度不能超过20个字符"))]
+    pub speed: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SwitchPortUpdate {
+    #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
+    pub port_number: Option<String>,
+    #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
+    pub port_name: Option<String>,
+    pub port_type: Option<String>,
+    pub vlan_id: Option<i32>,
+    pub status: Option<String>,
+    #[validate(length(max = 20, message = "速率长度不能超过20个字符"))]
+    pub speed: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// SNMP测试请求
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SnmpTestRequest {
+    pub switch_id: Option<Uuid>,
+    pub ip_address: Option<String>,
+    pub snmp_version: Option<String>,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
+}
+
+// ARP表条目
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ArpEntry {
+    pub ip_address: String,
+    pub mac_address: String,
+    pub interface: Option<String>,
+}
+
+// 拉取MAC请求
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PullMacRequest {
+    pub switch_id: Uuid,
+}
+
+// API 响应模型
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub message: String,
+    pub data: Option<T>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedResponse<T> {
+    pub success: bool,
+    pub data: Vec<T>,
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+impl<T> ApiResponse<T> {
+    pub fn success(data: T, message: &str) -> Self {
+        Self {
+            success: true,
+            message: message.to_string(),
+            data: Some(data),
+        }
+    }
+
+    pub fn error(message: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    // 多语言版本的成功响应
+    pub fn success_i18n(data: T, message_key: &str, lang: &str) -> Self {
+        // 设置语言
+        rust_i18n::set_locale(lang);
+        let message = rust_i18n::t!(message_key);
+
+        Self {
+            success: true,
+            message: message.to_string(),
+            data: Some(data),
+        }
+    }
+
+    // 多语言版本的错误响应
+    pub fn error_i18n(message_key: &str, lang: &str) -> Self {
+        // 设置语言
+        rust_i18n::set_locale(lang);
+        let message = rust_i18n::t!(message_key);
+
+        Self {
+            success: false,
+            message: message.to_string(),
+            data: None,
+        }
+    }
+}

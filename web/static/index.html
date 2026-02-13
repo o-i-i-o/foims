@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="IPMA系统登录页面" />
+    <title>IPMA - 系统登录</title>
+    <link rel="stylesheet" href="/static/css/main.css" />
+    <!-- i18next 国际化支持 -->
+    <script src="/static/js/lib/i18next.js"></script>
+    <script src="/static/js/lib/i18next-browser-languagedetector.js"></script>
+  </head>
+  <body class="login-body" role="document">
+    <!-- 登录页面 -->
+    <main class="login-container" role="main">
+      <h1>IPMA 系统登录</h1>
+      
+      <!-- 登录模式 Tabs -->
+      <div class="login-tabs">
+        <button type="button" class="tab-btn active" data-tab="password-login">密码认证</button>
+        <button type="button" class="tab-btn" data-tab="email-login">邮箱认证</button>
+      </div>
+
+      <!-- 视图容器 -->
+      <div class="login-views">
+        
+        <!-- 登录视图（密码/邮箱） -->
+        <div id="login-view" class="view active">
+          <form id="login-form" aria-labelledby="login-heading">
+            <h2 id="login-heading" class="sr-only">登录表单</h2>
+
+            <!-- 密码登录区域 -->
+            <div id="password-login-section" class="login-section active">
+              <div class="form-group">
+                <label for="username">用户名或邮箱</label>
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  required
+                  aria-required="true"
+                  placeholder="请输入用户名或邮箱"
+                  autocomplete="username"
+                  aria-label="用户名或邮箱"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="password">密码</label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  required
+                  aria-required="true"
+                  placeholder="请输入密码"
+                  autocomplete="current-password"
+                  aria-label="密码"
+                />
+              </div>
+
+              <div class="form-group forgot-password">
+                <a href="#" id="forgot-password-link" class="link-text">忘记密码？</a>
+              </div>
+            </div>
+
+            <!-- 邮箱登录区域 -->
+            <div id="email-login-section" class="login-section">
+              <div class="form-group">
+                <label for="email-login-input">邮箱地址</label>
+                <input
+                  type="email"
+                  id="email-login-input"
+                  name="email"
+                  placeholder="请输入注册邮箱"
+                  autocomplete="email"
+                  aria-label="邮箱地址"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="email-login-code">验证码</label>
+                <div style="display: flex; gap: 10px;">
+                  <input
+                    type="text"
+                    id="email-login-code"
+                    name="email_code"
+                    placeholder="请输入6位验证码"
+                    autocomplete="one-time-code"
+                    aria-label="验证码"
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                  />
+                  <button type="button" id="send-login-code-btn" class="btn btn-secondary" style="white-space: nowrap;">发送验证码</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group remember-me">
+              <label for="remember-me" class="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="remember"
+                  id="remember-me"
+                  aria-label="保持登录"
+                />
+                保持登录
+              </label>
+            </div>
+
+            <button type="submit" id="login-submit-btn" class="btn btn-primary" aria-label="登录">
+              登录
+            </button>
+          </form>
+        </div>
+
+        <!-- 2FA 验证视图 (向导式) -->
+        <div id="two-factor-view" class="view">
+          <div class="view-header">
+            <h3>双重验证</h3>
+            <p class="view-desc">为了您的账户安全，请进行二次验证</p>
+          </div>
+          
+          <form id="two-factor-form">
+            <div class="form-group">
+              <label for="two-factor-code">验证码</label>
+              <input
+                type="text"
+                id="two-factor-code"
+                name="two_factor_code"
+                placeholder="请输入6位验证码"
+                autocomplete="one-time-code"
+                aria-label="验证码"
+                maxlength="6"
+                pattern="[0-9]{6}"
+                required
+              />
+            </div>
+            
+            <div class="form-group password-hint">
+              <small class="hint-text">请输入身份验证器生成的动态码</small>
+            </div>
+
+            <button type="submit" id="two-factor-submit-btn" class="btn btn-primary">
+              验证并登录
+            </button>
+            
+            <button type="button" id="back-to-login-btn" class="btn btn-text" style="width: 100%; margin-top: 10px;">
+              返回账号登录
+            </button>
+          </form>
+        </div>
+
+      </div>
+      
+      <div
+        id="login-error"
+        class="error-message"
+        role="alert"
+        aria-live="polite"
+      ></div>
+    </main>
+
+    <!-- 忘记密码模态框 -->
+    <div id="forgot-password-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">忘记密码</h3>
+          <span class="close" data-modal-id="forgot-password-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+          <form id="forgot-password-form">
+            <div class="form-group">
+              <label for="forgot-email">请输入您的注册邮箱</label>
+              <input
+                type="email"
+                id="forgot-email"
+                name="email"
+                required
+                placeholder="请输入邮箱地址"
+                aria-label="邮箱地址"
+              />
+            </div>
+            <div class="form-group">
+              <small class="hint-text">系统将向您的邮箱发送密码重置链接，请查收邮件。</small>
+            </div>
+            <div
+              id="forgot-password-error"
+              class="error-message"
+              role="alert"
+              aria-live="polite"
+            ></div>
+            <div
+              id="forgot-password-success"
+              class="success-message"
+              role="status"
+              aria-live="polite"
+            ></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-modal-id="forgot-password-modal"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            form="forgot-password-form"
+          >
+            发送重置邮件
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/static/js/login.js"></script>
+  </body>
+</html>

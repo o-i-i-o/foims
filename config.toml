@@ -1,0 +1,34 @@
+[database]
+host = "localhost"
+port = 5432
+database = "ipma"
+username = "postgres"
+password = "password"
+max_connections = 20
+query_timeout_secs = 30
+slow_query_threshold_ms = 1000
+
+[server]
+host = ""
+host_ipv6 = "::"
+http_enabled = true
+http_port = 80
+https_enabled = true
+https_port = 443
+auto_https = true
+http_version = "http3"
+cert_type = "self_signed"
+public_url = "https://192.168.6.102"
+page_timeout = 60
+
+[jwt]
+secret = "451#*jdhjhdfskdsHASDGJSAD256dgdfgs4dfs45werr2x"
+access_token_expiry = "15m"
+refresh_token_expiry = "7d"
+
+[init]
+enabled = false
+
+[i18n]
+default_language = "zh"
+supported_languages = ["zh", "en"]

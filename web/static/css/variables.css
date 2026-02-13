@@ -1,0 +1,75 @@
+:root {
+    --color-primary: #667eea;
+    --color-primary-hover: #5568d3;
+    --color-primary-light: rgba(102, 126, 234, 0.1);
+    --color-primary-shadow: rgba(102, 126, 234, 0.3);
+    
+    --color-secondary: #6c757d;
+    --color-secondary-hover: #5a6268;
+    
+    --color-success: #28a745;
+    --color-success-bg: #d4edda;
+    --color-success-text: #155724;
+    
+    --color-danger: #dc3545;
+    --color-danger-hover: #c82333;
+    --color-danger-bg: #f8d7da;
+    --color-danger-text: #721c24;
+    
+    --color-warning: #ffc107;
+    --color-warning-bg: #fff3cd;
+    --color-warning-text: #856404;
+    
+    --color-info: #17a2b8;
+    --color-info-hover: #138496;
+    --color-info-bg: #d1ecf1;
+    --color-info-text: #0c5460;
+    
+    --color-text: #333;
+    --color-text-secondary: #555;
+    --color-text-muted: #6c757d;
+    --color-text-light: #495057;
+    
+    --color-bg: #f8f9fa;
+    --color-bg-white: #fff;
+    --color-bg-card: #fff;
+    
+    --color-border: #ced4da;
+    --color-border-light: #e9ecef;
+    
+    --control-bg: #ffffff;
+    --control-bg-muted: #f8f9fa;
+    --control-border: #ced4da;
+    --control-border-hover: #b9c1cc;
+    --control-border-focus: #667eea;
+    --control-radius: 8px;
+    --control-height: 44px;
+    --control-padding-x: 0.85rem;
+    --control-padding-y: 0.6rem;
+    --control-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    
+    --btn-height: 44px;
+    --btn-padding-x: 1.1rem;
+    
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.2);
+    
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.2s ease;
+    --transition-slow: 0.3s ease;
+    
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    
+    --sidebar-width: 240px;
+    --header-height: 80px;
+}

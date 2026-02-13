@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPMA - 系统初始化</title>
+    <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script type="module">
+        import { showToast } from '/static/js/utils/ui.js';
+        
+        // DOM 加载完成后执行
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 全局变量
+            let currentStep = 1;
+            let dbStatus = null;
+            let resetDb = false;
+
+            // 切换到指定步骤
+            const goToStep = (stepNum) => {
+                // 隐藏所有步骤面板
+                document.querySelectorAll('.step-panel').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+
+                // 显示指定步骤面板
+                document.querySelector(`.step-panel[data-step="${stepNum}"]`).classList.add('active');
+
+                // 更新步骤指示器状态
+                document.querySelectorAll('.step').forEach(step => {
+                    const stepData = parseInt(step.dataset.step);
+                    if (stepData < stepNum) {
+                        step.classList.add('completed');
+                        step.classList.remove('active');
+                    } else if (stepData === stepNum) {
+                        step.classList.add('active');
+                        step.classList.remove('completed');
+                    } else {
+                        step.classList.remove('active', 'completed');
+                    }
+                });
+
+                currentStep = stepNum;
+            };
+
+            // 显示错误信息
+            const showError = (message) => {
+                const errorElement = document.getElementById('error-message');
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                
+                // 3秒后自动隐藏
+                setTimeout(() => {
+                    errorElement.style.display = 'none';
+                }, 3000);
+            };
+
+            // 显示加载指示器
+            const showLoading = () => {
+                document.getElementById('loading').style.display = 'flex';
+            };
+
+            // 隐藏加载指示器
+            const hideLoading = () => {
+                document.getElementById('loading').style.display = 'none';
+            };
+
+            // 检查PostgreSQL状态
+            const checkPostgreSQL = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/check-pgsql', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    const pgStatusElement = document.getElementById('pg-status');
+                    const nextButton = document.querySelector('.step-panel[data-step="1"] .btn-success');
+                    
+                    if (result.installed && result.running) {
+                        pgStatusElement.innerHTML = `
+                            <div class="status-success">✓</div>
+                            <h3>PostgreSQL 已安装并运行</h3>
+                            <p>${result.message || 'PostgreSQL 连接成功'}</p>
+                        `;
+                        pgStatusElement.classList.add('status-success');
+                        nextButton.disabled = false;
+                    } else {
+                        pgStatusElement.innerHTML = `
+                            <div class="status-error">✗</div>
+                            <h3>PostgreSQL 检查失败</h3>
+                            <p>${result.error || '未知错误'}</p>
+                            <div class="error-guide">
+                                <h4>解决建议：</h4>
+                                <ul>
+                                    ${!result.installed ? '<li>请先安装 PostgreSQL 数据库</li>' : ''}
+                                    ${result.installed && !result.running ? '<li>请启动 PostgreSQL 服务</li>' : ''}
+                                    <li>确保数据库配置正确</li>
+                                    <li>检查网络连接和防火墙设置</li>
+                                </ul>
+                            </div>
+                        `;
+                        pgStatusElement.classList.add('status-error');
+                        nextButton.disabled = true;
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            // 检查数据库状态
+            const checkDatabaseStatus = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/db-status', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        dbStatus = result.data;
+                        const dbStatusElement = document.getElementById('db-status');
+                        const resetSwitch = document.getElementById('reset-db');
+                        const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+                        
+                        // 重置状态元素样式
+                        dbStatusElement.className = 'status-container';
+                        
+                        if (dbStatus.connected) {
+                            if (!dbStatus.has_tables) {
+                                // 情况1: 有数据库，没有表
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-info">ℹ</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，但没有表结构。</p>
+                                    <p>系统将自动创建数据库表结构。</p>
+                                    <div style="margin-top: 15px;">
+                                        <button type="button" class="btn btn-primary" onclick="importDatabase()">导入数据库</button>
+                                        <p class="help-text">导入数据库将覆盖写入现有数据，请注意备份。</p>
+                                    </div>
+                                `;
+                                dbStatusElement.classList.add('status-info');
+                                resetSwitch.checked = false;
+                                resetSwitch.disabled = true;
+                            } else if (!dbStatus.required_tables_exist) {
+                                // 情况2: 有数据库，表结构不完整
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-warning">⚠</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，但表结构不完整。</p>
+                                    <p>系统将自动补全数据库表结构。</p>
+                                    <div style="margin-top: 15px;">
+                                        <button type="button" class="btn btn-primary" onclick="importDatabase()">导入数据库</button>
+                                        <p class="help-text">导入数据库将覆盖写入现有数据，请注意备份。</p>
+                                    </div>
+                                `;
+                                dbStatusElement.classList.add('status-warning');
+                                resetSwitch.checked = false;
+                                resetSwitch.disabled = true;
+                            } else if (dbStatus.has_data) {
+                                // 情况3: 有数据库，表结构完整，有数据
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-warning">⚠</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，表结构完整，且包含数据。</p>
+                                    <p>您可以选择是否重置数据库。</p>
+                                `;
+                                dbStatusElement.classList.add('status-warning');
+                                resetSwitch.disabled = false;
+                            } else {
+                                // 情况4: 有数据库，表结构完整，无数据
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-success">✓</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，表结构完整，且为空。</p>
+                                    <p>系统将跳过数据库初始化操作。</p>
+                                `;
+                                dbStatusElement.classList.add('status-success');
+                                resetSwitch.checked = false;
+                                resetSwitch.disabled = true;
+                            }
+                            nextButton.disabled = false;
+                        } else {
+                            // 数据库连接失败
+                            dbStatusElement.innerHTML = `
+                                <div class="status-error">✗</div>
+                                <h3>数据库连接失败</h3>
+                                <p>无法连接到数据库。</p>
+                                <p>系统将尝试自动创建数据库。</p>
+                                <div style="margin-top: 15px;">
+                                    <button type="button" class="btn btn-primary" onclick="importDatabase()">导入数据库</button>
+                                    <p class="help-text">导入数据库将覆盖写入现有数据，请注意备份。</p>
+                                </div>
+                            `;
+                            dbStatusElement.classList.add('status-error');
+                            nextButton.disabled = false;
+                        }
+                    } else {
+                        showError('检查数据库状态失败');
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            // 处理数据库状态表单提交
+            const handleDbStatusSubmit = async (e) => {
+                e.preventDefault();
+                
+                const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+                
+                // 禁用下一步按钮，防止重复点击
+                nextButton.disabled = true;
+                
+                // 检查是否需要执行数据库操作
+                let needDbOperation = false;
+                let operationType = '';
+                let successMessage = '';
+                
+                if (resetDb) {
+                    // 用户选择重置数据库
+                    needDbOperation = true;
+                    operationType = 'reset';
+                    successMessage = '数据库重置成功';
+                } else if (!dbStatus.connected) {
+                    // 数据库连接失败，需要创建数据库
+                    needDbOperation = true;
+                    operationType = 'init';
+                    successMessage = '数据库创建成功';
+                } else if (!dbStatus.has_tables || !dbStatus.required_tables_exist) {
+                    // 表结构不存在或不完整，需要创建或补全表结构
+                    needDbOperation = true;
+                    operationType = 'init';
+                    successMessage = '数据库表结构初始化成功';
+                }
+                
+                if (needDbOperation) {
+                    showLoading();
+                    
+                    try {
+                        let apiEndpoint = '/api/init/db';
+                        let method = 'POST';
+                        
+                        if (operationType === 'reset') {
+                            // 重置数据库
+                            const verificationCode = document.getElementById('verification-step2').value;
+                            if (!verificationCode) {
+                                hideLoading();
+                                showError('请输入验证码');
+                                nextButton.disabled = false;
+                                return;
+                            }
+                            apiEndpoint = '/api/init/db/clear?code=' + verificationCode;
+                            method = 'DELETE';
+                        }
+                        
+                        const response = await fetch(apiEndpoint, {
+                            method: method,
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        const result = await response.json();
+                        hideLoading();
+                        
+                        if (result.success) {
+                            showToast(successMessage);
+                            // 短暂延迟后进入下一步，让用户看到反馈
+                            setTimeout(() => {
+                                goToStep(3);
+                            }, 1000);
+                        } else {
+                            showError(`操作失败: ${result.message || '未知错误'}`);
+                            // 重新启用下一步按钮
+                            nextButton.disabled = false;
+                        }
+                    } catch (error) {
+                        hideLoading();
+                        showError(`网络错误: ${error.message}`);
+                        // 重新启用下一步按钮
+                        nextButton.disabled = false;
+                    }
+                } else {
+                    // 数据库状态正常，不需要操作，直接进入下一步
+                    goToStep(3);
+                }
+            };
+
+            // 处理管理员账户表单提交
+            const handleAdminAccountSubmit = async (e) => {
+                e.preventDefault();
+                
+                const form = e.target;
+                const formData = new FormData(form);
+                
+                // 验证密码
+                const password = formData.get('password');
+                const confirmPassword = formData.get('confirm_password');
+                
+                if (password !== confirmPassword) {
+                    showError('两次输入的密码不一致');
+                    return;
+                }
+                
+                // 构建请求数据
+                const initConfig = {
+                    username: formData.get('username'),
+                    password: password,
+                    email: formData.get('email'),
+                    role: 'admin',
+                    verification: formData.get('verification'),
+                    clear_db: resetDb
+                };
+
+                showLoading();
+                
+                try {
+                    // 完成系统初始化
+                    const response = await fetch('/api/init', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(initConfig)
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        goToStep(4);
+                        // 延时后重启程序
+                        setTimeout(async () => {
+                            try {
+                                // 调用重启API
+                                await fetch('/api/init/restart', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                            } catch (error) {
+                                // 重启API调用失败可能是因为服务已经开始重启，忽略错误
+                            }
+                            // 延时后重定向到登录页
+                            setTimeout(() => {
+                                window.location.href = '/main.html';
+                            }, 2000);
+                        }, 3000);
+                    } else {
+                        showError(`系统初始化失败: ${result.message || '未知错误'}`);
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            // 绑定表单提交事件
+            document.getElementById('db-status-form')?.addEventListener('submit', handleDbStatusSubmit);
+            document.getElementById('admin-account-form')?.addEventListener('submit', handleAdminAccountSubmit);
+
+            // 绑定上一步按钮事件
+            document.querySelectorAll('.prev-step').forEach(button => {
+                button.addEventListener('click', () => {
+                    goToStep(currentStep - 1);
+                });
+            });
+
+            // 绑定步骤指示器点击事件
+            document.querySelectorAll('.step').forEach(step => {
+                step.addEventListener('click', () => {
+                    const stepNum = parseInt(step.dataset.step);
+                    if (stepNum < currentStep) {
+                        goToStep(stepNum);
+                    }
+                });
+            });
+
+            // 获取验证码的函数
+            window.getVerificationCode = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/verification-code', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        showToast(result.message);
+                    } else {
+                        showError(`获取验证码失败: ${result.message || '未知错误'}`);
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            // 导入数据库的函数
+            window.importDatabase = async () => {
+                if (!confirm('导入数据库将覆盖写入现有数据，请注意备份。确定要继续吗？')) {
+                    return;
+                }
+                
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/db/import', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        showToast('数据库导入成功');
+                        // 重新检查数据库状态
+                        checkDatabaseStatus();
+                    } else {
+                        showError(`导入数据库失败: ${result.message || '未知错误'}`);
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            // 监听重置数据库开关的变化
+            document.getElementById('reset-db')?.addEventListener('change', (e) => {
+                resetDb = e.target.checked;
+                const verificationGroup = document.getElementById('verification-group');
+                if (resetDb) {
+                    // 显示验证码输入字段
+                    verificationGroup.style.display = 'block';
+                } else {
+                    // 隐藏验证码输入字段
+                    verificationGroup.style.display = 'none';
+                }
+                
+                // 当用户修改重置数据库选择时，重新检查数据库状态
+                checkDatabaseStatus();
+            });
+
+            // 绑定步骤1的下一步按钮事件
+            document.querySelector('.step-panel[data-step="1"] .btn-success')?.addEventListener('click', () => {
+                goToStep(2);
+                // 进入步骤2后自动检查数据库状态
+                checkDatabaseStatus();
+            });
+
+            // 自动执行PostgreSQL检查
+            await checkPostgreSQL();
+        });
+    </script>
+</head>
+<body class="init-body">
+    <div class="init-container">
+        <div class="init-header">
+            <h1>IPMA 系统初始化</h1>
+            <p>请完成以下初始化步骤，以启动 IP 地址管理系统</p>
+        </div>
+
+        <div class="init-steps">
+            <!-- 步骤指示器 -->
+            <div class="step-indicator">
+                <div class="step active" data-step="1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">PostgreSQL 检查</span>
+                </div>
+                <div class="step" data-step="2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">数据库检查</span>
+                </div>
+                <div class="step" data-step="3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">管理员账户</span>
+                </div>
+                <div class="step" data-step="4">
+                    <span class="step-number">4</span>
+                    <span class="step-label">初始化完成</span>
+                </div>
+            </div>
+
+            <!-- 步骤内容 -->
+            <div class="step-content">
+                <!-- 步骤 1: PostgreSQL 检查 -->
+                <div class="step-panel active" data-step="1">
+                    <h2>PostgreSQL 检查</h2>
+                    <div id="pg-status" class="status-container">
+                        <div class="status-loading">
+                            <div class="loading-spinner"></div>
+                            <p>正在检查 PostgreSQL 状态...</p>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" onclick="location.reload()">重新检查</button>
+                        <button type="button" class="btn btn-success" disabled>下一步</button>
+                    </div>
+                </div>
+
+                <!-- 步骤 2: 数据库检查 -->
+                <div class="step-panel" data-step="2">
+                    <h2>数据库检查</h2>
+                    <div id="db-status" class="status-container">
+                        <div class="status-loading">
+                            <div class="loading-spinner"></div>
+                            <p>正在检查数据库状态...</p>
+                        </div>
+                    </div>
+                    <form id="db-status-form" class="init-form">
+                        <div class="form-group">
+                            <label for="reset-db">
+                                <input type="checkbox" id="reset-db" name="reset_db">
+                                重置数据库（清空所有数据）
+                            </label>
+                        </div>
+                        <div class="form-group" id="verification-group" style="display: none;">
+                            <label for="verification-step2">控制台验证码:</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码">
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                            </div>
+                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
+                            <button type="submit" class="btn btn-success" disabled>下一步</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 步骤 3: 管理员账户 -->
+                <div class="step-panel" data-step="3">
+                    <h2>管理员账户创建</h2>
+                    <form id="admin-account-form" class="init-form">
+                        <div class="form-group">
+                            <label for="admin-username">用户名:</label>
+                            <input type="text" id="admin-username" name="username" value="admin" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-password">密码:</label>
+                            <input type="password" id="admin-password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-confirm-password">确认密码:</label>
+                            <input type="password" id="admin-confirm-password" name="confirm_password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-email">邮箱:</label>
+                            <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="verification">控制台验证码:</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" required>
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                            </div>
+                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
+                            <button type="submit" class="btn btn-success">完成初始化</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 步骤 4: 初始化完成 -->
+                <div class="step-panel" data-step="4">
+                    <div class="init-success">
+                        <h2>初始化完成!</h2>
+                        <div class="success-icon">✓</div>
+                        <p>IPMA 系统已成功初始化。</p>
+                        <p>系统正在重启，请稍候...</p>
+                        <div class="form-actions">
+                            <a href="/main.html" class="btn btn-primary">登录系统</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 错误信息 -->
+        <div id="error-message" class="error-message" style="display: none;"></div>
+
+        <!-- 加载指示器 -->
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>正在处理...</p>
+        </div>
+    </div>
+
+    <style>
+        /* 初始化页面专用样式 */
+        .init-body {
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .init-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 800px;
+            padding: 30px;
+            margin: 20px;
+        }
+
+        .init-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .init-header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .init-header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background-color: #e0e0e0;
+            z-index: 1;
+        }
+
+        .step:last-child::after {
+            display: none;
+        }
+
+        .step.active::after,
+        .step.completed::after {
+            background-color: #4CAF50;
+        }
+
+        .step-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #e0e0e0;
+            color: #666;
+            line-height: 30px;
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step.active .step-number {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .step.completed .step-number {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .step-label {
+            display: block;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .step.active .step-label {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .step-content {
+            position: relative;
+        }
+
+        .step-panel {
+            display: none;
+        }
+
+        .step-panel.active {
+            display: block;
+        }
+
+        .init-form {
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .form-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+        }
+
+        .help-text {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .form-actions {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-success {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .init-success {
+            text-align: center;
+            padding: 40px 0;
+        }
+
+        .success-icon {
+            font-size: 60px;
+            color: #4CAF50;
+            margin: 20px 0;
+        }
+
+        .init-success h2 {
+            color: #333;
+        }
+
+        .init-success p {
+            color: #666;
+            margin: 10px 0;
+        }
+
+        /* 状态容器样式 */
+        .status-container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ddd;
+        }
+
+        .status-success {
+            border-left-color: #4CAF50;
+            background-color: #f1f8e9;
+        }
+
+        .status-error {
+            border-left-color: #f44336;
+            background-color: #fef5e7;
+        }
+
+        .status-warning {
+            border-left-color: #ff9800;
+            background-color: #fff3e0;
+        }
+
+        .status-info {
+            border-left-color: #2196f3;
+            background-color: #e3f2fd;
+        }
+
+        .status-success .status-success,
+        .status-error .status-error,
+        .status-warning .status-warning,
+        .status-info .status-info {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .status-container h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .status-container p {
+            margin-bottom: 10px;
+        }
+
+        .error-guide {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+
+        .error-guide h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .error-guide ul {
+            margin-bottom: 0;
+        }
+
+        .error-guide li {
+            margin-bottom: 5px;
+        }
+
+        .status-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .status-loading .loading-spinner {
+            margin-bottom: 15px;
+        }
+    </style>
+</body>
+</html>
