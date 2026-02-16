@@ -1,6 +1,7 @@
 use actix_web::{
     HttpMessage, HttpRequest, HttpResponse, Result,
     body::MessageBody,
+    cookie::{Cookie, SameSite},
     dev::{ServiceRequest, ServiceResponse},
     middleware::Next,
     web,
@@ -11,6 +12,7 @@ use jsonwebtoken::errors::ErrorKind;
 use lettre::message::Message;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use serde::Deserialize;
 use tracing::{info, error};
 use uuid::Uuid;
 use validator::Validate;
@@ -26,7 +28,7 @@ use crate::models::{
 };
 use crate::utils::detect_user_language;
 use crate::system::smtp::get_smtp_config_from_db;
-use totp_rs::{Algorithm, TOTP};
+use totp_rs::{Algorithm, TOTP, Secret};
 use chrono::DateTime;
 
 // 认证中间件
@@ -73,8 +75,8 @@ pub async fn auth_middleware(
         let (ip_address, user_agent) = get_client_info_from_service_request(&req);
         let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
         
-        if let Some(token_fingerprint) = &claims.device_fingerprint {
-             if token_fingerprint != &current_fingerprint {
+        if let Some(token_fingerprint) = &claims.device_fingerprint
+             && token_fingerprint != &current_fingerprint {
                  let user_lang = detect_user_language(req.request());
                  // 记录安全警告
                  // 手动构造带 error_type 的响应
@@ -87,7 +89,6 @@ pub async fn auth_middleware(
                          .map_into_right_body(),
                  ));
              }
-        }
     // }
 
     // 4. 将用户信息注入到请求扩展中，以便后续处理程序使用
@@ -152,9 +153,11 @@ pub async fn login(
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
+    let remember_me = req.remember_me.unwrap_or(false);
     let access_token = jwt_utils.generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address)).unwrap();
-    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), req.remember_me.unwrap_or(false)).unwrap();
-    let expires_in = jwt_utils.get_access_token_expiry();
+    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me).unwrap();
+    let access_token_expiry = jwt_utils.get_access_token_expiry();
+    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
     let user = User {
         id, username: username.clone(), email, role: role.clone(), status, two_factor_enabled, two_factor_verified: true,
@@ -162,11 +165,19 @@ pub async fn login(
     };
 
     let _ = log_login(&pool.pool, &username, &http_req, true, None).await;
-    Ok(HttpResponse::Ok().json(ApiResponse::success_i18n(
-        serde_json::json!({ "access_token": access_token, "refresh_token": refresh_token, "user": user, "expires_in": expires_in }),
-        "api.success",
-        &user_lang
-    )))
+    
+    let secure = is_secure_request(&http_req);
+    let access_cookie = create_auth_cookie("access_token", &access_token, access_token_expiry as i64, secure);
+    let refresh_cookie = create_auth_cookie("refresh_token", &refresh_token, refresh_token_expiry as i64, secure);
+    
+    Ok(HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::success_i18n(
+            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
+            "api.success",
+            &user_lang
+        )))
 }
 
 // 邮箱验证码登录
@@ -235,9 +246,11 @@ pub async fn login_with_email_code(
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
+    let remember_me = req.remember_me.unwrap_or(false);
     let access_token = jwt_utils.generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address)).unwrap();
-    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), req.remember_me.unwrap_or(false)).unwrap();
-    let expires_in = jwt_utils.get_access_token_expiry();
+    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me).unwrap();
+    let access_token_expiry = jwt_utils.get_access_token_expiry();
+    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
     let user = User {
         id, username: username.clone(), email, role: role.clone(), status, two_factor_enabled, two_factor_verified: true,
@@ -245,11 +258,19 @@ pub async fn login_with_email_code(
     };
 
     let _ = log_login(&pool.pool, &username, &http_req, true, None).await;
-    Ok(HttpResponse::Ok().json(ApiResponse::success_i18n(
-        serde_json::json!({ "access_token": access_token, "refresh_token": refresh_token, "user": user, "expires_in": expires_in }),
-        "api.success",
-        &user_lang
-    )))
+    
+    let secure = is_secure_request(&http_req);
+    let access_cookie = create_auth_cookie("access_token", &access_token, access_token_expiry as i64, secure);
+    let refresh_cookie = create_auth_cookie("refresh_token", &refresh_token, refresh_token_expiry as i64, secure);
+    
+    Ok(HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::success_i18n(
+            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
+            "api.success",
+            &user_lang
+        )))
 }
 
 // 发送登录验证码
@@ -257,7 +278,7 @@ pub async fn send_login_code(
     pool: web::Data<DbPool>,
     req: web::Json<SendLoginCodeRequest>,
 ) -> Result<HttpResponse> {
-    use rand::Rng;
+    use rand::RngExt;
     let email = req.email.trim();
 
     if let Err(e) = req.validate() {
@@ -366,13 +387,29 @@ pub async fn login_with_two_factor(
     }
 
     let mut verified = false;
-    // 验证 TOTP
+    // 验证 TOTP (RFC 4226: 密钥至少128 bits)
     if let Some(s) = secret {
-        // 使用 Secret::Raw 或 into_bytes 转换
-        if let Ok(totp) = TOTP::new(Algorithm::SHA1, 6, 1, 30, s.into_bytes(), None, "".to_string()) {
-             if totp.check_current(&req.two_factor_code).unwrap_or(false) {
-                 verified = true;
-             }
+        // 将 Base32 编码的密钥解码为字节
+        let secret_bytes = match Secret::Encoded(s.clone()).to_bytes() {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                // Base32 解码失败，密钥格式错误
+                let _ = log_login(&pool.pool, &username, &http_req, false, Some("Invalid 2FA secret format")).await;
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("2FA密钥格式错误")));
+            }
+        };
+        // 使用 TOTP::new 验证密钥长度符合 RFC 4226 规范
+        match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, None, "".to_string()) {
+            Ok(totp) => {
+                if totp.check_current(&req.two_factor_code).unwrap_or(false) {
+                    verified = true;
+                }
+            }
+            Err(_) => {
+                // 密钥长度不符合规范（需要至少16字节）
+                let _ = log_login(&pool.pool, &username, &http_req, false, Some("2FA secret too short")).await;
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("2FA密钥长度不足，请重新设置")));
+            }
         }
     }
 
@@ -384,9 +421,11 @@ pub async fn login_with_two_factor(
     let jwt_utils = JwtUtils::new(&config);
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
+    let remember_me = req.remember_me.unwrap_or(false);
     let access_token = jwt_utils.generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address)).unwrap();
-    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), req.remember_me.unwrap_or(false)).unwrap();
-    let expires_in = jwt_utils.get_access_token_expiry();
+    let refresh_token = jwt_utils.generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me).unwrap();
+    let access_token_expiry = jwt_utils.get_access_token_expiry();
+    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
     let user = User {
         id, username, email, role, status, two_factor_enabled, two_factor_verified: true,
@@ -394,11 +433,19 @@ pub async fn login_with_two_factor(
     };
 
     let _ = log_login(&pool.pool, &user.username, &http_req, true, None).await;
-    Ok(HttpResponse::Ok().json(ApiResponse::success_i18n(
-        serde_json::json!({ "access_token": access_token, "refresh_token": refresh_token, "user": user, "expires_in": expires_in }),
-        "api.success",
-        &user_lang
-    )))
+    
+    let secure = is_secure_request(&http_req);
+    let access_cookie = create_auth_cookie("access_token", &access_token, access_token_expiry as i64, secure);
+    let refresh_cookie = create_auth_cookie("refresh_token", &refresh_token, refresh_token_expiry as i64, secure);
+    
+    Ok(HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::success_i18n(
+            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
+            "api.success",
+            &user_lang
+        )))
 }
 
 // 发送 2FA 码
@@ -413,7 +460,7 @@ pub async fn send_two_factor_code(
     };
     
     // 生成并发送代码... (简化)
-     use rand::Rng;
+     use rand::RngExt;
      let mut rng = rand::rng();
      let code: String = (0..6).map(|_| rng.random_range(0..10).to_string()).collect();
      let expiry = Utc::now() + chrono::Duration::minutes(5);
@@ -427,38 +474,89 @@ pub async fn send_two_factor_code(
 // 登出
 pub async fn logout(http_req: HttpRequest) -> Result<HttpResponse> {
     let user_lang = detect_user_language(&http_req);
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success_i18n((), "api.success", &user_lang)))
+    let secure = is_secure_request(&http_req);
+    
+    let access_cookie = create_clear_cookie("access_token", secure);
+    let refresh_cookie = create_clear_cookie("refresh_token", secure);
+    
+    Ok(HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::<()>::success_i18n((), "api.success", &user_lang)))
 }
 
 // 刷新 Token
 pub async fn refresh_token(
-    _pool: web::Data<DbPool>,
+    pool: web::Data<DbPool>,
     config: web::Data<Config>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_lang = detect_user_language(&http_req);
-    let token = match crate::auth::utils::extract_token_from_request(&http_req) {
-        Some(t) => t,
-        None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang))),
+    
+    // 优先从 Cookie 中获取 refresh_token
+    let token = if let Some(cookie) = http_req.cookie("refresh_token") {
+        cookie.value().to_string()
+    } else {
+        // 回退到 Authorization 头
+        match crate::auth::utils::extract_token_from_request(&http_req) {
+            Some(t) => t,
+            None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang))),
+        }
     };
 
     let jwt_utils = JwtUtils::new(&config);
-    // 使用 decode_token_without_expiration
-    let claims = match jwt_utils.decode_token_without_expiration(&token) {
+    
+    // 1. 完整验证 token（包括过期检查）
+    let claims = match jwt_utils.validate_token(&token) {
         Ok(c) => c,
-        Err(_) => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_token", &user_lang))),
+        Err(err) => {
+            let error_msg = match err.kind() {
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => "api.token_expired",
+                _ => "api.invalid_token",
+            };
+            return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(error_msg, &user_lang)));
+        }
     };
 
-    let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
-    let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
-    let access_token = jwt_utils.generate_access_token(&Uuid::parse_str(&claims.sub).unwrap(), &claims.username, &claims.role, Some(&device_fingerprint), Some(&ip_address)).unwrap();
-    let refresh_token = jwt_utils.generate_refresh_token(&Uuid::parse_str(&claims.sub).unwrap(), &claims.username, &claims.role, Some(&device_fingerprint), Some(&ip_address), false).unwrap(); // 默认 false
+    // 2. 检查 token 是否已被撤销
+    if crate::utils::is_token_revoked(&pool.pool, &token).await.unwrap_or(false) {
+        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.token_revoked", &user_lang)));
+    }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success_i18n(
-        serde_json::json!({ "access_token": access_token, "refresh_token": refresh_token, "expires_in": jwt_utils.get_access_token_expiry() }),
-        "api.success",
-        &user_lang
-    )))
+    // 3. 验证设备指纹
+    let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
+    let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
+    
+    if let Some(ref token_fingerprint) = claims.device_fingerprint {
+        if token_fingerprint != &current_fingerprint {
+            return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.device_validation_failed", &user_lang)));
+        }
+    }
+
+    // 4. 将旧的 refresh_token 加入撤销列表
+    let user_id = Uuid::parse_str(&claims.sub).unwrap();
+    let token_expiry = chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(|| Utc::now());
+    let _ = crate::utils::revoke_token(&pool.pool, &token, &user_id, token_expiry).await;
+
+    // 5. 生成新的 token (刷新时不保持登录状态)
+    let access_token = jwt_utils.generate_access_token(&user_id, &claims.username, &claims.role, Some(&current_fingerprint), Some(&ip_address)).unwrap();
+    let new_refresh_token = jwt_utils.generate_refresh_token(&user_id, &claims.username, &claims.role, Some(&current_fingerprint), Some(&ip_address), false).unwrap();
+    
+    let access_token_expiry = jwt_utils.get_access_token_expiry();
+    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(false);
+    
+    let secure = is_secure_request(&http_req);
+    let access_cookie = create_auth_cookie("access_token", &access_token, access_token_expiry as i64, secure);
+    let refresh_cookie = create_auth_cookie("refresh_token", &new_refresh_token, refresh_token_expiry as i64, secure);
+
+    Ok(HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::success_i18n(
+            serde_json::json!({ "expires_in": access_token_expiry }),
+            "api.success",
+            &user_lang
+        )))
 }
 
 // 获取当前用户
@@ -479,10 +577,198 @@ pub async fn reset_password() -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "密码重置成功")))
 }
 
-// 2FA 管理 (空实现占位)
-pub async fn init_two_factor() -> Result<HttpResponse> { Ok(HttpResponse::Ok().finish()) }
-pub async fn enable_two_factor() -> Result<HttpResponse> { Ok(HttpResponse::Ok().finish()) }
-pub async fn disable_two_factor() -> Result<HttpResponse> { Ok(HttpResponse::Ok().finish()) }
+// 初始化2FA - 生成符合RFC 4226规范的TOTP密钥
+pub async fn init_two_factor(
+    pool: web::Data<DbPool>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse> {
+    let extensions = http_req.extensions();
+    let claims = match extensions.get::<crate::auth::utils::JwtClaims>() {
+        Some(c) => c,
+        None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
+    };
+    
+    let user_id = match Uuid::parse_str(&claims.sub) {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    };
+    
+    // 生成32字节（256 bits）的密钥，比RFC 4226推荐的160 bits更安全
+    let secret_bytes: Vec<u8> = {
+        use rand::Rng;
+        let mut bytes = vec![0u8; 32];
+        rand::rng().fill_bytes(&mut bytes);
+        bytes
+    };
+    let secret = Secret::Raw(secret_bytes);
+    let secret_base32 = secret.to_encoded().to_string();
+    
+    // 创建TOTP实例用于生成URL（SHA-1算法保证兼容性）
+    let totp = match TOTP::new(
+        Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret.to_bytes().unwrap(),
+        Some("IPMA".to_string()),
+        claims.username.clone(),
+    ) {
+        Ok(t) => t,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("生成TOTP失败"))),
+    };
+    
+    // 将密钥临时存储到数据库（尚未启用）
+    let _ = sqlx::query(
+        "UPDATE users SET two_factor_secret = $1 WHERE id = $2"
+    )
+    .bind(&secret_base32)
+    .bind(user_id)
+    .execute(&pool.pool)
+    .await;
+    
+    // 返回密钥和otpauth URL
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "secret": secret_base32,
+            "otpauth_url": totp.get_url(),
+            "qr_code_base64": totp.get_qr_base64().unwrap_or_default(),
+        }),
+        "2FA初始化成功，请使用认证器应用扫描二维码"
+    )))
+}
+
+// 启用2FA - 验证TOTP码并启用
+pub async fn enable_two_factor(
+    pool: web::Data<DbPool>,
+    req: web::Json<TwoFactorEnableRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse> {
+    let extensions = http_req.extensions();
+    let claims = match extensions.get::<crate::auth::utils::JwtClaims>() {
+        Some(c) => c,
+        None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
+    };
+    
+    let user_id = match Uuid::parse_str(&claims.sub) {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    };
+    
+    // 获取存储的密钥
+    let secret: Option<String> = match sqlx::query_scalar(
+        "SELECT two_factor_secret FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(&pool.pool)
+    .await
+    {
+        Ok(Some(s)) => s,
+        Ok(None) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA"))),
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
+    };
+    
+    let secret = match secret {
+        Some(s) => s,
+        None => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA"))),
+    };
+    
+    // 验证TOTP码
+    let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("密钥格式错误"))),
+    };
+    
+    let totp = match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), claims.username.clone()) {
+        Ok(t) => t,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("TOTP创建失败"))),
+    };
+    
+    if !totp.check_current(&req.code).unwrap_or(false) {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("验证码错误")));
+    }
+    
+    // 启用2FA
+    let _ = sqlx::query(
+        "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1"
+    )
+    .bind(user_id)
+    .execute(&pool.pool)
+    .await;
+    
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已启用")))
+}
+
+// 禁用2FA
+pub async fn disable_two_factor(
+    pool: web::Data<DbPool>,
+    req: web::Json<TwoFactorDisableRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse> {
+    let extensions = http_req.extensions();
+    let claims = match extensions.get::<crate::auth::utils::JwtClaims>() {
+        Some(c) => c,
+        None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
+    };
+    
+    let user_id = match Uuid::parse_str(&claims.sub) {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    };
+    
+    // 获取存储的密钥
+    let (secret, two_factor_enabled): (Option<String>, bool) = match sqlx::query_as(
+        "SELECT two_factor_secret, two_factor_enabled FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(&pool.pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
+    };
+    
+    if !two_factor_enabled {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("2FA未启用")));
+    }
+    
+    // 验证TOTP码或密码
+    let mut verified = false;
+    
+    if let Some(s) = secret {
+        if let Ok(secret_bytes) = Secret::Encoded(s).to_bytes() {
+            if let Ok(totp) = TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), claims.username.clone()) {
+                if totp.check_current(&req.code).unwrap_or(false) {
+                    verified = true;
+                }
+            }
+        }
+    }
+    
+    if !verified {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("验证码错误")));
+    }
+    
+    // 禁用2FA并清除密钥
+    let _ = sqlx::query(
+        "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_verified = false WHERE id = $1"
+    )
+    .bind(user_id)
+    .execute(&pool.pool)
+    .await;
+    
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已禁用")))
+}
+
+// 2FA请求结构体
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorEnableRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorDisableRequest {
+    pub code: String,
+}
 
 
 // 辅助函数：记录登录日志
@@ -509,4 +795,48 @@ async fn log_login(
     .await?;
     
     Ok(())
+}
+
+// 辅助函数：创建 HttpOnly Cookie
+fn create_auth_cookie(
+    name: &str,
+    value: &str,
+    max_age: i64,
+    secure: bool,
+) -> Cookie<'static> {
+    let mut cookie = Cookie::build(name, value)
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(actix_web::cookie::time::Duration::seconds(max_age))
+        .finish()
+        .into_owned();
+    
+    if secure {
+        cookie.set_secure(true);
+    }
+    
+    cookie
+}
+
+// 辅助函数：创建清除 Cookie
+fn create_clear_cookie(name: &str, secure: bool) -> Cookie<'static> {
+    let mut cookie = Cookie::build(name, "")
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(actix_web::cookie::time::Duration::seconds(0))
+        .finish()
+        .into_owned();
+    
+    if secure {
+        cookie.set_secure(true);
+    }
+    
+    cookie
+}
+
+// 辅助函数：判断是否使用 HTTPS
+fn is_secure_request(req: &HttpRequest) -> bool {
+    req.connection_info().scheme() == "https"
 }

@@ -2,12 +2,13 @@
 
 // ES模块导入
 import {
-  showToast
-} from "../utils/ui.js";
+  apiGet,
+  apiPut,
+} from "../utils/apiClient.js";
 
 import {
-  getAccessToken
-} from "../utils/apiClient.js";
+  showToast
+} from "../utils/ui.js";
 
 // 日志字段中文映射
 const logFieldMappings = {
@@ -232,9 +233,6 @@ function initLogSearch() {
 
 // 加载日志数据（支持搜索和分页）
 export async function loadLogsData(logType = "operation", searchParams = {}) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
     const { resource_type = '', resource_id = '', user_id = '', action = '', page = 1, page_size = 50 } = searchParams;
     
@@ -252,13 +250,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
       apiUrl = "/api/logs/login";
     }
 
-    const response = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet(apiUrl);
     const tableId = `${logType}-logs-table`;
     const tbody = document.querySelector(`#${tableId} tbody`);
 
@@ -368,22 +360,13 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
 
 // 加载通知数据
 export async function loadNotificationsData(filterStatus = 'all') {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
     const params = new URLSearchParams();
     if (filterStatus && filterStatus !== 'all') {
       params.append('status', filterStatus);
     }
     
-    const response = await fetch(`/api/notifications?${params.toString()}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet(`/api/notifications?${params.toString()}`);
     const tbody = document.querySelector("#notifications-table tbody");
 
     if (!tbody) {
@@ -425,18 +408,8 @@ export async function loadNotificationsData(filterStatus = 'all') {
 
 // 标记通知为已读
 export async function markNotificationAsRead(notificationId) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/notifications/${notificationId}/read`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiPut(`/api/notifications/${notificationId}/read`, {});
     if (result.success) {
       loadNotificationsData();
     } else {
@@ -450,19 +423,9 @@ export async function markNotificationAsRead(notificationId) {
 
 // 清除已读通知
 export async function clearReadNotifications() {
-  const token = getAccessToken();
-  if (!token) return;
-
   if (confirm("确定要清除所有已读通知吗？")) {
     try {
-      const response = await fetch("/api/notifications/mark-all-read", {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
+      const result = await apiPut("/api/notifications/mark-all-read", {});
       if (result.success) {
         loadNotificationsData();
         showToast("已读通知已清除", "success");
@@ -490,20 +453,8 @@ export async function saveMacNotificationEmail() {
     }
 
     // 检查SMTP配置是否存在
-    const token = getAccessToken();
-    if (!token) {
-      showToast("请先登录系统", "error");
-      return;
-    }
-
     try {
-      const response = await fetch("/api/system/smtp/config", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
+      const result = await apiGet("/api/system/smtp/config");
       if (!result.success || !result.data || !result.data.host) {
         showToast("请先在系统设置中配置SMTP服务器", "error");
         return;
@@ -523,7 +474,7 @@ export async function saveMacNotificationEmail() {
 }
 
 // 初始化MAC变动通知邮箱输入框
-export function initMacNotificationEmail() {
+function initMacNotificationEmail() {
   const emailInput = document.getElementById("mac-notification-email");
   const savedEmail = sessionStorage.getItem("macNotificationEmail");
   if (savedEmail) {
@@ -531,45 +482,11 @@ export function initMacNotificationEmail() {
   }
 }
 
-// 发送MAC变动邮件通知
-export async function sendMacChangeEmailNotification(workstationName, ipAddress, oldMac, newMac) {
-  const email = sessionStorage.getItem("macNotificationEmail");
-  if (!email) return;
+function initLogEvents() {
+  if (initLogEvents.initialized) return;
+  initLogEvents.initialized = true;
 
-  const token = getAccessToken();
-  if (!token) return;
-
-  try {
-    const response = await fetch("/api/system/send-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        to: email,
-        subject: `MAC地址变动通知 - ${workstationName}`,
-        content: `工位 ${workstationName} ${ipAddress} 的MAC地址已从 ${oldMac} 变更为 ${newMac}`,
-        is_html: false,
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      console.log("MAC变动邮件通知发送成功");
-    } else {
-      console.error("MAC变动邮件通知发送失败:", result.message);
-    }
-  } catch (error) {
-    console.error("发送MAC变动邮件通知失败:", error);
-  }
-}
-
-// 初始化日志事件
-export function initLogEvents() {
-  // 事件委托：处理通知相关按钮点击事件
   document.addEventListener("click", (e) => {
-    // 处理标记已读按钮点击
     if (e.target.classList.contains("mark-read")) {
       const id = e.target.getAttribute("data-id");
       if (id) {
@@ -577,17 +494,14 @@ export function initLogEvents() {
       }
     }
     
-    // 处理日志详情按钮点击
     if (e.target.classList.contains("view-log-details")) {
       const logData = e.target.getAttribute("data-log");
       if (logData) {
         try {
-          // 尝试解码并解析
           const log = JSON.parse(decodeURIComponent(logData));
           showLogDetails(log);
         } catch (err) {
           console.error("解析日志数据失败:", err);
-          // 尝试回退旧方式
           try {
             const log = JSON.parse(logData);
             showLogDetails(log);
@@ -598,7 +512,6 @@ export function initLogEvents() {
       }
     }
 
-    // 处理分页按钮点击
     if (e.target.classList.contains("prev-page") || e.target.classList.contains("next-page")) {
       const page = parseInt(e.target.getAttribute("data-page"));
       const type = e.target.getAttribute("data-type");
@@ -615,6 +528,8 @@ export function initLogEvents() {
     }
   });
 }
+
+initLogEvents();
 
 // 显示日志详情弹窗
 function showLogDetails(log) {
@@ -635,11 +550,11 @@ function showLogDetails(log) {
   }
   
   const modalHtml = `
-    <div id="log-details-modal" class="modal" style="display: flex;">
-      <div class="modal-content" style="max-width: 600px;">
+    <div id="log-details-modal" class="modal modal-flex">
+      <div class="modal-content modal-md">
         <div class="modal-header">
           <h3 class="modal-title">操作日志详情</h3>
-          <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+          <span class="close" data-action="close-modal">&times;</span>
         </div>
         <div class="modal-body">
           <div class="log-detail-row">
@@ -676,7 +591,7 @@ function showLogDetails(log) {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">关闭</button>
+          <button class="btn btn-secondary" data-action="close-modal">关闭</button>
         </div>
       </div>
     </div>
@@ -686,7 +601,7 @@ function showLogDetails(log) {
   
   const modal = document.getElementById('log-details-modal');
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
+    if (e.target === modal || e.target.dataset.action === 'close-modal') {
       modal.remove();
     }
   });

@@ -18,6 +18,7 @@ import {
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
+import { getUser } from "../utils/sessionManager.js";
 
 // 加载用户数据
 export async function loadUsersData() {
@@ -53,11 +54,11 @@ export async function loadUsersData() {
           </td>
           <td>${formatDateTime(user.created_at)}</td>
           <td>
-            <button class="btn btn-secondary btn-sm user-edit" data-id="${user.id}">编辑</button>
+            <button class="btn btn-secondary btn-sm btn-edit" data-id="${user.id}">编辑</button>
             <button class="btn btn-secondary btn-sm user-2fa" data-id="${user.id}" data-username="${user.username}" data-enabled="${user.two_factor_enabled}">
               ${user.two_factor_enabled ? '管理2FA' : '启用2FA'}
             </button>
-            <button class="btn btn-danger btn-sm user-delete" data-id="${user.id}">删除</button>
+            <button class="btn btn-danger btn-sm btn-delete" data-id="${user.id}">删除</button>
           </td>
         </tr>
       `).join("");
@@ -80,12 +81,15 @@ export function openUserModal(userId) {
   const roleInput = document.getElementById("user-role");
   const statusInput = document.getElementById("user-status");
   const passwordInput = document.getElementById("user-password");
+  const passwordConfirmInput = document.getElementById("user-password-confirm");
 
   if (userId) {
     title.textContent = "编辑用户";
     userIdInput.value = userId;
     passwordInput.placeholder = "留空不修改密码";
     passwordInput.required = false;
+    passwordConfirmInput.placeholder = "留空不修改密码";
+    passwordConfirmInput.required = false;
     
     loadUserData(userId);
   } else {
@@ -98,6 +102,9 @@ export function openUserModal(userId) {
     passwordInput.value = "";
     passwordInput.placeholder = "请输入密码（添加时必填）";
     passwordInput.required = true;
+    passwordConfirmInput.value = "";
+    passwordConfirmInput.placeholder = "请再次输入密码";
+    passwordConfirmInput.required = true;
   }
 
   openModal("user-modal");
@@ -220,8 +227,7 @@ window.openTwoFactorModal = async function(userId, username, isEnabled) {
 // 初始化2FA配置
 async function initTwoFactorConfig(userId) {
   try {
-    // 检查当前登录用户是否有权限为其他用户操作2FA
-    const currentUser = JSON.parse(sessionStorage.getItem("user"));
+    const currentUser = getUser();
     if (currentUser && currentUser.id !== userId) {
       // 不是当前用户，需要检查是否是管理员
       if (currentUser.role !== 'admin') {
@@ -334,7 +340,13 @@ export async function submitUserForm() {
   };
 
   const password = formData.get("password");
+  const passwordConfirm = formData.get("password_confirm");
+  
   if (password) {
+    if (password !== passwordConfirm) {
+      showMessage("两次输入的密码不一致", "error");
+      return;
+    }
     userData.password = password;
   }
 

@@ -10,35 +10,28 @@ license = "MIT"
 # Actix Web 核心及周边
 actix-web = { version = "4.12.1", features = ["rustls-0_23"] }
 actix-rt = "2.11.0"
-actix-session = "0.11.0"
-actix-identity = "0.9.0"
 actix-multipart = "0.7.2"
 actix-files = "0.6.10"
 actix-cors = "0.7.1"
 
-# TLS/SSL 相关
 rustls = { version = "0.23.36", features = ["ring"] }
 rustls-pki-types = "1.14.0"
 pem = "3.0.6"
 tokio-rustls = "0.26.4"
 rcgen = "0.14.7"
 
-# HTTP/3 支持
 quinn = "0.11.9"
 quinn-proto = "0.11.13"
 quinn-udp = "0.5.14"
 
-# HTTP 相关
-bytes = "1.7.1"
-http = "1.1.0"
-hyper = "1.4.1"
+bytes = "1.11.1"
+http = "1.4.0"
 
 # SQLx PostgreSQL驱动
 sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json", "macros"] }
 
 # 数据校验
 validator = { version = "0.20.0", features = ["derive"] }
-validator-async = "0.20.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 regex = "1.12.3"
@@ -56,11 +49,6 @@ hex = "0.4.3"
 log = "0.4.29"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["time"] }
-tracing-actix-web = "0.7.21"
-
-# 绘图相关
-plotters = "0.3.7"
-plotters-svg = "0.3.7"
 
 # IP/MAC 处理
 ipnetwork = "0.21.1"
@@ -70,36 +58,29 @@ pnet = "0.35"
 # SNMP
 async-snmp = "0.5.0"
 
-# 随机数生成
-rand = "0.9.2"
+rand = "0.10.0"
 
 # 定时任务
 tokio-cron-scheduler = "0.15.1"
 
 # 配置管理
 config = { version = "0.15.19", features = ["toml"] }
-toml = "0.9.11"
-dotenvy = "0.15.7"
+toml = "1.0.1"
 
 # 其他工具
 tokio = { version = "1.49.0", features = ["full"] }
 anyhow = "1.0.101"
 thiserror = "2.0.18"
 chrono = { version = "0.4.43", features = ["serde"] }
-uuid = { version = "1.20.0", features = ["v4", "serde"] }
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
 futures-util = "0.3.31"
 lazy_static = "1.5.0"
 num_cpus = "1.17.0"
 csv = "1.4.0"
 lru = "0.16.3"
 base64 = "0.22.1"
-# 邮件发送
 lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
-# 2FA相关
-totp-rs = { version = "5.7.0", features = ["qr"] }
-qrcode = "0.14.1"
-# ZIP打包
-tar = "0.4.44"
+totp-rs = { version = "5.7.0", features = ["qr", "gen_secret"] }
 flate2 = "1.1.9"
 zip = { version = "7.4.0", default-features = false, features = ["deflate"] }
 # 国际化支持
@@ -109,7 +90,6 @@ time = "0.3.47"
 [dev-dependencies]
 actix-rt = "2.11.0"
 tokio = { version = "1.49.0", features = ["full"] }
-tokio-test = "0.4.5"
 
 [features]
 default = []

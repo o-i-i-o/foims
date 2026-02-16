@@ -70,7 +70,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
     ```bash
     cargo run
     ```
-    访问 `https://localhost:8443` (默认端口，可能会有自签名证书警告)。
+    访问 `https://localhost` (默认端口，会有自签名证书警告)。
 
 ### 生产环境构建
 

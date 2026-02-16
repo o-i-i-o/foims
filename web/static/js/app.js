@@ -11,7 +11,8 @@ import {
   displayCurrentUser,
   initAutoRefresh,
   initPageTimeout,
-  initLogout
+  initLogout,
+  checkLoginStatus
 } from "./modules/authManager.js";
 
 // ==========================================
@@ -24,17 +25,18 @@ import {
 async function initApp() {
   try {
     await initI18n();
+    
+    await checkLoginStatus();
+    
     initNavigation();
     initModals(getResourceCallbacks());
     initEventListeners();
     
-    // 初始化认证相关功能
     displayCurrentUser();
     initLogout();
     initAutoRefresh();
     await initPageTimeout();
     
-    console.log("应用程序初始化完成");
   } catch (error) {
     console.error("应用程序初始化失败:", error);
   }

@@ -25,6 +25,7 @@ api:
   invalid_email_or_code: "邮箱或验证码错误"
   account_disabled: "账户已被禁用，请联系管理员"
   device_validation_failed: "设备验证失败"
+  token_revoked: "令牌已被撤销，请重新登录"
   missing_field: "缺少必填字段: {{field}}"
   invalid_type: "字段类型错误: {{info}}"
   json_error: "JSON格式错误: {{error}}"

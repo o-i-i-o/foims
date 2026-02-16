@@ -275,10 +275,19 @@ pub async fn export_json(
                 }
             };
 
-                let rooms = match sqlx::query_as::<_, Room>(
-                "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
+                let rooms = match sqlx::query(
+                "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
             ).fetch_all(&mut *conn).await {
-                Ok(rooms) => rooms,
+                Ok(rows) => {
+                    rows.into_iter().map(|row| Room {
+                        id: row.get(0),
+                        name: row.get(1),
+                        room_type: row.get(2),
+                        description: row.get(3),
+                        created_at: row.get(4),
+                        updated_at: row.get(5),
+                    }).collect()
+                },
                 Err(err) => {
                     return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                 }
@@ -302,10 +311,35 @@ pub async fn export_json(
                 }
             };
 
-                let ip_managers = match sqlx::query_as::<_, IpManagerWithNames>(
-                r#"SELECT im.id, im.workstation_id, im.position_id, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, im.ip_address, im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
+                let ip_managers = match sqlx::query(
+                r#"SELECT im.id, im.workstation_id, im.position_id, im.switch_id, im.switch_port_id, im.device_type, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, CAST(im.ip_address AS TEXT), im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
             ).fetch_all(&mut *conn).await {
-                Ok(ip_managers) => ip_managers,
+                Ok(rows) => {
+                    rows.into_iter().map(|row| IpManagerWithNames {
+                        id: row.get(0),
+                        workstation_id: row.get(1),
+                        position_id: row.get(2),
+                        switch_id: row.get(3),
+                        switch_port_id: row.get(4),
+                        device_type: row.get(5),
+                        device_name: None,
+                        network_id: row.get(6),
+                        workstation_name: row.get(7),
+                        cabinet_position_name: row.get(8),
+                        switch_name: None,
+                        switch_port_number: None,
+                        network_name: row.get(9),
+                        network_region: row.get(10),
+                        ip_address: row.get(11),
+                        ip_version: row.get(12),
+                        mac_address: row.get(13),
+                        hostname: row.get(14),
+                        status: row.get(15),
+                        last_seen: row.get(16),
+                        created_at: row.get(17),
+                        updated_at: row.get(18),
+                    }).collect()
+                },
                 Err(err) => {
                     return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                 }
@@ -401,10 +435,35 @@ pub async fn export_json(
                 };
 
                 let ip_managers = if export_type == "ip_managers" {
-                    match sqlx::query_as::<_, IpManagerWithNames>(
-                    r#"SELECT im.id, im.workstation_id, im.position_id, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, im.ip_address, im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
+                    match sqlx::query(
+                    r#"SELECT im.id, im.workstation_id, im.position_id, im.switch_id, im.switch_port_id, im.device_type, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, CAST(im.ip_address AS TEXT), im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
                 ).fetch_all(&mut *conn).await {
-                    Ok(ip_managers) => ip_managers,
+                    Ok(rows) => {
+                        rows.into_iter().map(|row| IpManagerWithNames {
+                            id: row.get(0),
+                            workstation_id: row.get(1),
+                            position_id: row.get(2),
+                            switch_id: row.get(3),
+                            switch_port_id: row.get(4),
+                            device_type: row.get(5),
+                            device_name: None,
+                            network_id: row.get(6),
+                            workstation_name: row.get(7),
+                            cabinet_position_name: row.get(8),
+                            switch_name: None,
+                            switch_port_number: None,
+                            network_name: row.get(9),
+                            network_region: row.get(10),
+                            ip_address: row.get(11),
+                            ip_version: row.get(12),
+                            mac_address: row.get(13),
+                            hostname: row.get(14),
+                            status: row.get(15),
+                            last_seen: row.get(16),
+                            created_at: row.get(17),
+                            updated_at: row.get(18),
+                        }).collect()
+                    },
                     Err(err) => {
                         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                     }
@@ -512,10 +571,19 @@ pub async fn export_csv(
                 }
             };
 
-                let rooms = match sqlx::query_as::<_, Room>(
-                "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
+                let rooms = match sqlx::query(
+                "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
             ).fetch_all(&mut *conn).await {
-                Ok(rooms) => rooms,
+                Ok(rows) => {
+                    rows.into_iter().map(|row| Room {
+                        id: row.get(0),
+                        name: row.get(1),
+                        room_type: row.get(2),
+                        description: row.get(3),
+                        created_at: row.get(4),
+                        updated_at: row.get(5),
+                    }).collect()
+                },
                 Err(err) => {
                     return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                 }
@@ -539,10 +607,35 @@ pub async fn export_csv(
                 }
             };
 
-                let ip_managers = match sqlx::query_as::<_, IpManagerWithNames>(
-                r#"SELECT im.id, im.workstation_id, im.position_id, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, im.ip_address, im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
+                let ip_managers = match sqlx::query(
+                r#"SELECT im.id, im.workstation_id, im.position_id, im.switch_id, im.switch_port_id, im.device_type, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, CAST(im.ip_address AS TEXT), im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
             ).fetch_all(&mut *conn).await {
-                Ok(ip_managers) => ip_managers,
+                Ok(rows) => {
+                    rows.into_iter().map(|row| IpManagerWithNames {
+                        id: row.get(0),
+                        workstation_id: row.get(1),
+                        position_id: row.get(2),
+                        switch_id: row.get(3),
+                        switch_port_id: row.get(4),
+                        device_type: row.get(5),
+                        device_name: None,
+                        network_id: row.get(6),
+                        workstation_name: row.get(7),
+                        cabinet_position_name: row.get(8),
+                        switch_name: None,
+                        switch_port_number: None,
+                        network_name: row.get(9),
+                        network_region: row.get(10),
+                        ip_address: row.get(11),
+                        ip_version: row.get(12),
+                        mac_address: row.get(13),
+                        hostname: row.get(14),
+                        status: row.get(15),
+                        last_seen: row.get(16),
+                        created_at: row.get(17),
+                        updated_at: row.get(18),
+                    }).collect()
+                },
                 Err(err) => {
                     return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                 }
@@ -604,10 +697,19 @@ pub async fn export_csv(
                 };
 
                 let rooms = if export_type == "rooms" {
-                    match sqlx::query_as::<_, Room>(
-                    "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
+                    match sqlx::query(
+                    "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
                 ).fetch_all(&mut *conn).await {
-                    Ok(rooms) => rooms,
+                    Ok(rows) => {
+                        rows.into_iter().map(|row| Room {
+                            id: row.get(0),
+                            name: row.get(1),
+                            room_type: row.get(2),
+                            description: row.get(3),
+                            created_at: row.get(4),
+                            updated_at: row.get(5),
+                        }).collect()
+                    },
                     Err(err) => {
                         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                     }
@@ -645,10 +747,35 @@ pub async fn export_csv(
                 };
 
                 let ip_managers = if export_type == "ip_managers" {
-                    match sqlx::query_as::<_, IpManagerWithNames>(
-                    r#"SELECT im.id, im.workstation_id, im.position_id, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, im.ip_address, im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
+                    match sqlx::query(
+                    r#"SELECT im.id, im.workstation_id, im.position_id, im.switch_id, im.switch_port_id, im.device_type, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, CAST(im.ip_address AS TEXT), im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
                 ).fetch_all(&mut *conn).await {
-                    Ok(ip_managers) => ip_managers,
+                    Ok(rows) => {
+                        rows.into_iter().map(|row| IpManagerWithNames {
+                            id: row.get(0),
+                            workstation_id: row.get(1),
+                            position_id: row.get(2),
+                            switch_id: row.get(3),
+                            switch_port_id: row.get(4),
+                            device_type: row.get(5),
+                            device_name: None,
+                            network_id: row.get(6),
+                            workstation_name: row.get(7),
+                            cabinet_position_name: row.get(8),
+                            switch_name: None,
+                            switch_port_number: None,
+                            network_name: row.get(9),
+                            network_region: row.get(10),
+                            ip_address: row.get(11),
+                            ip_version: row.get(12),
+                            mac_address: row.get(13),
+                            hostname: row.get(14),
+                            status: row.get(15),
+                            last_seen: row.get(16),
+                            created_at: row.get(17),
+                            updated_at: row.get(18),
+                        }).collect()
+                    },
                     Err(err) => {
                         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
                     }
@@ -1457,9 +1584,18 @@ pub async fn export_database(pool: web::Data<DbPool>) -> Result<HttpResponse> {
         updated_at: row.get(12),
     }).collect();
 
-    let rooms = sqlx::query_as::<_, Room>(
+    let rooms = sqlx::query(
         "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms"
-    ).fetch_all(&mut *conn).await.map_err(|e| {
+    ).fetch_all(&mut *conn).await.map(|rows| {
+        rows.into_iter().map(|row| Room {
+            id: row.get(0),
+            name: row.get(1),
+            room_type: row.get(2),
+            description: row.get(3),
+            created_at: row.get(4),
+            updated_at: row.get(5),
+        }).collect()
+    }).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("导出房间失败: {}", e))
     })?;
 
@@ -1475,9 +1611,34 @@ pub async fn export_database(pool: web::Data<DbPool>) -> Result<HttpResponse> {
         actix_web::error::ErrorInternalServerError(format!("导出工位端口失败: {}", e))
     })?;
 
-    let ip_managers = sqlx::query_as::<_, IpManagerWithNames>(
-        r#"SELECT im.id, im.workstation_id, im.position_id, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, im.ip_address, im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
-    ).fetch_all(&mut *conn).await.map_err(|e| {
+    let ip_managers = sqlx::query(
+        r#"SELECT im.id, im.workstation_id, im.position_id, im.switch_id, im.switch_port_id, im.device_type, im.network_id, w.name as workstation_name, cp.name as cabinet_position_name, n.name as network_name, nt.name as network_region, CAST(im.ip_address AS TEXT), im.ip_version, im.mac_address, im.hostname, im.status, im.last_seen::TIMESTAMPTZ, im.created_at::TIMESTAMPTZ, im.updated_at::TIMESTAMPTZ FROM ip_managers im LEFT JOIN workstations w ON im.workstation_id = w.id LEFT JOIN positions cp ON im.position_id = cp.id LEFT JOIN network_cidrs n ON im.network_id = n.id LEFT JOIN network_regions nt ON n.network_region_id = nt.id"#
+    ).fetch_all(&mut *conn).await.map(|rows| {
+        rows.into_iter().map(|row| IpManagerWithNames {
+            id: row.get(0),
+            workstation_id: row.get(1),
+            position_id: row.get(2),
+            switch_id: row.get(3),
+            switch_port_id: row.get(4),
+            device_type: row.get(5),
+            device_name: None,
+            network_id: row.get(6),
+            workstation_name: row.get(7),
+            cabinet_position_name: row.get(8),
+            switch_name: None,
+            switch_port_number: None,
+            network_name: row.get(9),
+            network_region: row.get(10),
+            ip_address: row.get(11),
+            ip_version: row.get(12),
+            mac_address: row.get(13),
+            hostname: row.get(14),
+            status: row.get(15),
+            last_seen: row.get(16),
+            created_at: row.get(17),
+            updated_at: row.get(18),
+        }).collect()
+    }).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("导出IP管理失败: {}", e))
     })?;
 
@@ -1742,10 +1903,12 @@ pub async fn download_template(
                     network_id: uuid::Uuid::nil(),
                     workstation_name: Some("示例工位".to_string()),
                     cabinet_position_name: None,
+                    switch_name: None,
+                    switch_port_number: None,
                     network_name: "示例网络".to_string(),
                     network_region: "示例网络区域".to_string(),
                     ip_address: "192.168.1.100".to_string(),
-                    ip_version: 4,
+                    ip_version: "IPv4".to_string(),
                     mac_address: Some("00:11:22:33:44:55".to_string()),
                     hostname: Some("example-host".to_string()),
                     status: "active".to_string(),

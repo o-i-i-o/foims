@@ -6,7 +6,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -30,19 +29,8 @@ import {
 
 // 加载机柜数据
 export async function loadCabinetsData() {
-  const token = getAccessToken();
-  if (!token) {
-    return;
-  }
-
   try {
-    const response = await fetch("/api/resources/cabinets", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet("/api/resources/cabinets");
     const tbody = document.querySelector("#cabinets-table tbody");
 
     if (data.success && data.data.length > 0) {
@@ -82,17 +70,8 @@ export async function loadCabinetsData() {
 
 // 编辑机柜
 export async function editCabinet(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/resources/cabinets/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/cabinets/${id}`);
     if (result.success) {
       openCabinetModal(result.data);
     } else {
@@ -157,10 +136,7 @@ export async function openCabinetModal(cabinet = null) {
 
 // 提交机柜表单
 export async function submitCabinetForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  // 使用通用工具函数获取表单数据
+// 使用通用工具函数获取表单数据
   const id = getElementValue("cabinet-id"); // 直接获取UUID字符串，不转换为数字
   const name = getElementValue("cabinet-name", "trimmed");
   const roomId = getElementValue("cabinet-room"); // 获取房间ID
@@ -216,7 +192,6 @@ export async function submitCabinetForm() {
     formData: cabinetData,
     id,
     baseUrl: "/api/resources/cabinets",
-    token,
     successMessage: "机柜保存成功",
     modalId: "cabinet-modal",
     reloadFunction: loadCabinetsData

@@ -130,9 +130,19 @@ async fn main() -> std::io::Result<()> {
         let mut app = App::new()
             .wrap(
                 Cors::default()
-                    .allow_any_origin()
+                    .allowed_origin("http://localhost")
+                    .allowed_origin("http://localhost:80")
+                    .allowed_origin("http://localhost:443")
+                    .allowed_origin("https://localhost")
+                    .allowed_origin_fn(|origin, _req_head| {
+                        origin.as_bytes().starts_with(b"http://localhost:") ||
+                        origin.as_bytes().starts_with(b"https://localhost:") ||
+                        origin.as_bytes().starts_with(b"http://127.0.0.1:") ||
+                        origin.as_bytes().starts_with(b"https://127.0.0.1:")
+                    })
                     .allow_any_method()
                     .allow_any_header()
+                    .supports_credentials()
                     .max_age(3600),
             )
             .wrap(actix_web::middleware::Logger::default())
@@ -152,9 +162,19 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(
                 Cors::default()
-                    .allow_any_origin()
+                    .allowed_origin("http://localhost")
+                    .allowed_origin("http://localhost:80")
+                    .allowed_origin("http://localhost:443")
+                    .allowed_origin("https://localhost")
+                    .allowed_origin_fn(|origin, _req_head| {
+                        origin.as_bytes().starts_with(b"http://localhost:") ||
+                        origin.as_bytes().starts_with(b"https://localhost:") ||
+                        origin.as_bytes().starts_with(b"http://127.0.0.1:") ||
+                        origin.as_bytes().starts_with(b"https://127.0.0.1:")
+                    })
                     .allow_any_method()
                     .allow_any_header()
+                    .supports_credentials()
                     .max_age(3600),
             )
             .wrap(actix_web::middleware::Logger::default())
@@ -467,7 +487,6 @@ fn configure_app_services(
     }
 
     if config.init.enabled {
-        // 开启初始化时，只注册初始化相关的路由和静态文件
         cfg.service(
             web::scope("/api/init")
                 .route("", web::post().to(ipma::system::init::init_system))
@@ -477,8 +496,16 @@ fn configure_app_services(
                     web::delete().to(ipma::system::init::clear_database),
                 )
                 .route(
+                    "/db/create",
+                    web::post().to(ipma::system::init::create_database_api),
+                )
+                .route(
                     "/db/import",
-                    web::post().to(ipma::system::init::import_database),
+                    web::post().to(ipma::system::init::import_database_api),
+                )
+                .route(
+                    "/db/import-file",
+                    web::post().to(ipma::system::init::import_database_from_file),
                 )
                 .route(
                     "/restart",

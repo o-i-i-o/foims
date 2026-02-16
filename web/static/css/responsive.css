@@ -1,4 +1,20 @@
 /* 响应式设计 */
+
+/* 中等屏幕 */
+@media (max-width: 992px) {
+    .import-export-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .sidebar {
+        width: 200px;
+    }
+    
+    .main-content {
+        margin-left: 200px;
+    }
+}
+
 @media (max-width: 768px) {
     /* 登录页面响应式 */
     .login-container {
@@ -324,4 +340,27 @@
     #cabinet-visualization-container {
         height: 400px;
     }
+    
+    .login-container {
+        padding: var(--space-lg);
+    }
+    
+    .btn {
+        min-width: 100px;
+    }
+    
+    .form-group input:not([type="checkbox"]),
+    .form-group select,
+    .form-group textarea {
+        min-width: 100%;
+    }
+}
+
+/* 工具类 */
+.flex-1 {
+    flex: 1;
+}
+
+.hidden {
+    display: none;
 }

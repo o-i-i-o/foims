@@ -1,10 +1,10 @@
 use aes::Aes256;
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyInit, generic_array::GenericArray};
-use rand::TryRngCore;
-use rand::rngs::OsRng;
+use rand::RngExt;
 use std::fs;
 use std::path::Path;
 use tracing::info;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
 pub fn get_encryption_key() -> Vec<u8> {
     let app_name = "ipma";
@@ -25,8 +25,7 @@ pub fn get_encryption_key() -> Vec<u8> {
     }
 
     let mut key = vec![0u8; 32];
-    let mut rng = OsRng;
-    rng.try_fill_bytes(&mut key).unwrap_or(());
+    rand::rng().fill(&mut key);
 
     if let Err(e) = fs::write(&key_path, &key) {
         info!("保存加密密钥失败: {}", e);
@@ -50,7 +49,7 @@ pub fn encrypt_password(password: &str) -> String {
         cipher.encrypt_block_mut(block);
     }
 
-    hex::encode(ciphertext)
+    BASE64.encode(&ciphertext)
 }
 
 pub fn decrypt_password(encrypted_password: &str) -> String {
@@ -58,7 +57,7 @@ pub fn decrypt_password(encrypted_password: &str) -> String {
     let key = GenericArray::from_slice(&key);
     let mut cipher = Aes256::new(key);
 
-    let mut ciphertext = hex::decode(encrypted_password).unwrap_or_default();
+    let mut ciphertext = BASE64.decode(encrypted_password).unwrap_or_default();
 
     for chunk in ciphertext.chunks_mut(16) {
         let block = GenericArray::from_mut_slice(chunk);

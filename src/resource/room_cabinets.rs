@@ -488,7 +488,7 @@ pub async fn get_cabinets(
             Ok(room_id_uuid) => {
                 // 查询该房间的机柜
                 match sqlx::query_as::<_, Cabinet>(
-                    "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE room_id = $1"
+                    "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE room_id = $1"
                 ).bind(room_id_uuid)
                 .fetch_all(pool.get_conn()).await {
                     Ok(cabinets) => cabinets,
@@ -507,7 +507,7 @@ pub async fn get_cabinets(
     } else {
         // 没有room_id参数，查询所有机柜
         match sqlx::query_as::<_, Cabinet>(
-            "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets"
+            "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets"
         ).fetch_all(pool.get_conn()).await {
             Ok(cabinets) => cabinets,
             Err(err) => {
@@ -520,23 +520,26 @@ pub async fn get_cabinets(
     let mut cabinets_with_networks = Vec::new();
 
     for cabinet in cabinets {
-        // 获取机柜关联的网络
-        let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-            r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-               FROM cabinet_networks cn 
-               JOIN network_cidrs n ON cn.network_id = n.id 
-               JOIN network_regions nr ON n.network_region_id = nr.id 
-               WHERE cn.cabinet_id = $1"#,
-        )
-        .bind(cabinet.id)
-        .fetch_all(pool.get_conn())
-        .await
-        {
-            Ok(networks) => networks,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+        // 获取机柜关联的网络（通过 network_id）
+        let cabinet_networks = if let Some(network_id) = cabinet.network_id {
+            match sqlx::query_as::<_, NetworkInfo>(
+                r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+                   FROM network_cidrs n 
+                   JOIN network_regions nr ON n.network_region_id = nr.id 
+                   WHERE n.id = $1"#,
+            )
+            .bind(network_id)
+            .fetch_all(pool.get_conn())
+            .await
+            {
+                Ok(networks) => networks,
+                Err(err) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                }
             }
+        } else {
+            vec![]
         };
 
         // 创建带网络信息的机柜对象
@@ -545,6 +548,7 @@ pub async fn get_cabinets(
             name: cabinet.name,
             room_id: cabinet.room_id,
             capacity: cabinet.capacity,
+            network_id: cabinet.network_id,
             networks: cabinet_networks,
             description: cabinet.description,
             created_at: cabinet.created_at,
@@ -605,13 +609,14 @@ pub async fn create_cabinet(
 
     // 创建机柜
     if let Err(err) = sqlx::query(
-        "INSERT INTO cabinets (id, name, room_id, capacity, description, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO cabinets (id, name, room_id, capacity, network_id, description, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
+    .bind(req.network_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -622,31 +627,13 @@ pub async fn create_cabinet(
             .json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
     }
 
-    // 关联网络
-    for network_id in &req.network_ids {
-        if let Err(err) = sqlx::query(
-            "INSERT INTO cabinet_networks (id, cabinet_id, network_id, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5)",
-        )
-        .bind(Uuid::new_v4())
-        .bind(id)
-        .bind(network_id)
-        .bind(now)
-        .bind(now)
-        .execute(pool.get_conn())
-        .await
-        {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-        }
-    }
-
     // 返回创建的机柜
     let cabinet = Cabinet {
         id,
         name: req.name.clone(),
         room_id: req.room_id,
         capacity: req.capacity,
+        network_id: req.network_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -658,7 +645,7 @@ pub async fn create_cabinet(
         "room_id": cabinet.room_id,
         "capacity": cabinet.capacity,
         "description": cabinet.description,
-        "network_count": req.network_ids.len()
+        "network_id": req.network_id
     });
     let _ = log_system_operation(
         pool.get_conn(),
@@ -684,7 +671,7 @@ pub async fn get_cabinet(
 
     // 获取机柜基本信息
     let cabinet = match sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
         Ok(Some(cabinet)) => cabinet,
@@ -696,23 +683,26 @@ pub async fn get_cabinet(
         }
     };
 
-    // 获取机柜关联的网络
-    let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-        r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-           FROM cabinet_networks cn 
-           JOIN network_cidrs n ON cn.network_id = n.id 
-           JOIN network_regions nr ON n.network_region_id = nr.id 
-           WHERE cn.cabinet_id = $1"#,
-    )
-    .bind(id)
-    .fetch_all(pool.get_conn())
-    .await
-    {
-        Ok(networks) => networks,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+    // 获取机柜关联的网络（通过 network_id）
+    let cabinet_networks = if let Some(network_id) = cabinet.network_id {
+        match sqlx::query_as::<_, NetworkInfo>(
+            r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+               FROM network_cidrs n 
+               JOIN network_regions nr ON n.network_region_id = nr.id 
+               WHERE n.id = $1"#,
+        )
+        .bind(network_id)
+        .fetch_all(pool.get_conn())
+        .await
+        {
+            Ok(networks) => networks,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+            }
         }
+    } else {
+        vec![]
     };
 
     // 创建带网络信息的机柜对象
@@ -721,6 +711,7 @@ pub async fn get_cabinet(
         name: cabinet.name,
         room_id: cabinet.room_id,
         capacity: cabinet.capacity,
+        network_id: cabinet.network_id,
         networks: cabinet_networks,
         description: cabinet.description,
         created_at: cabinet.created_at,
@@ -785,13 +776,15 @@ pub async fn update_cabinet(
          name = COALESCE($1, name), 
          room_id = COALESCE($2, room_id), 
          capacity = COALESCE($3, capacity), 
-         description = COALESCE($4, description), 
-         updated_at = $5 
-         WHERE id = $6",
+         network_id = COALESCE($4, network_id), 
+         description = COALESCE($5, description), 
+         updated_at = $6 
+         WHERE id = $7",
     )
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
+    .bind(req.network_id)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -802,41 +795,9 @@ pub async fn update_cabinet(
             .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
     }
 
-    // 如果提供了网络ID列表，则更新机柜-网络关联
-    if let Some(network_ids) = &req.network_ids {
-        // 删除现有网络关联
-        if let Err(err) = sqlx::query("DELETE FROM cabinet_networks WHERE cabinet_id = $1")
-            .bind(id)
-            .execute(pool.get_conn())
-            .await
-        {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
-        }
-
-        // 创建新的网络关联
-        for network_id in network_ids {
-            if let Err(err) = sqlx::query(
-                "INSERT INTO cabinet_networks (id, cabinet_id, network_id, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5)",
-            )
-            .bind(Uuid::new_v4())
-            .bind(id)
-            .bind(network_id)
-            .bind(now)
-            .bind(now)
-            .execute(pool.get_conn())
-            .await
-            {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-            }
-        }
-    }
-
     // 返回更新后的机柜
     let cabinet = match sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_one(pool.get_conn()).await {
         Ok(cabinet) => cabinet,

@@ -4,7 +4,6 @@ import {
   apiPut,
   apiPost,
   apiDelete,
-  getAccessToken,
   redirectToLogin,
   refreshToken,
 } from "../utils/apiClient.js";
@@ -16,7 +15,6 @@ import {
   renderTable,
   formatDateTime,
   setLoading,
-  downloadFile,
 } from "../utils/ui.js";
 
 import { initModals, openModal, closeModal } from "../utils/modal.js";
@@ -140,7 +138,7 @@ export function initSystemTabs() {
 }
 
 // 格式化系统运行时间（秒 -> X天X小时X分钟X秒）
-export function formatUptime(seconds) {
+function formatUptime(seconds) {
   const days = Math.floor(seconds / (24 * 60 * 60));
   seconds %= 24 * 60 * 60;
   const hours = Math.floor(seconds / (60 * 60));
@@ -162,11 +160,8 @@ export function formatUptime(seconds) {
 // 保存系统配置
 let currentServerConfig = null;
 
-export async function saveSystemConfig() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  try {
+async function saveSystemConfig() {
+try {
     const httpEnabled = document.getElementById("http-enabled").checked;
     const httpsEnabled = document.getElementById("https-enabled").checked;
     
@@ -192,25 +187,11 @@ export async function saveSystemConfig() {
 
     const config = { server: serverConfig };
 
-    const response = await fetch("/api/system/config", {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(config),
-    });
-
-    const result = await response.json();
+    const result = await apiPut("/api/system/config", config);
     if (result.success) {
-      // 重新加载配置以更新UI
       await loadSystemConfig();
-      // 显示保存成功提示
       showToast("系统配置保存成功", "success");
-      // 显示重启提示，告知用户需要重启程序
       showToast("配置已更新，需要重启应用系统以使配置生效", "warning");
-      
-      // 设置重启提示标记，用于后续的持续提示
       sessionStorage.setItem("configUpdated", "true");
     } else {
       showToast("系统配置保存失败: " + result.message, "error");
@@ -222,7 +203,7 @@ export async function saveSystemConfig() {
 }
 
 // 检查并显示配置更新后的重启提示
-export function checkConfigUpdateRestartPrompt() {
+function checkConfigUpdateRestartPrompt() {
   // 检查是否有配置更新标记
   if (sessionStorage.getItem("configUpdated") === "true") {
     // 显示重启提示
@@ -231,23 +212,14 @@ export function checkConfigUpdateRestartPrompt() {
 }
 
 // 清除配置更新标记（在重启后调用）
-export function clearConfigUpdateFlag() {
+function clearConfigUpdateFlag() {
   sessionStorage.removeItem("configUpdated");
 }
 
 // 加载系统配置
 export async function loadSystemConfig() {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch("/api/system/info", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet("/api/system/info");
     if (result.success) {
       const config = result.data.config;
       
@@ -282,18 +254,9 @@ export async function loadSystemConfig() {
 }
 
 // 检查是否有导入的证书
-export async function checkImportedCertificate() {
-  const token = getAccessToken();
-  if (!token) return;
-
+async function checkImportedCertificate() {
   try {
-    const response = await fetch("/api/system/certificate/status", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet("/api/system/certificate/status");
     if (result.success) {
       const hasImportedCert = result.data.has_imported_cert;
       const importBtn = document.getElementById("import-cert-btn");
@@ -307,7 +270,7 @@ export async function checkImportedCertificate() {
 }
 
 // 更新证书管理区域的显示
-export function updateCertificateSectionVisibility() {
+function updateCertificateSectionVisibility() {
   const httpsEnabled = document.getElementById("https-enabled").checked;
   const certificateSection = document.getElementById("certificate-section");
   
@@ -317,7 +280,7 @@ export function updateCertificateSectionVisibility() {
 }
 
 // 处理自动 HTTPS 功能
-export function handleAutoHttpsChange() {
+function handleAutoHttpsChange() {
   const autoHttps = document.getElementById("auto-https").checked;
   const httpEnabled = document.getElementById("http-enabled");
   const httpsEnabled = document.getElementById("https-enabled");
@@ -331,7 +294,7 @@ export function handleAutoHttpsChange() {
 }
 
 // 处理 HTTP 或 HTTPS 端口禁用
-export function handlePortDisable(e) {
+function handlePortDisable(e) {
   const httpEnabled = document.getElementById("http-enabled").checked;
   const httpsEnabled = document.getElementById("https-enabled").checked;
   const autoHttps = document.getElementById("auto-https");
@@ -356,7 +319,7 @@ export function handlePortDisable(e) {
 }
 
 // 处理证书类型切换
-export function handleCertTypeChange() {
+function handleCertTypeChange() {
   const certType = document.getElementById("cert-type").value;
   const updateCertBtn = document.getElementById("update-cert-btn");
   const importCertBtn = document.getElementById("import-cert-btn");
@@ -378,17 +341,17 @@ export function handleCertTypeChange() {
 }
 
 // 显示证书生成模态框
-export function showCertGenerateModal() {
+function showCertGenerateModal() {
   openModal("cert-generate-modal");
 }
 
 // 显示证书导入模态框
-export function showCertImportModal() {
+function showCertImportModal() {
   openModal("cert-import-modal");
 }
 
 // 下载证书
-export async function downloadCertificate() {
+async function downloadCertificate() {
   try {
     const result = await apiRequest("/api/system/certificate/download");
 
@@ -414,11 +377,8 @@ export async function downloadCertificate() {
 }
 
 // 生成自签名证书
-export async function generateSelfSignedCert() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  try {
+async function generateSelfSignedCert() {
+try {
     const form = document.getElementById("cert-generate-form");
     const formData = new FormData(form);
     
@@ -432,16 +392,7 @@ export async function generateSelfSignedCert() {
       validity: parseInt(formData.get("validity"))
     };
 
-    const response = await fetch("/api/system/certificate/generate", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(certData),
-    });
-
-    const result = await response.json();
+    const result = await apiPost("/api/system/certificate/generate", certData);
     if (result.success) {
       showToast("自签名证书生成成功", "success");
       closeModal("cert-generate-modal");
@@ -456,23 +407,15 @@ export async function generateSelfSignedCert() {
 }
 
 // 导入证书
-export async function importCertificate() {
-  const token = getAccessToken();
-  if (!token) return;
-
+async function importCertificate() {
   try {
     const form = document.getElementById("cert-import-form");
     const formData = new FormData(form);
 
-    const response = await fetch("/api/system/certificate/import", {
+    const result = await apiRequest("/api/system/certificate/import", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
       body: formData,
     });
-
-    const result = await response.json();
     if (result.success) {
       showToast("证书导入成功", "success");
       closeModal("cert-import-modal");
@@ -489,18 +432,9 @@ export async function importCertificate() {
 }
 
 // 检查服务状态
-export async function checkServiceStatus() {
-  const token = getAccessToken();
-  if (!token) return;
-
+async function checkServiceStatus() {
   try {
-    const response = await fetch("/api/system/service-status", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet("/api/system/service-status");
     if (result.success) {
       const data = result.data;
       const registerBtn = document.getElementById("register-service-btn");
@@ -578,19 +512,9 @@ export async function checkServiceStatus() {
 
 // 注册为服务
 export async function registerService() {
-  const token = getAccessToken();
-  if (!token) return;
-
   if (confirm("确定要将系统注册为服务吗？此操作将在系统启动时自动运行IPMA服务。")) {
     try {
-      const response = await fetch("/api/system/register-service", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
+      const result = await apiPost("/api/system/register-service", {});
       if (result.success) {
         showToast("注册为服务成功", "success");
         // 注册成功后更新服务状态
@@ -607,9 +531,6 @@ export async function registerService() {
 
 // 重启应用系统
 export async function restartApplication() {
-  const token = getAccessToken();
-  if (!token) return;
-
   const isService = await checkIfRunningAsService();
   const confirmMsg = isService 
     ? "确定要重启IPMA服务吗？重启过程中服务将暂时不可用。" 
@@ -619,14 +540,7 @@ export async function restartApplication() {
     clearConfigUpdateFlag();
     
     try {
-      const response = await fetch("/api/system/restart-application", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
+      const result = await apiPost("/api/system/restart-application", {});
       if (result.success) {
         const successMsg = isService ? "服务重启命令已发送" : "程序重启命令已发送";
         showToast(successMsg, "success");
@@ -645,16 +559,8 @@ export async function restartApplication() {
 }
 
 async function checkIfRunningAsService() {
-  const token = getAccessToken();
-  if (!token) return false;
-  
   try {
-    const response = await fetch("/api/system/service-status", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    const result = await response.json();
+    const result = await apiGet("/api/system/service-status");
     return result.success && result.data.running_as_service;
   } catch {
     return false;
@@ -663,22 +569,11 @@ async function checkIfRunningAsService() {
 
 // 重启操作系统
 export async function restartOs() {
-  const token = getAccessToken();
-  if (!token) return;
-
   if (confirm("确定要重启操作系统吗？重启过程中所有服务将暂时不可用。")) {
-    // 清除配置更新标记，因为用户正在重启系统
     clearConfigUpdateFlag();
     
     try {
-      const response = await fetch("/api/system/restart-os", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
+      const result = await apiPost("/api/system/restart-os", {});
       if (result.success) {
         showToast("操作系统重启命令已发送", "success");
         showToast("操作系统正在重启，请稍候...", "info");
@@ -699,18 +594,9 @@ export async function restartOs() {
 
 
 // 加载SMTP配置
-export async function loadSmtpConfig() {
-  const token = getAccessToken();
-  if (!token) return;
-
+async function loadSmtpConfig() {
   try {
-    const response = await fetch("/api/system/smtp/config", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet("/api/system/smtp/config");
     if (result.success) {
       const smtpConfig = result.data;
       if (smtpConfig) {
@@ -746,11 +632,8 @@ export async function loadSmtpConfig() {
 }
 
 // 保存SMTP配置
-export async function saveSmtpConfig() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  try {
+async function saveSmtpConfig() {
+try {
     const secureType = document.getElementById("smtp-secure-type").value;
     const smtpConfig = {
       host: document.getElementById("smtp-host").value,
@@ -761,16 +644,7 @@ export async function saveSmtpConfig() {
       secure: secureType !== "none",
     };
 
-    const response = await fetch("/api/system/smtp/config", {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(smtpConfig),
-    });
-
-    const result = await response.json();
+    const result = await apiPut("/api/system/smtp/config", smtpConfig);
     if (result.success) {
       showToast("SMTP配置保存成功", "success");
     } else {
@@ -784,9 +658,6 @@ export async function saveSmtpConfig() {
 
 // 测试SMTP连接
 export async function testSmtpConnection() {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
     const secureType = document.getElementById("smtp-secure-type").value;
     const smtpConfig = {
@@ -798,16 +669,7 @@ export async function testSmtpConnection() {
       secure: secureType !== "none",
     };
 
-    const response = await fetch("/api/system/smtp/test", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(smtpConfig),
-    });
-
-    const result = await response.json();
+    const result = await apiPost("/api/system/smtp/test", smtpConfig);
     if (result.success) {
       showToast("SMTP连接测试成功", "success");
     } else {
@@ -826,17 +688,8 @@ export function initSmtpFunctions() {
 
 // 加载系统信息
 export async function loadSystemInfo() {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch("/api/system/info", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet("/api/system/info");
     if (result.success) {
       const systemInfo = result.data;
 
@@ -880,10 +733,7 @@ export async function downloadTemplate(type = "csv") {
 
 // 导入CSV数据
 export async function importCsvData() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  const fileInput = document.createElement("input");
+const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = ".zip,.csv";
   fileInput.click();
@@ -896,15 +746,11 @@ export async function importCsvData() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("/api/system/import-export/import/csv", {
+      const result = await apiRequest("/api/system/import-export/import/csv", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
-      const result = await response.json();
       if (result.success) {
         showToast("数据导入成功", "success");
       } else {
@@ -977,10 +823,7 @@ export async function exportDatabase() {
 
 // 导入数据库
 export function importDatabase() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  const fileInput = document.createElement("input");
+const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = ".sql";
   fileInput.click();
@@ -993,15 +836,11 @@ export function importDatabase() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("/api/system/import-export/import/database", {
+      const result = await apiRequest("/api/system/import-export/import/database", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
-      const result = await response.json();
       if (result.success) {
         showToast("数据库导入成功", "success");
       } else {
@@ -1044,10 +883,7 @@ export async function backupConfig() {
 
 // 恢复配置
 export function restoreConfig() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  const fileInput = document.createElement("input");
+const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = ".toml";
   fileInput.click();
@@ -1060,15 +896,11 @@ export function restoreConfig() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("/api/system/config/restore", {
+      const result = await apiRequest("/api/system/config/restore", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
-      const result = await response.json();
       if (result.success) {
         showToast("配置恢复成功", "success");
         // 显示重启提示，告知用户需要重启程序

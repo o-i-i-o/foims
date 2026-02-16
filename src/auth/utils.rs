@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use lru::LruCache;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use tracing::{error, info, warn};
@@ -317,10 +317,28 @@ impl JwtUtils {
     pub fn get_refresh_token_expiry(&self) -> u64 {
         self.config.refresh_token_expiry
     }
+
+    // 获取基于 remember_me 的实际刷新令牌过期时间
+    pub fn get_actual_refresh_token_expiry(&self, remember_me: bool) -> u64 {
+        if remember_me {
+            self.config.refresh_token_expiry
+        } else {
+            86400 // 未勾选保持登录，24 小时
+        }
+    }
 }
 
-// 从请求中提取令牌
+// 从请求中提取令牌（优先从 Cookie，其次从 Authorization 头）
 pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String> {
+    // 优先从 Cookie 中获取 access_token
+    if let Some(cookie) = req.cookie("access_token") {
+        let token = cookie.value();
+        if !token.is_empty() {
+            return Some(token.to_string());
+        }
+    }
+    
+    // 回退到 Authorization 头（用于向后兼容或 API 调用）
     req.headers()
         .get("Authorization")
         .and_then(|header| header.to_str().ok())

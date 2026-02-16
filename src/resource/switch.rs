@@ -9,6 +9,7 @@ use validator::Validate;
 use async_snmp::{Auth, Client, oid, v3::AuthProtocol};
 
 use crate::config::Config;
+use crate::crypto::decrypt_password;
 use crate::db::DbPool;
 use crate::models::{
     ApiResponse, ArpEntry, SnmpTestRequest, Switch, SwitchCreate, SwitchPort, SwitchPortCreate,
@@ -27,6 +28,20 @@ pub struct SnmpParams<'a> {
     pub auth_pass: Option<&'a str>,
     pub priv_proto: Option<&'a str>,
     pub priv_pass: Option<&'a str>,
+}
+
+fn decrypt_snmp_field(value: Option<&str>) -> Option<String> {
+    value.map(|v| {
+        if v.is_empty() {
+            return String::new();
+        }
+        let decrypted = decrypt_password(v);
+        if decrypted.is_empty() || decrypted == v {
+            v.to_string()
+        } else {
+            decrypted
+        }
+    })
 }
 
 // ==================== 交换机管理 ====================
@@ -48,10 +63,17 @@ pub async fn get_switches(pool: web::Data<DbPool>) -> Result<HttpResponse> {
 
     let switches = sqlx::query_as::<_, SwitchWithParent>(
         r#"SELECT 
-            s.id, s.name, s.network_region_id, s.network_id, CAST(s.ip_address AS TEXT) as ip_address, s.mac_address, s.model, s.vendor,
-            CAST(s.management_ip AS TEXT) as management_ip, s.location, s.snmp_version, s.snmp_community,
-            s.snmp_username, s.snmp_auth_protocol, s.snmp_auth_password,
-            s.snmp_priv_protocol, s.snmp_priv_password, s.snmp_port,
+            s.id, s.name, s.network_region_id, s.network_id, s.model, s.vendor,
+            s.location, s.snmp_version, 
+            CASE WHEN s.snmp_community IS NOT NULL AND length(s.snmp_community) >= 44 
+                THEN decrypt_password(s.snmp_community) ELSE s.snmp_community END as snmp_community,
+            s.snmp_username, s.snmp_auth_protocol, 
+            CASE WHEN s.snmp_auth_password IS NOT NULL AND length(s.snmp_auth_password) >= 44 
+                THEN decrypt_password(s.snmp_auth_password) ELSE s.snmp_auth_password END as snmp_auth_password,
+            s.snmp_priv_protocol, 
+            CASE WHEN s.snmp_priv_password IS NOT NULL AND length(s.snmp_priv_password) >= 44 
+                THEN decrypt_password(s.snmp_priv_password) ELSE s.snmp_priv_password END as snmp_priv_password,
+            s.snmp_port,
             s.parent_switch_id, ps.name as parent_switch_name,
             s.parent_port_id, pp.port_number as parent_port_number,
             s.description, s.created_at, s.updated_at
@@ -80,10 +102,17 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
 
     let switch = sqlx::query_as::<_, SwitchWithParent>(
         r#"SELECT 
-            s.id, s.name, s.network_region_id, s.network_id, CAST(s.ip_address AS TEXT) as ip_address, s.mac_address, s.model, s.vendor,
-            CAST(s.management_ip AS TEXT) as management_ip, s.location, s.snmp_version, s.snmp_community,
-            s.snmp_username, s.snmp_auth_protocol, s.snmp_auth_password,
-            s.snmp_priv_protocol, s.snmp_priv_password, s.snmp_port,
+            s.id, s.name, s.network_region_id, s.network_id, s.model, s.vendor,
+            s.location, s.snmp_version, 
+            CASE WHEN s.snmp_community IS NOT NULL AND length(s.snmp_community) >= 44 
+                THEN decrypt_password(s.snmp_community) ELSE s.snmp_community END as snmp_community,
+            s.snmp_username, s.snmp_auth_protocol, 
+            CASE WHEN s.snmp_auth_password IS NOT NULL AND length(s.snmp_auth_password) >= 44 
+                THEN decrypt_password(s.snmp_auth_password) ELSE s.snmp_auth_password END as snmp_auth_password,
+            s.snmp_priv_protocol, 
+            CASE WHEN s.snmp_priv_password IS NOT NULL AND length(s.snmp_priv_password) >= 44 
+                THEN decrypt_password(s.snmp_priv_password) ELSE s.snmp_priv_password END as snmp_priv_password,
+            s.snmp_port,
             s.parent_switch_id, ps.name as parent_switch_name,
             s.parent_port_id, pp.port_number as parent_port_number,
             s.description, s.created_at, s.updated_at
@@ -98,7 +127,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
 
     match switch {
         Ok(Some(data)) => {
-            // 获取交换机的IP列表，包含network_region_id
+            // 获取交换机的IP列表，只获取device_type为switch的IP
             let ips = sqlx::query(
                 r#"SELECT 
                     m.id, m.switch_id, m.device_type, m.network_id, 
@@ -108,7 +137,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                     n.network_region_id
                 FROM ip_managers m
                 LEFT JOIN network_cidrs n ON m.network_id = n.id
-                WHERE m.switch_id = $1
+                WHERE m.switch_id = $1 AND m.device_type = 'switch'
                 ORDER BY m.ip_address"#,
             )
             .bind(id)
@@ -131,7 +160,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                     "last_seen": row.get::<DateTime<Utc>, _>(9),
                     "created_at": row.get::<DateTime<Utc>, _>(10),
                     "updated_at": row.get::<DateTime<Utc>, _>(11),
-                    "network_region_id": row.get::<Uuid, _>(12)
+                    "network_region_id": row.get::<Option<Uuid>, _>(12)
                 })
             }).collect();
 
@@ -160,22 +189,22 @@ pub async fn create_switch(
         );
     }
 
-    // 检查是否至少有一个IP地址
-    if req.ips.is_none() || req.ips.as_ref().unwrap().is_empty() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("至少需要添加一个IP地址")));
+    let has_ips = req.ips.is_some() && !req.ips.as_ref().unwrap().is_empty();
+    
+    if !has_ips {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "交换机必须至少配置一个IP地址"
+        )));
     }
-
-    // 从ips数组中获取第一个IP的信息作为交换机的主IP
+    
     let ips = req.ips.as_ref().unwrap();
     let first_ip = &ips[0];
     
-    // 获取network_region_id
     let network_region_id = if let Some(nrid) = req.network_region_id {
-        nrid
+        Some(nrid)
     } else if let Some(nrid) = first_ip.network_region_id {
-        nrid
+        Some(nrid)
     } else {
-        // 从network_id查询network_region_id
         match sqlx::query_scalar::<_, Uuid>(
             "SELECT network_region_id FROM network_cidrs WHERE id = $1"
         )
@@ -183,32 +212,31 @@ pub async fn create_switch(
         .fetch_optional(pool.get_conn())
         .await
         {
-            Ok(Some(id)) => id,
+            Ok(Some(id)) => Some(id),
             _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无法获取网络区域ID"))),
         }
     };
+    
+    let network_id = first_ip.network_id;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // 插入交换机记录
     let result = sqlx::query(
         r#"INSERT INTO switches (
-            id, name, network_region_id, network_id, ip_address, model, vendor, management_ip,
+            id, name, network_region_id, network_id, model, vendor,
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
             description, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)"#
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)"#
     )
     .bind(id)
     .bind(&req.name)
     .bind(network_region_id)
-    .bind(first_ip.network_id)
-    .bind(&first_ip.ip_address)
+    .bind(network_id)
     .bind(&req.model)
     .bind(&req.vendor)
-    .bind(&req.management_ip)
     .bind(&req.location)
     .bind(req.snmp_version.as_deref().unwrap_or("v2c"))
     .bind(&req.snmp_community)
@@ -228,56 +256,60 @@ pub async fn create_switch(
 
     match result {
         Ok(_) => {
-            // 处理所有IP地址
-            for ip in ips {
-                // 检查IP地址是否已存在
-                let ip_exists = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
-                )
-                .bind(&ip.ip_address)
-                .fetch_one(pool.get_conn())
-                .await
-                .unwrap_or(false);
+            if has_ips {
+                let ips = req.ips.as_ref().unwrap();
+                for ip in ips {
+                    let ip_exists = sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
+                    )
+                    .bind(&ip.ip_address)
+                    .fetch_one(pool.get_conn())
+                    .await
+                    .unwrap_or(false);
 
-                if ip_exists {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已存在", ip.ip_address))));
+                    if ip_exists {
+                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已存在", ip.ip_address))));
+                    }
+
+                    let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
+                    let now = Utc::now();
+                    
+                    let ip_manager_id = Uuid::new_v4();
+                    let _ = sqlx::query(
+                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
+                    )
+                    .bind(ip_manager_id)
+                    .bind(id)
+                    .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
+                    .bind(ip.network_id)
+                    .bind(&ip.ip_address)
+                    .bind(ip_version)
+                    .bind(&ip.mac_address)
+                    .bind(&ip.hostname)
+                    .bind("active")
+                    .bind(now)
+                    .bind(now)
+                    .bind(now)
+                    .execute(pool.get_conn())
+                    .await;
                 }
-
-                // 创建IP管理记录
-                let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
-                let now = Utc::now();
-                
-                let ip_manager_id = Uuid::new_v4();
-                let _ = sqlx::query(
-                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
-                )
-                .bind(ip_manager_id)
-                .bind(id)
-                .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
-                .bind(&ip.network_id)
-                .bind(&ip.ip_address)
-                .bind(ip_version)
-                .bind(&ip.mac_address)
-                .bind(&ip.hostname)
-                .bind("active")
-                .bind(now)
-                .bind(now)
-                .bind(now)
-                .execute(pool.get_conn())
-                .await;
             }
 
-            // 查询新创建的交换机
             let switch = sqlx::query_as::<_, Switch>(
                 r#"SELECT 
                     id, name, network_region_id, network_id,
-                    CAST(ip_address AS TEXT) as ip_address, 
-                    mac_address, model, vendor, 
-                    CAST(management_ip AS TEXT) as management_ip, 
-                    location, snmp_version, snmp_community, 
-                    snmp_username, snmp_auth_protocol, snmp_auth_password, 
-                    snmp_priv_protocol, snmp_priv_password, snmp_port, 
+                    model, vendor, 
+                    location, snmp_version, 
+                    CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                        THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+                    snmp_username, snmp_auth_protocol, 
+                    CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                        THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+                    snmp_priv_protocol, 
+                    CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                        THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+                    snmp_port, 
                     parent_switch_id, parent_port_id, description, created_at, updated_at 
                 FROM switches WHERE id = $1"#,
             )
@@ -287,7 +319,6 @@ pub async fn create_switch(
 
             match switch {
                 Ok(data) => {
-                    // 记录操作日志
                     let details = serde_json::json!({
                         "name": data.name,
                         "model": data.model,
@@ -370,28 +401,30 @@ pub async fn update_switch(
     let result = sqlx::query(
         r#"UPDATE switches SET
             name = COALESCE($1, name),
-            model = COALESCE($2, model),
-            vendor = COALESCE($3, vendor),
-            management_ip = COALESCE(CAST($4 AS INET), management_ip),
-            location = COALESCE($5, location),
-            snmp_version = COALESCE($6, snmp_version),
-            snmp_community = COALESCE($7, snmp_community),
-            snmp_username = COALESCE($8, snmp_username),
-            snmp_auth_protocol = COALESCE($9, snmp_auth_protocol),
-            snmp_auth_password = COALESCE($10, snmp_auth_password),
-            snmp_priv_protocol = COALESCE($11, snmp_priv_protocol),
-            snmp_priv_password = COALESCE($12, snmp_priv_password),
-            snmp_port = COALESCE($13, snmp_port),
-            parent_switch_id = $14,
-            parent_port_id = $15,
-            description = COALESCE($16, description),
-            updated_at = $17
-        WHERE id = $18"#,
+            network_region_id = COALESCE($2, network_region_id),
+            network_id = COALESCE($3, network_id),
+            model = COALESCE($4, model),
+            vendor = COALESCE($5, vendor),
+            location = COALESCE($6, location),
+            snmp_version = COALESCE($7, snmp_version),
+            snmp_community = COALESCE($8, snmp_community),
+            snmp_username = COALESCE($9, snmp_username),
+            snmp_auth_protocol = COALESCE($10, snmp_auth_protocol),
+            snmp_auth_password = COALESCE($11, snmp_auth_password),
+            snmp_priv_protocol = COALESCE($12, snmp_priv_protocol),
+            snmp_priv_password = COALESCE($13, snmp_priv_password),
+            snmp_port = COALESCE($14, snmp_port),
+            parent_switch_id = $15,
+            parent_port_id = $16,
+            description = COALESCE($17, description),
+            updated_at = $18
+        WHERE id = $19"#,
     )
     .bind(&req.name)
+    .bind(req.network_region_id)
+    .bind(req.network_id)
     .bind(&req.model)
     .bind(&req.vendor)
-    .bind(&req.management_ip)
     .bind(&req.location)
     .bind(&req.snmp_version)
     .bind(&req.snmp_community)
@@ -418,39 +451,6 @@ pub async fn update_switch(
                     .bind(id)
                     .execute(pool.get_conn())
                     .await;
-
-                // 获取第一个IP的信息作为交换机的主IP
-                if !ips.is_empty() {
-                    let first_ip = &ips[0];
-                    
-                    // 获取network_region_id
-                    let network_region_id = if let Some(nrid) = first_ip.network_region_id {
-                        nrid
-                    } else {
-                        // 从network_id查询network_region_id
-                        match sqlx::query_scalar::<_, Uuid>(
-                            "SELECT network_region_id FROM network_cidrs WHERE id = $1"
-                        )
-                        .bind(first_ip.network_id)
-                        .fetch_optional(pool.get_conn())
-                        .await
-                        {
-                            Ok(Some(id)) => id,
-                            _ => Uuid::nil(),
-                        }
-                    };
-                    
-                    // 更新交换机的主IP信息
-                    let _ = sqlx::query(
-                        "UPDATE switches SET network_region_id = $1, network_id = $2, ip_address = CAST($3 AS INET) WHERE id = $4"
-                    )
-                    .bind(network_region_id)
-                    .bind(first_ip.network_id)
-                    .bind(&first_ip.ip_address)
-                    .bind(id)
-                    .execute(pool.get_conn())
-                    .await;
-                }
 
                 // 添加新的IP管理记录
                 for ip in ips {
@@ -480,7 +480,7 @@ pub async fn update_switch(
                     .bind(ip_manager_id)
                     .bind(id)
                     .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
-                    .bind(&ip.network_id)
+                    .bind(ip.network_id)
                     .bind(&ip.ip_address)
                     .bind(ip_version)
                     .bind(&ip.mac_address)
@@ -498,12 +498,17 @@ pub async fn update_switch(
             let switch = sqlx::query_as::<_, Switch>(
                 r#"SELECT 
                     id, name, network_region_id, network_id,
-                    CAST(ip_address AS TEXT) as ip_address, 
-                    mac_address, model, vendor, 
-                    CAST(management_ip AS TEXT) as management_ip, 
-                    location, snmp_version, snmp_community, 
-                    snmp_username, snmp_auth_protocol, snmp_auth_password, 
-                    snmp_priv_protocol, snmp_priv_password, snmp_port, 
+                    model, vendor, 
+                    location, snmp_version, 
+                    CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                        THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+                    snmp_username, snmp_auth_protocol, 
+                    CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                        THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+                    snmp_priv_protocol, 
+                    CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                        THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+                    snmp_port, 
                     parent_switch_id, parent_port_id, description, created_at, updated_at 
                 FROM switches WHERE id = $1"#,
             )
@@ -629,7 +634,11 @@ pub async fn get_switch_ports(
 pub async fn get_all_switch_ports(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let ports = sqlx::query_as::<_, SwitchPortWithSwitch>(
         r#"SELECT 
-            sp.id, sp.switch_id, s.name as switch_name, CAST(s.ip_address AS TEXT) as switch_ip,
+            sp.id, sp.switch_id, s.name as switch_name, 
+            COALESCE(
+                (SELECT CAST(im.ip_address AS TEXT) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
+                ''
+            ) as switch_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
         FROM switch_ports sp
@@ -768,7 +777,11 @@ pub async fn get_switch_port(
 
     let port = sqlx::query_as::<_, SwitchPortWithSwitch>(
         r#"SELECT 
-            sp.id, sp.switch_id, s.name as switch_name, CAST(s.ip_address AS inet) as switch_ip,
+            sp.id, sp.switch_id, s.name as switch_name, 
+            COALESCE(
+                (SELECT CAST(im.ip_address AS TEXT) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
+                ''
+            ) as switch_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
         FROM switch_ports sp
@@ -972,12 +985,17 @@ pub async fn test_snmp_connection(
             let switch = sqlx::query_as::<_, Switch>(
                 r#"SELECT 
                     id, name, network_region_id, network_id,
-                    CAST(ip_address AS TEXT) as ip_address, 
-                    mac_address, model, vendor, 
-                    CAST(management_ip AS TEXT) as management_ip, 
-                    location, snmp_version, snmp_community, 
-                    snmp_username, snmp_auth_protocol, snmp_auth_password, 
-                    snmp_priv_protocol, snmp_priv_password, snmp_port, 
+                    model, vendor, 
+                    location, snmp_version, 
+                    CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                        THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+                    snmp_username, snmp_auth_protocol, 
+                    CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                        THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+                    snmp_priv_protocol, 
+                    CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                        THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+                    snmp_port, 
                     parent_switch_id, parent_port_id, description, created_at, updated_at 
                 FROM switches WHERE id = $1"#,
             )
@@ -986,17 +1004,34 @@ pub async fn test_snmp_connection(
             .await;
 
             match switch {
-                Ok(Some(s)) => (
-                    s.ip_address,
-                    s.snmp_version,
-                    s.snmp_community,
-                    s.snmp_username,
-                    s.snmp_auth_protocol,
-                    s.snmp_auth_password,
-                    s.snmp_priv_protocol,
-                    s.snmp_priv_password,
-                    s.snmp_port,
-                ),
+                Ok(Some(s)) => {
+                    // 从 ip_managers 获取交换机IP
+                    let ip_address: Option<String> = sqlx::query_scalar(
+                        r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+                           WHERE switch_id = $1 AND device_type = 'switch' 
+                           ORDER BY created_at LIMIT 1"#
+                    )
+                    .bind(switch_id)
+                    .fetch_optional(pool.get_conn())
+                    .await
+                    .ok()
+                    .flatten();
+                    
+                    let decrypted_community = decrypt_snmp_field(s.snmp_community.as_deref());
+                    let decrypted_auth_pass = decrypt_snmp_field(s.snmp_auth_password.as_deref());
+                    let decrypted_priv_pass = decrypt_snmp_field(s.snmp_priv_password.as_deref());
+                    (
+                        ip_address,
+                        s.snmp_version,
+                        decrypted_community,
+                        s.snmp_username,
+                        s.snmp_auth_protocol,
+                        decrypted_auth_pass,
+                        s.snmp_priv_protocol,
+                        decrypted_priv_pass,
+                        s.snmp_port,
+                    )
+                },
                 Ok(None) => {
                     return Ok(
                         HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))
@@ -1008,9 +1043,8 @@ pub async fn test_snmp_connection(
                 }
             }
         } else {
-            // 使用请求中的配置
             (
-                req.ip_address.clone().unwrap_or_default(),
+                req.ip_address.clone(),
                 req.snmp_version
                     .clone()
                     .unwrap_or_else(|| "v2c".to_string()),
@@ -1024,9 +1058,10 @@ pub async fn test_snmp_connection(
             )
         };
 
-    if ip.is_empty() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("IP地址不能为空")));
-    }
+    let ip = match ip {
+        Some(ref s) if !s.is_empty() => s.clone(),
+        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("IP地址不能为空"))),
+    };
 
     // 执行SNMP测试
     let snmp_params = SnmpParams {
@@ -1061,12 +1096,17 @@ pub async fn get_switch_arp_table(
     let switch = sqlx::query_as::<_, Switch>(
         r#"SELECT 
             id, name, network_region_id, network_id,
-            CAST(ip_address AS TEXT) as ip_address, 
-            mac_address, model, vendor, 
-            CAST(management_ip AS TEXT) as management_ip, 
-            location, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, snmp_auth_password, 
-            snmp_priv_protocol, snmp_priv_password, snmp_port, 
+            model, vendor, 
+            location, snmp_version, 
+            CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+            snmp_priv_protocol, 
+            CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+            snmp_port, 
             parent_switch_id, parent_port_id, description, created_at, updated_at 
         FROM switches WHERE id = $1"#,
     )
@@ -1085,17 +1125,37 @@ pub async fn get_switch_arp_table(
         }
     };
 
-    // 获取ARP表
+    // 从 ip_managers 获取交换机IP
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+           WHERE switch_id = $1 AND device_type = 'switch' 
+           ORDER BY created_at LIMIT 1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
+    let ip_address = match ip_address {
+        Some(ref ip) if !ip.is_empty() => ip,
+        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+    };
+
+    let decrypted_community = decrypt_snmp_field(switch.snmp_community.as_deref());
+    let decrypted_auth_pass = decrypt_snmp_field(switch.snmp_auth_password.as_deref());
+    let decrypted_priv_pass = decrypt_snmp_field(switch.snmp_priv_password.as_deref());
+
     let snmp_params = SnmpParams {
-        ip: &switch.ip_address,
+        ip: ip_address,
         port: switch.snmp_port,
         version: &switch.snmp_version,
-        community: switch.snmp_community.as_deref(),
+        community: decrypted_community.as_deref(),
         username: switch.snmp_username.as_deref(),
         auth_proto: switch.snmp_auth_protocol.as_deref(),
-        auth_pass: switch.snmp_auth_password.as_deref(),
+        auth_pass: decrypted_auth_pass.as_deref(),
         priv_proto: switch.snmp_priv_protocol.as_deref(),
-        priv_pass: switch.snmp_priv_password.as_deref(),
+        priv_pass: decrypted_priv_pass.as_deref(),
     };
 
     match get_arp_table_via_snmp(&snmp_params).await {
@@ -1421,12 +1481,17 @@ pub async fn batch_get_mac_via_snmp(
     let switches = sqlx::query_as::<_, Switch>(
         r#"SELECT 
             id, name, network_region_id, network_id,
-            CAST(ip_address AS TEXT) as ip_address, 
-            mac_address, model, vendor, 
-            CAST(management_ip AS TEXT) as management_ip, 
-            location, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, snmp_auth_password, 
-            snmp_priv_protocol, snmp_priv_password, snmp_port, 
+            model, vendor, 
+            location, snmp_version, 
+            CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+            snmp_priv_protocol, 
+            CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+            snmp_port, 
             parent_switch_id, parent_port_id, description, created_at, updated_at 
         FROM switches WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL"#,
     )
@@ -1446,16 +1511,37 @@ pub async fn batch_get_mac_via_snmp(
     let mut all_arp_entries: HashMap<String, String> = HashMap::new();
 
     for switch in &switches {
+        // 从 ip_managers 获取交换机IP
+        let ip_address: Option<String> = sqlx::query_scalar(
+            r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+               WHERE switch_id = $1 AND device_type = 'switch' 
+               ORDER BY created_at LIMIT 1"#
+        )
+        .bind(switch.id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        
+        let ip_address = match ip_address {
+            Some(ref ip) if !ip.is_empty() => ip,
+            _ => continue,
+        };
+        
+        let decrypted_community = decrypt_snmp_field(switch.snmp_community.as_deref());
+        let decrypted_auth_pass = decrypt_snmp_field(switch.snmp_auth_password.as_deref());
+        let decrypted_priv_pass = decrypt_snmp_field(switch.snmp_priv_password.as_deref());
+        
         let snmp_params = SnmpParams {
-            ip: &switch.ip_address,
+            ip: ip_address,
             port: switch.snmp_port,
             version: &switch.snmp_version,
-            community: switch.snmp_community.as_deref(),
+            community: decrypted_community.as_deref(),
             username: switch.snmp_username.as_deref(),
             auth_proto: switch.snmp_auth_protocol.as_deref(),
-            auth_pass: switch.snmp_auth_password.as_deref(),
+            auth_pass: decrypted_auth_pass.as_deref(),
             priv_proto: switch.snmp_priv_protocol.as_deref(),
-            priv_pass: switch.snmp_priv_password.as_deref(),
+            priv_pass: decrypted_priv_pass.as_deref(),
         };
 
         if let Ok(entries) = get_arp_table_via_snmp(&snmp_params).await {
@@ -1486,12 +1572,17 @@ pub async fn get_mac_from_switch(
     let switch = sqlx::query_as::<_, Switch>(
         r#"SELECT 
             id, name, network_region_id, network_id,
-            CAST(ip_address AS TEXT) as ip_address, 
-            mac_address, model, vendor, 
-            CAST(management_ip AS TEXT) as management_ip, 
-            location, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, snmp_auth_password, 
-            snmp_priv_protocol, snmp_priv_password, snmp_port, 
+            model, vendor, 
+            location, snmp_version, 
+            CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+            snmp_priv_protocol, 
+            CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+            snmp_port, 
             parent_switch_id, parent_port_id, description, created_at, updated_at 
         FROM switches WHERE id = $1"#,
     )
@@ -1505,22 +1596,41 @@ pub async fn get_mac_from_switch(
         None => return Err("交换机不存在".to_string()),
     };
 
-    // 检查SNMP配置
+    // 从 ip_managers 获取交换机IP
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+           WHERE switch_id = $1 AND device_type = 'switch' 
+           ORDER BY created_at LIMIT 1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    let ip_address = match ip_address {
+        Some(ref ip) if !ip.is_empty() => ip.clone(),
+        _ => return Err("交换机没有配置IP地址".to_string()),
+    };
+
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
         return Err("该交换机未配置SNMP".to_string());
     }
 
-    // 从交换机获取ARP表
+    let decrypted_community = decrypt_snmp_field(switch.snmp_community.as_deref());
+    let decrypted_auth_pass = decrypt_snmp_field(switch.snmp_auth_password.as_deref());
+    let decrypted_priv_pass = decrypt_snmp_field(switch.snmp_priv_password.as_deref());
+
     let snmp_params = SnmpParams {
-        ip: &switch.ip_address,
+        ip: &ip_address,
         port: switch.snmp_port,
         version: &switch.snmp_version,
-        community: switch.snmp_community.as_deref(),
+        community: decrypted_community.as_deref(),
         username: switch.snmp_username.as_deref(),
         auth_proto: switch.snmp_auth_protocol.as_deref(),
-        auth_pass: switch.snmp_auth_password.as_deref(),
+        auth_pass: decrypted_auth_pass.as_deref(),
         priv_proto: switch.snmp_priv_protocol.as_deref(),
-        priv_pass: switch.snmp_priv_password.as_deref(),
+        priv_pass: decrypted_priv_pass.as_deref(),
     };
 
     let entries = get_arp_table_via_snmp(&snmp_params).await?;
@@ -1649,12 +1759,17 @@ pub async fn get_switch_info_snmp(
     let switch = sqlx::query_as::<_, Switch>(
         r#"SELECT 
             id, name, network_region_id, network_id,
-            CAST(ip_address AS TEXT) as ip_address, 
-            mac_address, model, vendor, 
-            CAST(management_ip AS TEXT) as management_ip, 
-            location, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, snmp_auth_password, 
-            snmp_priv_protocol, snmp_priv_password, snmp_port, 
+            model, vendor, 
+            location, snmp_version, 
+            CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+            snmp_priv_protocol, 
+            CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+            snmp_port, 
             parent_switch_id, parent_port_id, description, created_at, updated_at 
         FROM switches WHERE id = $1"#,
     )
@@ -1673,17 +1788,37 @@ pub async fn get_switch_info_snmp(
         }
     };
 
-    // 获取交换机信息
+    // 从 ip_managers 获取交换机IP
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+           WHERE switch_id = $1 AND device_type = 'switch' 
+           ORDER BY created_at LIMIT 1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
+    let ip_address = match ip_address {
+        Some(ref ip) if !ip.is_empty() => ip,
+        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+    };
+
+    let decrypted_community = decrypt_snmp_field(switch.snmp_community.as_deref());
+    let decrypted_auth_pass = decrypt_snmp_field(switch.snmp_auth_password.as_deref());
+    let decrypted_priv_pass = decrypt_snmp_field(switch.snmp_priv_password.as_deref());
+
     let snmp_params = SnmpParams {
-        ip: &switch.ip_address,
+        ip: ip_address,
         port: switch.snmp_port,
         version: &switch.snmp_version,
-        community: switch.snmp_community.as_deref(),
+        community: decrypted_community.as_deref(),
         username: switch.snmp_username.as_deref(),
         auth_proto: switch.snmp_auth_protocol.as_deref(),
-        auth_pass: switch.snmp_auth_password.as_deref(),
+        auth_pass: decrypted_auth_pass.as_deref(),
         priv_proto: switch.snmp_priv_protocol.as_deref(),
-        priv_pass: switch.snmp_priv_password.as_deref(),
+        priv_pass: decrypted_priv_pass.as_deref(),
     };
 
     match get_switch_info_via_snmp(&snmp_params).await {
@@ -1710,12 +1845,17 @@ pub async fn get_switch_ports_snmp(
     let switch = sqlx::query_as::<_, Switch>(
         r#"SELECT 
             id, name, network_region_id, network_id,
-            CAST(ip_address AS TEXT) as ip_address, 
-            mac_address, model, vendor, 
-            CAST(management_ip AS TEXT) as management_ip, 
-            location, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, snmp_auth_password, 
-            snmp_priv_protocol, snmp_priv_password, snmp_port, 
+            model, vendor, 
+            location, snmp_version, 
+            CASE WHEN snmp_community IS NOT NULL AND length(snmp_community) >= 24 
+                THEN decrypt_password(snmp_community) ELSE snmp_community END as snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            CASE WHEN snmp_auth_password IS NOT NULL AND length(snmp_auth_password) >= 24 
+                THEN decrypt_password(snmp_auth_password) ELSE snmp_auth_password END as snmp_auth_password, 
+            snmp_priv_protocol, 
+            CASE WHEN snmp_priv_password IS NOT NULL AND length(snmp_priv_password) >= 24 
+                THEN decrypt_password(snmp_priv_password) ELSE snmp_priv_password END as snmp_priv_password, 
+            snmp_port, 
             parent_switch_id, parent_port_id, description, created_at, updated_at 
         FROM switches WHERE id = $1"#,
     )
@@ -1734,17 +1874,37 @@ pub async fn get_switch_ports_snmp(
         }
     };
 
-    // 获取端口信息
+    // 从 ip_managers 获取交换机IP
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r#"SELECT CAST(ip_address AS TEXT) FROM ip_managers 
+           WHERE switch_id = $1 AND device_type = 'switch' 
+           ORDER BY created_at LIMIT 1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
+    let ip_address = match ip_address {
+        Some(ref ip) if !ip.is_empty() => ip,
+        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+    };
+
+    let decrypted_community = decrypt_snmp_field(switch.snmp_community.as_deref());
+    let decrypted_auth_pass = decrypt_snmp_field(switch.snmp_auth_password.as_deref());
+    let decrypted_priv_pass = decrypt_snmp_field(switch.snmp_priv_password.as_deref());
+
     let snmp_params = SnmpParams {
-        ip: &switch.ip_address,
+        ip: ip_address,
         port: switch.snmp_port,
         version: &switch.snmp_version,
-        community: switch.snmp_community.as_deref(),
+        community: decrypted_community.as_deref(),
         username: switch.snmp_username.as_deref(),
         auth_proto: switch.snmp_auth_protocol.as_deref(),
-        auth_pass: switch.snmp_auth_password.as_deref(),
+        auth_pass: decrypted_auth_pass.as_deref(),
         priv_proto: switch.snmp_priv_protocol.as_deref(),
-        priv_pass: switch.snmp_priv_password.as_deref(),
+        priv_pass: decrypted_priv_pass.as_deref(),
     };
 
     match get_switch_ports_via_snmp(&snmp_params).await {

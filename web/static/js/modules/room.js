@@ -4,7 +4,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -365,19 +364,8 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 
 // 加载房间数据
 export async function loadRoomsData() {
-  const token = getAccessToken();
-  if (!token) {
-    return;
-  }
-
   try {
-    const roomsResponse = await fetch("/api/resources/rooms", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const roomsData = await roomsResponse.json();
+    const roomsData = await apiGet("/api/resources/rooms");
     const tbody = document.querySelector("#rooms-table tbody");
 
     if (roomsData.success && roomsData.data.length > 0) {
@@ -423,17 +411,8 @@ export async function loadRoomsData() {
 
 // 编辑房间
 export async function editRoom(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/resources/rooms/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/rooms/${id}`);
     if (result.success) {
       openRoomModal(result.data);
     } else {
@@ -451,9 +430,6 @@ export async function deleteRoom(id) {
 
 // 提交房间表单
 export async function submitRoomForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
   const id = getElementValue("room-id");
   const name = getElementValue("room-name", "trimmed");
   const roomType = getElementValue("room-type");
@@ -501,7 +477,6 @@ export async function submitRoomForm() {
     formData: roomData,
     id,
     baseUrl: "/api/resources/rooms",
-    token,
     successMessage: "房间保存成功",
     modalId: "room-modal",
     reloadFunction: loadRoomsData
@@ -536,26 +511,8 @@ export async function openRoomModal(room = null) {
 
 // 加载房间的网络配置
 async function loadRoomNetworks(room) {
-  const localRememberMe = localStorage.getItem("rememberMe");
-  let token;
-  if (localRememberMe === "true") {
-    token = localStorage.getItem("access_token");
-  } else {
-    token = sessionStorage.getItem("access_token");
-  }
-  
-  if (!token) {
-    await roomNetworkConfigManager.init();
-    return;
-  }
-
   try {
-    const networksResponse = await fetch("/api/resources/networks", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    const networksResult = await networksResponse.json();
+    const networksResult = await apiGet("/api/resources/networks");
     if (networksResult.success) {
       await roomNetworkConfigManager.loadExistingNetworks(room.networks, networksResult.data);
     } else {

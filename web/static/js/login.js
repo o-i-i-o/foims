@@ -1,10 +1,11 @@
 // 登录页面专用脚本
 
 // ES模块导入
-import { apiPost, apiGet, refreshToken } from "./utils/apiClient.js";
+import { apiPost, refreshToken } from "./utils/apiClient.js";
 import { closeModal, openModal } from "./utils/modal.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n } from "./utils/i18n.js";
+import { hasSession, clearSession } from "./utils/sessionManager.js";
 
 /**
  * 登录管理器类
@@ -524,12 +525,11 @@ class LoginManager {
   }
 
   async checkLoginStatus() {
-    const accessToken = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
-    if (!accessToken) return;
+    if (!hasSession()) return;
 
     try {
       const response = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -538,15 +538,12 @@ class LoginManager {
       }
 
       if (response.status === 401) {
-        const rememberMe = localStorage.getItem("rememberMe") === "true";
-        if (rememberMe) {
-          const refreshed = await refreshToken();
-          if (refreshed) {
-            window.location.href = "/main.html";
-            return;
-          }
+        const refreshed = await refreshToken();
+        if (refreshed) {
+          window.location.href = "/main.html";
+          return;
         }
-        this.clearStorage();
+        clearSession();
       }
     } catch (e) {
       console.warn("Check login status failed:", e);
@@ -554,14 +551,7 @@ class LoginManager {
   }
 
   clearStorage() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    sessionStorage.removeItem("access_token");
-    sessionStorage.removeItem("refresh_token");
-    sessionStorage.removeItem("user");
-    sessionStorage.removeItem("rememberMe");
+    clearSession();
   }
 }
 

@@ -9,6 +9,7 @@
 @import url('./components/toasts.css');
 @import url('./components/toggles.css');
 @import url('./components/network-config.css');
+@import url('./components/network-usage.css');
 @import url('./layouts/sidebar.css');
 @import url('./layouts/main-content.css');
 @import url('./pages/login.css');
@@ -16,4 +17,3 @@
 @import url('./pages/visualization.css');
 @import url('./utilities/animations.css');
 @import url('./responsive.css');
-@import url('./utilities/responsive.css');

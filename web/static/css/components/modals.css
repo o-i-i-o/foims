@@ -53,9 +53,17 @@
     max-width: 480px;
 }
 
+.modal-content.modal-md {
+    max-width: 600px;
+}
+
 .modal-content.modal-lg-custom {
     max-width: 90vw;
     max-height: 90vh;
+}
+
+.modal.modal-flex {
+    display: flex;
 }
 
 .modal-header {

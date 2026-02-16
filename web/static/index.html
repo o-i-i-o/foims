@@ -80,7 +80,7 @@
 
               <div class="form-group">
                 <label for="email-login-code">验证码</label>
-                <div style="display: flex; gap: 10px;">
+                <div class="form-inline-group">
                   <input
                     type="text"
                     id="email-login-code"
@@ -91,7 +91,7 @@
                     maxlength="6"
                     pattern="[0-9]{6}"
                   />
-                  <button type="button" id="send-login-code-btn" class="btn btn-secondary" style="white-space: nowrap;">发送验证码</button>
+                  <button type="button" id="send-login-code-btn" class="btn btn-secondary btn-nowrap">发送验证码</button>
                 </div>
               </div>
             </div>
@@ -145,7 +145,7 @@
               验证并登录
             </button>
             
-            <button type="button" id="back-to-login-btn" class="btn btn-text" style="width: 100%; margin-top: 10px;">
+            <button type="button" id="back-to-login-btn" class="btn btn-text btn-full-width">
               返回账号登录
             </button>
           </form>

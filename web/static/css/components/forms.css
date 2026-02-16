@@ -205,6 +205,23 @@
     opacity: 0.6;
 }
 
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    padding: var(--space-sm) 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    margin-right: var(--space-sm);
+    cursor: pointer;
+}
+
 .search-container {
     display: flex;
     gap: var(--space-sm);

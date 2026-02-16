@@ -1,14 +1,5 @@
-import { apiGet, getAccessToken } from "../utils/apiClient.js";
+import { apiGet, apiPost, apiDelete } from "../utils/apiClient.js";
 import { showToast, showMessage } from "../utils/ui.js";
-
-// 生成UUID的工具函数
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 export class SVGVisualization {
   constructor(containerId, type, callbacks = {}) {
@@ -770,7 +761,6 @@ export class SVGVisualization {
 
       // 如果没有工位数据，不显示任何内容
       if (workstations.length === 0) {
-        console.log("该房间下暂无工位数据");
         showMessage("该房间下暂无工位数据", "info");
         return;
       }
@@ -839,13 +829,8 @@ export class SVGVisualization {
         this.elementsGroup.innerHTML = "";
         
         // 并行获取数据，提高加载速度
-        const [layoutResponse, workstations, ipManagers] = await Promise.all([
-          fetch(`/api/resources/layouts/workstation/${id}`, {
-            method: "GET",
-            headers: {
-              "Authorization": `Bearer ${getAccessToken()}`,
-            },
-          }),
+        const [layoutResult, workstations, ipManagers] = await Promise.all([
+          apiGet(`/api/resources/layouts/workstation/${id}`),
           this.fetchWorkstationsByRoom(id),
           this.fetchIpManager()
         ]);
@@ -863,19 +848,10 @@ export class SVGVisualization {
         let layoutData = [];
         let hasSavedLayout = false;
         
-        if (layoutResponse.ok) {
-          const result = await layoutResponse.json();
-          if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
-            layoutData = result.data;
-            hasSavedLayout = true;
-            console.log("从数据库加载布局数据成功");
-          } else {
-            console.log("数据库中没有布局数据");
-          }
+        if (layoutResult.success && layoutResult.data && Array.isArray(layoutResult.data) && layoutResult.data.length > 0) {
+          layoutData = layoutResult.data;
+          hasSavedLayout = true;
         } else {
-          console.warn("从API加载布局数据失败");
-          // API加载失败时，只绘制门图标，不绘制工位
-          console.log("API加载失败，不绘制工位");
         }
         
         // 绘制门图标作为参考点
@@ -957,7 +933,6 @@ export class SVGVisualization {
           });
         } else {
           // 如果没有保存的布局数据，只绘制门图标，不绘制工位
-          console.log("没有保存的布局数据，不绘制工位");
         }
         
         // 根据最大坐标调整viewBox
@@ -975,51 +950,31 @@ export class SVGVisualization {
         this.elementsGroup.innerHTML = "";
         
         // 并行获取数据，提高加载速度
-        const [layoutResponse, cabinetsResult] = await Promise.all([
-          fetch(`/api/resources/layouts/positions/${id}`, {
-            method: "GET",
-            headers: {
-              "Authorization": `Bearer ${getAccessToken()}`,
-            },
-          }),
-          fetch(`/api/resources/cabinets`, {
-            headers: {
-              "Authorization": `Bearer ${getAccessToken()}`,
-            },
-          })
+        const [layoutResult, cabinetsResult] = await Promise.all([
+          apiGet(`/api/resources/layouts/positions/${id}`),
+          apiGet(`/api/resources/cabinets`)
         ]);
         
         // 处理布局数据
         let layoutData = [];
         let hasSavedLayout = false;
         
-        if (layoutResponse.ok) {
-          const result = await layoutResponse.json();
-          if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
-            layoutData = result.data;
-            hasSavedLayout = true;
-            console.log("从数据库加载网络区域布局数据成功");
-          } else {
-            console.log("数据库中没有网络区域布局数据");
-            showMessage("数据库中没有网络区域布局数据", "info");
-          }
+        if (layoutResult.success && layoutResult.data && Array.isArray(layoutResult.data) && layoutResult.data.length > 0) {
+          layoutData = layoutResult.data;
+          hasSavedLayout = true;
         } else {
-          console.warn("从API加载网络区域布局数据失败");
-          showMessage("加载布局数据失败", "error");
+          showMessage("数据库中没有网络区域布局数据", "info");
         }
         
         // 处理机柜数据
         let filteredCabinets = [];
-        if (cabinetsResult.ok) {
-          const cabinetsData = await cabinetsResult.json();
-          if (cabinetsData.success && cabinetsData.data) {
-            // 过滤出指定网络区域的机柜
-            filteredCabinets = cabinetsData.data.filter(cabinet => {
-              return cabinet.networks && cabinet.networks.some(network => 
-                network.network_region_id === id
-              );
-            });
-          }
+        if (cabinetsResult.success && cabinetsResult.data) {
+          // 过滤出指定网络区域的机柜
+          filteredCabinets = cabinetsResult.data.filter(cabinet => {
+            return cabinet.networks && cabinet.networks.some(network => 
+              network.network_region_id === id
+            );
+          });
         }
         
         // 绘制机柜
@@ -1073,7 +1028,6 @@ export class SVGVisualization {
           }
         } else {
           // 没有保存的布局，不显示任何元素
-          console.log("没有保存的网络区域布局数据");
         }
         
         return hasSavedLayout;
@@ -1117,7 +1071,6 @@ export class SVGVisualization {
       });
       
       if (filteredCabinets.length === 0) {
-        console.log("该网络区域下暂无机柜数据");
         showMessage("该网络区域下暂无机柜数据", "info");
         return;
       }
@@ -1127,7 +1080,6 @@ export class SVGVisualization {
 
       // 如果没有机柜数据，不显示任何内容
       if (filteredCabinets.length === 0) {
-        console.log("该网络区域下暂无机柜数据");
         showMessage("该网络区域下暂无机柜数据", "info");
         return;
       }
@@ -1199,7 +1151,6 @@ export class SVGVisualization {
       // 从后端获取机位数据
       const positionsResult = await apiGet(`/api/resources/positions?cabinet_id=${cabinet.id}`);
       if (!positionsResult.success || !positionsResult.data) {
-        console.log("该机柜暂无机位数据:", cabinet.name);
         return;
       }
 
@@ -1225,7 +1176,6 @@ export class SVGVisualization {
           this.drawCabinetPosition(position, cabinet);
         });
       } else {
-        console.log("该机柜暂无机位数据:", cabinet.name);
       }
     } catch (error) {
       console.error("绘制机位失败:", error);
@@ -1241,30 +1191,6 @@ export class SVGVisualization {
       return result.success ? result.data : [];
     } catch (error) {
       console.error("获取工位数据失败:", error);
-      return [];
-    }
-  }
-
-  // 从后端获取机柜数据
-  async fetchCabinetById(cabinetId) {
-    try {
-      const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
-      return result.success ? result.data : null;
-    } catch (error) {
-      console.error("获取机柜数据失败:", error);
-      return null;
-    }
-  }
-
-  // 从后端获取机位数据
-  async fetchCabinetPositionsByCabinet(cabinetId) {
-    try {
-      const result = await apiGet(
-        `/api/resources/positions?cabinet_id=${cabinetId}`,
-      );
-      return result.success ? result.data : [];
-    } catch (error) {
-      console.error("获取机位数据失败:", error);
       return [];
     }
   }
@@ -1327,22 +1253,14 @@ export class SVGVisualization {
 
     // 发送到后端保存
     try {
-      const response = await fetch("/api/resources/layouts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getAccessToken()}`,
-        },
-        body: JSON.stringify({
-          type: this.type === "cabinet" ? "network_region" : this.type,
-          room_id: this.type === "workstation" ? this.currentRoomId : null,
-          network_region_id: this.type === "cabinet" ? this.currentNetworkRegionId : null,
-          cabinet_id: null,
-          layout: layoutData,
-        }),
+      const result = await apiPost("/api/resources/layouts", {
+        type: this.type === "cabinet" ? "network_region" : this.type,
+        room_id: this.type === "workstation" ? this.currentRoomId : null,
+        network_region_id: this.type === "cabinet" ? this.currentNetworkRegionId : null,
+        cabinet_id: null,
+        layout: layoutData,
       });
 
-      const result = await response.json();
       if (result.success) {
         showToast("布局保存成功", "success");
       } else {
@@ -1368,15 +1286,7 @@ export class SVGVisualization {
 
       try {
         // 发送删除请求到后端
-        const response = await fetch(`/api/resources/layouts/workstation/${this.currentRoomId}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${getAccessToken()}`,
-          },
-        });
-
-        const result = await response.json();
+        const result = await apiDelete(`/api/resources/layouts/workstation/${this.currentRoomId}`);
         if (result.success) {
           // 清空显示
           this.elementsGroup.innerHTML = "";
@@ -1402,15 +1312,7 @@ export class SVGVisualization {
 
       try {
         // 发送删除请求到后端
-        const response = await fetch(`/api/resources/layouts/positions/${this.currentNetworkRegionId}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${getAccessToken()}`,
-          },
-        });
-
-        const result = await response.json();
+        const result = await apiDelete(`/api/resources/layouts/positions/${this.currentNetworkRegionId}`);
         if (result.success) {
           // 清空显示
           this.elementsGroup.innerHTML = "";

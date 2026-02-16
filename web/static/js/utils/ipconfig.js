@@ -88,7 +88,6 @@ export class IpConfigManager {
         const networkId = networkSelect.value;
         const ipAddress = ipAddressInput.value.trim();
         
-        // 只有当网络ID和IP地址都存在时才收集
         if (networkId && ipAddress) {
           const ipData = {
             network_id: networkId,
@@ -96,12 +95,15 @@ export class IpConfigManager {
             mac_address: macAddressInput ? macAddressInput.value.trim() || null : null,
           };
 
-          // 对于非switch类型，收集交换机端口信息
-          if (this.resourceType !== 'switch' && switchSelect && switchPortSelect && switchPortSelect.value) {
-            ipData.switch_port_id = switchPortSelect.value;
+          if (this.resourceType !== 'switch') {
+            if (switchSelect && switchSelect.value) {
+              ipData.switch_id = switchSelect.value;
+            }
+            if (switchPortSelect && switchPortSelect.value) {
+              ipData.switch_port_id = switchPortSelect.value;
+            }
           }
           
-          // 如果有网络区域信息（通常用于交换机）
           if (networkRegionSelect && networkRegionSelect.value) {
             ipData.network_region_id = networkRegionSelect.value;
           }
@@ -298,16 +300,17 @@ export class IpConfigManager {
       if (initialData.mac_address && macInput) macInput.value = initialData.mac_address;
 
       // 4. 设置交换机和端口
-      let switchId = initialData.switch_id;
-      // 兼容直接从交换机信息获取parent信息的情况
-      if (this.resourceType === 'switch' && !switchId && initialData.parent_switch_id) {
-          switchId = initialData.parent_switch_id;
-      }
+      let switchId = null;
+      let portId = null;
       
-      let portId = initialData.switch_port_id || initialData.port_id;
-      // 兼容直接从交换机信息获取parent信息的情况
-      if (this.resourceType === 'switch' && !portId && initialData.parent_port_id) {
+      // 对于switch类型，优先使用parent信息
+      if (this.resourceType === 'switch') {
+          switchId = initialData.parent_switch_id;
           portId = initialData.parent_port_id;
+      } else {
+          // 对于其他类型，使用switch_id和switch_port_id
+          switchId = initialData.switch_id;
+          portId = initialData.switch_port_id || initialData.port_id;
       }
 
       if (switchId && switchSelect) {
@@ -354,10 +357,8 @@ export class IpConfigManager {
     if (!switchSelect || !portSelect) return;
 
     try {
-      if (!switchesCache) {
-        const result = await apiGet("/api/switches");
-        switchesCache = result.data || [];
-      }
+      const result = await apiGet("/api/switches");
+      switchesCache = result.data || [];
       
       // 清空并添加默认选项
       switchSelect.innerHTML = '<option value="">选择交换机</option>';
@@ -449,24 +450,13 @@ export function bindButton(buttonId, resourceType) {
 export const handleWorkstationRoomChange = async () => {
   const manager = getManager('workstation');
   manager.clear();
-  // 房间改变后自动添加一行IP输入
   await manager.addIpRow();
 };
 
 export const handleCabinetPositionCabinetChange = async () => {
   const manager = getManager('cabinet-position');
   manager.clear();
-  // 机柜改变后自动添加一行IP输入
   await manager.addIpRow();
 };
 
-export const addIpAddressFieldToWorkstationForm = () => addIpAddressField('workstation');
-export const addIpAddressFieldToCabinetPositionForm = () => addIpAddressField('cabinet-position');
-export const addIpAddressFieldToSwitchForm = () => addIpAddressField('switch');
-
-export const bindWorkstationAddIpButton = () => {};
-export const bindCabinetPositionAddIpButton = () => {};
-export const bindSwitchAddIpButton = () => {};
-
-// 导出 getManager 函数
 export { getManager };

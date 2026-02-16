@@ -92,6 +92,10 @@
     white-space: nowrap;
 }
 
+.toggle-with-label-spacing {
+    margin-bottom: var(--space-md);
+}
+
 .toggle-group-vertical {
     flex-direction: column;
     align-items: flex-start;

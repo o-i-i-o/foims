@@ -4,7 +4,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -23,6 +22,8 @@ import { openModal, closeModal } from "../utils/modal.js";
 import {
   loadNetworkTypeOptions
 } from "../utils/resources.js";
+
+import { elementCache } from "../utils/helpers.js";
 
 // 加载网络区域数据并填充表格
 export async function loadNetworkTypesData() {
@@ -57,19 +58,8 @@ export async function loadNetworkTypesData() {
 
 // 加载网络数据
 export async function loadNetworksData(searchTerm = "") {
-  const token = getAccessToken();
-  if (!token) {
-    return;
-  }
-
   try {
-    const response = await fetch("/api/resources/networks", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet("/api/resources/networks");
     const tbody = document.querySelector("#networks-table tbody");
 
     if (data.success && data.data.length > 0) {
@@ -713,374 +703,13 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
 }
 
 function addUsageStyles(modalContainer) {
-  const styleElement = document.createElement('style');
-  styleElement.innerHTML = `
-    .network-usage-container {
-      font-size: 14px;
-    }
-    
-    .usage-tabs {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 20px;
-      border-bottom: 2px solid #dee2e6;
-    }
-    
-    .usage-tab-btn {
-      padding: 10px 20px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      color: #6c757d;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      transition: all 0.2s ease;
-    }
-    
-    .usage-tab-btn:hover {
-      color: #495057;
-    }
-    
-    .usage-tab-btn.active {
-      color: #007bff;
-      border-bottom-color: #007bff;
-    }
-    
-    .usage-tab-content {
-      display: none;
-    }
-    
-    .usage-tab-content.active {
-      display: block;
-    }
-    
-    .usage-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
-      margin-bottom: 20px;
-      padding: 15px;
-      background-color: #f8f9fa;
-      border-radius: 8px;
-    }
-    
-    .stat-item {
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .stat-label {
-      font-weight: 500;
-      color: #6c757d;
-      font-size: 12px;
-    }
-    
-    .stat-value {
-      font-weight: 600;
-      font-size: 16px;
-      color: #495057;
-    }
-    
-    .usage-controls {
-      margin-bottom: 20px;
-    }
-    
-    .filter-controls {
-      display: flex;
-      align-items: center;
-    }
-    
-    .usage-visualization {
-      margin-bottom: 20px;
-    }
-    
-    .ip-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
-      gap: 6px;
-      padding: 12px;
-      background-color: #f8f9fa;
-      border-radius: 8px;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    
-    .ip-block {
-      width: 100%;
-      height: 32px;
-      border-radius: 3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      position: relative;
-    }
-    
-    .ip-label {
-      font-size: 11px;
-      font-weight: 500;
-      color: #495057;
-    }
-    
-    .ip-block:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .ip-unused {
-      background-color: #e9ecef;
-      border: 1px solid #dee2e6;
-    }
-    
-    .ip-used-active {
-      background-color: #c3e6cb;
-      border: 1px solid #28a745;
-    }
-    
-    .ip-used-inactive {
-      background-color: #ffeeba;
-      border: 1px solid #ffc107;
-    }
-    
-    .usage-ips {
-      margin-top: 20px;
-    }
-    
-    .status-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    
-    .status-active {
-      background-color: #d4edda;
-      color: #155724;
-    }
-    
-    .status-inactive {
-      background-color: #fff3cd;
-      color: #856404;
-    }
-    
-    /* IPv6 样式 */
-    .ipv6-info-section {
-      margin-bottom: 20px;
-    }
-    
-    .ipv6-info-section h5 {
-      margin-bottom: 15px;
-      color: #495057;
-      font-weight: 600;
-    }
-    
-    .ipv6-info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
-      padding: 15px;
-      background-color: #f8f9fa;
-      border-radius: 8px;
-      border-left: 4px solid #6f42c1;
-    }
-    
-    .ipv6-info-item {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-    
-    .info-label {
-      font-weight: 500;
-      color: #6c757d;
-      font-size: 12px;
-    }
-    
-    .info-value {
-      font-weight: 600;
-      font-size: 14px;
-      color: #495057;
-      word-break: break-all;
-    }
-    
-    .ipv6-address {
-      font-family: 'Consolas', 'Monaco', monospace;
-      color: #6f42c1;
-    }
-    
-    .connection-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 4px 12px;
-      border-radius: 15px;
-      font-size: 13px;
-      font-weight: 500;
-    }
-    
-    .status-enabled {
-      background-color: #d4edda;
-      color: #155724;
-    }
-    
-    .status-disabled {
-      background-color: #e9ecef;
-      color: #6c757d;
-    }
-    
-    .ipv6-stats-section {
-      margin-bottom: 20px;
-    }
-    
-    .ipv6-stats-section h5 {
-      margin-bottom: 15px;
-      color: #495057;
-      font-weight: 600;
-    }
-    
-    .ipv6-stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 15px;
-    }
-    
-    .ipv6-stat-card {
-      padding: 20px;
-      background-color: #f8f9fa;
-      border-radius: 8px;
-      text-align: center;
-      border: 1px solid #dee2e6;
-    }
-    
-    .ipv6-stat-card.active {
-      background-color: #d4edda;
-      border-color: #28a745;
-    }
-    
-    .ipv6-stat-card.inactive {
-      background-color: #fff3cd;
-      border-color: #ffc107;
-    }
-    
-    .stat-number {
-      font-size: 28px;
-      font-weight: 700;
-      color: #495057;
-    }
-    
-    .ipv6-stat-card.active .stat-number {
-      color: #155724;
-    }
-    
-    .ipv6-stat-card.inactive .stat-number {
-      color: #856404;
-    }
-    
-    .stat-desc {
-      font-size: 12px;
-      color: #6c757d;
-      margin-top: 5px;
-    }
-    
-    .ipv6-list-section {
-      margin-top: 20px;
-    }
-    
-    .ipv6-list-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
-    }
-    
-    .ipv6-list-header h5 {
-      margin: 0;
-      color: #495057;
-      font-weight: 600;
-    }
-    
-    .ipv6-address-cell {
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 13px;
-      color: #6f42c1;
-    }
-    
-    .no-ipv6-info {
-      text-align: center;
-      padding: 60px 20px;
-      color: #6c757d;
-    }
-    
-    .no-ipv6-icon {
-      font-size: 48px;
-      margin-bottom: 15px;
-    }
-    
-    .no-ipv6-info p {
-      margin: 5px 0;
-    }
-    
-    .no-ipv6-hint {
-      font-size: 12px;
-      color: #adb5bd;
-    }
-    
-    .no-network-info {
-      text-align: center;
-      padding: 60px 20px;
-      color: #6c757d;
-    }
-    
-    .table-responsive {
-      overflow-x: auto;
-    }
-    
-    @media (max-width: 768px) {
-      .usage-tabs {
-        flex-direction: column;
-        border-bottom: none;
-      }
-      
-      .usage-tab-btn {
-        border-bottom: 1px solid #dee2e6;
-        margin-bottom: 0;
-      }
-      
-      .usage-tab-btn.active {
-        border-bottom-color: #007bff;
-        background-color: #f8f9fa;
-      }
-      
-      .ipv6-info-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .ipv6-stats-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  `;
-  modalContainer.appendChild(styleElement);
 }
 
 // 编辑网络
 export async function editNetwork(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
     // 根据ID获取网络数据
-    const response = await fetch(`/api/resources/networks/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/networks/${id}`);
     if (result.success) {
       // 打开编辑模态框
       openNetworkModal(result.data);
@@ -1098,17 +727,8 @@ export async function deleteNetwork(id) {
 }
 // 编辑网络区域
 export async function editNetworkType(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/resources/network-regions/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/network-regions/${id}`);
     if (result.success) {
       openNetworkTypeModal(result.data);
     } else {
@@ -1126,10 +746,7 @@ export async function deleteNetworkType(id) {
 
 // ====== 提交网络区域表单 ======
 export async function submitNetworkTypeForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  // 使用通用工具函数获取表单数据
+// 使用通用工具函数获取表单数据
   const id = getElementValue("network-type-id");
   const name = getElementValue("network-type-name", "trimmed");
   const description = getElementValue("network-type-description", "trimmed");
@@ -1150,7 +767,6 @@ export async function submitNetworkTypeForm() {
     formData: networkTypeData,
     id,
     baseUrl: "/api/resources/network-regions",
-    token,
     successMessage: "网络区域保存成功",
     modalId: "network-type-modal",
     reloadFunction: () => {
@@ -1164,10 +780,7 @@ export async function submitNetworkTypeForm() {
 
 // ====== 提交网络表单 ======
 export async function submitNetworkForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  // 使用通用工具函数获取表单数据
+// 使用通用工具函数获取表单数据
   const id = getElementValue("network-id");
   const name = getElementValue("network-name", "trimmed");
   const networkType = getElementValue("network-type"); // 直接获取UUID字符串，不转换为数字
@@ -1213,7 +826,6 @@ export async function submitNetworkForm() {
     formData: networkData,
     id,
     baseUrl: "/api/resources/networks",
-    token,
     successMessage: "网络保存成功",
     modalId: "network-modal",
     reloadFunction: loadNetworksData
@@ -1224,22 +836,19 @@ export async function submitNetworkForm() {
 
 // ====== 网络区域管理模态框 ======
 export function openNetworkTypeModal(networkType = null) {
-  const modal = document.getElementById("network-type-modal");
-  const title = document.getElementById("network-type-modal-title");
-  const form = document.getElementById("network-type-form");
+  const modal = elementCache.get('network-type-modal');
+  const title = elementCache.get('network-type-modal-title');
+  const form = elementCache.get('network-type-form');
 
   if (networkType) {
-    // 编辑模式
     title.textContent = "编辑网络区域";
-    document.getElementById("network-type-id").value = networkType.id;
-    document.getElementById("network-type-name").value = networkType.name;
-    document.getElementById("network-type-description").value =
-      networkType.description || "";
+    elementCache.setValue('network-type-id', networkType.id);
+    elementCache.setValue('network-type-name', networkType.name);
+    elementCache.setValue('network-type-description', networkType.description || "");
   } else {
-    // 添加模式
     title.textContent = "添加网络区域";
-    form.reset();
-    document.getElementById("network-type-id").value = "";
+    if (form) form.reset();
+    elementCache.setValue('network-type-id', '');
   }
 
   openModal("network-type-modal");
@@ -1247,37 +856,27 @@ export function openNetworkTypeModal(networkType = null) {
 
 // ====== 网络管理模态框 ======
 export async function openNetworkModal(network = null) {
-  const modal = document.getElementById("network-modal");
-  const title = document.getElementById("network-modal-title");
-  const form = document.getElementById("network-form");
+  const title = elementCache.get('network-modal-title');
+  const form = elementCache.get('network-form');
 
-  // 加载网络区域选项
   await loadNetworkTypeOptions();
 
   if (network) {
-    // 编辑模式
     title.textContent = "编辑网络";
-    document.getElementById("network-id").value = network.id;
-    // 直接使用网络名称，不需要从组合名称中提取
-    document.getElementById("network-name").value = network.name;
-    document.getElementById("network-type").value = network.network_region_id;
-    document.getElementById("network-ipv4-cidr").value =
-      network.ipv4_cidr || "";
-    document.getElementById("network-ipv6-cidr").value =
-      network.ipv6_cidr || "";
-    document.getElementById("network-ipv4-gateway").value =
-      network.ipv4_gateway || "";
-    document.getElementById("network-ipv6-gateway").value =
-      network.ipv6_gateway || "";
-    document.getElementById("network-ipv4-dns").value = network.ipv4_dns || "";
-    document.getElementById("network-ipv6-dns").value = network.ipv6_dns || "";
-    document.getElementById("network-description").value =
-      network.description || "";
+    elementCache.setValue('network-id', network.id);
+    elementCache.setValue('network-name', network.name);
+    elementCache.setValue('network-type', network.network_region_id);
+    elementCache.setValue('network-ipv4-cidr', network.ipv4_cidr || "");
+    elementCache.setValue('network-ipv6-cidr', network.ipv6_cidr || "");
+    elementCache.setValue('network-ipv4-gateway', network.ipv4_gateway || "");
+    elementCache.setValue('network-ipv6-gateway', network.ipv6_gateway || "");
+    elementCache.setValue('network-ipv4-dns', network.ipv4_dns || "");
+    elementCache.setValue('network-ipv6-dns', network.ipv6_dns || "");
+    elementCache.setValue('network-description', network.description || "");
   } else {
-    // 添加模式
     title.textContent = "添加网络";
-    form.reset();
-    document.getElementById("network-id").value = "";
+    if (form) form.reset();
+    elementCache.setValue('network-id', '');
   }
 
   openModal("network-modal");

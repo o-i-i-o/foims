@@ -95,3 +95,12 @@
     gap: var(--space-sm);
     flex-wrap: wrap;
 }
+
+.btn-nowrap {
+    white-space: nowrap;
+}
+
+.btn-full-width {
+    width: 100%;
+    margin-top: var(--space-sm);
+}

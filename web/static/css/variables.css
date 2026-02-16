@@ -36,6 +36,10 @@
     
     --color-border: #ced4da;
     --color-border-light: #e9ecef;
+    --color-border-dark: #dee2e6;
+    
+    --color-ipv6: #6f42c1;
+    --color-blue: #007bff;
     
     --control-bg: #ffffff;
     --control-bg-muted: #f8f9fa;

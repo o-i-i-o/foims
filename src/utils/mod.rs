@@ -2,7 +2,6 @@ pub mod buffer_pool;
 
 use ipnetwork::IpNetwork;
 use macaddr::MacAddr;
-use rand::Rng;
 use regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -31,6 +30,7 @@ pub fn validate_room_type(room_type: &Option<String>) -> bool {
 
 // 生成随机密码
 pub fn generate_random_password(length: usize) -> String {
+    use rand::RngExt;
     const CHARS: &[u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+";
     let mut rng = rand::rng();
@@ -570,10 +570,7 @@ pub fn validate_cidr(cidr: &str) -> bool {
     }
 
     // 然后尝试使用ipnetwork库解析CIDR，确保它是有效的网络地址
-    match ipnetwork::IpNetwork::from_str(cidr) {
-        Ok(_) => true,
-        Err(_) => false
-    }
+    ipnetwork::IpNetwork::from_str(cidr).is_ok()
 }
 
 // 获取CIDR类型

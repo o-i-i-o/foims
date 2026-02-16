@@ -30,6 +30,10 @@ const EDIT_FUNCTIONS = {
   "cabinets-table": editCabinet,
   "cabinet-positions-table": editCabinetPosition,
   "switches-table": editSwitch,
+  "users-table": async (id) => {
+    const { openUserModal } = await loadModule("userManager", "/static/js/modules/userManager.js");
+    openUserModal(id);
+  },
 };
 
 const DELETE_FUNCTIONS = {

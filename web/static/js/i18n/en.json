@@ -42,6 +42,7 @@
     "logout": "Logout",
     "username": "Username",
     "password": "Password",
+    "confirm_password": "Confirm Password",
     "remember_me": "Remember me",
     "login_success": "Login successful",
     "login_failed": "Login failed",
@@ -223,7 +224,8 @@
     "add_user": "Add User",
     "username_placeholder": "Enter username",
     "email_placeholder": "Enter email",
-    "password_placeholder": "Enter password (required for new users)"
+    "password_placeholder": "Enter password (required for new users)",
+    "password_confirm_placeholder": "Enter password again"
   },
   "config": {
     "server_ipv4": "Server Address (IPv4)",
@@ -396,6 +398,7 @@
     "invalid_email_or_code": "Invalid email or verification code",
     "account_disabled": "Account disabled, please contact administrator",
     "device_validation_failed": "Device validation failed",
+    "token_revoked": "Token has been revoked, please login again",
     "success": "Operation successful",
     "failed": "Operation failed"
   }

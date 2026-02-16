@@ -4,7 +4,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -31,21 +30,9 @@ export async function loadCabinetPositionsData() {
   if (isLoadingPositions) {
     return;
   }
-
-  const token = getAccessToken();
-  if (!token) {
-    return;
-  }
-
   try {
     isLoadingPositions = true;
-    const response = await fetch("/api/resources/positions", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet("/api/resources/positions");
     const tbody = document.querySelector("#cabinet-positions-table tbody");
 
     // 确保tbody元素存在
@@ -61,28 +48,22 @@ export async function loadCabinetPositionsData() {
       for (const position of data.data) {
         // 显示格式：机柜名+机位名，如Cabinet01-Server01
         const displayName = `${position.cabinet_name}-${position.name}`;
-        // 构建交换机端口显示内容
-        const portsHtml =
-          position.ports && position.ports.length > 0
-            ? position.ports
-                .map(
-                  (port) =>
-                    `${port.switch_name || "未知交换机"}: ${port.port_number}${port.port_name ? ` (${port.port_name})` : ""}`,
-                )
-                .join("<br>")
-            : "-";
         
-        // 获取机位关联的IP地址
+        // 获取机位关联的IP地址和交换机端口
         let ipsHtml = "-";
+        let portsHtml = "-";
         try {
-          const ipsResponse = await fetch(`/api/resources/ip/cabinet-position/${position.id}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          const ipsData = await ipsResponse.json();
+          const ipsData = await apiGet(`/api/resources/ip/cabinet-position/${position.id}`);
           if (ipsData.success && ipsData.data.length > 0) {
-            ipsHtml = ipsData.data.map(ip => ip.ip_address).join("<br>");
+            ipsHtml = ipsData.data.map(ip => {
+              const ipAddr = ip.ip_address.split('/')[0];
+              return ipAddr;
+            }).join("<br>");
+            
+            const portInfos = ipsData.data
+              .filter(ip => ip.switch_name && ip.switch_port_number)
+              .map(ip => `${ip.switch_name}: ${ip.switch_port_number}`);
+            portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
           }
         } catch (ipsError) {
           console.error(`获取机位 ${position.id} 的IP地址失败:`, ipsError);
@@ -122,17 +103,8 @@ export async function loadCabinetPositionsData() {
 
 // 编辑机位
 export async function editCabinetPosition(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/resources/positions/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/positions/${id}`);
     if (result.success) {
       openCabinetPositionModal(result.data);
     } else {
@@ -150,10 +122,7 @@ export async function deleteCabinetPosition(id) {
 
 // 提交机柜机位表单
 export async function submitCabinetPositionForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  const id = document.getElementById("cabinet-position-id").value;
+const id = document.getElementById("cabinet-position-id").value;
   const parsedId = id && id !== "" ? id : null;
   const name = document.getElementById("cabinet-position-name").value;
   const cabinetId = document.getElementById("cabinet-position-cabinet").value;
@@ -215,21 +184,12 @@ export async function submitCabinetPositionForm() {
   };
 
   try {
-    const url = parsedId
-      ? `/api/resources/positions/${parsedId}`
-      : "/api/resources/positions";
-    const method = parsedId ? "PUT" : "POST";
+    if (parsedId) {
+      var result = await apiPut(`/api/resources/positions/${parsedId}`, positionData);
+    } else {
+      var result = await apiPost("/api/resources/positions", positionData);
+    }
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(positionData),
-    });
-
-    const result = await response.json();
     if (result.success) {
       closeModal("cabinet-position-modal");
       loadCabinetPositionsData();
@@ -259,18 +219,12 @@ export async function openCabinetPositionModal(position = null) {
   const ipManager = new IpConfigManager('cabinet-position');
   ipManager.clear();
 
-  // 获取机柜选择框
   const cabinetSelect = document.getElementById("cabinet-position-cabinet");
   
-  // 导入并添加机柜选择事件监听器
-  const { handleCabinetPositionCabinetChange, bindCabinetPositionAddIpButton } = await import("../utils/ipconfig.js");
+  const { handleCabinetPositionCabinetChange } = await import("../utils/ipconfig.js");
   
-  // 添加机柜选择事件监听器，当选择机柜时，清空现有IP行
   if (cabinetSelect) {
-    // 移除之前的事件监听器，避免重复添加
     cabinetSelect.removeEventListener("change", handleCabinetPositionCabinetChange);
-    
-    // 添加新的事件监听器
     cabinetSelect.addEventListener("change", handleCabinetPositionCabinetChange);
   }
 
@@ -300,6 +254,4 @@ export async function openCabinetPositionModal(position = null) {
   }
 
   openModal("cabinet-position-modal");
-  
-  bindCabinetPositionAddIpButton();
 }

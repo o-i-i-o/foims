@@ -133,143 +133,95 @@ pub async fn get_system_info(
 pub async fn get_dashboard_stats(
     pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let total_users: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let active_users: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = 'active'")
+    let active_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = 'active'")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_network_regions: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
+    let total_network_regions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_networks: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
+    let total_networks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_rooms: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
+    let total_rooms: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_cabinets: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM cabinets")
+    let total_cabinets: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cabinets")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_workstations: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM workstations")
+    let total_workstations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workstations")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_positions: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM positions")
+    let total_positions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM positions")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_switches: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM switches")
+    let total_switches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switches")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let total_ips: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers")
+    let total_ips: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let active_ips: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers WHERE status = 'active'")
+    let active_ips: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers WHERE status = 'active'")
         .fetch_one(pool.get_conn())
         .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+        .unwrap_or_default();
 
-    let ips_by_device_type: Vec<(String, i64)> = match sqlx::query_as(
+    let ips_by_device_type: Vec<(String, i64)> = sqlx::query_as(
         "SELECT device_type, COUNT(*) as count FROM ip_managers WHERE device_type IS NOT NULL GROUP BY device_type"
     )
     .fetch_all(pool.get_conn())
     .await
-    {
-        Ok(data) => data,
-        Err(_) => vec![],
-    };
+    .unwrap_or_default();
 
-    let ips_by_status: Vec<(String, i64)> = match sqlx::query_as(
+    let ips_by_status: Vec<(String, i64)> = sqlx::query_as(
         "SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status"
     )
     .fetch_all(pool.get_conn())
     .await
-    {
-        Ok(data) => data,
-        Err(_) => vec![],
-    };
+    .unwrap_or_default();
 
-    let rooms_by_type: Vec<(String, i64)> = match sqlx::query_as(
+    let rooms_by_type: Vec<(String, i64)> = sqlx::query_as(
         "SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type"
     )
     .fetch_all(pool.get_conn())
     .await
-    {
-        Ok(data) => data,
-        Err(_) => vec![],
-    };
+    .unwrap_or_default();
 
-    let recent_logs: i64 = match sqlx::query_scalar(
+    let recent_logs: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
     )
     .fetch_one(pool.get_conn())
     .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    .unwrap_or_default();
 
-    let login_logs_today: i64 = match sqlx::query_scalar(
+    let login_logs_today: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
     )
     .fetch_one(pool.get_conn())
     .await
-    {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    .unwrap_or_default();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
@@ -347,25 +299,25 @@ pub async fn restart_application() -> Result<HttpResponse> {
         
         match output {
             Ok(output) if output.status.success() => {
-                return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
+                Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
                     (),
                     "服务重启命令已发送，服务正在重启",
-                )));
+                )))
             }
             Ok(output) => {
                 let error_message = String::from_utf8_lossy(&output.stderr);
                 if error_message.contains("Access denied") || error_message.contains("Permission denied") {
                     return restart_via_sudo();
                 }
-                return Ok(
+                Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
                         "服务重启失败: {}",
                         error_message
                     ))),
-                );
+                )
             }
             Err(_) => {
-                return restart_via_sudo();
+                restart_via_sudo()
             }
         }
     } else {
@@ -374,15 +326,14 @@ pub async fn restart_application() -> Result<HttpResponse> {
 }
 
 fn check_if_running_as_service() -> bool {
-    if let Ok(_) = std::env::var("INVOCATION_ID") {
+    if std::env::var("INVOCATION_ID").is_ok() {
         return true;
     }
     
-    if let Ok(pid) = std::fs::read_to_string("/proc/self/cgroup") {
-        if pid.contains("systemd") || pid.contains(".service") {
+    if let Ok(pid) = std::fs::read_to_string("/proc/self/cgroup")
+        && (pid.contains("systemd") || pid.contains(".service")) {
             return true;
         }
-    }
     
     std::path::Path::new("/etc/systemd/system/ipma.service").exists()
 }
@@ -535,7 +486,7 @@ pub async fn check_service_status() -> Result<HttpResponse> {
 
         if is_active {
             let show_output = Command::new("systemctl")
-                .args(&["show", "ipma.service", "--property=ExecMainStartTimestamp"])
+                .args(["show", "ipma.service", "--property=ExecMainStartTimestamp"])
                 .output()
                 .ok();
             
@@ -543,12 +494,11 @@ pub async fn check_service_status() -> Result<HttpResponse> {
                 let prop = String::from_utf8_lossy(&output.stdout);
                 if let Some(timestamp_str) = prop.strip_prefix("ExecMainStartTimestamp=") {
                     let timestamp_str = timestamp_str.trim();
-                    if !timestamp_str.is_empty() && timestamp_str != "n/a" {
-                        if let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
+                    if !timestamp_str.is_empty() && timestamp_str != "n/a"
+                        && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
                             let now = chrono::Utc::now();
                             uptime_seconds = Some((now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64);
                         }
-                    }
                 }
             }
         }
@@ -1084,10 +1034,10 @@ pub async fn download_certificate() -> Result<HttpResponse> {
     if let Ok(entries) = std::fs::read_dir(&certs_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                if filename.starts_with(prefix) && filename.ends_with(".pem") {
-                    if let Ok(metadata) = entry.metadata() {
-                        if let Ok(modified) = metadata.modified() {
+            if let Some(filename) = path.file_name().and_then(|f| f.to_str())
+                && filename.starts_with(prefix) && filename.ends_with(".pem")
+                    && let Ok(metadata) = entry.metadata()
+                        && let Ok(modified) = metadata.modified() {
                             if let Some((_, latest_time)) = latest_cert {
                                 if modified > latest_time {
                                     latest_cert = Some((path.to_string_lossy().to_string(), modified));
@@ -1096,14 +1046,11 @@ pub async fn download_certificate() -> Result<HttpResponse> {
                                 latest_cert = Some((path.to_string_lossy().to_string(), modified));
                             }
                         }
-                    }
-                }
-            }
         }
     }
     
     if let Some((path, _)) = latest_cert {
-        let content = std::fs::read(&path).map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
+        let content = std::fs::read(&path).map_err(actix_web::error::ErrorInternalServerError)?;
         let filename = std::path::Path::new(&path).file_name().unwrap().to_str().unwrap();
         
         Ok(HttpResponse::Ok()
@@ -1181,10 +1128,8 @@ fn generate_self_signed_cert(
          if !host.is_empty() {
              if let Ok(ip) = host.parse::<std::net::IpAddr>() {
                  sans.push(SanType::IpAddress(ip));
-             } else {
-                 if let Ok(dns_name) = host.try_into() {
-                     sans.push(SanType::DnsName(dns_name));
-                 }
+             } else if let Ok(dns_name) = host.try_into() {
+                 sans.push(SanType::DnsName(dns_name));
              }
          }
     }
@@ -1193,10 +1138,8 @@ fn generate_self_signed_cert(
     if sans.is_empty() {
          if let Ok(ip) = req.common_name.parse::<std::net::IpAddr>() {
              sans.push(SanType::IpAddress(ip));
-         } else {
-             if let Ok(dns_name) = req.common_name.as_str().try_into() {
-                 sans.push(SanType::DnsName(dns_name));
-             }
+         } else if let Ok(dns_name) = req.common_name.as_str().try_into() {
+             sans.push(SanType::DnsName(dns_name));
          }
     }
     params.subject_alt_names = sans;

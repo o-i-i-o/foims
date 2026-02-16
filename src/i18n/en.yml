@@ -25,6 +25,7 @@ api:
   invalid_email_or_code: "Invalid email or verification code"
   account_disabled: "Account disabled, please contact administrator"
   device_validation_failed: "Device validation failed"
+  token_revoked: "Token has been revoked, please login again"
   missing_field: "Missing required field: {{field}}"
   invalid_type: "Field type error: {{info}}"
   json_error: "JSON format error: {{error}}"

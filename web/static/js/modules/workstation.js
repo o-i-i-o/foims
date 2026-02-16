@@ -5,7 +5,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -30,23 +29,13 @@ import {
 } from "../utils/resources.js";
 
 import {
-  handleWorkstationRoomChange,
-  bindWorkstationAddIpButton
+  handleWorkstationRoomChange
 } from "../utils/ipconfig.js";
 
 // 编辑工位
 export async function editWorkstation(id) {
-  const token = getAccessToken();
-  if (!token) return;
-
   try {
-    const response = await fetch(`/api/resources/workstations/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
+    const result = await apiGet(`/api/resources/workstations/${id}`);
     if (result.success) {
       openWorkstationModal(result.data);
     } else {
@@ -72,21 +61,9 @@ export async function loadWorkstationsData() {
   if (isLoadingWorkstations) {
     return;
   }
-
-  const token = getAccessToken();
-  if (!token) {
-    return;
-  }
-
-  try {
+try {
     isLoadingWorkstations = true;
-    const response = await fetch("/api/resources/workstations", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
+    const data = await apiGet("/api/resources/workstations");
     const tbody = document.querySelector("#workstations-table tbody");
 
     // 确保tbody元素存在
@@ -102,28 +79,22 @@ export async function loadWorkstationsData() {
       for (const workstation of data.data) {
         // 显示格式：房间名+工位名，如112-1
         const displayName = `${workstation.room_name}-${workstation.name}`;
-        // 构建交换机端口显示内容
-        const portsHtml =
-          workstation.ports && workstation.ports.length > 0
-            ? workstation.ports
-                .map(
-                  (port) =>
-                    `${port.switch_name || "未知交换机"}: ${port.port_number}${port.port_name ? ` (${port.port_name})` : ""}`,
-                )
-                .join("<br>")
-            : "-";
         
-        // 获取工位关联的IP地址
+        // 获取工位关联的IP地址和交换机端口
         let ipsHtml = "-";
+        let portsHtml = "-";
         try {
-          const ipsResponse = await fetch(`/api/resources/ip/workstation/${workstation.id}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          const ipsData = await ipsResponse.json();
+          const ipsData = await apiGet(`/api/resources/ip/workstation/${workstation.id}`);
           if (ipsData.success && ipsData.data.length > 0) {
-            ipsHtml = ipsData.data.map(ip => ip.ip_address).join("<br>");
+            ipsHtml = ipsData.data.map(ip => {
+              const ipAddr = ip.ip_address.split('/')[0];
+              return ipAddr;
+            }).join("<br>");
+            
+            const portInfos = ipsData.data
+              .filter(ip => ip.switch_name && ip.switch_port_number)
+              .map(ip => `${ip.switch_name}: ${ip.switch_port_number}`);
+            portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
           }
         } catch (ipsError) {
           console.error(`获取工位 ${workstation.id} 的IP地址失败:`, ipsError);
@@ -209,16 +180,10 @@ export async function openWorkstationModal(workstation = null) {
   }
 
   openModal("workstation-modal");
-  
-  bindWorkstationAddIpButton();
 }
 
-// 提交工位表单
 export async function submitWorkstationForm() {
-  const token = getAccessToken();
-  if (!token) return;
-
-  const id = document.getElementById("workstation-id").value;
+const id = document.getElementById("workstation-id").value;
   const parsedId = id && id !== "" ? id : null;
   const name = document.getElementById("workstation-name").value;
   const roomId = document.getElementById("workstation-room").value;
@@ -256,21 +221,12 @@ export async function submitWorkstationForm() {
   };
 
   try {
-    const url = parsedId
-      ? `/api/resources/workstations/${parsedId}`
-      : "/api/resources/workstations";
-    const method = parsedId ? "PUT" : "POST";
+    if (parsedId) {
+      var result = await apiPut(`/api/resources/workstations/${parsedId}`, workstationData);
+    } else {
+      var result = await apiPost("/api/resources/workstations", workstationData);
+    }
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(workstationData),
-    });
-
-    const result = await response.json();
     if (result.success) {
       closeModal("workstation-modal");
       loadWorkstationsData();

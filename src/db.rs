@@ -266,7 +266,7 @@ impl DbPool {
     async fn update_metrics(&self) {
         let status = self.pool.size();
         self.metrics.update_connection_counts(
-            status as u32,
+            status,
             self.pool.num_idle() as u32,
         );
     }
@@ -279,7 +279,7 @@ impl DbPool {
     /// 获取连接池状态
     pub fn get_pool_status(&self) -> PoolStatus {
         PoolStatus {
-            size: self.pool.size() as u32,
+            size: self.pool.size(),
             num_idle: self.pool.num_idle() as u32,
             is_closed: self.pool.is_closed(),
         }
@@ -345,20 +345,18 @@ impl DbPool {
         // 高负载：增加连接数
         if utilization_rate > high_load_threshold {
             let new_max = (max_connections as f32 * 1.5).min(100.0) as u32;
-            if new_max > max_connections {
-                if let Err(e) = self.resize_pool(new_max).await {
+            if new_max > max_connections
+                && let Err(e) = self.resize_pool(new_max).await {
                     log::error!("连接池扩容失败: {}", e);
                 }
-            }
         }
         // 低负载：减少连接数
         else if utilization_rate < low_load_threshold {
             let new_max = (max_connections as f32 * 0.8).max(min_connections as f32) as u32;
-            if new_max < max_connections {
-                if let Err(e) = self.resize_pool(new_max).await {
+            if new_max < max_connections
+                && let Err(e) = self.resize_pool(new_max).await {
                     log::error!("连接池缩容失败: {}", e);
                 }
-            }
         }
     }
 
@@ -423,8 +421,8 @@ impl DbPool {
 
     /// 获取慢查询阈值
     pub fn get_slow_query_threshold_ms(&self) -> u64 {
-        let config = self.config.try_read().map(|c| c.slow_query_threshold_ms).unwrap_or(1000);
-        config
+        
+        self.config.try_read().map(|c| c.slow_query_threshold_ms).unwrap_or(1000)
     }
 
     /// 执行带超时的查询

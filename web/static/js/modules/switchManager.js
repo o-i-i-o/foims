@@ -6,7 +6,6 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-  getAccessToken,
 } from "../utils/apiClient.js";
 
 import {
@@ -21,11 +20,62 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 
 import {
-  bindSwitchAddIpButton,
-  addIpAddressFieldToSwitchForm,
   IpConfigManager,
   getManager
 } from "../utils/ipconfig.js";
+
+import { elementCache } from "../utils/helpers.js";
+
+const SWITCH_FORM_FIELDS = [
+  'switch-id', 'switch-name', 'switch-model', 'switch-vendor',
+  'switch-location', 'switch-description', 'switch-snmp-version',
+  'switch-snmp-port', 'switch-snmp-community', 'switch-snmp-username',
+  'switch-snmp-auth-protocol', 'switch-snmp-auth-password',
+  'switch-snmp-priv-protocol', 'switch-snmp-priv-password'
+];
+
+function getSwitchFormValues() {
+  return {
+    id: elementCache.getValue('switch-id'),
+    name: elementCache.getValue('switch-name'),
+    model: elementCache.getValue('switch-model') || null,
+    vendor: elementCache.getValue('switch-vendor') || null,
+    location: elementCache.getValue('switch-location') || null,
+    description: elementCache.getValue('switch-description') || null,
+    snmp_version: elementCache.getValue('switch-snmp-version'),
+    snmp_port: parseInt(elementCache.getValue('switch-snmp-port')) || 161,
+    snmp_community: elementCache.getValue('switch-snmp-community') || null,
+    snmp_username: elementCache.getValue('switch-snmp-username') || null,
+    snmp_auth_protocol: elementCache.getValue('switch-snmp-auth-protocol') || null,
+    snmp_auth_password: elementCache.getValue('switch-snmp-auth-password') || null,
+    snmp_priv_protocol: elementCache.getValue('switch-snmp-priv-protocol') || null,
+    snmp_priv_password: elementCache.getValue('switch-snmp-priv-password') || null
+  };
+}
+
+function setSwitchFormValues(sw) {
+  elementCache.setValue('switch-id', sw.id || '');
+  elementCache.setValue('switch-name', sw.name || '');
+  elementCache.setValue('switch-model', sw.model || '');
+  elementCache.setValue('switch-vendor', sw.vendor || '');
+  elementCache.setValue('switch-location', sw.location || '');
+  elementCache.setValue('switch-description', sw.description || '');
+  elementCache.setValue('switch-snmp-version', sw.snmp_version || 'v2c');
+  elementCache.setValue('switch-snmp-port', sw.snmp_port || 161);
+  elementCache.setValue('switch-snmp-community', sw.snmp_community || '');
+  elementCache.setValue('switch-snmp-username', sw.snmp_username || '');
+  elementCache.setValue('switch-snmp-auth-protocol', sw.snmp_auth_protocol || '');
+  elementCache.setValue('switch-snmp-auth-password', sw.snmp_auth_password || '');
+  elementCache.setValue('switch-snmp-priv-protocol', sw.snmp_priv_protocol || '');
+  elementCache.setValue('switch-snmp-priv-password', sw.snmp_priv_password || '');
+}
+
+function resetSwitchForm() {
+  const form = elementCache.get('switch-form');
+  if (form) form.reset();
+  elementCache.setValue('switch-id', '');
+  elementCache.setValue('switch-snmp-port', '161');
+}
 
 // 加载交换机数据
 async function loadSwitchesData() {
@@ -122,137 +172,57 @@ async function loadAllSwitchPortsData() {
 
 // 打开交换机模态框
 async function openSwitchModal(sw = null) {
-  console.log("openSwitchModal called with sw:", sw);
-  const modal = document.getElementById("switch-modal");
-  const title = document.getElementById("switch-modal-title");
-  const form = document.getElementById("switch-form");
+  elementCache.clear();
+  
+  const modal = elementCache.get('switch-modal');
+  const title = elementCache.get('switch-modal-title');
+  const form = elementCache.get('switch-form');
 
   if (sw) {
     title.textContent = "编辑交换机";
-    document.getElementById("switch-id").value = sw.id;
-    document.getElementById("switch-name").value = sw.name;
-    document.getElementById("switch-model").value = sw.model || "";
-    document.getElementById("switch-vendor").value = sw.vendor || "";
-    document.getElementById("switch-location").value = sw.location || "";
-    document.getElementById("switch-description").value = sw.description || "";
-    document.getElementById("switch-snmp-version").value =
-      sw.snmp_version || "v2c";
-    document.getElementById("switch-snmp-port").value = sw.snmp_port || 161;
-    document.getElementById("switch-snmp-community").value =
-      sw.snmp_community || "";
-    document.getElementById("switch-snmp-username").value =
-      sw.snmp_username || "";
-    document.getElementById("switch-snmp-auth-protocol").value =
-      sw.snmp_auth_protocol || "";
-    document.getElementById("switch-snmp-auth-password").value =
-      sw.snmp_auth_password || "";
-    document.getElementById("switch-snmp-priv-protocol").value =
-      sw.snmp_priv_protocol || "";
-    document.getElementById("switch-snmp-priv-password").value =
-      sw.snmp_priv_password || "";
   } else {
     title.textContent = "添加交换机";
-    form.reset();
-    document.getElementById("switch-id").value = "";
-    document.getElementById("switch-snmp-port").value = "161";
   }
 
-  // 使用全局缓存的IpConfigManager实例，避免重复创建
   const ipManager = getManager('switch');
   
-  // 编辑模式下，设置要排除的交换机ID（不能选择自己作为上级）
   if (sw && sw.id) {
     ipManager.setExcludeSwitchId(sw.id);
   } else {
     ipManager.setExcludeSwitchId(null);
   }
   
-  // 清空IP容器
   ipManager.clear();
-  
-  // 处理 IP 和上联信息
-  // 1. 如果有 IP 列表，后端返回的 IP 对象中可能已包含 switch_id/switch_port_id（即上联信息）
-  // 2. 如果没有 IP 列表，但交换机本身有 parent_switch_id，我们需要手动构造一个项来显示
   
   let ipsToLoad = [];
   if (sw && sw.ips && sw.ips.length > 0) {
-    // 使用现有的 IP 列表
-    // 注意：后端返回的 switch.ips 中的每一项通常包含 switch_id 和 switch_port_id
-    // 如果后端没有正确填充这些字段（例如它们存储在 switches 表而不是 ip_managers 表），
-    // 我们可能需要手动合并 sw.parent_switch_id 到第一个 IP 项中
     ipsToLoad = sw.ips.map((ip, index) => {
-         // 如果是第一个 IP 且没有自身的交换机连接信息，尝试使用交换机层面的上联信息
-         if (index === 0 && !ip.switch_id && sw.parent_switch_id) {
+         if (index === 0) {
              return {
                  ...ip,
-                 switch_id: sw.parent_switch_id,
-                 switch_port_id: sw.parent_port_id
+                 parent_switch_id: sw.parent_switch_id,
+                 parent_port_id: sw.parent_port_id
              };
          }
          return ip;
     });
   } else if (sw && sw.parent_switch_id) {
-    // 无 IP 但有上联
     ipsToLoad = [{
         parent_switch_id: sw.parent_switch_id,
-        parent_port_id: sw.parent_port_id,
-        _is_uplink_only: true
+        parent_port_id: sw.parent_port_id
     }];
   }
   
   if (ipsToLoad.length > 0) {
       await ipManager.loadIps(ipsToLoad);
   } else {
-      // 添加模式或编辑模式但没有IP，只添加一个IP容器
       await ipManager.addIpRow();
   }
 
-  // 编辑模式下，设置上级交换机和端口（从交换机本身的属性获取）
-  // 这部分代码是为了兼容旧的逻辑，确保即使 loadIps 没有正确设置，这里也能再次设置
-  if (sw && sw.parent_switch_id) {
-    // 等待 loadIps 完成后的 DOM 更新
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const firstIpRow = document.querySelector(".switch-ip-row");
-    if (firstIpRow) {
-      const switchSelect = firstIpRow.querySelector(".switch-switch-select");
-      const portSelect = firstIpRow.querySelector(".switch-switch-port-select");
-      
-      if (switchSelect && (!switchSelect.value || switchSelect.value === "")) {
-        // 查找匹配的选项并设置值
-        const normalizedSwitchId = sw.parent_switch_id.toLowerCase();
-        const switchOptions = switchSelect.querySelectorAll('option');
-        let found = false;
-        for (const opt of switchOptions) {
-          if (opt.value && opt.value.toLowerCase() === normalizedSwitchId) {
-            switchSelect.value = opt.value;
-            found = true;
-            break;
-          }
-        }
-        
-        if (found) {
-            // 触发change事件加载端口
-            // 注意：这里需要传递 true 给 IpConfigManager.handleSwitchChange
-            // 但由于我们无法直接调用该方法，只能触发事件
-            // 为了确保端口被加载，我们可以尝试手动调用 getManager('switch').handleSwitchChange
-            
-            await ipManager.handleSwitchChange(switchSelect, portSelect);
-            
-            // 等待端口加载完成后设置端口值
-            if (sw.parent_port_id && portSelect) {
-              const normalizedPortId = sw.parent_port_id.toLowerCase();
-              const portOptions = portSelect.querySelectorAll('option');
-              for (const opt of portOptions) {
-                if (opt.value && opt.value.toLowerCase() === normalizedPortId) {
-                  portSelect.value = opt.value;
-                  break;
-                }
-              }
-            }
-        }
-      }
-    }
+  if (sw) {
+    setSwitchFormValues(sw);
+  } else {
+    resetSwitchForm();
   }
 
   // 根据SNMP版本显示/隐藏配置
@@ -308,8 +278,6 @@ async function getSwitchInfoFromSnmp() {
   const networkRegionId = networkRegionSelect.value;
   const networkId = networkSelect.value;
   
-  console.log("SNMP测试时的网络区域ID:", networkRegionId);
-  console.log("SNMP测试时的网络ID:", networkId);
   
   const switchData = {
     name: "临时测试交换机",
@@ -325,7 +293,6 @@ async function getSwitchInfoFromSnmp() {
     snmp_priv_password: document.getElementById("switch-snmp-priv-password").value || null
   };
   
-  console.log("SNMP测试数据:", switchData);
 
   try {
     // 先测试SNMP连接
@@ -430,23 +397,14 @@ async function getSwitchPortsFromSnmp(switchId) {
 
 // 提交交换机表单
 async function submitSwitchForm() {
-  const token = getAccessToken();
-  if (!token) {
-    showToast("请先登录", "warning");
-    return;
-  }
-
-  const id = document.getElementById("switch-id").value;
+  const formValues = getSwitchFormValues();
   
-  // 收集IP地址信息
   const ipManager = getManager('switch');
   const ips = ipManager.getIps();
   
-  // 从第一个IP行中获取上级交换机和端口信息
   let parentSwitchId = null;
   let parentPortId = null;
   
-  // 即使 ips 数组为空（如果只配置了上联但没有 IP），我们也需要获取上联信息
   const firstIpRow = document.querySelector(".switch-ip-row");
   if (firstIpRow) {
     const switchSelect = firstIpRow.querySelector(".switch-switch-select");
@@ -455,34 +413,22 @@ async function submitSwitchForm() {
     if (portSelect) parentPortId = portSelect.value || null;
   }
   
-  // 过滤掉虚拟的 uplink-only IP 项，不将其作为 IP 发送给后端
-  // 但保留它们的上联信息（已经在上面提取了）
-  // 注意：getIps() 返回的是纯数据对象，没有 DOM 引用或 _is_uplink_only 标记
-  // 所以我们需要检查 IP 地址是否为空
-  
   const validIps = ips.filter(ip => ip.ip_address && ip.ip_address.trim());
   
   const data = {
-    name: document.getElementById("switch-name").value,
-    model: document.getElementById("switch-model").value || null,
-    vendor: document.getElementById("switch-vendor").value || null,
-    location: document.getElementById("switch-location").value || null,
-    description: document.getElementById("switch-description").value || null,
-    snmp_version: document.getElementById("switch-snmp-version").value,
-    snmp_port:
-      parseInt(document.getElementById("switch-snmp-port").value) || 161,
-    snmp_community:
-      document.getElementById("switch-snmp-community").value || null,
-    snmp_username:
-      document.getElementById("switch-snmp-username").value || null,
-    snmp_auth_protocol:
-      document.getElementById("switch-snmp-auth-protocol").value || null,
-    snmp_auth_password:
-      document.getElementById("switch-snmp-auth-password").value || null,
-    snmp_priv_protocol:
-      document.getElementById("switch-snmp-priv-protocol").value || null,
-    snmp_priv_password:
-      document.getElementById("switch-snmp-priv-password").value || null,
+    name: formValues.name,
+    model: formValues.model,
+    vendor: formValues.vendor,
+    location: formValues.location,
+    description: formValues.description,
+    snmp_version: formValues.snmp_version,
+    snmp_port: formValues.snmp_port,
+    snmp_community: formValues.snmp_community,
+    snmp_username: formValues.snmp_username,
+    snmp_auth_protocol: formValues.snmp_auth_protocol,
+    snmp_auth_password: formValues.snmp_auth_password,
+    snmp_priv_protocol: formValues.snmp_priv_protocol,
+    snmp_priv_password: formValues.snmp_priv_password,
     parent_switch_id: parentSwitchId,
     parent_port_id: parentPortId,
     ips: validIps.length > 0 ? validIps : null
@@ -492,47 +438,23 @@ async function submitSwitchForm() {
     showToast("请填写交换机名称", "warning");
     return;
   }
-  
-  // 如果没有 IP 也没有上联，提示至少填写一项
-  // 但允许只填上联不填 IP（纯二层交换机场景）
-  /* 
-  if (validIps.length === 0 && !parentSwitchId) {
-     showToast("请至少添加一个IP地址或配置上联交换机", "warning");
-     return;
+
+  if (validIps.length === 0) {
+    showToast("请至少配置一个IP地址", "warning");
+    return;
   }
-  */
-  
-  // 验证所有IP地址行都有有效的IP地址
-  /* 
-  for (const ip of ips) {
-    if (!ip.ip_address || !ip.ip_address.trim()) {
-      showToast("请填写所有IP地址", "warning");
-      return;
-    }
-  }
-  */
-  
-  console.log("提交的交换机数据:", data);
 
   try {
-    const url = id ? `/api/switches/${id}` : "/api/switches";
-    const method = id ? "PUT" : "POST";
-
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
-
-    const result = await response.json();
+    if (formValues.id) {
+      var result = await apiPut(`/api/switches/${formValues.id}`, data);
+    } else {
+      var result = await apiPost("/api/switches", data);
+    }
 
     if (result.success) {
       closeModal("switch-modal");
       loadSwitchesData();
-      showToast(id ? "交换机更新成功" : "交换机添加成功", "success");
+      showToast(formValues.id ? "交换机更新成功" : "交换机添加成功", "success");
     } else {
       showToast(`操作失败: ${result.message}`, "error");
     }
@@ -795,10 +717,33 @@ async function loadSwitchPortsData(switchId) {
   try {
     const result = await apiGet(`/api/switches/${switchId}/ports`);
 
-    // 添加"添加端口"和"从SNMP获取端口"按钮
     const searchContainer = document.querySelector(
       "#switch-ports-list-tab .search-container",
     );
+    
+    if (!searchContainer) {
+      renderTable(
+        "#switch-ports-table",
+        result.success ? result.data : [],
+        (port) => `
+                  <td>${currentSwitchName}</td>
+                  <td>${port.port_number}</td>
+                  <td>${port.port_name || "-"}</td>
+                  <td>${port.port_type}</td>
+                  <td>${port.vlan_id || "-"}</td>
+                  <td><span class="status-badge ${port.status === "up" ? "status-active" : "status-inactive"}">${port.status}</span></td>
+                  <td>${port.speed || "-"}</td>
+                  <td>
+                      <button class="btn btn-sm btn-edit switch-port-edit" data-id="${port.id}">编辑</button>
+                      <button class="btn btn-sm btn-delete switch-port-delete" data-id="${port.id}">删除</button>
+                  </td>
+              `,
+        "暂无端口数据",
+        8,
+      );
+      return;
+    }
+    
     const actionButtonsContainer = searchContainer.parentElement.querySelector(".action-buttons") || 
       (() => {
         const container = document.createElement("div");
@@ -807,7 +752,6 @@ async function loadSwitchPortsData(switchId) {
         return container;
       })();
     
-    // 确保"添加端口"按钮存在
   let addBtn = document.getElementById("add-switch-port-btn");
   if (!addBtn) {
     addBtn = document.createElement("button");
@@ -818,7 +762,6 @@ async function loadSwitchPortsData(switchId) {
     actionButtonsContainer.appendChild(addBtn);
   }
   
-  // 添加"从SNMP获取端口"按钮
   let snmpPortsBtn = document.getElementById("get-snmp-ports-btn");
   if (!snmpPortsBtn) {
     snmpPortsBtn = document.createElement("button");
@@ -849,7 +792,6 @@ async function loadSwitchPortsData(switchId) {
       8,
     );
   } catch (error) {
-    console.error("加载端口数据失败:", error);
     renderTable("#switch-ports-table", [], () => "", "加载失败", 8);
   }
 }
@@ -857,13 +799,7 @@ async function loadSwitchPortsData(switchId) {
 
 // 提交端口表单
 async function submitSwitchPortForm() {
-  const token = getAccessToken();
-  if (!token) {
-    showToast("请先登录", "warning");
-    return;
-  }
-
-  // 使用工具函数获取扩展表单数据
+// 使用工具函数获取扩展表单数据
   const id = getElementValue("switch-port-id-expanded");
   const switchId = getElementValue("switch-port-switch-id-expanded");
   const portNumber = getElementValue("switch-port-number-expanded", "trimmed");
@@ -893,21 +829,12 @@ async function submitSwitchPortForm() {
 
   try {
     // 构建URL和方法
-    const url = id 
-      ? `/api/switches/ports/${id}` 
-      : `/api/switches/${switchId}/ports`;
-    const method = id ? "PUT" : "POST";
+    if (id) {
+      var result = await apiPut(`/api/switches/ports/${id}`, data);
+    } else {
+      var result = await apiPost(`/api/switches/${switchId}/ports`, data);
+    }
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
-
-    const result = await response.json();
     if (result.success) {
       // 隐藏扩展表单
       document.querySelector(".add-port-form-container").style.display = "none";
@@ -1000,20 +927,12 @@ async function deleteSwitchPort(id) {
 
 // 测试SNMP连接
 async function testSnmpConnection() {
-  const token = getAccessToken();
-  if (!token) {
-    showToast("请先登录", "warning");
-    return;
-  }
-
-  // 收集IP地址信息
   const ipRows = document.querySelectorAll(".switch-ip-row");
   if (ipRows.length === 0) {
     showToast("请先添加IP地址", "warning");
     return;
   }
 
-  // 使用第一个IP地址作为测试
   const firstRow = ipRows[0];
   const networkRegionSelect = firstRow.querySelector(".switch-ip-network-region-select");
   const networkSelect = firstRow.querySelector(".switch-ip-network-select");
@@ -1023,66 +942,46 @@ async function testSnmpConnection() {
     return;
   }
 
-  const btn = document.getElementById("test-snmp-btn");
+  const btn = elementCache.get('test-snmp-btn');
   const originalText = btn.textContent;
   btn.textContent = "测试中...";
   btn.disabled = true;
 
-  const id = document.getElementById("switch-id").value;
+  const formValues = getSwitchFormValues();
   const networkRegionId = networkRegionSelect.value;
   const networkId = networkSelect.value;
 
   const data = {
-    switch_id: id || null,
+    switch_id: formValues.id || null,
     network_region_id: networkRegionId,
     network_id: networkId,
-    snmp_version: document.getElementById("switch-snmp-version").value,
-    snmp_port:
-      parseInt(document.getElementById("switch-snmp-port").value) || 161,
-    snmp_community:
-      document.getElementById("switch-snmp-community").value || null,
-    snmp_username:
-      document.getElementById("switch-snmp-username").value || null,
-    snmp_auth_protocol:
-      document.getElementById("switch-snmp-auth-protocol").value || null,
-    snmp_auth_password:
-      document.getElementById("switch-snmp-auth-password").value || null,
-    snmp_priv_protocol:
-      document.getElementById("switch-snmp-priv-protocol").value || null,
-    snmp_priv_password:
-      document.getElementById("switch-snmp-priv-password").value || null,
+    snmp_version: formValues.snmp_version,
+    snmp_port: formValues.snmp_port,
+    snmp_community: formValues.snmp_community,
+    snmp_username: formValues.snmp_username,
+    snmp_auth_protocol: formValues.snmp_auth_protocol,
+    snmp_auth_password: formValues.snmp_auth_password,
+    snmp_priv_protocol: formValues.snmp_priv_protocol,
+    snmp_priv_password: formValues.snmp_priv_password,
   };
 
   try {
-    const response = await fetch(
-      id ? `/api/switches/${id}/test-snmp` : "/api/switches/test-snmp",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      },
+    const result = await apiPost(
+      formValues.id ? `/api/switches/${formValues.id}/test-snmp` : "/api/switches/test-snmp",
+      data
     );
-
-    const result = await response.json();
 
     if (result.success) {
       showToast("SNMP连接成功", "success");
       
-      // 尝试获取并更新交换机型号和厂商信息
       try {
         let infoResult;
-        if (id) {
-          // 如果是编辑模式，使用已有交换机的SNMP信息
-          infoResult = await apiGet(`/api/switches/${id}/snmp-info`);
+        if (formValues.id) {
+          infoResult = await apiGet(`/api/switches/${formValues.id}/snmp-info`);
         } else {
-          // 如果是添加模式，先创建临时交换机以获取SNMP信息
           const createResult = await apiPost(`/api/switches`, data);
           if (createResult.success) {
             infoResult = await apiGet(`/api/switches/${createResult.data.id}/snmp-info`);
-            // 删除临时交换机
             await apiDelete(`/api/switches/${createResult.data.id}`);
           }
         }
@@ -1090,31 +989,27 @@ async function testSnmpConnection() {
         if (infoResult && infoResult.success) {
           const { vendor, model } = infoResult.data;
           
-          // 检查是否已有手动添加的内容，提示是否覆盖
-          const currentVendor = document.getElementById("switch-vendor").value;
-          const currentModel = document.getElementById("switch-model").value;
+          const currentVendor = elementCache.getValue('switch-vendor');
+          const currentModel = elementCache.getValue('switch-model');
           
           if (currentVendor || currentModel) {
             if (confirm("已存在手动添加的交换机信息，是否覆盖?")) {
-              document.getElementById("switch-vendor").value = vendor;
-              document.getElementById("switch-model").value = model;
+              elementCache.setValue('switch-vendor', vendor);
+              elementCache.setValue('switch-model', model);
               showToast("交换机信息已更新", "success");
             }
           } else {
-            document.getElementById("switch-vendor").value = vendor;
-            document.getElementById("switch-model").value = model;
+            elementCache.setValue('switch-vendor', vendor);
+            elementCache.setValue('switch-model', model);
             showToast("交换机信息已更新", "success");
           }
         }
       } catch (infoError) {
-        console.error("获取交换机详细信息失败:", infoError);
-        // 不影响SNMP测试结果的显示
       }
     } else {
       showToast("SNMP连接失败: " + result.message, "error");
     }
   } catch (error) {
-    console.error("SNMP测试失败:", error);
     showToast("SNMP测试失败，请检查网络连接", "error");
   } finally {
     btn.textContent = originalText;
@@ -1124,13 +1019,7 @@ async function testSnmpConnection() {
 
 // 查看ARP表
 async function viewArpTable(switchId) {
-  const token = getAccessToken();
-  if (!token) {
-    showToast("请先登录", "warning");
-    return;
-  }
-
-  try {
+try {
     // 检查交换机SNMP配置
     const switchResult = await apiGet(`/api/switches/${switchId}`);
     if (!switchResult.success) {
@@ -1386,8 +1275,6 @@ function initSwitches() {
   if (snmpVersionSelect) {
     snmpVersionSelect.addEventListener("change", toggleSnmpConfig);
   }
-
-  bindSwitchAddIpButton();
 
   const testSnmpBtn = document.getElementById("test-snmp-btn");
   if (testSnmpBtn) {

@@ -164,12 +164,10 @@ pub async fn get_positions(
         let cabinet_name: String = row.get("cabinet_name"); // 直接从查询结果获取
         let start_u: i32 = row.get("start_u");
         let end_u: i32 = row.get("end_u");
+        let network_id: Option<Uuid> = row.get("network_id");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-
-        let ports = ports_map.remove(&id).unwrap_or_default();
-
         let position_with_details = CabinetPositionWithDetails {
             id,
             name,
@@ -177,8 +175,8 @@ pub async fn get_positions(
             cabinet_name,
             start_u,
             end_u,
-            ports,
-            ips: Vec::new(), // 列表视图不需要返回IP信息
+            network_id,
+            ips: Vec::new(),
             description,
             created_at,
             updated_at,
@@ -261,27 +259,6 @@ pub async fn create_cabinet_position(
     .bind(now)
     .execute(&mut *tx).await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-    }
-
-    // 创建机位-交换机端口关联
-    if let Some(ports) = &req.ports {
-        for port in ports {
-            if let Err(err) = sqlx::query(
-                "INSERT INTO position_ports (id, position_id, switch_port_id, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, $5)",
-            )
-            .bind(Uuid::new_v4())
-            .bind(id)
-            .bind(port.switch_port_id)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx)
-            .await
-            {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-            }
-        }
     }
 
     // 创建机位关联的IP地址
@@ -367,19 +344,19 @@ pub async fn create_cabinet_position(
             // 检测IP地址版本
             let ip_version = detect_ip_version(&ip.ip_address);
 
-            // 创建IP管理
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
             )
             .bind(Uuid::new_v4())
             .bind(ip.workstation_id)
-            .bind(Some(id)) // 设置为当前创建的机位ID
+            .bind(Some(id))
             .bind(ip.switch_id)
+            .bind(ip.switch_port_id)
             .bind(&ip.device_type)
             .bind(ip.network_id)
             .bind(&ip.ip_address)
-            .bind(&ip_version)
+            .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
             .bind("active")
@@ -394,7 +371,6 @@ pub async fn create_cabinet_position(
         }
     }
 
-    // 提交事务
     if let Err(err) = tx.commit().await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
@@ -406,6 +382,7 @@ pub async fn create_cabinet_position(
         cabinet_id: req.cabinet_id,
         start_u: req.start_u,
         end_u: req.end_u,
+        network_id: req.network_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -418,7 +395,6 @@ pub async fn create_cabinet_position(
         "start_u": position.start_u,
         "end_u": position.end_u,
         "description": position.description,
-        "port_count": req.ports.as_ref().map_or(0, |p| p.len()),
         "ip_count": ip_count
     });
     let _ = log_system_operation(
@@ -459,21 +435,6 @@ pub async fn get_cabinet_position(
         },
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
-        }
-    };
-
-    // 获取机位关联的交换机端口
-    let position_ports = match sqlx::query_as::<_, CabinetPositionPortWithSwitchPort>(
-        r#"SELECT cp.id, cp.position_id, cp.switch_port_id, sp.switch_id, s.name as switch_name, sp.port_number, sp.port_name, cp.created_at::TIMESTAMPTZ, cp.updated_at::TIMESTAMPTZ 
-           FROM position_ports cp 
-           JOIN switch_ports sp ON cp.switch_port_id = sp.id 
-           JOIN switches s ON sp.switch_id = s.id
-           WHERE cp.position_id = $1"#
-    ).bind(id)
-    .fetch_all(pool.get_conn()).await {
-        Ok(ports) => ports,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
         }
     };
 
@@ -523,7 +484,7 @@ pub async fn get_cabinet_position(
         cabinet_name,
         start_u: position.start_u,
         end_u: position.end_u,
-        ports: position_ports,
+        network_id: position.network_id,
         ips: position_ips,
         description: position.description,
         created_at: position.created_at,
@@ -616,58 +577,111 @@ pub async fn update_cabinet_position(
             .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
     }
 
-    // 如果提供了端口列表且不为空，则更新机位-交换机端口关联
-    if let Some(ports) = &req.ports {
-        // 删除现有端口关联
-        if let Err(err) = sqlx::query("DELETE FROM position_ports WHERE position_id = $1")
+    // 如果提供了IP列表，则更新IP管理记录
+    if let Some(ips) = &req.ips {
+        // 删除现有IP记录
+        if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await
         {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("删除IP记录失败: {}", err))));
         }
 
-        // 创建新的端口关联
-        for port in ports {
+        // 创建新的IP记录
+        for ip in ips {
+            let ip_version = if ip.ip_address.contains(":") { 6i16 } else { 4i16 };
+            
             if let Err(err) = sqlx::query(
-                "INSERT INTO position_ports (id, position_id, switch_port_id, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5)"
+                "INSERT INTO ip_managers (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
-            .bind(port.switch_port_id)
+            .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+            .bind(ip.network_id)
+            .bind(&ip.ip_address)
+            .bind(ip_version)
+            .bind(&ip.mac_address)
+            .bind(&ip.hostname)
+            .bind(ip.switch_id)
+            .bind(ip.switch_port_id)
+            .bind("active")
+            .bind(now)
             .bind(now)
             .bind(now)
             .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {}", err))));
             }
         }
     }
-
-    // 返回更新后的机位
-    let position = match sqlx::query_as::<_, CabinetPosition>(
-        "SELECT id, name, cabinet_id, start_u, end_u, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM positions WHERE id = $1"
-    ).bind(id)
-    .fetch_one(&mut *tx).await {
-        Ok(position) => position,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
-        }
-    };
 
     // 提交事务
     if let Err(err) = tx.commit().await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
+    // 查询更新后的完整机位信息（包含IP和端口）
+    let row = match sqlx::query(
+        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+        FROM positions p 
+        LEFT JOIN cabinets c ON p.cabinet_id = c.id 
+        WHERE p.id = $1"
+    ).bind(id)
+    .fetch_one(pool.get_conn()).await {
+        Ok(r) => r,
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机位失败: {}", err))));
+        }
+    };
+
+    let position_with_details = CabinetPositionWithDetails {
+        id: row.get("id"),
+        name: row.get("name"),
+        cabinet_id: row.get("cabinet_id"),
+        cabinet_name: row.get::<Option<String>, _>("cabinet_name").unwrap_or_default(),
+        start_u: row.get("start_u"),
+        end_u: row.get("end_u"),
+        network_id: row.get("network_id"),
+        description: row.get("description"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        ips: vec![],
+    };
+
+    // 查询IP信息
+    let ips = match sqlx::query_as::<_, IpManager>(
+        r#"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
+           CAST(ip_address AS TEXT) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
+           FROM ip_managers WHERE position_id = $1"#
+    ).bind(id)
+    .fetch_all(pool.get_conn()).await {
+        Ok(i) => i,
+        Err(_) => vec![],
+    };
+
+    let result = CabinetPositionWithDetails {
+        id: position_with_details.id,
+        name: position_with_details.name,
+        cabinet_id: position_with_details.cabinet_id,
+        cabinet_name: position_with_details.cabinet_name,
+        start_u: position_with_details.start_u,
+        end_u: position_with_details.end_u,
+        network_id: position_with_details.network_id,
+        ips,
+        description: position_with_details.description,
+        created_at: position_with_details.created_at,
+        updated_at: position_with_details.updated_at,
+    };
+
     // 记录操作日志
     let details = serde_json::json!({
-        "name": position.name,
-        "cabinet_id": position.cabinet_id,
-        "start_u": position.start_u,
-        "end_u": position.end_u,
-        "description": position.description
+        "name": result.name,
+        "cabinet_id": result.cabinet_id,
+        "start_u": result.start_u,
+        "end_u": result.end_u,
+        "description": result.description
     });
     let _ = log_system_operation(
         pool.get_conn(),
@@ -682,8 +696,8 @@ pub async fn update_cabinet_position(
     .await;
 
     Ok(
-        HttpResponse::Ok().json(ApiResponse::<CabinetPosition>::success(
-            position,
+        HttpResponse::Ok().json(ApiResponse::<CabinetPositionWithDetails>::success(
+            result,
             "机位更新成功",
         )),
     )
@@ -884,14 +898,12 @@ pub async fn get_workstations(
     for row in workstations_basic {
         let id: Uuid = row.get("id");
         let name: String = row.get("name");
-        let room_id: Uuid = row.get::<Option<Uuid>, _>("room_id").unwrap_or_else(|| Uuid::nil());
+        let room_id: Uuid = row.get::<Option<Uuid>, _>("room_id").unwrap_or_else(Uuid::nil);
         let room_name: String = row.get::<Option<String>, _>("room_name").unwrap_or_else(|| "未知房间".to_string());
         let manager: Option<String> = row.get("manager");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-
-        let ports = ports_map.remove(&id).unwrap_or_default();
 
         let workstation_with_details = WorkstationWithDetails {
             id,
@@ -899,8 +911,7 @@ pub async fn get_workstations(
             room_id,
             room_name,
             manager,
-            ports,
-            ips: Vec::new(), // 列表视图不需要返回IP信息
+            ips: Vec::new(),
             description,
             created_at,
             updated_at,
@@ -983,24 +994,6 @@ pub async fn create_workstation(
     .bind(now)
     .execute(&mut *tx).await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-    }
-
-    // 创建工位-交换机端口关联
-    if let Some(ports) = &req.ports {
-        for port in ports {
-            if let Err(err) = sqlx::query(
-                "INSERT INTO workstation_ports (id, workstation_id, switch_port_id, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5)"
-            )
-            .bind(Uuid::new_v4())
-            .bind(id)
-            .bind(port.switch_port_id)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
-            }
-        }
     }
 
     // 创建工位关联的IP地址
@@ -1086,19 +1079,19 @@ pub async fn create_workstation(
             // 检测IP地址版本
             let ip_version = detect_ip_version(&ip.ip_address);
 
-            // 创建IP管理
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
             )
             .bind(Uuid::new_v4())
-            .bind(Some(id)) // 设置为当前创建的工位ID
+            .bind(Some(id))
             .bind(ip.position_id)
             .bind(ip.switch_id)
+            .bind(ip.switch_port_id)
             .bind(&ip.device_type)
             .bind(ip.network_id)
             .bind(&ip.ip_address)
-            .bind(&ip_version)
+            .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
             .bind("active")
@@ -1113,12 +1106,10 @@ pub async fn create_workstation(
         }
     }
 
-    // 提交事务
     if let Err(err) = tx.commit().await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
-    // 返回创建的工位
     let workstation = Workstation {
         id,
         name: req.name.clone(),
@@ -1136,7 +1127,6 @@ pub async fn create_workstation(
         "room_id": workstation.room_id,
         "manager": workstation.manager,
         "description": workstation.description,
-        "port_count": req.ports.as_ref().map_or(0, |p| p.len()),
         "ip_count": ip_count
     });
     let _ = log_system_operation(
@@ -1175,21 +1165,6 @@ pub async fn get_workstation(
         },
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
-        }
-    };
-
-    // 获取工位关联的交换机端口
-    let workstation_ports = match sqlx::query_as::<_, WorkstationPortWithSwitchPort>(
-        r#"SELECT wp.id, wp.workstation_id, wp.switch_port_id, sp.switch_id, COALESCE(s.name, '未知交换机') as switch_name, COALESCE(sp.port_number, '') as port_number, sp.port_name, wp.created_at::TIMESTAMPTZ, wp.updated_at::TIMESTAMPTZ 
-           FROM workstation_ports wp 
-           LEFT JOIN switch_ports sp ON wp.switch_port_id = sp.id 
-           LEFT JOIN switches s ON sp.switch_id = s.id
-           WHERE wp.workstation_id = $1"#
-    ).bind(id)
-    .fetch_all(pool.get_conn()).await {
-        Ok(ports) => ports,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
         }
     };
 
@@ -1234,7 +1209,6 @@ pub async fn get_workstation(
         room_id: workstation.room_id,
         room_name,
         manager: workstation.manager.clone(),
-        ports: workstation_ports,
         ips: workstation_ips,
         description: workstation.description,
         created_at: workstation.created_at,
@@ -1325,57 +1299,106 @@ pub async fn update_workstation(
             .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
     }
 
-    // 如果提供了端口列表且不为空，则更新工位-交换机端口关联
-    if let Some(ports) = &req.ports {
-        // 删除现有端口关联
-        if let Err(err) = sqlx::query("DELETE FROM workstation_ports WHERE workstation_id = $1")
+    // 如果提供了IP列表，则更新IP管理记录
+    if let Some(ips) = &req.ips {
+        // 删除现有IP记录
+        if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE workstation_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await
         {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("删除IP记录失败: {}", err))));
         }
 
-        // 创建新的端口关联
-        for port in ports {
+        // 创建新的IP记录
+        for ip in ips {
+            let ip_version = if ip.ip_address.contains(":") { 6i16 } else { 4i16 };
+            
             if let Err(err) = sqlx::query(
-                "INSERT INTO workstation_ports (id, workstation_id, switch_port_id, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5)"
+                "INSERT INTO ip_managers (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
-            .bind(port.switch_port_id)
+            .bind(ip.device_type.as_deref().unwrap_or("workstation"))
+            .bind(ip.network_id)
+            .bind(&ip.ip_address)
+            .bind(ip_version)
+            .bind(&ip.mac_address)
+            .bind(&ip.hostname)
+            .bind(ip.switch_id)
+            .bind(ip.switch_port_id)
+            .bind("active")
+            .bind(now)
             .bind(now)
             .bind(now)
             .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {}", err))));
             }
         }
     }
-
-    // 返回更新后的工位
-    let workstation = match sqlx::query_as::<_, Workstation>(
-        "SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ FROM workstations w LEFT JOIN rooms r ON w.room_id = r.id WHERE w.id = $1"
-    ).bind(id)
-    .fetch_one(&mut *tx).await {
-        Ok(workstation) => workstation,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
-        }
-    };
 
     // 提交事务
     if let Err(err) = tx.commit().await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
+    // 查询更新后的完整工位信息（包含IP和端口）
+    let row = match sqlx::query(
+        r#"SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
+        FROM workstations w 
+        LEFT JOIN rooms r ON w.room_id = r.id 
+        WHERE w.id = $1"#
+    ).bind(id)
+    .fetch_one(pool.get_conn()).await {
+        Ok(r) => r,
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询工位失败: {}", err))));
+        }
+    };
+
+    let workstation_with_details = WorkstationWithDetails {
+        id: row.get("id"),
+        name: row.get("name"),
+        room_id: row.get("room_id"),
+        room_name: row.get::<Option<String>, _>("room_name").unwrap_or_default(),
+        manager: row.get("manager"),
+        description: row.get("description"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        ips: vec![],
+    };
+
+    // 查询IP信息
+    let ips = match sqlx::query_as::<_, IpManager>(
+        r#"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
+           CAST(ip_address AS TEXT) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
+           FROM ip_managers WHERE workstation_id = $1"#
+    ).bind(id)
+    .fetch_all(pool.get_conn()).await {
+        Ok(i) => i,
+        Err(_) => vec![],
+    };
+
+    let result = WorkstationWithDetails {
+        id: workstation_with_details.id,
+        name: workstation_with_details.name,
+        room_id: workstation_with_details.room_id,
+        room_name: workstation_with_details.room_name,
+        manager: workstation_with_details.manager,
+        ips,
+        description: workstation_with_details.description,
+        created_at: workstation_with_details.created_at,
+        updated_at: workstation_with_details.updated_at,
+    };
+
     // 记录操作日志
     let details = serde_json::json!({
-        "name": workstation.name,
-        "room_id": workstation.room_id,
-        "manager": workstation.manager,
-        "description": workstation.description
+        "name": result.name,
+        "room_id": result.room_id,
+        "manager": result.manager,
+        "description": result.description
     });
     let _ = log_system_operation(
         pool.get_conn(),
@@ -1389,8 +1412,8 @@ pub async fn update_workstation(
     )
     .await;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Workstation>::success(
-        workstation,
+    Ok(HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
+        result,
         "工位更新成功",
     )))
 }
