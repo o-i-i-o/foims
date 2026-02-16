@@ -945,6 +945,53 @@
               </section>
             </div>
           </article>
+          
+          <article class="import-export-section">
+            <h2 data-i18n="logs.cleanup">Log Cleanup</h2>
+            <div class="data-management-container">
+              <section class="section">
+                <h3 data-i18n="logs.stats">Log Statistics</h3>
+                <div id="logs-stats-container" class="logs-stats-grid">
+                  <div class="log-stat-card">
+                    <div class="log-stat-title" data-i18n="logs.operation_logs">Operation Logs</div>
+                    <div class="log-stat-value" id="operation-logs-count">-</div>
+                    <div class="log-stat-info" id="operation-logs-oldest"></div>
+                  </div>
+                  <div class="log-stat-card">
+                    <div class="log-stat-title" data-i18n="logs.login_logs">Login Logs</div>
+                    <div class="log-stat-value" id="login-logs-count">-</div>
+                    <div class="log-stat-info" id="login-logs-oldest"></div>
+                  </div>
+                  <div class="log-stat-card">
+                    <div class="log-stat-title" data-i18n="logs.notifications">Notifications</div>
+                    <div class="log-stat-value" id="notifications-count">-</div>
+                  </div>
+                </div>
+              </section>
+              <section class="section">
+                <h3 data-i18n="logs.clear_logs">Clear Logs</h3>
+                <div class="clear-logs-form">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="clear-log-type" data-i18n="logs.log_type">Log Type</label>
+                      <select id="clear-log-type">
+                        <option value="operation" data-i18n="logs.operation_logs">Operation Logs</option>
+                        <option value="login" data-i18n="logs.login_logs">Login Logs</option>
+                        <option value="notification" data-i18n="logs.notifications">Notifications</option>
+                        <option value="all" data-i18n="logs.all_logs">All Logs</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="clear-log-days" data-i18n="logs.keep_days">Keep Days</label>
+                      <input type="number" id="clear-log-days" value="30" min="1" max="365" />
+                    </div>
+                  </div>
+                  <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. This action cannot be undone.</p>
+                  <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
+                </div>
+              </section>
+            </div>
+          </article>
         </div>
       </section>
     </main>

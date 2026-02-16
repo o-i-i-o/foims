@@ -2024,3 +2024,181 @@ pub async fn download_template(
             .json(ApiResponse::<()>::error("不支持的模板类型".to_string()))),
     }
 }
+
+// 清理日志请求结构体
+#[derive(Debug, Deserialize)]
+pub struct ClearLogsRequest {
+    pub log_type: String,
+    pub days: Option<i32>,
+}
+
+// 清理日志
+pub async fn clear_logs(
+    pool: web::Data<DbPool>,
+    req: web::Json<ClearLogsRequest>,
+) -> HttpResponse {
+    let days = req.days.unwrap_or(30);
+    
+    if days < 1 {
+        return HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error("保留天数必须大于0"));
+    }
+    
+    let result = match req.log_type.as_str() {
+        "operation" => {
+            sqlx::query(
+                "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+        }
+        "login" => {
+            sqlx::query(
+                "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+        }
+        "notification" => {
+            sqlx::query(
+                "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+        }
+        "all" => {
+            let mut deleted = 0u64;
+            
+            match sqlx::query(
+                "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+            {
+                Ok(r) => deleted += r.rows_affected(),
+                Err(_) => {}
+            }
+            
+            match sqlx::query(
+                "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+            {
+                Ok(r) => deleted += r.rows_affected(),
+                Err(_) => {}
+            }
+            
+            match sqlx::query(
+                "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1"
+            )
+            .bind(days)
+            .execute(pool.get_conn())
+            .await
+            {
+                Ok(r) => deleted += r.rows_affected(),
+                Err(_) => {}
+            }
+            
+            return HttpResponse::Ok().json(ApiResponse::success(
+                serde_json::json!({ "deleted": deleted }),
+                &format!("成功清理 {} 条日志记录", deleted)
+            ));
+        }
+        _ => {
+            return HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("无效的日志类型"));
+        }
+    };
+    
+    match result {
+        Ok(r) => {
+            let deleted = r.rows_affected();
+            HttpResponse::Ok().json(ApiResponse::success(
+                serde_json::json!({ "deleted": deleted }),
+                &format!("成功清理 {} 条日志记录", deleted)
+            ))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("清理日志失败: {}", e)))
+        }
+    }
+}
+
+// 获取日志统计
+pub async fn get_logs_stats(
+    pool: web::Data<DbPool>,
+) -> HttpResponse {
+    let operation_count: i64 = match sqlx::query_scalar(
+        "SELECT COUNT(*) FROM operation_logs"
+    )
+    .fetch_one(pool.get_conn())
+    .await
+    {
+        Ok(c) => c,
+        Err(_) => 0,
+    };
+    
+    let login_count: i64 = match sqlx::query_scalar(
+        "SELECT COUNT(*) FROM login_logs"
+    )
+    .fetch_one(pool.get_conn())
+    .await
+    {
+        Ok(c) => c,
+        Err(_) => 0,
+    };
+    
+    let notification_count: i64 = match sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications"
+    )
+    .fetch_one(pool.get_conn())
+    .await
+    {
+        Ok(c) => c,
+        Err(_) => 0,
+    };
+    
+    let operation_oldest: Option<String> = match sqlx::query_scalar(
+        "SELECT created_at::text FROM operation_logs ORDER BY created_at ASC LIMIT 1"
+    )
+    .fetch_optional(pool.get_conn())
+    .await
+    {
+        Ok(d) => d,
+        Err(_) => None,
+    };
+    
+    let login_oldest: Option<String> = match sqlx::query_scalar(
+        "SELECT created_at::text FROM login_logs ORDER BY created_at ASC LIMIT 1"
+    )
+    .fetch_optional(pool.get_conn())
+    .await
+    {
+        Ok(d) => d,
+        Err(_) => None,
+    };
+    
+    HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "operation_logs": {
+                "count": operation_count,
+                "oldest": operation_oldest
+            },
+            "login_logs": {
+                "count": login_count,
+                "oldest": login_oldest
+            },
+            "notifications": {
+                "count": notification_count
+            }
+        }),
+        "日志统计获取成功"
+    ))
+}

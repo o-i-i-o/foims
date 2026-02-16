@@ -51,7 +51,9 @@ export function initSystemTabs() {
         } else if (tabId === "system-smtp") {
           loadSmtpConfig();
           loadNotificationSettings();
-        } 
+        } else if (tabId === "import-export") {
+          loadLogsStats();
+        }
       });
     });
     systemContainer.dataset.tabsInitialized = "true";
@@ -138,6 +140,11 @@ export function initSystemTabs() {
   const saveNotificationBtn = document.getElementById("save-notification-settings-btn");
   if (saveNotificationBtn) {
     saveNotificationBtn.addEventListener("click", saveNotificationSettings);
+  }
+
+  const clearLogsBtn = document.getElementById("clear-logs-btn");
+  if (clearLogsBtn) {
+    clearLogsBtn.addEventListener("click", clearLogs);
   }
 
   systemContainer.dataset.eventsInitialized = "true";
@@ -995,4 +1002,68 @@ const fileInput = document.createElement("input");
       showToast("恢复配置失败: " + error.message, "error");
     }
   });
+}
+
+// 加载日志统计
+export async function loadLogsStats() {
+  try {
+    const result = await apiGet("/api/system/logs/stats");
+    if (result.success && result.data) {
+      const stats = result.data;
+      
+      document.getElementById("operation-logs-count").textContent = 
+        stats.operation_logs?.count || 0;
+      document.getElementById("login-logs-count").textContent = 
+        stats.login_logs?.count || 0;
+      document.getElementById("notifications-count").textContent = 
+        stats.notifications?.count || 0;
+      
+      if (stats.operation_logs?.oldest) {
+        document.getElementById("operation-logs-oldest").textContent = 
+          `最早: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
+      }
+      if (stats.login_logs?.oldest) {
+        document.getElementById("login-logs-oldest").textContent = 
+          `最早: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
+      }
+    }
+  } catch (error) {
+    console.error("加载日志统计失败:", error);
+  }
+}
+
+// 清理日志
+export async function clearLogs() {
+  const logType = document.getElementById("clear-log-type").value;
+  const days = parseInt(document.getElementById("clear-log-days").value) || 30;
+  
+  if (!confirm(`确定要清理 ${days} 天前的日志吗？此操作不可撤销。`)) {
+    return;
+  }
+  
+  try {
+    const result = await apiPost("/api/system/logs/clear", {
+      log_type: logType,
+      days: days
+    });
+    
+    if (result.success) {
+      showToast(result.message, "success");
+      loadLogsStats();
+    } else {
+      showToast("清理日志失败: " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("清理日志失败:", error);
+    showToast("清理日志失败: " + error.message, "error");
+  }
+}
+
+// 初始化日志清理功能
+export function initLogsCleanup() {
+  const clearLogsBtn = document.getElementById("clear-logs-btn");
+  if (clearLogsBtn) {
+    clearLogsBtn.addEventListener("click", clearLogs);
+  }
+  loadLogsStats();
 }

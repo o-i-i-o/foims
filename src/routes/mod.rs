@@ -33,7 +33,7 @@ use crate::system::config::{
 };
 use crate::system::import_export::{
     download_template, export_csv, export_database, export_json, import_csv, import_database,
-    import_json,
+    import_json, clear_logs, get_logs_stats,
 };
 use actix_web::{HttpResponse, middleware, web};
 
@@ -268,7 +268,10 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/export/csv", web::get().to(export_csv))
                                 .route("/export/database", web::get().to(export_database))
                                 .route("/template", web::get().to(download_template)),
-                        ),
+                        )
+                        // 日志清理功能
+                        .route("/logs/stats", web::get().to(get_logs_stats))
+                        .route("/logs/clear", web::post().to(clear_logs)),
                 ),
         );
 

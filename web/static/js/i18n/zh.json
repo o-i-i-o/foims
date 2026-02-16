@@ -200,7 +200,7 @@
     "config": "系统配置",
     "smtp": "SMTP配置",
     "certificate": "证书管理",
-    "import_export": "导入导出",
+    "import_export": "数据管理",
     "service": "服务管理",
     "restart_application": "重启应用",
     "restart_os": "重启系统",
@@ -281,7 +281,15 @@
     "login_time": "登录时间",
     "user_agent": "用户代理",
     "login_result": "登录结果",
-    "error_message": "错误信息"
+    "error_message": "错误信息",
+    "cleanup": "日志清理",
+    "stats": "日志统计",
+    "clear_logs": "清理日志",
+    "log_type": "日志类型",
+    "keep_days": "保留天数",
+    "all_logs": "所有日志",
+    "clear_hint": "删除指定天数之前的日志记录，此操作不可撤销。",
+    "clear": "清理"
   },
   "notifications": {
     "all": "全部通知",
