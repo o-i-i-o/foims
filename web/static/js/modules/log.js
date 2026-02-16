@@ -10,82 +10,36 @@ import {
   showToast
 } from "../utils/ui.js";
 
-// 日志字段中文映射
-const logFieldMappings = {
-  // 操作类型映射
-  operationTypes: {
-    create_user: "创建用户",
-    update_user: "更新用户",
-    delete_user: "删除用户",
-    create_network: "创建网络",
-    update_network: "更新网络",
-    delete_network: "删除网络",
-    create_workstation: "添加工位",
-    update_workstation: "更新工位",
-    delete_workstation: "删除工位",
-    create_ip: "创建IP",
-    update_ip: "更新IP",
-    delete_ip: "删除IP",
-    pull_ip: "拉取IP",
-    create_region: "创建区域",
-    update_region: "更新区域",
-    delete_region: "删除区域",
-    create_room: "创建房间",
-    update_room: "更新房间",
-    delete_room: "删除房间",
-    backup_config: "备份配置",
-    restore_config: "恢复配置",
-    // 默认映射，将下划线转换为空格并首字母大写
-    default: (value) =>
-      value
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
-  },
+import { t } from "../utils/i18n.js";
 
-  // 资源类型映射
-  resourceTypes: {
-    user: "用户",
-    network: "网络",
-    workstation: "工位",
-    ip: "IP",
-    region: "区域",
-    room: "房间",
-    config: "配置",
-    // 默认映射，将下划线转换为空格并首字母大写
-    default: (value) =>
-      value
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
-  },
-};
-
-// 获取中文操作类型
+// 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
   if (typeof type === "string") {
-    // 尝试直接匹配
-    if (logFieldMappings.operationTypes[type]) {
-      return logFieldMappings.operationTypes[type];
-    }
-    // 尝试小写匹配
     const lowerType = type.toLowerCase();
-    if (logFieldMappings.operationTypes[lowerType]) {
-      return logFieldMappings.operationTypes[lowerType];
+    const translation = t(`logs.operation_types.${lowerType}`);
+    if (translation !== `logs.operation_types.${lowerType}`) {
+      return translation;
     }
-    // 默认处理
-    return logFieldMappings.operationTypes.default(type);
+    return type
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
   return type;
 }
 
-// 获取中文资源类型
+// 获取资源类型文本（支持多语言）
 function getResourceTypeText(type) {
   if (typeof type === "string") {
-    return (
-      logFieldMappings.resourceTypes[type] ||
-      logFieldMappings.resourceTypes.default(type)
-    );
+    const lowerType = type.toLowerCase();
+    const translation = t(`logs.resource_types.${lowerType}`);
+    if (translation !== `logs.resource_types.${lowerType}`) {
+      return translation;
+    }
+    return type
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
   return type;
 }

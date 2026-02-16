@@ -18,6 +18,7 @@ import {
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
+import { t } from "../utils/i18n.js";
 
 import {
   loadNetworkTypeOptions
@@ -439,7 +440,7 @@ function buildIPv4Content(network, networkIps, networkId) {
               <th>状态</th>
               <th>所属资源</th>
               <th>MAC地址</th>
-              <th>主机名</th>
+              <th>${t('ip.hostname')}</th>
             </tr>
           </thead>
           <tbody id="ipv4-list-body">
@@ -538,7 +539,7 @@ function buildIPv6Content(network, networkIps, networkId) {
               <th>状态</th>
               <th>所属资源</th>
               <th>MAC地址</th>
-              <th>主机名</th>
+              <th>${t('ip.hostname')}</th>
             </tr>
           </thead>
           <tbody id="ipv6-list-body">

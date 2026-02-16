@@ -162,7 +162,7 @@ export async function loadIpMacData(searchParams = {}) {
                 <td>${ipManager.network_name || "未知"} (${ipManager.network_region || "未知"})</td>
                 <td>${ipManager.ip_address}</td>
                 <td>${ipManager.mac_address || ""}</td>
-                <td>${ipManager.hostname || "-"}</td>
+                <td>${formatSwitchPort(ipManager.switch_name, ipManager.switch_port_number)}</td>
                 <td>
                     <span class="status-badge ${ipManager.status === "active" ? "status-active" : "status-inactive"}">
                         ${ipManager.status}
@@ -190,6 +190,18 @@ export async function loadIpMacData(searchParams = {}) {
     );
     return null;
   }
+}
+
+// 格式化交换机端口显示
+function formatSwitchPort(switchName, portNumber) {
+  if (switchName && portNumber) {
+    return `${switchName}:${portNumber}`;
+  } else if (switchName) {
+    return switchName;
+  } else if (portNumber) {
+    return portNumber;
+  }
+  return "-";
 }
 
 // 获取设备类型名称
