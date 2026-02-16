@@ -23,6 +23,7 @@
     "back": "Back",
     "confirm": "Confirm",
     "success": "Success",
+    "failed": "Failed",
     "error": "Error",
     "warning": "Warning",
     "info": "Info",
@@ -35,7 +36,12 @@
     "filter": "Filter",
     "close": "Close",
     "all_types": "All Types",
-    "all_status": "All Status"
+    "all_status": "All Status",
+    "prev_page": "Previous",
+    "next_page": "Next",
+    "page_info": "Total {{total}} records, Page {{page}}/{{total_pages}}",
+    "load_failed": "Load failed",
+    "load_failed_retry": "Load failed, please refresh and try again"
   },
   "auth": {
     "login": "Login",
@@ -112,7 +118,11 @@
     "delete_room": "Delete Room",
     "room_deleted": "Room deleted successfully",
     "room_added": "Room added successfully",
-    "room_updated": "Room updated successfully"
+    "room_updated": "Room updated successfully",
+    "name_required": "Room name is required",
+    "type_required": "Room type is required",
+    "network_required": "At least one network is required",
+    "network_all_required": "Please select all networks"
   },
   "workstation": {
     "name": "Workstation Name",
@@ -221,11 +231,20 @@
     "status": "Status",
     "status_enabled": "Enabled",
     "status_disabled": "Disabled",
+    "two_factor": "Two-Factor Authentication",
+    "two_factor_enabled": "Enabled",
+    "two_factor_disabled": "Disabled",
+    "manage_2fa": "Manage 2FA",
+    "enable_2fa": "Enable 2FA",
     "add_user": "Add User",
+    "edit_user": "Edit User",
+    "delete_user": "Delete User",
+    "delete_confirm": "Are you sure you want to delete this user?",
     "username_placeholder": "Enter username",
     "email_placeholder": "Enter email",
     "password_placeholder": "Enter password (required for new users)",
-    "password_confirm_placeholder": "Enter password again"
+    "password_confirm_placeholder": "Enter password again",
+    "password_leave_blank": "Leave blank to keep current password"
   },
   "config": {
     "server_ipv4": "Server Address (IPv4)",
@@ -279,6 +298,7 @@
     "result": "Result",
     "ip_address": "IP Address",
     "login_time": "Login Time",
+    "details": "Details",
     "user_agent": "User Agent",
     "login_result": "Login Result",
     "error_message": "Error Message",
@@ -291,6 +311,9 @@
     "clear_hint": "Delete logs older than specified days. This action cannot be undone.",
     "clear": "Clear",
     "operation_types": {
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
       "create_user": "Create User",
       "update_user": "Update User",
       "delete_user": "Delete User",
@@ -316,8 +339,17 @@
       "create_switch": "Create Switch",
       "update_switch": "Update Switch",
       "delete_switch": "Delete Switch",
+      "create_switch_port": "Create Switch Port",
+      "update_switch_port": "Update Switch Port",
+      "delete_switch_port": "Delete Switch Port",
+      "create_cabinet_position": "Create Cabinet Position",
+      "update_cabinet_position": "Update Cabinet Position",
+      "delete_cabinet_position": "Delete Cabinet Position",
       "backup_config": "Backup Config",
       "restore_config": "Restore Config",
+      "batch_create": "Batch Create",
+      "batch_delete": "Batch Delete",
+      "auto_assign_ip": "Auto Assign IP",
       "login": "Login",
       "logout": "Logout",
       "send_email": "Send Email"
@@ -327,10 +359,15 @@
       "network": "Network",
       "workstation": "Workstation",
       "ip": "IP Address",
+      "ip_manager": "IP Manager",
       "region": "Region",
+      "network_region": "Network Region",
       "room": "Room",
       "cabinet": "Cabinet",
+      "cabinet_position": "Cabinet Position",
       "switch": "Switch",
+      "switch_port": "Switch Port",
+      "layout": "Layout",
       "config": "Config",
       "email": "Email"
     }
@@ -355,6 +392,11 @@
     "inactive": "Inactive",
     "device_name": "Device Name",
     "device_type": "Device Type",
+    "device_types": {
+      "workstation": "Workstation",
+      "cabinet_position": "Cabinet Position",
+      "switch": "Switch"
+    },
     "network": "Network",
     "last_seen": "Last Seen",
     "management": "IP Address Management",
@@ -376,7 +418,18 @@
     "select_region": "Select Network Region:",
     "auto_draw": "Auto Draw",
     "save_layout": "Save Layout",
-    "delete_layout": "Delete Layout"
+    "delete_layout": "Delete Layout",
+    "workstation_name": "Workstation",
+    "cabinet_position": "Cabinet Position",
+    "ip_address": "IP Address",
+    "switch_port": "Switch Port",
+    "u_position": "U Position",
+    "no_workstation_data": "No workstation data in this room",
+    "delete_layout_confirm": "Are you sure you want to delete the workstation layout for this room? This action cannot be undone.",
+    "delete_cabinet_layout_confirm": "Are you sure you want to delete the cabinet layout for this network region? This action cannot be undone.",
+    "draw_failed": "Draw failed",
+    "save_success": "Saved successfully",
+    "delete_success": "Deleted successfully"
   },
   "import_export": {
     "data_management": "Data Management",

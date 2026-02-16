@@ -12,6 +12,8 @@ import {
   handleError
 } from "../utils/ui.js";
 
+import { t } from "../utils/i18n.js";
+
 // ====== IP管理 ======
 
 // 加载交换机列表到拉取MAC下拉框
@@ -206,12 +208,12 @@ function formatSwitchPort(switchName, portNumber) {
 
 // 获取设备类型名称
 function getDeviceTypeName(deviceType) {
-  const typeMap = {
-    'workstation': '工位',
-    'cabinet_position': '机位',
-    'switch': '交换机'
-  };
-  return typeMap[deviceType] || deviceType || '-';
+  if (!deviceType) return '-';
+  const translation = t(`ip.device_types.${deviceType}`);
+  if (translation !== `ip.device_types.${deviceType}`) {
+    return translation;
+  }
+  return deviceType;
 }
 
 // 初始化IP相关功能

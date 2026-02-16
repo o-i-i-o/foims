@@ -19,6 +19,7 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { getUser } from "../utils/sessionManager.js";
+import { t } from "../utils/i18n.js";
 
 // 加载用户数据
 export async function loadUsersData() {
@@ -31,7 +32,7 @@ export async function loadUsersData() {
       if (users.length === 0) {
         tableBody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="7" class="text-center">暂无用户数据</td>
+            <td colspan="7" class="text-center">${t('common.no_data')}</td>
           </tr>
         `;
         return;
@@ -41,33 +42,33 @@ export async function loadUsersData() {
         <tr data-user-id="${user.id}">
           <td>${user.username}</td>
           <td>${user.email}</td>
-          <td>${user.role === 'admin' ? '管理员' : '普通用户'}</td>
+          <td>${user.role === 'admin' ? t('user.role_admin') : t('user.role_user')}</td>
           <td>
             <span class="status-badge ${user.status ? 'status-active' : 'status-inactive'}">
-              ${user.status ? '启用' : '禁用'}
+              ${user.status ? t('user.status_enabled') : t('user.status_disabled')}
             </span>
           </td>
           <td>
             <span class="two-factor-badge ${user.two_factor_enabled ? 'two-factor-enabled' : 'two-factor-disabled'}">
-              ${user.two_factor_enabled ? '已启用' : '未启用'}
+              ${user.two_factor_enabled ? t('user.two_factor_enabled') : t('user.two_factor_disabled')}
             </span>
           </td>
           <td>${formatDateTime(user.created_at)}</td>
           <td>
-            <button class="btn btn-secondary btn-sm btn-edit" data-id="${user.id}">编辑</button>
+            <button class="btn btn-secondary btn-sm btn-edit" data-id="${user.id}">${t('common.edit')}</button>
             <button class="btn btn-secondary btn-sm user-2fa" data-id="${user.id}" data-username="${user.username}" data-enabled="${user.two_factor_enabled}">
-              ${user.two_factor_enabled ? '管理2FA' : '启用2FA'}
+              ${user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa')}
             </button>
-            <button class="btn btn-danger btn-sm btn-delete" data-id="${user.id}">删除</button>
+            <button class="btn btn-danger btn-sm btn-delete" data-id="${user.id}">${t('common.delete')}</button>
           </td>
         </tr>
       `).join("");
     } else {
-      showMessage("加载用户数据失败：" + response.message, "error");
+      showMessage(t('common.load_failed') + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
-    showMessage("加载用户数据失败，请检查网络连接", "error");
+    showMessage(t('common.load_failed_retry'), "error");
   }
 }
 
@@ -84,26 +85,26 @@ export function openUserModal(userId) {
   const passwordConfirmInput = document.getElementById("user-password-confirm");
 
   if (userId) {
-    title.textContent = "编辑用户";
+    title.textContent = t('user.edit_user');
     userIdInput.value = userId;
-    passwordInput.placeholder = "留空不修改密码";
+    passwordInput.placeholder = t('user.password_leave_blank');
     passwordInput.required = false;
-    passwordConfirmInput.placeholder = "留空不修改密码";
+    passwordConfirmInput.placeholder = t('user.password_leave_blank');
     passwordConfirmInput.required = false;
     
     loadUserData(userId);
   } else {
-    title.textContent = "添加用户";
+    title.textContent = t('user.add_user');
     userIdInput.value = "";
     usernameInput.value = "";
     emailInput.value = "";
     roleInput.value = "user";
     statusInput.value = "true";
     passwordInput.value = "";
-    passwordInput.placeholder = "请输入密码（添加时必填）";
+    passwordInput.placeholder = t('user.password_placeholder');
     passwordInput.required = true;
     passwordConfirmInput.value = "";
-    passwordConfirmInput.placeholder = "请再次输入密码";
+    passwordConfirmInput.placeholder = t('user.password_confirm_placeholder');
     passwordConfirmInput.required = true;
   }
 
@@ -125,32 +126,30 @@ async function loadUserData(userId) {
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
-    showMessage("加载用户数据失败", "error");
+    showMessage(t('common.load_failed'), "error");
   }
 }
 
 // 删除用户
 export async function deleteUser(userId) {
-  if (!confirm("确定要删除此用户吗？")) {
+  if (!confirm(t('user.delete_confirm'))) {
     return;
   }
 
   try {
     const response = await apiDelete(`/api/users/${userId}`);
     if (response.success) {
-      showMessage("用户删除成功", "success");
+      showMessage(t('user.delete_user') + t('common.success'), "success");
       loadUsersData();
     } else {
-      showMessage("删除用户失败：" + response.message, "error");
+      showMessage(t('user.delete_user') + t('common.failed') + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("删除用户失败:", error);
-    showMessage("删除用户失败，请检查网络连接", "error");
+    showMessage(t('user.delete_user') + t('common.failed'), "error");
   }
 }
 
-// 为了保持与现有代码的兼容性，仍然在window对象上注册该函数
-window.deleteUser = deleteUser;
 
 // 注意：用户编辑/删除按钮的点击事件已在 eventManager.js 中统一处理
 // 此处 initUserEvents 函数保留用于处理 2FA 相关按钮

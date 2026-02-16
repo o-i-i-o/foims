@@ -240,7 +240,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
           if (logType === "operation") {
             const operationTypeText = getOperationTypeText(log.operation_type);
             const resourceTypeText = getResourceTypeText(log.resource_type);
-            const resultText = log.result ? "成功" : "失败";
+            const resultText = log.result ? t('common.success') : t('common.failed');
             
             // 安全地处理日志详情数据
             const logData = encodeURIComponent(JSON.stringify(log));
@@ -253,16 +253,17 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
               <td>${resultText}</td>
               <td>${log.ip_address || "-"}</td>
               <td>
-                <button class="btn btn-sm btn-info view-log-details" data-log="${logData}">详情</button>
+                <button class="btn btn-sm btn-info view-log-details" data-log="${logData}">${t('logs.details')}</button>
               </td>
             `;
           } else if (logType === "login") {
+            const loginResultText = log.success ? t('common.success') : t('common.failed');
             rowHtml = `
               <td>${new Date(log.created_at).toLocaleString()}</td>
               <td>${log.username}</td>
               <td>${log.ip_address}</td>
               <td>${log.user_agent || "-"}</td>
-              <td>${log.success ? "成功" : "失败"}</td>
+              <td>${loginResultText}</td>
               <td>${log.error_message || "-"}</td>
             `;
           }
@@ -277,14 +278,20 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
           const prevDisabled = pagination.page <= 1 ? 'disabled' : '';
           const nextDisabled = pagination.page >= pagination.total_pages ? 'disabled' : '';
           
+          const pageInfo = t('common.page_info', {
+            total: pagination.total,
+            page: pagination.page,
+            total_pages: pagination.total_pages
+          });
+          
           const paginationHtml = `
             <tr class="pagination-row">
               <td colspan="${colSpan}" class="pagination-cell">
                 <div class="pagination-controls">
-                  <span>共 ${pagination.total} 条记录，第 ${pagination.page}/${pagination.total_pages} 页</span>
+                  <span>${pageInfo}</span>
                   <div class="btn-group">
-                    <button class="btn btn-sm btn-secondary prev-page" ${prevDisabled} data-page="${pagination.page - 1}" data-type="${logType}">上一页</button>
-                    <button class="btn btn-sm btn-secondary next-page" ${nextDisabled} data-page="${pagination.page + 1}" data-type="${logType}">下一页</button>
+                    <button class="btn btn-sm btn-secondary prev-page" ${prevDisabled} data-page="${pagination.page - 1}" data-type="${logType}">${t('common.prev_page')}</button>
+                    <button class="btn btn-sm btn-secondary next-page" ${nextDisabled} data-page="${pagination.page + 1}" data-type="${logType}">${t('common.next_page')}</button>
                   </div>
                 </div>
               </td>
@@ -294,11 +301,11 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
         }
       } else {
         const colSpan = logType === "operation" ? 7 : 6;
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">暂无日志数据</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t('common.no_data')}</td></tr>`;
       }
     } else {
       const colSpan = logType === "operation" ? 7 : 6;
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${data.message || '加载失败'}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${data.message || t('common.load_failed')}</td></tr>`;
     }
   } catch (error) {
     console.error("加载日志数据失败:", error);
@@ -307,7 +314,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
     
     if (tbody) {
       const colSpan = logType === "operation" ? 7 : 6;
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">加载失败，请刷新页面重试</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t('common.load_failed_retry')}</td></tr>`;
     }
   }
 }

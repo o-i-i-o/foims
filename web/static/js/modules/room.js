@@ -18,6 +18,7 @@ import {
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
+import { t } from "../utils/i18n.js";
 
 // ==========================================
 // 网段配置管理模块 - 仅用于房间管理
@@ -381,7 +382,7 @@ export async function loadRoomsData() {
         }
 
         let roomTypeLower = room.room_type.toLowerCase();
-        let roomTypeText = roomTypeLower === "office" ? "办公室" : roomTypeLower === "data_center" ? "机房" : room.room_type;
+        let roomTypeText = roomTypeLower === "office" ? t('room.type_office') : roomTypeLower === "data_center" ? t('room.type_datacenter') : room.room_type;
 
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -391,15 +392,15 @@ export async function loadRoomsData() {
                     <td>${room.description || "-"}</td>
                     <td>${new Date(room.created_at).toLocaleString()}</td>
                     <td>
-                    <button class="btn btn-sm btn-edit" data-id="${room.id}">编辑</button>
-                    <button class="btn btn-sm btn-delete" data-id="${room.id}">删除</button>
+                    <button class="btn btn-sm btn-edit" data-id="${room.id}">${t('common.edit')}</button>
+                    <button class="btn btn-sm btn-delete" data-id="${room.id}">${t('common.delete')}</button>
                 </td>
                 `;
         tbody.appendChild(row);
       });
     } else {
       tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="6" class="text-center">暂无房间数据</td></tr>';
+        `<tr class="empty-row"><td colspan="6" class="text-center">${t('common.no_data')}</td></tr>`;
     }
   } catch (error) {
     console.error("加载房间数据失败:", error);
@@ -436,24 +437,24 @@ export async function submitRoomForm() {
   const description = getElementValue("room-description", "trimmed");
 
   if (!name) {
-    showToast("房间名称不能为空", "warning");
+    showToast(t('room.name_required'), "warning");
     return;
   }
 
   if (!roomType) {
-    showToast("房间类型不能为空", "warning");
+    showToast(t('room.type_required'), "warning");
     return;
   }
 
   const { networkIds, hasEmpty } = roomNetworkConfigManager.collectData();
   
   if (hasEmpty) {
-    showToast("请选择所有网段", "warning");
+    showToast(t('room.network_all_required'), "warning");
     return;
   }
   
   if (networkIds.length === 0) {
-    showToast("至少需要选择一个网段", "warning");
+    showToast(t('room.network_required'), "warning");
     return;
   }
 

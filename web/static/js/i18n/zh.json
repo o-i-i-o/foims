@@ -23,6 +23,7 @@
     "back": "返回",
     "confirm": "确认",
     "success": "成功",
+    "failed": "失败",
     "error": "错误",
     "warning": "警告",
     "info": "信息",
@@ -35,7 +36,12 @@
     "filter": "筛选",
     "close": "关闭",
     "all_types": "全部类型",
-    "all_status": "全部状态"
+    "all_status": "全部状态",
+    "prev_page": "上一页",
+    "next_page": "下一页",
+    "page_info": "共 {{total}} 条记录，第 {{page}}/{{total_pages}} 页",
+    "load_failed": "加载失败",
+    "load_failed_retry": "加载失败，请刷新页面重试"
   },
   "auth": {
     "login": "登录",
@@ -112,7 +118,11 @@
     "delete_room": "删除房间",
     "room_deleted": "房间删除成功",
     "room_added": "房间添加成功",
-    "room_updated": "房间更新成功"
+    "room_updated": "房间更新成功",
+    "name_required": "房间名称不能为空",
+    "type_required": "房间类型不能为空",
+    "network_required": "至少需要选择一个网段",
+    "network_all_required": "请选择所有网段"
   },
   "workstation": {
     "name": "工位名称",
@@ -221,11 +231,20 @@
     "status": "状态",
     "status_enabled": "启用",
     "status_disabled": "禁用",
+    "two_factor": "双因素认证",
+    "two_factor_enabled": "已启用",
+    "two_factor_disabled": "未启用",
+    "manage_2fa": "管理2FA",
+    "enable_2fa": "启用2FA",
     "add_user": "添加用户",
+    "edit_user": "编辑用户",
+    "delete_user": "删除用户",
+    "delete_confirm": "确定要删除此用户吗？",
     "username_placeholder": "请输入用户名",
     "email_placeholder": "请输入邮箱",
     "password_placeholder": "请输入密码（新用户必填）",
-    "password_confirm_placeholder": "请再次输入密码"
+    "password_confirm_placeholder": "请再次输入密码",
+    "password_leave_blank": "留空不修改密码"
   },
   "config": {
     "server_ipv4": "服务器地址(IPv4)",
@@ -279,6 +298,7 @@
     "result": "结果",
     "ip_address": "IP地址",
     "login_time": "登录时间",
+    "details": "详情",
     "user_agent": "用户代理",
     "login_result": "登录结果",
     "error_message": "错误信息",
@@ -291,6 +311,9 @@
     "clear_hint": "删除指定天数之前的日志记录，此操作不可撤销。",
     "clear": "清理",
     "operation_types": {
+      "create": "创建",
+      "update": "更新",
+      "delete": "删除",
       "create_user": "创建用户",
       "update_user": "更新用户",
       "delete_user": "删除用户",
@@ -316,8 +339,17 @@
       "create_switch": "创建交换机",
       "update_switch": "更新交换机",
       "delete_switch": "删除交换机",
+      "create_switch_port": "创建交换机端口",
+      "update_switch_port": "更新交换机端口",
+      "delete_switch_port": "删除交换机端口",
+      "create_cabinet_position": "创建机位",
+      "update_cabinet_position": "更新机位",
+      "delete_cabinet_position": "删除机位",
       "backup_config": "备份配置",
       "restore_config": "恢复配置",
+      "batch_create": "批量创建",
+      "batch_delete": "批量删除",
+      "auto_assign_ip": "自动分配IP",
       "login": "登录",
       "logout": "登出",
       "send_email": "发送邮件"
@@ -327,10 +359,15 @@
       "network": "网络",
       "workstation": "工位",
       "ip": "IP地址",
+      "ip_manager": "IP管理",
       "region": "区域",
+      "network_region": "网络区域",
       "room": "房间",
       "cabinet": "机柜",
+      "cabinet_position": "机位",
       "switch": "交换机",
+      "switch_port": "交换机端口",
+      "layout": "布局",
       "config": "配置",
       "email": "邮件"
     }
@@ -355,6 +392,11 @@
     "inactive": "不活跃",
     "device_name": "设备名称",
     "device_type": "设备类型",
+    "device_types": {
+      "workstation": "工位",
+      "cabinet_position": "机位",
+      "switch": "交换机"
+    },
     "network": "网络",
     "last_seen": "最后在线",
     "management": "IP地址管理",
@@ -375,7 +417,18 @@
     "select_region": "选择网络区域:",
     "auto_draw": "自动绘制",
     "save_layout": "保存布局",
-    "delete_layout": "删除布局"
+    "delete_layout": "删除布局",
+    "workstation_name": "工位",
+    "cabinet_position": "机位",
+    "ip_address": "IP地址",
+    "switch_port": "交换机端口",
+    "u_position": "U位",
+    "no_workstation_data": "该房间下暂无工位数据",
+    "delete_layout_confirm": "确定要删除当前房间的工位布局数据吗？此操作不可恢复。",
+    "delete_cabinet_layout_confirm": "确定要删除当前网络区域的机位布局数据吗？此操作不可恢复。",
+    "draw_failed": "绘制失败",
+    "save_success": "保存成功",
+    "delete_success": "删除成功"
   },
   "import_export": {
     "data_management": "数据管理",
