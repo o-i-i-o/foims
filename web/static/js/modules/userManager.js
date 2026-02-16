@@ -238,16 +238,19 @@ async function initTwoFactorConfig(userId) {
     
     const response = await apiPost("/api/two-factor/init", { user_id: userId });
     if (response.success) {
-      const { secret, qr_code, uri } = response.data;
+      const { secret, qr_code_base64, otpauth_url } = response.data;
       
       // 显示QR码和密钥
-      document.getElementById("two-factor-qr-code").src = qr_code;
+      const qrCodeImg = document.getElementById("two-factor-qr-code");
+      if (qr_code_base64) {
+        qrCodeImg.src = "data:image/png;base64," + qr_code_base64;
+      }
       document.getElementById("two-factor-secret").value = secret;
       
       // 存储URI用于验证
       const uriInput = document.getElementById("two-factor-uri");
       if (uriInput) {
-        uriInput.value = uri;
+        uriInput.value = otpauth_url;
       }
     } else {
       showMessage("获取2FA配置失败：" + response.message, "error");

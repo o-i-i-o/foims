@@ -77,7 +77,11 @@ async function loadLogsPage() {
   whenVisible("#logs .tab-btn.active", () => {
     const activeTabBtn = document.querySelector("#logs .tab-btn.active");
     const logType = activeTabBtn?.getAttribute("data-tab") || "operation";
-    logModule.loadLogsData(logType);
+    if (logType === "notifications") {
+      logModule.loadNotificationsData();
+    } else {
+      logModule.loadLogsData(logType);
+    }
   });
 }
 

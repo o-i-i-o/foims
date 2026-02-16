@@ -48,7 +48,7 @@ hex = "0.4.3"
 # 日志
 log = "0.4.29"
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["time"] }
+tracing-subscriber = { version = "0.3.22", features = ["time", "local-time"] }
 
 # IP/MAC 处理
 ipnetwork = "0.21.1"

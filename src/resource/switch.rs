@@ -9,7 +9,7 @@ use validator::Validate;
 use async_snmp::{Auth, Client, oid, v3::AuthProtocol};
 
 use crate::config::Config;
-use crate::crypto::decrypt_password;
+use crate::crypto::{decrypt_password, encrypt_password};
 use crate::db::DbPool;
 use crate::models::{
     ApiResponse, ArpEntry, SnmpTestRequest, Switch, SwitchCreate, SwitchPort, SwitchPortCreate,
@@ -76,7 +76,10 @@ pub async fn get_switches(pool: web::Data<DbPool>) -> Result<HttpResponse> {
             s.snmp_port,
             s.parent_switch_id, ps.name as parent_switch_name,
             s.parent_port_id, pp.port_number as parent_port_number,
-            s.description, s.created_at, s.updated_at
+            s.description,
+            'switch' as device_type,
+            (SELECT CAST(im.ip_address AS TEXT) FROM ip_managers im WHERE im.switch_id = s.id AND im.device_type = 'switch' LIMIT 1) as ip_address,
+            s.created_at, s.updated_at
         FROM switches s
         LEFT JOIN switches ps ON s.parent_switch_id = ps.id
         LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
@@ -115,7 +118,10 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             s.snmp_port,
             s.parent_switch_id, ps.name as parent_switch_name,
             s.parent_port_id, pp.port_number as parent_port_number,
-            s.description, s.created_at, s.updated_at
+            s.description,
+            'switch' as device_type,
+            (SELECT CAST(im.ip_address AS TEXT) FROM ip_managers im WHERE im.switch_id = s.id AND im.device_type = 'switch' LIMIT 1) as ip_address,
+            s.created_at, s.updated_at
         FROM switches s
         LEFT JOIN switches ps ON s.parent_switch_id = ps.id
         LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
@@ -222,6 +228,11 @@ pub async fn create_switch(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
+    // 加密敏感字段
+    let encrypted_snmp_community = req.snmp_community.as_ref().map(|c| encrypt_password(c));
+    let encrypted_snmp_auth_password = req.snmp_auth_password.as_ref().map(|p| encrypt_password(p));
+    let encrypted_snmp_priv_password = req.snmp_priv_password.as_ref().map(|p| encrypt_password(p));
+
     let result = sqlx::query(
         r#"INSERT INTO switches (
             id, name, network_region_id, network_id, model, vendor,
@@ -239,12 +250,12 @@ pub async fn create_switch(
     .bind(&req.vendor)
     .bind(&req.location)
     .bind(req.snmp_version.as_deref().unwrap_or("v2c"))
-    .bind(&req.snmp_community)
+    .bind(&encrypted_snmp_community)
     .bind(&req.snmp_username)
     .bind(&req.snmp_auth_protocol)
-    .bind(&req.snmp_auth_password)
+    .bind(&encrypted_snmp_auth_password)
     .bind(&req.snmp_priv_protocol)
-    .bind(&req.snmp_priv_password)
+    .bind(&encrypted_snmp_priv_password)
     .bind(req.snmp_port.unwrap_or(161))
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)
@@ -397,6 +408,11 @@ pub async fn update_switch(
 
     let now = Utc::now();
 
+    // 加密敏感字段
+    let encrypted_snmp_community = req.snmp_community.as_ref().map(|c| encrypt_password(c));
+    let encrypted_snmp_auth_password = req.snmp_auth_password.as_ref().map(|p| encrypt_password(p));
+    let encrypted_snmp_priv_password = req.snmp_priv_password.as_ref().map(|p| encrypt_password(p));
+
     // 构建动态更新SQL（不包含IP相关字段）
     let result = sqlx::query(
         r#"UPDATE switches SET
@@ -427,12 +443,12 @@ pub async fn update_switch(
     .bind(&req.vendor)
     .bind(&req.location)
     .bind(&req.snmp_version)
-    .bind(&req.snmp_community)
+    .bind(&encrypted_snmp_community)
     .bind(&req.snmp_username)
     .bind(&req.snmp_auth_protocol)
-    .bind(&req.snmp_auth_password)
+    .bind(&encrypted_snmp_auth_password)
     .bind(&req.snmp_priv_protocol)
-    .bind(&req.snmp_priv_password)
+    .bind(&encrypted_snmp_priv_password)
     .bind(req.snmp_port)
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)

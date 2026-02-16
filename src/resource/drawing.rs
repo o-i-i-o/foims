@@ -393,7 +393,7 @@ pub async fn get_positions_layout(
                       'rotation', rotation
                   ) as position
            FROM svg_layouts 
-           WHERE layout_type = 'position' AND network_region_id = $1"#,
+           WHERE layout_type = 'network_region' AND network_region_id = $1"#,
     )
     .bind(network_region_id)
     .fetch_all(pool.get_conn())

@@ -850,6 +850,29 @@
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </div>
             </form>
+            
+            <div class="notification-settings-section">
+              <div class="config-card">
+                <div class="config-card-header">
+                  <div class="config-card-title">
+                    <span class="icon">🔔</span>
+                    <span data-i18n="notification.mac_change_settings">MAC Address Change Notification</span>
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field" style="flex: 1;">
+                    <label data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</label>
+                    <div class="user-select-container">
+                      <div id="notification-users-list" class="users-checkbox-list"></div>
+                    </div>
+                    <p class="config-hint" data-i18n="notification.recipients_hint">Select users who will receive email notifications when MAC address changes are detected.</p>
+                  </div>
+                </div>
+                <div class="config-actions">
+                  <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

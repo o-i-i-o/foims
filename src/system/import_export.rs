@@ -1519,13 +1519,14 @@ async fn process_ip_managers_csv(
 
             if existing.is_none() {
                 // 插入新IP管理记录
+                let ip_version_num: i16 = if ip_version == "6" || ip_version.to_lowercase() == "ipv6" { 6 } else { 4 };
                 sqlx::query("INSERT INTO ip_managers (id, workstation_id, position_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, NOW(), NOW(), NOW())")
                     .bind(id)
                     .bind(workstation)
                     .bind(cabinet_position)
                     .bind(network)
                     .bind(ip_address)
-                    .bind(ip_version)
+                    .bind(ip_version_num)
                     .bind(if mac_address.is_empty() { None } else { Some(mac_address) })
                     .bind(if hostname.is_empty() { None } else { Some(hostname) })
                     .bind(status)
@@ -1908,7 +1909,7 @@ pub async fn download_template(
                     network_name: "示例网络".to_string(),
                     network_region: "示例网络区域".to_string(),
                     ip_address: "192.168.1.100".to_string(),
-                    ip_version: "IPv4".to_string(),
+                    ip_version: 4,
                     mac_address: Some("00:11:22:33:44:55".to_string()),
                     hostname: Some("example-host".to_string()),
                     status: "active".to_string(),

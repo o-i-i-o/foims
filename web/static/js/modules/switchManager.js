@@ -602,6 +602,9 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
   // 清空容器
   container.innerHTML = "";
   
+  // 初始隐藏添加端口表单
+  addPortFormContainer.style.display = "none";
+  
   // 显示分组端口
   Object.entries(portGroups).forEach(([groupName, ports]) => {
     const groupElement = document.createElement("div");

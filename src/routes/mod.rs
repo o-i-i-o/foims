@@ -29,6 +29,7 @@ use crate::system::config::{
     get_certificate_status, get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages, get_system_info, get_dashboard_stats, import_certificate, register_service, restart_application, restart_os, restore_config,
     send_email, test_smtp_connection as test_smtp, update_config, update_language_setting,
     update_page_timeout_config, update_session_timeout_config, update_smtp_config, update_system_config, download_certificate,
+    get_notification_settings, update_notification_settings,
 };
 use crate::system::import_export::{
     download_template, export_csv, export_database, export_json, import_csv, import_database,
@@ -254,6 +255,9 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         // 会话超时配置
                         .route("/session-timeout", web::get().to(get_session_timeout_config))
                         .route("/session-timeout", web::put().to(update_session_timeout_config))
+                        // 通知设置
+                        .route("/notification/settings", web::get().to(get_notification_settings))
+                        .route("/notification/settings", web::put().to(update_notification_settings))
                         // 导入导出功能
                         .service(
                             web::scope("/import-export")

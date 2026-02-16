@@ -819,3 +819,55 @@
         width: 100%;
     }
 }
+
+.notification-settings-section {
+    margin-top: 2rem;
+}
+
+.users-checkbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+    background: var(--color-bg);
+}
+
+.users-checkbox-list .user-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.2s;
+}
+
+.users-checkbox-list .user-checkbox-item:hover {
+    background-color: var(--color-bg-white);
+}
+
+.users-checkbox-list input[type="checkbox"] {
+    margin-right: 0.75rem;
+    width: 18px;
+    height: 18px;
+}
+
+.users-checkbox-list .user-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.users-checkbox-list .user-name {
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.users-checkbox-list .user-email {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.config-hint {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}

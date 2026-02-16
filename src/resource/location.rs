@@ -79,7 +79,7 @@ pub async fn get_positions(
                 let rows = match sqlx::query(
                     "SELECT p.id, p.name, p.cabinet_id, 
                             COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                            p.start_u, p.end_u, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+                            p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
                      FROM positions p 
                      WHERE p.cabinet_id = $1"
                 ).bind(cabinet_id_uuid)
@@ -110,7 +110,7 @@ pub async fn get_positions(
         let rows = match sqlx::query(
             "SELECT p.id, p.name, p.cabinet_id, 
                     COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                    p.start_u, p.end_u, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+                    p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
              FROM positions p"
         ).fetch_all(pool.get_conn()).await {
             Ok(rows) => rows,
@@ -168,6 +168,10 @@ pub async fn get_positions(
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+        
+        // 获取该机位的端口
+        let ports = ports_map.get(&id).cloned().unwrap_or_default();
+        
         let position_with_details = CabinetPositionWithDetails {
             id,
             name,
@@ -177,6 +181,7 @@ pub async fn get_positions(
             end_u,
             network_id,
             ips: Vec::new(),
+            ports,
             description,
             created_at,
             updated_at,
@@ -426,7 +431,7 @@ pub async fn get_cabinet_position(
 
     // 获取机位基本信息
     let position = match sqlx::query_as::<_, CabinetPosition>(
-        "SELECT id, name, cabinet_id, start_u, end_u, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM positions WHERE id = $1"
+        "SELECT id, name, cabinet_id, start_u, end_u, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM positions WHERE id = $1"
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
         Ok(Some(position)) => position,
@@ -486,6 +491,7 @@ pub async fn get_cabinet_position(
         end_u: position.end_u,
         network_id: position.network_id,
         ips: position_ips,
+        ports: Vec::new(),
         description: position.description,
         created_at: position.created_at,
         updated_at: position.updated_at,
@@ -648,6 +654,7 @@ pub async fn update_cabinet_position(
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         ips: vec![],
+        ports: vec![],
     };
 
     // 查询IP信息
@@ -670,6 +677,7 @@ pub async fn update_cabinet_position(
         end_u: position_with_details.end_u,
         network_id: position_with_details.network_id,
         ips,
+        ports: vec![],
         description: position_with_details.description,
         created_at: position_with_details.created_at,
         updated_at: position_with_details.updated_at,

@@ -5,8 +5,7 @@ use crate::models::{ApiResponse, LoginLog, OperationLog};
 use actix_web::{HttpResponse, Result, web};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::fmt::time::UtcTime;
+use tracing_subscriber::fmt::time::LocalTime;
 use std::path::Path;
 use std::fs;
 
@@ -118,8 +117,10 @@ pub async fn get_login_logs(pool: web::Data<DbPool>) -> Result<HttpResponse> {
 }
 
 pub fn setup_logging() -> String {
-    // 初始化日志
-    let timer = UtcTime::rfc_3339();
+    // 初始化日志 - 使用本地时间
+    let timer = LocalTime::new(time::format_description::parse(
+        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]"
+    ).unwrap());
 
     // 获取程序名
     let app_name = env!("CARGO_PKG_NAME");
@@ -132,15 +133,15 @@ pub fn setup_logging() -> String {
         });
     }
     // 构建日志文件路径，格式：/var/log/程序名/日期.log
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    // 使用本地时间（CST）而不是UTC时间
+    let today = chrono::Local::now().format("%Y-%m-%d-%H-%M").to_string();
     let log_file_path = format!("{}/{}.log", log_dir, today);
 
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_timer(timer.clone())
-                .with_span_events(FmtSpan::CLOSE),
+                .with_timer(timer.clone()),
         )
         .with(
             tracing_subscriber::fmt::layer()
@@ -150,7 +151,7 @@ pub fn setup_logging() -> String {
                     std::fs::File::create("ipma.log").unwrap()
                 }))
                 .with_timer(timer)
-                .with_span_events(FmtSpan::CLOSE),
+                .with_ansi(false), // 禁用ANSI颜色代码
         )
         .with(
             tracing_subscriber::filter::Targets::new()

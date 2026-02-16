@@ -112,7 +112,6 @@ export class SVGVisualization {
       }
     });
 
-    // 右键菜单事件已移除，不再支持右键删除工位
   }
 
   // 处理鼠标按下事件
@@ -274,16 +273,12 @@ export class SVGVisualization {
       const cabinetId = element.dataset.id;
       const positions = this.elementsGroup.querySelectorAll(".cabinet-position-element");
       positions.forEach((position) => {
-        // 这里需要一种方法来确定机位属于哪个机柜
-        // 由于当前代码没有直接关联，我们可以通过位置关系来判断
-        const positionRect = position.querySelector("rect");
-        if (positionRect) {
-          const posX = parseFloat(positionRect.getAttribute("x"));
-          const posY = parseFloat(positionRect.getAttribute("y"));
-          // 简单判断：如果机位在机柜附近，则认为是该机柜的机位
-          if (Math.abs(posX - (x + 15)) < 10 && Math.abs(posY - (y + 40)) < 10) {
-            const newPosX = posX + dx;
-            const newPosY = posY + dy;
+        // 通过 cabinetId 关联机位
+        if (position.dataset.cabinetId === cabinetId) {
+          const positionRect = position.querySelector("rect");
+          if (positionRect) {
+            const newPosX = parseFloat(positionRect.getAttribute("x")) + dx;
+            const newPosY = parseFloat(positionRect.getAttribute("y")) + dy;
             positionRect.setAttribute("x", newPosX);
             positionRect.setAttribute("y", newPosY);
             // 更新机位文本位置
@@ -365,13 +360,14 @@ export class SVGVisualization {
     rect.setAttribute("width", workstation.position.width || 160);
     rect.setAttribute("height", workstation.position.height || 160);
 
-    // 获取端口号（显示所有端口）
-    const portInfo =
-      workstation.ports && workstation.ports.length > 0
-        ? workstation.ports.map(port => port.port_number || "未知端口").join(", ")
-        : "无端口";
+    // 从ipManager获取交换机端口信息
     const ipManager = workstation.ipManager || null;
     const ipAddress = ipManager ? ipManager.ip_address : "无IP";
+    let portInfo = "无端口";
+    if (ipManager && ipManager.switch_name && ipManager.switch_port_number) {
+      portInfo = `${ipManager.switch_name}: ${ipManager.switch_port_number}`;
+    }
+    
     const statusClass =
       ipManager && ipManager.status ? `status-${ipManager.status}` : "status-unknown";
     group.classList.add(statusClass);
@@ -506,9 +502,9 @@ export class SVGVisualization {
 
     const x = cabinet.position.x || 50;
     const y = cabinet.position.y || 50;
-    const width = cabinet.position.width || 150; // 增加机柜宽度
-    const capacity = cabinet.capacity || 45; // 默认45U
-    const height = cabinet.position.height || (capacity * 20 + 40); // 根据capacity计算高度，包含标题区域
+    const width = cabinet.position.width || 150;
+    const capacity = cabinet.capacity || 45;
+    const height = cabinet.position.height || (capacity * 20 + 40);
 
     // 机柜矩形
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -517,54 +513,6 @@ export class SVGVisualization {
     rect.setAttribute("width", width);
     rect.setAttribute("height", height);
 
-    // 机柜图标（服务器图标）
-    const iconGroup = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "g",
-    );
-    iconGroup.className.baseVal = "cabinet-icon";
-
-    // 绘制简单的服务器图标
-    const iconX = x + width - 25;
-    const iconY = y + 5;
-
-    // 服务器机箱
-    const serverRect = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "rect",
-    );
-    serverRect.setAttribute("x", iconX);
-    serverRect.setAttribute("y", iconY);
-    serverRect.setAttribute("width", 18);
-    serverRect.setAttribute("height", 12);
-    serverRect.setAttribute("rx", 2);
-    serverRect.setAttribute("fill", "#4a90d9");
-    serverRect.setAttribute("stroke", "#2c5282");
-    serverRect.setAttribute("stroke-width", "1");
-
-    // 指示灯
-    const led1 = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle",
-    );
-    led1.setAttribute("cx", iconX + 4);
-    led1.setAttribute("cy", iconY + 6);
-    led1.setAttribute("r", 2);
-    led1.setAttribute("fill", "#48bb78");
-
-    const led2 = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle",
-    );
-    led2.setAttribute("cx", iconX + 10);
-    led2.setAttribute("cy", iconY + 6);
-    led2.setAttribute("r", 2);
-    led2.setAttribute("fill", "#f6ad55");
-
-    iconGroup.appendChild(serverRect);
-    iconGroup.appendChild(led1);
-    iconGroup.appendChild(led2);
-
     // 机柜名称
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("x", x + width / 2);
@@ -572,12 +520,9 @@ export class SVGVisualization {
     text.textContent = cabinet.name;
     group.dataset.tooltip = `机柜: ${cabinet.name}\n容量: ${cabinet.capacity || 42}U`;
 
-    // 绘制U位标记
-    this.drawUMarks(cabinet, group);
-
-    // 组装元素
+    // 组装元素 - 注意顺序：先添加背景，再添加内容
     group.appendChild(rect);
-    group.appendChild(iconGroup);
+    this.drawUMarks(cabinet, group);
     group.appendChild(text);
     this.elementsGroup.appendChild(group);
 
@@ -627,6 +572,7 @@ export class SVGVisualization {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.className.baseVal = "cabinet-position-element";
     group.dataset.id = position.id;
+    group.dataset.cabinetId = cabinet.id; // 添加机柜ID关联
 
     // 计算机位位置和大小
     const uHeight = 20;
@@ -658,13 +604,11 @@ export class SVGVisualization {
     text.setAttribute("y", y + height / 2 + 4);
     text.textContent = position.name;
 
-    // 端口信息
-    const portsLabel =
-      position.ports && position.ports.length > 0
-        ? position.ports
-            .map((port) => `${port.network_name || "未知网络"}: ${port.port_number || "未知端口"}`)
-            .join(", ")
-        : "无端口";
+    // 端口信息 - 从ipManager获取交换机端口信息
+    let portsLabel = "无端口";
+    if (position.ipManager && position.ipManager.switch_name && position.ipManager.switch_port_number) {
+      portsLabel = `${position.ipManager.switch_name}: ${position.ipManager.switch_port_number}`;
+    }
     
     // IP信息
     const ipAddress = position.ipManager ? position.ipManager.ip_address : "无IP";
@@ -1161,9 +1105,12 @@ export class SVGVisualization {
       const ipMap = new Map();
       
       if (ipResult.success && ipResult.data) {
-        ipResult.data.forEach(ipManager => {
-          if (ipManager.cabinet_position_id) {
-            ipMap.set(ipManager.cabinet_position_id, ipManager);
+        // IP数据可能是分页格式 {data: [...], total: ...} 或直接数组
+        const ipList = Array.isArray(ipResult.data) ? ipResult.data : (ipResult.data.data || []);
+        ipList.forEach(ipManager => {
+          // 使用 position_id 关联机位
+          if (ipManager.position_id) {
+            ipMap.set(ipManager.position_id, ipManager);
           }
         });
       }

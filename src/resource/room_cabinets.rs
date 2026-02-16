@@ -520,26 +520,26 @@ pub async fn get_cabinets(
     let mut cabinets_with_networks = Vec::new();
 
     for cabinet in cabinets {
-        // 获取机柜关联的网络（通过 network_id）
-        let cabinet_networks = if let Some(network_id) = cabinet.network_id {
-            match sqlx::query_as::<_, NetworkInfo>(
-                r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-                   FROM network_cidrs n 
-                   JOIN network_regions nr ON n.network_region_id = nr.id 
-                   WHERE n.id = $1"#,
-            )
-            .bind(network_id)
-            .fetch_all(pool.get_conn())
-            .await
-            {
-                Ok(networks) => networks,
-                Err(err) => {
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
-                }
+        // 获取机柜关联的网络
+        // 机柜只继承类型为"机房"(DATA_CENTER)的房间的网段
+        let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
+            r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+               FROM cabinets c 
+               LEFT JOIN rooms r ON c.room_id = r.id AND r.room_type = 'DATA_CENTER'
+               LEFT JOIN room_networks rn ON r.id = rn.room_id
+               LEFT JOIN network_cidrs n ON COALESCE(c.network_id, rn.network_id) = n.id 
+               LEFT JOIN network_regions nr ON n.network_region_id = nr.id 
+               WHERE c.id = $1 AND n.id IS NOT NULL"#,
+        )
+        .bind(cabinet.id)
+        .fetch_all(pool.get_conn())
+        .await
+        {
+            Ok(networks) => networks,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
-        } else {
-            vec![]
         };
 
         // 创建带网络信息的机柜对象
@@ -996,12 +996,15 @@ pub async fn get_cabinet_networks(pool: web::Data<DbPool>, id_path: web::Path<Uu
     }
 
     // 获取机柜关联的网络
+    // 机柜只继承类型为"机房"(DATA_CENTER)的房间的网段
     let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
         r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-           FROM cabinet_networks cn 
-           JOIN network_cidrs n ON cn.network_id = n.id 
-           JOIN network_regions nr ON n.network_region_id = nr.id 
-           WHERE cn.cabinet_id = $1"#,
+           FROM cabinets c 
+           LEFT JOIN rooms r ON c.room_id = r.id AND r.room_type = 'DATA_CENTER'
+           LEFT JOIN room_networks rn ON r.id = rn.room_id
+           LEFT JOIN network_cidrs n ON COALESCE(c.network_id, rn.network_id) = n.id 
+           LEFT JOIN network_regions nr ON n.network_region_id = nr.id 
+           WHERE c.id = $1 AND n.id IS NOT NULL"#,
     )
     .bind(id)
     .fetch_all(pool.get_conn())

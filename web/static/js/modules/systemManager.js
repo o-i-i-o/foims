@@ -50,6 +50,7 @@ export function initSystemTabs() {
           loadSystemConfig();
         } else if (tabId === "system-smtp") {
           loadSmtpConfig();
+          loadNotificationSettings();
         } 
       });
     });
@@ -132,6 +133,11 @@ export function initSystemTabs() {
       e.preventDefault();
       await saveSmtpConfig();
     });
+  }
+
+  const saveNotificationBtn = document.getElementById("save-notification-settings-btn");
+  if (saveNotificationBtn) {
+    saveNotificationBtn.addEventListener("click", saveNotificationSettings);
   }
 
   systemContainer.dataset.eventsInitialized = "true";
@@ -684,6 +690,79 @@ export async function testSmtpConnection() {
 // 初始化SMTP相关功能
 export function initSmtpFunctions() {
   // 注意：test-smtp-btn 已在 eventManager.js 中绑定，此处不再重复绑定
+}
+
+// 加载通知设置
+export async function loadNotificationSettings() {
+  try {
+    // 加载用户列表
+    const usersResult = await apiGet("/api/users");
+    const settingsResult = await apiGet("/api/system/notification/settings");
+    
+    const usersList = document.getElementById("notification-users-list");
+    if (!usersList) return;
+    
+    usersList.innerHTML = "";
+    
+    if (!usersResult.success || !usersResult.data) return;
+    
+    const selectedRecipients = settingsResult.success && settingsResult.data 
+      ? settingsResult.data.email_recipients || [] 
+      : [];
+    
+    usersResult.data.forEach(user => {
+      const item = document.createElement("div");
+      item.className = "user-checkbox-item";
+      
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = `notify-user-${user.id}`;
+      checkbox.value = user.id;
+      checkbox.checked = selectedRecipients.includes(user.id);
+      
+      const label = document.createElement("label");
+      label.htmlFor = `notify-user-${user.id}`;
+      label.className = "user-info";
+      
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "user-name";
+      nameSpan.textContent = user.username;
+      
+      const emailSpan = document.createElement("span");
+      emailSpan.className = "user-email";
+      emailSpan.textContent = user.email;
+      
+      label.appendChild(nameSpan);
+      label.appendChild(emailSpan);
+      
+      item.appendChild(checkbox);
+      item.appendChild(label);
+      usersList.appendChild(item);
+    });
+  } catch (error) {
+    console.error("加载通知设置失败:", error);
+  }
+}
+
+// 保存通知设置
+export async function saveNotificationSettings() {
+  try {
+    const checkboxes = document.querySelectorAll("#notification-users-list input[type='checkbox']:checked");
+    const userIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    const result = await apiPut("/api/system/notification/settings", {
+      email_recipients: userIds
+    });
+    
+    if (result.success) {
+      showToast("通知设置保存成功", "success");
+    } else {
+      showToast("通知设置保存失败: " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("保存通知设置失败:", error);
+    showToast("保存通知设置失败: " + error.message, "error");
+  }
 }
 
 // 加载系统信息

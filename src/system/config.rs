@@ -1180,7 +1180,16 @@ pub async fn disable_init_mode(
         actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
     })?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "初始化模式已关闭")))
+    // 重启服务
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let _ = std::process::Command::new("systemctl")
+            .arg("restart")
+            .arg("ipma.service")
+            .status();
+    });
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "初始化模式已关闭，服务正在重启...")))
 }
 
 // 备份系统配置
@@ -1386,4 +1395,62 @@ pub async fn update_page_timeout_config(
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "页面超时配置更新成功")))
+}
+
+// 通知设置请求模型
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NotificationSettings {
+    pub email_recipients: Vec<Uuid>,
+}
+
+// 获取通知设置
+pub async fn get_notification_settings(
+    pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let recipients = match sqlx::query_scalar::<_, String>(
+        "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
+    )
+    .fetch_optional(pool.get_conn())
+    .await
+    {
+        Ok(Some(recips)) => {
+            recips.split(',')
+                .filter_map(|id| Uuid::parse_str(id.trim()).ok())
+                .collect::<Vec<Uuid>>()
+        }
+        Ok(None) => Vec::new(),
+        Err(_) => Vec::new(),
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        NotificationSettings { email_recipients: recipients },
+        "通知设置获取成功",
+    )))
+}
+
+// 更新通知设置
+pub async fn update_notification_settings(
+    pool: web::Data<DbPool>,
+    req: web::Json<NotificationSettings>,
+) -> Result<HttpResponse> {
+    let recipients_str = req.email_recipients
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+
+    sqlx::query(
+        "INSERT INTO system_configs (config_type, key, value) 
+         VALUES ('notification', 'email_recipients', $1) 
+         ON CONFLICT (config_type, key) 
+         DO UPDATE SET value = $1, updated_at = NOW()",
+    )
+    .bind(&recipients_str)
+    .execute(pool.get_conn())
+    .await
+    .map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {}", e))
+    })?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
 }

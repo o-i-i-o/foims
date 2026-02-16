@@ -247,29 +247,42 @@ pub async fn log_system_operation(
 
 // 从请求中获取真实IP地址的辅助函数
 pub fn get_real_ip_from_request(req: &actix_web::HttpRequest) -> String {
-    // 先尝试从X-Forwarded-For头获取，这是最常用的代理IP头
-    if let Some(xff) = req.headers().get("X-Forwarded-For")
-        && let Ok(xff_str) = xff.to_str()
-    {
-        // X-Forwarded-For格式：client, proxy1, proxy2
-        // 取第一个IP作为真实IP
-        if let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string()) {
-            return real_ip;
+    let ip = {
+        // 先尝试从X-Forwarded-For头获取，这是最常用的代理IP头
+        if let Some(xff) = req.headers().get("X-Forwarded-For")
+            && let Ok(xff_str) = xff.to_str()
+        {
+            // X-Forwarded-For格式：client, proxy1, proxy2
+            // 取第一个IP作为真实IP
+            if let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string()) {
+                return normalize_ipv4_address(&real_ip);
+            }
         }
-    }
 
-    // 尝试从X-Real-IP头获取
-    if let Some(x_real_ip) = req.headers().get("X-Real-IP")
-        && let Ok(real_ip_str) = x_real_ip.to_str()
-    {
-        return real_ip_str.trim().to_string();
-    }
+        // 尝试从X-Real-IP头获取
+        if let Some(x_real_ip) = req.headers().get("X-Real-IP")
+            && let Ok(real_ip_str) = x_real_ip.to_str()
+        {
+            return normalize_ipv4_address(real_ip_str.trim());
+        }
 
-    // 最后尝试从连接信息获取
-    req.connection_info()
-        .realip_remote_addr()
-        .unwrap_or("unknown")
-        .to_string()
+        // 最后尝试从连接信息获取
+        req.connection_info()
+            .realip_remote_addr()
+            .unwrap_or("unknown")
+            .to_string()
+    };
+    
+    normalize_ipv4_address(&ip)
+}
+
+// 规范化IPv4地址，将 ::ffff:x.x.x.x 转换为 x.x.x.x
+pub fn normalize_ipv4_address(ip: &str) -> String {
+    if ip.starts_with("::ffff:") {
+        ip.strip_prefix("::ffff:").unwrap_or(ip).to_string()
+    } else {
+        ip.to_string()
+    }
 }
 
 // 发送MAC地址变更通知

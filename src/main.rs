@@ -5,17 +5,6 @@ use actix_web::{App, HttpServer, web};
 use std::path::Path;
 use tracing::info;
 
-// 引入模块
-// 移除本地模块声明，使用库 crate (ipma)
-// mod auth;
-// mod db;
-// mod log;
-// mod models;
-// mod routes;
-// mod system;
-// mod utils;
-
-// 引入重构后的模块组件
 use ipma::log::setup_logging;
 use ipma::routes::static_files::{
     serve_json, https_redirect_handler, json_error_handler, WEB_DIR

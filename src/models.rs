@@ -125,31 +125,6 @@ pub struct ResetPasswordRequest {
 }
 
 // 2FA相关模型
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct TwoFactorEnableRequest {
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
-    pub code: String,
-    pub user_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct TwoFactorVerifyRequest {
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
-    pub code: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct TwoFactorDisableRequest {
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
-    pub code: String,
-    pub user_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct TwoFactorInitRequest {
-    pub user_id: Option<String>,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TwoFactorConfigResponse {
     pub secret: String,
@@ -570,6 +545,7 @@ pub struct CabinetPositionWithDetails {
     pub end_u: i32,
     pub network_id: Option<Uuid>,
     pub ips: Vec<IpManager>,
+    pub ports: Vec<CabinetPositionPortWithSwitchPort>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -623,7 +599,7 @@ pub struct IpManager {
     pub device_type: Option<String>,
     pub network_id: Uuid,
     pub ip_address: String,
-    pub ip_version: String,
+    pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
     pub status: String,
@@ -650,7 +626,7 @@ pub struct IpManagerWithNames {
     pub network_name: String,
     pub network_region: String,
     pub ip_address: String,
-    pub ip_version: String,
+    pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
     pub status: String,
@@ -690,7 +666,7 @@ pub struct IpManagerUpdate {
     pub hostname: Option<String>,
     #[validate(length(max = 20, message = "状态长度不能超过20个字符"))]
     pub status: Option<String>,
-    pub ip_version: Option<String>,
+    pub ip_version: Option<i16>,
 }
 
 // 操作日志模型
@@ -793,6 +769,8 @@ pub struct SwitchWithParent {
     pub parent_port_id: Option<Uuid>,
     pub parent_port_number: Option<String>,
     pub description: Option<String>,
+    pub device_type: Option<String>,
+    pub ip_address: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

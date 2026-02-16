@@ -366,7 +366,16 @@ pub fn get_client_info(req: &actix_web::HttpRequest) -> (String, String) {
         .unwrap_or("unknown")
         .to_string();
 
-    (ip_address, user_agent)
+    (normalize_ipv4_address(&ip_address), user_agent)
+}
+
+// 规范化IPv4地址，将 ::ffff:x.x.x.x 转换为 x.x.x.x
+pub fn normalize_ipv4_address(ip: &str) -> String {
+    if ip.starts_with("::ffff:") {
+        ip.strip_prefix("::ffff:").unwrap_or(ip).to_string()
+    } else {
+        ip.to_string()
+    }
 }
 
 // 从ServiceRequest中提取令牌

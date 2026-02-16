@@ -28,6 +28,7 @@ use crate::models::{
 };
 use crate::utils::detect_user_language;
 use crate::system::smtp::get_smtp_config_from_db;
+use crate::crypto::{encrypt_password, decrypt_password};
 use totp_rs::{Algorithm, TOTP, Secret};
 use chrono::DateTime;
 
@@ -70,26 +71,20 @@ pub async fn auth_middleware(
         }
     };
 
-    // 3. 验证设备指纹 (跳过 config 字段检查，默认检查或假设开启)
-    // if config.jwt.validate_device_fingerprint {
-        let (ip_address, user_agent) = get_client_info_from_service_request(&req);
-        let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
-        
-        if let Some(token_fingerprint) = &claims.device_fingerprint
-             && token_fingerprint != &current_fingerprint {
-                 let user_lang = detect_user_language(req.request());
-                 // 记录安全警告
-                 // 手动构造带 error_type 的响应
-                 let resp = ApiResponse::<()>::error_i18n("api.device_validation_failed", &user_lang);
-                 // 暂时无法设置 error_type，因为 models 里没暴露 setter 或字段是私有的/结构体。
-                 // 假设前端只看 message。
-                 return Ok(req.into_response(
-                     HttpResponse::Unauthorized()
-                         .json(resp)
-                         .map_into_right_body(),
-                 ));
-             }
-    // }
+    // 3. 验证设备指纹（始终启用）
+    let (ip_address, user_agent) = get_client_info_from_service_request(&req);
+    let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
+    
+    if let Some(token_fingerprint) = &claims.device_fingerprint
+         && token_fingerprint != &current_fingerprint {
+             let user_lang = detect_user_language(req.request());
+             let resp = ApiResponse::<()>::error_i18n("api.device_validation_failed", &user_lang);
+             return Ok(req.into_response(
+                 HttpResponse::Unauthorized()
+                     .json(resp)
+                     .map_into_right_body(),
+             ));
+         }
 
     // 4. 将用户信息注入到请求扩展中，以便后续处理程序使用
     // claims 是 JwtClaims 结构体
@@ -388,9 +383,11 @@ pub async fn login_with_two_factor(
 
     let mut verified = false;
     // 验证 TOTP (RFC 4226: 密钥至少128 bits)
-    if let Some(s) = secret {
+    if let Some(encrypted_secret) = secret {
+        // 解密密钥
+        let secret = decrypt_password(&encrypted_secret);
         // 将 Base32 编码的密钥解码为字节
-        let secret_bytes = match Secret::Encoded(s.clone()).to_bytes() {
+        let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
             Ok(bytes) => bytes,
             Err(_) => {
                 // Base32 解码失败，密钥格式错误
@@ -580,6 +577,7 @@ pub async fn reset_password() -> Result<HttpResponse> {
 // 初始化2FA - 生成符合RFC 4226规范的TOTP密钥
 pub async fn init_two_factor(
     pool: web::Data<DbPool>,
+    req: web::Json<TwoFactorInitRequest>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse> {
     let extensions = http_req.extensions();
@@ -588,9 +586,32 @@ pub async fn init_two_factor(
         None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
     };
     
-    let user_id = match Uuid::parse_str(&claims.sub) {
-        Ok(id) => id,
-        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    // 确定目标用户ID
+    let target_user_id = if let Some(user_id) = req.user_id {
+        // 如果指定了user_id，检查权限
+        if claims.sub != user_id.to_string() && claims.role != "admin" {
+            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("只有管理员可以为其他用户初始化2FA")));
+        }
+        user_id
+    } else {
+        // 默认使用当前用户
+        match Uuid::parse_str(&claims.sub) {
+            Ok(id) => id,
+            Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+        }
+    };
+    
+    // 获取目标用户信息
+    let target_username: String = match sqlx::query_scalar(
+        "SELECT username FROM users WHERE id = $1"
+    )
+    .bind(target_user_id)
+    .fetch_optional(&pool.pool)
+    .await
+    {
+        Ok(Some(name)) => name,
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在"))),
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
     };
     
     // 生成32字节（256 bits）的密钥，比RFC 4226推荐的160 bits更安全
@@ -611,18 +632,19 @@ pub async fn init_two_factor(
         30,
         secret.to_bytes().unwrap(),
         Some("IPMA".to_string()),
-        claims.username.clone(),
+        target_username.clone(),
     ) {
         Ok(t) => t,
         Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("生成TOTP失败"))),
     };
     
-    // 将密钥临时存储到数据库（尚未启用）
+    // 将密钥加密后存储到数据库（尚未启用）
+    let encrypted_secret = encrypt_password(&secret_base32);
     let _ = sqlx::query(
         "UPDATE users SET two_factor_secret = $1 WHERE id = $2"
     )
-    .bind(&secret_base32)
-    .bind(user_id)
+    .bind(&encrypted_secret)
+    .bind(target_user_id)
     .execute(&pool.pool)
     .await;
     
@@ -649,16 +671,26 @@ pub async fn enable_two_factor(
         None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
     };
     
-    let user_id = match Uuid::parse_str(&claims.sub) {
-        Ok(id) => id,
-        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    // 确定目标用户ID
+    let target_user_id = if let Some(user_id) = req.user_id {
+        // 如果指定了user_id，检查权限
+        if claims.sub != user_id.to_string() && claims.role != "admin" {
+            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("只有管理员可以为其他用户启用2FA")));
+        }
+        user_id
+    } else {
+        // 默认使用当前用户
+        match Uuid::parse_str(&claims.sub) {
+            Ok(id) => id,
+            Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+        }
     };
     
     // 获取存储的密钥
     let secret: Option<String> = match sqlx::query_scalar(
         "SELECT two_factor_secret FROM users WHERE id = $1"
     )
-    .bind(user_id)
+    .bind(target_user_id)
     .fetch_optional(&pool.pool)
     .await
     {
@@ -667,9 +699,25 @@ pub async fn enable_two_factor(
         Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
     };
     
-    let secret = match secret {
+    let encrypted_secret = match secret {
         Some(s) => s,
         None => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA"))),
+    };
+    
+    // 解密密钥
+    let secret = decrypt_password(&encrypted_secret);
+    
+    // 获取目标用户名
+    let target_username: String = match sqlx::query_scalar(
+        "SELECT username FROM users WHERE id = $1"
+    )
+    .bind(target_user_id)
+    .fetch_optional(&pool.pool)
+    .await
+    {
+        Ok(Some(name)) => name,
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在"))),
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
     };
     
     // 验证TOTP码
@@ -678,7 +726,7 @@ pub async fn enable_two_factor(
         Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("密钥格式错误"))),
     };
     
-    let totp = match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), claims.username.clone()) {
+    let totp = match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), target_username) {
         Ok(t) => t,
         Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("TOTP创建失败"))),
     };
@@ -691,7 +739,7 @@ pub async fn enable_two_factor(
     let _ = sqlx::query(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1"
     )
-    .bind(user_id)
+    .bind(target_user_id)
     .execute(&pool.pool)
     .await;
     
@@ -710,16 +758,26 @@ pub async fn disable_two_factor(
         None => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权"))),
     };
     
-    let user_id = match Uuid::parse_str(&claims.sub) {
-        Ok(id) => id,
-        Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+    // 确定目标用户ID
+    let target_user_id = if let Some(user_id) = req.user_id {
+        // 如果指定了user_id，检查权限
+        if claims.sub != user_id.to_string() && claims.role != "admin" {
+            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("只有管理员可以为其他用户禁用2FA")));
+        }
+        user_id
+    } else {
+        // 默认使用当前用户
+        match Uuid::parse_str(&claims.sub) {
+            Ok(id) => id,
+            Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))),
+        }
     };
     
     // 获取存储的密钥
     let (secret, two_factor_enabled): (Option<String>, bool) = match sqlx::query_as(
         "SELECT two_factor_secret, two_factor_enabled FROM users WHERE id = $1"
     )
-    .bind(user_id)
+    .bind(target_user_id)
     .fetch_one(&pool.pool)
     .await
     {
@@ -731,12 +789,27 @@ pub async fn disable_two_factor(
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("2FA未启用")));
     }
     
-    // 验证TOTP码或密码
+    // 获取目标用户名
+    let target_username: String = match sqlx::query_scalar(
+        "SELECT username FROM users WHERE id = $1"
+    )
+    .bind(target_user_id)
+    .fetch_optional(&pool.pool)
+    .await
+    {
+        Ok(Some(name)) => name,
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在"))),
+        Err(_) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))),
+    };
+    
+    // 验证TOTP码
     let mut verified = false;
     
-    if let Some(s) = secret {
-        if let Ok(secret_bytes) = Secret::Encoded(s).to_bytes() {
-            if let Ok(totp) = TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), claims.username.clone()) {
+    if let Some(encrypted_secret) = secret {
+        // 解密密钥
+        let secret = decrypt_password(&encrypted_secret);
+        if let Ok(secret_bytes) = Secret::Encoded(secret).to_bytes() {
+            if let Ok(totp) = TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("IPMA".to_string()), target_username) {
                 if totp.check_current(&req.code).unwrap_or(false) {
                     verified = true;
                 }
@@ -752,7 +825,7 @@ pub async fn disable_two_factor(
     let _ = sqlx::query(
         "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_verified = false WHERE id = $1"
     )
-    .bind(user_id)
+    .bind(target_user_id)
     .execute(&pool.pool)
     .await;
     
@@ -761,13 +834,20 @@ pub async fn disable_two_factor(
 
 // 2FA请求结构体
 #[derive(Debug, Deserialize)]
+pub struct TwoFactorInitRequest {
+    pub user_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TwoFactorEnableRequest {
     pub code: String,
+    pub user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TwoFactorDisableRequest {
     pub code: String,
+    pub user_id: Option<Uuid>,
 }
 
 

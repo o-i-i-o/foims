@@ -940,11 +940,11 @@ pub async fn pull_ip_managers(
 }
 
 // 检测IP地址版本
-pub fn detect_ip_version(ip: &str) -> String {
+pub fn detect_ip_version(ip: &str) -> i16 {
     match IpAddr::from_str(ip) {
-        Ok(IpAddr::V4(_)) => "IPv4".to_string(),
-        Ok(IpAddr::V6(_)) => "IPv6".to_string(),
-        Err(_) => "IPv4".to_string(),
+        Ok(IpAddr::V4(_)) => 4,
+        Ok(IpAddr::V6(_)) => 6,
+        Err(_) => 4,
     }
 }
 

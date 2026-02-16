@@ -1390,7 +1390,7 @@ async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             device_type VARCHAR(20) NOT NULL,
             network_id UUID NOT NULL REFERENCES network_cidrs(id),
             ip_address INET NOT NULL,
-            ip_version VARCHAR(10) NOT NULL DEFAULT 'IPv4',
+            ip_version SMALLINT NOT NULL DEFAULT 4,
             mac_address VARCHAR(20),
             hostname VARCHAR(100),
             status VARCHAR(20) NOT NULL DEFAULT 'active',
@@ -1712,6 +1712,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.switch_port_id,
             imm.device_type,
             CASE
+                WHEN imm.device_type = 'switch' AND s.id IS NOT NULL THEN s.name::text
                 WHEN w.id IS NOT NULL THEN w.name::text
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE '未知设备'

@@ -261,6 +261,11 @@
     "ssl_starttls": "STARTTLS (Port 587)",
     "test_connection": "Test Connection"
   },
+  "notification": {
+    "mac_change_settings": "MAC Address Change Notification",
+    "email_recipients": "Email Recipients",
+    "recipients_hint": "Select users who will receive email notifications when MAC address changes are detected."
+  },
   "logs": {
     "title": "Logs Management",
     "operation_logs": "Operation Logs",

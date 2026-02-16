@@ -7,6 +7,7 @@ import { initI18n } from "./utils/i18n.js";
 import { initNavigation } from "./modules/navigation.js";
 import { initModals } from "./utils/modal.js";
 import { initEventListeners } from "./modules/eventManager.js";
+import { initUserEvents } from "./modules/userManager.js";
 import { 
   displayCurrentUser,
   initAutoRefresh,
@@ -31,6 +32,7 @@ async function initApp() {
     initNavigation();
     initModals(getResourceCallbacks());
     initEventListeners();
+    initUserEvents();
     
     displayCurrentUser();
     initLogout();
