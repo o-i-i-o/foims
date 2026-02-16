@@ -55,15 +55,14 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 1.  **克隆仓库**
     ```bash
-    git clone https://github.com/your-repo/ipma.git
+    git clone https://gitee.com/oi-io0/ipma.git
     cd ipma
     ```
 
 2.  **配置数据库**
     创建数据库并设置环境变量：
     ```bash
-    # .env 文件
-    DATABASE_URL=postgres://user:password@localhost/ipma_db
+    # config.toml
     ```
 
 3.  **运行项目**
@@ -89,7 +88,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 ## 🔧 配置说明
 
-首次运行时，系统会生成默认配置文件 `config.toml`。
+配置保存在 `config.toml`。
 
 ```toml
 [server]
