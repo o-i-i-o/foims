@@ -1,0 +1,176 @@
+use config::Config as ConfigBuilder;
+use regex;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+// 配置文件搜索路径（按优先级）
+pub const CONFIG_PATHS: [&str; 3] = [
+    "/etc/ipma/config",     // 系统配置目录（生产环境）- 最高优先级
+    "/opt/ipma/config",     // 应用目录（备用）
+    "config",               // 当前目录（开发环境）
+];
+
+// 获取配置文件路径
+pub fn get_config_path() -> &'static str {
+    for path in &CONFIG_PATHS {
+        if Path::new(&format!("{}.toml", path)).exists() {
+            return path;
+        }
+    }
+    // 默认返回系统配置目录
+    "/etc/ipma/config"
+}
+
+// 获取配置文件完整路径
+pub fn get_config_file_path() -> String {
+    format!("{}.toml", get_config_path())
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct DatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+    pub max_connections: u32,
+    #[serde(default = "default_query_timeout")]
+    pub query_timeout_secs: u64,
+    #[serde(default = "default_slow_query_threshold")]
+    pub slow_query_threshold_ms: u64,
+}
+
+fn default_query_timeout() -> u64 {
+    30
+}
+
+fn default_slow_query_threshold() -> u64 {
+    1000
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct ServerConfig {
+    pub host: String,              // IPv4地址
+    pub host_ipv6: Option<String>, // IPv6地址
+    pub http_enabled: Option<bool>,
+    pub http_port: Option<u16>,
+    pub https_enabled: Option<bool>,
+    pub https_port: Option<u16>,
+    pub auto_https: Option<bool>,
+    pub http_version: Option<String>,
+    pub cert_type: Option<String>,
+    pub public_url: String,         // 服务器公共URL，用于构建重置链接等
+    pub session_timeout: Option<u64>, // 会话超时时间（分钟）
+    pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct JwtConfig {
+    pub secret: String,
+    pub access_token_expiry: String, // 带单位的过期时间，如"15m"表示15分钟
+    pub refresh_token_expiry: String, // 带单位的过期时间，如"7d"表示7天
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct InitConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct I18nConfig {
+    pub default_language: String,
+    pub supported_languages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct RateLimitConfig {
+    #[serde(default = "default_ip_limit")]
+    pub ip_limit: u32,
+    #[serde(default = "default_user_limit")]
+    pub user_limit: u32,
+    #[serde(default = "default_login_limit")]
+    pub login_limit: u32,
+    #[serde(default = "default_window_secs")]
+    pub window_secs: u64,
+    #[serde(default = "default_rate_limit_enabled")]
+    pub enabled: bool,
+}
+
+fn default_ip_limit() -> u32 { 100 }
+fn default_user_limit() -> u32 { 200 }
+fn default_login_limit() -> u32 { 5 }
+fn default_window_secs() -> u64 { 60 }
+fn default_rate_limit_enabled() -> bool { true }
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            ip_limit: default_ip_limit(),
+            user_limit: default_user_limit(),
+            login_limit: default_login_limit(),
+            window_secs: default_window_secs(),
+            enabled: default_rate_limit_enabled(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct Config {
+    pub database: DatabaseConfig,
+    pub server: ServerConfig,
+    pub jwt: JwtConfig,
+    pub init: InitConfig,
+    pub i18n: Option<I18nConfig>,
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
+}
+
+impl Config {
+    pub fn load() -> Result<Self, config::ConfigError> {
+        // 检查是否存在 .env 文件
+        let env_file = Path::new(".env");
+        
+        if env_file.exists() {
+            let config = ConfigBuilder::builder()
+                .add_source(config::Environment::default())
+                .build()?;
+            return config.try_deserialize();
+        }
+
+        // 使用配置路径函数
+        let config_path = get_config_path();
+        let config_file = format!("{}.toml", config_path);
+        
+        if !Path::new(&config_file).exists() {
+            return Err(config::ConfigError::Message(
+                format!("configuration file \"{}\" not found", config_file)
+            ));
+        }
+
+        let config = ConfigBuilder::builder()
+            .add_source(config::File::with_name(config_path))
+            .add_source(config::Environment::default())
+            .build()?;
+
+        config.try_deserialize()
+    }
+}
+
+// 解析带单位的时间字符串为秒数
+pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
+    let re = regex::Regex::new(r"^(\d+)([smhd])$").unwrap();
+    if let Some(captures) = re.captures(duration_str) {
+        let value: u64 = captures[1].parse().map_err(|_| "Invalid duration value")?;
+        let unit = &captures[2];
+
+        match unit {
+            "s" => Ok(value),         // 秒
+            "m" => Ok(value * 60),    // 分钟
+            "h" => Ok(value * 3600),  // 小时
+            "d" => Ok(value * 86400), // 天
+            _ => Err("Invalid time unit".to_string()),
+        }
+    } else {
+        Err("Invalid duration format".to_string())
+    }
+}

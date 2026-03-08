@@ -1,0 +1,101 @@
+[package]
+name = "ipma"
+version = "0.8.28"
+edition = "2024"
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
+license = "MIT"
+
+[dependencies]
+# Actix Web 核心及周边
+actix-web = { version = "4.13.0", features = ["rustls-0_23"] }
+actix-rt = "2.11.0"
+actix-multipart = "0.7.2"
+actix-files = "0.6.10"
+actix-cors = "0.7.1"
+
+rustls = { version = "0.23.37", features = ["ring"] }
+rustls-pki-types = "1.14.0"
+pem = "3.0.6"
+tokio-rustls = "0.26.4"
+rcgen = "0.14.7"
+
+quinn = "0.11.9"
+quinn-proto = "0.11.13"
+quinn-udp = "0.5.14"
+
+bytes = "1.11.1"
+http = "1.4.0"
+
+# SQLx PostgreSQL驱动
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json", "macros"] }
+
+# 数据校验
+validator = { version = "0.20.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+regex = "1.12.3"
+
+# 密码加密
+bcrypt = "0.18.0"
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+sha2 = "0.10.9"
+rand = "0.10.0"
+
+# AES加密
+aes-gcm = "0.10.3"
+hex = "0.4.3"
+
+# 日志
+log = "0.4.29"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["time", "local-time"] }
+
+# IP/MAC 处理
+ipnetwork = "0.21.1"
+macaddr = "1.0.1"
+pnet = "0.35"
+
+# SNMP
+async-snmp = "0.5.0"
+
+# 定时任务
+tokio-cron-scheduler = "0.15.1"
+
+# 配置管理
+config = { version = "0.15.19", features = ["toml"] }
+toml = "1.0.3"
+
+# 其他工具
+tokio = { version = "1.49.0", features = ["full"] }
+anyhow = "1.0.102"
+thiserror = "2.0.18"
+chrono = { version = "0.4.44", features = ["serde"] }
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
+futures-util = "0.3.32"
+lazy_static = "1.5.0"
+num_cpus = "1.17.0"
+csv = "1.4.0"
+dashmap = "6.1.0"
+base64 = "0.22.1"
+lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
+totp-rs = { version = "5.7.0", features = ["qr", "gen_secret"] }
+flate2 = "1.1.9"
+zip = { version = "8.1.0", default-features = false, features = ["deflate"] }
+# 国际化支持
+rust-i18n = "3.1.5"
+time = "0.3.47"
+
+[dev-dependencies]
+actix-rt = "2.11.0"
+tokio = { version = "1.49.0", features = ["full"] }
+
+[features]
+default = []
+
+
+#[profile.release]
+#opt-level = "z"        # 优化生成代码的体积，而不是速度[citation:1][citation:4]
+#lto = true             # LTO 也能帮助消除死代码，减小体积[citation:1]
+#strip = true           # 自动移除二进制文件中的调试符号，能极大减小体积[citation:1][citation:4]
+#codegen-units = 1      # 同样有助于更激进的优化和体积缩减[citation:1]

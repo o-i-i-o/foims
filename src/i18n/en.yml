@@ -1,0 +1,56 @@
+# English language resources
+
+# System messages
+system:
+  start: "Starting IPMA server..."
+  config_loaded: "Configuration loaded successfully: {{config}}"
+  db_pool_created: "Database connection pool created successfully"
+  init_mode_enabled: "Initialization mode enabled: only initialization routes available"
+  init_mode_disabled: "Initialization mode disabled: full application routes available"
+  auto_https_enabled: "Auto HTTPS enabled: redirect HTTP to HTTPS automatically"
+  http_server_started: "HTTP server running on http://{{address}}:{{port}}"
+  https_server_started: "HTTPS server running on https://{{address}}:{{port}}"
+  http_version: "HTTP version: {{version}}"
+  cert_type: "Certificate type: {{type}}"
+  cert_generated: "Self-signed certificate generated successfully"
+  http3_server_started: "HTTP/3 server started successfully"
+  connection_error: "Connection error: {{error}}"
+  stream_error: "Stream error: {{error}}"
+
+# API messages
+api:
+  success: "Operation successful"
+  failed: "Operation failed"
+  login_failed: "Invalid username or password"
+  invalid_email_or_code: "Invalid email or verification code"
+  account_disabled: "Account disabled, please contact administrator"
+  device_validation_failed: "Device validation failed"
+  token_revoked: "Token has been revoked, please login again"
+  missing_field: "Missing required field: {{field}}"
+  invalid_type: "Field type error: {{info}}"
+  json_error: "JSON format error: {{error}}"
+
+# Log messages
+log:
+  output_to: "Log output to: {{path}}"
+  database_connected: "Database connected successfully"
+  database_error: "Database error: {{error}}"
+  user_login: "User {{username}} logged in from {{ip}}"
+  user_logout: "User {{username}} logged out"
+  user_created: "User {{username}} created"
+  user_updated: "User {{username}} updated"
+  user_deleted: "User {{username}} deleted"
+  resource_created: "{{resource}} {{name}} created"
+  resource_updated: "{{resource}} {{name}} updated"
+  resource_deleted: "{{resource}} {{name}} deleted"
+
+# Error messages
+error:
+  internal_server: "Internal server error"
+  not_found: "Resource not found"
+  unauthorized: "Unauthorized access"
+  forbidden: "Access forbidden"
+  bad_request: "Bad request"
+  validation_failed: "Validation failed"
+  database_error: "Database error"
+  network_error: "Network error"
