@@ -46,6 +46,10 @@ export function dispatchNetworkRegionChange(regionId, regionName = '') {
 }
 
 export function onNetworkRegionChange(callback) {
+  if (typeof callback !== 'function') {
+    console.error("onNetworkRegionChange: callback must be a function");
+    return;
+  }
   const wrapper = (e) => callback(e.detail.regionId, e.detail.regionName);
   regionChangeCallbacks.set(callback, wrapper);
   document.addEventListener(NETWORK_REGION_CHANGED_EVENT, wrapper);

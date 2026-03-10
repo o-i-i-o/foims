@@ -941,6 +941,7 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     }
 
     migrate_ip_managers_constraint(pool).await?;
+    migrate_switch_position_fields(pool).await?;
 
     Ok(())
 }
@@ -965,6 +966,43 @@ async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx:
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL)
             )"#
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM information_schema.columns 
+         WHERE table_name = 'switches' AND column_name = 'cabinet_id'"
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+    
+    if count == 0 {
+        sqlx::query(
+            "ALTER TABLE switches 
+             ADD COLUMN cabinet_id UUID REFERENCES cabinets(id) ON DELETE SET NULL,
+             ADD COLUMN start_u INTEGER,
+             ADD COLUMN end_u INTEGER"
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            r#"UPDATE switches s 
+               SET cabinet_id = p.cabinet_id, 
+                   start_u = p.start_u, 
+                   end_u = p.end_u
+               FROM positions p
+               JOIN ip_managers im ON im.position_id = p.id 
+               WHERE im.switch_id = s.id
+               AND s.cabinet_id IS NULL"#
         )
         .execute(pool)
         .await?;
@@ -1146,6 +1184,7 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
     .await?;
 
     sqlx::query(r#"
+        DROP VIEW IF EXISTS switches_with_details;
         CREATE VIEW switches_with_details AS
         SELECT 
             s.id, s.name, s.network_region_id, s.network_id, s.model, s.vendor,
@@ -1158,6 +1197,8 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
             s.snmp_port,
             s.parent_switch_id, ps.name as parent_switch_name,
             s.parent_port_id, pp.port_number as parent_port_number,
+            s.cabinet_id, c.name as cabinet_name,
+            s.start_u, s.end_u,
             s.description,
             'switch' as device_type,
             host(im.ip_address) as ip_address,
@@ -1166,6 +1207,7 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
         FROM switches s
         LEFT JOIN switches ps ON s.parent_switch_id = ps.id
         LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
+        LEFT JOIN cabinets c ON s.cabinet_id = c.id
         LEFT JOIN LATERAL (
             SELECT ip_address, mac_address 
             FROM ip_managers 

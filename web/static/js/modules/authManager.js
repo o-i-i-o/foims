@@ -94,9 +94,12 @@ export const initAutoRefresh = () => {
   if (isRememberMe()) {
     autoRefreshInterval = setInterval(async () => {
       try {
-        await refreshToken();
+        const refreshed = await refreshToken();
+        if (!refreshed) {
+          console.warn("Token 自动刷新失败");
+        }
       } catch (error) {
-        // Ignore refresh errors
+        console.error("Token 自动刷新错误:", error);
       }
     }, 10 * 60 * 1000);
   }
@@ -118,6 +121,8 @@ const handlePageTimeout = async () => {
 };
 
 let timeoutId = null;
+let boundResetTimeout = null;
+let boundEvents = null;
 
 const resetTimeout = (timeoutMinutes) => {
   if (timeoutId) {
@@ -134,6 +139,13 @@ const resetTimeout = (timeoutMinutes) => {
 const startPageTimeout = async () => {
   if (!hasSession()) return;
 
+  // 移除旧的监听器
+  if (boundResetTimeout && boundEvents) {
+    boundEvents.forEach(event => {
+      document.removeEventListener(event, boundResetTimeout, true);
+    });
+  }
+
   let timeoutMinutes = 30;
   
   try {
@@ -147,9 +159,11 @@ const startPageTimeout = async () => {
     console.error("获取页面超时配置失败:", error);
   }
 
-  const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-  events.forEach(event => {
-    document.addEventListener(event, () => resetTimeout(timeoutMinutes), true);
+  // 创建新的事件处理函数
+  boundResetTimeout = () => resetTimeout(timeoutMinutes);
+  boundEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+  boundEvents.forEach(event => {
+    document.addEventListener(event, boundResetTimeout, true);
   });
 
   resetTimeout(timeoutMinutes);

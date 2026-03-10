@@ -60,6 +60,7 @@ export function getSwitchFormValues(positionData) {
 }
 
 export async function setSwitchFormValues(sw, positionData, updateNetworkRegion) {
+  console.log('setSwitchFormValues - switch data:', sw);
   elementCache.setValue('switch-id', sw.id || '');
   elementCache.setValue('switch-name', sw.name || '');
   elementCache.setValue('switch-model', sw.model || '');
@@ -75,8 +76,15 @@ export async function setSwitchFormValues(sw, positionData, updateNetworkRegion)
   elementCache.setValue('switch-snmp-priv-protocol', sw.snmp_priv_protocol || '');
   elementCache.setValue('switch-snmp-priv-password', sw.snmp_priv_password || '');
 
-  const pos = sw.position || sw;
-  if (pos.cabinet_id || pos.id) {
+  if (sw.cabinet_id) {
+    console.log('setSwitchFormValues - found cabinet_id:', sw.cabinet_id, 'start_u:', sw.start_u, 'end_u:', sw.end_u);
+    positionData.cabinetId = sw.cabinet_id;
+    positionData.cabinetName = sw.cabinet_name || '';
+    positionData.startU = sw.start_u;
+    positionData.endU = sw.end_u;
+  } else if (sw.position && sw.position.cabinet_id) {
+    console.log('setSwitchFormValues - found position.cabinet_id:', sw.position.cabinet_id);
+    const pos = sw.position;
     positionData.cabinetId = pos.cabinet_id;
     positionData.cabinetName = pos.cabinet_name || '';
     positionData.positionId = pos.id || pos.position_id;

@@ -7,9 +7,9 @@ use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::models::{ApiResponse, ArpEntry, Switch};
+use crate::models::{ApiResponse, ArpEntry};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
+use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
 pub async fn get_arp_table_via_snmp(
     params: &SnmpParamsLegacy,
@@ -190,23 +190,15 @@ pub async fn batch_get_mac_via_snmp(
     pool: &sqlx::PgPool,
     ips: &[String],
 ) -> HashMap<String, Option<String>> {
-    use crate::models::Switch;
-    
     let mut results: HashMap<String, Option<String>> = HashMap::new();
     results.reserve(ips.len());
 
-    let switches = match sqlx::query_as::<_, Switch>(
+    let switches = match sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL"#
     )
     .fetch_all(pool)
@@ -248,11 +240,9 @@ pub async fn batch_get_mac_via_snmp(
 
 async fn fetch_switch_arp(
     pool: &sqlx::PgPool,
-    switch: &crate::models::Switch,
+    switch: &SwitchForSnmp,
     arp_entries: &mut HashMap<String, String>,
 ) -> Result<(), SnmpError> {
-    use crate::crypto::decrypt_password;
-    
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
@@ -269,21 +259,7 @@ async fn fetch_switch_arp(
         _ => return Ok(()),
     };
 
-    let decrypted_community = switch.snmp_community.as_ref().map(|v| decrypt_password(v));
-    let decrypted_auth_pass = switch.snmp_auth_password.as_ref().map(|v| decrypt_password(v));
-    let decrypted_priv_pass = switch.snmp_priv_password.as_ref().map(|v| decrypt_password(v));
-
-    let params = SnmpParamsLegacy {
-        ip: ip_address.to_string(),
-        port: switch.snmp_port,
-        version: switch.snmp_version.clone(),
-        community: decrypted_community,
-        username: switch.snmp_username.clone(),
-        auth_proto: switch.snmp_auth_protocol.clone(),
-        auth_pass: decrypted_auth_pass,
-        priv_proto: switch.snmp_priv_protocol.clone(),
-        priv_pass: decrypted_priv_pass,
-    };
+    let params = switch.to_snmp_params(ip_address);
 
     match get_arp_table_via_snmp(&params).await {
         Ok(entries) => {
@@ -301,21 +277,12 @@ pub async fn get_mac_from_switch(
     switch_id: &uuid::Uuid,
     ips: &[String],
 ) -> Result<HashMap<String, Option<String>>, SnmpError> {
-    use crate::models::Switch;
-    use crate::crypto::decrypt_password;
-
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#
     )
     .bind(switch_id)
@@ -343,21 +310,7 @@ pub async fn get_mac_from_switch(
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
     }
 
-    let decrypted_community = switch.snmp_community.as_ref().map(|v| decrypt_password(v));
-    let decrypted_auth_pass = switch.snmp_auth_password.as_ref().map(|v| decrypt_password(v));
-    let decrypted_priv_pass = switch.snmp_priv_password.as_ref().map(|v| decrypt_password(v));
-
-    let params = SnmpParamsLegacy {
-        ip: ip_address.clone(),
-        port: switch.snmp_port,
-        version: switch.snmp_version.clone(),
-        community: decrypted_community,
-        username: switch.snmp_username.clone(),
-        auth_proto: switch.snmp_auth_protocol.clone(),
-        auth_pass: decrypted_auth_pass,
-        priv_proto: switch.snmp_priv_protocol.clone(),
-        priv_pass: decrypted_priv_pass,
-    };
+    let params = switch.to_snmp_params(&ip_address);
 
     let entries = get_arp_table_via_snmp(&params).await?;
 
@@ -379,21 +332,12 @@ pub async fn get_all_arp_entries(
     pool: &sqlx::PgPool,
     switch_id: &uuid::Uuid,
 ) -> Result<Vec<ArpEntry>, SnmpError> {
-    use crate::models::Switch;
-    use crate::crypto::decrypt_password;
-
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#
     )
     .bind(switch_id)
@@ -421,21 +365,7 @@ pub async fn get_all_arp_entries(
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
     }
 
-    let decrypted_community = switch.snmp_community.as_ref().map(|v| decrypt_password(v));
-    let decrypted_auth_pass = switch.snmp_auth_password.as_ref().map(|v| decrypt_password(v));
-    let decrypted_priv_pass = switch.snmp_priv_password.as_ref().map(|v| decrypt_password(v));
-
-    let params = SnmpParamsLegacy {
-        ip: ip_address.clone(),
-        port: switch.snmp_port,
-        version: switch.snmp_version.clone(),
-        community: decrypted_community,
-        username: switch.snmp_username.clone(),
-        auth_proto: switch.snmp_auth_protocol.clone(),
-        auth_pass: decrypted_auth_pass,
-        priv_proto: switch.snmp_priv_protocol.clone(),
-        priv_pass: decrypted_priv_pass,
-    };
+    let params = switch.to_snmp_params(&ip_address);
 
     let entries = get_arp_table_via_snmp(&params).await?;
     Ok(entries)
@@ -447,18 +377,12 @@ pub async fn get_switch_mac_table(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)
@@ -476,7 +400,14 @@ pub async fn get_switch_mac_table(
         }
     };
 
-    let network_id = switch.network_id;
+    let network_id: Option<Uuid> = sqlx::query_scalar(
+        r#"SELECT network_id FROM switches WHERE id = $1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
 
     if network_id.is_none() {
         return Ok(HttpResponse::BadRequest()

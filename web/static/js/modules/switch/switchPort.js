@@ -262,11 +262,11 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
   
   const modal = elementCache.get("switch-ports-group-modal");
   const title = elementCache.get("switch-ports-group-modal-title");
-  const container = elementCache.get(".port-groups-container");
+  const container = document.querySelector(".port-groups-container");
   const addPortBtn = elementCache.get("add-port-btn");
   
   if (!modal || !title || !container || !addPortBtn) {
-    console.error("端口分组模态框相关DOM元素未找到");
+    console.error("端口分组模态框相关DOM元素未找到", { modal, title, container, addPortBtn });
     return;
   }
   

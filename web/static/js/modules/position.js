@@ -81,6 +81,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         
         let ipsHtml = "-";
         let portsHtml = "-";
+        let deviceTypeHtml = "-";
         if (ipsData.success && ipsData.data.length > 0) {
           ipsHtml = ipsData.data.map(ip => escapeHtml(ip.ip_address)).join("<br>");
           
@@ -88,12 +89,26 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
             .filter(ip => ip.switch_name && ip.switch_port_number)
             .map(ip => `${escapeHtml(ip.switch_name)}: ${escapeHtml(ip.switch_port_number)}`);
           portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
+          
+          // 显示设备类型
+          const deviceTypes = [...new Set(ipsData.data.map(ip => ip.device_type).filter(Boolean))];
+          if (deviceTypes.length > 0) {
+            deviceTypeHtml = deviceTypes.map(dt => {
+              const typeMap = {
+                'switch': '交换机',
+                'workstation': '工作站',
+                'cabinet_position': '机位'
+              };
+              return typeMap[dt] || dt;
+            }).join(", ");
+          }
         }
 
         const row = document.createElement("tr");
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
                     <td>${displayName}</td>
+                    <td>${deviceTypeHtml}</td>
                     <td>${ipsHtml}</td>
                     <td>${position.start_u} - ${position.end_u} U</td>
                     <td>${portsHtml}</td>
@@ -113,7 +128,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
       }
     } else {
       tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">暂无机位数据</td></tr>';
+        '<tr class="empty-row"><td colspan="9" class="text-center">暂无机位数据</td></tr>';
     }
     updateSortIcons("cabinet-positions-table", tableState);
   } catch (error) {
@@ -121,7 +136,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
     const tbody = document.querySelector("#cabinet-positions-table tbody");
     if (tbody) {
       tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">加载失败，请刷新页面重试</td></tr>';
+        '<tr class="empty-row"><td colspan="9" class="text-center">加载失败，请刷新页面重试</td></tr>';
     }
   } finally {
     isLoading = false;

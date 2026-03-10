@@ -15,16 +15,7 @@ import {
 } from "../../utils/ui.js";
 
 import { elementCache } from "../../utils/helpers.js";
-
-export const SWITCH_PAGE_SIZE = 20;
-
-export function createListState() {
-  return {
-    currentPage: 1,
-    currentSwitchId: null,
-    currentSwitchName: null
-  };
-}
+import { SWITCH_PAGE_SIZE } from "./switchState.js";
 
 async function loadSwitchesData(state, searchTerm = "") {
   state.currentPage = state.currentPage || 1;
@@ -84,13 +75,11 @@ function bindSwitchButtonsEvents(state) {
     table.removeEventListener("click", switchTableClickHandler);
   }
 
-  switchTableClickHandler = (e) => {
+  switchTableClickHandler = async (e) => {
     const target = e.target;
     const id = target.dataset.id || target.dataset.switchId;
 
-    if (target.classList.contains("btn-edit")) {
-      editSwitch(id, state);
-    } else if (target.classList.contains("btn-delete")) {
+    if (target.classList.contains("btn-delete")) {
       deleteSwitch(id, state);
     } else if (target.classList.contains("btn-switch-ports")) {
       const switchName = target.dataset.switchName;
@@ -111,7 +100,7 @@ function bindSwitchButtonsEvents(state) {
   table.addEventListener("click", switchTableClickHandler);
 }
 
-async function editSwitch(id, state) {
+async function fetchSwitchById(id) {
   try {
     const result = await apiGet(`/api/switches/${id}`);
     if (result.success) {
@@ -166,7 +155,7 @@ async function submitSwitchForm(formData, state) {
 
 export {
   loadSwitchesData,
-  editSwitch,
+  fetchSwitchById,
   deleteSwitch,
   submitSwitchForm
 };

@@ -17,6 +17,10 @@ import {
   handleError,
   appendPaginationToTable,
   escapeHtml,
+  DEFAULT_PAGE_SIZE,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -378,102 +382,52 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 // 房间管理功能
 // ==========================================
 
-let currentRoomPage = 1;
-const ROOM_PAGE_SIZE = 20;
-let currentRoomSort = { by: "name", order: "asc" };
+const tableState = createSortState('name', 'asc');
+let currentPage = 1;
 
-// 加载房间数据
 export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
-  currentRoomPage = page;
-  if (sortBy) currentRoomSort.by = sortBy;
-  if (sortOrder) currentRoomSort.order = sortOrder;
+  currentPage = page;
+  if (sortBy) tableState.setSort(sortBy, sortOrder);
   
   try {
-    const roomsData = await apiGet(`/api/resources/rooms?page=${page}&page_size=${ROOM_PAGE_SIZE}&sort_by=${currentRoomSort.by}&sort_order=${currentRoomSort.order}`);
-    const tbody = document.querySelector("#rooms-table tbody");
-    tbody.innerHTML = "";
-
+    const roomsData = await apiGet(`/api/resources/rooms?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = roomsData.success ? roomsData.data : { items: [], total: 0 };
     const rooms = data.items || data;
+    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
 
-    if (rooms.length > 0) {
-      const startIndex = (page - 1) * ROOM_PAGE_SIZE;
-      rooms.forEach((room, index) => {
-        let networkDisplay = "-";
-        if (room.networks && room.networks.length > 0) {
-          networkDisplay = room.networks
-            .map((network) => {
-              return `${network.name} (${network.network_region})`;
-            })
-            .join("<br>");
-        }
+    renderTable("#rooms-table", {
+      data: rooms,
+      columns: [
+        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
+        { field: 'name', render: (v) => escapeHtml(v) },
+        { field: 'room_type', render: (v) => {
+          const roomTypeLower = v ? v.toLowerCase() : '';
+          return roomTypeLower === "office" ? t('room.type_office') : roomTypeLower === "data_center" ? t('room.type_datacenter') : v || '-';
+        }},
+        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${n.name} (${n.network_region})`).join("<br>") : '-' },
+        { field: 'description', render: (v) => escapeHtml(v) || '-' },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'id', render: (v) => `
+          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+        ` }
+      ],
+      emptyMessage: t('common.no_data')
+    });
 
-        const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-        const roomTypeText = roomTypeLower === "office" ? t('room.type_office') : roomTypeLower === "data_center" ? t('room.type_datacenter') : room.room_type || '-';
-
-        const row = document.createElement("tr");
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + index + 1}</td>
-                    <td>${escapeHtml(room.name)}</td>
-                    <td>${escapeHtml(roomTypeText)}</td>
-                    <td>${networkDisplay}</td>
-                    <td>${escapeHtml(room.description) || "-"}</td>
-                    <td>${new Date(room.created_at).toLocaleString()}</td>
-                    <td>
-                    <button class="btn btn-sm btn-edit" data-id="${room.id}">${t('common.edit')}</button>
-                    <button class="btn btn-sm btn-delete" data-id="${room.id}">${t('common.delete')}</button>
-                </td>
-                `;
-        tbody.appendChild(row);
-      });
-
-      if (data.total !== undefined) {
-        appendPaginationToTable("#rooms-table", data, loadRoomsData);
-      }
-    } else {
-      tbody.innerHTML =
-        `<tr class="empty-row"><td colspan="7" class="text-center">${t('common.no_data')}</td></tr>`;
+    if (data.total !== undefined) {
+      appendPaginationToTable("#rooms-table", data, loadRoomsData);
     }
-    updateRoomSortIcons();
+    updateSortIcons("rooms-table", tableState);
   } catch (error) {
-    console.error("加载房间数据失败:", error);
-    const tbody = document.querySelector("#rooms-table tbody");
-    tbody.innerHTML =
-      '<tr class="empty-row"><td colspan="7" class="text-center">加载失败，请刷新页面重试</td></tr>';
+    handleError(error, "加载房间数据失败", () => {
+      renderTable("#rooms-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    });
   }
 }
 
-// 更新排序图标
-function updateRoomSortIcons() {
-  const table = document.getElementById("rooms-table");
-  if (!table) return;
-  
-  table.querySelectorAll("th.sortable").forEach(th => {
-    const sortKey = th.dataset.sort;
-    
-    if (sortKey === currentRoomSort.by) {
-      th.classList.add("sorted", currentRoomSort.order);
-      th.classList.remove(currentRoomSort.order === "asc" ? "desc" : "asc");
-    } else {
-      th.classList.remove("sorted", "asc", "desc");
-    }
-  });
-}
-
-// 初始化房间排序事件
 export function initRoomSortEvents() {
-  const table = document.getElementById("rooms-table");
-  if (!table) return;
-  
-  table.querySelectorAll("th.sortable").forEach(th => {
-    th.addEventListener("click", () => {
-      const sortKey = th.dataset.sort;
-      const newOrder = (currentRoomSort.by === sortKey && currentRoomSort.order === "asc") ? "desc" : "asc";
-      loadRoomsData(1, sortKey, newOrder);
-    });
-  });
-  
-  updateRoomSortIcons();
+  initSortEvents("rooms-table", tableState, loadRoomsData);
 }
 
 // 编辑房间

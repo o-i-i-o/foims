@@ -309,7 +309,7 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
     Ok((cert_path, key_path))
 }
 
-// 加载 Rustls 配置
+// 加载 Rustls 配置（支持 HTTP/1.1 和 HTTP/2）
 pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls::ServerConfig> {
     let cert_data = std::fs::read(cert_path)?;
     let key_data = std::fs::read(key_path)?;
@@ -335,8 +335,14 @@ pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls:
 
     use rustls::pki_types::PrivateKeyDer;
 
-    rustls::ServerConfig::builder()
+    let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    
+    // 配置 ALPN 协议，支持 HTTP/2 和 HTTP/1.1
+    // ALPN 协议顺序：h2（HTTP/2）优先，然后是 http/1.1
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    
+    Ok(config)
 }

@@ -47,6 +47,15 @@ async function initApp() {
     
   } catch (error) {
     console.error("应用程序初始化失败:", error);
+    // 显示用户友好的错误提示
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; background: #fff; border: 1px solid #ccc; border-radius: 8px; text-align: center; z-index: 10000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);';
+    errorDiv.innerHTML = `
+      <h3 style="margin: 0 0 15px 0; color: #e74c3c;">应用程序加载失败</h3>
+      <p style="margin: 0 0 15px 0; color: #666;">请刷新页面重试，或联系管理员。</p>
+      <button onclick="location.reload()" style="padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;">刷新页面</button>
+    `;
+    document.body.appendChild(errorDiv);
   }
 }
 

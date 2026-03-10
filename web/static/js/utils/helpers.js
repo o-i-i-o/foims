@@ -37,6 +37,7 @@ class CacheManager {
     this.caches = new Map();
     this.defaultTTL = 5 * 60 * 1000;
     this.localStorageKey = "ipma_cache";
+    this.cleanupIntervalId = null;
     this.loadFromStorage();
     this.startCleanupInterval();
   }
@@ -74,7 +75,8 @@ class CacheManager {
     } catch (e) {
       if (e.name === "QuotaExceededError") {
         this.cleanup();
-        this.saveToStorage();
+        // 不再递归调用，避免无限循环
+        console.warn("localStorage配额超限，已清理缓存");
       }
     }
   }
@@ -129,7 +131,17 @@ class CacheManager {
   }
   
   startCleanupInterval() {
-    setInterval(() => this.cleanup(), 60 * 1000);
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+    }
+    this.cleanupIntervalId = setInterval(() => this.cleanup(), 60 * 1000);
+  }
+  
+  stopCleanupInterval() {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
   }
   
   async getOrSet(key, fetcher, ttl = this.defaultTTL, persist = true) {
@@ -266,6 +278,16 @@ class ElementCache {
   setValue(id, value) {
     const el = this.get(id);
     if (el) el.value = value;
+  }
+  
+  getChecked(id) {
+    const el = this.get(id);
+    return el ? el.checked : false;
+  }
+  
+  setChecked(id, checked) {
+    const el = this.get(id);
+    if (el) el.checked = checked;
   }
   
   clear(id) {

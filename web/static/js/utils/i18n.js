@@ -1,7 +1,7 @@
 let i18nInstance = null;
 
 function detectBrowserLanguage() {
-  const browserLang = navigator.language || navigator.userLanguage;
+  const browserLang = navigator.language || navigator.userLanguage || navigator.browserLanguage || 'en';
   if (browserLang.startsWith('zh')) {
     return 'zh';
   }

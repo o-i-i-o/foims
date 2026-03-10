@@ -336,7 +336,7 @@ impl DbPool {
         }
 
         let utilization_rate = metrics.active_connections as f32 / total_connections as f32;
-        let max_connections = config.max_connections;
+        let current_max = config.max_connections;
         let min_connections = config.min_connections;
         let high_load_threshold = config.high_load_threshold;
         let low_load_threshold = config.low_load_threshold;
@@ -344,19 +344,33 @@ impl DbPool {
 
         // 高负载：增加连接数
         if utilization_rate > high_load_threshold {
-            let new_max = (max_connections as f32 * 1.5).min(100.0) as u32;
-            if new_max > max_connections
-                && let Err(e) = self.resize_pool(new_max).await {
+            // 计算新的最大连接数，使用更保守的增长策略
+            // 避免每次都增加50%，而是根据负载程度动态调整
+            let load_factor = utilization_rate / high_load_threshold;
+            let growth_factor = 1.0 + (load_factor - 1.0) * 0.3; // 最大增长30%
+            let new_max = (current_max as f32 * growth_factor).min(100.0) as u32;
+            
+            // 只有当新的最大连接数比当前大至少2个时才进行调整
+            if new_max > current_max + 1 {
+                if let Err(e) = self.resize_pool(new_max).await {
                     log::error!("连接池扩容失败: {}", e);
                 }
+            }
         }
         // 低负载：减少连接数
         else if utilization_rate < low_load_threshold {
-            let new_max = (max_connections as f32 * 0.8).max(min_connections as f32) as u32;
-            if new_max < max_connections
-                && let Err(e) = self.resize_pool(new_max).await {
+            // 计算新的最大连接数，使用更保守的减少策略
+            // 避免每次都减少20%，而是根据负载程度动态调整
+            let load_factor = utilization_rate / low_load_threshold;
+            let reduction_factor = 0.8 + (load_factor * 0.2); // 最小减少20%
+            let new_max = (current_max as f32 * reduction_factor).max(min_connections as f32) as u32;
+            
+            // 只有当新的最大连接数比当前小至少2个时才进行调整
+            if new_max < current_max - 1 {
+                if let Err(e) = self.resize_pool(new_max).await {
                     log::error!("连接池缩容失败: {}", e);
                 }
+            }
         }
     }
 

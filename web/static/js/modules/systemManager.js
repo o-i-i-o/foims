@@ -125,7 +125,7 @@ export function initSystemTabs() {
     });
   }
 
-  const systemConfigTab = elementCache.get('[data-tab="system-config"]');
+  const systemConfigTab = document.querySelector('[data-tab="system-config"]');
   if (systemConfigTab) {
     systemConfigTab.addEventListener("click", async () => {
       setTimeout(async () => {
@@ -180,8 +180,8 @@ let currentServerConfig = null;
 
 async function saveSystemConfig() {
   try {
-    const httpEnabled = elementCache.get("http-enabled").checked;
-    const httpsEnabled = elementCache.get("https-enabled").checked;
+    const httpEnabled = elementCache.getChecked("http-enabled");
+    const httpsEnabled = elementCache.getChecked("https-enabled");
     
     if (!httpEnabled && !httpsEnabled) {
       showToast("至少需要开启一个端口（HTTP或HTTPS）", "warning");
@@ -196,7 +196,7 @@ async function saveSystemConfig() {
       http_port: parseInt(elementCache.getValue("http-port")) || 80,
       https_enabled: httpsEnabled,
       https_port: parseInt(elementCache.getValue("https-port")) || 443,
-      auto_https: elementCache.get("auto-https").checked,
+      auto_https: elementCache.getChecked("auto-https"),
       http_version: elementCache.getValue("http-version") || "http1.1",
       cert_type: elementCache.getValue("cert-type") || "self_signed",
       page_timeout: parseInt(elementCache.getValue("page-timeout")) || 30,
@@ -204,7 +204,7 @@ async function saveSystemConfig() {
     };
 
     const rateLimitConfig = {
-      enabled: elementCache.get("rate-limit-enabled").checked,
+      enabled: elementCache.getChecked("rate-limit-enabled"),
       ip_limit: parseInt(elementCache.getValue("rate-limit-ip")) || 100,
       user_limit: parseInt(elementCache.getValue("rate-limit-user")) || 200,
       login_limit: parseInt(elementCache.getValue("rate-limit-login")) || 5,
@@ -320,23 +320,20 @@ function updateCertificateSectionVisibility() {
 
 // 处理自动 HTTPS 功能
 function handleAutoHttpsChange() {
-  const autoHttps = elementCache.get("auto-https").checked;
-  const httpEnabled = elementCache.get("http-enabled");
-  const httpsEnabled = elementCache.get("https-enabled");
+  const autoHttps = elementCache.getChecked("auto-https");
   
   if (autoHttps) {
     // 自动启用 HTTP 和 HTTPS 端口
-    httpEnabled.checked = true;
-    httpsEnabled.checked = true;
+    elementCache.setChecked("http-enabled", true);
+    elementCache.setChecked("https-enabled", true);
     updateCertificateSectionVisibility();
   }
 }
 
 // 处理 HTTP 或 HTTPS 端口禁用
 function handlePortDisable(e) {
-  const httpEnabled = elementCache.get("http-enabled").checked;
-  const httpsEnabled = elementCache.get("https-enabled").checked;
-  const autoHttps = elementCache.get("auto-https");
+  const httpEnabled = elementCache.getChecked("http-enabled");
+  const httpsEnabled = elementCache.getChecked("https-enabled");
   
   // 确保至少有一个端口处于开启状态
   if (!httpEnabled && !httpsEnabled) {
@@ -351,7 +348,7 @@ function handlePortDisable(e) {
   
   if (!httpEnabled || !httpsEnabled) {
     // 如果任一端口被禁用，取消自动 HTTPS
-    autoHttps.checked = false;
+    elementCache.setChecked("auto-https", false);
   }
   
   updateCertificateSectionVisibility();
@@ -430,7 +427,7 @@ try {
       country: formData.get("country"),
       state: formData.get("state"),
       locality: formData.get("locality"),
-      validity: parseInt(formData.get("validity"))
+      validity: parseInt(formData.get("validity")) || 365
     };
 
     const result = await apiPost("/api/system/certificate/generate", certData);

@@ -1,9 +1,10 @@
-import { apiPost } from "../../utils/apiClient.js";
+import { apiPost, apiGet } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
 import { elementCache } from "../../utils/helpers.js";
 
 function buildSnmpRequestData(formData) {
-  const { name: ip, snmp_port: port, snmp_version: version } = formData;
+  const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
+  const { snmp_port: port, snmp_version: version } = formData;
   const data = { ip, port, version };
   
   if (version === 'v3') {
@@ -41,8 +42,9 @@ export function toggleSnmpConfig() {
 
 export async function testSnmpConnection(getFormData) {
   const formData = getFormData();
+  const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
   
-  if (!formData.name) {
+  if (!ip) {
     showToast('请输入交换机IP地址', 'warning');
     return;
   }
@@ -71,8 +73,9 @@ export async function testSnmpConnection(getFormData) {
 
 export async function getSwitchInfoFromSnmp(getFormData) {
   const formData = getFormData();
+  const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
   
-  if (!formData.name) {
+  if (!ip) {
     showToast('请输入交换机IP地址', 'warning');
     return;
   }
@@ -104,15 +107,15 @@ export async function getSwitchInfoFromSnmp(getFormData) {
 }
 
 export async function getSwitchPortsFromSnmp(switchId) {
-  const getInfoBtn = elementCache.get('get-switch-ports-btn');
-  const originalText = getInfoBtn?.textContent || '获取端口';
-  if (getInfoBtn) {
-    getInfoBtn.disabled = true;
-    getInfoBtn.textContent = '获取中...';
+  const getPortsBtn = elementCache.get('get-switch-ports-btn');
+  const originalText = getPortsBtn?.textContent || '获取端口';
+  if (getPortsBtn) {
+    getPortsBtn.disabled = true;
+    getPortsBtn.textContent = '获取中...';
   }
 
   try {
-    const result = await apiPost(`/api/switches/${switchId}/snmp/ports`, {});
+    const result = await apiGet(`/api/switches/${switchId}/snmp-ports`);
 
     if (result.success) {
       showToast(`成功获取 ${result.data?.length || 0} 个端口`, 'success');
@@ -125,9 +128,9 @@ export async function getSwitchPortsFromSnmp(switchId) {
     showToast('获取端口信息失败', 'error');
     return [];
   } finally {
-    if (getInfoBtn) {
-      getInfoBtn.disabled = false;
-      getInfoBtn.textContent = originalText;
+    if (getPortsBtn) {
+      getPortsBtn.disabled = false;
+      getPortsBtn.textContent = originalText;
     }
   }
 }

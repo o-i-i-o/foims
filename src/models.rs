@@ -16,12 +16,7 @@ pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError>
 }
 
 pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationError> {
-    let room_type_lower = room_type.to_lowercase();
-    if room_type_lower == "office" || room_type_lower == "data_center" {
-        Ok(())
-    } else {
-        Err(ValidationError::new("房间类型必须是office或data_center"))
-    }
+    validate_room_type_string(room_type)
 }
 
 pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
@@ -527,6 +522,7 @@ pub struct CabinetPositionWithDetails {
     pub start_u: i32,
     pub end_u: i32,
     pub network_id: Option<Uuid>,
+    pub device_type: String,
     pub ips: Vec<IpManager>,
     pub ports: Vec<CabinetPositionPortWithSwitchPort>,
     pub description: Option<String>,
@@ -759,6 +755,9 @@ pub struct Switch {
     pub snmp_port: i32,
     pub parent_switch_id: Option<Uuid>,
     pub parent_port_id: Option<Uuid>,
+    pub cabinet_id: Option<Uuid>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -785,6 +784,10 @@ pub struct SwitchWithParent {
     pub parent_switch_name: Option<String>,
     pub parent_port_id: Option<Uuid>,
     pub parent_port_number: Option<String>,
+    pub cabinet_id: Option<Uuid>,
+    pub cabinet_name: Option<String>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
     pub description: Option<String>,
     pub device_type: Option<String>,
     pub ip_address: Option<String>,

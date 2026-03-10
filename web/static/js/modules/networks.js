@@ -68,52 +68,42 @@ export async function loadNetworkTypesData(page = 1) {
 let currentNetworkPage = 1;
 const NETWORK_PAGE_SIZE = 20;
 
-// 加载网络数据
 export async function loadNetworksData(page = 1, searchTerm = "") {
   currentNetworkPage = page;
   try {
     const url = `/api/resources/networks?page=${page}&page_size=${NETWORK_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
     const result = await apiGet(url);
-    const tbody = document.querySelector("#networks-table tbody");
-    tbody.innerHTML = "";
-
     const data = result.success ? result.data : { items: [], total: 0 };
     const networks = data.items || data;
+    const startIndex = (page - 1) * NETWORK_PAGE_SIZE;
 
-    if (networks.length > 0) {
-      const startIndex = (page - 1) * NETWORK_PAGE_SIZE;
-      networks.forEach((network, index) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-                        <td class="index-column">${startIndex + index + 1}</td>
-                        <td>${escapeHtml(network.name)}</td>
-                        <td>${escapeHtml(network.network_region)}</td>
-                        <td>${escapeHtml(network.ipv4_cidr) || "-"}</td>
-                        <td>${escapeHtml(network.ipv6_cidr) || "-"}</td>
-                        <td>${new Date(network.created_at).toLocaleString()}</td>
-                        <td>
-                    <button class="btn btn-sm btn-secondary btn-usage" data-id="${network.id}">使用情况</button>
-                    <button class="btn btn-sm btn-edit" data-id="${network.id}">编辑</button>
-                    <button class="btn btn-sm btn-delete" data-id="${network.id}">删除</button>
-                </td>
-                    `;
-          tbody.appendChild(row);
-        });
+    renderTable("#networks-table", {
+      data: networks,
+      columns: [
+        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
+        { field: 'name', render: (v) => escapeHtml(v) },
+        { field: 'network_region', render: (v) => escapeHtml(v) },
+        { field: 'ipv4_cidr', render: (v) => escapeHtml(v) || '-' },
+        { field: 'ipv6_cidr', render: (v) => escapeHtml(v) || '-' },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'id', render: (v) => `
+          <button class="btn btn-sm btn-secondary btn-usage" data-id="${v}">使用情况</button>
+          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+        ` }
+      ],
+      emptyMessage: '没有找到匹配的网段数据'
+    });
 
-        if (data.total !== undefined) {
-          appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, searchTerm));
-        }
-      } else {
-        tbody.innerHTML =
-          '<tr class="empty-row"><td colspan="7" class="text-center">没有找到匹配的网段数据</td></tr>';
-      }
+    if (data.total !== undefined) {
+      appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, searchTerm));
+    }
 
     await loadNetworkTypeOptions();
   } catch (error) {
-    console.error("加载网络数据失败:", error);
-    const tbody = document.querySelector("#networks-table tbody");
-    tbody.innerHTML =
-      '<tr class="empty-row"><td colspan="7" class="text-center">加载失败，请刷新页面重试</td></tr>';
+    handleError(error, "加载网络数据失败", () => {
+      renderTable("#networks-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    });
   }
 }
 

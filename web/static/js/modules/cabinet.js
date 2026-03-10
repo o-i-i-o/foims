@@ -18,6 +18,10 @@ import {
   handleError,
   appendPaginationToTable,
   escapeHtml,
+  DEFAULT_PAGE_SIZE,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -28,98 +32,52 @@ import {
   loadCabinets
 } from "../utils/resources.js";
 
-let currentCabinetPage = 1;
-const CABINET_PAGE_SIZE = 20;
-let currentCabinetSort = { by: "name", order: "asc" };
+const tableState = createSortState('name', 'asc');
+let currentPage = 1;
 
 // 房间选择事件监听器引用
 let roomSelectHandler = null;
 
 // 加载机柜数据
 export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null) {
-  currentCabinetPage = page;
-  if (sortBy) currentCabinetSort.by = sortBy;
-  if (sortOrder) currentCabinetSort.order = sortOrder;
+  currentPage = page;
+  if (sortBy) tableState.setSort(sortBy, sortOrder);
   
   try {
-    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${CABINET_PAGE_SIZE}&sort_by=${currentCabinetSort.by}&sort_order=${currentCabinetSort.order}`);
-    const tbody = document.querySelector("#cabinets-table tbody");
-    tbody.innerHTML = "";
-
+    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const cabinets = data.items || data;
+    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
 
-    if (cabinets.length > 0) {
-      const startIndex = (page - 1) * CABINET_PAGE_SIZE;
-      cabinets.forEach((cabinet, index) => {
-        const row = document.createElement("tr");
-        const networkInfo =
-          cabinet.networks && cabinet.networks.length > 0
-            ? cabinet.networks
-                .map((network) => `${escapeHtml(network.name)} (${escapeHtml(network.network_region)})`)
-                .join("<br>")
-            : "-";
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + index + 1}</td>
-                    <td>${escapeHtml(cabinet.name)}</td>
-                    <td>${networkInfo}</td>
-                    <td>${escapeHtml(cabinet.description) || "-"}</td>
-                    <td>${new Date(cabinet.created_at).toLocaleString()}</td>
-                    <td>
-                        <button class="btn btn-sm btn-edit" data-id="${cabinet.id}">编辑</button>
-                        <button class="btn btn-sm btn-delete" data-id="${cabinet.id}">删除</button>
-                    </td>
-                `;
-        tbody.appendChild(row);
-      });
+    renderTable("#cabinets-table", {
+      data: cabinets,
+      columns: [
+        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
+        { field: 'name', render: (v) => escapeHtml(v) },
+        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
+        { field: 'description', render: (v) => escapeHtml(v) || '-' },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'id', render: (v) => `
+          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+        ` }
+      ],
+      emptyMessage: '暂无机柜数据'
+    });
 
-      if (data.total !== undefined) {
-        appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
-      }
-    } else {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="6" class="text-center">暂无机柜数据</td></tr>';
+    if (data.total !== undefined) {
+      appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
     }
-    updateCabinetSortIcons();
+    updateSortIcons("cabinets-table", tableState);
   } catch (error) {
-    console.error("加载机柜数据失败:", error);
-    const tbody = document.querySelector("#cabinets-table tbody");
-    tbody.innerHTML =
-      '<tr class="empty-row"><td colspan="6" class="text-center">加载失败，请刷新页面重试</td></tr>';
+    handleError(error, "加载机柜数据失败", () => {
+      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    });
   }
 }
 
-// 更新排序图标
-function updateCabinetSortIcons() {
-  const table = document.getElementById("cabinets-table");
-  if (!table) return;
-  
-  table.querySelectorAll("th.sortable").forEach(th => {
-    const sortKey = th.dataset.sort;
-    
-    if (sortKey === currentCabinetSort.by) {
-      th.classList.add("sorted", currentCabinetSort.order);
-      th.classList.remove(currentCabinetSort.order === "asc" ? "desc" : "asc");
-    } else {
-      th.classList.remove("sorted", "asc", "desc");
-    }
-  });
-}
-
-// 初始化机柜排序事件
 export function initCabinetSortEvents() {
-  const table = document.getElementById("cabinets-table");
-  if (!table) return;
-  
-  table.querySelectorAll("th.sortable").forEach(th => {
-    th.addEventListener("click", () => {
-      const sortKey = th.dataset.sort;
-      const newOrder = (currentCabinetSort.by === sortKey && currentCabinetSort.order === "asc") ? "desc" : "asc";
-      loadCabinetsData(1, sortKey, newOrder);
-    });
-  });
-  
-  updateCabinetSortIcons();
+  initSortEvents("cabinets-table", tableState, loadCabinetsData);
 }
 
 // 编辑机柜

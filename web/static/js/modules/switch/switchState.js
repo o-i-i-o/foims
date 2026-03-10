@@ -1,10 +1,23 @@
-import {
-  createListState,
-} from "./switchList.js";
+export const SWITCH_PAGE_SIZE = 20;
 
-import {
-  createPositionState,
-} from "./switchPosition.js";
+export function createListState() {
+  return {
+    currentPage: 1,
+    currentSwitchId: null,
+    currentSwitchName: null
+  };
+}
+
+export function createPositionState() {
+  return {
+    cabinetId: null,
+    cabinetName: null,
+    startU: null,
+    endU: null,
+    positionId: null,
+    networkRegionId: null
+  };
+}
 
 const listState = createListState();
 const positionData = createPositionState();

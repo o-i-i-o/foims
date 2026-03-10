@@ -250,7 +250,7 @@ const BUTTON_EVENT_BINDINGS = [
     },
   },
   {
-    id: "get-snmp-info",
+    id: "get-snmp-info-btn",
     event: "click",
     handler: () => {
       const { getSwitchInfoFromSnmp } = getModule("switchManager");

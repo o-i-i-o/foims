@@ -1,8 +1,6 @@
 import {
-  loadSwitchesData,
   openSwitchModal,
   editSwitch,
-  deleteSwitch,
   submitSwitchForm,
   toggleSnmpConfig,
   testSnmpConnection,
@@ -13,7 +11,11 @@ import {
   setCurrentSwitchName,
   getCurrentSwitchId,
   getCurrentSwitchName,
-  SWITCH_PAGE_SIZE,
+  loadSwitchesData,
+  deleteSwitch,
+} from "./switchDevice.js";
+
+import {
   loadSwitchPortsData,
   loadSwitchPortsBySwitchId,
   manageSwitchPorts,
@@ -26,6 +28,9 @@ import {
   extractPortNumber,
   extractPortLastNumber,
   SWITCH_PORT_PAGE_SIZE,
+} from "./switchPort.js";
+
+import {
   viewArpTable,
   viewLldpNeighbors,
   loadSwitchesForLldp,
@@ -33,8 +38,9 @@ import {
   bindCollapseEvents,
   groupByNetwork,
   filterEntries,
-} from "./switchDevice.js";
+} from "./switchMacLldp.js";
 
+import { SWITCH_PAGE_SIZE } from "./switchState.js";
 import { showToast, debounce } from "../../utils/ui.js";
 import { elementCache } from "../../utils/helpers.js";
 
@@ -58,7 +64,7 @@ function initSwitchTabs() {
       if (targetPane) targetPane.classList.add("active");
 
       if (tabId === "switches-list") {
-        loadSwitchesData(1, "");
+        loadSwitchesData("");
       } else if (tabId === "switch-ports-list") {
         loadSwitchPortsData(1, "");
       }
@@ -76,7 +82,7 @@ function initSwitchSearch() {
   const refreshBtn = elementCache.get("switch-refresh-btn");
 
   if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => loadSwitchesData(1, ""));
+    refreshBtn.addEventListener("click", () => loadSwitchesData(""));
   }
 
   if (searchInput) {
@@ -121,12 +127,12 @@ function initSwitchSearch() {
 
 async function filterSwitchesData() {
   const searchTerm = elementCache.getValue("switch-search");
-  await loadSwitchesData(1, searchTerm);
+  await loadSwitchesData(searchTerm);
 }
 
 async function filterSwitchPortsData() {
   const searchTerm = elementCache.getValue("switch-port-search");
-  await loadSwitchPortsData(1, searchTerm);
+  await loadSwitchPortsData(searchTerm);
 }
 
 function initSwitches() {

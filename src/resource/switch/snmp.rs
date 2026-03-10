@@ -8,28 +8,40 @@ use uuid::Uuid;
 
 use crate::crypto::{decrypt_credential, decrypt_password};
 use crate::db::DbPool;
-use crate::models::{ApiResponse, SnmpTestRequest, Switch, SwitchPortCreate, SwitchWithParent};
+use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate, SwitchWithParent};
 
-#[derive(Debug, Clone)]
-pub struct DecryptedSnmpCredentials {
-    pub community: Option<String>,
-    pub auth_password: Option<String>,
-    pub priv_password: Option<String>,
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SwitchForSnmp {
+    pub id: Uuid,
+    pub name: String,
+    pub snmp_version: String,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: i32,
 }
 
-impl DecryptedSnmpCredentials {
-    pub fn from_switch(switch: &Switch) -> Self {
-        Self {
-            community: decrypt_credential(switch.snmp_community.as_deref()),
-            auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
-            priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
-        }
-    }
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SwitchForSnmpWithNetwork {
+    pub id: Uuid,
+    pub name: String,
+    pub network_id: Option<Uuid>,
+    pub snmp_version: String,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: i32,
 }
 
-impl Switch {
+impl SwitchForSnmp {
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
-        let creds = DecryptedSnmpCredentials::from_switch(self);
+        let creds = DecryptedSnmpCredentials::from_switch_snmp(self);
         SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port,
@@ -40,6 +52,48 @@ impl Switch {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
+        }
+    }
+}
+
+impl SwitchForSnmpWithNetwork {
+    pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
+        let creds = DecryptedSnmpCredentials::from_switch_snmp_with_network(self);
+        SnmpParamsLegacy {
+            ip: ip_address.to_string(),
+            port: self.snmp_port,
+            version: self.snmp_version.clone(),
+            community: creds.community,
+            username: self.snmp_username.clone(),
+            auth_proto: self.snmp_auth_protocol.clone(),
+            auth_pass: creds.auth_password,
+            priv_proto: self.snmp_priv_protocol.clone(),
+            priv_pass: creds.priv_password,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DecryptedSnmpCredentials {
+    pub community: Option<String>,
+    pub auth_password: Option<String>,
+    pub priv_password: Option<String>,
+}
+
+impl DecryptedSnmpCredentials {
+    pub fn from_switch_snmp(switch: &SwitchForSnmp) -> Self {
+        Self {
+            community: decrypt_credential(switch.snmp_community.as_deref()),
+            auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
+            priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
+        }
+    }
+
+    pub fn from_switch_snmp_with_network(switch: &SwitchForSnmpWithNetwork) -> Self {
+        Self {
+            community: decrypt_credential(switch.snmp_community.as_deref()),
+            auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
+            priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
         }
     }
 }
@@ -312,18 +366,12 @@ pub async fn test_snmp_connection(
     
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(switch_id) = req.switch_id {
-            let switch = sqlx::query_as::<_, Switch>(
+            let switch = sqlx::query_as::<_, SwitchForSnmp>(
                 r#"SELECT 
-                    id, name, network_region_id, network_id,
-                    model, vendor, 
-                    location, snmp_version, 
-                    snmp_community, 
+                    id, name, snmp_version, snmp_community, 
                     snmp_username, snmp_auth_protocol, 
-                    snmp_auth_password, 
-                    snmp_priv_protocol, 
-                    snmp_priv_password, 
-                    snmp_port, 
-                    parent_switch_id, parent_port_id, description, created_at, updated_at 
+                    snmp_auth_password, snmp_priv_protocol, 
+                    snmp_priv_password, snmp_port
                 FROM switches WHERE id = $1"#,
             )
             .bind(switch_id)
@@ -343,7 +391,7 @@ pub async fn test_snmp_connection(
                     .ok()
                     .flatten();
                     
-                    let creds = DecryptedSnmpCredentials::from_switch(&s);
+                    let creds = DecryptedSnmpCredentials::from_switch_snmp(&s);
                     (
                         ip_address,
                         s.snmp_version,
@@ -418,18 +466,12 @@ pub async fn get_switch_info_snmp(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)
@@ -485,18 +527,12 @@ pub async fn get_switch_ports_snmp(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)

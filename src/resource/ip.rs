@@ -404,13 +404,14 @@ pub async fn get_cabinet_position_ips(
 ) -> Result<HttpResponse> {
     let position_id = *id_path;
 
+    // 查询 position_id 或 switch_id 匹配的IP地址
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r#"SELECT 
             id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
             network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
         FROM ip_managers_with_details 
-        WHERE position_id = $1"#
+        WHERE position_id = $1 OR switch_id = $1"#
     )
     .bind(position_id)
     .fetch_all(pool.get_conn())

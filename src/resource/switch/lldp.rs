@@ -6,26 +6,20 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::models::{ApiResponse, LldpNeighbor, Switch};
+use crate::models::{ApiResponse, LldpNeighbor};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, DecryptedSnmpCredentials};
+use super::snmp::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, SwitchForSnmp};
 
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
     switch_id: &Uuid,
 ) -> Result<Vec<LldpNeighbor>, SnmpError> {
-    let switch = sqlx::query_as::<_, Switch>(
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r#"SELECT 
-            id, name, network_region_id, network_id,
-            model, vendor, 
-            location, snmp_version, 
-            snmp_community, 
+            id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, 
-            snmp_priv_protocol, 
-            snmp_priv_password, 
-            snmp_port, 
-            parent_switch_id, parent_port_id, description, created_at, updated_at 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
         FROM switches WHERE id = $1"#
     )
     .bind(switch_id)
@@ -53,18 +47,7 @@ pub async fn get_lldp_neighbors(
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
     }
 
-    let creds = DecryptedSnmpCredentials::from_switch(&switch);
-    let params = SnmpParamsLegacy {
-        ip: ip_address.clone(),
-        port: switch.snmp_port,
-        version: switch.snmp_version.clone(),
-        community: creds.community,
-        username: switch.snmp_username.clone(),
-        auth_proto: switch.snmp_auth_protocol.clone(),
-        auth_pass: creds.auth_password,
-        priv_proto: switch.snmp_priv_protocol.clone(),
-        priv_pass: creds.priv_password,
-    };
+    let params = switch.to_snmp_params(&ip_address);
     get_lldp_neighbors_via_snmp(&params).await
 }
 

@@ -16,17 +16,9 @@ import {
   getSwitchPortsFromSnmp
 } from "./switchSnmp.js";
 import {
-  createPositionState,
   createNetworkRegionState,
   PositionSelector
 } from "./switchPosition.js";
-import {
-  SWITCH_PAGE_SIZE,
-  loadSwitchesData,
-  editSwitch as fetchEditSwitch,
-  deleteSwitch,
-  submitSwitchForm as saveSwitchForm
-} from "./switchList.js";
 import {
   loadSwitchPortsData,
   loadSwitchPortsBySwitchId,
@@ -40,17 +32,8 @@ import {
   extractPortNumber,
   extractPortLastNumber,
   SWITCH_PORT_PAGE_SIZE
-  loadSwitchPortsBySwitchId,
-  manageSwitchPorts,
-  openSwitchPortModal,
-  editSwitchPort,
-  deleteSwitchPort,
-  submitSwitchPortForm,
-  groupPorts,
-  showPortGroupsModal,
-  extractPortNumber,
-  extractPortLastNumber,
-  SWITCH_PORT_PAGE_SIZE
+} from "./switchPort.js";
+import {
   viewArpTable,
   viewLldpNeighbors,
   loadSwitchesForLldp,
@@ -61,6 +44,7 @@ import {
 } from "./switchMacLldp.js";
 import {
   listState,
+  createPositionState,
   setCurrentSwitchPage,
   getCurrentSwitchPage,
   setCurrentSwitchId,
@@ -79,6 +63,7 @@ function updateNetworkRegion(id, name = '') {
     networkRegion.name = name;
 }
 async function loadSwitchesDataWrapper(searchTerm = "") {
+    const { loadSwitchesData } = await import("./switchList.js");
     await loadSwitchesData(listState, searchTerm);
 }
 async function openSwitchModal(sw = null) {
@@ -119,23 +104,29 @@ async function openSwitchModal(sw = null) {
     });
 }
 async function editSwitch(id) {
-    const sw = await fetchEditSwitch(id, listState);
+    const { fetchSwitchById } = await import("./switchList.js");
+    const sw = await fetchSwitchById(id);
+    console.log('editSwitch - fetched switch data:', sw);
     if (sw) {
         await openSwitchModal(sw);
     }
 }
 async function submitSwitchForm() {
+    const { submitSwitchForm: saveSwitchForm } = await import("./switchList.js");
     const formData = getSwitchFormValues(positionData);
+    console.log('submitSwitchForm - form data:', formData);
     const success = await saveSwitchForm(formData, listState);
     if (success) {
         closeModal("switch-modal");
+        const { loadSwitchesData } = await import("./switchList.js");
         await loadSwitchesData(listState);
     }
 }
 function onNetworkRegionChange(regionId, regionName = '') {
     updateNetworkRegion(regionId, regionName);
 }
-function deleteSwitchWrapper(id) {
+async function deleteSwitchWrapper(id) {
+    const { deleteSwitch } = await import("./switchList.js");
     return deleteSwitch(id, listState);
 }
 function testSnmpConnectionWrapper() {
@@ -155,32 +146,10 @@ export {
     getSwitchInfoFromSnmpWrapper as getSwitchInfoFromSnmp,
     getSwitchPortsFromSnmp,
     onNetworkRegionChange,
-    SWITCH_PAGE_SIZE,
-    loadSwitchPortsData,
-    loadSwitchPortsBySwitchId,
-    manageSwitchPorts,
-    openSwitchPortModal,
-    editSwitchPort,
-    deleteSwitchPort,
-    submitSwitchPortForm,
-    groupPorts,
-    showPortGroupsModal,
-    extractPortNumber,
-    extractPortLastNumber,
-    SWITCH_PORT_PAGE_SIZE,
-    viewArpTable,
-    viewLldpNeighbors,
-    loadSwitchesForLldp,
-    renderMacTable,
-    bindCollapseEvents,
-    groupByNetwork,
-    filterEntries,
     setCurrentSwitchPage,
     getCurrentSwitchPage,
     setCurrentSwitchId,
     getCurrentSwitchId,
     setCurrentSwitchName,
     getCurrentSwitchName,
-    getSwitchPositionData,
-    resetSwitchPositionData
 };

@@ -101,7 +101,10 @@ export class ApiClient {
           queueItem.options,
           queueItem.retryCount,
           queueItem.requestKey
-        ).then(queueItem.resolve);
+        ).then(queueItem.resolve).catch(error => {
+          console.error("Queue request error:", error);
+          queueItem.resolve({ success: false, message: error.message, errorType: "queue_error" });
+        });
       }
     }
   }
@@ -171,19 +174,21 @@ export class ApiClient {
       }
 
       const contentType = response.headers.get("Content-Type");
+      
+      // 优先处理 JSON 响应
+      if (contentType && contentType.includes("application/json")) {
+        return await response.json();
+      }
+      
+      // 处理文件下载类型
       if (
         contentType &&
         (contentType.includes("application/octet-stream") ||
           contentType.includes("application/vnd.openxmlformats") ||
           contentType.includes("application/x-pem-file") ||
           contentType.includes("application/zip") ||
-          contentType.includes("application/sql") ||
-          contentType.includes("application/json") === false)
+          contentType.includes("application/sql"))
       ) {
-        if (contentType.includes("application/json")) {
-           return await response.json();
-        }
-        
         let filename = "download";
         const disposition = response.headers.get("Content-Disposition");
         if (disposition && disposition.indexOf("attachment") !== -1) {
@@ -202,7 +207,18 @@ export class ApiClient {
         };
       }
 
-      return await response.json();
+      // 默认尝试解析为 JSON
+      try {
+        return await response.json();
+      } catch {
+        // 如果不是 JSON，返回文本
+        const text = await response.text();
+        return { 
+          success: false, 
+          message: "无法解析响应内容",
+          data: text 
+        };
+      }
     } catch (error) {
       console.error("API请求错误:", error);
       

@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::crypto::encrypt_password;
 use crate::db::DbPool;
 use crate::models::{
-    ApiResponse, Switch, SwitchCreate, SwitchPosition, SwitchUpdate, SwitchWithParent,
+    ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent,
 };
 use crate::utils::{log_system_operation, DEFAULT_PAGE};
 use super::snmp::decrypt_snmp_fields;
@@ -65,6 +65,8 @@ pub async fn get_switches(
                 snmp_port,
                 parent_switch_id, parent_switch_name,
                 parent_port_id, parent_port_number,
+                cabinet_id, cabinet_name,
+                start_u, end_u,
                 description,
                 device_type,
                 ip_address,
@@ -93,6 +95,8 @@ pub async fn get_switches(
                 snmp_port,
                 parent_switch_id, parent_switch_name,
                 parent_port_id, parent_port_number,
+                cabinet_id, cabinet_name,
+                start_u, end_u,
                 description,
                 device_type,
                 ip_address,
@@ -148,6 +152,8 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             snmp_port,
             parent_switch_id, parent_switch_name,
             parent_port_id, parent_port_number,
+            cabinet_id, cabinet_name,
+            start_u, end_u,
             description,
             device_type,
             ip_address,
@@ -201,33 +207,8 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                 })
             }).collect();
 
-            let position: Option<(Uuid, Uuid, String, i32, i32, Option<Uuid>)> = sqlx::query_as(
-                r#"SELECT p.id, p.cabinet_id, c.name, p.start_u, p.end_u, n.network_region_id
-                   FROM positions p 
-                   JOIN cabinets c ON p.cabinet_id = c.id 
-                   JOIN ip_managers im ON im.position_id = p.id 
-                   LEFT JOIN network_cidrs n ON c.network_id = n.id
-                   WHERE im.switch_id = $1"#
-            )
-            .bind(id)
-            .fetch_optional(pool.get_conn())
-            .await
-            .ok()
-            .flatten();
-
             let mut response_data = serde_json::to_value(data).unwrap();
             response_data["ips"] = serde_json::to_value(ips_json).unwrap();
-            
-            if let Some((pos_id, cabinet_id, cabinet_name, start_u, end_u, network_region_id)) = position {
-                response_data["position"] = serde_json::json!({
-                    "id": pos_id,
-                    "cabinet_id": cabinet_id,
-                    "cabinet_name": cabinet_name,
-                    "start_u": start_u,
-                    "end_u": end_u,
-                    "network_region_id": network_region_id
-                });
-            }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
         },
@@ -306,8 +287,8 @@ pub async fn create_switch(
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
-            description, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)"#
+            cabinet_id, start_u, end_u, description, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"#
     )
     .bind(id)
     .bind(&req.name)
@@ -326,6 +307,9 @@ pub async fn create_switch(
     .bind(req.snmp_port.unwrap_or(161))
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)
+    .bind(req.cabinet_id)
+    .bind(req.start_u)
+    .bind(req.end_u)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -334,90 +318,40 @@ pub async fn create_switch(
 
     match result {
         Ok(_) => {
-            let mut position_id: Option<Uuid> = None;
-            let mut position_info: Option<SwitchPosition> = None;
-            
-            if let (Some(cabinet_id), Some(start_u), Some(end_u)) = (req.cabinet_id, req.start_u, req.end_u) {
-                let new_position_id = Uuid::new_v4();
-                let position_name = req.name.clone();
-                
-                let cabinet_name: Option<String> = sqlx::query_scalar(
-                    "SELECT name FROM cabinets WHERE id = $1"
+            for ip in ips {
+                let ip_exists = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
                 )
-                .bind(cabinet_id)
-                .fetch_optional(pool.get_conn())
+                .bind(&ip.ip_address)
+                .fetch_one(pool.get_conn())
                 .await
-                .ok()
-                .flatten();
+                .unwrap_or(false);
+
+                if ip_exists {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已存在", ip.ip_address))));
+                }
+
+                let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
                 
-                if let Some(cab_name) = cabinet_name {
-                    let position_result = sqlx::query(
-                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-                    )
-                    .bind(new_position_id)
-                    .bind(&position_name)
-                    .bind(cabinet_id)
-                    .bind(start_u)
-                    .bind(end_u)
-                    .bind(format!("交换机 {} 的机位", req.name))
-                    .bind(now)
-                    .bind(now)
-                    .execute(pool.get_conn())
-                    .await;
-                    
-                    if position_result.is_ok() {
-                        position_id = Some(new_position_id);
-                        position_info = Some(SwitchPosition {
-                            id: new_position_id,
-                            cabinet_id,
-                            cabinet_name: cab_name,
-                            start_u,
-                            end_u,
-                        });
-                    }
-                }
-            }
-            
-            if has_ips {
-                let ips = req.ips.as_ref().unwrap();
-                for ip in ips {
-                    let ip_exists = sqlx::query_scalar::<_, bool>(
-                        "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
-                    )
-                    .bind(&ip.ip_address)
-                    .fetch_one(pool.get_conn())
-                    .await
-                    .unwrap_or(false);
-
-                    if ip_exists {
-                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已存在", ip.ip_address))));
-                    }
-
-                    let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
-                    let now = Utc::now();
-                    
-                    let ip_manager_id = Uuid::new_v4();
-                    let _ = sqlx::query(
-                        "INSERT INTO ip_managers (id, switch_id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13, $14)"
-                    )
-                    .bind(ip_manager_id)
-                    .bind(id)
-                    .bind(position_id)
-                    .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
-                    .bind(ip.network_id)
-                    .bind(&ip.ip_address)
-                    .bind(ip_version)
-                    .bind(&ip.mac_address)
-                    .bind(&ip.hostname)
-                    .bind("active")
-                    .bind(now)
-                    .bind(now)
-                    .bind(now)
-                    .execute(pool.get_conn())
-                    .await;
-                }
+                let ip_manager_id = Uuid::new_v4();
+                let _ = sqlx::query(
+                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
+                )
+                .bind(ip_manager_id)
+                .bind(id)
+                .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
+                .bind(ip.network_id)
+                .bind(&ip.ip_address)
+                .bind(ip_version)
+                .bind(&ip.mac_address)
+                .bind(&ip.hostname)
+                .bind("active")
+                .bind(now)
+                .bind(now)
+                .bind(now)
+                .execute(pool.get_conn())
+                .await;
             }
 
             let switch = sqlx::query_as::<_, Switch>(
@@ -431,7 +365,9 @@ pub async fn create_switch(
                     snmp_priv_protocol, 
                     snmp_priv_password, 
                     snmp_port, 
-                    parent_switch_id, parent_port_id, description, created_at, updated_at 
+                    parent_switch_id, parent_port_id, 
+                    cabinet_id, start_u, end_u, 
+                    description, created_at, updated_at 
                 FROM switches WHERE id = $1"#,
             )
             .bind(id)
@@ -440,16 +376,14 @@ pub async fn create_switch(
 
             match switch {
                 Ok(data) => {
-                    let mut response_data = serde_json::to_value(&data).unwrap();
-                    if let Some(pos) = position_info {
-                        response_data["position"] = serde_json::to_value(pos).unwrap();
-                    }
-                    
                     let details = serde_json::json!({
                         "name": data.name,
                         "model": data.model,
                         "vendor": data.vendor,
                         "location": data.location,
+                        "cabinet_id": data.cabinet_id,
+                        "start_u": data.start_u,
+                        "end_u": data.end_u,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(
@@ -464,7 +398,7 @@ pub async fn create_switch(
                     )
                     .await;
                     
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "创建交换机成功")))
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
@@ -555,9 +489,12 @@ pub async fn update_switch(
             snmp_port = COALESCE($14, snmp_port),
             parent_switch_id = $15,
             parent_port_id = $16,
-            description = COALESCE($17, description),
-            updated_at = $18
-        WHERE id = $19"#,
+            cabinet_id = $17,
+            start_u = $18,
+            end_u = $19,
+            description = COALESCE($20, description),
+            updated_at = $21
+        WHERE id = $22"#,
     )
     .bind(&req.name)
     .bind(req.network_region_id)
@@ -575,6 +512,9 @@ pub async fn update_switch(
     .bind(req.snmp_port)
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)
+    .bind(req.cabinet_id)
+    .bind(req.start_u)
+    .bind(req.end_u)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -583,91 +523,6 @@ pub async fn update_switch(
 
     match result {
         Ok(_) => {
-            let mut position_id: Option<Uuid> = None;
-            let mut position_info: Option<SwitchPosition> = None;
-            
-            if let (Some(cabinet_id), Some(start_u), Some(end_u)) = (req.cabinet_id, req.start_u, req.end_u) {
-                let switch_name: String = sqlx::query_scalar(
-                    "SELECT name FROM switches WHERE id = $1"
-                )
-                .bind(id)
-                .fetch_one(pool.get_conn())
-                .await
-                .unwrap_or_else(|_| "未知交换机".to_string());
-                
-                let cabinet_name: Option<String> = sqlx::query_scalar(
-                    "SELECT name FROM cabinets WHERE id = $1"
-                )
-                .bind(cabinet_id)
-                .fetch_optional(pool.get_conn())
-                .await
-                .ok()
-                .flatten();
-                
-                if let Some(cab_name) = cabinet_name {
-                    let existing_position: Option<(Uuid, Uuid)> = sqlx::query_as(
-                        "SELECT p.id, p.cabinet_id FROM positions p 
-                         JOIN ip_managers ip ON ip.position_id = p.id 
-                         WHERE ip.switch_id = $1"
-                    )
-                    .bind(id)
-                    .fetch_optional(pool.get_conn())
-                    .await
-                    .ok()
-                    .flatten();
-                    
-                    if let Some((pos_id, _)) = existing_position {
-                        let _ = sqlx::query(
-                            "UPDATE positions SET cabinet_id = $1, start_u = $2, end_u = $3, name = $4, updated_at = $5 WHERE id = $6"
-                        )
-                        .bind(cabinet_id)
-                        .bind(start_u)
-                        .bind(end_u)
-                        .bind(&switch_name)
-                        .bind(now)
-                        .bind(pos_id)
-                        .execute(pool.get_conn())
-                        .await;
-                        
-                        position_id = Some(pos_id);
-                        position_info = Some(SwitchPosition {
-                            id: pos_id,
-                            cabinet_id,
-                            cabinet_name: cab_name,
-                            start_u,
-                            end_u,
-                        });
-                    } else {
-                        let new_position_id = Uuid::new_v4();
-                        let position_result = sqlx::query(
-                            "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) 
-                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-                        )
-                        .bind(new_position_id)
-                        .bind(&switch_name)
-                        .bind(cabinet_id)
-                        .bind(start_u)
-                        .bind(end_u)
-                        .bind(format!("交换机 {} 的机位", switch_name))
-                        .bind(now)
-                        .bind(now)
-                        .execute(pool.get_conn())
-                        .await;
-                        
-                        if position_result.is_ok() {
-                            position_id = Some(new_position_id);
-                            position_info = Some(SwitchPosition {
-                                id: new_position_id,
-                                cabinet_id,
-                                cabinet_name: cab_name,
-                                start_u,
-                                end_u,
-                            });
-                        }
-                    }
-                }
-            }
-            
             if let Some(ips) = &req.ips {
                 let _ = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
                     .bind(id)
@@ -689,16 +544,14 @@ pub async fn update_switch(
                     }
 
                     let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
-                    let now = Utc::now();
                     
                     let ip_manager_id = Uuid::new_v4();
                     let _ = sqlx::query(
-                        "INSERT INTO ip_managers (id, switch_id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13, $14)"
+                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
                     )
                     .bind(ip_manager_id)
                     .bind(id)
-                    .bind(position_id)
                     .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
                     .bind(ip.network_id)
                     .bind(&ip.ip_address)
@@ -725,7 +578,9 @@ pub async fn update_switch(
                     snmp_priv_protocol, 
                     snmp_priv_password, 
                     snmp_port, 
-                    parent_switch_id, parent_port_id, description, created_at, updated_at 
+                    parent_switch_id, parent_port_id, 
+                    cabinet_id, start_u, end_u, 
+                    description, created_at, updated_at 
                 FROM switches WHERE id = $1"#,
             )
             .bind(id)
@@ -734,16 +589,14 @@ pub async fn update_switch(
 
             match switch {
                 Ok(data) => {
-                    let mut response_data = serde_json::to_value(&data).unwrap();
-                    if let Some(pos) = position_info {
-                        response_data["position"] = serde_json::to_value(pos).unwrap();
-                    }
-                    
                     let details = serde_json::json!({
                         "name": data.name,
                         "model": data.model,
                         "vendor": data.vendor,
                         "location": data.location,
+                        "cabinet_id": data.cabinet_id,
+                        "start_u": data.start_u,
+                        "end_u": data.end_u,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(
@@ -758,7 +611,7 @@ pub async fn update_switch(
                     )
                     .await;
                     
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "更新交换机成功")))
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
@@ -794,32 +647,10 @@ pub async fn delete_switch(
             .json(ApiResponse::<()>::error("该交换机存在下级交换机，无法删除")));
     }
 
-    let position_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT p.id FROM positions p 
-         JOIN ip_managers im ON im.position_id = p.id 
-         WHERE im.switch_id = $1"
-    )
-    .bind(id)
-    .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
-
     let _ = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
         .bind(id)
         .execute(pool.get_conn())
         .await;
-
-    for position_id in position_ids {
-        let _ = sqlx::query("DELETE FROM position_ports WHERE position_id = $1")
-            .bind(position_id)
-            .execute(pool.get_conn())
-            .await;
-        
-        let _ = sqlx::query("DELETE FROM positions WHERE id = $1")
-            .bind(position_id)
-            .execute(pool.get_conn())
-            .await;
-    }
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")
         .bind(id)

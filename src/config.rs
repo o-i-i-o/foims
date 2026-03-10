@@ -127,32 +127,41 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
-        // 检查是否存在 .env 文件
-        let env_file = Path::new(".env");
+        // 构建配置加载器
+        let mut builder = ConfigBuilder::builder();
         
-        if env_file.exists() {
-            let config = ConfigBuilder::builder()
-                .add_source(config::Environment::default())
-                .build()?;
-            return config.try_deserialize();
-        }
-
-        // 使用配置路径函数
+        // 首先加载配置文件（如果存在）
         let config_path = get_config_path();
         let config_file = format!("{}.toml", config_path);
         
-        if !Path::new(&config_file).exists() {
-            return Err(config::ConfigError::Message(
-                format!("configuration file \"{}\" not found", config_file)
-            ));
+        if Path::new(&config_file).exists() {
+            builder = builder.add_source(config::File::with_name(config_path));
         }
-
-        let config = ConfigBuilder::builder()
-            .add_source(config::File::with_name(config_path))
-            .add_source(config::Environment::default())
-            .build()?;
-
-        config.try_deserialize()
+        
+        // 然后加载环境变量（优先级高于配置文件）
+        builder = builder.add_source(
+            config::Environment::default()
+                .prefix("IPMA")
+                .separator("_")
+                .try_parsing(true)
+        );
+        
+        // 构建配置
+        let config = builder.build()?;
+        
+        // 尝试反序列化
+        let config: Self = config.try_deserialize()?;
+        
+        // 验证关键配置
+        if config.database.host.is_empty() {
+            return Err(config::ConfigError::Message("Database host is required".to_string()));
+        }
+        
+        if config.jwt.secret.len() < 32 {
+            return Err(config::ConfigError::Message("JWT secret must be at least 32 characters long".to_string()));
+        }
+        
+        Ok(config)
     }
 }
 

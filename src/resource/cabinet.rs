@@ -27,23 +27,28 @@ pub async fn get_positions(
     let offset = (page - 1) * page_size;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
-        ("name", "desc") => "ORDER BY p.name DESC",
-        ("name", _) => "ORDER BY p.name ASC",
-        ("cabinet_name", "desc") => "ORDER BY cabinet_name DESC, p.name ASC",
-        ("cabinet_name", _) => "ORDER BY cabinet_name ASC, p.name ASC",
-        ("start_u", "desc") => "ORDER BY p.start_u DESC, p.name ASC",
-        ("start_u", _) => "ORDER BY p.start_u ASC, p.name ASC",
-        ("created_at", "desc") => "ORDER BY p.created_at DESC",
-        ("created_at", _) => "ORDER BY p.created_at ASC",
-        _ => "ORDER BY p.name ASC",
+        ("name", "desc") => "ORDER BY name DESC",
+        ("name", _) => "ORDER BY name ASC",
+        ("cabinet_name", "desc") => "ORDER BY cabinet_name DESC, name ASC",
+        ("cabinet_name", _) => "ORDER BY cabinet_name ASC, name ASC",
+        ("start_u", "desc") => "ORDER BY start_u DESC, name ASC",
+        ("start_u", _) => "ORDER BY start_u ASC, name ASC",
+        ("created_at", "desc") => "ORDER BY created_at DESC",
+        ("created_at", _) => "ORDER BY created_at ASC",
+        _ => "ORDER BY name ASC",
     };
 
+    // 查询总数（包含普通机位和交换机机位）
     let total: i64 = if !search.is_empty() || cabinet_id.is_some() {
         let count_result = if let Some(cid) = cabinet_id {
             if !search.is_empty() {
                 let pattern = format!("%{}%", search);
                 sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM positions p WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2)"
+                    r#"SELECT COUNT(*) FROM (
+                        SELECT id FROM positions WHERE cabinet_id = $1 AND (name ILIKE $2 OR description ILIKE $2)
+                        UNION ALL
+                        SELECT id FROM switches WHERE cabinet_id = $1 AND (name ILIKE $2 OR description ILIKE $2)
+                    ) AS combined"#
                 )
                 .bind(cid)
                 .bind(&pattern)
@@ -51,7 +56,11 @@ pub async fn get_positions(
                 .await
             } else {
                 sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM positions p WHERE p.cabinet_id = $1"
+                    r#"SELECT COUNT(*) FROM (
+                        SELECT id FROM positions WHERE cabinet_id = $1
+                        UNION ALL
+                        SELECT id FROM switches WHERE cabinet_id = $1
+                    ) AS combined"#
                 )
                 .bind(cid)
                 .fetch_one(pool.get_conn())
@@ -60,7 +69,11 @@ pub async fn get_positions(
         } else {
             let pattern = format!("%{}%", search);
             sqlx::query_scalar(
-                "SELECT COUNT(*) FROM positions p WHERE p.name ILIKE $1 OR p.description ILIKE $1"
+                r#"SELECT COUNT(*) FROM (
+                    SELECT id FROM positions WHERE name ILIKE $1 OR description ILIKE $1
+                    UNION ALL
+                    SELECT id FROM switches WHERE name ILIKE $1 OR description ILIKE $1
+                ) AS combined"#
             )
             .bind(&pattern)
             .fetch_one(pool.get_conn())
@@ -73,9 +86,15 @@ pub async fn get_positions(
             }
         }
     } else {
-        match sqlx::query_scalar("SELECT COUNT(*) FROM positions")
-            .fetch_one(pool.get_conn())
-            .await
+        match sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM (
+                SELECT id FROM positions
+                UNION ALL
+                SELECT id FROM switches WHERE cabinet_id IS NOT NULL
+            ) AS combined"#
+        )
+        .fetch_one(pool.get_conn())
+        .await
         {
             Ok(t) => t,
             Err(err) => {
@@ -84,16 +103,29 @@ pub async fn get_positions(
         }
     };
 
+    // 查询机位列表（包含普通机位和交换机机位）
     let positions_basic = if !search.is_empty() || cabinet_id.is_some() {
         let query_result = if let Some(cid) = cabinet_id {
             if !search.is_empty() {
                 let pattern = format!("%{}%", search);
                 sqlx::query(
                     &format!(
-                        "SELECT p.id, p.name, p.cabinet_id, 
-                                COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                                p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-                         FROM positions p WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2) {} LIMIT $3 OFFSET $4",
+                        r#"SELECT id, name, cabinet_id, cabinet_name, start_u, end_u, network_id, description, device_type, created_at, updated_at 
+                         FROM (
+                            SELECT p.id, p.name, p.cabinet_id, 
+                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                   p.start_u, p.end_u, p.network_id, p.description, 
+                                   'cabinet_position' as device_type,
+                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
+                            FROM positions p WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2)
+                            UNION ALL
+                            SELECT s.id, s.name, s.cabinet_id, 
+                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = s.cabinet_id), '未知机柜') as cabinet_name, 
+                                   s.start_u, s.end_u, NULL as network_id, s.description, 
+                                   'switch' as device_type,
+                                   s.created_at::TIMESTAMPTZ as created_at, s.updated_at::TIMESTAMPTZ as updated_at
+                            FROM switches s WHERE s.cabinet_id = $1 AND (s.name ILIKE $2 OR s.description ILIKE $2)
+                         ) AS combined {} LIMIT $3 OFFSET $4"#,
                         order_clause
                     )
                 )
@@ -106,10 +138,22 @@ pub async fn get_positions(
             } else {
                 sqlx::query(
                     &format!(
-                        "SELECT p.id, p.name, p.cabinet_id, 
-                                COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                                p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-                         FROM positions p WHERE p.cabinet_id = $1 {} LIMIT $2 OFFSET $3",
+                        r#"SELECT id, name, cabinet_id, cabinet_name, start_u, end_u, network_id, description, device_type, created_at, updated_at 
+                         FROM (
+                            SELECT p.id, p.name, p.cabinet_id, 
+                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                   p.start_u, p.end_u, p.network_id, p.description, 
+                                   'cabinet_position' as device_type,
+                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
+                            FROM positions p WHERE p.cabinet_id = $1
+                            UNION ALL
+                            SELECT s.id, s.name, s.cabinet_id, 
+                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = s.cabinet_id), '未知机柜') as cabinet_name, 
+                                   s.start_u, s.end_u, NULL as network_id, s.description, 
+                                   'switch' as device_type,
+                                   s.created_at::TIMESTAMPTZ as created_at, s.updated_at::TIMESTAMPTZ as updated_at
+                            FROM switches s WHERE s.cabinet_id = $1
+                         ) AS combined {} LIMIT $2 OFFSET $3"#,
                         order_clause
                     )
                 )
@@ -123,10 +167,22 @@ pub async fn get_positions(
             let pattern = format!("%{}%", search);
             sqlx::query(
                 &format!(
-                    "SELECT p.id, p.name, p.cabinet_id, 
-                            COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                            p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-                     FROM positions p WHERE p.name ILIKE $1 OR p.description ILIKE $1 {} LIMIT $2 OFFSET $3",
+                    r#"SELECT id, name, cabinet_id, cabinet_name, start_u, end_u, network_id, description, device_type, created_at, updated_at 
+                     FROM (
+                        SELECT p.id, p.name, p.cabinet_id, 
+                               COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                               p.start_u, p.end_u, p.network_id, p.description, 
+                               'cabinet_position' as device_type,
+                               p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
+                        FROM positions p WHERE p.name ILIKE $1 OR p.description ILIKE $1
+                        UNION ALL
+                        SELECT s.id, s.name, s.cabinet_id, 
+                               COALESCE((SELECT c.name FROM cabinets c WHERE c.id = s.cabinet_id), '未知机柜') as cabinet_name, 
+                               s.start_u, s.end_u, NULL as network_id, s.description, 
+                               'switch' as device_type,
+                               s.created_at::TIMESTAMPTZ as created_at, s.updated_at::TIMESTAMPTZ as updated_at
+                        FROM switches s WHERE s.name ILIKE $1 OR s.description ILIKE $1
+                     ) AS combined {} LIMIT $2 OFFSET $3"#,
                     order_clause
                 )
             )
@@ -145,10 +201,22 @@ pub async fn get_positions(
     } else {
         match sqlx::query(
             &format!(
-                "SELECT p.id, p.name, p.cabinet_id, 
-                        COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                        p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-                 FROM positions p {} LIMIT $1 OFFSET $2",
+                r#"SELECT id, name, cabinet_id, cabinet_name, start_u, end_u, network_id, description, device_type, created_at, updated_at 
+                 FROM (
+                    SELECT p.id, p.name, p.cabinet_id, 
+                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                           p.start_u, p.end_u, p.network_id, p.description, 
+                           'cabinet_position' as device_type,
+                           p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
+                    FROM positions p
+                    UNION ALL
+                    SELECT s.id, s.name, s.cabinet_id, 
+                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = s.cabinet_id), '未知机柜') as cabinet_name, 
+                           s.start_u, s.end_u, NULL as network_id, s.description, 
+                           'switch' as device_type,
+                           s.created_at::TIMESTAMPTZ as created_at, s.updated_at::TIMESTAMPTZ as updated_at
+                    FROM switches s WHERE s.cabinet_id IS NOT NULL
+                 ) AS combined {} LIMIT $1 OFFSET $2"#,
                 order_clause
             )
         )
@@ -203,6 +271,7 @@ pub async fn get_positions(
         let start_u: i32 = row.get("start_u");
         let end_u: i32 = row.get("end_u");
         let network_id: Option<Uuid> = row.get("network_id");
+        let device_type: String = row.get("device_type");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
@@ -217,6 +286,7 @@ pub async fn get_positions(
             start_u,
             end_u,
             network_id,
+            device_type,
             ips: Vec::new(),
             ports,
             description,
@@ -446,37 +516,75 @@ pub async fn get_cabinet_position(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    let position = match sqlx::query_as::<_, CabinetPosition>(
-        "SELECT id, name, cabinet_id, start_u, end_u, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM positions WHERE id = $1"
+    // 首先尝试从 positions 表查询，如果没有则从 switches 表查询
+    let position_data = match sqlx::query(
+        r#"SELECT id, name, cabinet_id, start_u, end_u, network_id, description, 
+                  'cabinet_position' as device_type,
+                  created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
+           FROM positions WHERE id = $1
+           UNION ALL
+           SELECT id, name, cabinet_id, start_u, end_u, NULL as network_id, description, 
+                  'switch' as device_type,
+                  created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
+           FROM switches WHERE id = $1"#
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
-        Ok(Some(position)) => position,
+        Ok(Some(row)) => row,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<CabinetPosition>::error("机位未找到")));
+            return Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error("机位未找到")));
         },
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询机位失败"));
         }
     };
 
-    let position_ips = match sqlx::query(
-        r#"SELECT 
-            m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
-            m.device_type, m.network_id, 
-            host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
-            m.status, m.last_seen, m.created_at, m.updated_at,
-            n.network_region_id, nr.name as network_region
-        FROM ip_managers m
-        LEFT JOIN network_cidrs n ON m.network_id = n.id
-        LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-        WHERE m.position_id = $1
-        ORDER BY m.ip_address"#
-    ).bind(id)
-    .fetch_all(pool.get_conn()).await {
-        Ok(ips) => ips,
-        Err(err) => {
-            return Ok(crate::utils::handle_db_error(err, "查询机位IP信息失败"));
+    let device_type: String = position_data.get("device_type");
+    let is_switch = device_type == "switch";
+
+    // 根据设备类型查询IP信息
+    let position_ips = if is_switch {
+        // 对于交换机，查询 switch_id 关联的 IP
+        match sqlx::query(
+            r#"SELECT 
+                m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
+                m.device_type, m.network_id, 
+                host(m.ip_address) as ip_address,
+                m.ip_version, m.mac_address, m.hostname,
+                m.status, m.last_seen, m.created_at, m.updated_at,
+                n.network_region_id, nr.name as network_region
+            FROM ip_managers m
+            LEFT JOIN network_cidrs n ON m.network_id = n.id
+            LEFT JOIN network_regions nr ON n.network_region_id = nr.id
+            WHERE m.switch_id = $1
+            ORDER BY m.ip_address"#
+        ).bind(id)
+        .fetch_all(pool.get_conn()).await {
+            Ok(ips) => ips,
+            Err(err) => {
+                return Ok(crate::utils::handle_db_error(err, "查询交换机IP信息失败"));
+            }
+        }
+    } else {
+        // 对于普通机位，查询 position_id 关联的 IP
+        match sqlx::query(
+            r#"SELECT 
+                m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
+                m.device_type, m.network_id, 
+                host(m.ip_address) as ip_address,
+                m.ip_version, m.mac_address, m.hostname,
+                m.status, m.last_seen, m.created_at, m.updated_at,
+                n.network_region_id, nr.name as network_region
+            FROM ip_managers m
+            LEFT JOIN network_cidrs n ON m.network_id = n.id
+            LEFT JOIN network_regions nr ON n.network_region_id = nr.id
+            WHERE m.position_id = $1
+            ORDER BY m.ip_address"#
+        ).bind(id)
+        .fetch_all(pool.get_conn()).await {
+            Ok(ips) => ips,
+            Err(err) => {
+                return Ok(crate::utils::handle_db_error(err, "查询机位IP信息失败"));
+            }
         }
     };
 
@@ -502,32 +610,34 @@ pub async fn get_cabinet_position(
         })
     }).collect();
 
-    let cabinet_name =
-        match sqlx::query_scalar::<_, String>("SELECT COALESCE((SELECT c.name FROM cabinets c JOIN positions p ON c.id = p.cabinet_id WHERE p.id = $1), '未知机柜')")
-            .bind(id)
+    let cabinet_name: String = if let Some(_) = position_data.get::<Option<Uuid>, _>("cabinet_id") {
+        let cabinet_id: Uuid = position_data.get("cabinet_id");
+        match sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
+            .bind(cabinet_id)
             .fetch_optional(pool.get_conn())
             .await
         {
             Ok(Some(name)) => name,
-            Ok(None) => "未知机柜".to_string(),
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机柜名称失败"));
-            }
-        };
+            _ => "未知机柜".to_string(),
+        }
+    } else {
+        "未知机柜".to_string()
+    };
 
     let position_with_details = serde_json::json!({
-        "id": position.id,
-        "name": position.name,
-        "cabinet_id": position.cabinet_id,
+        "id": position_data.get::<Uuid, _>("id"),
+        "name": position_data.get::<String, _>("name"),
+        "cabinet_id": position_data.get::<Uuid, _>("cabinet_id"),
         "cabinet_name": cabinet_name,
-        "start_u": position.start_u,
-        "end_u": position.end_u,
-        "network_id": position.network_id,
+        "start_u": position_data.get::<i32, _>("start_u"),
+        "end_u": position_data.get::<i32, _>("end_u"),
+        "network_id": position_data.get::<Option<Uuid>, _>("network_id"),
+        "device_type": device_type,
         "ips": ips_with_region,
         "ports": [],
-        "description": position.description,
-        "created_at": position.created_at,
-        "updated_at": position.updated_at
+        "description": position_data.get::<Option<String>, _>("description"),
+        "created_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "updated_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
     });
 
     Ok(
@@ -680,6 +790,7 @@ pub async fn update_cabinet_position(
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
         network_id: row.get("network_id"),
+        device_type: "cabinet_position".to_string(),
         ips,
         ports: vec![],
         description: row.get("description"),

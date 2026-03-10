@@ -183,10 +183,9 @@ export function createElement(tag, attributes = {}, children = []) {
     });
     
     if (children.length > 0) {
-        const fragment = document.createDocumentFragment();
         children.forEach(child => {
             if (typeof child === 'string') {
-                element.insertAdjacentHTML(child);
+                element.insertAdjacentHTML('beforeend', child);
             } else {
                 element.appendChild(child);
             }

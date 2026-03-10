@@ -5,17 +5,7 @@ import {
   onNetworkRegionChange,
   offNetworkRegionChange
 } from "../../utils/ipconfig.js";
-
-export function createPositionState() {
-  return {
-    cabinetId: null,
-    cabinetName: null,
-    startU: null,
-    endU: null,
-    positionId: null,
-    networkRegionId: null
-  };
-}
+import { createPositionState } from "./switchState.js";
 
 export function createNetworkRegionState() {
   return {
@@ -44,6 +34,7 @@ export class PositionSelector {
     this.onRegionChange = onRegionChange;
     this.eventController = null;
     this.cabinetsCache = [];
+    this.boundHandleNetworkRegionChange = null;
   }
 
   async init(sw = null) {
@@ -53,6 +44,16 @@ export class PositionSelector {
     this.eventController = new AbortController();
     const { signal } = this.eventController;
 
+    // 移除旧的事件监听器
+    if (this.boundHandleNetworkRegionChange) {
+      offNetworkRegionChange(this.boundHandleNetworkRegionChange);
+    }
+    
+    // 创建并保存新的事件处理函数
+    this.boundHandleNetworkRegionChange = (regionId, regionName) => {
+      this.handleNetworkRegionChange(regionId, regionName);
+    };
+    
     this.bindEvents(signal);
 
     const regionId = this.networkRegion.id || (sw && (sw.network_region_id || sw.position?.network_region_id || (sw.ips && sw.ips[0]?.network_region_id)));
@@ -65,9 +66,7 @@ export class PositionSelector {
       await this.loadFromSwitch(sw);
     }
 
-    onNetworkRegionChange((regionId, regionName) => {
-      this.handleNetworkRegionChange(regionId, regionName);
-    });
+    onNetworkRegionChange(this.boundHandleNetworkRegionChange);
   }
 
   bindEvents(signal) {
@@ -97,6 +96,7 @@ export class PositionSelector {
   }
 
   async loadFromSwitch(sw) {
+    console.log('loadFromSwitch - switch data:', sw);
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     const startUInput = elementCache.get('switch-start-u');
     const endUInput = elementCache.get('switch-end-u');
@@ -107,11 +107,13 @@ export class PositionSelector {
     let endU = null;
 
     if (sw.cabinet_id) {
+      console.log('loadFromSwitch - found cabinet_id:', sw.cabinet_id);
       cabinetId = sw.cabinet_id;
       cabinetName = sw.cabinet_name;
       startU = sw.start_u;
       endU = sw.end_u;
     } else if (sw.position) {
+      console.log('loadFromSwitch - found position:', sw.position);
       const pos = sw.position;
       if (pos.cabinet_id) {
         cabinetId = pos.cabinet_id;
@@ -120,6 +122,8 @@ export class PositionSelector {
         endU = pos.end_u;
       }
     }
+
+    console.log('loadFromSwitch - extracted:', { cabinetId, cabinetName, startU, endU });
 
     if (cabinetId) {
       this.positionData.cabinetId = cabinetId;
@@ -131,8 +135,22 @@ export class PositionSelector {
       if (endUInput && endU) endUInput.value = endU;
       
       if (cabinetSelect && cabinetId) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        cabinetSelect.value = cabinetId;
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const option = cabinetSelect.querySelector(`option[value="${cabinetId}"]`);
+        console.log('loadFromSwitch - option found:', !!option, 'cabinetsCache length:', this.cabinetsCache.length);
+        if (option) {
+          cabinetSelect.value = cabinetId;
+        } else if (this.cabinetsCache.length > 0) {
+          const cabinet = this.cabinetsCache.find(c => c.id === cabinetId);
+          if (cabinet) {
+            const newOption = document.createElement('option');
+            newOption.value = cabinet.id;
+            newOption.dataset.name = cabinet.name;
+            newOption.textContent = cabinet.name;
+            cabinetSelect.appendChild(newOption);
+            cabinetSelect.value = cabinetId;
+          }
+        }
       }
     }
 
@@ -215,6 +233,9 @@ export class PositionSelector {
       this.eventController.abort();
       this.eventController = null;
     }
-    offNetworkRegionChange(this.handleNetworkRegionChange);
+    if (this.boundHandleNetworkRegionChange) {
+      offNetworkRegionChange(this.boundHandleNetworkRegionChange);
+      this.boundHandleNetworkRegionChange = null;
+    }
   }
 }
