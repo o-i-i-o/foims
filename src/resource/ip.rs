@@ -787,7 +787,7 @@ pub async fn delete_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }
 
-// 拉取IP管理数据
+// 拉取IP管理数据 - 从数据库中已缓存的MAC表筛选
 pub async fn pull_ip_managers(
     pool: web::Data<DbPool>,
     req: web::Json<serde_json::Value>,
@@ -844,31 +844,36 @@ pub async fn pull_ip_managers(
     .ok()
     .flatten();
 
-    let all_arp_entries = match crate::resource::switch::mac::get_all_arp_entries(pool.get_conn(), &switch_id).await {
-        Ok(entries) => entries,
-        Err(e) => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                    "从交换机获取ARP表失败: {}",
-                    e
-                ))),
-            );
-        }
-    };
+    let switch_macs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT ip_address, mac_address FROM switch_macs WHERE switch_id = $1"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    if switch_macs.is_empty() {
+        return Ok(
+            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
+                vec![],
+                "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
+            )),
+        );
+    }
 
     let mut filtered_entries: Vec<(String, String)> = Vec::new();
-    for entry in all_arp_entries {
-        let is_ipv6 = entry.ip_address.contains(':');
+    for (ip, mac) in switch_macs {
+        let is_ipv6 = ip.contains(':');
         
         if let Some((ref ipv4_cidr, ref ipv6_cidr)) = network_info {
             let belongs_to_network = if is_ipv6 {
-                ipv6_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&entry.ip_address, cidr)).unwrap_or(false)
+                ipv6_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&ip, cidr)).unwrap_or(false)
             } else {
-                ipv4_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&entry.ip_address, cidr)).unwrap_or(false)
+                ipv4_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&ip, cidr)).unwrap_or(false)
             };
             
             if belongs_to_network {
-                filtered_entries.push((entry.ip_address, entry.mac_address));
+                filtered_entries.push((ip, mac));
             }
         }
     }

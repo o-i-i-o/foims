@@ -2,6 +2,7 @@
 
 import {
   apiGet,
+  apiPost,
 } from "../../utils/apiClient.js";
 
 import { elementCache } from "../../utils/helpers.js";
@@ -22,7 +23,7 @@ async function viewArpTable(switchId) {
       <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
         <div id="arp-loading" style="text-align: center; padding: 40px;">
           <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">正在获取MAC表...</p>
+          <p style="margin-top: 10px; color: #666;">正在加载MAC表...</p>
         </div>
         <div id="arp-content" style="display: none;">
           <div class="tab-container">
@@ -31,8 +32,8 @@ async function viewArpTable(switchId) {
                 <button class="tab-btn active" data-tab="ipv4">IPv4</button>
                 <button class="tab-btn" data-tab="ipv6">IPv6</button>
               </div>
-              <button class="btn btn-sm btn-secondary" id="refresh-mac-btn">
-                <span>刷新</span>
+              <button class="btn btn-sm btn-primary" id="sync-mac-btn">
+                <span>从SNMP同步</span>
               </button>
             </div>
             <div class="tab-content active" id="ipv4-tab">
@@ -74,11 +75,11 @@ async function viewArpTable(switchId) {
     const loadingEl = modal.querySelector("#arp-loading");
     const contentEl = modal.querySelector("#arp-content");
     const nameEl = modal.querySelector("#arp-switch-name");
-    const refreshBtn = modal.querySelector("#refresh-mac-btn");
+    const syncBtn = modal.querySelector("#sync-mac-btn");
 
     loadingEl.style.display = "block";
     contentEl.style.display = "none";
-    refreshBtn.disabled = true;
+    syncBtn.disabled = true;
 
     try {
       const switchResult = await apiGet(`/api/switches/${switchId}`);
@@ -90,25 +91,23 @@ async function viewArpTable(switchId) {
       const switchData = switchResult.data;
       nameEl.textContent = `- ${switchData.name}`;
 
-      const hasSnmpConfig = switchData.snmp_community || switchData.snmp_username;
-      if (!hasSnmpConfig) {
-        loadingEl.innerHTML = `<p style="color: #666;">该交换机未配置SNMP信息，无法获取MAC表</p>`;
-        return;
-      }
-
-      const result = await apiGet(`/api/switches/${switchId}/mac-table`);
+      const result = await apiGet(`/api/switches/${switchId}/macs`);
 
       if (result.success) {
         const entries = result.data || [];
         nameEl.textContent = `- ${switchData.name} (${entries.length}条)`;
 
         if (entries.length === 0) {
-          loadingEl.innerHTML = `<p style="color: #666;">MAC表为空或无法获取</p>`;
+          loadingEl.innerHTML = `
+            <p style="color: #666; margin-bottom: 10px;">暂无MAC数据，请点击"从SNMP同步"按钮获取</p>
+            <button class="btn btn-primary" id="sync-mac-empty-btn">从SNMP同步</button>
+          `;
+          modal.querySelector("#sync-mac-empty-btn").addEventListener("click", () => syncMacData());
           return;
         }
 
-        const ipv4Entries = entries.filter(e => e.ip_address.includes('.'));
-        const ipv6Entries = entries.filter(e => e.ip_address.includes(':'));
+        const ipv4Entries = entries.filter(e => e.ip_address && e.ip_address.includes('.'));
+        const ipv6Entries = entries.filter(e => e.ip_address && e.ip_address.includes(':'));
 
         modal.querySelector('[data-tab="ipv4"]').textContent = `IPv4 (${ipv4Entries.length})`;
         modal.querySelector('[data-tab="ipv6"]').textContent = `IPv6 (${ipv6Entries.length})`;
@@ -152,7 +151,7 @@ async function viewArpTable(switchId) {
           ipv4Search.addEventListener("input", ipv4SearchHandler);
           ipv6Search.addEventListener("input", ipv6SearchHandler);
 
-          refreshBtn.addEventListener("click", loadArpData);
+          syncBtn.addEventListener("click", syncMacData);
 
           isFirstLoad = false;
         }
@@ -160,12 +159,39 @@ async function viewArpTable(switchId) {
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">获取MAC表失败: ${result.message || '未知错误'}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">加载MAC表失败: ${result.message || '未知错误'}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">获取失败: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">加载失败: ${err.message}</p>`;
     } finally {
-      refreshBtn.disabled = false;
+      syncBtn.disabled = false;
+    }
+  };
+
+  const syncMacData = async () => {
+    const loadingEl = modal.querySelector("#arp-loading");
+    const contentEl = modal.querySelector("#arp-content");
+    const syncBtn = modal.querySelector("#sync-mac-btn");
+
+    loadingEl.style.display = "block";
+    contentEl.style.display = "none";
+    syncBtn.disabled = true;
+    loadingEl.innerHTML = `
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #666;">正在从SNMP同步MAC表...</p>
+    `;
+
+    try {
+      const result = await apiPost(`/api/switches/${switchId}/macs/sync`, {});
+      if (result.success) {
+        await loadArpData();
+      } else {
+        loadingEl.innerHTML = `<p style="color: red;">同步失败: ${result.message || '未知错误'}</p>`;
+      }
+    } catch (err) {
+      loadingEl.innerHTML = `<p style="color: red;">同步失败: ${err.message}</p>`;
+    } finally {
+      syncBtn.disabled = false;
     }
   };
 
@@ -298,12 +324,12 @@ async function viewLldpNeighbors(switchId) {
       <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
         <div id="lldp-loading" style="text-align: center; padding: 40px;">
           <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">正在获取LLDP邻居信息...</p>
+          <p style="margin-top: 10px; color: #666;">正在加载LLDP邻居信息...</p>
         </div>
         <div id="lldp-content" style="display: none;"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="refresh-lldp-btn">刷新</button>
+        <button class="btn btn-primary" id="sync-lldp-btn">从SNMP同步</button>
         <button class="btn btn-secondary lldp-modal-close">关闭</button>
       </div>
     </div>
@@ -323,11 +349,11 @@ async function viewLldpNeighbors(switchId) {
     const loadingEl = modal.querySelector("#lldp-loading");
     const contentEl = modal.querySelector("#lldp-content");
     const nameEl = modal.querySelector("#lldp-switch-name");
-    const refreshBtn = modal.querySelector("#refresh-lldp-btn");
+    const syncBtn = modal.querySelector("#sync-lldp-btn");
     
     loadingEl.style.display = "block";
     contentEl.style.display = "none";
-    refreshBtn.disabled = true;
+    syncBtn.disabled = true;
 
     try {
       const switchResult = await apiGet(`/api/switches/${switchId}`);
@@ -338,12 +364,6 @@ async function viewLldpNeighbors(switchId) {
 
       const switchData = switchResult.data;
       nameEl.textContent = `- ${switchData.name}`;
-      
-      const hasSnmpConfig = switchData.snmp_community || switchData.snmp_username;
-      if (!hasSnmpConfig) {
-        loadingEl.innerHTML = `<p style="color: #666;">该交换机未配置SNMP信息，无法获取LLDP邻居</p>`;
-        return;
-      }
 
       const result = await apiGet(`/api/switches/${switchId}/lldp-neighbors`);
 
@@ -351,63 +371,98 @@ async function viewLldpNeighbors(switchId) {
         const neighbors = result.data || [];
         nameEl.textContent = `- ${switchData.name} (${neighbors.length}条)`;
         
-        if (neighbors.length > 0) {
-          contentEl.innerHTML = `
-            <table class="table table-bordered" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-              <thead>
-                <tr style="background-color: var(--bg-secondary, #f0f2f5);">
-                  <th style="width: 60px; text-align: center; border: 1px solid var(--border-color, #ddd); padding: 12px 8px; font-weight: 600;">序号</th>
-                  <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">本地端口</th>
-                  <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">邻居设备</th>
-                  <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">邻居端口</th>
-                  <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">Chassis ID</th>
-                  <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">系统描述</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${neighbors.map((n, i) => {
-                  const isMac = (str) => /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str);
-                  let neighborPort = '-';
-                  if (n.neighbor_port_id && !isMac(n.neighbor_port_id)) {
-                    neighborPort = n.neighbor_port_id;
-                  } else if (n.neighbor_port_desc) {
-                    neighborPort = n.neighbor_port_desc;
-                  } else if (n.neighbor_port_id) {
-                    neighborPort = n.neighbor_port_id;
-                  }
-                  return `
-                  <tr style="background-color: ${i % 2 === 0 ? 'var(--bg-primary, #fff)' : 'var(--bg-tertiary, #fafbfc)'};">
-                    <td style="text-align: center; color: var(--text-muted, #888); border: 1px solid var(--border-color, #ddd); padding: 10px 8px;">${i + 1}</td>
-                    <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-weight: 500;">${n.local_port || '-'}</td>
-                    <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${n.neighbor_sys_name || '-'}</td>
-                    <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${neighborPort}</td>
-                    <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-family: monospace; font-size: 0.9em;">${n.neighbor_chassis_id || '-'}</td>
-                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border-color, #ddd); padding: 10px; font-size: 0.9em; color: var(--text-secondary, #666);" title="${n.neighbor_sys_desc || ''}">${n.neighbor_sys_desc || '-'}</td>
-                  </tr>
-                `}).join('')}
-              </tbody>
-            </table>
+        if (neighbors.length === 0) {
+          loadingEl.innerHTML = `
+            <p style="color: #666; margin-bottom: 10px;">暂无LLDP数据，请点击"从SNMP同步"按钮获取</p>
+            <button class="btn btn-primary" id="sync-lldp-empty-btn">从SNMP同步</button>
           `;
-        } else {
-          contentEl.innerHTML = `<p style="text-align: center; color: #666; padding: 40px;">未发现LLDP邻居信息</p>`;
+          modal.querySelector("#sync-lldp-empty-btn").addEventListener("click", () => syncLldpData());
+          return;
         }
         
+        contentEl.innerHTML = renderLldpTable(neighbors);
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">获取LLDP邻居失败: ${result.message || '未知错误'}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">加载LLDP邻居失败: ${result.message || '未知错误'}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">获取失败: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">加载失败: ${err.message}</p>`;
     } finally {
-      refreshBtn.disabled = false;
+      syncBtn.disabled = false;
     }
   };
 
-  const refreshBtn = modal.querySelector("#refresh-lldp-btn");
-  refreshBtn.addEventListener("click", loadLldpData);
+  const syncLldpData = async () => {
+    const loadingEl = modal.querySelector("#lldp-loading");
+    const contentEl = modal.querySelector("#lldp-content");
+    const syncBtn = modal.querySelector("#sync-lldp-btn");
+
+    loadingEl.style.display = "block";
+    contentEl.style.display = "none";
+    syncBtn.disabled = true;
+    loadingEl.innerHTML = `
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #666;">正在从SNMP同步LLDP信息...</p>
+    `;
+
+    try {
+      const result = await apiPost(`/api/switches/${switchId}/lldp/sync`, {});
+      if (result.success) {
+        await loadLldpData();
+      } else {
+        loadingEl.innerHTML = `<p style="color: red;">同步失败: ${result.message || '未知错误'}</p>`;
+      }
+    } catch (err) {
+      loadingEl.innerHTML = `<p style="color: red;">同步失败: ${err.message}</p>`;
+    } finally {
+      syncBtn.disabled = false;
+    }
+  };
+
+  const syncBtn = modal.querySelector("#sync-lldp-btn");
+  syncBtn.addEventListener("click", syncLldpData);
 
   await loadLldpData();
+}
+
+function renderLldpTable(neighbors) {
+  return `
+    <table class="table table-bordered" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+      <thead>
+        <tr style="background-color: var(--bg-secondary, #f0f2f5);">
+          <th style="width: 60px; text-align: center; border: 1px solid var(--border-color, #ddd); padding: 12px 8px; font-weight: 600;">序号</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">本地端口</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">邻居设备</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">邻居端口</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">Chassis ID</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">系统描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${neighbors.map((n, i) => {
+          const isMac = (str) => /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str);
+          let neighborPort = '-';
+          if (n.neighbor_port_id && !isMac(n.neighbor_port_id)) {
+            neighborPort = n.neighbor_port_id;
+          } else if (n.neighbor_port_desc) {
+            neighborPort = n.neighbor_port_desc;
+          } else if (n.neighbor_port_id) {
+            neighborPort = n.neighbor_port_id;
+          }
+          return `
+          <tr style="background-color: ${i % 2 === 0 ? 'var(--bg-primary, #fff)' : 'var(--bg-tertiary, #fafbfc)'};">
+            <td style="text-align: center; color: var(--text-muted, #888); border: 1px solid var(--border-color, #ddd); padding: 10px 8px;">${i + 1}</td>
+            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-weight: 500;">${n.local_port || '-'}</td>
+            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${n.neighbor_sys_name || '-'}</td>
+            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${neighborPort}</td>
+            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-family: monospace; font-size: 0.9em;">${n.neighbor_chassis_id || '-'}</td>
+            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border-color, #ddd); padding: 10px; font-size: 0.9em; color: var(--text-secondary, #666);" title="${n.neighbor_sys_desc || ''}">${n.neighbor_sys_desc || '-'}</td>
+          </tr>
+        `}).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 async function loadSwitchesForLldp() {

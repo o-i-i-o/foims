@@ -188,6 +188,8 @@ fn get_required_tables() -> Vec<&'static str> {
         "position_ports",
         "switches",
         "switch_ports",
+        "switch_macs",
+        "switch_lldps",
         "ip_managers",
         "operation_logs",
         "task_logs",
@@ -215,6 +217,8 @@ fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     columns.insert("position_ports", vec!["id", "position_id", "switch_port_id", "created_at", "updated_at"]);
     columns.insert("switches", vec!["id", "name", "network_region_id", "network_id", "model", "vendor", "location", "snmp_version", "snmp_community", "parent_switch_id", "parent_port_id", "description", "created_at", "updated_at"]);
     columns.insert("switch_ports", vec!["id", "switch_id", "port_number", "port_name", "port_type", "vlan_id", "status", "speed", "description", "created_at", "updated_at"]);
+    columns.insert("switch_macs", vec!["id", "switch_id", "ip_address", "mac_address", "interface", "vlan_id", "created_at", "updated_at"]);
+    columns.insert("switch_lldps", vec!["id", "switch_id", "local_port", "neighbor_chassis_id", "neighbor_port_id", "neighbor_port_desc", "neighbor_sys_name", "neighbor_sys_desc", "created_at", "updated_at"]);
     columns.insert("ip_managers", vec!["id", "workstation_id", "position_id", "switch_id", "switch_port_id", "device_type", "network_id", "ip_address", "ip_version", "mac_address", "hostname", "status", "last_seen", "created_at", "updated_at"]);
     columns.insert("operation_logs", vec!["id", "user_id", "action", "resource_type", "resource_id", "details", "result", "ip_address", "created_at"]);
     columns.insert("task_logs", vec!["id", "task_name", "status", "details", "start_time", "end_time", "duration"]);
@@ -766,6 +770,40 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "ALTER TABLE switches ADD CONSTRAINT fk_parent_port_id FOREIGN KEY (parent_port_id) REFERENCES switch_ports(id) ON DELETE SET NULL"
     ).execute(pool).await;
 
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS switch_macs (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            switch_id UUID NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
+            ip_address VARCHAR(45) NOT NULL,
+            mac_address VARCHAR(20) NOT NULL,
+            interface VARCHAR(50),
+            vlan_id INTEGER,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            UNIQUE(switch_id, ip_address)
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS switch_lldps (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            switch_id UUID NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
+            local_port VARCHAR(50) NOT NULL,
+            neighbor_chassis_id VARCHAR(100),
+            neighbor_port_id VARCHAR(100),
+            neighbor_port_desc VARCHAR(255),
+            neighbor_sys_name VARCHAR(255),
+            neighbor_sys_desc TEXT,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            UNIQUE(switch_id, local_port)
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 
@@ -930,6 +968,10 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_switches_parent_switch_id ON switches(parent_switch_id)",
         "CREATE INDEX IF NOT EXISTS idx_switch_ports_switch_id ON switch_ports(switch_id)",
+        "CREATE INDEX IF NOT EXISTS idx_switch_macs_switch_id ON switch_macs(switch_id)",
+        "CREATE INDEX IF NOT EXISTS idx_switch_macs_ip_address ON switch_macs(ip_address)",
+        "CREATE INDEX IF NOT EXISTS idx_switch_macs_mac_address ON switch_macs(mac_address)",
+        "CREATE INDEX IF NOT EXISTS idx_switch_lldps_switch_id ON switch_lldps(switch_id)",
         "CREATE INDEX IF NOT EXISTS idx_ip_managers_switch_id ON ip_managers(switch_id)",
         "CREATE INDEX IF NOT EXISTS idx_ip_managers_switch_device ON ip_managers(switch_id, device_type)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_managers_ip_unique ON ip_managers(ip_address)",

@@ -974,6 +974,50 @@ pub struct LldpNeighbor {
     pub neighbor_sys_desc: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct SwitchMac {
+    pub id: Uuid,
+    pub switch_id: Uuid,
+    pub ip_address: String,
+    pub mac_address: String,
+    pub interface: Option<String>,
+    pub vlan_id: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwitchMacCreate {
+    pub ip_address: String,
+    pub mac_address: String,
+    pub interface: Option<String>,
+    pub vlan_id: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct SwitchLldp {
+    pub id: Uuid,
+    pub switch_id: Uuid,
+    pub local_port: String,
+    pub neighbor_chassis_id: Option<String>,
+    pub neighbor_port_id: Option<String>,
+    pub neighbor_port_desc: Option<String>,
+    pub neighbor_sys_name: Option<String>,
+    pub neighbor_sys_desc: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwitchLldpCreate {
+    pub local_port: String,
+    pub neighbor_chassis_id: Option<String>,
+    pub neighbor_port_id: Option<String>,
+    pub neighbor_port_desc: Option<String>,
+    pub neighbor_sys_name: Option<String>,
+    pub neighbor_sys_desc: Option<String>,
+}
+
 // ==================== 日志模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]

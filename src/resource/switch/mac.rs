@@ -7,7 +7,7 @@ use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::models::{ApiResponse, ArpEntry};
+use crate::models::{ApiResponse, ArpEntry, SwitchMac};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
@@ -400,20 +400,6 @@ pub async fn get_switch_mac_table(
         }
     };
 
-    let network_id: Option<Uuid> = sqlx::query_scalar(
-        r#"SELECT network_id FROM switches WHERE id = $1"#
-    )
-    .bind(switch_id)
-    .fetch_optional(pool.get_conn())
-    .await
-    .ok()
-    .flatten();
-
-    if network_id.is_none() {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error("交换机没有关联网段，无法获取MAC表")));
-    }
-
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
@@ -432,41 +418,112 @@ pub async fn get_switch_mac_table(
 
     let snmp_params = switch.to_snmp_params(ip_address);
 
-    match get_arp_table_via_snmp(&snmp_params).await {
-        Ok(entries) => {
-            if !entries.is_empty() {
-                let net_id = network_id.unwrap();
-                let now = Utc::now();
-                
-                for entry in &entries {
-                    let ip_version = if entry.ip_address.contains(':') { 6i16 } else { 4i16 };
-                    let mac_opt = Some(entry.mac_address.clone());
-                    
-                    let _ = sqlx::query(
-                        r#"INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, status, last_seen, created_at, updated_at) 
-                           VALUES (gen_random_uuid(), $1, 'switch_port', $2, CAST($3 AS INET), $4, $5, 'active', $6, $6, $6)
-                           ON CONFLICT (ip_address, network_id) 
-                           DO UPDATE SET 
-                               mac_address = EXCLUDED.mac_address,
-                               switch_id = EXCLUDED.switch_id,
-                               status = 'active',
-                               last_seen = EXCLUDED.last_seen,
-                               updated_at = EXCLUDED.updated_at"#
-                    )
-                    .bind(switch_id)
-                    .bind(net_id)
-                    .bind(&entry.ip_address)
-                    .bind(ip_version)
-                    .bind(&mac_opt)
-                    .bind(now)
-                    .execute(pool.get_conn())
-                    .await;
-                }
-            }
-            
-            Ok(HttpResponse::Ok().json(ApiResponse::success(entries, "获取ARP表成功")))
-        }
-        Err(e) => Ok(HttpResponse::BadRequest()
+    let entries = match get_arp_table_via_snmp(&snmp_params).await {
+        Ok(e) => e,
+        Err(e) => return Ok(HttpResponse::BadRequest()
             .json(ApiResponse::<()>::error(format!("获取ARP表失败: {}", e)))),
+    };
+
+    let now = Utc::now();
+    let mut saved_count = 0usize;
+    let mut updated_count = 0usize;
+
+    for entry in &entries {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM switch_macs WHERE switch_id = $1 AND ip_address = $2)"
+        )
+        .bind(switch_id)
+        .bind(&entry.ip_address)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(false);
+
+        if exists {
+            let result = sqlx::query(
+                r#"UPDATE switch_macs SET 
+                    mac_address = $1, 
+                    interface = COALESCE($2, interface),
+                    updated_at = $3
+                WHERE switch_id = $4 AND ip_address = $5"#
+            )
+            .bind(&entry.mac_address)
+            .bind(&entry.interface)
+            .bind(now)
+            .bind(switch_id)
+            .bind(&entry.ip_address)
+            .execute(pool.get_conn())
+            .await;
+
+            if result.is_ok() {
+                updated_count += 1;
+            }
+        } else {
+            let id = Uuid::new_v4();
+            let result = sqlx::query(
+                r#"INSERT INTO switch_macs (id, switch_id, ip_address, mac_address, interface, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $6)"#
+            )
+            .bind(id)
+            .bind(switch_id)
+            .bind(&entry.ip_address)
+            .bind(&entry.mac_address)
+            .bind(&entry.interface)
+            .bind(now)
+            .execute(pool.get_conn())
+            .await;
+
+            if result.is_ok() {
+                saved_count += 1;
+            }
+        }
     }
+
+    let saved_macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
+        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    let message = if saved_count > 0 && updated_count > 0 {
+        format!("新增 {} 条，更新 {} 条 MAC 记录", saved_count, updated_count)
+    } else if saved_count > 0 {
+        format!("新增 {} 条 MAC 记录", saved_count)
+    } else if updated_count > 0 {
+        format!("更新 {} 条 MAC 记录", updated_count)
+    } else {
+        "MAC 数据无变化".to_string()
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_macs, &message)))
+}
+
+pub async fn get_switch_macs_from_db(
+    pool: web::Data<DbPool>,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    let switch_id = path.into_inner();
+
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)"
+    )
+    .bind(switch_id)
+    .fetch_one(pool.get_conn())
+    .await
+    .unwrap_or(false);
+
+    if !exists {
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+    }
+
+    let macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
+        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(macs, "获取MAC表成功")))
 }

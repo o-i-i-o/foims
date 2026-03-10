@@ -6,7 +6,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::models::{ApiResponse, LldpNeighbor};
+use crate::models::{ApiResponse, LldpNeighbor, SwitchLldp};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, SwitchForSnmp};
 
@@ -353,9 +353,121 @@ pub async fn get_switch_lldp_neighbors(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    match get_lldp_neighbors(pool.get_conn(), &switch_id).await {
-        Ok(neighbors) => Ok(HttpResponse::Ok().json(ApiResponse::success(neighbors, "获取LLDP邻居成功"))),
-        Err(e) => Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {}", e)))),
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)"
+    )
+    .bind(switch_id)
+    .fetch_one(pool.get_conn())
+    .await
+    .unwrap_or(false);
+
+    if !exists {
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
     }
+
+    let lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
+        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(lldps, "获取LLDP邻居成功")))
+}
+
+pub async fn sync_lldp_from_snmp(
+    pool: web::Data<DbPool>,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    let switch_id = path.into_inner();
+
+    let neighbors = match get_lldp_neighbors(pool.get_conn(), &switch_id).await {
+        Ok(n) => n,
+        Err(e) => return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {}", e)))),
+    };
+
+    let now = chrono::Utc::now();
+    let mut saved_count = 0usize;
+    let mut updated_count = 0usize;
+
+    for neighbor in &neighbors {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE switch_id = $1 AND local_port = $2)"
+        )
+        .bind(switch_id)
+        .bind(&neighbor.local_port)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(false);
+
+        if exists {
+            let result = sqlx::query(
+                r#"UPDATE switch_lldps SET 
+                    neighbor_chassis_id = $1,
+                    neighbor_port_id = $2,
+                    neighbor_port_desc = $3,
+                    neighbor_sys_name = $4,
+                    neighbor_sys_desc = $5,
+                    updated_at = $6
+                WHERE switch_id = $7 AND local_port = $8"#
+            )
+            .bind(&neighbor.neighbor_chassis_id)
+            .bind(&neighbor.neighbor_port_id)
+            .bind(&neighbor.neighbor_port_desc)
+            .bind(&neighbor.neighbor_sys_name)
+            .bind(&neighbor.neighbor_sys_desc)
+            .bind(now)
+            .bind(switch_id)
+            .bind(&neighbor.local_port)
+            .execute(pool.get_conn())
+            .await;
+
+            if result.is_ok() {
+                updated_count += 1;
+            }
+        } else {
+            let id = Uuid::new_v4();
+            let result = sqlx::query(
+                r#"INSERT INTO switch_lldps (id, switch_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"#
+            )
+            .bind(id)
+            .bind(switch_id)
+            .bind(&neighbor.local_port)
+            .bind(&neighbor.neighbor_chassis_id)
+            .bind(&neighbor.neighbor_port_id)
+            .bind(&neighbor.neighbor_port_desc)
+            .bind(&neighbor.neighbor_sys_name)
+            .bind(&neighbor.neighbor_sys_desc)
+            .bind(now)
+            .execute(pool.get_conn())
+            .await;
+
+            if result.is_ok() {
+                saved_count += 1;
+            }
+        }
+    }
+
+    let saved_lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
+        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    let message = if saved_count > 0 && updated_count > 0 {
+        format!("新增 {} 条，更新 {} 条 LLDP 记录", saved_count, updated_count)
+    } else if saved_count > 0 {
+        format!("新增 {} 条 LLDP 记录", saved_count)
+    } else if updated_count > 0 {
+        format!("更新 {} 条 LLDP 记录", updated_count)
+    } else {
+        "LLDP 数据无变化".to_string()
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_lldps, &message)))
 }

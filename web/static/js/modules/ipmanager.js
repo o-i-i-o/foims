@@ -117,25 +117,20 @@ export async function pullIpMacData() {
   const originalText = btn.textContent;
 
   try {
-    // 显示加载状态，添加旋转动画
     btn.innerHTML = '<span class="loading"></span> 拉取中...';
     btn.disabled = true;
 
-    // 调用拉取IP MAC API，传入交换机ID和网段ID
     const result = await apiPost("/api/resources/ip/pull", { switch_id: switchId, network_id: networkId });
 
     if (result.success) {
-      // 显示详细的成功信息
-      const updatedCount = result.data ? result.data.length : 0;
-      showToast(`MAC数据拉取成功，共更新了 ${updatedCount} 个IP地址的MAC地址`, "success");
-      loadIpMacData(); // 刷新IP MAC数据
+      showToast(result.message || "MAC数据拉取成功", "success");
+      loadIpMacData();
     } else {
       showToast(`MAC数据拉取失败: ${result.message}`, "error");
     }
   } catch (error) {
     handleError(error, "拉取MAC数据失败");
   } finally {
-    // 恢复按钮状态
     btn.innerHTML = originalText;
     btn.disabled = false;
   }
