@@ -1,7 +1,6 @@
 export { showToast, showSuccess, showError, showWarning, showInfo } from './toast.js';
 export { showConfirm, confirmDelete } from './confirm.js';
 export { renderPagination, renderPageInfo, createPaginationState } from './pagination.js';
-export { escapeHtml } from './helpers.js';
 export { formatDateTime, formatDate, formatRelativeTime } from './formatter.js';
 
 export const DEFAULT_PAGE_SIZE = 20;
@@ -11,6 +10,9 @@ import { showToast as showToastFn } from './toast.js';
 import { closeModal as closeModalFn } from './modal.js';
 import { apiPost, apiPut, apiDelete } from './apiClient.js';
 import { showConfirm } from './confirm.js';
+import { escapeHtml } from './helpers.js';
+
+export { escapeHtml };
 
 export function createSortState(defaultBy = 'name', defaultOrder = 'asc') {
     return {
