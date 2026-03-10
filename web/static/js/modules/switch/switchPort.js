@@ -351,8 +351,12 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
 
   const getSnmpPortsBtn = elementCache.get("get-snmp-ports-btn");
   if (getSnmpPortsBtn) {
-    getSnmpPortsBtn.onclick = () => {
-      getSwitchPortsFromSnmp(switchId);
+    getSnmpPortsBtn.onclick = async () => {
+      const ports = await getSwitchPortsFromSnmp(switchId);
+      if (ports && ports.length > 0) {
+        const portGroups = groupPorts(ports);
+        showPortGroupsModal(getCurrentSwitchName() || "", portGroups, switchId);
+      }
     };
   }
 }
