@@ -1,6 +1,8 @@
 export { showToast, showSuccess, showError, showWarning, showInfo } from './toast.js';
 export { showConfirm, confirmDelete } from './confirm.js';
 export { renderPagination, renderPageInfo, createPaginationState } from './pagination.js';
+export { escapeHtml } from './helpers.js';
+export { formatDateTime, formatDate, formatRelativeTime } from './formatter.js';
 
 export const DEFAULT_PAGE_SIZE = 20;
 
@@ -116,47 +118,6 @@ export function throttle(func, limit) {
             setTimeout(() => inThrottle = false, limit);
         }
     };
-}
-
-export function formatDateTime(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleString();
-}
-
-export function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString();
-}
-
-export function formatRelativeTime(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now - date;
-    
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    
-    if (days > 0) {
-        return `${days} 天前`;
-    } else if (hours > 0) {
-        return `${hours} 小时前`;
-    } else if (minutes > 0) {
-        return `${minutes} 分钟前`;
-    } else {
-        return '刚刚';
-    }
-}
-
-export function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 export function sanitizeHtml(html) {
@@ -523,9 +484,6 @@ export function removeToast() {
 export default {
     debounce,
     throttle,
-    formatDateTime,
-    formatDate,
-    formatRelativeTime,
     escapeHtml,
     sanitizeHtml,
     createElement,

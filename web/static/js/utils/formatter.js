@@ -1,5 +1,17 @@
 import { t } from "./i18n.js";
 
+export function formatDateTime(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleString();
+}
+
+export function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString();
+}
+
 export function getStatusText(status) {
   const statusMap = {
     'active': t('status.active', '活跃'),

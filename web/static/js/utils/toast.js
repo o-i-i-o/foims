@@ -1,3 +1,5 @@
+import { escapeHtml } from './helpers.js';
+
 let toastContainer = null;
 
 function ensureContainer() {
@@ -59,11 +61,6 @@ function removeToast(toast) {
     }, 300);
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 export function showSuccess(message, duration = 3000) {
     return showToast(message, 'success', duration);

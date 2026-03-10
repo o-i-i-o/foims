@@ -17,7 +17,7 @@ import { editRoom, deleteRoom } from "./room.js";
 import { editWorkstation, deleteWorkstation } from "./workstation.js";
 import { editCabinet, deleteCabinet } from "./cabinet.js";
 import { editCabinetPosition, deleteCabinetPosition } from "./position.js";
-import { editSwitch, deleteSwitch, deleteSwitchPort } from "./switch/switchManager.js";
+import { editSwitch, deleteSwitch, deleteSwitchPort } from "./switch/switchDevice.js";
 
 // ==========================================
 // 编辑/删除函数映射
@@ -64,7 +64,7 @@ const moduleCache = {};
 const MODULE_PATHS = {
   log: "/static/js/modules/log.js",
   systemManager: "/static/js/modules/systemManager.js",
-  switchManager: "/static/js/modules/switch/switchManager.js",
+  switchDevice: "/static/js/modules/switch/switchDevice.js",
   userManager: "/static/js/modules/userManager.js",
   authManager: "/static/js/modules/authManager.js",
   i18n: "/static/js/utils/i18n.js",
@@ -245,9 +245,9 @@ const BUTTON_EVENT_BINDINGS = [
     id: "test-snmp-btn",
     event: "click",
     handler: () => {
-      const switchManager = getModule("switchManager");
-      if (switchManager && switchManager.testSnmpConnection) {
-        switchManager.testSnmpConnection();
+      const switchDevice = getModule("switchDevice");
+      if (switchDevice && switchDevice.testSnmpConnection) {
+        switchDevice.testSnmpConnection();
       }
     },
   },
@@ -255,9 +255,9 @@ const BUTTON_EVENT_BINDINGS = [
     id: "get-snmp-info-btn",
     event: "click",
     handler: () => {
-      const switchManager = getModule("switchManager");
-      if (switchManager && switchManager.getSwitchInfoFromSnmp) {
-        switchManager.getSwitchInfoFromSnmp();
+      const switchDevice = getModule("switchDevice");
+      if (switchDevice && switchDevice.getSwitchInfoFromSnmp) {
+        switchDevice.getSwitchInfoFromSnmp();
       }
     },
   },

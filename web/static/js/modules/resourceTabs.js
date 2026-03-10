@@ -3,7 +3,7 @@
  * 处理资源管理页面的标签页切换和数据加载
  */
 
-import { loadSwitchesData, initSwitchSearch } from "./switch/switchManager.js";
+import { loadSwitchesData, initSwitchSearch } from "./switch/switchDevice.js";
 import { loadNetworkTypesData, loadNetworksData, initNetworksSearch } from "./networks.js";
 import { loadRoomsData, initRoomSortEvents } from "./room.js";
 import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";

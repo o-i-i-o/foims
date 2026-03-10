@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './apiClient.js';
 import { showToast } from './toast.js';
+import { showConfirm } from './confirm.js';
 import { t } from './i18n.js';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -198,13 +199,6 @@ export function createCrudManager(config) {
             }
         }
     };
-}
-
-function showConfirm(message) {
-    return new Promise((resolve) => {
-        const result = window.confirm(message);
-        resolve(result);
-    });
 }
 
 export function createPaginatedLoader(endpoint, options = {}) {
