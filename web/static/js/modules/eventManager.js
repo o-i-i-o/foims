@@ -245,16 +245,20 @@ const BUTTON_EVENT_BINDINGS = [
     id: "test-snmp-btn",
     event: "click",
     handler: () => {
-      const { testSnmpConnection } = getModule("switchManager");
-      testSnmpConnection();
+      const switchManager = getModule("switchManager");
+      if (switchManager && switchManager.testSnmpConnection) {
+        switchManager.testSnmpConnection();
+      }
     },
   },
   {
     id: "get-snmp-info-btn",
     event: "click",
     handler: () => {
-      const { getSwitchInfoFromSnmp } = getModule("switchManager");
-      getSwitchInfoFromSnmp();
+      const switchManager = getModule("switchManager");
+      if (switchManager && switchManager.getSwitchInfoFromSnmp) {
+        switchManager.getSwitchInfoFromSnmp();
+      }
     },
   },
 ];

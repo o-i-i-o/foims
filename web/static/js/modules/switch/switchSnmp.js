@@ -107,7 +107,7 @@ export async function getSwitchInfoFromSnmp(getFormData) {
 }
 
 export async function getSwitchPortsFromSnmp(switchId) {
-  const getPortsBtn = elementCache.get('get-switch-ports-btn');
+  const getPortsBtn = elementCache.get('get-snmp-ports-btn');
   const originalText = getPortsBtn?.textContent || '获取端口';
   if (getPortsBtn) {
     getPortsBtn.disabled = true;
