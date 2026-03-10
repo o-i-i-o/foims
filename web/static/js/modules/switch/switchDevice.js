@@ -13,7 +13,7 @@ import {
   toggleSnmpConfig,
   testSnmpConnection,
   getSwitchInfoFromSnmp,
-  getSwitchPortsFromSnmp
+  syncPortsFromSnmp
 } from "./switchSnmp.js";
 
 import { PositionSelector } from "./switchPosition.js";
@@ -242,7 +242,7 @@ export {
   toggleSnmpConfig,
   testSnmpConnection,
   getSwitchInfoFromSnmp,
-  getSwitchPortsFromSnmp,
+  syncPortsFromSnmp,
   onNetworkRegionChange,
 
   loadSwitchPortsData,

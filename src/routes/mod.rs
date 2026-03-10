@@ -9,7 +9,7 @@ use crate::log::{get_login_logs, get_operation_logs};
 use crate::resource::switch::{
     create_switch, create_switch_port, delete_switch, delete_switch_port, get_all_switch_ports,
     get_switch, get_switch_mac_table, get_switch_info_snmp, get_switch_lldp_neighbors, get_switch_port, get_switch_ports,
-    get_switch_ports_snmp, get_switches, test_snmp_connection, test_snmp_connection_by_id, update_switch, update_switch_port,
+    get_switch_ports_snmp, get_switches, sync_ports_from_snmp, test_snmp_connection, test_snmp_connection_by_id, update_switch, update_switch_port,
 };
 use crate::resource::{
     create_cabinet, create_cabinet_position, create_network,
@@ -190,6 +190,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .route("/{id}", web::delete().to(delete_switch))
                         .route("/{id}/ports", web::get().to(get_switch_ports))
                         .route("/{id}/ports", web::post().to(create_switch_port))
+                        .route("/{id}/ports/sync-snmp", web::post().to(sync_ports_from_snmp))
                         .route("/{id}/test-snmp", web::post().to(test_snmp_connection_by_id))
                         .route("/{id}/mac-table", web::get().to(get_switch_mac_table))
                         .route("/{id}/lldp-neighbors", web::get().to(get_switch_lldp_neighbors))

@@ -10,6 +10,7 @@ use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
 use crate::utils::{log_system_operation};
+use super::snmp::{get_switch_ports_via_snmp, SwitchForSnmp};
 
 pub async fn get_switch_ports(
     pool: web::Data<DbPool>,
@@ -452,4 +453,128 @@ pub async fn delete_switch_port(
         Err(e) => Ok(HttpResponse::InternalServerError()
             .json(ApiResponse::<()>::error(format!("删除端口失败: {}", e)))),
     }
+}
+
+pub async fn sync_ports_from_snmp(
+    pool: web::Data<DbPool>,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    let switch_id = path.into_inner();
+
+    let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
+        r#"SELECT 
+            id, name, snmp_version, snmp_community, 
+            snmp_username, snmp_auth_protocol, 
+            snmp_auth_password, snmp_priv_protocol, 
+            snmp_priv_password, snmp_port
+        FROM switches WHERE id = $1"#,
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await;
+
+    let switch_data = match switch_data {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+        }
+        Err(e) => {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("查询交换机失败: {}", e))));
+        }
+    };
+
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r#"SELECT host(ip_address) FROM ip_managers 
+           WHERE switch_id = $1 AND device_type = 'switch' 
+           ORDER BY created_at LIMIT 1"#
+    )
+    .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
+    let ip_address = match ip_address {
+        Some(ref ip) if !ip.is_empty() => ip,
+        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+    };
+
+    let snmp_params = switch_data.to_snmp_params(ip_address);
+
+    let ports = match get_switch_ports_via_snmp(&snmp_params).await {
+        Ok(p) => p,
+        Err(e) => return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "获取交换机端口信息失败: {}",
+                e
+            ))),
+        ),
+    };
+
+    let mut saved_count = 0;
+    let mut skipped_count = 0;
+
+    for port in &ports {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE switch_id = $1 AND port_number = $2)"
+        )
+        .bind(switch_id)
+        .bind(&port.port_number)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(true);
+
+        if exists {
+            skipped_count += 1;
+            continue;
+        }
+
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let result = sqlx::query(
+            r#"INSERT INTO switch_ports (
+                id, switch_id, port_number, port_name, port_type, vlan_id,
+                status, speed, description, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
+        )
+        .bind(id)
+        .bind(switch_id)
+        .bind(&port.port_number)
+        .bind(&port.port_name)
+        .bind(port.port_type.as_deref().unwrap_or("access"))
+        .bind(port.vlan_id)
+        .bind(port.status.as_deref().unwrap_or("up"))
+        .bind(&port.speed)
+        .bind(&port.description)
+        .bind(now)
+        .bind(now)
+        .execute(pool.get_conn())
+        .await;
+
+        if result.is_ok() {
+            saved_count += 1;
+        }
+    }
+
+    let saved_ports = sqlx::query_as::<_, SwitchPort>(
+        "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number"
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    let message = if saved_count > 0 && skipped_count > 0 {
+        format!("成功保存 {} 个端口，跳过 {} 个已存在的端口", saved_count, skipped_count)
+    } else if saved_count > 0 {
+        format!("成功保存 {} 个端口到数据库", saved_count)
+    } else if skipped_count > 0 {
+        format!("所有 {} 个端口已存在，跳过保存", skipped_count)
+    } else {
+        "未获取到端口信息".to_string()
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_ports, &message)))
 }

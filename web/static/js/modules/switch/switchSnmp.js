@@ -107,26 +107,26 @@ export async function getSwitchInfoFromSnmp() {
   }
 }
 
-export async function getSwitchPortsFromSnmp(switchId) {
+export async function syncPortsFromSnmp(switchId) {
   const getPortsBtn = elementCache.get('get-snmp-ports-btn');
-  const originalText = getPortsBtn?.textContent || '获取端口';
+  const originalText = getPortsBtn?.textContent || '从SNMP获取端口';
   if (getPortsBtn) {
     getPortsBtn.disabled = true;
-    getPortsBtn.textContent = '获取中...';
+    getPortsBtn.textContent = '同步中...';
   }
 
   try {
-    const result = await apiGet(`/api/switches/${switchId}/snmp-ports`);
+    const result = await apiPost(`/api/switches/${switchId}/ports/sync-snmp`, {});
 
     if (result.success) {
-      showToast(`成功获取 ${result.data?.length || 0} 个端口`, 'success');
+      showToast(result.message || '端口同步成功', 'success');
       return result.data || [];
     } else {
-      showToast('获取端口信息失败: ' + result.message, 'error');
+      showToast('端口同步失败: ' + result.message, 'error');
       return [];
     }
   } catch (error) {
-    showToast('获取端口信息失败', 'error');
+    showToast('端口同步失败', 'error');
     return [];
   } finally {
     if (getPortsBtn) {

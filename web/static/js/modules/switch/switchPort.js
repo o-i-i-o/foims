@@ -25,7 +25,7 @@ import {
   SWITCH_PORT_PAGE_SIZE
 } from "./switchState.js";
 
-import { getSwitchPortsFromSnmp } from "./switchSnmp.js";
+import { syncPortsFromSnmp } from "./switchSnmp.js";
 
 import { elementCache } from "../../utils/helpers.js";
 
@@ -344,7 +344,7 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
   const getSnmpPortsBtn = elementCache.get("get-snmp-ports-btn");
   if (getSnmpPortsBtn) {
     getSnmpPortsBtn.onclick = async () => {
-      const ports = await getSwitchPortsFromSnmp(switchId);
+      const ports = await syncPortsFromSnmp(switchId);
       if (ports && ports.length > 0) {
         const portGroups = groupPorts(ports);
         showPortGroupsModal(getCurrentSwitchName() || "", portGroups, switchId);
