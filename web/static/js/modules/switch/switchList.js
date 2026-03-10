@@ -15,16 +15,19 @@ import {
 } from "../../utils/ui.js";
 
 import { elementCache } from "../../utils/helpers.js";
-import { SWITCH_PAGE_SIZE } from "./switchState.js";
+import {
+  listState,
+  SWITCH_PAGE_SIZE
+} from "./switchState.js";
 
-async function loadSwitchesData(state, searchTerm = "") {
-  state.currentPage = state.currentPage || 1;
+async function loadSwitchesData(searchTerm = "") {
+  listState.currentPage = listState.currentPage || 1;
   try {
-    const url = `/api/switches?page=${state.currentPage}&page_size=${SWITCH_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
+    const url = `/api/switches?page=${listState.currentPage}&page_size=${SWITCH_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const switches = data.items || data;
-    const startIndex = (state.currentPage - 1) * SWITCH_PAGE_SIZE;
+    const startIndex = (listState.currentPage - 1) * SWITCH_PAGE_SIZE;
 
     renderTable("#switches-table", {
       data: switches,
@@ -52,12 +55,12 @@ async function loadSwitchesData(state, searchTerm = "") {
 
     if (data.total !== undefined) {
       appendPaginationToTable("#switches-table", data, (p) => {
-        state.currentPage = p;
-        loadSwitchesData(state, searchTerm);
+        listState.currentPage = p;
+        loadSwitchesData(searchTerm);
       });
     }
 
-    bindSwitchButtonsEvents(state);
+    bindSwitchButtonsEvents();
   } catch (error) {
     handleError(error, "加载交换机数据失败", () => {
       renderTable("#switches-table", { data: [], columns: [], emptyMessage: "加载失败" });
@@ -67,7 +70,7 @@ async function loadSwitchesData(state, searchTerm = "") {
 
 let switchTableClickHandler = null;
 
-function bindSwitchButtonsEvents(state) {
+function bindSwitchButtonsEvents() {
   const table = elementCache.get("switches-table");
   if (!table) return;
 
@@ -80,7 +83,7 @@ function bindSwitchButtonsEvents(state) {
     const id = target.dataset.id || target.dataset.switchId;
 
     if (target.classList.contains("btn-delete")) {
-      deleteSwitch(id, state);
+      deleteSwitch(id);
     } else if (target.classList.contains("btn-switch-ports")) {
       const switchName = target.dataset.switchName;
       import('./switchPort.js').then(module => {
@@ -115,11 +118,11 @@ async function fetchSwitchById(id) {
   }
 }
 
-async function deleteSwitch(id, state) {
-  await handleDelete(id, "/api/switches", "交换机删除成功", () => loadSwitchesData(state));
+async function deleteSwitch(id) {
+  await handleDelete(id, "/api/switches", "交换机删除成功", () => loadSwitchesData());
 }
 
-async function submitSwitchForm(formData, state) {
+async function submitSwitchForm(formData) {
   const id = formData.id;
 
   if (!formData.name) {

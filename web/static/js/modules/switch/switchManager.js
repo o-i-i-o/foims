@@ -8,9 +8,6 @@ import {
   getSwitchPortsFromSnmp,
   onNetworkRegionChange,
   setCurrentSwitchId,
-  setCurrentSwitchName,
-  getCurrentSwitchId,
-  getCurrentSwitchName,
   loadSwitchesData,
   deleteSwitch,
 } from "./switchDevice.js";
@@ -40,7 +37,14 @@ import {
   filterEntries,
 } from "./switchMacLldp.js";
 
-import { SWITCH_PAGE_SIZE } from "./switchState.js";
+import {
+  SWITCH_PAGE_SIZE,
+  setCurrentSwitchPage,
+  setCurrentSwitchName,
+  getCurrentSwitchId,
+  getCurrentSwitchName,
+} from "./switchState.js";
+
 import { showToast, debounce } from "../../utils/ui.js";
 import { elementCache } from "../../utils/helpers.js";
 
@@ -149,7 +153,7 @@ export {
   initSwitches,
   initSwitchTabs,
   initSwitchSearch,
-  
+
   loadSwitchesData,
   openSwitchModal,
   editSwitch,
@@ -160,7 +164,7 @@ export {
   getSwitchInfoFromSnmp,
   getSwitchPortsFromSnmp,
   onNetworkRegionChange,
-  
+
   loadSwitchPortsData,
   loadSwitchPortsBySwitchId,
   manageSwitchPorts,
@@ -172,7 +176,7 @@ export {
   showPortGroupsModal,
   extractPortNumber,
   extractPortLastNumber,
-  
+
   viewArpTable,
   viewLldpNeighbors,
   loadSwitchesForLldp,
@@ -180,12 +184,13 @@ export {
   bindCollapseEvents,
   groupByNetwork,
   filterEntries,
-  
+
   setCurrentSwitchId,
   setCurrentSwitchName,
+  setCurrentSwitchPage,
   getCurrentSwitchId,
   getCurrentSwitchName,
-  
+
   SWITCH_PAGE_SIZE,
   SWITCH_PORT_PAGE_SIZE,
 };

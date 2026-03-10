@@ -1,5 +1,3 @@
-// ==================== 交换机端口管理 ====================
-
 import {
   apiGet,
   apiPost,
@@ -19,26 +17,20 @@ import {
 import { openModal, closeModal } from "../../utils/modal.js";
 
 import {
+  listState,
   getCurrentSwitchId,
   getCurrentSwitchName,
   setCurrentSwitchId,
   setCurrentSwitchName,
+  SWITCH_PORT_PAGE_SIZE
 } from "./switchState.js";
 
-import {
-  getSwitchPortsFromSnmp,
-} from "./switchSnmp.js";
+import { getSwitchPortsFromSnmp } from "./switchSnmp.js";
 
 import { elementCache } from "../../utils/helpers.js";
 
-// ==================== 状态变量 ====================
-
 let currentSwitchPortPage = 1;
 let currentSwitchPortSearchTerm = "";
-
-const SWITCH_PORT_PAGE_SIZE = 50;
-
-// ==================== 端口管理函数 ====================
 
 async function loadSwitchPortsData(page = 1, searchTerm = "") {
   currentSwitchPortPage = page;
@@ -85,7 +77,7 @@ async function loadSwitchPortsBySwitchId(switchId) {
     const searchContainer = document.querySelector(
       "#switch-ports-list-tab .search-container",
     );
-    
+
     if (!searchContainer) {
       renderTable("#switch-ports-table", {
         data: result.success ? result.data : [],
@@ -105,15 +97,15 @@ async function loadSwitchPortsBySwitchId(switchId) {
       });
       return;
     }
-    
-    const actionButtonsContainer = searchContainer.parentElement.querySelector(".action-buttons") || 
+
+    const actionButtonsContainer = searchContainer.parentElement.querySelector(".action-buttons") ||
       (() => {
         const container = document.createElement("div");
         container.className = "action-buttons";
         searchContainer.parentElement.appendChild(container);
         return container;
       })();
-    
+
     let addBtn = elementCache.get("add-switch-port-btn");
     if (!addBtn) {
       addBtn = document.createElement("button");
@@ -123,7 +115,7 @@ async function loadSwitchPortsBySwitchId(switchId) {
       addBtn.addEventListener("click", () => openSwitchPortModal(null, getCurrentSwitchId()));
       actionButtonsContainer.appendChild(addBtn);
     }
-    
+
     let snmpPortsBtn = elementCache.get("get-snmp-ports-btn");
     if (!snmpPortsBtn) {
       snmpPortsBtn = document.createElement("button");
@@ -186,7 +178,7 @@ async function manageSwitchPorts(switchId, switchName) {
         ports = portsResult.data.items;
       }
     }
-    
+
     const portGroups = groupPorts(ports);
     showPortGroupsModal(switchName, portGroups, switchId);
   } catch (error) {
@@ -198,7 +190,7 @@ async function manageSwitchPorts(switchId, switchName) {
 function groupPorts(ports) {
   const MIN_GROUP_SIZE = 3;
   const rawGroups = {};
-  
+
   const portTypePatterns = [
     { typeName: "Bridge-Aggregation", regex: /(Bridge-Aggregation)/, subGroup: false },
     { typeName: "Hundred-GigabitEthernet", regex: /(Hundred-?GigabitEthernet)(\d+)/i, subGroup: true },
@@ -212,11 +204,11 @@ function groupPorts(ports) {
     { typeName: "FastEthernet", regex: /(FastEthernet)(\d+)/, subGroup: true },
     { typeName: "Ethernet", regex: /(Ethernet)(\d+)/, subGroup: true }
   ];
-  
+
   ports.forEach(port => {
     const portNumber = port.port_number;
     let groupKey = "其他";
-    
+
     for (const { regex, subGroup } of portTypePatterns) {
       const match = portNumber.match(regex);
       if (match) {
@@ -228,16 +220,16 @@ function groupPorts(ports) {
         break;
       }
     }
-    
+
     if (!rawGroups[groupKey]) {
       rawGroups[groupKey] = [];
     }
     rawGroups[groupKey].push(port);
   });
-  
+
   const finalGroups = {};
   const smallGroupPorts = [];
-  
+
   Object.entries(rawGroups).forEach(([groupName, groupPorts]) => {
     if (groupPorts.length >= MIN_GROUP_SIZE) {
       finalGroups[groupName] = groupPorts;
@@ -245,7 +237,7 @@ function groupPorts(ports) {
       smallGroupPorts.push(...groupPorts);
     }
   });
-  
+
   if (smallGroupPorts.length > 0) {
     if (finalGroups["其他"]) {
       finalGroups["其他"].push(...smallGroupPorts);
@@ -253,43 +245,43 @@ function groupPorts(ports) {
       finalGroups["其他"] = smallGroupPorts;
     }
   }
-  
+
   return finalGroups;
 }
 
 function showPortGroupsModal(switchName, portGroups, switchId) {
   openModal("switch-ports-group-modal");
-  
+
   const modal = elementCache.get("switch-ports-group-modal");
   const title = elementCache.get("switch-ports-group-modal-title");
   const container = document.querySelector(".port-groups-container");
   const addPortBtn = elementCache.get("add-port-btn");
-  
+
   if (!modal || !title || !container || !addPortBtn) {
     console.error("端口分组模态框相关DOM元素未找到", { modal, title, container, addPortBtn });
     return;
   }
-  
+
   title.textContent = `${switchName} - 端口分组显示`;
   container.innerHTML = "";
-  
+
   Object.entries(portGroups).forEach(([groupName, ports]) => {
     const groupElement = document.createElement("div");
     groupElement.className = "port-group";
-    
+
     const groupTitle = document.createElement("h4");
     groupTitle.textContent = `${groupName} (${ports.length})`;
     groupElement.appendChild(groupTitle);
-    
+
     const portGrid = document.createElement("div");
     portGrid.className = "port-grid";
-    
+
     ports.sort((a, b) => {
       const aNum = extractPortNumber(a.port_number);
       const bNum = extractPortNumber(b.port_number);
       return aNum - bNum;
     });
-    
+
     ports.forEach(port => {
       const portItem = document.createElement("div");
       portItem.className = `port-item status-${port.status}`;
@@ -302,22 +294,22 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
       portItem.dataset.status = port.status || "up";
       portItem.dataset.speed = port.speed || "";
       portItem.dataset.description = port.description || "";
-      
+
       const portDisplayNum = extractPortLastNumber(port.port_number);
       portItem.textContent = portDisplayNum;
-      
+
       const tooltip = document.createElement("div");
       tooltip.className = "port-tooltip";
       tooltip.textContent = port.port_number;
       portItem.appendChild(tooltip);
-      
+
       portGrid.appendChild(portItem);
     });
-    
+
     groupElement.appendChild(portGrid);
     container.appendChild(groupElement);
   });
-  
+
   container.onclick = (e) => {
     const portItem = e.target.closest(".port-item");
     if (portItem) {
@@ -363,21 +355,21 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
 
 function openPortDetailModal(portData) {
   openModal("switch-port-detail-modal");
-  
+
   const modal = elementCache.get("switch-port-detail-modal");
   const title = elementCache.get("switch-port-detail-modal-title");
   const form = elementCache.get("switch-port-form-expanded");
   const saveBtn = elementCache.get("save-port-btn");
   const deleteBtn = elementCache.get("delete-port-btn");
-  
+
   if (!modal || !form) {
     console.error("端口详情模态框相关DOM元素未找到");
     return;
   }
-  
+
   const isNewPort = !portData.portId;
   title.textContent = isNewPort ? "新增端口" : `端口详情 - ${portData.portNumber}`;
-  
+
   elementCache.setValue("switch-port-id-expanded", portData.portId || "");
   elementCache.setValue("switch-port-switch-id-expanded", portData.switchId || "");
   elementCache.setValue("switch-port-number-expanded", portData.portNumber || "");
@@ -387,7 +379,7 @@ function openPortDetailModal(portData) {
   elementCache.setValue("switch-port-status-expanded", portData.status || "up");
   elementCache.setValue("switch-port-speed-expanded", portData.speed || "");
   elementCache.setValue("switch-port-description-expanded", portData.description || "");
-  
+
   deleteBtn.style.display = isNewPort ? "none" : "inline-block";
 
   saveBtn.onclick = async () => {
@@ -416,7 +408,7 @@ function openPortDetailModal(portData) {
 
 function openSwitchPortModal(portData = null, switchId = null) {
   openModal("switch-port-modal");
-  
+
   const modal = elementCache.get("switch-port-modal");
   const title = elementCache.get("switch-port-modal-title");
   const form = elementCache.get("switch-port-form");
@@ -542,8 +534,6 @@ async function deleteSwitchPort(id) {
   await handleDelete(id, "/api/switches/ports", "端口删除成功", successCallback);
 }
 
-// ==================== 工具函数 ====================
-
 function extractPortNumber(portNumber) {
   if (typeof portNumber !== 'string' || !portNumber) return 0;
   const match = portNumber.match(/\d+/g);
@@ -561,8 +551,6 @@ function extractPortLastNumber(portNumber) {
   }
   return portNumber;
 }
-
-// ==================== 导出 ====================
 
 export {
   loadSwitchPortsData,

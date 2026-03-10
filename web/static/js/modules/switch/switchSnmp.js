@@ -1,12 +1,13 @@
 import { apiPost, apiGet } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
 import { elementCache } from "../../utils/helpers.js";
+import { getSwitchFormValues } from "./switchForm.js";
 
 function buildSnmpRequestData(formData) {
   const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
   const { snmp_port: port, snmp_version: version } = formData;
   const data = { ip, port, version };
-  
+
   if (version === 'v3') {
     data.username = formData.snmp_username;
     data.auth_protocol = formData.snmp_auth_protocol;
@@ -16,7 +17,7 @@ function buildSnmpRequestData(formData) {
   } else {
     data.community = formData.snmp_community || 'public';
   }
-  
+
   return data;
 }
 
@@ -40,10 +41,10 @@ export function toggleSnmpConfig() {
   }
 }
 
-export async function testSnmpConnection(getFormData) {
-  const formData = getFormData();
+export async function testSnmpConnection() {
+  const formData = getSwitchFormValues();
   const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
-  
+
   if (!ip) {
     showToast('请输入交换机IP地址', 'warning');
     return;
@@ -71,10 +72,10 @@ export async function testSnmpConnection(getFormData) {
   }
 }
 
-export async function getSwitchInfoFromSnmp(getFormData) {
-  const formData = getFormData();
+export async function getSwitchInfoFromSnmp() {
+  const formData = getSwitchFormValues();
   const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
-  
+
   if (!ip) {
     showToast('请输入交换机IP地址', 'warning');
     return;

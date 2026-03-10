@@ -1,36 +1,80 @@
 export const SWITCH_PAGE_SIZE = 20;
+export const SWITCH_PORT_PAGE_SIZE = 50;
 
-export function createListState() {
-  return {
-    currentPage: 1,
-    currentSwitchId: null,
-    currentSwitchName: null
-  };
-}
+const listState = {
+  currentPage: 1,
+  currentSwitchId: null,
+  currentSwitchName: null
+};
+
+const positionData = {
+  cabinetId: null,
+  cabinetName: null,
+  startU: null,
+  endU: null,
+  positionId: null,
+  networkRegionId: null
+};
+
+const networkRegion = {
+  id: null,
+  name: ''
+};
 
 export function createPositionState() {
-  return {
+  return positionData;
+}
+
+export function createNetworkRegionState() {
+  return networkRegion;
+}
+
+export function setCurrentSwitchPage(page) {
+  listState.currentPage = page;
+}
+
+export function getCurrentSwitchPage() {
+  return listState.currentPage;
+}
+
+export function setCurrentSwitchId(id) {
+  listState.currentSwitchId = id;
+}
+
+export function getCurrentSwitchId() {
+  return listState.currentSwitchId;
+}
+
+export function setCurrentSwitchName(name) {
+  listState.currentSwitchName = name;
+}
+
+export function getCurrentSwitchName() {
+  return listState.currentSwitchName;
+}
+
+export function getSwitchPositionData() {
+  return positionData;
+}
+
+export function resetSwitchPositionData() {
+  Object.assign(positionData, {
     cabinetId: null,
     cabinetName: null,
     startU: null,
     endU: null,
     positionId: null,
     networkRegionId: null
-  };
+  });
 }
 
-const listState = createListState();
-const positionData = createPositionState();
-
-export function setCurrentSwitchPage(page) { listState.currentPage = page; }
-export function getCurrentSwitchPage() { return listState.currentPage; }
-export function setCurrentSwitchId(id) { listState.currentSwitchId = id; }
-export function getCurrentSwitchId() { return listState.currentSwitchId; }
-export function setCurrentSwitchName(name) { listState.currentSwitchName = name; }
-export function getCurrentSwitchName() { return listState.currentSwitchName; }
-export function getSwitchPositionData() { return positionData; }
-export function resetSwitchPositionData() {
-  Object.assign(positionData, createPositionState());
+export function updateNetworkRegion(id, name = '') {
+  networkRegion.id = id;
+  networkRegion.name = name;
 }
 
-export { listState, positionData };
+export function getNetworkRegion() {
+  return networkRegion;
+}
+
+export { listState, positionData, networkRegion };

@@ -1,5 +1,10 @@
 import { elementCache } from "../../utils/helpers.js";
 import { getManager } from "../../utils/ipconfig.js";
+import {
+  positionData,
+  networkRegion,
+  updateNetworkRegion
+} from "./switchState.js";
 
 export const SWITCH_FORM_FIELDS = [
   'switch-id', 'switch-name', 'switch-model', 'switch-vendor',
@@ -9,14 +14,14 @@ export const SWITCH_FORM_FIELDS = [
   'switch-snmp-priv-protocol', 'switch-snmp-priv-password'
 ];
 
-export function getSwitchFormValues(positionData) {
+export function getSwitchFormValues() {
   const manager = getManager('switch');
   const rawIps = manager ? manager.getIps() : [];
-  
+
   let parentSwitchId = null;
   let parentPortId = null;
   let networkRegionId = null;
-  
+
   const ips = rawIps.map(ip => {
     if (ip.parent_switch_id) parentSwitchId = ip.parent_switch_id;
     if (ip.parent_port_id) parentPortId = ip.parent_port_id;
@@ -24,16 +29,16 @@ export function getSwitchFormValues(positionData) {
     const { parent_switch_id, parent_port_id, ...rest } = ip;
     return rest;
   });
-  
+
   const cabinetSelect = elementCache.get('switch-cabinet-select');
   const startUInput = elementCache.get('switch-start-u');
   const endUInput = elementCache.get('switch-end-u');
-  
+
   const cabinetId = cabinetSelect?.value || null;
   const cabinetName = cabinetSelect?.selectedOptions?.[0]?.dataset?.name || null;
   const startU = startUInput?.value ? parseInt(startUInput.value) : null;
   const endU = endUInput?.value ? parseInt(endUInput.value) : null;
-  
+
   return {
     id: elementCache.getValue('switch-id'),
     name: elementCache.getValue('switch-name'),
@@ -59,7 +64,7 @@ export function getSwitchFormValues(positionData) {
   };
 }
 
-export async function setSwitchFormValues(sw, positionData, updateNetworkRegion) {
+export async function setSwitchFormValues(sw) {
   console.log('setSwitchFormValues - switch data:', sw);
   elementCache.setValue('switch-id', sw.id || '');
   elementCache.setValue('switch-name', sw.name || '');
@@ -115,7 +120,7 @@ export async function setSwitchFormValues(sw, positionData, updateNetworkRegion)
   }
 }
 
-export async function resetSwitchForm(positionData, updateNetworkRegion) {
+export async function resetSwitchForm() {
   SWITCH_FORM_FIELDS.forEach(field => elementCache.setValue(field, ''));
   Object.assign(positionData, {
     cabinetId: null,
@@ -126,11 +131,11 @@ export async function resetSwitchForm(positionData, updateNetworkRegion) {
     networkRegionId: null
   });
   updateNetworkRegion(null);
-  
+
   const cabinetSelect = elementCache.get('switch-cabinet-select');
   const startUInput = elementCache.get('switch-start-u');
   const endUInput = elementCache.get('switch-end-u');
-  
+
   if (cabinetSelect) {
     cabinetSelect.innerHTML = '<option value="">请先在IP配置中选择网络区域</option>';
     cabinetSelect.disabled = true;
@@ -143,7 +148,7 @@ export async function resetSwitchForm(positionData, updateNetworkRegion) {
     endUInput.value = '';
     endUInput.disabled = true;
   }
-  
+
   const manager = getManager('switch');
   if (manager) {
     manager.setExcludeSwitchId(null);

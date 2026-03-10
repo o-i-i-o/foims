@@ -5,14 +5,11 @@ import {
   onNetworkRegionChange,
   offNetworkRegionChange
 } from "../../utils/ipconfig.js";
-import { createPositionState } from "./switchState.js";
-
-export function createNetworkRegionState() {
-  return {
-    id: null,
-    name: ''
-  };
-}
+import {
+  positionData,
+  networkRegion,
+  updateNetworkRegion
+} from "./switchState.js";
 
 async function loadCabinetsByRegion(regionId) {
   try {
@@ -28,9 +25,7 @@ async function loadCabinetsByRegion(regionId) {
 }
 
 export class PositionSelector {
-  constructor(positionData, networkRegion, onRegionChange) {
-    this.positionData = positionData;
-    this.networkRegion = networkRegion;
+  constructor(onRegionChange) {
     this.onRegionChange = onRegionChange;
     this.eventController = null;
     this.cabinetsCache = [];
@@ -44,22 +39,20 @@ export class PositionSelector {
     this.eventController = new AbortController();
     const { signal } = this.eventController;
 
-    // 移除旧的事件监听器
     if (this.boundHandleNetworkRegionChange) {
       offNetworkRegionChange(this.boundHandleNetworkRegionChange);
     }
-    
-    // 创建并保存新的事件处理函数
+
     this.boundHandleNetworkRegionChange = (regionId, regionName) => {
       this.handleNetworkRegionChange(regionId, regionName);
     };
-    
+
     this.bindEvents(signal);
 
-    const regionId = this.networkRegion.id || (sw && (sw.network_region_id || sw.position?.network_region_id || (sw.ips && sw.ips[0]?.network_region_id)));
-    
+    const regionId = networkRegion.id || (sw && (sw.network_region_id || sw.position?.network_region_id || (sw.ips && sw.ips[0]?.network_region_id)));
+
     if (regionId) {
-      await this.handleNetworkRegionChange(regionId, this.networkRegion.name || sw?.network_region_name || sw?.ips?.[0]?.network_region || '');
+      await this.handleNetworkRegionChange(regionId, networkRegion.name || sw?.network_region_name || sw?.ips?.[0]?.network_region || '');
     }
 
     if (sw) {
@@ -77,20 +70,20 @@ export class PositionSelector {
     if (cabinetSelect) {
       cabinetSelect.addEventListener('change', (e) => {
         const selectedOption = cabinetSelect.options[cabinetSelect.selectedIndex];
-        this.positionData.cabinetId = cabinetSelect.value || null;
-        this.positionData.cabinetName = selectedOption?.dataset?.name || null;
+        positionData.cabinetId = cabinetSelect.value || null;
+        positionData.cabinetName = selectedOption?.dataset?.name || null;
       }, { signal });
     }
 
     if (startUInput) {
       startUInput.addEventListener('input', (e) => {
-        this.positionData.startU = parseInt(e.target.value) || null;
+        positionData.startU = parseInt(e.target.value) || null;
       }, { signal });
     }
 
     if (endUInput) {
       endUInput.addEventListener('input', (e) => {
-        this.positionData.endU = parseInt(e.target.value) || null;
+        positionData.endU = parseInt(e.target.value) || null;
       }, { signal });
     }
   }
@@ -126,14 +119,14 @@ export class PositionSelector {
     console.log('loadFromSwitch - extracted:', { cabinetId, cabinetName, startU, endU });
 
     if (cabinetId) {
-      this.positionData.cabinetId = cabinetId;
-      this.positionData.cabinetName = cabinetName;
-      this.positionData.startU = startU;
-      this.positionData.endU = endU;
+      positionData.cabinetId = cabinetId;
+      positionData.cabinetName = cabinetName;
+      positionData.startU = startU;
+      positionData.endU = endU;
 
       if (startUInput && startU) startUInput.value = startU;
       if (endUInput && endU) endUInput.value = endU;
-      
+
       if (cabinetSelect && cabinetId) {
         await new Promise(resolve => setTimeout(resolve, 50));
         const option = cabinetSelect.querySelector(`option[value="${cabinetId}"]`);
@@ -155,19 +148,18 @@ export class PositionSelector {
     }
 
     if (sw.network_region_id) {
-      this.positionData.networkRegionId = sw.network_region_id;
-      this.networkRegion.id = sw.network_region_id;
-      this.networkRegion.name = sw.network_region_name || '';
+      positionData.networkRegionId = sw.network_region_id;
+      networkRegion.id = sw.network_region_id;
+      networkRegion.name = sw.network_region_name || '';
     } else if (sw.position?.network_region_id) {
-      this.positionData.networkRegionId = sw.position.network_region_id;
-      this.networkRegion.id = sw.position.network_region_id;
+      positionData.networkRegionId = sw.position.network_region_id;
+      networkRegion.id = sw.position.network_region_id;
     }
   }
 
   async handleNetworkRegionChange(regionId, regionName) {
-    this.networkRegion.id = regionId;
-    this.networkRegion.name = regionName;
-    this.positionData.networkRegionId = regionId;
+    updateNetworkRegion(regionId, regionName);
+    positionData.networkRegionId = regionId;
 
     if (this.onRegionChange) {
       this.onRegionChange(regionId, regionName);
@@ -177,11 +169,11 @@ export class PositionSelector {
     const startUInput = elementCache.get('switch-start-u');
     const endUInput = elementCache.get('switch-end-u');
 
-    this.positionData.cabinetId = null;
-    this.positionData.cabinetName = null;
-    this.positionData.startU = null;
-    this.positionData.endU = null;
-    this.positionData.positionId = null;
+    positionData.cabinetId = null;
+    positionData.cabinetName = null;
+    positionData.startU = null;
+    positionData.endU = null;
+    positionData.positionId = null;
 
     if (startUInput) startUInput.value = '';
     if (endUInput) endUInput.value = '';
@@ -213,11 +205,11 @@ export class PositionSelector {
   }
 
   clear() {
-    this.positionData.cabinetId = null;
-    this.positionData.cabinetName = null;
-    this.positionData.startU = null;
-    this.positionData.endU = null;
-    this.positionData.positionId = null;
+    positionData.cabinetId = null;
+    positionData.cabinetName = null;
+    positionData.startU = null;
+    positionData.endU = null;
+    positionData.positionId = null;
 
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     const startUInput = elementCache.get('switch-start-u');
