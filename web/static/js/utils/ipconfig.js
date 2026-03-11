@@ -192,6 +192,21 @@ export class IpConfigManager {
     return network?.ipv4_cidr || network?.ipv6_cidr || null;
   }
 
+  getCidrForIp(networkId, ipAddress) {
+    if (!networkId || !ipAddress) {
+      return { cidr: null, hasCidr: false, isV6: false };
+    }
+    
+    const network = this.networks.find(n => n.id === networkId);
+    if (!network) return { cidr: null, hasCidr: false, isV6: false };
+    
+    const isV6 = isIPv6(ipAddress);
+    const cidr = isV6 ? network.ipv6_cidr : network.ipv4_cidr;
+    const hasCidr = !!cidr;
+    
+    return { cidr, hasCidr, isV6 };
+  }
+
   async loadIps(ips) {
     this.clear();
     if (ips && ips.length > 0) {
@@ -298,9 +313,12 @@ export class IpConfigManager {
       }
 
       if (networkId && ipAddress) {
-        const cidr = this.getNetworkCidr(networkId);
-        if (cidr && !isIpInCidr(ipAddress, cidr)) {
-          errors.push(`第${rowNum}行：IP地址 ${ipAddress} 不在所选网段 ${cidr} 内`);
+        const result = this.getCidrForIp(networkId, ipAddress);
+        if (!result.hasCidr) {
+          const ipType = result.isV6 ? 'IPv6' : 'IPv4';
+          errors.push(`第${rowNum}行：所选网络不支持${ipType}地址`);
+        } else if (result.cidr && !isIpInCidr(ipAddress, result.cidr)) {
+          errors.push(`第${rowNum}行：IP地址 ${ipAddress} 不在所选网段 ${result.cidr} 内`);
         }
       }
 
