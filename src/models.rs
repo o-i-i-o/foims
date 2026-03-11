@@ -1035,6 +1035,47 @@ pub struct OperationLog {
     pub created_at: DateTime<Utc>,
 }
 
+// ==================== 定时任务模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct ScheduledTask {
+    pub id: Uuid,
+    pub name: String,
+    pub task_type: String,
+    pub cron_expression: String,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+    pub last_run_at: Option<DateTime<Utc>>,
+    pub next_run_at: Option<DateTime<Utc>>,
+    pub last_result: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+pub struct ScheduledTaskCreate {
+    #[validate(length(min = 1, max = 100, message = "任务名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    #[validate(length(min = 1, max = 50, message = "任务类型长度必须在1到50个字符之间"))]
+    pub task_type: String,
+    #[validate(length(min = 1, max = 100, message = "cron表达式长度必须在1到100个字符之间"))]
+    pub cron_expression: String,
+    pub enabled: Option<bool>,
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+pub struct ScheduledTaskUpdate {
+    #[validate(length(min = 1, max = 100, message = "任务名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(length(min = 1, max = 50, message = "任务类型长度必须在1到50个字符之间"))]
+    pub task_type: Option<String>,
+    #[validate(length(min = 1, max = 100, message = "cron表达式长度必须在1到100个字符之间"))]
+    pub cron_expression: Option<String>,
+    pub enabled: Option<bool>,
+    pub config: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct TaskLog {
     pub id: Uuid,

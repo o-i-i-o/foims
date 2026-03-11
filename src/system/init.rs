@@ -985,8 +985,35 @@ async fn create_system_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         )"#,
     )
     .execute(pool)
-    .await
-    .map(|_| ())
+    .await?;
+
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name VARCHAR(100) NOT NULL UNIQUE,
+            task_type VARCHAR(50) NOT NULL,
+            cron_expression VARCHAR(100) NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            config JSONB DEFAULT '{}',
+            last_run_at TIMESTAMP WITH TIME ZONE,
+            next_run_at TIMESTAMP WITH TIME ZONE,
+            last_result TEXT,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_name ON scheduled_tasks(name)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)")
+        .execute(pool)
+        .await?;
+
+    Ok(())
 }
 
 async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {

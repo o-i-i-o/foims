@@ -35,6 +35,11 @@ use crate::system::data::{
     download_template, export_csv, export_database, import_csv,
     clear_logs, get_logs_stats,
 };
+use crate::system::scheduled_task::{
+    get_scheduled_tasks, get_scheduled_task, create_scheduled_task,
+    update_scheduled_task, delete_scheduled_task, toggle_scheduled_task,
+    run_scheduled_task_now,
+};
 use actix_web::{HttpResponse, middleware, web};
 
 // 初始化相关路由将根据配置动态添加
@@ -271,8 +276,19 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         )
                         // 日志清理功能
                         .route("/logs/stats", web::get().to(get_logs_stats))
-                        .route("/logs/clear", web::post().to(clear_logs)),
-                ),
+                        .route("/logs/clear", web::post().to(clear_logs))
+                        // 定时任务管理
+                        .service(
+                            web::scope("/scheduled-tasks")
+                                .route("", web::get().to(get_scheduled_tasks))
+                                .route("", web::post().to(create_scheduled_task))
+                                .route("/{id}", web::get().to(get_scheduled_task))
+                                .route("/{id}", web::put().to(update_scheduled_task))
+                                .route("/{id}", web::delete().to(delete_scheduled_task))
+                                .route("/{id}/toggle", web::post().to(toggle_scheduled_task))
+                                .route("/{id}/run", web::post().to(run_scheduled_task_now)),
+                        ),
+                )
         );
 
     // 注意：初始化相关路由将在main.rs中根据配置动态添加

@@ -980,6 +980,131 @@ pub async fn pull_ip_managers(
     Ok(HttpResponse::Ok().json(ApiResponse::success(results, &message)))
 }
 
+pub async fn pull_ip_managers_internal(
+    pool: &sqlx::PgPool,
+    switch_id: Uuid,
+    network_id: Uuid,
+) -> Result<(), String> {
+    let network_info: Option<(Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT ipv4_cidr::text, ipv6_cidr::text FROM network_cidrs WHERE id = $1"
+    )
+    .bind(network_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("查询网段信息失败: {}", e))
+    .ok()
+    .flatten();
+
+    if network_info.is_none() {
+        return Err("未找到网段信息".to_string());
+    }
+
+    let switch_macs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT ip_address, mac_address FROM switch_macs WHERE switch_id = $1"
+    )
+    .bind(switch_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    if switch_macs.is_empty() {
+        return Err("该交换机暂无MAC数据".to_string());
+    }
+
+    let mut filtered_entries: Vec<(String, String)> = Vec::new();
+    for (ip, mac) in switch_macs {
+        let is_ipv6 = ip.contains(':');
+        if let Some((ref ipv4_cidr, ref ipv6_cidr)) = network_info {
+            let belongs_to_network = if is_ipv6 {
+                ipv6_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&ip, cidr)).unwrap_or(false)
+            } else {
+                ipv4_cidr.as_ref().map(|cidr| ip_belongs_to_cidr(&ip, cidr)).unwrap_or(false)
+            };
+            if belongs_to_network {
+                filtered_entries.push((ip, mac));
+            }
+        }
+    }
+
+    if filtered_entries.is_empty() {
+        return Err("未发现属于该网段的IP地址".to_string());
+    }
+
+    let now = Utc::now();
+    for (ip, mac) in &filtered_entries {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))"
+        )
+        .bind(ip)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("查询IP存在失败: {}", e))?;
+
+        if !exists {
+            continue;
+        }
+
+        let mac_conflict: Option<String> = sqlx::query_scalar(
+            "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET)"
+        )
+        .bind(mac)
+        .bind(ip)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询MAC冲突失败: {}", e))?
+        .flatten();
+
+        if mac_conflict.is_some() {
+            continue;
+        }
+
+        let old_mac: Option<String> = sqlx::query_scalar(
+            "SELECT mac_address FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        )
+        .bind(ip)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询旧MAC失败: {}", e))?
+        .flatten();
+
+        let result = sqlx::query(
+            r#"UPDATE ip_managers 
+               SET mac_address = $1, last_seen = $2, updated_at = $2
+               WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"#
+        )
+        .bind(&mac)
+        .bind(now)
+        .bind(ip)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新MAC地址失败: {}", e))?;
+
+        if result.rows_affected() > 0 {
+            if let (Some(old), Some(workstation_id)) = (&old_mac, sqlx::query_scalar::<_, Option<Uuid>>(
+                "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+            )
+            .bind(ip)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()) {
+                if *old != *mac && !old.is_empty() {
+                    let _ = crate::utils::send_mac_change_notification(
+                        pool,
+                        &workstation_id,
+                        ip,
+                        &old,
+                        mac,
+                    ).await;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn ip_belongs_to_cidr(ip: &str, cidr: &str) -> bool {
     let cidr_parts: Vec<&str> = cidr.split('/').collect();
     if cidr_parts.len() != 2 {

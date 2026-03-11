@@ -599,6 +599,7 @@
           <button class="tab-btn" data-tab="system-config" role="tab" aria-selected="false" aria-controls="system-config-tab" data-i18n="system.config">System Config</button>
           <button class="tab-btn" data-tab="system-smtp" role="tab" aria-selected="false" aria-controls="system-smtp-tab" data-i18n="system.smtp">SMTP Config</button>
           <button class="tab-btn" data-tab="import-export" role="tab" aria-selected="false" aria-controls="import-export-tab" data-i18n="system.import_export">Import/Export</button>
+          <button class="tab-btn" data-tab="scheduled-tasks" role="tab" aria-selected="false" aria-controls="scheduled-tasks-tab" data-i18n="system.scheduled_tasks">Scheduled Tasks</button>
         </div>
 
         <div id="system-info-tab" class="tab-content active" role="tabpanel">
@@ -1029,9 +1030,81 @@
             </div>
           </article>
         </div>
+        
+        <div id="scheduled-tasks-tab" class="tab-content" role="tabpanel">
+          <article class="import-export-section">
+            <h2 data-i18n="scheduled_tasks.title">Scheduled Tasks</h2>
+            <div class="action-bar">
+              <button id="create-scheduled-task-btn" class="btn btn-primary" data-i18n="scheduled_tasks.create">Create Task</button>
+            </div>
+            <div class="table-container">
+              <table id="scheduled-tasks-table" class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="scheduled_tasks.name">Name</th>
+                    <th data-i18n="scheduled_tasks.type">Type</th>
+                    <th data-i18n="scheduled_tasks.cron">Cron Expression</th>
+                    <th data-i18n="scheduled_tasks.status">Status</th>
+                    <th data-i18n="scheduled_tasks.last_run">Last Run</th>
+                    <th data-i18n="scheduled_tasks.last_result">Last Result</th>
+                    <th data-i18n="common.actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduled-tasks-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
       </section>
     </main>
   </div>
+
+  <template id="scheduled-task-modal-template">
+  <div id="scheduled-task-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduled-task-modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h3 class="modal-title" id="scheduled-task-modal-title" data-i18n="scheduled_tasks.create_task">Create Scheduled Task</h3>
+        <button type="button" class="close" onclick="closeScheduledTaskModal()" aria-label="Close">&times;</button>
+      </header>
+      <form id="scheduled-task-form">
+        <div class="modal-body">
+          <input type="hidden" id="scheduled-task-id">
+          <div class="form-group">
+            <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
+            <input type="text" id="scheduled-task-name" required>
+          </div>
+          <div class="form-group">
+            <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
+            <select id="scheduled-task-type" required>
+              <option value="mac_sync">MAC Sync</option>
+              <option value="token_cleanup">Token Cleanup</option>
+              <option value="backup">Backup</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
+            <input type="text" id="scheduled-task-cron" value="0 */6 * * *" required>
+            <small class="form-hint">e.g., "0 */6 * * *" runs every 6 hours</small>
+          </div>
+          <div class="form-group">
+            <label for="scheduled-task-config" data-i18n="scheduled_tasks.config">Config (JSON)</label>
+            <textarea id="scheduled-task-config" rows="4">{}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="scheduled-task-enabled" checked>
+              <span data-i18n="scheduled_tasks.enabled">Enabled</span>
+            </label>
+          </div>
+        </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="scheduled-task-cancel-btn" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="common.save">Save</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+  </template>
 
   <template id="network-type-modal-template">
   <div id="network-type-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="network-type-modal-title">
