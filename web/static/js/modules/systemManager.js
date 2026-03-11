@@ -54,6 +54,8 @@ export function initSystemTabs() {
           loadNotificationSettings();
         } else if (tabId === "import-export") {
           loadLogsStats();
+        } else if (tabId === "scheduled-tasks") {
+          initScheduledTasksTab();
         }
       });
     });
@@ -1106,4 +1108,14 @@ export function initLogsCleanup() {
     clearLogsBtn.addEventListener("click", clearLogs);
   }
   loadLogsStats();
+}
+
+// 初始化定时任务标签页
+async function initScheduledTasksTab() {
+  try {
+    const scheduledTaskModule = await import("./scheduledTaskManager.js");
+    await scheduledTaskModule.initScheduledTaskManager();
+  } catch (error) {
+    console.error("初始化定时任务模块失败:", error);
+  }
 }

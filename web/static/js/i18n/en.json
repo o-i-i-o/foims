@@ -579,6 +579,8 @@
     "config": "Config (JSON)",
     "enabled": "Enabled",
     "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
     "status": "Status",
     "last_run": "Last Run",
     "next_run": "Next Run",

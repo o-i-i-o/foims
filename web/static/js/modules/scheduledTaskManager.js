@@ -1,5 +1,19 @@
-import { api } from './api.js';
-import { i18n } from './i18n.js';
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+} from "../utils/apiClient.js";
+
+import {
+  showToast,
+  escapeHtml,
+  formatDateTime,
+} from "../utils/ui.js";
+
+import { t } from "../utils/i18n.js";
+import { openModal, closeModal } from "../utils/modal.js";
+import { elementCache } from "../utils/helpers.js";
 
 let switches = [];
 let networks = [];
@@ -13,7 +27,7 @@ export async function initScheduledTaskManager() {
 
 async function loadSwitches() {
     try {
-        const response = await api.get('/api/switches');
+        const response = await apiGet('/api/switches');
         if (response.success) {
             switches = response.data || [];
         }
@@ -24,7 +38,7 @@ async function loadSwitches() {
 
 async function loadNetworks() {
     try {
-        const response = await api.get('/api/networks');
+        const response = await apiGet('/api/resources/networks');
         if (response.success) {
             networks = response.data || [];
         }
@@ -34,6 +48,11 @@ async function loadNetworks() {
 }
 
 function setupEventListeners() {
+    const createBtn = document.getElementById('create-scheduled-task-btn');
+    if (createBtn) {
+        createBtn.addEventListener('click', openCreateScheduledTaskModal);
+    }
+
     const taskTypeSelect = document.getElementById('scheduled-task-type');
     if (taskTypeSelect) {
         taskTypeSelect.addEventListener('change', handleTaskTypeChange);
@@ -104,87 +123,55 @@ function populateNetworkSelect() {
 }
 
 async function loadScheduledTasks() {
-    const container = document.getElementById('scheduled-tasks-container');
-    if (!container) return;
+    const tbody = document.getElementById('scheduled-tasks-tbody');
+    if (!tbody) return;
 
     try {
-        const response = await api.get('/api/scheduled-tasks');
+        const response = await apiGet('/api/system/scheduled-tasks');
         if (response.success) {
             renderScheduledTasks(response.data || []);
         } else {
-            container.innerHTML = `<p class="error-message">${i18n.t('scheduled_tasks.load_failed')}</p>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
         }
     } catch (error) {
         console.error('Failed to load scheduled tasks:', error);
-        container.innerHTML = `<p class="error-message">${i18n.t('scheduled_tasks.load_failed')}</p>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
     }
 }
 
 function renderScheduledTasks(tasks) {
-    const container = document.getElementById('scheduled-tasks-container');
-    if (!container) return;
+    const tbody = document.getElementById('scheduled-tasks-tbody');
+    if (!tbody) return;
 
     if (tasks.length === 0) {
-        container.innerHTML = `<p class="no-data">${i18n.t('scheduled_tasks.no_tasks')}</p>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="no-data">${t('scheduled_tasks.no_tasks')}</td></tr>`;
         return;
     }
 
-    const table = document.createElement('table');
-    table.className = 'data-table';
-    table.innerHTML = `
-        <thead>
-            <tr>
-                <th>${i18n.t('scheduled_tasks.name')}</th>
-                <th>${i18n.t('scheduled_tasks.type')}</th>
-                <th>${i18n.t('scheduled_tasks.cron')}</th>
-                <th>${i18n.t('scheduled_tasks.status')}</th>
-                <th>${i18n.t('scheduled_tasks.last_run')}</th>
-                <th>${i18n.t('scheduled_tasks.next_run')}</th>
-                <th>${i18n.t('scheduled_tasks.last_result')}</th>
-                <th>${i18n.t('common.actions')}</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    `;
-
-    const tbody = table.querySelector('tbody');
+    tbody.innerHTML = '';
     tasks.forEach(task => {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${escapeHtml(task.name)}</td>
-            <td>${i18n.t('scheduled_tasks.task_types.' + task.task_type) || task.task_type}</td>
+            <td>${t('scheduled_tasks.task_types.' + task.task_type) || task.task_type}</td>
             <td><code>${escapeHtml(task.cron_expression)}</code></td>
             <td>
                 <span class="status-badge ${task.enabled ? 'status-active' : 'status-inactive'}">
-                    ${task.enabled ? i18n.t('scheduled_tasks.enabled') : i18n.t('scheduled_tasks.disabled')}
+                    ${task.enabled ? t('scheduled_tasks.enabled') : t('scheduled_tasks.disabled')}
                 </span>
             </td>
             <td>${formatDateTime(task.last_run_at)}</td>
-            <td>${formatDateTime(task.next_run_at)}</td>
             <td>${escapeHtml(task.last_result || '-')}</td>
             <td class="actions">
-                <button class="btn btn-sm btn-secondary" onclick="runScheduledTask('${task.id}')" title="${i18n.t('scheduled_tasks.run_now')}">
-                    <i class="icon-play"></i>
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="toggleScheduledTask('${task.id}')" title="${i18n.t('common.toggle')}">
-                    <i class="icon-toggle-${task.enabled ? 'on' : 'off'}"></i>
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="editScheduledTask('${task.id}')" title="${i18n.t('common.edit')}">
-                    <i class="icon-edit"></i>
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="viewTaskLogs('${task.name}')" title="${i18n.t('scheduled_tasks.view_logs')}">
-                    <i class="icon-log"></i>
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteScheduledTask('${task.id}')" title="${i18n.t('common.delete')}">
-                    <i class="icon-delete"></i>
-                </button>
+                <button class="btn btn-secondary btn-sm" onclick="runScheduledTask('${task.id}')">${t('scheduled_tasks.run_now')}</button>
+                <button class="btn btn-secondary btn-sm" onclick="toggleScheduledTask('${task.id}')">${task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable')}</button>
+                <button class="btn btn-secondary btn-sm" onclick="editScheduledTask('${task.id}')">${t('common.edit')}</button>
+                <button class="btn btn-secondary btn-sm" onclick="viewTaskLogs('${task.name}')">${t('scheduled_tasks.view_logs')}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteScheduledTask('${task.id}')">${t('common.delete')}</button>
             </td>
         `;
         tbody.appendChild(row);
     });
-
-    container.innerHTML = '';
-    container.appendChild(table);
 }
 
 window.openCreateScheduledTaskModal = function() {
@@ -195,7 +182,7 @@ window.openCreateScheduledTaskModal = function() {
     if (modalContainer) {
         modalContainer.innerHTML = template.innerHTML;
         setupEventListeners();
-        document.getElementById('scheduled-task-modal-title').textContent = i18n.t('scheduled_tasks.create_task');
+        document.getElementById('scheduled-task-modal-title').textContent = t('scheduled_tasks.create_task');
         document.getElementById('scheduled-task-id').value = '';
         document.getElementById('scheduled-task-form').reset();
         document.getElementById('scheduled-task-enabled').checked = true;
@@ -206,7 +193,7 @@ window.openCreateScheduledTaskModal = function() {
 
 window.editScheduledTask = async function(id) {
     try {
-        const response = await api.get(`/api/scheduled-tasks/${id}`);
+        const response = await apiGet(`/api/system/scheduled-tasks/${id}`);
         if (response.success) {
             const task = response.data;
             const template = document.getElementById('scheduled-task-modal-template');
@@ -216,7 +203,7 @@ window.editScheduledTask = async function(id) {
             if (modalContainer) {
                 modalContainer.innerHTML = template.innerHTML;
                 setupEventListeners();
-                document.getElementById('scheduled-task-modal-title').textContent = i18n.t('scheduled_tasks.edit_task');
+                document.getElementById('scheduled-task-modal-title').textContent = t('scheduled_tasks.edit_task');
                 document.getElementById('scheduled-task-id').value = task.id;
                 document.getElementById('scheduled-task-name').value = task.name;
                 document.getElementById('scheduled-task-type').value = task.task_type;
@@ -260,7 +247,7 @@ async function handleScheduledTaskSubmit(e) {
     const enabled = document.getElementById('scheduled-task-enabled').checked;
 
     if (!name || !taskType || !cronExpression) {
-        alert(i18n.t('scheduled_tasks.required_fields'));
+        alert(t('scheduled_tasks.required_fields'));
         return;
     }
 
@@ -270,7 +257,7 @@ async function handleScheduledTaskSubmit(e) {
         const switchId = document.getElementById('scheduled-task-switch-id').value;
         const networkId = document.getElementById('scheduled-task-network-id').value;
         if (!switchId || !networkId) {
-            alert(i18n.t('scheduled_tasks.required_fields'));
+            alert(t('scheduled_tasks.required_fields'));
             return;
         }
         config = { switch_id: switchId, network_id: networkId };
@@ -290,70 +277,70 @@ async function handleScheduledTaskSubmit(e) {
     try {
         let response;
         if (id) {
-            response = await api.put(`/api/scheduled-tasks/${id}`, data);
+            response = await apiPut(`/api/system/scheduled-tasks/${id}`, data);
         } else {
-            response = await api.post('/api/scheduled-tasks', data);
+            response = await apiPost('/api/system/scheduled-tasks', data);
         }
 
         if (response.success) {
-            alert(id ? i18n.t('scheduled_tasks.update_success') : i18n.t('scheduled_tasks.create_success'));
+            showToast(id ? t('scheduled_tasks.update_success') : t('scheduled_tasks.create_success'), 'success');
             closeScheduledTaskModal();
             await loadScheduledTasks();
         } else {
-            alert(i18n.t('scheduled_tasks.save_failed') + ': ' + (response.message || ''));
+            showToast(t('scheduled_tasks.save_failed') + ': ' + (response.message || ''), 'error');
         }
     } catch (error) {
         console.error('Failed to save task:', error);
-        alert(i18n.t('scheduled_tasks.save_failed'));
+        showToast(t('scheduled_tasks.save_failed'), 'error');
     }
 }
 
 window.toggleScheduledTask = async function(id) {
     try {
-        const response = await api.post(`/api/scheduled-tasks/${id}/toggle`);
+        const response = await apiPost(`/api/system/scheduled-tasks/${id}/toggle`);
         if (response.success) {
-            alert(i18n.t('scheduled_tasks.toggle_success'));
+            showToast(t('scheduled_tasks.toggle_success'), 'success');
             await loadScheduledTasks();
         } else {
-            alert(i18n.t('scheduled_tasks.toggle_failed'));
+            showToast(t('scheduled_tasks.toggle_failed'), 'error');
         }
     } catch (error) {
         console.error('Failed to toggle task:', error);
-        alert(i18n.t('scheduled_tasks.toggle_failed'));
+        showToast(t('scheduled_tasks.toggle_failed'), 'error');
     }
 };
 
 window.runScheduledTask = async function(id) {
-    if (!confirm(i18n.t('scheduled_tasks.confirm_run'))) return;
+    if (!confirm(t('scheduled_tasks.confirm_run'))) return;
 
     try {
-        const response = await api.post(`/api/scheduled-tasks/${id}/run`);
+        const response = await apiPost(`/api/system/scheduled-tasks/${id}/run`);
         if (response.success) {
             const result = response.data?.result;
             if (result && result.ok) {
-                alert(i18n.t('scheduled_tasks.run_success') + ': ' + result.ok);
+                showToast(t('scheduled_tasks.run_success') + ': ' + result.ok, 'success');
             } else if (result && result.err) {
-                alert(i18n.t('scheduled_tasks.run_failed') + ': ' + result.err);
+                showToast(t('scheduled_tasks.run_failed') + ': ' + result.err, 'error');
             } else {
-                alert(i18n.t('scheduled_tasks.run_success'));
+                showToast(t('scheduled_tasks.run_success'), 'success');
             }
             await loadScheduledTasks();
         } else {
-            alert(i18n.t('scheduled_tasks.run_failed') + ': ' + (response.message || ''));
+            showToast(t('scheduled_tasks.run_failed') + ': ' + (response.message || ''), 'error');
         }
     } catch (error) {
         console.error('Failed to run task:', error);
-        alert(i18n.t('scheduled_tasks.run_failed'));
+        showToast(t('scheduled_tasks.run_failed'), 'error');
     }
 };
 
 window.deleteScheduledTask = async function(id) {
-    if (!confirm(i18n.t('scheduled_tasks.confirm_delete'))) return;
+    if (!confirm(t('scheduled_tasks.confirm_delete'))) return;
 
     try {
-        const response = await api.delete(`/api/scheduled-tasks/${id}`);
+        const response = await apiDelete(`/api/system/scheduled-tasks/${id}`);
         if (response.success) {
-            alert(i18n.t('scheduled_tasks.delete_success'));
+            showToast(t('scheduled_tasks.delete_success'), 'success');
             await loadScheduledTasks();
         }
     } catch (error) {
@@ -371,12 +358,12 @@ window.viewTaskLogs = async function(taskName) {
         modalContainer.style.display = 'flex';
 
         try {
-            const response = await api.get(`/api/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`);
+            const response = await apiGet(`/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`);
             const tbody = document.getElementById('task-logs-tbody');
             if (tbody && response.success) {
                 const logs = response.data || [];
                 if (logs.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="no-data">${i18n.t('common.no_data')}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="no-data">${t('common.no_data')}</td></tr>`;
                 } else {
                     logs.forEach(log => {
                         const row = document.createElement('tr');
@@ -405,20 +392,3 @@ window.closeTaskLogsModal = function() {
         modalContainer.innerHTML = '';
     }
 };
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function formatDateTime(dateStr) {
-    if (!dateStr) return '-';
-    try {
-        const date = new Date(dateStr);
-        return date.toLocaleString();
-    } catch {
-        return dateStr;
-    }
-}

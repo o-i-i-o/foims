@@ -7,7 +7,7 @@ import { loadDashboardData } from "./dashboard.js";
 import { initResourceTabs } from "./resourceTabs.js";
 import { loadSwitchesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
 import { loadModule } from "../utils/moduleLoader.js";
-import { initVisualization } from "./visualizationManager.js";
+import { initVisualization } from "./visualization/visualizationManager.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 
 // ==========================================
