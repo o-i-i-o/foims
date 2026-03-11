@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{
     ApiResponse, CabinetPosition, CabinetPositionCreate, CabinetPositionPortWithSwitchPort,
-    CabinetPositionUpdate, CabinetPositionWithDetails, IpManager, Network,
+    CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::{log_system_operation, validate_ip_in_cidr, DEFAULT_PAGE};
@@ -395,30 +395,10 @@ pub async fn create_cabinet_position(
                     .json(ApiResponse::<()>::error("该网络中IP地址已存在")));
             }
 
-            let network = match sqlx::query(
-                r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, n.ipv4_dns::TEXT, n.ipv6_dns::TEXT, NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
-                   FROM network_cidrs n 
-                   JOIN network_regions nt ON n.network_region_id = nt.id 
-                   WHERE n.id = $1"#
-            ).bind(ip.network_id)
-            .fetch_optional(&mut *tx).await {
-                Ok(Some(row)) => {
-                    Network {
-                        id: row.get(0),
-                        name: row.get(1),
-                        network_region_id: row.get(2),
-                        network_region: row.get(3),
-                        ipv4_cidr: row.get(4),
-                        ipv6_cidr: row.get(5),
-                        ipv4_gateway: row.get(6),
-                        ipv6_gateway: row.get(7),
-                        ipv4_dns: row.get(8),
-                        ipv6_dns: row.get(9),
-                        description: row.get(12),
-                        created_at: row.get(13),
-                        updated_at: row.get(14),
-                    }
-                },
+            let network = match sqlx::query(crate::utils::NETWORK_QUERY)
+                .bind(ip.network_id)
+                .fetch_optional(&mut *tx).await {
+                Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
                 Ok(None) => {
                     return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到")));
                 },

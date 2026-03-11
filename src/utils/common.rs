@@ -664,3 +664,38 @@ pub fn log_bilingual(message_key: &str) {
     info!("[中文] {}", zh_message);
     info!("[English] {}", en_message);
 }
+
+// ==================== 网络查询工具 ====================
+
+pub const NETWORK_QUERY: &str = r#"
+    SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
+           n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
+           n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+           (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns, 
+           (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns, 
+           NULL as gateway, NULL as dns, 
+           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
+    FROM network_cidrs n 
+    JOIN network_regions nt ON n.network_region_id = nt.id 
+    WHERE n.id = $1
+"#;
+
+pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Network {
+    use sqlx::Row;
+    
+    crate::models::Network {
+        id: row.get(0),
+        name: row.get(1),
+        network_region_id: row.get(2),
+        network_region: row.get(3),
+        ipv4_cidr: row.get(4),
+        ipv6_cidr: row.get(5),
+        ipv4_gateway: row.get(6),
+        ipv6_gateway: row.get(7),
+        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
+        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
+        description: row.get(12),
+        created_at: row.get(13),
+        updated_at: row.get(14),
+    }
+}
