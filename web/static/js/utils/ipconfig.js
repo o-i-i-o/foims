@@ -5,23 +5,70 @@ const NETWORK_REGION_CHANGED_EVENT = 'ipma:network-region-changed';
 
 const regionChangeCallbacks = new WeakMap();
 
-function ipToInt(ip) {
+function isIPv6(ip) {
+  return ip.includes(':');
+}
+
+function ipv4ToInt(ip) {
   const parts = ip.split('.').map(p => parseInt(p, 10));
   if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
     return null;
   }
-  return (parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
+  return (BigInt(parts[0]) << 24n) + (BigInt(parts[1]) << 16n) + (BigInt(parts[2]) << 8n) + BigInt(parts[3]);
 }
 
-function cidrToRange(cidr) {
+function ipv6ToInt(ipv6) {
+  let ip = ipv6.split('%')[0];
+  
+  if (ip === '::') {
+    ip = '::0';
+  }
+  
+  const parts = ip.split(':');
+  if (parts.length > 8) return null;
+  
+  const doubleColonIndex = parts.indexOf('');
+  if (doubleColonIndex !== -1) {
+    const missingCount = 8 - parts.length + 1;
+    parts.splice(doubleColonIndex, 1, ...Array(missingCount).fill('0'));
+  }
+  
+  if (parts.length !== 8) return null;
+  
+  let result = BigInt(0);
+  for (const part of parts) {
+    const val = part === '' ? 0 : parseInt(part, 16);
+    if (isNaN(val) || val < 0 || val > 65535) return null;
+    result = result * BigInt(65536) + BigInt(val);
+  }
+  
+  return result;
+}
+
+function ipv4CidrToRange(cidr) {
   const [ip, prefixLen] = cidr.split('/');
   const prefix = parseInt(prefixLen, 10);
   if (!ip || isNaN(prefix) || prefix < 0 || prefix > 32) return null;
   
-  const ipInt = ipToInt(ip);
+  const ipInt = ipv4ToInt(ip);
   if (ipInt === null) return null;
   
-  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix));
+  const mask = prefix === 0 ? BigInt(0) : (~BigInt(0) << BigInt(32 - prefix));
+  const network = ipInt & mask;
+  const broadcast = network | ~mask;
+  
+  return { start: network, end: broadcast };
+}
+
+function ipv6CidrToRange(cidr) {
+  const [ip, prefixLen] = cidr.split('/');
+  const prefix = parseInt(prefixLen, 10);
+  if (!ip || isNaN(prefix) || prefix < 0 || prefix > 128) return null;
+  
+  const ipInt = ipv6ToInt(ip);
+  if (ipInt === null) return null;
+  
+  const mask = prefix === 0 ? 0n : ((1n << 128n) - 1n) << BigInt(128 - prefix);
   const network = ipInt & mask;
   const broadcast = network | ~mask;
   
@@ -30,13 +77,24 @@ function cidrToRange(cidr) {
 
 function isIpInCidr(ipAddress, cidr) {
   if (!cidr) return true;
-  const ipInt = ipToInt(ipAddress);
-  if (ipInt === null) return false;
   
-  const range = cidrToRange(cidr);
-  if (!range) return false;
-  
-  return ipInt >= range.start && ipInt <= range.end;
+  if (isIPv6(ipAddress)) {
+    const ipInt = ipv6ToInt(ipAddress);
+    if (ipInt === null) return false;
+    
+    const range = ipv6CidrToRange(cidr);
+    if (!range) return false;
+    
+    return ipInt >= range.start && ipInt <= range.end;
+  } else {
+    const ipInt = ipv4ToInt(ipAddress);
+    if (ipInt === null) return false;
+    
+    const range = ipv4CidrToRange(cidr);
+    if (!range) return false;
+    
+    return ipInt >= range.start && ipInt <= range.end;
+  }
 }
 
 export function dispatchNetworkRegionChange(regionId, regionName = '') {
@@ -385,7 +443,13 @@ export class IpConfigManager {
     div.className = `${this.config.classPrefix}-ip-row form-row-container`;
     
     const regionOptions = regions.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-    const networkOptions = networks.map(n => `<option value="${n.id}">${n.name} (${n.ipv4_cidr || n.ipv6_cidr || '无CIDR'})</option>`).join('');
+    const networkOptions = networks.map(n => {
+      const cidrs = [];
+      if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
+      if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
+      const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+      return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+    }).join('');
 
     const switchLabel = this.config.switchLabel || '上级交换机';
     const portLabel = this.config.portLabel || '上级端口';
@@ -483,7 +547,13 @@ export class IpConfigManager {
         const filtered = networks.filter(n => n.network_region_id === regionId);
         
         networkSelect.innerHTML = '<option value="">请选择网络</option>' + 
-          filtered.map(n => `<option value="${n.id}">${n.name} (${n.ipv4_cidr || n.ipv6_cidr || '无CIDR'})</option>`).join('');
+          filtered.map(n => {
+            const cidrs = [];
+            if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
+            if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
+            const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+            return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+          }).join('');
         
         if (filtered.length === 1) {
           networkSelect.value = filtered[0].id;
@@ -528,7 +598,13 @@ export class IpConfigManager {
               const regionNetworks = result.data.items || result.data || [];
               this.networks = regionNetworks;
               networkSelect.innerHTML = '<option value="">请选择网络</option>' + 
-                regionNetworks.map(n => `<option value="${n.id}">${n.name} (${n.ipv4_cidr || n.ipv6_cidr || '无CIDR'})</option>`).join('');
+                regionNetworks.map(n => {
+                  const cidrs = [];
+                  if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
+                  if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
+                  const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+                  return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+                }).join('');
             }
           }
         } else {
