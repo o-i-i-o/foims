@@ -253,13 +253,13 @@ async fn process_http3_request_optimized(request_data: &[u8], app_state: AppStat
 
     // 处理认证
     let mut user_info = None;
-    if let Some(auth_header) = headers.get("authorization") {
-        if auth_header.starts_with("Bearer ") {
-            let token = auth_header.trim_start_matches("Bearer ");
-            let jwt_utils = JwtUtils::new(&app_state.config);
-            if let Ok(claims) = jwt_utils.validate_token(token) {
-                user_info = Some((claims.sub, claims.username, claims.role));
-            }
+    if let Some(auth_header) = headers.get("authorization")
+        && auth_header.starts_with("Bearer ")
+    {
+        let token = auth_header.trim_start_matches("Bearer ");
+        let jwt_utils = JwtUtils::new(&app_state.config);
+        if let Ok(claims) = jwt_utils.validate_token(token) {
+            user_info = Some((claims.sub, claims.username, claims.role));
         }
     }
 

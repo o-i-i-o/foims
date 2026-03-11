@@ -353,10 +353,10 @@ impl DbPool {
             let new_max = (current_max as f32 * growth_factor).min(100.0) as u32;
             
             // 只有当新的最大连接数比当前大至少2个时才进行调整
-            if new_max > current_max + 1 {
-                if let Err(e) = self.resize_pool(new_max).await {
-                    log::error!("连接池扩容失败: {}", e);
-                }
+            if new_max > current_max + 1
+                && let Err(e) = self.resize_pool(new_max).await
+            {
+                log::error!("连接池扩容失败: {}", e);
             }
         }
         // 低负载：减少连接数
@@ -368,10 +368,10 @@ impl DbPool {
             let new_max = (current_max as f32 * reduction_factor).max(min_connections as f32) as u32;
             
             // 只有当新的最大连接数比当前小至少2个时才进行调整
-            if new_max < current_max - 1 {
-                if let Err(e) = self.resize_pool(new_max).await {
-                    log::error!("连接池缩容失败: {}", e);
-                }
+            if new_max < current_max - 1
+                && let Err(e) = self.resize_pool(new_max).await
+            {
+                log::error!("连接池缩容失败: {}", e);
             }
         }
     }

@@ -1,11 +1,12 @@
 use ipnetwork::IpNetwork;
+use log::{error, info, warn};
 use macaddr::MacAddr;
 use regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::info;
+use tracing;
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -436,8 +437,14 @@ pub async fn send_mac_change_notification(
             .await
         {
             Ok(Some(name)) => name,
-            Ok(None) => workstation_id.to_string(),
-            Err(_) => workstation_id.to_string(),
+            Ok(None) => {
+                warn!("未找到工位ID: {}", workstation_id);
+                workstation_id.to_string()
+            }
+            Err(e) => {
+                warn!("查询工位名称失败: {}", e);
+                workstation_id.to_string()
+            }
         };
 
     let content = format!(
@@ -452,8 +459,12 @@ pub async fn send_mac_change_notification(
         None,
     )
     .await?;
+    info!("MAC地址变更站内通知创建成功: 工位={}, IP={}", workstation_name, ip_address);
 
-    let _ = crate::system::smtp::send_mac_change_email(pool, &workstation_name, ip_address, old_mac, new_mac).await;
+    match crate::system::smtp::send_mac_change_email(pool, &workstation_name, ip_address, old_mac, new_mac).await {
+        Ok(_) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
+        Err(e) => error!("MAC地址变更邮件通知发送失败: 工位={}, 错误: {}", workstation_name, e),
+    }
 
     Ok(())
 }

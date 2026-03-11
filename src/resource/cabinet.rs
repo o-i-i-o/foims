@@ -610,7 +610,7 @@ pub async fn get_cabinet_position(
         })
     }).collect();
 
-    let cabinet_name: String = if let Some(_) = position_data.get::<Option<Uuid>, _>("cabinet_id") {
+    let cabinet_name: String = if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
         let cabinet_id: Uuid = position_data.get("cabinet_id");
         match sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
             .bind(cabinet_id)

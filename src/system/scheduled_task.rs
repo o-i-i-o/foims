@@ -91,16 +91,16 @@ pub async fn update_scheduled_task(
     let id = path.into_inner();
     let now = Utc::now();
 
-    if let Some(ref cron_expr) = req.cron_expression {
-        if let Ok(next_run) = calculate_next_run(cron_expr) {
-            let _ = sqlx::query(
-                "UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2"
-            )
-            .bind(next_run)
-            .bind(id)
-            .execute(pool.get_conn())
-            .await;
-        }
+    if let Some(ref cron_expr) = req.cron_expression
+        && let Ok(next_run) = calculate_next_run(cron_expr)
+    {
+        let _ = sqlx::query(
+            "UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2"
+        )
+        .bind(next_run)
+        .bind(id)
+        .execute(pool.get_conn())
+        .await;
     }
 
     let result = sqlx::query(
@@ -116,7 +116,7 @@ pub async fn update_scheduled_task(
     .bind(&req.name)
     .bind(&req.task_type)
     .bind(&req.cron_expression)
-    .bind(&req.enabled)
+    .bind(req.enabled)
     .bind(&req.config)
     .bind(now)
     .bind(id)

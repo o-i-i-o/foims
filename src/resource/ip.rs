@@ -6,6 +6,7 @@ use crate::models::{
 use crate::utils::{log_system_operation, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
+use log::{error, info, warn};
 use sqlx::Row;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -938,10 +939,10 @@ pub async fn pull_ip_managers(
         .execute(pool.get_conn())
         .await;
 
-        if let Ok(res) = result {
-            if res.rows_affected() > 0 {
-                updated_count += 1;
-            }
+        if let Ok(res) = result
+            && res.rows_affected() > 0
+        {
+            updated_count += 1;
         }
     }
 
@@ -1055,6 +1056,7 @@ pub async fn pull_ip_managers_internal(
         .flatten();
 
         if mac_conflict.is_some() {
+            warn!("MAC地址 {} 存在冲突，跳过IP {}", mac, ip);
             continue;
         }
 
@@ -1072,31 +1074,41 @@ pub async fn pull_ip_managers_internal(
                SET mac_address = $1, last_seen = $2, updated_at = $2
                WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"#
         )
-        .bind(&mac)
+        .bind(mac)
         .bind(now)
         .bind(ip)
         .execute(pool)
         .await
         .map_err(|e| format!("更新MAC地址失败: {}", e))?;
 
-        if result.rows_affected() > 0 {
-            if let (Some(old), Some(workstation_id)) = (&old_mac, sqlx::query_scalar::<_, Option<Uuid>>(
-                "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
-            )
-            .bind(ip)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten()
-            .flatten()) {
-                if *old != *mac && !old.is_empty() {
-                    let _ = crate::utils::send_mac_change_notification(
-                        pool,
-                        &workstation_id,
-                        ip,
-                        &old,
-                        mac,
-                    ).await;
+        if result.rows_affected() == 0 {
+            continue;
+        }
+
+        let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        )
+        .bind(ip)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten();
+
+        if let (Some(old), Some(ws_id)) = (&old_mac, &workstation_id) {
+            let mac_changed = old != mac && !old.is_empty();
+
+            if mac_changed {
+                info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
+                match crate::utils::send_mac_change_notification(
+                    pool,
+                    ws_id,
+                    ip,
+                    old,
+                    mac,
+                ).await {
+                    Ok(_) => info!("MAC地址变更通知发送成功: IP={}", ip),
+                    Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
                 }
             }
         }

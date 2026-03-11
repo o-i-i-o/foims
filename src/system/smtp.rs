@@ -1,6 +1,7 @@
 use anyhow::Result;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -203,7 +204,6 @@ pub async fn send_mac_change_email(
     old_mac: &str,
     new_mac: &str,
 ) -> Result<()> {
-    // 查询系统配置中的邮件收件人（用户ID）
     let user_ids = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
@@ -211,32 +211,30 @@ pub async fn send_mac_change_email(
     .await
     {
         Ok(Some(recips)) => {
-            // 解析用户ID列表，假设存储格式为逗号分隔的UUID字符串
             recips.split(',')
                 .filter_map(|id| Uuid::parse_str(id.trim()).ok())
                 .collect::<Vec<Uuid>>()
         }
         Ok(None) => {
-            // 如果没有配置收件人，返回成功（不发送邮件）
+            warn!("未配置邮件收件人，跳过MAC变更邮件通知");
             return Ok(());
         }
-        Err(_) => {
-            // 如果查询出错，返回成功（不发送邮件）
+        Err(e) => {
+            error!("查询邮件收件人配置失败: {}", e);
             return Ok(());
         }
     };
 
     if user_ids.is_empty() {
+        warn!("邮件收件人列表为空，跳过MAC变更邮件通知");
         return Ok(());
     }
 
-    // 构建邮件内容
     let email_body = format!(
         "尊敬的管理员：\n\n工位 {} 的MAC地址已发生变更，详情如下：\n工位名称：{}\nIP地址：{}\n旧MAC地址：{}\n新MAC地址：{}\n\n请确认此变更是否为授权操作。\n\n此致，\nIPMA系统",
         workstation_name, workstation_name, ip_address, old_mac, new_mac
     );
 
-    // 发送邮件
     send_email_to_users(pool, &user_ids, &format!("MAC地址变更通知 - 工位: {}", workstation_name), &email_body)
         .await
 }

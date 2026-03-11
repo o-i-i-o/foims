@@ -154,21 +154,18 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-            if filename.starts_with("ipma_backup_") && filename.ends_with(".sql") {
-                if let Ok(metadata) = entry.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(age) = now.duration_since(modified) {
-                            if age > cutoff {
-                                if let Err(e) = std::fs::remove_file(&path) {
-                                    error!("删除旧备份文件失败: {} - {}", path.display(), e);
-                                } else {
-                                    info!("删除旧备份文件: {}", path.display());
-                                }
-                            }
-                        }
-                    }
-                }
+        if let Some(filename) = path.file_name().and_then(|f| f.to_str())
+            && filename.starts_with("ipma_backup_")
+            && filename.ends_with(".sql")
+            && let Ok(metadata) = entry.metadata()
+            && let Ok(modified) = metadata.modified()
+            && let Ok(age) = now.duration_since(modified)
+            && age > cutoff
+        {
+            if let Err(e) = std::fs::remove_file(&path) {
+                error!("删除旧备份文件失败: {} - {}", path.display(), e);
+            } else {
+                info!("删除旧备份文件: {}", path.display());
             }
         }
     }
@@ -237,7 +234,7 @@ pub fn calculate_next_run(cron_expression: &str) -> Result<chrono::DateTime<Utc>
     let mut next = now;
 
     for _ in 0..366 * 24 * 60 {
-        next = next + chrono::Duration::minutes(1);
+        next += chrono::Duration::minutes(1);
         
         let (sec, min, hour, day, month, weekday) = (
             next.second() as i32,
