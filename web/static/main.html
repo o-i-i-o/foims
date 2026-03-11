@@ -1076,19 +1076,33 @@
           <div class="form-group">
             <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
             <select id="scheduled-task-type" required>
-              <option value="mac_sync">MAC Sync</option>
-              <option value="token_cleanup">Token Cleanup</option>
-              <option value="backup">Backup</option>
+              <option value="mac_sync" data-i18n="scheduled_tasks.task_types.mac_sync">MAC Address Sync</option>
+              <option value="token_cleanup" data-i18n="scheduled_tasks.task_types.token_cleanup">Token Cleanup</option>
+              <option value="backup" data-i18n="scheduled_tasks.task_types.backup">Database Backup</option>
+              <option value="log_cleanup" data-i18n="scheduled_tasks.task_types.log_cleanup">Log Cleanup</option>
             </select>
           </div>
           <div class="form-group">
             <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
             <input type="text" id="scheduled-task-cron" value="0 */6 * * *" required>
-            <small class="form-hint">e.g., "0 */6 * * *" runs every 6 hours</small>
+            <small class="form-hint" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
           </div>
-          <div class="form-group">
-            <label for="scheduled-task-config" data-i18n="scheduled_tasks.config">Config (JSON)</label>
-            <textarea id="scheduled-task-config" rows="4">{}</textarea>
+          <div id="scheduled-task-config-section">
+            <div class="form-group" id="mac-sync-config" style="display:none;">
+              <label><span data-i18n="scheduled_tasks.config_fields.switch">Switch</span><span class="required">*</span></label>
+              <select id="scheduled-task-switch-id">
+                <option value="" data-i18n="scheduled_tasks.config_fields.select_switch">Select Switch</option>
+              </select>
+              <label style="margin-top:10px;"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
+              <select id="scheduled-task-network-id">
+                <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
+              </select>
+            </div>
+            <div class="form-group" id="log-cleanup-config" style="display:none;">
+              <label><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
+              <input type="number" id="scheduled-task-keep-days" value="30" min="0">
+              <small class="form-hint" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+            </div>
           </div>
           <div class="form-group">
             <label class="checkbox-label">
@@ -1102,6 +1116,34 @@
           <button type="submit" class="btn btn-primary" data-i18n="common.save">Save</button>
         </footer>
       </form>
+    </div>
+  </div>
+  </template>
+
+  <template id="task-logs-modal-template">
+  <div id="task-logs-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="task-logs-modal-title">
+    <div class="modal-content" style="max-width: 900px;">
+      <header class="modal-header">
+        <h3 class="modal-title" id="task-logs-modal-title" data-i18n="scheduled_tasks.logs_title">Task Execution Logs</h3>
+        <button type="button" class="close" onclick="closeTaskLogsModal()" aria-label="Close">&times;</button>
+      </header>
+      <div class="modal-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th data-i18n="scheduled_tasks.task_name">Task Name</th>
+              <th data-i18n="common.status">Status</th>
+              <th data-i18n="scheduled_tasks.execution_time">Execution Time</th>
+              <th data-i18n="scheduled_tasks.duration">Duration(ms)</th>
+              <th data-i18n="scheduled_tasks.details">Details</th>
+            </tr>
+          </thead>
+          <tbody id="task-logs-tbody"></tbody>
+        </table>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeTaskLogsModal()" data-i18n="common.close">Close</button>
+      </footer>
     </div>
   </div>
   </template>

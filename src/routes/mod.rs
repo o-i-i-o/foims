@@ -38,7 +38,7 @@ use crate::system::data::{
 use crate::system::scheduled_task::{
     get_scheduled_tasks, get_scheduled_task, create_scheduled_task,
     update_scheduled_task, delete_scheduled_task, toggle_scheduled_task,
-    run_scheduled_task_now,
+    run_scheduled_task_now, get_task_logs,
 };
 use actix_web::{HttpResponse, middleware, web};
 
@@ -286,7 +286,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::put().to(update_scheduled_task))
                                 .route("/{id}", web::delete().to(delete_scheduled_task))
                                 .route("/{id}/toggle", web::post().to(toggle_scheduled_task))
-                                .route("/{id}/run", web::post().to(run_scheduled_task_now)),
+                                .route("/{id}/run", web::post().to(run_scheduled_task_now))
+                                .route("/logs", web::get().to(get_task_logs)),
                         ),
                 )
         );

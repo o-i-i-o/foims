@@ -6,6 +6,7 @@ use validator::Validate;
 
 use crate::db::DbPool;
 use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
+use crate::system::cron::{execute_task_by_type, calculate_next_run};
 
 pub async fn get_scheduled_tasks(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
@@ -52,9 +53,11 @@ pub async fn create_scheduled_task(
     let config = req.config.clone().unwrap_or(serde_json::json!({}));
     let enabled = req.enabled.unwrap_or(true);
 
+    let next_run_at = calculate_next_run(&req.cron_expression).ok();
+
     let task: Result<ScheduledTask, sqlx::Error> = sqlx::query_as(
-        r#"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config)
-           VALUES ($1, $2, $3, $4, $5)
+        r#"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at"#
     )
     .bind(&req.name)
@@ -62,6 +65,7 @@ pub async fn create_scheduled_task(
     .bind(&req.cron_expression)
     .bind(enabled)
     .bind(&config)
+    .bind(next_run_at)
     .fetch_one(pool.get_conn())
     .await;
 
@@ -86,6 +90,18 @@ pub async fn update_scheduled_task(
 
     let id = path.into_inner();
     let now = Utc::now();
+
+    if let Some(ref cron_expr) = req.cron_expression {
+        if let Ok(next_run) = calculate_next_run(cron_expr) {
+            let _ = sqlx::query(
+                "UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2"
+            )
+            .bind(next_run)
+            .bind(id)
+            .execute(pool.get_conn())
+            .await;
+        }
+    }
 
     let result = sqlx::query(
         r#"UPDATE scheduled_tasks SET
@@ -209,47 +225,84 @@ pub async fn run_scheduled_task_now(
         None => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
     };
 
-    let result = match task.task_type.as_str() {
-        "mac_sync" => execute_mac_sync(pool.get_conn(), &task.config).await,
-        "token_cleanup" => execute_token_cleanup(pool.get_conn()).await,
-        "backup" => execute_backup(pool.get_conn()).await,
-        _ => Err(format!("未知的任务类型: {}", task.task_type)),
+    let start_time = Utc::now();
+    let task_name = task.name.clone();
+    let task_type = task.task_type.clone();
+
+    let db_config = pool.db_config.clone();
+    let result = execute_task_by_type(pool.get_conn(), &task.task_type, &task.config, &db_config).await;
+
+    let end_time = Utc::now();
+    let duration = (end_time - start_time).num_milliseconds() as i32;
+
+    let (status, details) = match &result {
+        Ok(msg) => ("success", serde_json::json!({ "message": msg, "task_type": task_type })),
+        Err(e) => ("failed", serde_json::json!({ "error": e, "task_type": task_type })),
     };
 
-    let now = Utc::now();
-    sqlx::query(
-        "UPDATE scheduled_tasks SET last_run_at = $1, last_result = $2, updated_at = $1 WHERE id = $3"
+    let _ = sqlx::query(
+        r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)"#
     )
-    .bind(now)
-    .bind(result.as_ref().ok())
-    .bind(id)
+    .bind(Uuid::new_v4())
+    .bind(&task_name)
+    .bind(status)
+    .bind(sqlx::types::Json(details))
+    .bind(start_time)
+    .bind(end_time)
+    .bind(duration)
     .execute(pool.get_conn())
-    .await
-    .ok();
+    .await;
+
+    let next_run_at = calculate_next_run(&task.cron_expression).ok();
+
+    let update_query = if let Some(next_run) = next_run_at {
+        sqlx::query(
+            "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = $2, last_result = $3, updated_at = $1 WHERE id = $4"
+        )
+        .bind(start_time)
+        .bind(next_run)
+        .bind(result.as_ref().ok())
+        .bind(id)
+    } else {
+        sqlx::query(
+            "UPDATE scheduled_tasks SET last_run_at = $1, last_result = $2, updated_at = $1 WHERE id = $3"
+        )
+        .bind(start_time)
+        .bind(result.as_ref().ok())
+        .bind(id)
+    };
+
+    update_query.execute(pool.get_conn()).await.ok();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({"result": result}), "执行定时任务成功")))
 }
 
-async fn execute_mac_sync(pool: &sqlx::PgPool, config: &serde_json::Value) -> Result<String, String> {
-    let switch_id = config.get("switch_id").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
-    let network_id = config.get("network_id").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
+pub async fn get_task_logs(
+    pool: web::Data<DbPool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<HttpResponse> {
+    let task_name = query.get("task_name").cloned();
+    let limit: i64 = query.get("limit").and_then(|s| s.parse().ok()).unwrap_or(100);
 
-    match (switch_id, network_id) {
-        (Some(switch_id), Some(network_id)) => {
-            crate::resource::ip::pull_ip_managers_internal(pool, switch_id, network_id).await
-                .map(|_| "MAC同步成功".to_string())
-                .map_err(|e| format!("MAC同步失败: {}", e))
-        },
-        _ => Err("MAC同步任务需要配置switch_id和network_id".to_string()),
-    }
-}
+    let logs = if let Some(name) = task_name {
+        sqlx::query_as::<_, crate::models::TaskLog>(
+            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs WHERE task_name = $1 ORDER BY start_time DESC LIMIT $2"
+        )
+        .bind(&name)
+        .bind(limit)
+        .fetch_all(pool.get_conn())
+        .await
+        .unwrap_or_default()
+    } else {
+        sqlx::query_as::<_, crate::models::TaskLog>(
+            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
+        )
+        .bind(limit)
+        .fetch_all(pool.get_conn())
+        .await
+        .unwrap_or_default()
+    };
 
-async fn execute_token_cleanup(pool: &sqlx::PgPool) -> Result<String, String> {
-    let count = crate::utils::cleanup_expired_revoked_tokens(pool).await
-        .map_err(|e| format!("Token清理失败: {}", e))?;
-    Ok(format!("清理了 {} 个过期token", count))
-}
-
-async fn execute_backup(pool: &sqlx::PgPool) -> Result<String, String> {
-    Ok("备份任务执行成功".to_string())
+    Ok(HttpResponse::Ok().json(ApiResponse::success(logs, "获取任务日志成功")))
 }

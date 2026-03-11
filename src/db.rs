@@ -181,6 +181,7 @@ pub struct DbPool {
     pub pool: PgPool,
     pub metrics: Arc<PoolMetrics>,
     pub config: Arc<RwLock<PoolConfig>>,
+    pub db_config: DatabaseConfig,
     last_scaling_time: Arc<AtomicU64>,
 }
 
@@ -207,6 +208,7 @@ impl DbPool {
             pool,
             metrics: Arc::new(PoolMetrics::new()),
             config: Arc::new(RwLock::new(pool_config)),
+            db_config: config.clone(),
             last_scaling_time: Arc::new(AtomicU64::new(0)),
         })
     }

@@ -567,5 +567,63 @@
     "token_revoked": "令牌已被撤销，请重新登录",
     "success": "操作成功",
     "failed": "操作失败"
+  },
+  "scheduled_tasks": {
+    "title": "定时任务管理",
+    "create": "创建任务",
+    "create_task": "创建定时任务",
+    "edit_task": "编辑定时任务",
+    "name": "任务名称",
+    "type": "任务类型",
+    "cron": "Cron表达式",
+    "config": "配置(JSON)",
+    "enabled": "启用",
+    "disabled": "禁用",
+    "status": "状态",
+    "last_run": "上次执行",
+    "next_run": "下次执行",
+    "last_result": "执行结果",
+    "run_now": "立即执行",
+    "no_tasks": "暂无定时任务",
+    "load_failed": "加载定时任务失败",
+    "invalid_config": "配置JSON格式无效",
+    "required_fields": "请填写所有必填字段",
+    "create_success": "定时任务创建成功",
+    "update_success": "定时任务更新成功",
+    "delete_success": "定时任务删除成功",
+    "save_failed": "保存定时任务失败",
+    "run_success": "任务执行成功",
+    "run_failed": "任务执行失败",
+    "toggle_success": "任务状态切换成功",
+    "toggle_failed": "任务状态切换失败",
+    "confirm_run": "确定要立即执行此任务吗？",
+    "confirm_delete": "确定要删除此定时任务吗？",
+    "task_types": {
+      "mac_sync": "MAC地址同步",
+      "token_cleanup": "Token清理",
+      "backup": "数据库备份",
+      "log_cleanup": "日志清理"
+    },
+    "config_fields": {
+      "switch": "交换机",
+      "select_switch": "选择交换机",
+      "network": "网络",
+      "select_network": "选择网络",
+      "keep_days": "保留天数",
+      "keep_days_hint": "删除指定天数之前的日志，0表示删除全部"
+    },
+    "cron_hint": "例如: \"0 */6 * * *\" 表示每6小时执行一次",
+    "cron_examples": {
+      "hourly": "每小时 (0 * * * *)",
+      "daily": "每天凌晨 (0 0 * * *)",
+      "weekly": "每周一凌晨 (0 0 * * 1)",
+      "monthly": "每月1号凌晨 (0 0 1 * *)"
+    },
+    "logs_title": "任务执行日志",
+    "view_logs": "查看日志",
+    "task_name": "任务名称",
+    "execution_time": "执行时间",
+    "duration": "耗时(ms)",
+    "details": "详情"
   }
 }
