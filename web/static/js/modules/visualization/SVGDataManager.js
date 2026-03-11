@@ -207,7 +207,8 @@ export class SVGDataManager {
           let maxX = 0;
           let maxY = 0;
           
-          cabinets.forEach((cabinet, index) => {
+          for (let index = 0; index < cabinets.length; index++) {
+            const cabinet = cabinets[index];
             const savedItem = layoutData.find(item => item.id.toLowerCase() === cabinet.id.toLowerCase());
             if (savedItem && savedItem.position) {
               cabinet.position = savedItem.position;
@@ -235,7 +236,7 @@ export class SVGDataManager {
               maxX = Math.max(maxX, cabinet.position.x + cabinet.position.width);
               maxY = Math.max(maxY, cabinet.position.y + cabinet.position.height);
             }
-          });
+          }
           
           if (maxX > 0 || maxY > 0) {
             const padding = 50;
