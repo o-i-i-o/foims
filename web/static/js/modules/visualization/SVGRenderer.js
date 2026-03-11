@@ -9,11 +9,16 @@ export class SVGRenderer {
     group.className.baseVal = "workstation-element";
     group.dataset.id = workstation.id;
 
+    const x = workstation.position.x || 100;
+    const y = workstation.position.y || 100;
+    const width = workstation.position.width || 160;
+    const height = workstation.position.height || 160;
+
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", workstation.position.x || 100);
-    rect.setAttribute("y", workstation.position.y || 100);
-    rect.setAttribute("width", workstation.position.width || 160);
-    rect.setAttribute("height", workstation.position.height || 160);
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", width);
+    rect.setAttribute("height", height);
 
     const ipManager = workstation.ipManager || null;
     const ipAddress = ipManager ? ipManager.ip_address : "无IP";
@@ -26,14 +31,10 @@ export class SVGRenderer {
       ipManager && ipManager.status ? `status-${ipManager.status}` : "status-unknown";
     group.classList.add(statusClass);
 
-    const x = workstation.position.x || 100;
-    const y = workstation.position.y || 100;
-    const width = workstation.position.width || 160;
-    const height = workstation.position.height || 160;
-
     const nameText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     nameText.setAttribute("x", x + width / 2);
     nameText.setAttribute("y", y + 40);
+    nameText.dataset.relY = 40;
 
     const nameTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     nameTitleSpan.textContent = "工位: ";
@@ -48,6 +49,7 @@ export class SVGRenderer {
     const ipText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     ipText.setAttribute("x", x + width / 2);
     ipText.setAttribute("y", y + 70);
+    ipText.dataset.relY = 70;
 
     const ipTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     ipTitleSpan.textContent = "IP: ";
@@ -62,6 +64,7 @@ export class SVGRenderer {
     const portText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     portText.setAttribute("x", x + width / 2);
     portText.setAttribute("y", y + 100);
+    portText.dataset.relY = 100;
 
     const portTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     portTitleSpan.textContent = "端口: ";
@@ -75,6 +78,7 @@ export class SVGRenderer {
     const managerText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     managerText.setAttribute("x", x + width / 2);
     managerText.setAttribute("y", y + 130);
+    managerText.dataset.relY = 130;
 
     const managerTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     managerTitleSpan.textContent = "管理人: ";
@@ -127,39 +131,44 @@ export class SVGRenderer {
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("x", x + width / 2);
     text.setAttribute("y", y + 20);
+    text.dataset.relY = 20;
     text.textContent = cabinet.name;
     group.dataset.tooltip = `机柜: ${cabinet.name}\n容量: ${cabinet.capacity || 42}U`;
 
     group.appendChild(rect);
-    this.drawUMarks(cabinet, group);
+    this.drawUMarks(cabinet, group, x, y, width, capacity);
     group.appendChild(text);
     this.elementsGroup.appendChild(group);
 
     return group;
   }
 
-  drawUMarks(cabinet, group) {
+  drawUMarks(cabinet, group, baseX, baseY, width, capacity) {
     const uHeight = 20;
-    const startY = (cabinet.position.y || 50) + 40;
-    const width = cabinet.position.width || 150;
-    const capacity = cabinet.capacity || 45;
+    const startY = baseY + 40;
 
     for (let i = 1; i <= capacity; i++) {
       const y = startY + (capacity - i) * uHeight;
 
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", (cabinet.position.x || 50) + 10);
+      line.setAttribute("x1", baseX + 10);
       line.setAttribute("y1", y);
-      line.setAttribute("x2", (cabinet.position.x || 50) + width - 10);
+      line.setAttribute("x2", baseX + width - 10);
       line.setAttribute("y2", y);
       line.setAttribute("stroke", "#e0e0e0");
       line.setAttribute("stroke-width", "0.5");
+      line.dataset.relX1 = 10;
+      line.dataset.relY1 = y - baseY;
+      line.dataset.relX2 = width - 10;
+      line.dataset.relY2 = y - baseY;
       group.appendChild(line);
 
       if (i % 5 === 0 || i === 1 || i === capacity) {
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", (cabinet.position.x || 50) + 5);
+        text.setAttribute("x", baseX + 5);
         text.setAttribute("y", y + uHeight / 2);
+        text.dataset.relX = 5;
+        text.dataset.relY = y - baseY + uHeight / 2;
         text.textContent = i;
         text.className.baseVal = "u-mark";
         group.appendChild(text);
@@ -184,16 +193,22 @@ export class SVGRenderer {
 
     const startY = cabinetY + 40;
     const y = startY + (capacity - endU) * uHeight;
+    const x = cabinetX + 20;
+
+    group.dataset.relX = 20;
+    group.dataset.relY = y - cabinetY;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", cabinetX + 20);
+    rect.setAttribute("x", x);
     rect.setAttribute("y", y);
     rect.setAttribute("width", 110);
     rect.setAttribute("height", height);
 
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", cabinetX + 75);
+    text.setAttribute("x", x + 55);
     text.setAttribute("y", y + height / 2 + 4);
+    text.dataset.relX = 55;
+    text.dataset.relY = height / 2 + 4;
     text.textContent = position.name;
 
     let portsLabel = "无端口";
@@ -236,10 +251,14 @@ export class SVGRenderer {
     doorHandle.setAttribute("cy", y + height / 2);
     doorHandle.setAttribute("r", 3);
     doorHandle.setAttribute("fill", "#6b7280");
+    doorHandle.dataset.relCx = width - 10;
+    doorHandle.dataset.relCy = height / 2;
     
     const doorLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     doorLabel.setAttribute("x", x + width / 2);
     doorLabel.setAttribute("y", y - 10);
+    doorLabel.dataset.relX = 0;
+    doorLabel.dataset.relY = -10;
     doorLabel.textContent = "门";
     
     group.dataset.tooltip = "房间入口参考点";

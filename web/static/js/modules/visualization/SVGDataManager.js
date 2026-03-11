@@ -128,12 +128,15 @@ export class SVGDataManager {
           if (text) {
             text.setAttribute("x", doorItem.position.x + doorItem.position.width / 2);
             text.setAttribute("y", doorItem.position.y - 10);
+            text.dataset.relY = -10;
           }
           
           const circle = doorElement.querySelector("circle");
           if (circle) {
             circle.setAttribute("cx", doorItem.position.x + doorItem.position.width - 10);
             circle.setAttribute("cy", doorItem.position.y + doorItem.position.height / 2);
+            circle.dataset.relCx = doorItem.position.width - 10;
+            circle.dataset.relCy = doorItem.position.height / 2;
           }
           
           maxX = Math.max(maxX, doorItem.position.x + doorItem.position.width);
