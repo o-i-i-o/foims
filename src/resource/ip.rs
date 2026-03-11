@@ -787,7 +787,7 @@ pub async fn delete_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }
 
-// 拉取IP管理数据 - 从数据库中已缓存的MAC表筛选
+// 拉取IP管理数据 - 从switch_macs缓存中匹配已存在的IP记录并更新MAC地址
 pub async fn pull_ip_managers(
     pool: web::Data<DbPool>,
     req: web::Json<serde_json::Value>,
@@ -835,7 +835,7 @@ pub async fn pull_ip_managers(
     };
 
     let network_info: Option<(Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT ipv4_cidr, ipv6_cidr FROM network_cidrs WHERE id = $1"
+        "SELECT ipv4_cidr::text, ipv6_cidr::text FROM network_cidrs WHERE id = $1"
     )
     .bind(network_id)
     .fetch_optional(pool.get_conn())
@@ -843,6 +843,11 @@ pub async fn pull_ip_managers(
     .map_err(|e| format!("查询网段信息失败: {}", e))
     .ok()
     .flatten();
+
+    if network_info.is_none() {
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error("未找到网段信息")));
+    }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
         "SELECT ip_address, mac_address FROM switch_macs WHERE switch_id = $1"
@@ -888,69 +893,62 @@ pub async fn pull_ip_managers(
     }
 
     let now = Utc::now();
-
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                format!("事务启动失败: {}", err),
-            )));
-        }
-    };
-
     let mut updated_count = 0usize;
-    let mut inserted_count = 0usize;
+    let mut skipped_count = 0usize;
+    let mut not_found_count = 0usize;
 
-    for (ip, mac) in filtered_entries {
-        let ip_version = detect_ip_version(&ip);
-        let mac_opt = Some(mac.clone());
-
-        let result: Result<sqlx::postgres::PgRow, sqlx::Error> = sqlx::query(
-            r#"INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, status, last_seen, created_at, updated_at) 
-               VALUES (gen_random_uuid(), $1, 'unknown', $2, CAST($3 AS INET), $4, $5, 'active', $6, $6, $6)
-               ON CONFLICT (ip_address, network_id) 
-               DO UPDATE SET 
-                   mac_address = EXCLUDED.mac_address,
-                   status = 'active',
-                   last_seen = EXCLUDED.last_seen,
-                   updated_at = EXCLUDED.updated_at
-               RETURNING (xmax = 0) as inserted"#
+    for (ip, mac) in &filtered_entries {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))"
         )
-        .bind(switch_id)
-        .bind(network_id)
-        .bind(&ip)
-        .bind(ip_version)
-        .bind(&mac_opt)
+        .bind(ip)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(false);
+
+        if !exists {
+            not_found_count += 1;
+            continue;
+        }
+
+        let mac_conflict: Option<String> = sqlx::query_scalar(
+            "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET)"
+        )
+        .bind(mac)
+        .bind(ip)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(conflict_ip) = mac_conflict {
+            println!("MAC冲突: {} 已被 IP {} 使用，跳过更新", mac, conflict_ip);
+            skipped_count += 1;
+            continue;
+        }
+
+        let result = sqlx::query(
+            r#"UPDATE ip_managers 
+               SET mac_address = $1, last_seen = $2, updated_at = $2
+               WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"#
+        )
+        .bind(mac)
         .bind(now)
-        .fetch_one(tx.as_mut())
+        .bind(ip)
+        .execute(pool.get_conn())
         .await;
 
-        match result {
-            Ok(row) => {
-                let inserted: bool = row.get("inserted");
-                if inserted {
-                    inserted_count += 1;
-                } else {
-                    updated_count += 1;
-                }
-            }
-            Err(err) => {
-                println!("数据库UPSERT错误 ({}): {}", ip, err);
+        if let Ok(res) = result {
+            if res.rows_affected() > 0 {
+                updated_count += 1;
             }
         }
-    }
-
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("事务提交失败: {}", err),
-        )));
     }
 
     let results: Vec<IpManager> = match sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE network_id = $1 AND switch_id = $2"
+        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE network_id = $1"
     )
     .bind(network_id)
-    .bind(switch_id)
     .fetch_all(pool.get_conn())
     .await
     {
@@ -962,10 +960,21 @@ pub async fn pull_ip_managers(
         }
     };
 
-    let message = if updated_count == 0 && inserted_count == 0 {
+    let mut message_parts = Vec::new();
+    if updated_count > 0 {
+        message_parts.push(format!("更新 {} 条MAC地址", updated_count));
+    }
+    if not_found_count > 0 {
+        message_parts.push(format!("{} 条IP未在管理表中", not_found_count));
+    }
+    if skipped_count > 0 {
+        message_parts.push(format!("{} 条MAC冲突跳过", skipped_count));
+    }
+    
+    let message = if message_parts.is_empty() {
         "MAC地址无变化".to_string()
     } else {
-        format!("更新 {} 条，新增 {} 条", updated_count, inserted_count)
+        message_parts.join("，")
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(results, &message)))

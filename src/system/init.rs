@@ -824,11 +824,12 @@ async fn create_ip_managers_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error
             last_seen TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch')),
+            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown')),
             CONSTRAINT chk_device_consistency CHECK (
                 (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
-                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL)
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
+                (device_type = 'unknown')
             )
         )"#)
         .execute(pool).await?;
@@ -878,8 +879,51 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         )"#,
     )
     .execute(pool)
-    .await
-    .map(|_| ())
+    .await?;
+
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS mac_history (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            mac_address VARCHAR(20) NOT NULL,
+            ip_address INET NOT NULL,
+            ip_manager_id UUID NOT NULL REFERENCES ip_managers(id) ON DELETE CASCADE,
+            device_type VARCHAR(20) NOT NULL,
+            workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
+            position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
+            switch_id UUID REFERENCES switches(id) ON DELETE SET NULL,
+            network_id UUID NOT NULL REFERENCES network_cidrs(id),
+            change_type VARCHAR(20) NOT NULL DEFAULT 'update',
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_mac_address ON mac_history(mac_address)"
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_ip_address ON mac_history(ip_address)"
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_ip_manager_id ON mac_history(ip_manager_id)"
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_created_at ON mac_history(created_at)"
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }
 
 async fn create_token_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
@@ -984,6 +1028,7 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     migrate_ip_managers_constraint(pool).await?;
     migrate_switch_position_fields(pool).await?;
+    migrate_mac_history(pool).await?;
 
     Ok(())
 }
@@ -1002,11 +1047,22 @@ async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx:
             .execute(pool)
             .await?;
         
+        sqlx::query("ALTER TABLE ip_managers DROP CONSTRAINT IF EXISTS chk_device_type")
+            .execute(pool)
+            .await?;
+        
+        sqlx::query(
+            r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown'))"#
+        )
+        .execute(pool)
+        .await?;
+        
         sqlx::query(
             r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
                 (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
-                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL)
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
+                (device_type = 'unknown')
             )"#
         )
         .execute(pool)
@@ -1045,6 +1101,102 @@ async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx:
                JOIN ip_managers im ON im.position_id = p.id 
                WHERE im.switch_id = s.id
                AND s.cabinet_id IS NULL"#
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = 'mac_history'"
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+    
+    if count == 0 {
+        sqlx::query(
+            r#"CREATE TABLE mac_history (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                mac_address VARCHAR(20) NOT NULL,
+                ip_address INET NOT NULL,
+                ip_manager_id UUID NOT NULL REFERENCES ip_managers(id) ON DELETE CASCADE,
+                device_type VARCHAR(20) NOT NULL,
+                workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
+                position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
+                switch_id UUID REFERENCES switches(id) ON DELETE SET NULL,
+                network_id UUID NOT NULL REFERENCES network_cidrs(id),
+                change_type VARCHAR(20) NOT NULL DEFAULT 'update',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            )"#
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query("CREATE INDEX idx_mac_history_mac_address ON mac_history(mac_address)")
+            .execute(pool)
+            .await?;
+        
+        sqlx::query("CREATE INDEX idx_mac_history_ip_address ON mac_history(ip_address)")
+            .execute(pool)
+            .await?;
+        
+        sqlx::query("CREATE INDEX idx_mac_history_ip_manager_id ON mac_history(ip_manager_id)")
+            .execute(pool)
+            .await?;
+        
+        sqlx::query("CREATE INDEX idx_mac_history_created_at ON mac_history(created_at)")
+            .execute(pool)
+            .await?;
+    }
+
+    let trigger_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_log_mac_address_change')"
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !trigger_exists {
+        sqlx::query(r#"
+            CREATE OR REPLACE FUNCTION log_mac_address_change() RETURNS TRIGGER AS $$
+            BEGIN
+                IF TG_OP = 'INSERT' THEN
+                    IF NEW.mac_address IS NOT NULL AND NEW.mac_address != '' THEN
+                        INSERT INTO mac_history (
+                            mac_address, ip_address, ip_manager_id, device_type,
+                            workstation_id, position_id, switch_id, network_id, change_type
+                        ) VALUES (
+                            NEW.mac_address, NEW.ip_address, NEW.id, NEW.device_type,
+                            NEW.workstation_id, NEW.position_id, NEW.switch_id, NEW.network_id, 'create'
+                        );
+                    END IF;
+                ELSIF TG_OP = 'UPDATE' THEN
+                    IF OLD.mac_address IS DISTINCT FROM NEW.mac_address THEN
+                        IF NEW.mac_address IS NOT NULL AND NEW.mac_address != '' THEN
+                            INSERT INTO mac_history (
+                                mac_address, ip_address, ip_manager_id, device_type,
+                                workstation_id, position_id, switch_id, network_id, change_type
+                            ) VALUES (
+                                NEW.mac_address, NEW.ip_address, NEW.id, NEW.device_type,
+                                NEW.workstation_id, NEW.position_id, NEW.switch_id, NEW.network_id, 'update'
+                            );
+                        END IF;
+                    END IF;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        "#)
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TRIGGER trg_log_mac_address_change AFTER INSERT OR UPDATE OF mac_address ON ip_managers FOR EACH ROW EXECUTE FUNCTION log_mac_address_change()"
         )
         .execute(pool)
         .await?;
@@ -1331,6 +1483,49 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         "CREATE TRIGGER trg_check_switch_circular_dependency BEFORE INSERT OR UPDATE OF parent_switch_id ON switches FOR EACH ROW EXECUTE FUNCTION check_switch_circular_dependency()"
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(r#"
+        CREATE OR REPLACE FUNCTION log_mac_address_change() RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                IF NEW.mac_address IS NOT NULL AND NEW.mac_address != '' THEN
+                    INSERT INTO mac_history (
+                        mac_address, ip_address, ip_manager_id, device_type,
+                        workstation_id, position_id, switch_id, network_id, change_type
+                    ) VALUES (
+                        NEW.mac_address, NEW.ip_address, NEW.id, NEW.device_type,
+                        NEW.workstation_id, NEW.position_id, NEW.switch_id, NEW.network_id, 'create'
+                    );
+                END IF;
+            ELSIF TG_OP = 'UPDATE' THEN
+                IF OLD.mac_address IS DISTINCT FROM NEW.mac_address THEN
+                    IF NEW.mac_address IS NOT NULL AND NEW.mac_address != '' THEN
+                        INSERT INTO mac_history (
+                            mac_address, ip_address, ip_manager_id, device_type,
+                            workstation_id, position_id, switch_id, network_id, change_type
+                        ) VALUES (
+                            NEW.mac_address, NEW.ip_address, NEW.id, NEW.device_type,
+                            NEW.workstation_id, NEW.position_id, NEW.switch_id, NEW.network_id, 'update'
+                        );
+                    END IF;
+                END IF;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    "#)
+    .execute(pool)
+    .await?;
+
+    let _ = sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_log_mac_address_change ON ip_managers"
+    ).execute(pool).await;
+
+    sqlx::query(
+        "CREATE TRIGGER trg_log_mac_address_change AFTER INSERT OR UPDATE OF mac_address ON ip_managers FOR EACH ROW EXECUTE FUNCTION log_mac_address_change()"
     )
     .execute(pool)
     .await?;
