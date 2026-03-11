@@ -547,43 +547,43 @@ fn configure_app_services(
     if config.init.enabled {
         cfg.service(
             web::scope("/api/init")
-                .route("", web::post().to(ipma::system::init::init_system))
-                .route("/db", web::post().to(ipma::system::init::init_db))
+                .route("", web::post().to(ipma::init::init_system))
+                .route("/db", web::post().to(ipma::init::init_db))
                 .route(
                     "/db/clear",
-                    web::delete().to(ipma::system::init::clear_database),
+                    web::delete().to(ipma::init::clear_database),
                 )
                 .route(
                     "/db/create",
-                    web::post().to(ipma::system::init::create_database_api),
+                    web::post().to(ipma::init::create_database_api),
                 )
                 .route(
                     "/db/import",
-                    web::post().to(ipma::system::init::import_database_api),
+                    web::post().to(ipma::init::import_database_api),
                 )
                 .route(
                     "/db/import-file",
-                    web::post().to(ipma::system::init::import_database_from_file),
+                    web::post().to(ipma::init::import_database_from_file),
                 )
                 .route(
                     "/restart",
-                    web::post().to(ipma::system::init::restart_program),
+                    web::post().to(ipma::init::restart_program),
                 )
                 .route(
                     "/status",
-                    web::get().to(ipma::system::init::check_init_status),
+                    web::get().to(ipma::init::check_init_status),
                 )
                 .route(
                     "/db-status",
-                    web::get().to(ipma::system::init::check_db_status),
+                    web::get().to(ipma::init::check_db_status),
                 )
                 .route(
                     "/verification-code",
-                    web::get().to(ipma::system::init::get_verification_code),
+                    web::get().to(ipma::init::get_verification_code),
                 )
                 .route(
                     "/check-pgsql",
-                    web::get().to(ipma::system::init::check_pgsql),
+                    web::get().to(ipma::init::check_pgsql),
                 ),
         )
         // 配置初始化页面路由

@@ -13,6 +13,7 @@ pub mod auth;
 pub mod config;
 pub mod crypto;
 pub mod db;
+pub mod init;
 pub mod log;
 pub mod models;
 pub mod resource;
