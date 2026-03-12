@@ -9,6 +9,46 @@ function isIPv6(ip) {
   return ip.includes(':');
 }
 
+function isValidIPv4(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) return false;
+    const num = parseInt(part, 10);
+    if (isNaN(num) || num < 0 || num > 255) return false;
+    if (part.length > 1 && part.startsWith('0') && num !== 0) return false;
+  }
+  return true;
+}
+
+function isValidIPv6(ip) {
+  if (!ip.includes(':')) return false;
+  
+  let addr = ip.split('%')[0];
+  if (addr === '::') return true;
+  
+  const parts = addr.split(':');
+  if (parts.length > 8) return false;
+  
+  const doubleColonCount = parts.filter(p => p === '').length;
+  if (doubleColonCount > 1) return false;
+  if (doubleColonCount === 1 && parts.length >= 8) return false;
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === '') continue;
+    
+    if (!/^[0-9a-fA-F]{1,4}$/.test(part)) return false;
+  }
+  
+  return true;
+}
+
+function isValidIP(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  return isValidIPv4(ip) || isValidIPv6(ip);
+}
+
 function ipv4ToInt(ip) {
   const parts = ip.split('.').map(p => parseInt(p, 10));
   if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
@@ -53,9 +93,10 @@ function ipv4CidrToRange(cidr) {
   const ipInt = ipv4ToInt(ip);
   if (ipInt === null) return null;
   
-  const mask = prefix === 0 ? BigInt(0) : (~BigInt(0) << BigInt(32 - prefix));
+  const max = (1n << 32n) - 1n;
+  const mask = prefix === 0 ? 0n : max ^ ((1n << BigInt(32 - prefix)) - 1n);
   const network = ipInt & mask;
-  const broadcast = network | ~mask;
+  const broadcast = network | (max ^ mask);
   
   return { start: network, end: broadcast };
 }
@@ -68,9 +109,10 @@ function ipv6CidrToRange(cidr) {
   const ipInt = ipv6ToInt(ip);
   if (ipInt === null) return null;
   
-  const mask = prefix === 0 ? 0n : ((1n << 128n) - 1n) << BigInt(128 - prefix);
+  const max = (1n << 128n) - 1n;
+  const mask = prefix === 0 ? 0n : max ^ ((1n << BigInt(128 - prefix)) - 1n);
   const network = ipInt & mask;
-  const broadcast = network | ~mask;
+  const broadcast = network | (max ^ mask);
   
   return { start: network, end: broadcast };
 }
@@ -310,8 +352,10 @@ export class IpConfigManager {
       }
       if (!ipAddress) {
         errors.push(`第${rowNum}行：请输入IP地址`);
+      } else if (!isValidIP(ipAddress)) {
+        errors.push(`第${rowNum}行：IP地址格式无效`);
       }
-
+      
       if (networkId && ipAddress) {
         const result = this.getCidrForIp(networkId, ipAddress);
         if (!result.hasCidr) {
