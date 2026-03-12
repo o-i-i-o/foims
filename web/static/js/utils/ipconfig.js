@@ -251,11 +251,110 @@ export class IpConfigManager {
 
   async loadIps(ips) {
     this.clear();
-    if (ips && ips.length > 0) {
-      for (const ip of ips) {
-        await this.addIpRow(ip);
+    if (!ips || ips.length === 0) {
+      await this.addIpRow();
+      return;
+    }
+
+    try {
+      let regions = [];
+      let allNetworks = [];
+      
+      if (this.config.loadNetworksByRegion) {
+        const regionsResult = await apiGet('/api/resources/network-regions?page_size=1000');
+        if (!regionsResult.success) {
+          throw new Error('加载网络区域失败');
+        }
+        regions = regionsResult.data?.items || regionsResult.data || [];
+        
+        const regionIds = new Set();
+        for (const ip of ips) {
+          if (ip.network_region_id) {
+            regionIds.add(ip.network_region_id);
+          }
+        }
+        
+        if (regionIds.size === 0 && ips.some(ip => ip.network_id)) {
+          const networkIds = ips.filter(ip => ip.network_id).map(ip => ip.network_id);
+          const uniqueNetworkIds = [...new Set(networkIds)];
+          const networkPromises = uniqueNetworkIds.map(id => 
+            apiGet(`/api/resources/networks/${id}`).catch(() => null)
+          );
+          const networkResults = await Promise.all(networkPromises);
+          for (const result of networkResults) {
+            if (result?.success && result.data) {
+              const network = result.data;
+              if (network.network_region_id) {
+                regionIds.add(network.network_region_id);
+              }
+              allNetworks.push(network);
+            }
+          }
+        }
+        
+        if (regionIds.size > 0) {
+          const networkPromises = Array.from(regionIds).map(regionId => {
+            const url = this.config.networksApi(regionId);
+            return url ? apiGet(url).catch(() => null) : null;
+          }).filter(Boolean);
+          
+          const networkResults = await Promise.all(networkPromises);
+          for (const result of networkResults) {
+            if (result?.success && result.data) {
+              const regionNetworks = result.data.items || result.data || [];
+              allNetworks = allNetworks.concat(regionNetworks);
+            }
+          }
+        }
+      } else if (this.config.idSelector) {
+        const id = document.getElementById(this.config.idSelector)?.value;
+        if (!id) {
+          throw new Error(`请先选择${this.config.idName}`);
+        }
+        const url = this.config.networksApi(id);
+        if (url) {
+          const result = await apiGet(url);
+          if (!result.success) {
+            throw new Error('加载网络数据失败');
+          }
+          allNetworks = result.data?.items || result.data || [];
+        }
+        
+        const regionMap = new Map();
+        for (const network of allNetworks) {
+          if (network.network_region_id && network.network_region) {
+            regionMap.set(network.network_region_id, {
+              id: network.network_region_id,
+              name: network.network_region
+            });
+          }
+        }
+        regions = Array.from(regionMap.values());
       }
-    } else {
+      
+      if (allNetworks.length > 0) {
+        this.networks = allNetworks;
+      }
+      
+      const container = this.getContainer();
+      const fragment = document.createDocumentFragment();
+      const rowElements = [];
+      
+      for (const ip of ips) {
+        const row = this.createIpRowElement(regions, allNetworks);
+        rowElements.push(row);
+        fragment.appendChild(row);
+      }
+      
+      container.appendChild(fragment);
+      
+      for (let i = 0; i < rowElements.length; i++) {
+        await this.bindRowEvents(rowElements[i], allNetworks, ips[i]);
+      }
+      
+    } catch (error) {
+      console.error("加载IP失败:", error);
+      showToast(error.message || "加载IP数据失败", "error");
       await this.addIpRow();
     }
   }
