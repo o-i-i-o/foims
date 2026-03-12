@@ -237,6 +237,7 @@ pub async fn get_cabinets(
 pub async fn get_cabinets_by_network_region(
     pool: web::Data<DbPool>,
     path: web::Path<String>,
+    query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let region_id_str = path.into_inner();
     
@@ -247,21 +248,38 @@ pub async fn get_cabinets_by_network_region(
         }
     };
 
-    let cabinets = match sqlx::query_as::<_, Cabinet>(
-        r#"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
-           FROM cabinets c
-           LEFT JOIN network_cidrs nc1 ON c.network_id = nc1.id
-           LEFT JOIN rooms r ON c.room_id = r.id
-           LEFT JOIN room_networks rn ON r.id = rn.room_id
-           LEFT JOIN network_cidrs nc2 ON rn.network_id = nc2.id
-           WHERE nc1.network_region_id = $1 
-              OR nc2.network_region_id = $1
-           ORDER BY c.name"#
-    )
-    .bind(region_id)
-    .fetch_all(pool.get_conn())
-    .await
-    {
+    let network_id_filter = query.get("network_id").and_then(|s| Uuid::parse_str(s).ok());
+
+    let cabinets = if let Some(network_id) = network_id_filter {
+        sqlx::query_as::<_, Cabinet>(
+            r#"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+               FROM cabinets c
+               LEFT JOIN rooms r ON c.room_id = r.id
+               LEFT JOIN room_networks rn ON r.id = rn.room_id
+               WHERE c.network_id = $1 OR rn.network_id = $1
+               ORDER BY c.name"#
+        )
+        .bind(network_id)
+        .fetch_all(pool.get_conn())
+        .await
+    } else {
+        sqlx::query_as::<_, Cabinet>(
+            r#"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+               FROM cabinets c
+               LEFT JOIN network_cidrs nc1 ON c.network_id = nc1.id
+               LEFT JOIN rooms r ON c.room_id = r.id
+               LEFT JOIN room_networks rn ON r.id = rn.room_id
+               LEFT JOIN network_cidrs nc2 ON rn.network_id = nc2.id
+               WHERE nc1.network_region_id = $1 
+                  OR nc2.network_region_id = $1
+               ORDER BY c.name"#
+        )
+        .bind(region_id)
+        .fetch_all(pool.get_conn())
+        .await
+    };
+
+    let cabinets = match cabinets {
         Ok(c) => c,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(

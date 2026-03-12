@@ -2,8 +2,10 @@ import { apiGet } from "./apiClient.js";
 import { showToast } from "./toast.js";
 
 const NETWORK_REGION_CHANGED_EVENT = 'ipma:network-region-changed';
+const NETWORK_CHANGED_EVENT = 'ipma:network-changed';
 
 const regionChangeCallbacks = new WeakMap();
+const networkChangeCallbacks = new Set();
 
 function isIPv6(ip) {
   return ip.includes(':');
@@ -160,6 +162,28 @@ export function offNetworkRegionChange(callback) {
   if (wrapper) {
     document.removeEventListener(NETWORK_REGION_CHANGED_EVENT, wrapper);
     regionChangeCallbacks.delete(callback);
+  }
+}
+
+export function onNetworkChange(callback) {
+  if (typeof callback !== 'function') {
+    console.error("onNetworkChange: callback must be a function");
+    return;
+  }
+  networkChangeCallbacks.add(callback);
+}
+
+export function offNetworkChange(callback) {
+  networkChangeCallbacks.delete(callback);
+}
+
+function dispatchNetworkChange(networkId, networkName, networkRegionId) {
+  for (const callback of networkChangeCallbacks) {
+    try {
+      callback(networkId, networkName, networkRegionId);
+    } catch (e) {
+      console.error("Network change callback error:", e);
+    }
   }
 }
 
@@ -734,6 +758,9 @@ export class IpConfigManager {
         const network = this.networks.find(n => n.id === networkId);
         if (network) {
           this.filterSwitchesByRegion(switchSelect, portSelect, network.network_region_id);
+          if (this.resourceType === 'switch') {
+            dispatchNetworkChange(networkId, network.name, network.network_region_id);
+          }
         }
       });
     }
