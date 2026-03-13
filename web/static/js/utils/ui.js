@@ -26,6 +26,19 @@ export function createSortState(defaultBy = 'name', defaultOrder = 'asc') {
                 this.order = 'asc';
             }
             return this;
+        },
+        setSort(by, order = null) {
+            this.by = by;
+            if (order) {
+                this.order = order;
+            }
+            return this;
+        },
+        get sortBy() {
+            return this.by;
+        },
+        get sortOrder() {
+            return this.order;
         }
     };
 }

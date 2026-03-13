@@ -206,10 +206,19 @@ pub async fn get_cabinets(
         .await
         .unwrap_or(0);
 
+        let room_name: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM rooms WHERE id = $1"
+        )
+        .bind(cabinet.room_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
+
         let cabinet_with_networks = CabinetWithNetworks {
             id: cabinet.id,
             name: cabinet.name,
             room_id: cabinet.room_id,
+            room_name,
             capacity: cabinet.capacity,
             network_id: cabinet.network_id,
             networks: cabinet_networks,
@@ -442,10 +451,19 @@ pub async fn get_cabinet(
     .await
     .unwrap_or(0);
 
+    let room_name: Option<String> = sqlx::query_scalar(
+        "SELECT name FROM rooms WHERE id = $1"
+    )
+    .bind(cabinet.room_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    .unwrap_or(None);
+
     let cabinet_with_networks = CabinetWithNetworks {
         id: cabinet.id,
         name: cabinet.name,
         room_id: cabinet.room_id,
+        room_name,
         capacity: cabinet.capacity,
         network_id: cabinet.network_id,
         networks: cabinet_networks,

@@ -443,6 +443,7 @@ pub struct CabinetWithNetworks {
     pub id: Uuid,
     pub name: String,
     pub room_id: Uuid,
+    pub room_name: Option<String>,
     pub capacity: i32,
     pub network_id: Option<Uuid>,
     pub networks: Vec<NetworkInfo>,
@@ -554,6 +555,7 @@ pub struct CabinetPositionPortCreate {
 pub struct CabinetPositionUpdate {
     #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
     pub name: Option<String>,
+    pub cabinet_id: Option<Uuid>,
     #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
     pub start_u: Option<i32>,
     #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]

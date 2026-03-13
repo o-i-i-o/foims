@@ -671,69 +671,152 @@ pub async fn update_cabinet_position(
             }
         };
 
-    if existing_position.is_none() {
+    let existing_switch: Option<Uuid> = if existing_position.is_none() {
+        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+        {
+            Ok(switch) => switch,
+            Err(err) => {
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "Database query error: {}",
+                        err
+                    ))),
+                );
+            }
+        }
+    } else {
+        None
+    };
+
+    if existing_position.is_none() && existing_switch.is_none() {
         return Ok(
             HttpResponse::NotFound().json(ApiResponse::<CabinetPosition>::error("机位未找到"))
         );
     }
 
+    let is_switch = existing_switch.is_some();
+
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
-        "UPDATE positions SET 
-         name = COALESCE($1, name), 
-         start_u = COALESCE($2, start_u),
-         end_u = COALESCE($3, end_u),
-         description = COALESCE($4, description), 
-         updated_at = $5 
-         WHERE id = $6",
-    )
-    .bind(&req.name)
-    .bind(req.start_u)
-    .bind(req.end_u)
-    .bind(&req.description)
-    .bind(now)
-    .bind(id)
-    .execute(&mut *tx)
-    .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+    if is_switch {
+        if let Err(err) = sqlx::query(
+            "UPDATE switches SET 
+             name = COALESCE($1, name), 
+             cabinet_id = COALESCE($2, cabinet_id),
+             start_u = COALESCE($3, start_u),
+             end_u = COALESCE($4, end_u),
+             description = COALESCE($5, description), 
+             updated_at = $6 
+             WHERE id = $7",
+        )
+        .bind(&req.name)
+        .bind(req.cabinet_id)
+        .bind(req.start_u)
+        .bind(req.end_u)
+        .bind(&req.description)
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+        }
+    } else {
+        if let Err(err) = sqlx::query(
+            "UPDATE positions SET 
+             name = COALESCE($1, name), 
+             start_u = COALESCE($2, start_u),
+             end_u = COALESCE($3, end_u),
+             description = COALESCE($4, description), 
+             updated_at = $5 
+             WHERE id = $6",
+        )
+        .bind(&req.name)
+        .bind(req.start_u)
+        .bind(req.end_u)
+        .bind(&req.description)
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+        }
     }
 
     if let Some(ips) = &req.ips {
-        if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-        {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除IP记录失败: {}", err))));
+        if is_switch {
+            if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+            {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("删除IP记录失败: {}", err))));
+            }
+        } else {
+            if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+            {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("删除IP记录失败: {}", err))));
+            }
         }
 
         for ip in ips {
             let ip_version = if ip.ip_address.contains(":") { 6i16 } else { 4i16 };
             
-            if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
-            )
-            .bind(Uuid::new_v4())
-            .bind(id)
-            .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
-            .bind(ip.network_id)
-            .bind(&ip.ip_address)
-            .bind(ip_version)
-            .bind(&ip.mac_address)
-            .bind(&ip.hostname)
-            .bind(ip.switch_id)
-            .bind(ip.switch_port_id)
-            .bind("active")
-            .bind(now)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {}", err))));
+            if is_switch {
+                if let Err(err) = sqlx::query(
+                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id as parent_switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                )
+                .bind(Uuid::new_v4())
+                .bind(id)
+                .bind(ip.device_type.as_deref().unwrap_or("switch"))
+                .bind(ip.network_id)
+                .bind(&ip.ip_address)
+                .bind(ip_version)
+                .bind(&ip.mac_address)
+                .bind(&ip.hostname)
+                .bind(ip.switch_id)
+                .bind(ip.switch_port_id)
+                .bind("active")
+                .bind(now)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx).await {
+                    return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {}", err))));
+                }
+            } else {
+                if let Err(err) = sqlx::query(
+                    "INSERT INTO ip_managers (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                )
+                .bind(Uuid::new_v4())
+                .bind(id)
+                .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+                .bind(ip.network_id)
+                .bind(&ip.ip_address)
+                .bind(ip_version)
+                .bind(&ip.mac_address)
+                .bind(&ip.hostname)
+                .bind(ip.switch_id)
+                .bind(ip.switch_port_id)
+                .bind("active")
+                .bind(now)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx).await {
+                    return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {}", err))));
+                }
             }
         }
     }
@@ -742,25 +825,51 @@ pub async fn update_cabinet_position(
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
-    let row = match sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-        FROM positions p 
-        LEFT JOIN cabinets c ON p.cabinet_id = c.id 
-        WHERE p.id = $1"
-    ).bind(id)
-    .fetch_one(pool.get_conn()).await {
-        Ok(r) => r,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机位失败: {}", err))));
-        }
-    };
+    let (row, ips, device_type) = if is_switch {
+        let row = match sqlx::query(
+            "SELECT s.id, s.name, s.cabinet_id, c.name as cabinet_name, s.start_u, s.end_u, NULL::uuid as network_id, s.description, s.created_at::TIMESTAMPTZ, s.updated_at::TIMESTAMPTZ 
+            FROM switches s 
+            LEFT JOIN cabinets c ON s.cabinet_id = c.id 
+            WHERE s.id = $1"
+        ).bind(id)
+        .fetch_one(pool.get_conn()).await {
+            Ok(r) => r,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询交换机失败: {}", err))));
+            }
+        };
 
-    let ips: Vec<IpManager> = sqlx::query_as(
-        r#"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
-           host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
-           FROM ip_managers WHERE position_id = $1"#
-    ).bind(id)
-    .fetch_all(pool.get_conn()).await.unwrap_or_default();
+        let ips: Vec<IpManager> = sqlx::query_as(
+            r#"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
+               host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
+               FROM ip_managers WHERE switch_id = $1"#
+        ).bind(id)
+        .fetch_all(pool.get_conn()).await.unwrap_or_default();
+
+        (row, ips, "switch".to_string())
+    } else {
+        let row = match sqlx::query(
+            "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.network_id, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+            FROM positions p 
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id 
+            WHERE p.id = $1"
+        ).bind(id)
+        .fetch_one(pool.get_conn()).await {
+            Ok(r) => r,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机位失败: {}", err))));
+            }
+        };
+
+        let ips: Vec<IpManager> = sqlx::query_as(
+            r#"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
+               host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
+               FROM ip_managers WHERE position_id = $1"#
+        ).bind(id)
+        .fetch_all(pool.get_conn()).await.unwrap_or_default();
+
+        (row, ips, "cabinet_position".to_string())
+    };
 
     let result = CabinetPositionWithDetails {
         id: row.get("id"),
@@ -770,7 +879,7 @@ pub async fn update_cabinet_position(
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
         network_id: row.get("network_id"),
-        device_type: "cabinet_position".to_string(),
+        device_type,
         ips,
         ports: vec![],
         description: row.get("description"),
