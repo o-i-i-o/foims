@@ -890,7 +890,7 @@ pub async fn update_cabinet_position(
             if is_switch {
                 if let Err(err) = sqlx::query(
                     "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)"
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
                 )
                 .bind(Uuid::new_v4())
                 .bind(id)

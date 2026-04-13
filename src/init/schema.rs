@@ -352,7 +352,7 @@ async fn create_ip_managers_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown')),
             CONSTRAINT chk_device_consistency CHECK (
-                (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL AND position_id IS NULL) OR
+                (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
@@ -573,6 +573,12 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+pub async fn run_migrations_only(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    create_schema_migrations_table(pool).await?;
+    run_migrations(pool).await?;
+    Ok(())
+}
+
 async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_ip_managers_constraint(pool).await?;
     migrate_switch_position_fields(pool).await?;
@@ -584,6 +590,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_log_cleanup_tasks(pool).await?;
     migrate_log_table_partitions(pool).await?;
     migrate_switch_position_link(pool).await?;
+    migrate_switch_position_constraint(pool).await?;
     Ok(())
 }
 
@@ -613,7 +620,7 @@ async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx:
 
         sqlx::query(
             r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
-                (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL AND position_id IS NULL) OR
+                (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
@@ -1015,22 +1022,35 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             let end_u: Option<i32> = row.get("end_u");
             let description: Option<String> = row.get("description");
 
-            let pos_id = Uuid::new_v4();
-            if let Err(e) = sqlx::query(
-                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+            let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2"
             )
-            .bind(pos_id)
             .bind(&name)
             .bind(cabinet_id)
-            .bind(start_u.unwrap_or(1i32))
-            .bind(end_u.unwrap_or(1i32))
-            .bind(&description)
-            .execute(pool)
+            .fetch_optional(pool)
             .await
             {
-                warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
-                continue;
-            }
+                Ok(Some(existing_id)) => existing_id,
+                _ => {
+                    let new_id = Uuid::new_v4();
+                    if let Err(e) = sqlx::query(
+                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+                    )
+                    .bind(new_id)
+                    .bind(&name)
+                    .bind(cabinet_id)
+                    .bind(start_u.unwrap_or(1i32))
+                    .bind(end_u.unwrap_or(1i32))
+                    .bind(&description)
+                    .execute(pool)
+                    .await
+                    {
+                        warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
+                        continue;
+                    }
+                    new_id
+                }
+            };
 
             if let Err(e) = sqlx::query(
                 "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2 AND position_id IS NULL"
@@ -1046,6 +1066,103 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
 
         sqlx::query(
             r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_link', '为有cabinet_id但无position关联的交换机创建position记录并关联ip_managers')"#
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'switch_position_constraint'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        sqlx::query("ALTER TABLE ip_managers DROP CONSTRAINT IF EXISTS chk_device_consistency")
+            .execute(pool)
+            .await?;
+
+        sqlx::query(
+            r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
+                (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
+                (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
+                (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
+            )"#
+        )
+        .execute(pool)
+        .await?;
+
+        let switches_without_position = sqlx::query(
+            r#"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+               FROM switches s
+               WHERE s.cabinet_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM ip_managers im WHERE im.switch_id = s.id AND im.position_id IS NOT NULL
+               )"#
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        for row in &switches_without_position {
+            let switch_id: Uuid = row.get("id");
+            let name: String = row.get("name");
+            let cabinet_id: Option<Uuid> = row.get("cabinet_id");
+            let start_u: Option<i32> = row.get("start_u");
+            let end_u: Option<i32> = row.get("end_u");
+            let description: Option<String> = row.get("description");
+
+            let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2"
+            )
+            .bind(&name)
+            .bind(cabinet_id)
+            .fetch_optional(pool)
+            .await
+            {
+                Ok(Some(existing_id)) => existing_id,
+                _ => {
+                    let new_id = Uuid::new_v4();
+                    if let Err(e) = sqlx::query(
+                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+                    )
+                    .bind(new_id)
+                    .bind(&name)
+                    .bind(cabinet_id)
+                    .bind(start_u.unwrap_or(1i32))
+                    .bind(end_u.unwrap_or(1i32))
+                    .bind(&description)
+                    .execute(pool)
+                    .await
+                    {
+                        warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
+                        continue;
+                    }
+                    new_id
+                }
+            };
+
+            if let Err(e) = sqlx::query(
+                "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2 AND position_id IS NULL"
+            )
+            .bind(pos_id)
+            .bind(switch_id)
+            .execute(pool)
+            .await
+            {
+                warn!("关联交换机 {} 的IP到机位失败: {}", switch_id, e);
+            }
+        }
+
+        sqlx::query(
+            r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_constraint', '更新chk_device_consistency约束允许switch类型有position_id，并为现有交换机创建position关联')"#
         )
         .execute(pool)
         .await?;

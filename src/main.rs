@@ -57,6 +57,11 @@ async fn main() -> std::io::Result<()> {
             .await
             .expect("Failed to create database pool");
         info!("数据库连接池创建成功");
+
+        if let Err(e) = ipma::init::schema::run_migrations_only(&p.pool).await {
+            tracing::error!("数据库迁移失败: {}", e);
+        }
+
         Some(p)
     } else {
         // 使用双语日志
