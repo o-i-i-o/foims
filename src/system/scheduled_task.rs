@@ -90,15 +90,13 @@ pub async fn update_scheduled_task(
 
     if let Some(ref cron_expr) = req.cron_expression
         && let Ok(next_run) = calculate_next_run(cron_expr)
-    {
-        if let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
+        && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
             .bind(next_run)
             .bind(id)
             .execute(pool.get_conn())
             .await
-        {
-            tracing::warn!("更新下次运行时间失败: {}", e);
-        }
+    {
+        tracing::warn!("更新下次运行时间失败: {}", e);
     }
 
     let result = sqlx::query(

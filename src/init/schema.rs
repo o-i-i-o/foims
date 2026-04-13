@@ -759,7 +759,7 @@ async fn migrate_switch_macs_ip_type(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
         let data_type: String = row.try_get("data_type").unwrap_or_default();
         if data_type == "character varying"
             && let Err(e) = sqlx::query(
-                "ALTER TABLE switch_macs ALTER COLUMN ip_address TYPE INET USING ip_address::INET"
+                "ALTER TABLE switch_macs ALTER COLUMN ip_address TYPE INET USING ip_address::INET",
             )
             .execute(pool)
             .await
@@ -822,7 +822,7 @@ async fn migrate_drop_switch_cabinet_fields(pool: &sqlx::PgPool) -> Result<(), s
                 LIMIT 1
             ) im ON true
             LEFT JOIN positions p ON im.position_id = p.id
-            LEFT JOIN cabinets c ON p.cabinet_id = c.id"#
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id"#,
         )
         .execute(pool)
         .await
@@ -873,11 +873,36 @@ async fn migrate_log_cleanup_tasks(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
 
     if count == 0 {
         let tasks = [
-            ("cleanup_operation_logs", "log_cleanup", "0 3 * * *", r#"{"retention_days": 30, "table": "operation_logs"}"#),
-            ("cleanup_token_usage", "log_cleanup", "0 3 * * *", r#"{"retention_days": 90, "table": "token_usage"}"#),
-            ("cleanup_revoked_tokens", "log_cleanup", "0 4 * * *", r#"{"retention_days": 0, "table": "revoked_tokens"}"#),
-            ("cleanup_login_logs", "log_cleanup", "0 4 * * *", r#"{"retention_days": 60, "table": "login_logs"}"#),
-            ("cleanup_mac_history", "log_cleanup", "0 5 * * *", r#"{"retention_days": 90, "table": "mac_history"}"#),
+            (
+                "cleanup_operation_logs",
+                "log_cleanup",
+                "0 3 * * *",
+                r#"{"retention_days": 30, "table": "operation_logs"}"#,
+            ),
+            (
+                "cleanup_token_usage",
+                "log_cleanup",
+                "0 3 * * *",
+                r#"{"retention_days": 90, "table": "token_usage"}"#,
+            ),
+            (
+                "cleanup_revoked_tokens",
+                "log_cleanup",
+                "0 4 * * *",
+                r#"{"retention_days": 0, "table": "revoked_tokens"}"#,
+            ),
+            (
+                "cleanup_login_logs",
+                "log_cleanup",
+                "0 4 * * *",
+                r#"{"retention_days": 60, "table": "login_logs"}"#,
+            ),
+            (
+                "cleanup_mac_history",
+                "log_cleanup",
+                "0 5 * * *",
+                r#"{"retention_days": 90, "table": "mac_history"}"#,
+            ),
         ];
 
         for (name, task_type, cron, config) in &tasks {
@@ -925,14 +950,13 @@ async fn migrate_log_table_partitions(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         ];
 
         for (table_name, partition_col, _interval) in &partition_tables {
-            let is_partitioned: bool = sqlx::query_scalar(
-                "SELECT relispartition FROM pg_class WHERE relname = $1",
-            )
-            .bind(*table_name)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None)
-            .unwrap_or(false);
+            let is_partitioned: bool =
+                sqlx::query_scalar("SELECT relispartition FROM pg_class WHERE relname = $1")
+                    .bind(*table_name)
+                    .fetch_optional(pool)
+                    .await
+                    .unwrap_or(None)
+                    .unwrap_or(false);
 
             if !is_partitioned
                 && let Err(e) = sqlx::query(&format!(
@@ -942,7 +966,10 @@ async fn migrate_log_table_partitions(pool: &sqlx::PgPool) -> Result<(), sqlx::E
                 .execute(pool)
                 .await
             {
-                warn!("表 {} 分区设置失败（可能不支持或已有数据）: {}", table_name, e);
+                warn!(
+                    "表 {} 分区设置失败（可能不支持或已有数据）: {}",
+                    table_name, e
+                );
             }
         }
 
@@ -1058,10 +1085,24 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     let tables_with_updated_at = [
-        "users", "network_regions", "network_cidrs", "rooms", "room_networks",
-        "svg_layouts", "cabinets", "positions", "position_ports", "workstations",
-        "workstation_ports", "switches", "switch_ports", "switch_macs", "switch_lldps",
-        "ip_managers", "system_configs", "scheduled_tasks",
+        "users",
+        "network_regions",
+        "network_cidrs",
+        "rooms",
+        "room_networks",
+        "svg_layouts",
+        "cabinets",
+        "positions",
+        "position_ports",
+        "workstations",
+        "workstation_ports",
+        "switches",
+        "switch_ports",
+        "switch_macs",
+        "switch_lldps",
+        "ip_managers",
+        "system_configs",
+        "scheduled_tasks",
     ];
 
     for table in &tables_with_updated_at {
@@ -1145,9 +1186,10 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    if let Err(e) = sqlx::query("DROP TRIGGER IF EXISTS trg_check_switch_circular_dependency ON switches")
-        .execute(pool)
-        .await
+    if let Err(e) =
+        sqlx::query("DROP TRIGGER IF EXISTS trg_check_switch_circular_dependency ON switches")
+            .execute(pool)
+            .await
     {
         warn!("删除旧触发器失败: {}", e);
     }
@@ -1178,9 +1220,10 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    if let Err(e) = sqlx::query("DROP TRIGGER IF EXISTS trg_check_parent_port_consistency ON switches")
-        .execute(pool)
-        .await
+    if let Err(e) =
+        sqlx::query("DROP TRIGGER IF EXISTS trg_check_parent_port_consistency ON switches")
+            .execute(pool)
+            .await
     {
         warn!("删除旧触发器失败: {}", e);
     }

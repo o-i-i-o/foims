@@ -965,7 +965,9 @@ pub async fn init_two_factor(
         .await
     {
         tracing::error!("保存2FA密钥失败: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存2FA密钥失败")));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存2FA密钥失败"))
+        );
     }
 
     // 返回密钥和otpauth URL
@@ -1099,7 +1101,9 @@ pub async fn enable_two_factor(
     .await
     {
         tracing::error!("启用2FA失败: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("启用2FA失败")));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("启用2FA失败"))
+        );
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已启用")))
