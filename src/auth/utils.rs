@@ -225,7 +225,8 @@ impl JwtUtils {
         hasher.update(ip_address);
 
         let hash = hasher.finalize();
-        format!("{:x}", hash)
+        let hash_bytes: &[u8] = hash.as_ref();
+        hex::encode(hash_bytes)
     }
 
     // 验证设备指纹

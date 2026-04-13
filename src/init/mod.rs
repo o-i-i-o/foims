@@ -12,7 +12,7 @@ pub use types::{
     VERIFICATION_CODE_EXPIRY_SECS, VerificationCode,
 };
 
-pub use verification::{VERIFICATION_CODE, get_verification_code, verify_code};
+pub use verification::{get_verification_code, verify_code};
 
 pub use config::{get_backup_dir, update_config_enabled};
 

@@ -1,15 +1,17 @@
 use actix_web::{HttpResponse, Result, web};
-use lazy_static::lazy_static;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use tracing::info;
 
 use crate::config::Config;
 use crate::init::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
 use crate::models::ApiResponse;
 
-lazy_static! {
-    pub static ref VERIFICATION_CODE: Mutex<VerificationCode> =
-        Mutex::new(VerificationCode::new(generate_verification_code()));
+static VERIFICATION_CODE: OnceLock<Mutex<VerificationCode>> = OnceLock::new();
+
+fn get_verification_code_storage() -> &'static Mutex<VerificationCode> {
+    VERIFICATION_CODE
+        .get_or_init(|| Mutex::new(VerificationCode::new(generate_verification_code())))
 }
 
 fn generate_verification_code() -> String {
@@ -41,7 +43,7 @@ fn generate_and_print_verification_code() -> VerificationCode {
 }
 
 pub fn verify_code(provided_code: &str) -> Result<(), String> {
-    let stored_code = VERIFICATION_CODE
+    let stored_code = get_verification_code_storage()
         .lock()
         .map_err(|_| "无法访问验证码".to_string())?;
 
@@ -70,7 +72,7 @@ pub async fn get_verification_code(config: web::Data<Config>) -> Result<HttpResp
 
     let verification_code = generate_and_print_verification_code();
 
-    if let Ok(mut lock) = VERIFICATION_CODE.lock() {
+    if let Ok(mut lock) = get_verification_code_storage().lock() {
         *lock = verification_code;
     }
 

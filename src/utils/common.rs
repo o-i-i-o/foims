@@ -1,13 +1,14 @@
 use ipnetwork::IpNetwork;
-use log::{error, info, warn};
 use macaddr::MacAddr;
 use regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing;
+use tracing::{error, info, warn};
 use uuid::Uuid;
+
+use hex::encode;
 
 use crate::config::Config;
 use actix_web::{HttpMessage, HttpRequest};
@@ -21,9 +22,17 @@ pub const MAX_PAGE_SIZE: i64 = 1000;
 pub const IPV4_CIDR_REGEX: &str = r"^(?:(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])/(?:[0-9]|[12]?[0-9]|3[0-2]))$";
 pub const IPV6_CIDR_REGEX: &str = r"^(?:[0-9a-fA-F:]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))$";
 
-lazy_static::lazy_static! {
-    static ref IPV4_CIDR_PATTERN: regex::Regex = regex::Regex::new(IPV4_CIDR_REGEX).unwrap();
-    static ref IPV6_CIDR_PATTERN: regex::Regex = regex::Regex::new(IPV6_CIDR_REGEX).unwrap();
+use std::sync::OnceLock;
+
+static IPV4_CIDR_PATTERN: OnceLock<regex::Regex> = OnceLock::new();
+static IPV6_CIDR_PATTERN: OnceLock<regex::Regex> = OnceLock::new();
+
+fn get_ipv4_cidr_pattern() -> &'static regex::Regex {
+    IPV4_CIDR_PATTERN.get_or_init(|| regex::Regex::new(IPV4_CIDR_REGEX).unwrap())
+}
+
+fn get_ipv6_cidr_pattern() -> &'static regex::Regex {
+    IPV6_CIDR_PATTERN.get_or_init(|| regex::Regex::new(IPV6_CIDR_REGEX).unwrap())
 }
 
 // ==================== IP/MAC 地址验证与格式化 ====================
@@ -61,7 +70,7 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
 // ==================== CIDR 验证 ====================
 
 pub fn validate_cidr(cidr: &str) -> bool {
-    if !IPV4_CIDR_PATTERN.is_match(cidr) && !IPV6_CIDR_PATTERN.is_match(cidr) {
+    if !get_ipv4_cidr_pattern().is_match(cidr) && !get_ipv6_cidr_pattern().is_match(cidr) {
         return false;
     }
 
@@ -69,9 +78,9 @@ pub fn validate_cidr(cidr: &str) -> bool {
 }
 
 pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
-    if IPV4_CIDR_PATTERN.is_match(cidr) {
+    if get_ipv4_cidr_pattern().is_match(cidr) {
         Some("ipv4")
-    } else if IPV6_CIDR_PATTERN.is_match(cidr) {
+    } else if get_ipv6_cidr_pattern().is_match(cidr) {
         Some("ipv6")
     } else {
         None
@@ -133,7 +142,9 @@ pub fn generate_token_hash(token: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(token);
-    format!("{:x}", hasher.finalize())
+    let hash = hasher.finalize();
+    let hash_bytes: &[u8] = hash.as_ref();
+    encode(hash_bytes)
 }
 
 pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, sqlx::Error> {

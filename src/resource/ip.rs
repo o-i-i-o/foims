@@ -4,9 +4,9 @@ use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerUpdate, Ip
 use crate::utils::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
-use log::{error, info, warn};
 use std::net::IpAddr;
 use std::str::FromStr;
+use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 

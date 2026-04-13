@@ -1,9 +1,9 @@
-use log;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tokio::time;
+use tracing::{debug, error, info, warn};
 
 use crate::config::DatabaseConfig;
 
@@ -241,11 +241,11 @@ impl DbPool {
         match &result {
             Ok(_) => {
                 self.metrics.record_request_complete(wait_time_ms, true);
-                log::debug!("获取连接成功，等待时间: {}ms", wait_time_ms);
+                debug!("获取连接成功，等待时间: {}ms", wait_time_ms);
             }
             Err(e) => {
                 self.metrics.record_request_complete(wait_time_ms, false);
-                log::error!("获取连接失败: {}, 等待时间: {}ms", e, wait_time_ms);
+                error!("获取连接失败: {}, 等待时间: {}ms", e, wait_time_ms);
             }
         }
 
@@ -301,7 +301,7 @@ impl DbPool {
         let config = self.config.read().await;
 
         if current_time - last_scaling < config.scaling_cooldown_secs {
-            log::warn!("连接池缩放冷却中，跳过本次调整");
+            warn!("连接池缩放冷却中，跳过本次调整");
             return Ok(());
         }
         drop(config);
@@ -316,7 +316,7 @@ impl DbPool {
         self.last_scaling_time
             .store(current_time, Ordering::Relaxed);
 
-        log::info!("连接池大小调整: {} -> {}", old_max, new_max_connections);
+        info!("连接池大小调整: {} -> {}", old_max, new_max_connections);
 
         Ok(())
     }
@@ -355,7 +355,7 @@ impl DbPool {
             if new_max > current_max + 1
                 && let Err(e) = self.resize_pool(new_max).await
             {
-                log::error!("连接池扩容失败: {}", e);
+                error!("连接池扩容失败: {}", e);
             }
         }
         // 低负载：减少连接数
@@ -371,7 +371,7 @@ impl DbPool {
             if new_max < current_max - 1
                 && let Err(e) = self.resize_pool(new_max).await
             {
-                log::error!("连接池缩容失败: {}", e);
+                error!("连接池缩容失败: {}", e);
             }
         }
     }
@@ -386,8 +386,8 @@ impl DbPool {
 
                 // 健康检查
                 match pool_clone.health_check().await {
-                    Ok(_) => log::debug!("数据库连接池健康检查通过"),
-                    Err(e) => log::error!("数据库连接池健康检查失败: {}", e),
+                    Ok(_) => debug!("数据库连接池健康检查通过"),
+                    Err(e) => error!("数据库连接池健康检查失败: {}", e),
                 }
 
                 // 更新指标
@@ -410,7 +410,7 @@ impl DbPool {
                 let metrics = pool_clone.get_metrics();
                 let _status = pool_clone.get_pool_status();
 
-                log::info!(
+                info!(
                     "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",
                     metrics.active_connections,
                     metrics.idle_connections,
@@ -426,7 +426,7 @@ impl DbPool {
     /// 关闭连接池
     pub async fn close(&self) {
         self.pool.close().await;
-        log::info!("数据库连接池已关闭");
+        info!("数据库连接池已关闭");
     }
 
     /// 获取查询超时时间
@@ -466,11 +466,9 @@ impl DbPool {
 
         // 记录慢查询
         if elapsed_ms > slow_threshold {
-            log::warn!(
+            warn!(
                 "慢查询警告: {} 耗时 {}ms (阈值: {}ms)",
-                query_name,
-                elapsed_ms,
-                slow_threshold
+                query_name, elapsed_ms, slow_threshold
             );
         }
 

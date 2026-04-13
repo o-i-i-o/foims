@@ -1,7 +1,7 @@
 use crate::auth::utils::JwtUtils;
 use crate::config::Config;
 use crate::db::DbPool;
-use crate::utils::buffer_pool::BUFFER_POOL;
+use crate::utils::buffer_pool::get_buffer_pool;
 use anyhow::Context;
 use quinn::{Endpoint, ServerConfig};
 use serde_json::json;
@@ -189,7 +189,8 @@ async fn handle_bi_stream_optimized(
     app_state: AppState,
 ) -> anyhow::Result<()> {
     // 从缓冲区池获取缓冲区
-    let mut buf = BUFFER_POOL.get();
+    let buffer_pool = get_buffer_pool();
+    let mut buf = buffer_pool.get();
     let mut chunk = [0; 1024];
 
     // 流式处理请求体
@@ -200,7 +201,7 @@ async fn handle_bi_stream_optimized(
             Ok(None) => break, // 流结束
             Err(e) => {
                 // 归还缓冲区到池
-                BUFFER_POOL.put(buf);
+                buffer_pool.put(buf);
                 debug!("读取请求流错误: {:?}", e);
                 return Err(e.into());
             }
@@ -211,7 +212,7 @@ async fn handle_bi_stream_optimized(
     let response = process_http3_request_optimized(&buf, app_state).await?;
 
     // 归还缓冲区到池
-    BUFFER_POOL.put(buf);
+    buffer_pool.put(buf);
 
     // 发送响应
     send_stream

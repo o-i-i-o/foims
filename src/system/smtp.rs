@@ -1,9 +1,9 @@
 use anyhow::Result;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
-use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::crypto::{decrypt_password, encrypt_password};

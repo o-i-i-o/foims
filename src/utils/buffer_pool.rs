@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 
 // 缓冲区池实现
 pub struct BufferPool {
@@ -30,7 +31,13 @@ impl BufferPool {
     }
 }
 
-// 全局缓冲区池
-lazy_static::lazy_static! {
-    pub static ref BUFFER_POOL: Arc<BufferPool> = Arc::new(BufferPool::new(100));
+static BUFFER_POOL_INNER: OnceLock<Arc<BufferPool>> = OnceLock::new();
+
+pub fn get_buffer_pool() -> Arc<BufferPool> {
+    BUFFER_POOL_INNER
+        .get_or_init(|| Arc::new(BufferPool::new(100)))
+        .clone()
 }
+
+#[deprecated(note = "请使用 get_buffer_pool() 函数获取缓冲区池")]
+pub static BUFFER_POOL: OnceLock<Arc<BufferPool>> = OnceLock::new();
