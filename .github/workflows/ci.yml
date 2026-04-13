@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          components: rustfmt, clippy
+
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ipma -> ./ipma
+
+      - name: 检查代码格式
+        run: cargo fmt --check
+
+      - name: 运行 clippy 检查
+        run: cargo clippy --release -- -D warnings
+
+      - name: 运行测试
+        run: cargo test --release
+
+      - name: 构建项目
+        run: cargo build --release --verbose
+
+      - name: 构建 DEB 安装包
+        run: |
+          chmod +x build-deb.sh
+          ./build-deb.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipma-ubuntu-build
+          path: |
+            target/release/ipma
+            ipma_*.deb
+          retention-days: 30
+
+  release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ipma -> ./ipma
+
+      - name: 构建发布版本
+        run: cargo build --release --verbose
+
+      - name: 构建 DEB 安装包
+        run: |
+          chmod +x build-deb.sh
+          ./build-deb.sh
+
+      - name: 获取版本号
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: 打包发布文件
+        run: |
+          mkdir -p release
+          cp ipma_*.deb release/
+          cp target/release/ipma release/
+          tar -czvf ipma-${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz release/
+          rm -rf release
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ipma-*.tar.gz
+          generate_release_notes: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
