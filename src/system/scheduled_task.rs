@@ -6,7 +6,7 @@ use validator::Validate;
 
 use crate::db::DbPool;
 use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
-use crate::system::cron::{execute_task_by_type, calculate_next_run};
+use crate::system::cron::{calculate_next_run, execute_task_by_type};
 
 pub async fn get_scheduled_tasks(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
@@ -45,9 +45,8 @@ pub async fn create_scheduled_task(
     req: web::Json<ScheduledTaskCreate>,
 ) -> Result<HttpResponse> {
     if let Err(e) = req.validate() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("参数验证失败: {:?}", e)
-        )));
+        return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error(format!("参数验证失败: {:?}", e))));
     }
 
     let config = req.config.clone().unwrap_or(serde_json::json!({}));
@@ -71,9 +70,8 @@ pub async fn create_scheduled_task(
 
     match task {
         Ok(t) => Ok(HttpResponse::Created().json(ApiResponse::success(t, "创建定时任务成功"))),
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("创建定时任务失败: {}", e)
-        ))),
+        Err(e) => Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("创建定时任务失败: {}", e)))),
     }
 }
 
@@ -83,9 +81,8 @@ pub async fn update_scheduled_task(
     req: web::Json<ScheduledTaskUpdate>,
 ) -> Result<HttpResponse> {
     if let Err(e) = req.validate() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("参数验证失败: {:?}", e)
-        )));
+        return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error(format!("参数验证失败: {:?}", e))));
     }
 
     let id = path.into_inner();
@@ -94,13 +91,11 @@ pub async fn update_scheduled_task(
     if let Some(ref cron_expr) = req.cron_expression
         && let Ok(next_run) = calculate_next_run(cron_expr)
     {
-        let _ = sqlx::query(
-            "UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2"
-        )
-        .bind(next_run)
-        .bind(id)
-        .execute(pool.get_conn())
-        .await;
+        let _ = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
+            .bind(next_run)
+            .bind(id)
+            .execute(pool.get_conn())
+            .await;
     }
 
     let result = sqlx::query(
@@ -111,7 +106,7 @@ pub async fn update_scheduled_task(
            enabled = COALESCE($4, enabled),
            config = COALESCE($5, config),
            updated_at = $6
-           WHERE id = $7"#
+           WHERE id = $7"#,
     )
     .bind(&req.name)
     .bind(&req.task_type)
@@ -134,15 +129,17 @@ pub async fn update_scheduled_task(
 
             match task {
                 Ok(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "更新定时任务成功"))),
-                Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("查询更新后的任务失败: {}", e)
-                ))),
+                Err(e) => Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "查询更新后的任务失败: {}",
+                        e
+                    ))),
+                ),
             }
-        },
+        }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("更新定时任务失败: {}", e)
-        ))),
+        Err(e) => Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("更新定时任务失败: {}", e)))),
     }
 }
 
@@ -160,11 +157,10 @@ pub async fn delete_scheduled_task(
     match result {
         Ok(res) if res.rows_affected() > 0 => {
             Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "删除定时任务成功")))
-        },
+        }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("删除定时任务失败: {}", e)
-        ))),
+        Err(e) => Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("删除定时任务失败: {}", e)))),
     }
 }
 
@@ -175,7 +171,7 @@ pub async fn toggle_scheduled_task(
     let id = path.into_inner();
 
     let result = sqlx::query(
-        "UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2"
+        "UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
     )
     .bind(Utc::now())
     .bind(id)
@@ -192,16 +188,24 @@ pub async fn toggle_scheduled_task(
             .await;
 
             match task {
-                Ok(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "切换定时任务状态成功"))),
-                Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("查询切换后的任务失败: {}", e)
-                ))),
+                Ok(t) => {
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(t, "切换定时任务状态成功")))
+                }
+                Err(e) => Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "查询切换后的任务失败: {}",
+                        e
+                    ))),
+                ),
             }
-        },
+        }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("切换定时任务状态失败: {}", e)
-        ))),
+        Err(e) => Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                "切换定时任务状态失败: {}",
+                e
+            ))),
+        ),
     }
 }
 
@@ -222,7 +226,9 @@ pub async fn run_scheduled_task_now(
 
     let task = match task {
         Some(t) => t,
-        None => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
+        None => {
+            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在")));
+        }
     };
 
     let start_time = Utc::now();
@@ -230,19 +236,26 @@ pub async fn run_scheduled_task_now(
     let task_type = task.task_type.clone();
 
     let db_config = pool.db_config.clone();
-    let result = execute_task_by_type(pool.get_conn(), &task.task_type, &task.config, &db_config).await;
+    let result =
+        execute_task_by_type(pool.get_conn(), &task.task_type, &task.config, &db_config).await;
 
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_milliseconds() as i32;
 
     let (status, details) = match &result {
-        Ok(msg) => ("success", serde_json::json!({ "message": msg, "task_type": task_type })),
-        Err(e) => ("failed", serde_json::json!({ "error": e, "task_type": task_type })),
+        Ok(msg) => (
+            "success",
+            serde_json::json!({ "message": msg, "task_type": task_type }),
+        ),
+        Err(e) => (
+            "failed",
+            serde_json::json!({ "error": e, "task_type": task_type }),
+        ),
     };
 
     let _ = sqlx::query(
         r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#
+           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
     )
     .bind(Uuid::new_v4())
     .bind(&task_name)
@@ -275,7 +288,10 @@ pub async fn run_scheduled_task_now(
 
     update_query.execute(pool.get_conn()).await.ok();
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({"result": result}), "执行定时任务成功")))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({"result": result}),
+        "执行定时任务成功",
+    )))
 }
 
 pub async fn get_task_logs(
@@ -283,7 +299,10 @@ pub async fn get_task_logs(
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let task_name = query.get("task_name").cloned();
-    let limit: i64 = query.get("limit").and_then(|s| s.parse().ok()).unwrap_or(100);
+    let limit: i64 = query
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100);
 
     let logs = if let Some(name) = task_name {
         sqlx::query_as::<_, crate::models::TaskLog>(

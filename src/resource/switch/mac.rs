@@ -11,9 +11,7 @@ use crate::models::{ApiResponse, ArpEntry, SwitchMac};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
-pub async fn get_arp_table_via_snmp(
-    params: &SnmpParamsLegacy,
-) -> Result<Vec<ArpEntry>, SnmpError> {
+pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<ArpEntry>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
     let timeout = std::time::Duration::from_secs(10);
 
@@ -30,13 +28,14 @@ pub async fn get_arp_table_via_snmp(
 
     debug!("尝试获取IPv4 ARP表");
     let arp_oid = oid!(1, 3, 6, 1, 2, 1, 4, 22, 1, 2);
-    
+
     let mut walk = client
         .walk(arp_oid)
         .map_err(|e| SnmpError::Message(format!("创建SNMP walk失败: {}", format_snmp_error(e))))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
+        let vb = result
+            .map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -60,8 +59,7 @@ pub async fn get_arp_table_via_snmp(
             {
                 let mac_addr = format!(
                     "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                    bytes[0], bytes[1], bytes[2],
-                    bytes[3], bytes[4], bytes[5]
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
                 );
 
                 if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
@@ -84,7 +82,8 @@ pub async fn get_arp_table_via_snmp(
         .map_err(|e| SnmpError::Message(format!("创建SNMP walk失败: {}", format_snmp_error(e))))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
+        let vb = result
+            .map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -98,7 +97,7 @@ pub async fn get_arp_table_via_snmp(
         if oid_parts.len() >= 14 {
             let base_len = 10;
             let addr_len = oid_parts[base_len + 2] as usize;
-            
+
             if addr_len == 16 && oid_parts.len() >= base_len + 3 + addr_len {
                 let addr_start = base_len + 3;
                 let addr_bytes: Vec<u8> = oid_parts[addr_start..addr_start + addr_len]
@@ -117,8 +116,7 @@ pub async fn get_arp_table_via_snmp(
                 {
                     let mac_addr = format!(
                         "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                        bytes[0], bytes[1], bytes[2],
-                        bytes[3], bytes[4], bytes[5]
+                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
                     );
 
                     if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
@@ -199,7 +197,7 @@ pub async fn batch_get_mac_via_snmp(
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL"#
+        FROM switches WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL"#,
     )
     .fetch_all(pool)
     .await
@@ -246,7 +244,7 @@ async fn fetch_switch_arp(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch.id)
     .fetch_optional(pool)
@@ -283,7 +281,7 @@ pub async fn get_mac_from_switch(
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#
+        FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -294,7 +292,7 @@ pub async fn get_mac_from_switch(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -338,7 +336,7 @@ pub async fn get_all_arp_entries(
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#
+        FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -349,7 +347,7 @@ pub async fn get_all_arp_entries(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -403,7 +401,7 @@ pub async fn get_switch_mac_table(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -413,15 +411,21 @@ pub async fn get_switch_mac_table(
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
-        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+        _ => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
+            );
+        }
     };
 
     let snmp_params = switch.to_snmp_params(ip_address);
 
     let entries = match get_arp_table_via_snmp(&snmp_params).await {
         Ok(e) => e,
-        Err(e) => return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("获取ARP表失败: {}", e)))),
+        Err(e) => {
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error(format!("获取ARP表失败: {}", e))));
+        }
     };
 
     let now = Utc::now();
@@ -430,7 +434,7 @@ pub async fn get_switch_mac_table(
 
     for entry in &entries {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_macs WHERE switch_id = $1 AND ip_address = $2)"
+            "SELECT EXISTS(SELECT 1 FROM switch_macs WHERE switch_id = $1 AND ip_address = $2)",
         )
         .bind(switch_id)
         .bind(&entry.ip_address)
@@ -444,7 +448,7 @@ pub async fn get_switch_mac_table(
                     mac_address = $1, 
                     interface = COALESCE($2, interface),
                     updated_at = $3
-                WHERE switch_id = $4 AND ip_address = $5"#
+                WHERE switch_id = $4 AND ip_address = $5"#,
             )
             .bind(&entry.mac_address)
             .bind(&entry.interface)
@@ -479,7 +483,7 @@ pub async fn get_switch_mac_table(
     }
 
     let saved_macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"
+        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
@@ -487,7 +491,10 @@ pub async fn get_switch_mac_table(
     .unwrap_or_default();
 
     let message = if saved_count > 0 && updated_count > 0 {
-        format!("新增 {} 条，更新 {} 条 MAC 记录", saved_count, updated_count)
+        format!(
+            "新增 {} 条，更新 {} 条 MAC 记录",
+            saved_count, updated_count
+        )
     } else if saved_count > 0 {
         format!("新增 {} 条 MAC 记录", saved_count)
     } else if updated_count > 0 {
@@ -505,20 +512,18 @@ pub async fn get_switch_macs_from_db(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)"
-    )
-    .bind(switch_id)
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or(false);
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
+        .bind(switch_id)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(false);
 
     if !exists {
         return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
     }
 
     let macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"
+        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())

@@ -49,7 +49,7 @@ async fn find_network_id(
             sqlx::query_scalar(
                 "SELECT n.id FROM network_cidrs n 
                  JOIN network_regions r ON n.network_region_id = r.id 
-                 WHERE r.name = $1 AND n.name = $2"
+                 WHERE r.name = $1 AND n.name = $2",
             )
             .bind(region_name)
             .bind(network_name)
@@ -182,7 +182,9 @@ async fn export_networks(
 ) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
-    csv.extend_from_slice("名称,网络区域,IPv4 CIDR,IPv6 CIDR,IPv4网关,IPv6网关,IPv4 DNS,IPv6 DNS,描述\n".as_bytes());
+    csv.extend_from_slice(
+        "名称,网络区域,IPv4 CIDR,IPv6 CIDR,IPv4网关,IPv6网关,IPv4 DNS,IPv6 DNS,描述\n".as_bytes(),
+    );
 
     let rows = sqlx::query(
         r#"SELECT n.name, nr.name as region_name, 
@@ -193,13 +195,11 @@ async fn export_networks(
            n.description
            FROM network_cidrs n 
            JOIN network_regions nr ON n.network_region_id = nr.id 
-           ORDER BY nr.name, n.name"#
+           ORDER BY nr.name, n.name"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询网络失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询网络失败: {}", e)))?;
 
     for row in rows {
         let name: String = row.get(0);
@@ -240,9 +240,7 @@ async fn export_rooms(
     let rooms = sqlx::query("SELECT id, name, room_type FROM rooms ORDER BY name")
         .fetch_all(&mut *conn)
         .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("查询房间失败: {}", e))
-        })?;
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询房间失败: {}", e)))?;
 
     let mut room_networks_map: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
     let mut max_networks = 0;
@@ -254,13 +252,13 @@ async fn export_rooms(
                JOIN network_cidrs n ON rn.network_id = n.id 
                JOIN network_regions nr ON n.network_region_id = nr.id
                WHERE rn.room_id = $1 
-               ORDER BY rn.created_at"#
+               ORDER BY rn.created_at"#,
         )
         .bind(room_id)
         .fetch_all(&mut *conn)
         .await
         .unwrap_or_default();
-        
+
         if networks.len() > max_networks {
             max_networks = networks.len();
         }
@@ -313,13 +311,11 @@ async fn export_workstations(
         r#"SELECT w.id, w.name, r.name as room_name, w.manager, w.description 
            FROM workstations w 
            JOIN rooms r ON w.room_id = r.id 
-           ORDER BY r.name, w.name"#
+           ORDER BY r.name, w.name"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询工位失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询工位失败: {}", e)))?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -361,13 +357,11 @@ async fn export_cabinets(
         r#"SELECT c.id, c.name, r.name as room_name, c.description 
            FROM cabinets c 
            JOIN rooms r ON c.room_id = r.id 
-           ORDER BY r.name, c.name"#
+           ORDER BY r.name, c.name"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询机柜失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询机柜失败: {}", e)))?;
 
     let mut cabinet_networks_map: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
     let mut max_networks = 0;
@@ -387,13 +381,13 @@ async fn export_cabinets(
                JOIN network_cidrs n ON rn.network_id = n.id 
                JOIN network_regions nr ON n.network_region_id = nr.id
                WHERE c.id = $1
-               ORDER BY 1"#
+               ORDER BY 1"#,
         )
         .bind(cabinet_id)
         .fetch_all(&mut *conn)
         .await
         .unwrap_or_default();
-        
+
         if networks.len() > max_networks {
             max_networks = networks.len();
         }
@@ -412,7 +406,10 @@ async fn export_cabinets(
         let name: String = cabinet.get(1);
         let room: String = cabinet.get(2);
         let description: Option<String> = cabinet.get(3);
-        let networks = cabinet_networks_map.get(&cabinet_id).cloned().unwrap_or_default();
+        let networks = cabinet_networks_map
+            .get(&cabinet_id)
+            .cloned()
+            .unwrap_or_default();
 
         let mut line = format!("{},{}", escape_csv_field(&name), escape_csv_field(&room));
         for i in 0..max_networks {
@@ -422,7 +419,10 @@ async fn export_cabinets(
                 line.push(',');
             }
         }
-        line.push_str(&format!(",{}\n", escape_csv_field(&description.unwrap_or_default())));
+        line.push_str(&format!(
+            ",{}\n",
+            escape_csv_field(&description.unwrap_or_default())
+        ));
         csv.extend_from_slice(line.as_bytes());
     }
 
@@ -441,13 +441,11 @@ async fn export_positions(
         r#"SELECT p.id, p.name, c.name as cabinet_name, p.start_u, p.end_u, p.description 
            FROM positions p 
            JOIN cabinets c ON p.cabinet_id = c.id 
-           ORDER BY c.name, p.start_u"#
+           ORDER BY c.name, p.start_u"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询机位失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询机位失败: {}", e)))?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -488,19 +486,19 @@ async fn export_switches(
 
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
-    csv.extend_from_slice("名称,IP地址,型号,厂商,位置,SNMP版本,SNMP端口,SNMP Community,SNMP用户名,描述\n".as_bytes());
+    csv.extend_from_slice(
+        "名称,IP地址,型号,厂商,位置,SNMP版本,SNMP端口,SNMP Community,SNMP用户名,描述\n".as_bytes(),
+    );
 
     let rows = sqlx::query(
         r#"SELECT s.id, s.name, s.model, s.vendor, s.location, s.snmp_version, s.snmp_port,
            s.snmp_community, s.snmp_username, s.description
            FROM switches s 
-           ORDER BY s.name"#
+           ORDER BY s.name"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询交换机失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询交换机失败: {}", e)))?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -562,13 +560,11 @@ async fn export_ip_managers(
            LEFT JOIN workstations w ON im.workstation_id = w.id 
            LEFT JOIN positions p ON im.position_id = p.id 
            LEFT JOIN network_cidrs n ON im.network_id = n.id 
-           ORDER BY im.ip_address"#
+           ORDER BY im.ip_address"#,
     )
     .fetch_all(&mut *conn)
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("查询IP管理失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询IP管理失败: {}", e)))?;
 
     for row in rows {
         let workstation: Option<String> = row.get(0);
@@ -600,7 +596,10 @@ pub async fn import_csv(
     mut payload: actix_multipart::Multipart,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let mode = query.get("mode").cloned().unwrap_or_else(|| "skip".to_string());
+    let mode = query
+        .get("mode")
+        .cloned()
+        .unwrap_or_else(|| "skip".to_string());
     let overwrite = mode == "overwrite";
 
     let mut file_data: Option<Vec<u8>> = None;
@@ -612,7 +611,9 @@ pub async fn import_csv(
         .map_err(|e| actix_web::error::ErrorInternalServerError(format!("读取文件失败: {}", e)))?
     {
         if field.name() == Some("file") {
-            filename = field.content_disposition().and_then(|cd| cd.get_filename().map(|s| s.to_string()));
+            filename = field
+                .content_disposition()
+                .and_then(|cd| cd.get_filename().map(|s| s.to_string()));
             let mut data = Vec::new();
             while let Some(chunk) = field.try_next().await.map_err(|e| {
                 actix_web::error::ErrorInternalServerError(format!("读取文件块失败: {}", e))
@@ -624,7 +625,8 @@ pub async fn import_csv(
         }
     }
 
-    let file_data = file_data.ok_or_else(|| actix_web::error::ErrorBadRequest("请选择要导入的CSV文件"))?;
+    let file_data =
+        file_data.ok_or_else(|| actix_web::error::ErrorBadRequest("请选择要导入的CSV文件"))?;
 
     let mut conn = pool.acquire().await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("获取数据库连接失败: {}", e))
@@ -646,14 +648,25 @@ pub async fn import_csv(
                 })?;
 
                 let table_name = zip_filename.trim_end_matches(".csv");
-                if let Err(e) = process_csv_by_filename(&mut conn, table_name, &content, overwrite, &mut results).await {
+                if let Err(e) = process_csv_by_filename(
+                    &mut conn,
+                    table_name,
+                    &content,
+                    overwrite,
+                    &mut results,
+                )
+                .await
+                {
                     results.push(format!("导入 {} 失败: {}", zip_filename, e));
                 }
             }
         }
     } else {
         let content = String::from_utf8(file_data).map_err(|e| {
-            actix_web::error::ErrorBadRequest(format!("解析CSV文件失败: 文件编码必须是UTF-8 - {}", e))
+            actix_web::error::ErrorBadRequest(format!(
+                "解析CSV文件失败: 文件编码必须是UTF-8 - {}",
+                e
+            ))
         })?;
 
         let table_name = filename
@@ -661,14 +674,16 @@ pub async fn import_csv(
             .and_then(|f| f.trim_end_matches(".csv").split('.').next())
             .unwrap_or("unknown");
 
-        if let Err(e) = process_csv_by_filename(&mut conn, table_name, &content, overwrite, &mut results).await {
+        if let Err(e) =
+            process_csv_by_filename(&mut conn, table_name, &content, overwrite, &mut results).await
+        {
             results.push(format!("导入失败: {}", e));
         }
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({ "results": results }),
-        "导入完成"
+        "导入完成",
     )))
 }
 
@@ -709,7 +724,7 @@ async fn import_network_regions(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -724,33 +739,40 @@ async fn import_network_regions(
         }
 
         if name.len() > 20 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过20个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过20个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 网络区域 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 网络区域 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_regions WHERE name = $1"
-        )
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询网络区域失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_regions WHERE name = $1")
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询网络区域失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
-                sqlx::query("UPDATE network_regions SET description = $1, updated_at = NOW() WHERE id = $2")
-                    .bind(empty_to_none(description))
-                    .bind(id)
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(|e| format!("更新网络区域 '{}' 失败: {}", name, e))?;
+                sqlx::query(
+                    "UPDATE network_regions SET description = $1, updated_at = NOW() WHERE id = $2",
+                )
+                .bind(empty_to_none(description))
+                .bind(id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| format!("更新网络区域 '{}' 失败: {}", name, e))?;
                 results.push(format!("更新网络区域: {}", name));
                 success_count += 1;
             } else {
@@ -770,7 +792,10 @@ async fn import_network_regions(
         }
     }
 
-    results.push(format!("网络区域导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "网络区域导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -789,7 +814,7 @@ async fn import_networks(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -811,47 +836,57 @@ async fn import_networks(
         }
 
         if name.len() > 50 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 网络 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 网络 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if region_name.is_empty() {
-            results.push(format!("第{}行跳过: 网络 '{}' - 网络区域为空", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 网络 '{}' - 网络区域为空",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
-        let region_id: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_regions WHERE name = $1"
-        )
-        .bind(region_name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询网络区域失败: {}", e))?;
+        let region_id: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_regions WHERE name = $1")
+                .bind(region_name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询网络区域失败: {}", e))?;
 
         let region_id = match region_id {
             Some(id) => id,
             None => {
-                results.push(format!("第{}行跳过: 网络 '{}' - 网络区域 '{}' 不存在", line_num, name, region_name));
+                results.push(format!(
+                    "第{}行跳过: 网络 '{}' - 网络区域 '{}' 不存在",
+                    line_num, name, region_name
+                ));
                 error_count += 1;
                 continue;
             }
         };
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_cidrs WHERE name = $1"
-        )
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询网络失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_cidrs WHERE name = $1")
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询网络失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
@@ -875,14 +910,17 @@ async fn import_networks(
                     .bind(id)
                     .execute(&mut *conn)
                     .await;
-                
+
                 match update_result {
                     Ok(_) => {
                         results.push(format!("更新网络: {}", name));
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新网络 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新网络 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
@@ -919,14 +957,20 @@ async fn import_networks(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入网络 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入网络 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("网络导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "网络导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -945,7 +989,7 @@ async fn import_rooms(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -960,7 +1004,10 @@ async fn import_rooms(
         }
 
         if name.len() > 50 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
@@ -970,29 +1017,38 @@ async fn import_rooms(
             "数据中心" | "DATA_CENTER" | "data_center" => "DATA_CENTER",
             "" => "OFFICE",
             _ => {
-                results.push(format!("第{}行跳过: 房间 '{}' - 无效的类型 '{}'", line_num, name, room_type_str));
+                results.push(format!(
+                    "第{}行跳过: 房间 '{}' - 无效的类型 '{}'",
+                    line_num, name, room_type_str
+                ));
                 error_count += 1;
                 continue;
             }
         };
 
-        let network_names: Vec<&str> = record.iter().skip(2).map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let network_names: Vec<&str> = record
+            .iter()
+            .skip(2)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM rooms WHERE name = $1"
-        )
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询房间失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM rooms WHERE name = $1")
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询房间失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
-                let update_result = sqlx::query("UPDATE rooms SET room_type = $1, updated_at = NOW() WHERE id = $2")
-                    .bind(room_type)
-                    .bind(id)
-                    .execute(&mut *conn)
-                    .await;
+                let update_result = sqlx::query(
+                    "UPDATE rooms SET room_type = $1, updated_at = NOW() WHERE id = $2",
+                )
+                .bind(room_type)
+                .bind(id)
+                .execute(&mut *conn)
+                .await;
 
                 match update_result {
                     Ok(_) => {
@@ -1004,7 +1060,9 @@ async fn import_rooms(
 
                         let mut linked_networks = Vec::new();
                         for network_name in &network_names {
-                            if let Some(network_id) = find_network_id(&mut *conn, network_name).await {
+                            if let Some(network_id) =
+                                find_network_id(&mut *conn, network_name).await
+                            {
                                 sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
                                     .bind(uuid::Uuid::new_v4())
                                     .bind(id)
@@ -1015,11 +1073,19 @@ async fn import_rooms(
                                 linked_networks.push(*network_name);
                             }
                         }
-                        results.push(format!("更新房间: {} (类型: {}, 网络: {})", name, room_type_str, linked_networks.join(", ")));
+                        results.push(format!(
+                            "更新房间: {} (类型: {}, 网络: {})",
+                            name,
+                            room_type_str,
+                            linked_networks.join(", ")
+                        ));
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新房间 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新房间 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
@@ -1056,24 +1122,43 @@ async fn import_rooms(
                     }
 
                     if !missing_networks.is_empty() {
-                        results.push(format!("导入房间: {} (类型: {}, 网络: {}, 未找到网络: {})", 
-                            name, room_type_str, linked_networks.join(", "), missing_networks.join(", ")));
+                        results.push(format!(
+                            "导入房间: {} (类型: {}, 网络: {}, 未找到网络: {})",
+                            name,
+                            room_type_str,
+                            linked_networks.join(", "),
+                            missing_networks.join(", ")
+                        ));
                     } else if linked_networks.is_empty() {
-                        results.push(format!("导入房间: {} (类型: {}, 无网络关联)", name, room_type_str));
+                        results.push(format!(
+                            "导入房间: {} (类型: {}, 无网络关联)",
+                            name, room_type_str
+                        ));
                     } else {
-                        results.push(format!("导入房间: {} (类型: {}, 网络: {})", name, room_type_str, linked_networks.join(", ")));
+                        results.push(format!(
+                            "导入房间: {} (类型: {}, 网络: {})",
+                            name,
+                            room_type_str,
+                            linked_networks.join(", ")
+                        ));
                     }
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入房间 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入房间 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("房间导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "房间导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -1092,7 +1177,7 @@ async fn import_workstations(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -1110,54 +1195,67 @@ async fn import_workstations(
         }
 
         if name.len() > 50 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if manager.len() > 50 {
-            results.push(format!("第{}行跳过: 工位 '{}' - 负责人超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 工位 '{}' - 负责人超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 工位 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 工位 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if room_name.is_empty() {
-            results.push(format!("第{}行跳过: 工位 '{}' - 房间名称为空", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 工位 '{}' - 房间名称为空",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
-        let room_id: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM rooms WHERE name = $1"
-        )
-        .bind(room_name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询房间失败: {}", e))?;
+        let room_id: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM rooms WHERE name = $1")
+                .bind(room_name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询房间失败: {}", e))?;
 
         let room_id = match room_id {
             Some(id) => id,
             None => {
-                results.push(format!("第{}行跳过: 工位 '{}' - 房间 '{}' 不存在", line_num, name, room_name));
+                results.push(format!(
+                    "第{}行跳过: 工位 '{}' - 房间 '{}' 不存在",
+                    line_num, name, room_name
+                ));
                 error_count += 1;
                 continue;
             }
         };
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM workstations WHERE name = $1 AND room_id = $2"
-        )
-        .bind(name)
-        .bind(room_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询工位失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM workstations WHERE name = $1 AND room_id = $2")
+                .bind(name)
+                .bind(room_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询工位失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
@@ -1167,7 +1265,7 @@ async fn import_workstations(
                     .bind(id)
                     .execute(&mut *conn)
                     .await;
-                
+
                 match update_result {
                     Ok(_) => {
                         if !ip_address.is_empty() {
@@ -1179,18 +1277,18 @@ async fn import_workstations(
                             .await
                             .ok()
                             .flatten();
-                            
+
                             let room_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
-                                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
                             )
                             .bind(room_id)
                             .fetch_optional(&mut *conn)
                             .await
                             .ok()
                             .flatten();
-                            
+
                             let ip_version: i16 = if ip_address.contains(":") { 6 } else { 4 };
-                            
+
                             if let Some(ip_id) = existing_ip {
                                 let ip_update_result = sqlx::query(
                                     "UPDATE ip_managers SET ip_address = CAST($1 AS INET), ip_version = $2, network_id = $3, updated_at = NOW() WHERE id = $4"
@@ -1201,10 +1299,16 @@ async fn import_workstations(
                                 .bind(ip_id)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_update_result {
-                                    Ok(_) => results.push(format!("更新工位: {} (房间: {}, IP: {})", name, room_name, ip_address)),
-                                    Err(e) => results.push(format!("更新工位: {} (房间: {}, IP更新失败: {})", name, room_name, e)),
+                                    Ok(_) => results.push(format!(
+                                        "更新工位: {} (房间: {}, IP: {})",
+                                        name, room_name, ip_address
+                                    )),
+                                    Err(e) => results.push(format!(
+                                        "更新工位: {} (房间: {}, IP更新失败: {})",
+                                        name, room_name, e
+                                    )),
                                 }
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
@@ -1218,10 +1322,16 @@ async fn import_workstations(
                                 .bind(ip_version)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_insert_result {
-                                    Ok(_) => results.push(format!("更新工位: {} (房间: {}, IP: {})", name, room_name, ip_address)),
-                                    Err(e) => results.push(format!("更新工位: {} (房间: {}, IP写入失败: {})", name, room_name, e)),
+                                    Ok(_) => results.push(format!(
+                                        "更新工位: {} (房间: {}, IP: {})",
+                                        name, room_name, ip_address
+                                    )),
+                                    Err(e) => results.push(format!(
+                                        "更新工位: {} (房间: {}, IP写入失败: {})",
+                                        name, room_name, e
+                                    )),
                                 }
                             }
                         } else {
@@ -1230,12 +1340,18 @@ async fn import_workstations(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新工位 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新工位 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过工位（已存在）: {} (房间: {})", name, room_name));
+                results.push(format!(
+                    "跳过工位（已存在）: {} (房间: {})",
+                    name, room_name
+                ));
                 skip_count += 1;
             }
         } else {
@@ -1253,14 +1369,14 @@ async fn import_workstations(
                 Ok(_) => {
                     if !ip_address.is_empty() {
                         let room_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
-                            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
                         )
                         .bind(room_id)
                         .fetch_optional(&mut *conn)
                         .await
                         .ok()
                         .flatten();
-                        
+
                         let ip_version: i16 = if ip_address.contains(":") { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
@@ -1273,10 +1389,16 @@ async fn import_workstations(
                         .bind(ip_version)
                         .execute(&mut *conn)
                         .await;
-                        
+
                         match ip_insert_result {
-                            Ok(_) => results.push(format!("导入工位: {} (房间: {}, IP: {})", name, room_name, ip_address)),
-                            Err(e) => results.push(format!("导入工位: {} (房间: {}, IP写入失败: {})", name, room_name, e)),
+                            Ok(_) => results.push(format!(
+                                "导入工位: {} (房间: {}, IP: {})",
+                                name, room_name, ip_address
+                            )),
+                            Err(e) => results.push(format!(
+                                "导入工位: {} (房间: {}, IP写入失败: {})",
+                                name, room_name, e
+                            )),
                         }
                     } else {
                         results.push(format!("导入工位: {} (房间: {})", name, room_name));
@@ -1284,14 +1406,20 @@ async fn import_workstations(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入工位 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入工位 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("工位导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "工位导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -1310,16 +1438,25 @@ async fn import_cabinets(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
 
         let name = record.get(0).unwrap_or("").trim();
         let room_name = record.get(1).unwrap_or("").trim();
-        let description = record.get(record.len().saturating_sub(1)).unwrap_or("").trim();
+        let description = record
+            .get(record.len().saturating_sub(1))
+            .unwrap_or("")
+            .trim();
 
-        let network_names: Vec<&str> = record.iter().skip(2).take(record.len().saturating_sub(3)).map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let network_names: Vec<&str> = record
+            .iter()
+            .skip(2)
+            .take(record.len().saturating_sub(3))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
         if name.is_empty() {
             results.push(format!("第{}行跳过: 名称为空", line_num));
@@ -1328,35 +1465,46 @@ async fn import_cabinets(
         }
 
         if name.len() > 50 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 机柜 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 机柜 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if room_name.is_empty() {
-            results.push(format!("第{}行跳过: 机柜 '{}' - 房间名称为空", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 机柜 '{}' - 房间名称为空",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
-        let room_id: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM rooms WHERE name = $1"
-        )
-        .bind(room_name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询房间失败: {}", e))?;
+        let room_id: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM rooms WHERE name = $1")
+                .bind(room_name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询房间失败: {}", e))?;
 
         let room_id = match room_id {
             Some(id) => id,
             None => {
-                results.push(format!("第{}行跳过: 机柜 '{}' - 房间 '{}' 不存在", line_num, name, room_name));
+                results.push(format!(
+                    "第{}行跳过: 机柜 '{}' - 房间 '{}' 不存在",
+                    line_num, name, room_name
+                ));
                 error_count += 1;
                 continue;
             }
@@ -1368,14 +1516,13 @@ async fn import_cabinets(
             None
         };
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2"
-        )
-        .bind(name)
-        .bind(room_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询机柜失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM cabinets WHERE name = $1 AND room_id = $2")
+                .bind(name)
+                .bind(room_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询机柜失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
@@ -1392,12 +1539,18 @@ async fn import_cabinets(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新机柜 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新机柜 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过机柜（已存在）: {} (房间: {})", name, room_name));
+                results.push(format!(
+                    "跳过机柜（已存在）: {} (房间: {})",
+                    name, room_name
+                ));
                 skip_count += 1;
             }
         } else {
@@ -1414,21 +1567,33 @@ async fn import_cabinets(
             match insert_result {
                 Ok(_) => {
                     if !network_names.is_empty() {
-                        results.push(format!("导入机柜: {} (房间: {}, 首网络: {})", name, room_name, network_names[0]));
+                        results.push(format!(
+                            "导入机柜: {} (房间: {}, 首网络: {})",
+                            name, room_name, network_names[0]
+                        ));
                     } else {
-                        results.push(format!("导入机柜: {} (房间: {}, 无网络关联)", name, room_name));
+                        results.push(format!(
+                            "导入机柜: {} (房间: {}, 无网络关联)",
+                            name, room_name
+                        ));
                     }
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入机柜 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入机柜 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("机柜导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "机柜导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -1447,7 +1612,7 @@ async fn import_positions(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -1466,19 +1631,28 @@ async fn import_positions(
         }
 
         if name.len() > 50 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 机位 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 机位 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if cabinet_name.is_empty() {
-            results.push(format!("第{}行跳过: 机位 '{}' - 机柜名称为空", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 机位 '{}' - 机柜名称为空",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
@@ -1492,12 +1666,18 @@ async fn import_positions(
         let start_u: i32 = match start_u_str.parse() {
             Ok(v) if (1..=42).contains(&v) => v,
             Ok(v) => {
-                results.push(format!("第{}行跳过: 机位 '{}' - 起始U '{}' 超出范围(1-42)", line_num, name, v));
+                results.push(format!(
+                    "第{}行跳过: 机位 '{}' - 起始U '{}' 超出范围(1-42)",
+                    line_num, name, v
+                ));
                 error_count += 1;
                 continue;
             }
             Err(_) => {
-                results.push(format!("第{}行跳过: 机位 '{}' - 起始U '{}' 不是有效数字", line_num, name, start_u_str));
+                results.push(format!(
+                    "第{}行跳过: 机位 '{}' - 起始U '{}' 不是有效数字",
+                    line_num, name, start_u_str
+                ));
                 error_count += 1;
                 continue;
             }
@@ -1506,38 +1686,42 @@ async fn import_positions(
         let end_u: i32 = match end_u_str.parse() {
             Ok(v) if v >= start_u && v <= 42 => v,
             Ok(v) => {
-                results.push(format!("第{}行跳过: 机位 '{}' - 结束U '{}' 无效(必须 >= 起始U 且 <= 42)", line_num, name, v));
+                results.push(format!(
+                    "第{}行跳过: 机位 '{}' - 结束U '{}' 无效(必须 >= 起始U 且 <= 42)",
+                    line_num, name, v
+                ));
                 error_count += 1;
                 continue;
             }
             Err(_) => start_u,
         };
 
-        let cabinet_id: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM cabinets WHERE name = $1"
-        )
-        .bind(cabinet_name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询机柜失败: {}", e))?;
+        let cabinet_id: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM cabinets WHERE name = $1")
+                .bind(cabinet_name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询机柜失败: {}", e))?;
 
         let cabinet_id = match cabinet_id {
             Some(id) => id,
             None => {
-                results.push(format!("第{}行跳过: 机位 '{}' - 机柜 '{}' 不存在", line_num, name, cabinet_name));
+                results.push(format!(
+                    "第{}行跳过: 机位 '{}' - 机柜 '{}' 不存在",
+                    line_num, name, cabinet_name
+                ));
                 error_count += 1;
                 continue;
             }
         };
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2"
-        )
-        .bind(name)
-        .bind(cabinet_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询机位失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2")
+                .bind(name)
+                .bind(cabinet_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询机位失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
@@ -1548,7 +1732,7 @@ async fn import_positions(
                     .bind(id)
                     .execute(&mut *conn)
                     .await;
-                
+
                 match update_result {
                     Ok(_) => {
                         if !ip_address.is_empty() {
@@ -1560,7 +1744,7 @@ async fn import_positions(
                             .await
                             .ok()
                             .flatten();
-                            
+
                             let cabinet_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
                                 "SELECT network_id FROM cabinet_networks WHERE cabinet_id = $1 LIMIT 1"
                             )
@@ -1569,9 +1753,9 @@ async fn import_positions(
                             .await
                             .ok()
                             .flatten();
-                            
+
                             let ip_version: i16 = if ip_address.contains(":") { 6 } else { 4 };
-                            
+
                             if let Some(ip_id) = existing_ip {
                                 let ip_update_result = sqlx::query(
                                     "UPDATE ip_managers SET ip_address = CAST($1 AS INET), ip_version = $2, network_id = $3, updated_at = NOW() WHERE id = $4"
@@ -1582,10 +1766,16 @@ async fn import_positions(
                                 .bind(ip_id)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_update_result {
-                                    Ok(_) => results.push(format!("更新机位: {} (机柜: {}, U{}-U{}, IP: {})", name, cabinet_name, start_u, end_u, ip_address)),
-                                    Err(e) => results.push(format!("更新机位: {} (机柜: {}, U{}-U{}, IP更新失败: {})", name, cabinet_name, start_u, end_u, e)),
+                                    Ok(_) => results.push(format!(
+                                        "更新机位: {} (机柜: {}, U{}-U{}, IP: {})",
+                                        name, cabinet_name, start_u, end_u, ip_address
+                                    )),
+                                    Err(e) => results.push(format!(
+                                        "更新机位: {} (机柜: {}, U{}-U{}, IP更新失败: {})",
+                                        name, cabinet_name, start_u, end_u, e
+                                    )),
                                 }
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
@@ -1599,24 +1789,39 @@ async fn import_positions(
                                 .bind(ip_version)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_insert_result {
-                                    Ok(_) => results.push(format!("更新机位: {} (机柜: {}, U{}-U{}, IP: {})", name, cabinet_name, start_u, end_u, ip_address)),
-                                    Err(e) => results.push(format!("更新机位: {} (机柜: {}, U{}-U{}, IP写入失败: {})", name, cabinet_name, start_u, end_u, e)),
+                                    Ok(_) => results.push(format!(
+                                        "更新机位: {} (机柜: {}, U{}-U{}, IP: {})",
+                                        name, cabinet_name, start_u, end_u, ip_address
+                                    )),
+                                    Err(e) => results.push(format!(
+                                        "更新机位: {} (机柜: {}, U{}-U{}, IP写入失败: {})",
+                                        name, cabinet_name, start_u, end_u, e
+                                    )),
                                 }
                             }
                         } else {
-                            results.push(format!("更新机位: {} (机柜: {}, U{}-U{})", name, cabinet_name, start_u, end_u));
+                            results.push(format!(
+                                "更新机位: {} (机柜: {}, U{}-U{})",
+                                name, cabinet_name, start_u, end_u
+                            ));
                         }
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新机位 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新机位 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过机位（已存在）: {} (机柜: {})", name, cabinet_name));
+                results.push(format!(
+                    "跳过机位（已存在）: {} (机柜: {})",
+                    name, cabinet_name
+                ));
                 skip_count += 1;
             }
         } else {
@@ -1635,14 +1840,14 @@ async fn import_positions(
                 Ok(_) => {
                     if !ip_address.is_empty() {
                         let cabinet_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
-                            "SELECT network_id FROM cabinet_networks WHERE cabinet_id = $1 LIMIT 1"
+                            "SELECT network_id FROM cabinet_networks WHERE cabinet_id = $1 LIMIT 1",
                         )
                         .bind(cabinet_id)
                         .fetch_optional(&mut *conn)
                         .await
                         .ok()
                         .flatten();
-                        
+
                         let ip_version: i16 = if ip_address.contains(":") { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
@@ -1655,25 +1860,40 @@ async fn import_positions(
                         .bind(ip_version)
                         .execute(&mut *conn)
                         .await;
-                        
+
                         match ip_insert_result {
-                            Ok(_) => results.push(format!("导入机位: {} (机柜: {}, U{}-U{}, IP: {})", name, cabinet_name, start_u, end_u, ip_address)),
-                            Err(e) => results.push(format!("导入机位: {} (机柜: {}, U{}-U{}, IP写入失败: {})", name, cabinet_name, start_u, end_u, e)),
+                            Ok(_) => results.push(format!(
+                                "导入机位: {} (机柜: {}, U{}-U{}, IP: {})",
+                                name, cabinet_name, start_u, end_u, ip_address
+                            )),
+                            Err(e) => results.push(format!(
+                                "导入机位: {} (机柜: {}, U{}-U{}, IP写入失败: {})",
+                                name, cabinet_name, start_u, end_u, e
+                            )),
                         }
                     } else {
-                        results.push(format!("导入机位: {} (机柜: {}, U{}-U{})", name, cabinet_name, start_u, end_u));
+                        results.push(format!(
+                            "导入机位: {} (机柜: {}, U{}-U{})",
+                            name, cabinet_name, start_u, end_u
+                        ));
                     }
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入机位 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入机位 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("机位导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "机位导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -1692,7 +1912,7 @@ async fn import_switches(
     for result in rdr.records() {
         line_num += 1;
         let record = result.map_err(|e| format!("第{}行解析失败: {}", line_num, e))?;
-        
+
         if record.get(0).map(|s| s == "名称").unwrap_or(false) {
             continue;
         }
@@ -1715,43 +1935,64 @@ async fn import_switches(
         }
 
         if name.len() > 100 {
-            results.push(format!("第{}行跳过: 名称 '{}' 超过100个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 名称 '{}' 超过100个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if model.len() > 100 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - 型号超过100个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - 型号超过100个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if vendor.len() > 50 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - 厂商超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - 厂商超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if location.len() > 100 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - 位置超过100个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - 位置超过100个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if snmp_community.len() > 100 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - SNMP Community超过100个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - SNMP Community超过100个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if snmp_username.len() > 50 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - SNMP用户名超过50个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - SNMP用户名超过50个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!("第{}行跳过: 交换机 '{}' - 描述超过255个字符", line_num, name));
+            results.push(format!(
+                "第{}行跳过: 交换机 '{}' - 描述超过255个字符",
+                line_num, name
+            ));
             error_count += 1;
             continue;
         }
@@ -1759,7 +2000,10 @@ async fn import_switches(
         let snmp_port: i32 = match snmp_port_str.parse() {
             Ok(v) if v > 0 && v <= 65535 => v,
             Ok(v) => {
-                results.push(format!("第{}行跳过: 交换机 '{}' - SNMP端口 '{}' 超出范围(1-65535)", line_num, name, v));
+                results.push(format!(
+                    "第{}行跳过: 交换机 '{}' - SNMP端口 '{}' 超出范围(1-65535)",
+                    line_num, name, v
+                ));
                 error_count += 1;
                 continue;
             }
@@ -1770,38 +2014,42 @@ async fn import_switches(
             "v1" | "v2c" | "v3" => snmp_version.to_string(),
             "" => "v2c".to_string(),
             _ => {
-                results.push(format!("第{}行跳过: 交换机 '{}' - 无效的SNMP版本 '{}' (支持: v1, v2c, v3)", line_num, name, snmp_version));
+                results.push(format!(
+                    "第{}行跳过: 交换机 '{}' - 无效的SNMP版本 '{}' (支持: v1, v2c, v3)",
+                    line_num, name, snmp_version
+                ));
                 error_count += 1;
                 continue;
             }
         };
 
-        let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT id FROM switches WHERE name = $1"
-        )
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| format!("查询交换机失败: {}", e))?;
+        let existing: Option<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM switches WHERE name = $1")
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| format!("查询交换机失败: {}", e))?;
 
         if let Some(id) = existing {
             if overwrite {
-                let update_result = sqlx::query(r#"UPDATE switches SET 
+                let update_result = sqlx::query(
+                    r#"UPDATE switches SET 
                     model = $1, vendor = $2, location = $3, 
                     snmp_version = $4, snmp_port = $5, 
                     snmp_community = $6, snmp_username = $7, 
-                    description = $8, updated_at = NOW() WHERE id = $9"#)
-                    .bind(empty_to_none(model))
-                    .bind(empty_to_none(vendor))
-                    .bind(empty_to_none(location))
-                    .bind(&snmp_version)
-                    .bind(snmp_port)
-                    .bind(empty_to_none(snmp_community))
-                    .bind(empty_to_none(snmp_username))
-                    .bind(empty_to_none(description))
-                    .bind(id)
-                    .execute(&mut *conn)
-                    .await;
+                    description = $8, updated_at = NOW() WHERE id = $9"#,
+                )
+                .bind(empty_to_none(model))
+                .bind(empty_to_none(vendor))
+                .bind(empty_to_none(location))
+                .bind(&snmp_version)
+                .bind(snmp_port)
+                .bind(empty_to_none(snmp_community))
+                .bind(empty_to_none(snmp_username))
+                .bind(empty_to_none(description))
+                .bind(id)
+                .execute(&mut *conn)
+                .await;
 
                 match update_result {
                     Ok(_) => {
@@ -1814,18 +2062,17 @@ async fn import_switches(
                             .await
                             .ok()
                             .flatten();
-                            
-                            let network_id: Option<uuid::Uuid> = sqlx::query_scalar(
-                                "SELECT network_id FROM switches WHERE id = $1"
-                            )
-                            .bind(id)
-                            .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
-                            
+
+                            let network_id: Option<uuid::Uuid> =
+                                sqlx::query_scalar("SELECT network_id FROM switches WHERE id = $1")
+                                    .bind(id)
+                                    .fetch_optional(&mut *conn)
+                                    .await
+                                    .ok()
+                                    .flatten();
+
                             let ip_version: i16 = if ip_address.contains(":") { 6 } else { 4 };
-                            
+
                             if let Some(ip_id) = existing_ip {
                                 let ip_update_result = sqlx::query(
                                     "UPDATE ip_managers SET ip_address = CAST($1 AS INET), ip_version = $2, network_id = $3, updated_at = NOW() WHERE id = $4"
@@ -1836,10 +2083,12 @@ async fn import_switches(
                                 .bind(ip_id)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_update_result {
-                                    Ok(_) => results.push(format!("更新交换机: {} (IP: {})", name, ip_address)),
-                                    Err(e) => results.push(format!("更新交换机: {} (IP更新失败: {})", name, e)),
+                                    Ok(_) => results
+                                        .push(format!("更新交换机: {} (IP: {})", name, ip_address)),
+                                    Err(e) => results
+                                        .push(format!("更新交换机: {} (IP更新失败: {})", name, e)),
                                 }
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
@@ -1853,10 +2102,12 @@ async fn import_switches(
                                 .bind(ip_version)
                                 .execute(&mut *conn)
                                 .await;
-                                
+
                                 match ip_insert_result {
-                                    Ok(_) => results.push(format!("更新交换机: {} (IP: {})", name, ip_address)),
-                                    Err(e) => results.push(format!("更新交换机: {} (IP写入失败: {})", name, e)),
+                                    Ok(_) => results
+                                        .push(format!("更新交换机: {} (IP: {})", name, ip_address)),
+                                    Err(e) => results
+                                        .push(format!("更新交换机: {} (IP写入失败: {})", name, e)),
                                 }
                             }
                         } else {
@@ -1865,7 +2116,10 @@ async fn import_switches(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{}行跳过: 更新交换机 '{}' 失败 - {}", line_num, name, e));
+                        results.push(format!(
+                            "第{}行跳过: 更新交换机 '{}' 失败 - {}",
+                            line_num, name, e
+                        ));
                         error_count += 1;
                     }
                 }
@@ -1875,44 +2129,47 @@ async fn import_switches(
             }
         } else {
             let id = uuid::Uuid::new_v4();
-            let network_region_id: Option<uuid::Uuid> = sqlx::query_scalar(
-                "SELECT id FROM network_regions LIMIT 1"
-            )
-            .fetch_optional(&mut *conn)
-            .await
-            .ok()
-            .flatten();
-
-            let network_id: Option<uuid::Uuid> = if let Some(region_id) = network_region_id {
-                sqlx::query_scalar("SELECT id FROM network_cidrs WHERE network_region_id = $1 LIMIT 1")
-                    .bind(region_id)
+            let network_region_id: Option<uuid::Uuid> =
+                sqlx::query_scalar("SELECT id FROM network_regions LIMIT 1")
                     .fetch_optional(&mut *conn)
                     .await
                     .ok()
-                    .flatten()
+                    .flatten();
+
+            let network_id: Option<uuid::Uuid> = if let Some(region_id) = network_region_id {
+                sqlx::query_scalar(
+                    "SELECT id FROM network_cidrs WHERE network_region_id = $1 LIMIT 1",
+                )
+                .bind(region_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .ok()
+                .flatten()
             } else {
                 None
             };
 
-            let insert_result = sqlx::query(r#"INSERT INTO switches (
+            let insert_result = sqlx::query(
+                r#"INSERT INTO switches (
                 id, name, network_region_id, network_id, model, vendor, location, 
                 snmp_version, snmp_community, snmp_username, snmp_port, 
                 description, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())"#)
-                .bind(id)
-                .bind(name)
-                .bind(network_region_id)
-                .bind(network_id)
-                .bind(empty_to_none(model))
-                .bind(empty_to_none(vendor))
-                .bind(empty_to_none(location))
-                .bind(&snmp_version)
-                .bind(empty_to_none(snmp_community))
-                .bind(empty_to_none(snmp_username))
-                .bind(snmp_port)
-                .bind(empty_to_none(description))
-                .execute(&mut *conn)
-                .await;
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())"#,
+            )
+            .bind(id)
+            .bind(name)
+            .bind(network_region_id)
+            .bind(network_id)
+            .bind(empty_to_none(model))
+            .bind(empty_to_none(vendor))
+            .bind(empty_to_none(location))
+            .bind(&snmp_version)
+            .bind(empty_to_none(snmp_community))
+            .bind(empty_to_none(snmp_username))
+            .bind(snmp_port)
+            .bind(empty_to_none(description))
+            .execute(&mut *conn)
+            .await;
 
             match insert_result {
                 Ok(_) => {
@@ -1929,10 +2186,14 @@ async fn import_switches(
                         .bind(ip_version)
                         .execute(&mut *conn)
                         .await;
-                        
+
                         match ip_insert_result {
-                            Ok(_) => results.push(format!("导入交换机: {} (IP: {})", name, ip_address)),
-                            Err(e) => results.push(format!("导入交换机: {} (IP写入失败: {})", name, e)),
+                            Ok(_) => {
+                                results.push(format!("导入交换机: {} (IP: {})", name, ip_address))
+                            }
+                            Err(e) => {
+                                results.push(format!("导入交换机: {} (IP写入失败: {})", name, e))
+                            }
                         }
                     } else {
                         results.push(format!("导入交换机: {}", name));
@@ -1940,14 +2201,20 @@ async fn import_switches(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{}行跳过: 插入交换机 '{}' 失败 - {}", line_num, name, e));
+                    results.push(format!(
+                        "第{}行跳过: 插入交换机 '{}' 失败 - {}",
+                        line_num, name, e
+                    ));
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!("交换机导入完成: 成功 {}, 跳过 {}, 失败 {}", success_count, skip_count, error_count));
+    results.push(format!(
+        "交换机导入完成: 成功 {}, 跳过 {}, 失败 {}",
+        success_count, skip_count, error_count
+    ));
     Ok(())
 }
 
@@ -1975,28 +2242,39 @@ pub async fn download_template(
     if template_type == "all" || template_type == "rooms" {
         let mut csv = Vec::new();
         csv.extend_from_slice(utf8_bom);
-        csv.extend_from_slice("名称,类型,网络1,网络2\n示例房间,办公室,网络区域/网络名称,\n".as_bytes());
+        csv.extend_from_slice(
+            "名称,类型,网络1,网络2\n示例房间,办公室,网络区域/网络名称,\n".as_bytes(),
+        );
         csv_data.push(("rooms.csv", csv));
     }
 
     if template_type == "all" || template_type == "workstations" {
         let mut csv = Vec::new();
         csv.extend_from_slice(utf8_bom);
-        csv.extend_from_slice("名称,房间,IP地址,负责人,描述\n示例工位,示例房间,192.168.1.100,管理员,示例描述\n".as_bytes());
+        csv.extend_from_slice(
+            "名称,房间,IP地址,负责人,描述\n示例工位,示例房间,192.168.1.100,管理员,示例描述\n"
+                .as_bytes(),
+        );
         csv_data.push(("workstations.csv", csv));
     }
 
     if template_type == "all" || template_type == "cabinets" {
         let mut csv = Vec::new();
         csv.extend_from_slice(utf8_bom);
-        csv.extend_from_slice("名称,房间,网络1,网络2,描述\n示例机柜,示例房间,网络区域/网络名称,,示例描述\n".as_bytes());
+        csv.extend_from_slice(
+            "名称,房间,网络1,网络2,描述\n示例机柜,示例房间,网络区域/网络名称,,示例描述\n"
+                .as_bytes(),
+        );
         csv_data.push(("cabinets.csv", csv));
     }
 
     if template_type == "all" || template_type == "positions" {
         let mut csv = Vec::new();
         csv.extend_from_slice(utf8_bom);
-        csv.extend_from_slice("名称,机柜,起始U,结束U,IP地址,描述\n示例机位,示例机柜,1,2,192.168.1.101,示例描述\n".as_bytes());
+        csv.extend_from_slice(
+            "名称,机柜,起始U,结束U,IP地址,描述\n示例机位,示例机柜,1,2,192.168.1.101,示例描述\n"
+                .as_bytes(),
+        );
         csv_data.push(("positions.csv", csv));
     }
 
@@ -2043,12 +2321,16 @@ pub async fn export_database(
     config: web::Data<crate::config::Config>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let db_config = &config.database;
-    
+
     let output = std::process::Command::new("pg_dump")
-        .arg("-h").arg(&db_config.host)
-        .arg("-p").arg(db_config.port.to_string())
-        .arg("-U").arg(&db_config.username)
-        .arg("-d").arg(&db_config.database)
+        .arg("-h")
+        .arg(&db_config.host)
+        .arg("-p")
+        .arg(db_config.port.to_string())
+        .arg("-U")
+        .arg(&db_config.username)
+        .arg("-d")
+        .arg(&db_config.database)
         .arg("--no-owner")
         .arg("--no-acl")
         .arg("--clean")
@@ -2056,24 +2338,35 @@ pub async fn export_database(
         .env("PGPASSWORD", &db_config.password)
         .output()
         .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("执行 pg_dump 失败: {}。请确保系统已安装 postgresql-client。", e))
+            actix_web::error::ErrorInternalServerError(format!(
+                "执行 pg_dump 失败: {}。请确保系统已安装 postgresql-client。",
+                e
+            ))
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(actix_web::error::ErrorInternalServerError(format!("pg_dump 执行失败: {}", stderr)));
+        return Err(actix_web::error::ErrorInternalServerError(format!(
+            "pg_dump 执行失败: {}",
+            stderr
+        )));
     }
 
     let sql_content = output.stdout;
     if sql_content.is_empty() {
-        return Err(actix_web::error::ErrorInternalServerError("导出的 SQL 文件为空"));
+        return Err(actix_web::error::ErrorInternalServerError(
+            "导出的 SQL 文件为空",
+        ));
     }
 
     Ok(HttpResponse::Ok()
         .content_type("application/sql")
         .append_header((
             actix_web::http::header::CONTENT_DISPOSITION,
-            format!("attachment; filename=ipma_backup_{}.sql", chrono::Utc::now().format("%Y%m%d_%H%M%S")),
+            format!(
+                "attachment; filename=ipma_backup_{}.sql",
+                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+            ),
         ))
         .body(sql_content))
 }
@@ -2084,117 +2377,169 @@ pub struct ClearLogsRequest {
     pub days: Option<i32>,
 }
 
-pub async fn clear_logs(
-    pool: web::Data<DbPool>,
-    req: web::Json<ClearLogsRequest>,
-) -> HttpResponse {
+pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest>) -> HttpResponse {
     let days = req.days.unwrap_or(0);
-    
+
     if days < 0 {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error("保留天数不能为负数"));
     }
-    
+
     let result = match req.log_type.as_str() {
         "operation" => {
             if days == 0 {
-                sqlx::query("DELETE FROM operation_logs").execute(pool.get_conn()).await
+                sqlx::query("DELETE FROM operation_logs")
+                    .execute(pool.get_conn())
+                    .await
             } else {
-                sqlx::query("DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await
+                sqlx::query(
+                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
             }
         }
         "login" => {
             if days == 0 {
-                sqlx::query("DELETE FROM login_logs").execute(pool.get_conn()).await
+                sqlx::query("DELETE FROM login_logs")
+                    .execute(pool.get_conn())
+                    .await
             } else {
-                sqlx::query("DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await
+                sqlx::query(
+                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
             }
         }
         "notification" => {
             if days == 0 {
-                sqlx::query("DELETE FROM notifications").execute(pool.get_conn()).await
+                sqlx::query("DELETE FROM notifications")
+                    .execute(pool.get_conn())
+                    .await
             } else {
-                sqlx::query("DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await
+                sqlx::query(
+                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
             }
         }
         "all" => {
             let mut deleted = 0u64;
-            
+
             if days == 0 {
-                if let Ok(r) = sqlx::query("DELETE FROM operation_logs").execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
+                    .execute(pool.get_conn())
+                    .await
+                {
                     deleted += r.rows_affected();
                 }
-                if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query("DELETE FROM login_logs")
+                    .execute(pool.get_conn())
+                    .await
+                {
                     deleted += r.rows_affected();
                 }
-                if let Ok(r) = sqlx::query("DELETE FROM notifications").execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query("DELETE FROM notifications")
+                    .execute(pool.get_conn())
+                    .await
+                {
                     deleted += r.rows_affected();
                 }
             } else {
-                if let Ok(r) = sqlx::query("DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
+                {
                     deleted += r.rows_affected();
                 }
-                if let Ok(r) = sqlx::query("DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
+                {
                     deleted += r.rows_affected();
                 }
-                if let Ok(r) = sqlx::query("DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-                    .bind(days).execute(pool.get_conn()).await {
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool.get_conn())
+                .await
+                {
                     deleted += r.rows_affected();
                 }
             }
-            
+
             return HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({ "deleted": deleted }),
-                &format!("成功清理 {} 条日志记录", deleted)
+                &format!("成功清理 {} 条日志记录", deleted),
             ));
         }
         _ => {
             return HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的日志类型"));
         }
     };
-    
+
     match result {
         Ok(r) => {
             let deleted = r.rows_affected();
             HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({ "deleted": deleted }),
-                &format!("成功清理 {} 条日志记录", deleted)
+                &format!("成功清理 {} 条日志记录", deleted),
             ))
         }
-        Err(e) => {
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("清理日志失败: {}", e)))
-        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("清理日志失败: {}", e))),
     }
 }
 
 pub async fn get_logs_stats(pool: web::Data<DbPool>) -> HttpResponse {
     let operation_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs")
-        .fetch_one(pool.get_conn()).await.unwrap_or(0);
-    
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(0);
+
     let login_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
-        .fetch_one(pool.get_conn()).await.unwrap_or(0);
-    
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(0);
+
     let notification_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notifications")
-        .fetch_one(pool.get_conn()).await.unwrap_or(0);
-    
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(0);
+
     let operation_oldest: Option<String> = sqlx::query_scalar(
-        "SELECT created_at::text FROM operation_logs ORDER BY created_at ASC LIMIT 1"
-    ).fetch_optional(pool.get_conn()).await.ok().flatten();
-    
+        "SELECT created_at::text FROM operation_logs ORDER BY created_at ASC LIMIT 1",
+    )
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
     let login_oldest: Option<String> = sqlx::query_scalar(
-        "SELECT created_at::text FROM login_logs ORDER BY created_at ASC LIMIT 1"
-    ).fetch_optional(pool.get_conn()).await.ok().flatten();
-    
+        "SELECT created_at::text FROM login_logs ORDER BY created_at ASC LIMIT 1",
+    )
+    .fetch_optional(pool.get_conn())
+    .await
+    .ok()
+    .flatten();
+
     HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "operation_logs": { "count": operation_count, "oldest": operation_oldest },
             "login_logs": { "count": login_count, "oldest": login_oldest },
             "notifications": { "count": notification_count }
         }),
-        "日志统计获取成功"
+        "日志统计获取成功",
     ))
 }

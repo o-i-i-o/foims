@@ -5,9 +5,9 @@ use std::path::Path;
 
 // 配置文件搜索路径（按优先级）
 pub const CONFIG_PATHS: [&str; 3] = [
-    "/etc/ipma/config",     // 系统配置目录（生产环境）- 最高优先级
-    "/opt/ipma/config",     // 应用目录（备用）
-    "config",               // 当前目录（开发环境）
+    "/etc/ipma/config", // 系统配置目录（生产环境）- 最高优先级
+    "/opt/ipma/config", // 应用目录（备用）
+    "config",           // 当前目录（开发环境）
 ];
 
 // 获取配置文件路径
@@ -59,7 +59,7 @@ pub struct ServerConfig {
     pub auto_https: Option<bool>,
     pub http_version: Option<String>,
     pub cert_type: Option<String>,
-    pub public_url: String,         // 服务器公共URL，用于构建重置链接等
+    pub public_url: String,           // 服务器公共URL，用于构建重置链接等
     pub session_timeout: Option<u64>, // 会话超时时间（分钟）
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
 }
@@ -96,11 +96,21 @@ pub struct RateLimitConfig {
     pub enabled: bool,
 }
 
-fn default_ip_limit() -> u32 { 100 }
-fn default_user_limit() -> u32 { 200 }
-fn default_login_limit() -> u32 { 5 }
-fn default_window_secs() -> u64 { 60 }
-fn default_rate_limit_enabled() -> bool { true }
+fn default_ip_limit() -> u32 {
+    100
+}
+fn default_user_limit() -> u32 {
+    200
+}
+fn default_login_limit() -> u32 {
+    5
+}
+fn default_window_secs() -> u64 {
+    60
+}
+fn default_rate_limit_enabled() -> bool {
+    true
+}
 
 impl Default for RateLimitConfig {
     fn default() -> Self {
@@ -129,38 +139,42 @@ impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         // 构建配置加载器
         let mut builder = ConfigBuilder::builder();
-        
+
         // 首先加载配置文件（如果存在）
         let config_path = get_config_path();
         let config_file = format!("{}.toml", config_path);
-        
+
         if Path::new(&config_file).exists() {
             builder = builder.add_source(config::File::with_name(config_path));
         }
-        
+
         // 然后加载环境变量（优先级高于配置文件）
         builder = builder.add_source(
             config::Environment::default()
                 .prefix("IPMA")
                 .separator("_")
-                .try_parsing(true)
+                .try_parsing(true),
         );
-        
+
         // 构建配置
         let config = builder.build()?;
-        
+
         // 尝试反序列化
         let config: Self = config.try_deserialize()?;
-        
+
         // 验证关键配置
         if config.database.host.is_empty() {
-            return Err(config::ConfigError::Message("Database host is required".to_string()));
+            return Err(config::ConfigError::Message(
+                "Database host is required".to_string(),
+            ));
         }
-        
+
         if config.jwt.secret.len() < 32 {
-            return Err(config::ConfigError::Message("JWT secret must be at least 32 characters long".to_string()));
+            return Err(config::ConfigError::Message(
+                "JWT secret must be at least 32 characters long".to_string(),
+            ));
         }
-        
+
         Ok(config)
     }
 }

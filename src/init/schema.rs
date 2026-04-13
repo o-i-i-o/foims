@@ -397,28 +397,24 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_mac_history_mac_address ON mac_history(mac_address)"
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_mac_address ON mac_history(mac_address)",
     )
     .execute(pool)
     .await?;
 
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_mac_history_ip_address ON mac_history(ip_address)")
+        .execute(pool)
+        .await?;
+
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_mac_history_ip_address ON mac_history(ip_address)"
+        "CREATE INDEX IF NOT EXISTS idx_mac_history_ip_manager_id ON mac_history(ip_manager_id)",
     )
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_mac_history_ip_manager_id ON mac_history(ip_manager_id)"
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_mac_history_created_at ON mac_history(created_at)"
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_mac_history_created_at ON mac_history(created_at)")
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -506,9 +502,11 @@ async fn create_system_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -559,28 +557,28 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM pg_constraint WHERE conname = 'chk_device_consistency'"
+        "SELECT COUNT(*) as count FROM pg_constraint WHERE conname = 'chk_device_consistency'",
     )
     .fetch_one(pool)
     .await?;
 
     let count: i64 = result.try_get("count").unwrap_or(0);
-    
+
     if count > 0 {
         sqlx::query("ALTER TABLE ip_managers DROP CONSTRAINT IF EXISTS chk_device_consistency")
             .execute(pool)
             .await?;
-        
+
         sqlx::query("ALTER TABLE ip_managers DROP CONSTRAINT IF EXISTS chk_device_type")
             .execute(pool)
             .await?;
-        
+
         sqlx::query(
             r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown'))"#
         )
         .execute(pool)
         .await?;
-        
+
         sqlx::query(
             r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
                 (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
@@ -599,19 +597,19 @@ async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx:
 async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let result = sqlx::query(
         "SELECT COUNT(*) as count FROM information_schema.columns 
-         WHERE table_name = 'switches' AND column_name = 'cabinet_id'"
+         WHERE table_name = 'switches' AND column_name = 'cabinet_id'",
     )
     .fetch_one(pool)
     .await?;
 
     let count: i64 = result.try_get("count").unwrap_or(0);
-    
+
     if count == 0 {
         sqlx::query(
             "ALTER TABLE switches 
              ADD COLUMN cabinet_id UUID REFERENCES cabinets(id) ON DELETE SET NULL,
              ADD COLUMN start_u INTEGER,
-             ADD COLUMN end_u INTEGER"
+             ADD COLUMN end_u INTEGER",
         )
         .execute(pool)
         .await?;
@@ -624,7 +622,7 @@ async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx:
                FROM positions p
                JOIN ip_managers im ON im.position_id = p.id 
                WHERE im.switch_id = s.id
-               AND s.cabinet_id IS NULL"#
+               AND s.cabinet_id IS NULL"#,
         )
         .execute(pool)
         .await?;
@@ -635,13 +633,13 @@ async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx:
 
 async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = 'mac_history'"
+        "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = 'mac_history'",
     )
     .fetch_one(pool)
     .await?;
 
     let count: i64 = result.try_get("count").unwrap_or(0);
-    
+
     if count == 0 {
         sqlx::query(
             r#"CREATE TABLE mac_history (
@@ -656,7 +654,7 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 network_id UUID NOT NULL REFERENCES network_cidrs(id),
                 change_type VARCHAR(20) NOT NULL DEFAULT 'update',
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-            )"#
+            )"#,
         )
         .execute(pool)
         .await?;
@@ -664,22 +662,22 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         sqlx::query("CREATE INDEX idx_mac_history_mac_address ON mac_history(mac_address)")
             .execute(pool)
             .await?;
-        
+
         sqlx::query("CREATE INDEX idx_mac_history_ip_address ON mac_history(ip_address)")
             .execute(pool)
             .await?;
-        
+
         sqlx::query("CREATE INDEX idx_mac_history_ip_manager_id ON mac_history(ip_manager_id)")
             .execute(pool)
             .await?;
-        
+
         sqlx::query("CREATE INDEX idx_mac_history_created_at ON mac_history(created_at)")
             .execute(pool)
             .await?;
     }
 
     let trigger_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_log_mac_address_change')"
+        "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_log_mac_address_change')",
     )
     .fetch_one(pool)
     .await
@@ -734,7 +732,8 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE VIEW ip_managers_with_details AS
         SELECT 
             imm.id,
@@ -782,7 +781,8 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
         LEFT JOIN network_cidrs n ON imm.network_id = n.id
         LEFT JOIN network_regions nt ON n.network_region_id = nt.id
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
@@ -790,7 +790,8 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 }
 
 async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS encryption_keys (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             key_name VARCHAR(50) UNIQUE NOT NULL,
@@ -798,7 +799,8 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
@@ -806,7 +808,7 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
     let key_base64 = if std::path::Path::new(key_path).exists() {
         if let Ok(key) = std::fs::read(key_path) {
             if key.len() == 32 {
-                use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+                use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
                 BASE64.encode(&key)
             } else {
                 tracing::warn!("加密密钥长度不正确，将使用默认密钥");
@@ -830,7 +832,8 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
     .execute(pool)
     .await?;
 
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE OR REPLACE FUNCTION encrypt_password(p_password TEXT)
         RETURNS TEXT AS $$
         DECLARE
@@ -859,11 +862,13 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
             RETURN encode(v_encrypted, 'base64');
         END;
         $$ LANGUAGE plpgsql STRICT IMMUTABLE;
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE OR REPLACE FUNCTION decrypt_password(p_encrypted TEXT)
         RETURNS TEXT AS $$
         DECLARE
@@ -897,11 +902,13 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
             RETURN convert_from(v_decrypted, 'UTF8');
         END;
         $$ LANGUAGE plpgsql STRICT IMMUTABLE;
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         DROP VIEW IF EXISTS switches_with_details;
         CREATE VIEW switches_with_details AS
         SELECT 
@@ -932,7 +939,8 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
             WHERE switch_id = s.id AND device_type = 'switch' 
             LIMIT 1
         ) im ON true
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
@@ -940,7 +948,8 @@ async fn create_crypto_functions(pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
 }
 
 async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE OR REPLACE FUNCTION check_position_overlap() RETURNS TRIGGER AS $$
         BEGIN
             IF EXISTS (
@@ -959,13 +968,14 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
-    let _ = sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_check_position_overlap ON positions"
-    ).execute(pool).await;
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS trg_check_position_overlap ON positions")
+        .execute(pool)
+        .await;
 
     sqlx::query(
         "CREATE TRIGGER trg_check_position_overlap BEFORE INSERT OR UPDATE ON positions FOR EACH ROW EXECUTE FUNCTION check_position_overlap()"
@@ -973,7 +983,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE OR REPLACE FUNCTION check_switch_circular_dependency() RETURNS TRIGGER AS $$
         BEGIN
             IF NEW.parent_switch_id = NEW.id THEN
@@ -997,13 +1008,14 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
 
-    let _ = sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_check_switch_circular_dependency ON switches"
-    ).execute(pool).await;
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS trg_check_switch_circular_dependency ON switches")
+        .execute(pool)
+        .await;
 
     sqlx::query(
         "CREATE TRIGGER trg_check_switch_circular_dependency BEFORE INSERT OR UPDATE OF parent_switch_id ON switches FOR EACH ROW EXECUTE FUNCTION check_switch_circular_dependency()"
@@ -1044,9 +1056,9 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    let _ = sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_log_mac_address_change ON ip_managers"
-    ).execute(pool).await;
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS trg_log_mac_address_change ON ip_managers")
+        .execute(pool)
+        .await;
 
     sqlx::query(
         "CREATE TRIGGER trg_log_mac_address_change AFTER INSERT OR UPDATE OF mac_address ON ip_managers FOR EACH ROW EXECUTE FUNCTION log_mac_address_change()"

@@ -5,26 +5,29 @@ pub mod operation;
 pub use login::get_login_logs;
 pub use operation::get_operation_logs;
 
-use tracing_subscriber::prelude::*;
+use std::fs;
+use std::path::Path;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::LocalTime;
-use std::path::Path;
-use std::fs;
+use tracing_subscriber::prelude::*;
 
 pub fn setup_logging() -> String {
-    let timer = LocalTime::new(time::format_description::parse(
-        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]"
-    ).unwrap());
+    let timer = LocalTime::new(
+        time::format_description::parse(
+            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]",
+        )
+        .unwrap(),
+    );
 
     let app_name = env!("CARGO_PKG_NAME");
     let log_dir = format!("/var/log/{}", app_name);
-    
+
     if !Path::new(&log_dir).exists() {
         fs::create_dir_all(&log_dir).unwrap_or_else(|e| {
             eprintln!("创建日志目录失败: {}", e);
         });
     }
-    
+
     let today = chrono::Local::now().format("%Y-%m-%d-%H-%M").to_string();
     let log_file_path = format!("{}/{}.log", log_dir, today);
 

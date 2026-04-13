@@ -1,11 +1,11 @@
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{
-    ApiResponse, IpManager, Workstation, WorkstationCreate,
-    WorkstationPortWithSwitchPort, WorkstationUpdate, WorkstationWithDetails,
+    ApiResponse, IpManager, Workstation, WorkstationCreate, WorkstationPortWithSwitchPort,
+    WorkstationUpdate, WorkstationWithDetails,
 };
 use crate::resource::ip::detect_ip_version;
-use crate::utils::{log_system_operation, validate_ip_in_cidr, DEFAULT_PAGE};
+use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -18,12 +18,24 @@ pub async fn get_workstations(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
-    let sort_by = query.get("sort_by").cloned().unwrap_or_else(|| "name".to_string());
-    let sort_order = query.get("sort_order").cloned().unwrap_or_else(|| "asc".to_string());
+    let sort_by = query
+        .get("sort_by")
+        .cloned()
+        .unwrap_or_else(|| "name".to_string());
+    let sort_order = query
+        .get("sort_order")
+        .cloned()
+        .unwrap_or_else(|| "asc".to_string());
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{}%", search);
@@ -48,9 +60,8 @@ pub async fn get_workstations(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -76,20 +87,18 @@ pub async fn get_workstations(
 
         (total, workstations_basic)
     } else if parsed_room_id.is_some() && search.is_empty() {
-        let total: i64 = match sqlx::query_scalar(
-            "SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1"
-        )
-        .bind(parsed_room_id)
-        .fetch_one(pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
-            }
-        };
+        let total: i64 =
+            match sqlx::query_scalar("SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1")
+                .bind(parsed_room_id)
+                .fetch_one(pool.get_conn())
+                .await
+            {
+                Ok(t) => t,
+                Err(err) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                }
+            };
 
         let workstations_basic = match sqlx::query(&format!(
             "SELECT w.id, w.name, w.room_id, 
@@ -217,7 +226,8 @@ pub async fn get_workstations(
         Vec::new()
     };
 
-    let mut ports_map: std::collections::HashMap<Uuid, Vec<WorkstationPortWithSwitchPort>> = std::collections::HashMap::new();
+    let mut ports_map: std::collections::HashMap<Uuid, Vec<WorkstationPortWithSwitchPort>> =
+        std::collections::HashMap::new();
     for port in all_ports {
         ports_map.entry(port.workstation_id).or_default().push(port);
     }
@@ -227,8 +237,12 @@ pub async fn get_workstations(
     for row in workstations_basic {
         let id: Uuid = row.get("id");
         let name: String = row.get("name");
-        let room_id: Uuid = row.get::<Option<Uuid>, _>("room_id").unwrap_or_else(Uuid::nil);
-        let room_name: String = row.get::<Option<String>, _>("room_name").unwrap_or_else(|| "未知房间".to_string());
+        let room_id: Uuid = row
+            .get::<Option<Uuid>, _>("room_id")
+            .unwrap_or_else(Uuid::nil);
+        let room_name: String = row
+            .get::<Option<String>, _>("room_name")
+            .unwrap_or_else(|| "未知房间".to_string());
         let manager: Option<String> = row.get("manager");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
@@ -355,17 +369,24 @@ pub async fn create_workstation(
                     .json(ApiResponse::<()>::error("该网络中IP地址已存在")));
             }
 
-            let network = match sqlx::query(crate::utils::NETWORK_QUERY)
-                .bind(ip.network_id)
-                .fetch_optional(&mut *tx).await {
-                Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
-                Ok(None) => {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到")));
-                },
-                Err(err) => {
-                    return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
-                }
-            };
+            let network =
+                match sqlx::query(crate::utils::NETWORK_QUERY)
+                    .bind(ip.network_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                {
+                    Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
+                    Ok(None) => {
+                        return Ok(
+                            HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到"))
+                        );
+                    }
+                    Err(err) => {
+                        return Ok(HttpResponse::InternalServerError().json(
+                            ApiResponse::<()>::error(format!("Database query error: {}", err)),
+                        ));
+                    }
+                };
 
             let ip_in_cidr = match validate_ip_in_cidr(&ip.ip_address, &network) {
                 Ok(valid) => valid,
@@ -407,7 +428,8 @@ pub async fn create_workstation(
     }
 
     if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
     let workstation = Workstation {
@@ -474,12 +496,16 @@ pub async fn get_workstation(
             m.status, m.last_seen, m.created_at, m.updated_at
         FROM ip_managers m
         WHERE m.workstation_id = $1
-        ORDER BY m.ip_address"#
-    ).bind(id)
-    .fetch_all(pool.get_conn()).await {
+        ORDER BY m.ip_address"#,
+    )
+    .bind(id)
+    .fetch_all(pool.get_conn())
+    .await
+    {
         Ok(ips) => ips,
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
         }
     };
 
@@ -599,8 +625,12 @@ pub async fn update_workstation(
         }
 
         for ip in ips {
-            let ip_version = if ip.ip_address.contains(":") { 6i16 } else { 4i16 };
-            
+            let ip_version = if ip.ip_address.contains(":") {
+                6i16
+            } else {
+                4i16
+            };
+
             if let Err(err) = sqlx::query(
                 "INSERT INTO ip_managers (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
@@ -626,7 +656,8 @@ pub async fn update_workstation(
     }
 
     if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
     let row = match sqlx::query(
@@ -653,7 +684,9 @@ pub async fn update_workstation(
         id: row.get("id"),
         name: row.get("name"),
         room_id: row.get("room_id"),
-        room_name: row.get::<Option<String>, _>("room_name").unwrap_or_default(),
+        room_name: row
+            .get::<Option<String>, _>("room_name")
+            .unwrap_or_default(),
         manager: row.get("manager"),
         ips,
         description: row.get("description"),
@@ -679,10 +712,12 @@ pub async fn update_workstation(
     )
     .await;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
-        result,
-        "工位更新成功",
-    )))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
+            result,
+            "工位更新成功",
+        )),
+    )
 }
 
 pub async fn delete_workstation(
@@ -762,7 +797,8 @@ pub async fn delete_workstation(
     }
 
     if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
     let details = serde_json::json!({

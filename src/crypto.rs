@@ -1,12 +1,12 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit},
 };
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use std::fs;
 use std::path::Path;
 use tracing::info;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
 const NONCE_SIZE: usize = 12;
 
@@ -102,7 +102,7 @@ mod tests {
         let encrypted1 = encrypt_password(password);
         let encrypted2 = encrypt_password(password);
         assert_ne!(encrypted1, encrypted2);
-        
+
         assert_eq!(password, decrypt_password(&encrypted1));
         assert_eq!(password, decrypt_password(&encrypted2));
     }

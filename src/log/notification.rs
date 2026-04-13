@@ -11,9 +11,18 @@ pub async fn get_notifications(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
-    let status = query.get("status").cloned().unwrap_or_else(|| "all".to_string());
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+    let status = query
+        .get("status")
+        .cloned()
+        .unwrap_or_else(|| "all".to_string());
     let offset = (page - 1) * page_size;
 
     let mut where_conditions = Vec::new();

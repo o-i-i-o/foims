@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
-use crate::utils::{log_system_operation, DEFAULT_PAGE};
+use crate::utils::{DEFAULT_PAGE, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use bcrypt::{DEFAULT_COST, hash};
 use chrono::Utc;
@@ -14,8 +14,14 @@ pub async fn get_users(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
@@ -28,9 +34,8 @@ pub async fn get_users(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -53,7 +58,7 @@ pub async fn get_users(
         (total, users)
     } else {
         let total: i64 = match sqlx::query_scalar(
-            "SELECT COUNT(*) FROM users WHERE username ILIKE $1 OR email ILIKE $1"
+            "SELECT COUNT(*) FROM users WHERE username ILIKE $1 OR email ILIKE $1",
         )
         .bind(&search_pattern)
         .fetch_one(pool.get_conn())
@@ -61,9 +66,8 @@ pub async fn get_users(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -345,10 +349,12 @@ pub async fn delete_user(
     let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "数据库事务启动失败: {}",
-                err
-            ))));
+            return Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                    "数据库事务启动失败: {}",
+                    err
+                ))),
+            );
         }
     };
 

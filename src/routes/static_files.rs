@@ -1,11 +1,11 @@
-use actix_web::{Error, HttpResponse, get, web, HttpRequest};
 use actix_web::error::{ErrorBadRequest, JsonPayloadError};
+use actix_web::{Error, HttpRequest, HttpResponse, get, web};
 use std::path::PathBuf;
 
 // 前端资源目录搜索路径（按优先级）
 pub const WEB_DIR_PATHS: [&str; 2] = [
-    "/opt/ipma/web",        // 应用目录（生产环境）
-    "/usr/share/ipma/web",  // 系统目录（备用）
+    "/opt/ipma/web",       // 应用目录（生产环境）
+    "/usr/share/ipma/web", // 系统目录（备用）
 ];
 
 // 获取 web 目录的绝对路径

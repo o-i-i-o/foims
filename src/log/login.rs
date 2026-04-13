@@ -7,7 +7,10 @@ pub async fn get_login_logs(
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
@@ -20,9 +23,8 @@ pub async fn get_login_logs(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 

@@ -10,14 +10,16 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::config::Config;
-use crate::models::ApiResponse;
-use crate::init::types::{BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest};
-use crate::init::verification::verify_code;
-use crate::init::config::update_config_enabled;
 use crate::init::check::{check_has_data, check_required_tables_exist, validate_table_columns};
+use crate::init::config::update_config_enabled;
 use crate::init::connection::ensure_database_and_schema;
 use crate::init::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::init::schema::create_tables;
+use crate::init::types::{
+    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest,
+};
+use crate::init::verification::verify_code;
+use crate::models::ApiResponse;
 
 pub async fn check_db_status(config: web::Data<Config>) -> Result<HttpResponse> {
     let pool = match ensure_database_and_schema(&config.database).await {
@@ -82,8 +84,7 @@ pub async fn create_database_api(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -111,33 +112,39 @@ pub async fn create_database_api(
         }
     } else {
         drop(pool);
-        
+
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            config.database.username, config.database.password, config.database.host, config.database.port
+            config.database.username,
+            config.database.password,
+            config.database.host,
+            config.database.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("连接PostgreSQL失败: {}", e))));
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "连接PostgreSQL失败: {}",
+                        e
+                    ))),
+                );
             }
         };
-        
-        let db_exists: bool = match sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
-        )
-        .bind(&config.database.database)
-        .fetch_one(&postgres_pool)
-        .await
-        {
-            Ok(exists) => exists,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
-            }
-        };
-        
+
+        let db_exists: bool =
+            match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+                .bind(&config.database.database)
+                .fetch_one(&postgres_pool)
+                .await
+            {
+                Ok(exists) => exists,
+                Err(e) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                }
+            };
+
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
@@ -155,8 +162,7 @@ pub async fn create_database_api(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -192,8 +198,7 @@ pub async fn import_database_api(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -221,33 +226,39 @@ pub async fn import_database_api(
         }
     } else {
         drop(pool);
-        
+
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            config.database.username, config.database.password, config.database.host, config.database.port
+            config.database.username,
+            config.database.password,
+            config.database.host,
+            config.database.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("连接PostgreSQL失败: {}", e))));
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "连接PostgreSQL失败: {}",
+                        e
+                    ))),
+                );
             }
         };
-        
-        let db_exists: bool = match sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
-        )
-        .bind(&config.database.database)
-        .fetch_one(&postgres_pool)
-        .await
-        {
-            Ok(exists) => exists,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
-            }
-        };
-        
+
+        let db_exists: bool =
+            match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+                .bind(&config.database.database)
+                .fetch_one(&postgres_pool)
+                .await
+            {
+                Ok(exists) => exists,
+                Err(e) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                }
+            };
+
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
@@ -265,8 +276,7 @@ pub async fn import_database_api(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -276,7 +286,12 @@ pub async fn import_database_api(
     }
 
     if let Err(e) = validate_table_columns(&pool).await {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("数据库字段完整性校验失败: {}", e))));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "数据库字段完整性校验失败: {}",
+                e
+            ))),
+        );
     }
 
     info!("数据库导入成功");
@@ -302,15 +317,24 @@ pub async fn import_database_from_file(
     let mut verification_code: Option<String> = None;
     let mut sql_file_path: Option<PathBuf> = None;
 
-    std::fs::create_dir_all("/tmp/ipma_import")
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("创建临时目录失败: {}", e)))?;
+    std::fs::create_dir_all("/tmp/ipma_import").map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("创建临时目录失败: {}", e))
+    })?;
 
-    while let Some(mut field) = payload.try_next().await.map_err(actix_web::error::ErrorBadRequest)? {
+    while let Some(mut field) = payload
+        .try_next()
+        .await
+        .map_err(actix_web::error::ErrorBadRequest)?
+    {
         let content_disposition = field.content_disposition();
-        let field_name = content_disposition.map(|cd| cd.get_name().unwrap_or("").to_string()).unwrap_or_default();
+        let field_name = content_disposition
+            .map(|cd| cd.get_name().unwrap_or("").to_string())
+            .unwrap_or_default();
 
         if field_name == "verification" {
-            let data = field.bytes(10 * 1024 * 1024).await
+            let data = field
+                .bytes(10 * 1024 * 1024)
+                .await
                 .map_err(actix_web::error::ErrorBadRequest)?
                 .map_err(actix_web::error::ErrorBadRequest)?;
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
@@ -319,14 +343,18 @@ pub async fn import_database_from_file(
                 .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
                 .unwrap_or_else(|| "import.sql".to_string());
             let filepath = PathBuf::from(format!("/tmp/ipma_import/{}", filename));
-            let mut f = std::fs::File::create(&filepath)
-                .map_err(|e| actix_web::error::ErrorInternalServerError(format!("创建文件失败: {}", e)))?;
-            
-            let data = field.bytes(100 * 1024 * 1024).await
+            let mut f = std::fs::File::create(&filepath).map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("创建文件失败: {}", e))
+            })?;
+
+            let data = field
+                .bytes(100 * 1024 * 1024)
+                .await
                 .map_err(actix_web::error::ErrorBadRequest)?
                 .map_err(actix_web::error::ErrorBadRequest)?;
-            f.write_all(&data)
-                .map_err(|e| actix_web::error::ErrorInternalServerError(format!("写入文件失败: {}", e)))?;
+            f.write_all(&data).map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("写入文件失败: {}", e))
+            })?;
             sql_file_path = Some(filepath);
         }
     }
@@ -348,8 +376,7 @@ pub async fn import_database_from_file(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -377,33 +404,39 @@ pub async fn import_database_from_file(
         }
     } else {
         drop(pool);
-        
+
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            config.database.username, config.database.password, config.database.host, config.database.port
+            config.database.username,
+            config.database.password,
+            config.database.host,
+            config.database.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("连接PostgreSQL失败: {}", e))));
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "连接PostgreSQL失败: {}",
+                        e
+                    ))),
+                );
             }
         };
-        
-        let db_exists: bool = match sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
-        )
-        .bind(&config.database.database)
-        .fetch_one(&postgres_pool)
-        .await
-        {
-            Ok(exists) => exists,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
-            }
-        };
-        
+
+        let db_exists: bool =
+            match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+                .bind(&config.database.database)
+                .fetch_one(&postgres_pool)
+                .await
+            {
+                Ok(exists) => exists,
+                Err(e) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                }
+            };
+
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
@@ -435,20 +468,28 @@ pub async fn import_database_from_file(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("导入SQL文件失败: {}", stderr))));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                "导入SQL文件失败: {}",
+                stderr
+            ))),
+        );
     }
 
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
     if let Err(e) = validate_table_columns(&pool).await {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("数据库字段完整性校验失败: {}", e))));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "数据库字段完整性校验失败: {}",
+                e
+            ))),
+        );
     }
 
     let _ = std::fs::remove_file(&sql_path);
@@ -469,10 +510,7 @@ pub async fn init_system(
 ) -> Result<HttpResponse> {
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "验证错误: {:?}",
-                e
-            ))),
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
         );
     }
 
@@ -489,8 +527,7 @@ pub async fn init_system(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -585,8 +622,7 @@ pub async fn init_db(config: web::Data<Config>) -> Result<HttpResponse> {
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -627,8 +663,7 @@ pub async fn clear_database(
     let pool = match ensure_database_and_schema(&config.database).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(e)));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e)));
         }
     };
 
@@ -696,19 +731,17 @@ pub async fn check_pgsql(config: web::Data<Config>) -> Result<HttpResponse> {
     );
 
     match PgPool::connect(&url).await {
-        Ok(_) => {
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "installed": true,
-                "running": true,
-                "message": "PostgreSQL is running and connection is successful."
-            })))
-        }
+        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "installed": true,
+            "running": true,
+            "message": "PostgreSQL is running and connection is successful."
+        }))),
         Err(e) => {
             let error_str = e.to_string();
             let running = !error_str.contains("connect")
                 && !error_str.contains("timeout")
                 && !error_str.contains("refused");
-            
+
             Ok(HttpResponse::Ok().json(serde_json::json!({
                 "installed": true,
                 "running": running,

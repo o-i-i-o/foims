@@ -5,21 +5,25 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
+use super::snmp::decrypt_snmp_fields;
 use crate::config::Config;
 use crate::crypto::encrypt_password;
 use crate::db::DbPool;
-use crate::models::{
-    ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent,
-};
-use crate::utils::{log_system_operation, DEFAULT_PAGE};
-use super::snmp::decrypt_snmp_fields;
+use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
+use crate::utils::{DEFAULT_PAGE, log_system_operation};
 
 pub async fn get_switches(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
@@ -43,12 +47,8 @@ pub async fn get_switches(
     } {
         Ok(t) => t,
         Err(e) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "数据库查询失败: {}",
-                    e
-                ))),
-            );
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
         }
     };
 
@@ -75,7 +75,7 @@ pub async fn get_switches(
             FROM switches_with_details
             WHERE name ILIKE $1 OR location ILIKE $1 OR model ILIKE $1 OR ip_address ILIKE $1
             ORDER BY created_at DESC
-            LIMIT $2 OFFSET $3"#
+            LIMIT $2 OFFSET $3"#,
         )
         .bind(pattern)
         .bind(page_size)
@@ -104,7 +104,7 @@ pub async fn get_switches(
                 created_at, updated_at
             FROM switches_with_details
             ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2"#
+            LIMIT $1 OFFSET $2"#,
         )
         .bind(page_size)
         .bind(offset)
@@ -169,7 +169,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
     match switch {
         Ok(Some(mut data)) => {
             decrypt_snmp_fields(&mut data);
-            
+
             let ips = sqlx::query(
                 r#"SELECT 
                     m.id, m.switch_id, m.device_type, m.network_id, 
@@ -188,30 +188,33 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             .await
             .unwrap_or_default();
 
-            let ips_json: Vec<serde_json::Value> = ips.into_iter().map(|row| {
-                serde_json::json!({
-                    "id": row.get::<Uuid, _>(0),
-                    "switch_id": row.get::<Option<Uuid>, _>(1),
-                    "device_type": row.get::<Option<String>, _>(2),
-                    "network_id": row.get::<Uuid, _>(3),
-                    "ip_address": row.get::<String, _>(4),
-                    "ip_version": row.get::<i16, _>(5),
-                    "mac_address": row.get::<Option<String>, _>(6),
-                    "hostname": row.get::<Option<String>, _>(7),
-                    "status": row.get::<String, _>(8),
-                    "last_seen": row.get::<DateTime<Utc>, _>(9),
-                    "created_at": row.get::<DateTime<Utc>, _>(10),
-                    "updated_at": row.get::<DateTime<Utc>, _>(11),
-                    "network_region_id": row.get::<Option<Uuid>, _>(12),
-                    "network_region": row.get::<Option<String>, _>(13)
+            let ips_json: Vec<serde_json::Value> = ips
+                .into_iter()
+                .map(|row| {
+                    serde_json::json!({
+                        "id": row.get::<Uuid, _>(0),
+                        "switch_id": row.get::<Option<Uuid>, _>(1),
+                        "device_type": row.get::<Option<String>, _>(2),
+                        "network_id": row.get::<Uuid, _>(3),
+                        "ip_address": row.get::<String, _>(4),
+                        "ip_version": row.get::<i16, _>(5),
+                        "mac_address": row.get::<Option<String>, _>(6),
+                        "hostname": row.get::<Option<String>, _>(7),
+                        "status": row.get::<String, _>(8),
+                        "last_seen": row.get::<DateTime<Utc>, _>(9),
+                        "created_at": row.get::<DateTime<Utc>, _>(10),
+                        "updated_at": row.get::<DateTime<Utc>, _>(11),
+                        "network_region_id": row.get::<Option<Uuid>, _>(12),
+                        "network_region": row.get::<Option<String>, _>(13)
+                    })
                 })
-            }).collect();
+                .collect();
 
             let mut response_data = serde_json::to_value(data).unwrap();
             response_data["ips"] = serde_json::to_value(ips_json).unwrap();
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
-        },
+        }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
             .json(ApiResponse::<()>::error(format!("获取交换机失败: {}", e)))),
@@ -231,47 +234,50 @@ pub async fn create_switch(
     }
 
     let has_ips = req.ips.is_some() && !req.ips.as_ref().unwrap().is_empty();
-    
+
     if !has_ips {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "交换机必须至少配置一个IP地址"
-        )));
+        return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error("交换机必须至少配置一个IP地址")));
     }
-    
+
     if req.cabinet_id.is_some() && (req.start_u.is_none() || req.end_u.is_none()) {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "选择机柜时必须填写起始U位和结束U位"
+            "选择机柜时必须填写起始U位和结束U位",
         )));
     }
-    
+
     if let (Some(start_u), Some(end_u)) = (req.start_u, req.end_u)
         && start_u > end_u
     {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "起始U位不能大于结束U位"
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error("起始U位不能大于结束U位"))
+        );
     }
-    
+
     let ips = req.ips.as_ref().unwrap();
     let first_ip = &ips[0];
-    
+
     let network_region_id = if let Some(nrid) = req.network_region_id {
         Some(nrid)
     } else if let Some(nrid) = first_ip.network_region_id {
         Some(nrid)
     } else {
         match sqlx::query_scalar::<_, Uuid>(
-            "SELECT network_region_id FROM network_cidrs WHERE id = $1"
+            "SELECT network_region_id FROM network_cidrs WHERE id = $1",
         )
         .bind(first_ip.network_id)
         .fetch_optional(pool.get_conn())
         .await
         {
             Ok(Some(id)) => Some(id),
-            _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无法获取网络区域ID"))),
+            _ => {
+                return Ok(
+                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("无法获取网络区域ID"))
+                );
+            }
         }
     };
-    
+
     let network_id = first_ip.network_id;
 
     let id = Uuid::new_v4();
@@ -328,11 +334,16 @@ pub async fn create_switch(
                 .unwrap_or(false);
 
                 if ip_exists {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已存在", ip.ip_address))));
+                    return Ok(
+                        HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                            "IP地址 {} 已存在",
+                            ip.ip_address
+                        ))),
+                    );
                 }
 
                 let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
-                
+
                 let ip_manager_id = Uuid::new_v4();
                 let _ = sqlx::query(
                     "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
@@ -397,7 +408,7 @@ pub async fn create_switch(
                         true,
                     )
                     .await;
-                    
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
                 }
                 Err(e) => Ok(
@@ -444,25 +455,26 @@ pub async fn update_switch(
             return Ok(HttpResponse::BadRequest()
                 .json(ApiResponse::<()>::error("不能将自己设置为上级交换机")));
         }
-        
+
         if check_switch_cycle(pool.get_conn(), id, parent_switch_id).await? {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("检测到交换机层级循环引用，无法设置此上级交换机")));
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "检测到交换机层级循环引用，无法设置此上级交换机",
+            )));
         }
     }
 
     if req.cabinet_id.is_some() && (req.start_u.is_none() || req.end_u.is_none()) {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "选择机柜时必须填写起始U位和结束U位"
+            "选择机柜时必须填写起始U位和结束U位",
         )));
     }
-    
+
     if let (Some(start_u), Some(end_u)) = (req.start_u, req.end_u)
         && start_u > end_u
     {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "起始U位不能大于结束U位"
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error("起始U位不能大于结束U位"))
+        );
     }
 
     let now = Utc::now();
@@ -540,11 +552,13 @@ pub async fn update_switch(
                     .unwrap_or(false);
 
                     if ip_exists {
-                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("IP地址 {} 已被其他设备使用", ip.ip_address))));
+                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                            format!("IP地址 {} 已被其他设备使用", ip.ip_address),
+                        )));
                     }
 
                     let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
-                    
+
                     let ip_manager_id = Uuid::new_v4();
                     let _ = sqlx::query(
                         "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
@@ -610,7 +624,7 @@ pub async fn update_switch(
                         true,
                     )
                     .await;
-                    
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
                 }
                 Err(e) => Ok(
@@ -682,37 +696,32 @@ pub async fn delete_switch(
     }
 }
 
-async fn check_switch_cycle(
-    pool: &sqlx::PgPool,
-    switch_id: Uuid,
-    parent_id: Uuid,
-) -> Result<bool> {
+async fn check_switch_cycle(pool: &sqlx::PgPool, switch_id: Uuid, parent_id: Uuid) -> Result<bool> {
     let mut current = parent_id;
     let mut visited = std::collections::HashSet::new();
-    
+
     while !visited.contains(&current) {
         if current == switch_id {
             return Ok(true);
         }
         visited.insert(current);
-        
-        let next_parent: Option<Uuid> = match sqlx::query_scalar(
-            "SELECT parent_switch_id FROM switches WHERE id = $1"
-        )
-        .bind(current)
-        .fetch_optional(pool)
-        .await
-        {
-            Ok(Some(id)) => id,
-            Ok(None) => break,
-            Err(_) => break,
-        };
-        
+
+        let next_parent: Option<Uuid> =
+            match sqlx::query_scalar("SELECT parent_switch_id FROM switches WHERE id = $1")
+                .bind(current)
+                .fetch_optional(pool)
+                .await
+            {
+                Ok(Some(id)) => id,
+                Ok(None) => break,
+                Err(_) => break,
+            };
+
         match next_parent {
             Some(id) => current = id,
             None => break,
         }
     }
-    
+
     Ok(false)
 }

@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use actix_web::{HttpResponse, Result, web};
-use async_snmp::{Auth, Client, Error, oid, v3::{AuthProtocol, PrivProtocol}};
+use async_snmp::{
+    Auth, Client, Error, oid,
+    v3::{AuthProtocol, PrivProtocol},
+};
 use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
@@ -119,8 +122,14 @@ pub struct SnmpParamsLegacy {
 
 pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
     data.snmp_community = data.snmp_community.as_ref().map(|v| decrypt_password(v));
-    data.snmp_auth_password = data.snmp_auth_password.as_ref().map(|v| decrypt_password(v));
-    data.snmp_priv_password = data.snmp_priv_password.as_ref().map(|v| decrypt_password(v));
+    data.snmp_auth_password = data
+        .snmp_auth_password
+        .as_ref()
+        .map(|v| decrypt_password(v));
+    data.snmp_priv_password = data
+        .snmp_priv_password
+        .as_ref()
+        .map(|v| decrypt_password(v));
 }
 
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
@@ -130,10 +139,15 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
             Ok(Auth::v2c(community))
         }
         "v3" => {
-            let username = params.username.as_deref().ok_or("SNMPv3需要用户名".to_string())?;
+            let username = params
+                .username
+                .as_deref()
+                .ok_or("SNMPv3需要用户名".to_string())?;
             let mut auth = Auth::usm(username);
 
-            if let (Some(proto), Some(pass)) = (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
+            if let (Some(proto), Some(pass)) =
+                (params.auth_proto.as_deref(), params.auth_pass.as_deref())
+            {
                 let auth_protocol = match proto {
                     "MD5" => AuthProtocol::Md5,
                     "SHA" | "SHA-1" | "SHA1" => AuthProtocol::Sha1,
@@ -145,7 +159,9 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                 };
                 auth = auth.auth(auth_protocol, pass);
 
-                if let (Some(proto), Some(pass)) = (params.priv_proto.as_deref(), params.priv_pass.as_deref()) {
+                if let (Some(proto), Some(pass)) =
+                    (params.priv_proto.as_deref(), params.priv_pass.as_deref())
+                {
                     let priv_protocol = match proto {
                         "DES" => PrivProtocol::Des,
                         "3DES" | "DES3" => PrivProtocol::Des3,
@@ -166,14 +182,24 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
 
 pub fn format_snmp_error(e: Box<Error>) -> String {
     match *e {
-        Error::Timeout { target, retries, .. } => {
+        Error::Timeout {
+            target, retries, ..
+        } => {
             format!("连接超时 (目标: {}, 重试次数: {})", target, retries)
         }
         Error::Network { target, source } => {
             format!("网络错误 (目标: {}): {}", target, source)
         }
-        Error::Snmp { target, status, index, .. } => {
-            format!("SNMP错误 (目标: {}, 状态: {:?}, 索引: {})", target, status, index)
+        Error::Snmp {
+            target,
+            status,
+            index,
+            ..
+        } => {
+            format!(
+                "SNMP错误 (目标: {}, 状态: {:?}, 索引: {})",
+                target, status, index
+            )
         }
         Error::Auth { target } => {
             format!("认证失败 (目标: {})", target)
@@ -199,7 +225,7 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
     let timeout = Duration::from_secs(5);
 
     tracing::info!("[test_snmp] 开始连接: {}", addr);
-    
+
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
     tracing::info!("[test_snmp] 认证构建成功");
@@ -221,22 +247,33 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
         match &result.value {
             async_snmp::Value::NoSuchObject => {
                 debug!("SNMP响应: NoSuchObject (OID存在但无值)");
-                Ok(format!("SNMP连接成功 ({}:{})，但设备不支持sysDescr OID", params.ip, params.port))
+                Ok(format!(
+                    "SNMP连接成功 ({}:{})，但设备不支持sysDescr OID",
+                    params.ip, params.port
+                ))
             }
             async_snmp::Value::NoSuchInstance => {
                 debug!("SNMP响应: NoSuchInstance (实例不存在)");
-                Ok(format!("SNMP连接成功 ({}:{})，但sysDescr实例不存在", params.ip, params.port))
+                Ok(format!(
+                    "SNMP连接成功 ({}:{})，但sysDescr实例不存在",
+                    params.ip, params.port
+                ))
             }
             async_snmp::Value::EndOfMibView => {
                 debug!("SNMP响应: EndOfMibView (MIB视图末尾)");
-                Ok(format!("SNMP连接成功 ({}:{})，已到达MIB视图末尾", params.ip, params.port))
+                Ok(format!(
+                    "SNMP连接成功 ({}:{})，已到达MIB视图末尾",
+                    params.ip, params.port
+                ))
             }
             _ => Err(SnmpError::Message("响应为异常值".to_string())),
         }
     } else if let Some(s) = result.value.as_str() {
         Ok(s.to_string())
     } else {
-        Err(SnmpError::Message("响应格式不正确: 期望字符串类型".to_string()))
+        Err(SnmpError::Message(
+            "响应格式不正确: 期望字符串类型".to_string(),
+        ))
     }
 }
 
@@ -244,33 +281,65 @@ pub async fn get_switch_info_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<(String, String), SnmpError> {
     let sys_descr = test_snmp(params).await?;
-    
+
     let vendor = identify_vendor(&sys_descr);
     let model = extract_model(&sys_descr);
-    
+
     Ok((vendor, model))
 }
 
 fn identify_vendor(sys_descr: &str) -> String {
     let lower = sys_descr.to_lowercase();
-    
-    if lower.contains("cisco") { return "Cisco".to_string(); }
-    if lower.contains("huawei") { return "Huawei".to_string(); }
-    if lower.contains("h3c") || lower.contains("3com") { return "H3C".to_string(); }
-    if lower.contains("juniper") { return "Juniper".to_string(); }
-    if lower.contains("dell") { return "Dell".to_string(); }
-    if lower.contains("hp") || lower.contains("hpe") || lower.contains("procurve") { return "HP/HPE".to_string(); }
-    if lower.contains("aruba") { return "Aruba".to_string(); }
-    if lower.contains("netgear") { return "Netgear".to_string(); }
-    if lower.contains("tp-link") || lower.contains("tplink") { return "TP-Link".to_string(); }
-    if lower.contains("linksys") { return "Linksys".to_string(); }
-    if lower.contains("ubiquiti") || lower.contains("ubnt") { return "Ubiquiti".to_string(); }
-    if lower.contains("mikrotik") { return "MikroTik".to_string(); }
-    if lower.contains("extreme") { return "Extreme Networks".to_string(); }
-    if lower.contains("alcatel") { return "Alcatel".to_string(); }
-    if lower.contains("zyxel") { return "ZyXEL".to_string(); }
-    if lower.contains("d-link") || lower.contains("dlink") { return "D-Link".to_string(); }
-    
+
+    if lower.contains("cisco") {
+        return "Cisco".to_string();
+    }
+    if lower.contains("huawei") {
+        return "Huawei".to_string();
+    }
+    if lower.contains("h3c") || lower.contains("3com") {
+        return "H3C".to_string();
+    }
+    if lower.contains("juniper") {
+        return "Juniper".to_string();
+    }
+    if lower.contains("dell") {
+        return "Dell".to_string();
+    }
+    if lower.contains("hp") || lower.contains("hpe") || lower.contains("procurve") {
+        return "HP/HPE".to_string();
+    }
+    if lower.contains("aruba") {
+        return "Aruba".to_string();
+    }
+    if lower.contains("netgear") {
+        return "Netgear".to_string();
+    }
+    if lower.contains("tp-link") || lower.contains("tplink") {
+        return "TP-Link".to_string();
+    }
+    if lower.contains("linksys") {
+        return "Linksys".to_string();
+    }
+    if lower.contains("ubiquiti") || lower.contains("ubnt") {
+        return "Ubiquiti".to_string();
+    }
+    if lower.contains("mikrotik") {
+        return "MikroTik".to_string();
+    }
+    if lower.contains("extreme") {
+        return "Extreme Networks".to_string();
+    }
+    if lower.contains("alcatel") {
+        return "Alcatel".to_string();
+    }
+    if lower.contains("zyxel") {
+        return "ZyXEL".to_string();
+    }
+    if lower.contains("d-link") || lower.contains("dlink") {
+        return "D-Link".to_string();
+    }
+
     "Unknown".to_string()
 }
 
@@ -280,7 +349,7 @@ fn extract_model(sys_descr: &str) -> String {
         .filter(|word| word.chars().any(|c| c.is_ascii_digit()))
         .take(2)
         .collect();
-    
+
     if model.is_empty() {
         if sys_descr.len() > 50 {
             sys_descr.chars().take(50).collect()
@@ -315,7 +384,8 @@ pub async fn get_switch_ports_via_snmp(
         .map_err(|e| SnmpError::Message(format!("创建SNMP walk失败: {}", format_snmp_error(e))))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
+        let vb = result
+            .map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -328,7 +398,9 @@ pub async fn get_switch_ports_via_snmp(
         let oid_parts = vb.oid.arcs();
         let if_index = oid_parts.last().unwrap_or(&0).to_string();
 
-        let port_number = vb.value.as_str()
+        let port_number = vb
+            .value
+            .as_str()
             .map(|s| s.to_string())
             .unwrap_or_else(|| if_index.clone());
 
@@ -363,7 +435,7 @@ pub async fn test_snmp_connection(
     req: web::Json<SnmpTestRequest>,
 ) -> Result<HttpResponse> {
     tracing::info!("[test_snmp] 收到的完整请求: {:?}", req);
-    
+
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(switch_id) = req.switch_id {
             let switch = sqlx::query_as::<_, SwitchForSnmp>(
@@ -383,14 +455,14 @@ pub async fn test_snmp_connection(
                     let ip_address: Option<String> = sqlx::query_scalar(
                         r#"SELECT host(ip_address) FROM ip_managers 
                            WHERE switch_id = $1 AND device_type = 'switch' 
-                           ORDER BY created_at LIMIT 1"#
+                           ORDER BY created_at LIMIT 1"#,
                     )
                     .bind(switch_id)
                     .fetch_optional(pool.get_conn())
                     .await
                     .ok()
                     .flatten();
-                    
+
                     let creds = DecryptedSnmpCredentials::from_switch_snmp(&s);
                     (
                         ip_address,
@@ -403,7 +475,7 @@ pub async fn test_snmp_connection(
                         creds.priv_password,
                         s.snmp_port,
                     )
-                },
+                }
                 Ok(None) => {
                     return Ok(
                         HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))
@@ -447,8 +519,16 @@ pub async fn test_snmp_connection(
         priv_pass: priv_pass.clone(),
     };
 
-    tracing::info!("[test_snmp] 接收到的参数: ip={}, port={}, version={}, community={:?}, username={:?}, auth_pass={:?}, priv_pass={:?}", 
-        ip, port, version, community, username, auth_pass, priv_pass);
+    tracing::info!(
+        "[test_snmp] 接收到的参数: ip={}, port={}, version={}, community={:?}, username={:?}, auth_pass={:?}, priv_pass={:?}",
+        ip,
+        port,
+        version,
+        community,
+        username,
+        auth_pass,
+        priv_pass
+    );
 
     match test_snmp(&snmp_params).await {
         Ok(sys_descr) => Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -492,7 +572,7 @@ pub async fn get_switch_info_snmp(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -502,7 +582,11 @@ pub async fn get_switch_info_snmp(
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
-        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+        _ => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
+            );
+        }
     };
 
     let snmp_params = switch.to_snmp_params(ip_address);
@@ -553,7 +637,7 @@ pub async fn get_switch_ports_snmp(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -563,7 +647,11 @@ pub async fn get_switch_ports_snmp(
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
-        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+        _ => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
+            );
+        }
     };
 
     let snmp_params = switch.to_snmp_params(ip_address);

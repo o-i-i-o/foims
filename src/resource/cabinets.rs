@@ -3,7 +3,7 @@ use crate::db::DbPool;
 use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
-use crate::utils::{log_system_operation, DEFAULT_PAGE};
+use crate::utils::{DEFAULT_PAGE, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -17,12 +17,24 @@ pub async fn get_cabinets(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
-    let sort_by = query.get("sort_by").cloned().unwrap_or_else(|| "name".to_string());
-    let sort_order = query.get("sort_order").cloned().unwrap_or_else(|| "asc".to_string());
+    let sort_by = query
+        .get("sort_by")
+        .cloned()
+        .unwrap_or_else(|| "name".to_string());
+    let sort_order = query
+        .get("sort_order")
+        .cloned()
+        .unwrap_or_else(|| "asc".to_string());
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{}%", search);
@@ -45,9 +57,8 @@ pub async fn get_cabinets(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -69,20 +80,18 @@ pub async fn get_cabinets(
 
         (total, cabinets)
     } else if parsed_room_id.is_some() && search.is_empty() {
-        let total: i64 = match sqlx::query_scalar(
-            "SELECT COUNT(*) FROM cabinets c WHERE c.room_id = $1"
-        )
-        .bind(parsed_room_id)
-        .fetch_one(pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
-            }
-        };
+        let total: i64 =
+            match sqlx::query_scalar("SELECT COUNT(*) FROM cabinets c WHERE c.room_id = $1")
+                .bind(parsed_room_id)
+                .fetch_one(pool.get_conn())
+                .await
+            {
+                Ok(t) => t,
+                Err(err) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                }
+            };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
             &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {} LIMIT $2 OFFSET $3", order_clause)
@@ -140,7 +149,7 @@ pub async fn get_cabinets(
         (total, cabinets)
     } else {
         let total: i64 = match sqlx::query_scalar(
-            "SELECT COUNT(*) FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1"
+            "SELECT COUNT(*) FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1",
         )
         .bind(&search_pattern)
         .fetch_one(pool.get_conn())
@@ -148,9 +157,8 @@ pub async fn get_cabinets(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -198,21 +206,18 @@ pub async fn get_cabinets(
             }
         };
 
-        let position_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM positions WHERE cabinet_id = $1"
-        )
-        .bind(cabinet.id)
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or(0);
+        let position_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
+                .bind(cabinet.id)
+                .fetch_one(pool.get_conn())
+                .await
+                .unwrap_or(0);
 
-        let room_name: Option<String> = sqlx::query_scalar(
-            "SELECT name FROM rooms WHERE id = $1"
-        )
-        .bind(cabinet.room_id)
-        .fetch_optional(pool.get_conn())
-        .await
-        .unwrap_or(None);
+        let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
+            .bind(cabinet.room_id)
+            .fetch_optional(pool.get_conn())
+            .await
+            .unwrap_or(None);
 
         let cabinet_with_networks = CabinetWithNetworks {
             id: cabinet.id,
@@ -249,15 +254,19 @@ pub async fn get_cabinets_by_network_region(
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let region_id_str = path.into_inner();
-    
+
     let region_id = match Uuid::parse_str(&region_id_str) {
         Ok(id) => id,
         Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的网络区域ID")));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的网络区域ID"))
+            );
         }
     };
 
-    let network_id_filter = query.get("network_id").and_then(|s| Uuid::parse_str(s).ok());
+    let network_id_filter = query
+        .get("network_id")
+        .and_then(|s| Uuid::parse_str(s).ok());
 
     let cabinets = if let Some(network_id) = network_id_filter {
         sqlx::query_as::<_, Cabinet>(
@@ -291,17 +300,12 @@ pub async fn get_cabinets_by_network_region(
     let cabinets = match cabinets {
         Ok(c) => c,
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "数据库查询错误: {}",
-                err
-            ))));
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
         }
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
-        cabinets,
-        "机柜获取成功",
-    )))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(cabinets, "机柜获取成功")))
 }
 
 // 创建机柜
@@ -443,21 +447,18 @@ pub async fn get_cabinet(
     };
 
     // 创建带网络信息的机柜对象
-    let position_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM positions WHERE cabinet_id = $1"
-    )
-    .bind(cabinet.id)
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or(0);
+    let position_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
+            .bind(cabinet.id)
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or(0);
 
-    let room_name: Option<String> = sqlx::query_scalar(
-        "SELECT name FROM rooms WHERE id = $1"
-    )
-    .bind(cabinet.room_id)
-    .fetch_optional(pool.get_conn())
-    .await
-    .unwrap_or(None);
+    let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
+        .bind(cabinet.room_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
 
     let cabinet_with_networks = CabinetWithNetworks {
         id: cabinet.id,
@@ -674,25 +675,29 @@ pub async fn delete_cabinet(
 }
 
 // 获取机柜关联的网段
-pub async fn get_cabinet_networks(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_cabinet_networks(
+    pool: web::Data<DbPool>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
     let id = *id_path;
 
     // 检查机柜是否存在
-    let existing_cabinet = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool.get_conn())
-        .await
-    {
-        Ok(cabinet) => cabinet,
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {}",
-                    err
-                ))),
-            );
-        }
-    };
+    let existing_cabinet =
+        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool.get_conn())
+            .await
+        {
+            Ok(cabinet) => cabinet,
+            Err(err) => {
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                        "Database query error: {}",
+                        err
+                    ))),
+                );
+            }
+        };
 
     if existing_cabinet.is_none() {
         return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("机柜未找到")));

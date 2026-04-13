@@ -2,7 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use actix_web::{dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform}, HttpResponse, ResponseError, body::EitherBody};
+use actix_web::{
+    HttpResponse, ResponseError,
+    body::EitherBody,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+};
 use futures_util::future::LocalBoxFuture;
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -17,22 +21,24 @@ const DEFAULT_WINDOW_SECS: u64 = 60;
 
 fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
     let auth_header = req.headers().get(AUTHORIZATION)?.to_str().ok()?;
-    
+
     if !auth_header.starts_with("Bearer ") {
         return None;
     }
-    
+
     let token = auth_header.strip_prefix("Bearer ")?;
-    
+
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
         return None;
     }
-    
+
     use base64::Engine;
-    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .ok()?;
     let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
-    
+
     claims.get("sub")?.as_str().map(|s| s.to_string())
 }
 
@@ -49,12 +55,11 @@ impl std::fmt::Display for RateLimitError {
 
 impl ResponseError for RateLimitError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::TooManyRequests()
-            .json(json!({
-                "success": false,
-                "message": &self.message,
-                "error_type": "rate_limit_exceeded"
-            }))
+        HttpResponse::TooManyRequests().json(json!({
+            "success": false,
+            "message": &self.message,
+            "error_type": "rate_limit_exceeded"
+        }))
     }
 }
 
@@ -105,10 +110,20 @@ impl RateLimiter {
     }
 
     pub fn default_limiter() -> Self {
-        Self::new(DEFAULT_IP_LIMIT, DEFAULT_USER_LIMIT, DEFAULT_LOGIN_LIMIT, DEFAULT_WINDOW_SECS)
+        Self::new(
+            DEFAULT_IP_LIMIT,
+            DEFAULT_USER_LIMIT,
+            DEFAULT_LOGIN_LIMIT,
+            DEFAULT_WINDOW_SECS,
+        )
     }
 
-    pub async fn check_rate_limit(&self, ip: &str, user_id: Option<&str>, is_login: bool) -> Result<(), RateLimitError> {
+    pub async fn check_rate_limit(
+        &self,
+        ip: &str,
+        user_id: Option<&str>,
+        is_login: bool,
+    ) -> Result<(), RateLimitError> {
         let limit = if is_login {
             self.login_limit
         } else if user_id.is_some() {
@@ -118,7 +133,8 @@ impl RateLimiter {
         };
 
         if let Some(uid) = user_id {
-            self.check_and_increment(&self.user_limits, &format!("user:{}", uid), limit).await?;
+            self.check_and_increment(&self.user_limits, &format!("user:{}", uid), limit)
+                .await?;
         }
 
         let ip_key = if is_login {
@@ -126,8 +142,13 @@ impl RateLimiter {
         } else {
             format!("ip:{}", ip)
         };
-        let ip_limit = if is_login { self.login_limit } else { self.ip_limit };
-        self.check_and_increment(&self.ip_limits, &ip_key, ip_limit).await?;
+        let ip_limit = if is_login {
+            self.login_limit
+        } else {
+            self.ip_limit
+        };
+        self.check_and_increment(&self.ip_limits, &ip_key, ip_limit)
+            .await?;
 
         Ok(())
     }
@@ -175,10 +196,7 @@ pub struct RateLimitMiddleware {
 
 impl RateLimitMiddleware {
     pub fn new(limiter: RateLimiter, enabled: bool) -> Self {
-        Self {
-            limiter,
-            enabled,
-        }
+        Self { limiter, enabled }
     }
 }
 
@@ -198,7 +216,11 @@ where
         let limiter = self.limiter.clone();
         let enabled = self.enabled;
         Box::pin(async move {
-            Ok(RateLimitMiddlewareService { service, limiter, enabled })
+            Ok(RateLimitMiddlewareService {
+                service,
+                limiter,
+                enabled,
+            })
         })
     }
 }
@@ -239,17 +261,19 @@ where
         let enabled = self.enabled;
         let is_strict = Self::is_strict_path(req.path());
         let ip = get_real_ip_from_request(req.request());
-        
+
         let user_id = extract_user_id_from_token(&req);
-        
+
         let fut = self.service.call(req);
 
         Box::pin(async move {
-        if enabled
-            && let Err(e) = limiter.check_rate_limit(&ip, user_id.as_deref(), is_strict).await
-        {
-            return Err(e.into());
-        }
+            if enabled
+                && let Err(e) = limiter
+                    .check_rate_limit(&ip, user_id.as_deref(), is_strict)
+                    .await
+            {
+                return Err(e.into());
+            }
 
             let res = fut.await?;
             Ok(res.map_into_left_body())

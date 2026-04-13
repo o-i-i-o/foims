@@ -1,15 +1,15 @@
-use anyhow::Context;
-use quinn::{Endpoint, ServerConfig};
-use std::net::SocketAddr;
-use tracing::{info, debug, warn};
-use crate::utils::buffer_pool::BUFFER_POOL;
+use crate::auth::utils::JwtUtils;
 use crate::config::Config;
 use crate::db::DbPool;
-use crate::auth::utils::JwtUtils;
+use crate::utils::buffer_pool::BUFFER_POOL;
+use anyhow::Context;
+use quinn::{Endpoint, ServerConfig};
 use serde_json::json;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
-use std::sync::Arc;
+use tracing::{debug, info, warn};
 
 // 应用状态
 #[derive(Clone)]
@@ -68,26 +68,30 @@ pub async fn start_http3_server(
     let addr = match server_host.as_str() {
         "::" => {
             // IPv6双栈模式
-            format!("[::]:{}", port).parse::<SocketAddr>()
+            format!("[::]:{}", port)
+                .parse::<SocketAddr>()
                 .context("Failed to parse IPv6 address")?
-        },
+        }
         "0.0.0.0" => {
             // IPv4通配符地址
-            format!("0.0.0.0:{}", port).parse::<SocketAddr>()
+            format!("0.0.0.0:{}", port)
+                .parse::<SocketAddr>()
                 .context("Failed to parse IPv4 address")?
-        },
+        }
         _ => {
             // 具体IP地址
-            format!("{}:{}", server_host, port).parse::<SocketAddr>()
+            format!("{}:{}", server_host, port)
+                .parse::<SocketAddr>()
                 .context("Failed to parse server address")?
         }
     };
 
     // 创建 QUIC 端点
-    let endpoint = Endpoint::server(server_config, addr)
-        .context("Failed to create QUIC endpoint")?;
+    let endpoint =
+        Endpoint::server(server_config, addr).context("Failed to create QUIC endpoint")?;
 
-    let local_addr = endpoint.local_addr()
+    let local_addr = endpoint
+        .local_addr()
         .context("Failed to get local address")?;
     info!("HTTP/3服务器监听在 {:?} (QUIC与TLS共存)", local_addr);
 
@@ -105,7 +109,10 @@ pub async fn start_http3_server(
 }
 
 // 优化的 HTTP/3 连接处理
-async fn handle_h3_connection_with_h3(conn: quinn::Incoming, app_state: AppState) -> anyhow::Result<()> {
+async fn handle_h3_connection_with_h3(
+    conn: quinn::Incoming,
+    app_state: AppState,
+) -> anyhow::Result<()> {
     let connection = conn.await.context("Failed to accept QUIC connection")?;
     let remote_addr = connection.remote_address();
     debug!("新的HTTP/3连接: {:?}", remote_addr);
@@ -221,7 +228,10 @@ async fn handle_bi_stream_optimized(
 }
 
 // 优化的 HTTP/3 请求处理
-async fn process_http3_request_optimized(request_data: &[u8], app_state: AppState) -> anyhow::Result<Vec<u8>> {
+async fn process_http3_request_optimized(
+    request_data: &[u8],
+    app_state: AppState,
+) -> anyhow::Result<Vec<u8>> {
     // 尝试解析HTTP请求
     let request_str = String::from_utf8_lossy(request_data);
     debug!("接收到HTTP/3请求: {}", request_str);
@@ -292,7 +302,8 @@ async fn process_http3_request_optimized(request_data: &[u8], app_state: AppStat
                     body
                 )
             } else {
-                let body = json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
+                let body =
+                    json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
                 format!(
                     "HTTP/3 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
                     body.len(),
@@ -312,14 +323,16 @@ async fn process_http3_request_optimized(request_data: &[u8], app_state: AppStat
         _ if path.starts_with("/api/") => {
             // API请求
             if user_info.is_some() {
-                let body = json!({"success": true, "message": "API endpoint accessed via HTTP/3"}).to_string();
+                let body = json!({"success": true, "message": "API endpoint accessed via HTTP/3"})
+                    .to_string();
                 format!(
                     "HTTP/3 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
                     body.len(),
                     body
                 )
             } else {
-                let body = json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
+                let body =
+                    json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
                 format!(
                     "HTTP/3 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
                     body.len(),
@@ -402,9 +415,7 @@ mod tests {
                     access_token_expiry: "15m".to_string(),
                     refresh_token_expiry: "7d".to_string(),
                 },
-                init: crate::config::InitConfig {
-                    enabled: false,
-                },
+                init: crate::config::InitConfig { enabled: false },
                 i18n: Some(crate::config::I18nConfig {
                     default_language: "zh".to_string(),
                     supported_languages: vec!["zh".to_string(), "en".to_string()],
@@ -463,9 +474,7 @@ mod tests {
                     access_token_expiry: "15m".to_string(),
                     refresh_token_expiry: "7d".to_string(),
                 },
-                init: crate::config::InitConfig {
-                    enabled: false,
-                },
+                init: crate::config::InitConfig { enabled: false },
                 i18n: Some(crate::config::I18nConfig {
                     default_language: "zh".to_string(),
                     supported_languages: vec!["zh".to_string(), "en".to_string()],
@@ -486,7 +495,10 @@ mod tests {
 
             // 测试健康检查请求
             let health_request = "GET /health HTTP/3\r\nHost: localhost\r\n\r\n";
-            let response = process_http3_request_optimized(health_request.as_bytes(), app_state.clone()).await.unwrap();
+            let response =
+                process_http3_request_optimized(health_request.as_bytes(), app_state.clone())
+                    .await
+                    .unwrap();
             let response_str = String::from_utf8_lossy(&response);
             assert!(response_str.contains("200 OK"));
             assert!(response_str.contains("status"));
@@ -494,7 +506,10 @@ mod tests {
 
             // 测试根路径重定向
             let root_request = "GET / HTTP/3\r\nHost: localhost\r\n\r\n";
-            let response = process_http3_request_optimized(root_request.as_bytes(), app_state.clone()).await.unwrap();
+            let response =
+                process_http3_request_optimized(root_request.as_bytes(), app_state.clone())
+                    .await
+                    .unwrap();
             let response_str = String::from_utf8_lossy(&response);
             assert!(response_str.contains("302 Found"));
             assert!(response_str.contains("location: /static/index.html"));

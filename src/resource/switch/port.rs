@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
+use super::snmp::{SwitchForSnmp, get_switch_ports_via_snmp};
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
-use crate::utils::{log_system_operation};
-use super::snmp::{get_switch_ports_via_snmp, SwitchForSnmp};
+use crate::utils::log_system_operation;
 
 pub async fn get_switch_ports(
     pool: web::Data<DbPool>,
@@ -19,20 +19,24 @@ pub async fn get_switch_ports(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let offset = (page - 1) * page_size;
 
-    let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
-        .bind(switch_id)
-        .fetch_one(pool.get_conn())
-        .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("获取端口数量失败: {}", e))));
-        }
-    };
+    let total: i64 =
+        match sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
+            .bind(switch_id)
+            .fetch_one(pool.get_conn())
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("获取端口数量失败: {}", e))));
+            }
+        };
 
     let ports = sqlx::query_as::<_, SwitchPort>(
         r#"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3"#,
@@ -64,7 +68,10 @@ pub async fn get_all_switch_ports(
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
@@ -82,9 +89,11 @@ pub async fn get_all_switch_ports(
         .fetch_one(pool.get_conn())
         .await
     } else {
-        sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id")
-            .fetch_one(pool.get_conn())
-            .await
+        sqlx::query_scalar(
+            "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id",
+        )
+        .fetch_one(pool.get_conn())
+        .await
     } {
         Ok(t) => t,
         Err(e) => {
@@ -487,7 +496,7 @@ pub async fn sync_ports_from_snmp(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -497,19 +506,25 @@ pub async fn sync_ports_from_snmp(
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
-        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))),
+        _ => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
+            );
+        }
     };
 
     let snmp_params = switch_data.to_snmp_params(ip_address);
 
     let ports = match get_switch_ports_via_snmp(&snmp_params).await {
         Ok(p) => p,
-        Err(e) => return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "获取交换机端口信息失败: {}",
-                e
-            ))),
-        ),
+        Err(e) => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                    "获取交换机端口信息失败: {}",
+                    e
+                ))),
+            );
+        }
     };
 
     let mut saved_count = 0;
@@ -517,7 +532,7 @@ pub async fn sync_ports_from_snmp(
 
     for port in &ports {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE switch_id = $1 AND port_number = $2)"
+            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE switch_id = $1 AND port_number = $2)",
         )
         .bind(switch_id)
         .bind(&port.port_number)
@@ -559,7 +574,7 @@ pub async fn sync_ports_from_snmp(
     }
 
     let saved_ports = sqlx::query_as::<_, SwitchPort>(
-        "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number"
+        "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number",
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
@@ -567,7 +582,10 @@ pub async fn sync_ports_from_snmp(
     .unwrap_or_default();
 
     let message = if saved_count > 0 && skipped_count > 0 {
-        format!("成功保存 {} 个端口，跳过 {} 个已存在的端口", saved_count, skipped_count)
+        format!(
+            "成功保存 {} 个端口，跳过 {} 个已存在的端口",
+            saved_count, skipped_count
+        )
     } else if saved_count > 0 {
         format!("成功保存 {} 个端口到数据库", saved_count)
     } else if skipped_count > 0 {

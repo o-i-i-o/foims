@@ -11,10 +11,9 @@ use tracing::info;
 
 use ipma::log::setup_logging;
 use ipma::routes::static_files::{
-    serve_json, https_redirect_handler, json_error_handler, get_web_dir
+    get_web_dir, https_redirect_handler, json_error_handler, serve_json,
 };
-use ipma::system::cert::{prepare_server_certificate, load_rustls_config};
-
+use ipma::system::cert::{load_rustls_config, prepare_server_certificate};
 
 use ipma::config::Config;
 use ipma::db::DbPool;
@@ -22,7 +21,7 @@ use ipma::routes::init_routes;
 use ipma::system::config::init_start_time;
 use ipma::system::cron::start_scheduler;
 use ipma::utils::log_bilingual;
-use ipma::utils::rate_limit::{RateLimiter, RateLimitMiddleware, start_cleanup_task};
+use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
 use std::fs;
 
 #[actix_web::main]
@@ -95,14 +94,23 @@ async fn main() -> std::io::Result<()> {
         config.rate_limit.window_secs,
     );
     let rate_limit_enabled = config.rate_limit.enabled;
-    
+
     // 启动速率限制清理任务
     if rate_limit_enabled {
         start_cleanup_task(rate_limiter.clone()).await;
         info!("速率限制中间件已启用");
-        info!("IP限制: {}/{}秒", config.rate_limit.ip_limit, config.rate_limit.window_secs);
-        info!("用户限制: {}/{}秒", config.rate_limit.user_limit, config.rate_limit.window_secs);
-        info!("登录限制: {}/{}秒", config.rate_limit.login_limit, config.rate_limit.window_secs);
+        info!(
+            "IP限制: {}/{}秒",
+            config.rate_limit.ip_limit, config.rate_limit.window_secs
+        );
+        info!(
+            "用户限制: {}/{}秒",
+            config.rate_limit.user_limit, config.rate_limit.window_secs
+        );
+        info!(
+            "登录限制: {}/{}秒",
+            config.rate_limit.login_limit, config.rate_limit.window_secs
+        );
     }
 
     // 保存服务器配置用于绑定和日志
@@ -152,10 +160,10 @@ async fn main() -> std::io::Result<()> {
                     .allowed_origin("https://localhost")
                     .allowed_origin_fn(|origin, _req_head| {
                         if let Ok(origin_str) = origin.to_str() {
-                            origin_str.starts_with("http://localhost:") ||
-                            origin_str.starts_with("https://localhost:") ||
-                            origin_str.starts_with("http://127.0.0.1:") ||
-                            origin_str.starts_with("https://127.0.0.1:")
+                            origin_str.starts_with("http://localhost:")
+                                || origin_str.starts_with("https://localhost:")
+                                || origin_str.starts_with("http://127.0.0.1:")
+                                || origin_str.starts_with("https://127.0.0.1:")
                         } else {
                             false
                         }
@@ -166,13 +174,18 @@ async fn main() -> std::io::Result<()> {
                     .max_age(3600),
             )
             .wrap(actix_web::middleware::Logger::default())
-            .wrap(RateLimitMiddleware::new(http_rate_limiter.clone(), http_rate_limit_enabled))
-            .configure(|cfg| configure_app_services(cfg, &http_config, &http_pool, enable_normal_routes));
+            .wrap(RateLimitMiddleware::new(
+                http_rate_limiter.clone(),
+                http_rate_limit_enabled,
+            ))
+            .configure(|cfg| {
+                configure_app_services(cfg, &http_config, &http_pool, enable_normal_routes)
+            });
 
         if !http_config.init.enabled && auto_https {
-             app = app.default_service(web::route().to(https_redirect_handler));
+            app = app.default_service(web::route().to(https_redirect_handler));
         }
-        
+
         app
     };
 
@@ -192,10 +205,10 @@ async fn main() -> std::io::Result<()> {
                     .allowed_origin("https://localhost")
                     .allowed_origin_fn(|origin, _req_head| {
                         if let Ok(origin_str) = origin.to_str() {
-                            origin_str.starts_with("http://localhost:") ||
-                            origin_str.starts_with("https://localhost:") ||
-                            origin_str.starts_with("http://127.0.0.1:") ||
-                            origin_str.starts_with("https://127.0.0.1:")
+                            origin_str.starts_with("http://localhost:")
+                                || origin_str.starts_with("https://localhost:")
+                                || origin_str.starts_with("http://127.0.0.1:")
+                                || origin_str.starts_with("https://127.0.0.1:")
                         } else {
                             false
                         }
@@ -206,7 +219,10 @@ async fn main() -> std::io::Result<()> {
                     .max_age(3600),
             )
             .wrap(actix_web::middleware::Logger::default())
-            .wrap(RateLimitMiddleware::new(https_rate_limiter.clone(), https_rate_limit_enabled))
+            .wrap(RateLimitMiddleware::new(
+                https_rate_limiter.clone(),
+                https_rate_limit_enabled,
+            ))
             .configure(|cfg| configure_app_services(cfg, &https_config, &https_pool, true))
     };
 
@@ -310,9 +326,9 @@ async fn main() -> std::io::Result<()> {
             let pool_clone = pool.clone();
 
             tokio::spawn(async move {
-                use tokio::sync::Semaphore;
                 use std::sync::Arc;
                 use tokio::runtime::Handle;
+                use tokio::sync::Semaphore;
 
                 let semaphore = Arc::new(Semaphore::new(100)); // 限制并发连接数为100
                 let rt_handle = Handle::current();
@@ -335,7 +351,10 @@ async fn main() -> std::io::Result<()> {
                 .await
                 {
                     Ok(_) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
-                    Err(e) => info!("启动HTTP/3服务器失败 ({}:{}): {:?}", host_str_clone, port_clone, e),
+                    Err(e) => info!(
+                        "启动HTTP/3服务器失败 ({}:{}): {:?}",
+                        host_str_clone, port_clone, e
+                    ),
                 }
             });
         }
@@ -408,10 +427,7 @@ async fn main() -> std::io::Result<()> {
                 };
 
                 let https_server_ipv4 = match https_server_ipv4
-                    .bind_rustls_0_23(
-                        (ipv4_address_clone.as_str(), https_port_clone),
-                        tls_config,
-                    )
+                    .bind_rustls_0_23((ipv4_address_clone.as_str(), https_port_clone), tls_config)
                 {
                     Ok(server) => server,
                     Err(e) => {
@@ -472,10 +488,7 @@ async fn main() -> std::io::Result<()> {
                 };
 
                 let https_server_ipv6 = match https_server_ipv6
-                    .bind_rustls_0_23(
-                        (ipv6_address_clone.as_str(), https_port_clone),
-                        tls_config,
-                    )
+                    .bind_rustls_0_23((ipv6_address_clone.as_str(), https_port_clone), tls_config)
                 {
                     Ok(server) => server,
                     Err(e) => {
@@ -532,14 +545,16 @@ fn configure_app_services(
     // 初始化应用数据
     cfg.app_data(Data::new(config.clone()));
     // 配置JSON请求体大小限制（10MB）
-    cfg.app_data(web::JsonConfig::default()
-        .limit(10 * 1024 * 1024)
-        .error_handler(json_error_handler));
+    cfg.app_data(
+        web::JsonConfig::default()
+            .limit(10 * 1024 * 1024)
+            .error_handler(json_error_handler),
+    );
     // 配置表单请求体大小限制（50MB，用于文件上传）
     cfg.app_data(web::FormConfig::default().limit(50 * 1024 * 1024));
     // 配置Payload大小限制
     cfg.app_data(web::PayloadConfig::new(50 * 1024 * 1024));
-    
+
     if let Some(pool) = pool {
         cfg.app_data(Data::new(pool.clone()));
     }
@@ -549,10 +564,7 @@ fn configure_app_services(
             web::scope("/api/init")
                 .route("", web::post().to(ipma::init::init_system))
                 .route("/db", web::post().to(ipma::init::init_db))
-                .route(
-                    "/db/clear",
-                    web::delete().to(ipma::init::clear_database),
-                )
+                .route("/db/clear", web::delete().to(ipma::init::clear_database))
                 .route(
                     "/db/create",
                     web::post().to(ipma::init::create_database_api),
@@ -565,26 +577,14 @@ fn configure_app_services(
                     "/db/import-file",
                     web::post().to(ipma::init::import_database_from_file),
                 )
-                .route(
-                    "/restart",
-                    web::post().to(ipma::init::restart_program),
-                )
-                .route(
-                    "/status",
-                    web::get().to(ipma::init::check_init_status),
-                )
-                .route(
-                    "/db-status",
-                    web::get().to(ipma::init::check_db_status),
-                )
+                .route("/restart", web::post().to(ipma::init::restart_program))
+                .route("/status", web::get().to(ipma::init::check_init_status))
+                .route("/db-status", web::get().to(ipma::init::check_db_status))
                 .route(
                     "/verification-code",
                     web::get().to(ipma::init::get_verification_code),
                 )
-                .route(
-                    "/check-pgsql",
-                    web::get().to(ipma::init::check_pgsql),
-                ),
+                .route("/check-pgsql", web::get().to(ipma::init::check_pgsql)),
         )
         // 配置初始化页面路由
         .route(
@@ -595,9 +595,8 @@ fn configure_app_services(
                 actix_web::HttpResponse::Ok()
                     .content_type("text/html")
                     .body(
-                        std::fs::read_to_string(&path).unwrap_or_else(
-                            |e| format!("Error reading init_index.html: {}", e),
-                        ),
+                        std::fs::read_to_string(&path)
+                            .unwrap_or_else(|e| format!("Error reading init_index.html: {}", e)),
                     )
             }),
         )
@@ -616,7 +615,6 @@ fn configure_app_services(
                     .finish()
             }),
         );
-
     } else if enable_normal_routes {
         // 关闭初始化时，注册完整的应用系统路由
         let static_path = format!("{}/static", get_web_dir());

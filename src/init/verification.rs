@@ -4,11 +4,12 @@ use std::sync::Mutex;
 use tracing::info;
 
 use crate::config::Config;
+use crate::init::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
 use crate::models::ApiResponse;
-use crate::init::types::{VerificationCode, VERIFICATION_CODE_EXPIRY_SECS};
 
 lazy_static! {
-    pub static ref VERIFICATION_CODE: Mutex<VerificationCode> = Mutex::new(VerificationCode::new(generate_verification_code()));
+    pub static ref VERIFICATION_CODE: Mutex<VerificationCode> =
+        Mutex::new(VerificationCode::new(generate_verification_code()));
 }
 
 fn generate_verification_code() -> String {
@@ -27,7 +28,7 @@ fn generate_verification_code() -> String {
 
 fn generate_and_print_verification_code() -> VerificationCode {
     let code = generate_verification_code();
-    
+
     info!("\n======================================================================");
     info!("                         系统初始化验证码                           ");
     info!("======================================================================");
@@ -40,7 +41,8 @@ fn generate_and_print_verification_code() -> VerificationCode {
 }
 
 pub fn verify_code(provided_code: &str) -> Result<(), String> {
-    let stored_code = VERIFICATION_CODE.lock()
+    let stored_code = VERIFICATION_CODE
+        .lock()
         .map_err(|_| "无法访问验证码".to_string())?;
 
     let now = std::time::SystemTime::now()

@@ -1,5 +1,8 @@
-use actix_web::{dev::{ServiceRequest, ServiceResponse, Transform, Service}, Error};
 use actix_web::http::header::{HeaderName, HeaderValue};
+use actix_web::{
+    Error,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform},
+};
 use futures_util::future::LocalBoxFuture;
 use std::future::Ready;
 
@@ -42,16 +45,15 @@ where
         let fut = self.service.call(req);
         Box::pin(async move {
             let mut res = fut.await?;
-            
-            let hsts_value = HeaderValue::from_static(
-                "max-age=31536000; includeSubDomains; preload"
-            );
-            
+
+            let hsts_value =
+                HeaderValue::from_static("max-age=31536000; includeSubDomains; preload");
+
             res.headers_mut().insert(
                 HeaderName::from_static("strict-transport-security"),
                 hsts_value,
             );
-            
+
             Ok(res)
         })
     }

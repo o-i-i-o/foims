@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use actix_web::{HttpResponse, Result, web};
-use async_snmp::{Client, oid, VarBind};
+use async_snmp::{Client, VarBind, oid};
 use tracing::debug;
 use uuid::Uuid;
 
 use crate::db::DbPool;
 use crate::models::{ApiResponse, LldpNeighbor, SwitchLldp};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, SwitchForSnmp};
+use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
@@ -20,7 +20,7 @@ pub async fn get_lldp_neighbors(
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#
+        FROM switches WHERE id = $1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -31,7 +31,7 @@ pub async fn get_lldp_neighbors(
     let ip_address: Option<String> = sqlx::query_scalar(
         r#"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#
+           ORDER BY created_at LIMIT 1"#,
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -65,18 +65,19 @@ where
         .map_err(|e| SnmpError::Message(format!("{}: {}", error_msg, format_snmp_error(e))))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| SnmpError::Message(format!("{}: {}", error_msg, format_snmp_error(e))))?;
-        
+        let vb = result
+            .map_err(|e| SnmpError::Message(format!("{}: {}", error_msg, format_snmp_error(e))))?;
+
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
                 break;
             }
             continue;
         }
-        
+
         process(&vb)?;
     }
-    
+
     Ok(())
 }
 
@@ -98,7 +99,7 @@ pub async fn get_lldp_neighbors_via_snmp(
 
     let if_name_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2);
     let mut if_name_map: HashMap<String, String> = HashMap::new();
-    
+
     snmp_walk(&client, if_name_oid, "接口名称表walk失败", |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 11 {
@@ -115,30 +116,37 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    }).await?;
+    })
+    .await?;
 
     let lldp_loc_port_subtype = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 2);
     let mut loc_port_subtype_map: HashMap<String, u8> = HashMap::new();
-    
-    snmp_walk(&client, lldp_loc_port_subtype, "LLDP端口子类型表walk失败", |vb| {
-        let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 12 {
-            let port_num = oid_parts[11].to_string();
-            let subtype = if let Some(s) = vb.value.as_u32() {
-                s as u8
-            } else if let Some(bytes) = vb.value.as_bytes() {
-                if !bytes.is_empty() { bytes[0] } else { 0 }
-            } else {
-                0
-            };
-            loc_port_subtype_map.insert(port_num, subtype);
-        }
-        Ok(())
-    }).await?;
+
+    snmp_walk(
+        &client,
+        lldp_loc_port_subtype,
+        "LLDP端口子类型表walk失败",
+        |vb| {
+            let oid_parts = vb.oid.arcs();
+            if oid_parts.len() >= 12 {
+                let port_num = oid_parts[11].to_string();
+                let subtype = if let Some(s) = vb.value.as_u32() {
+                    s as u8
+                } else if let Some(bytes) = vb.value.as_bytes() {
+                    if !bytes.is_empty() { bytes[0] } else { 0 }
+                } else {
+                    0
+                };
+                loc_port_subtype_map.insert(port_num, subtype);
+            }
+            Ok(())
+        },
+    )
+    .await?;
 
     let lldp_loc_port_id = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 3);
     let mut port_id_map: HashMap<String, String> = HashMap::new();
-    
+
     snmp_walk(&client, lldp_loc_port_id, "LLDP端口表walk失败", |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 12 {
@@ -150,29 +158,36 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    }).await?;
+    })
+    .await?;
 
     let lldp_loc_port_desc = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 4);
     let mut port_desc_map: HashMap<String, String> = HashMap::new();
-    
-    snmp_walk(&client, lldp_loc_port_desc, "LLDP端口描述表walk失败", |vb| {
-        let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 12 {
-            let port_num = oid_parts[11].to_string();
-            if let Some(port_desc) = vb.value.as_str() {
-                let desc = port_desc.trim();
-                if !desc.is_empty() && desc != "NULL" {
-                    port_desc_map.insert(port_num, desc.to_string());
-                }
-            } else if let Some(port_desc) = vb.value.as_bytes() {
-                let desc = String::from_utf8_lossy(port_desc).trim().to_string();
-                if !desc.is_empty() && desc != "NULL" {
-                    port_desc_map.insert(port_num, desc);
+
+    snmp_walk(
+        &client,
+        lldp_loc_port_desc,
+        "LLDP端口描述表walk失败",
+        |vb| {
+            let oid_parts = vb.oid.arcs();
+            if oid_parts.len() >= 12 {
+                let port_num = oid_parts[11].to_string();
+                if let Some(port_desc) = vb.value.as_str() {
+                    let desc = port_desc.trim();
+                    if !desc.is_empty() && desc != "NULL" {
+                        port_desc_map.insert(port_num, desc.to_string());
+                    }
+                } else if let Some(port_desc) = vb.value.as_bytes() {
+                    let desc = String::from_utf8_lossy(port_desc).trim().to_string();
+                    if !desc.is_empty() && desc != "NULL" {
+                        port_desc_map.insert(port_num, desc);
+                    }
                 }
             }
-        }
-        Ok(())
-    }).await?;
+            Ok(())
+        },
+    )
+    .await?;
 
     let lldp_rem_table = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
     let mut neighbor_data: HashMap<(String, String), crate::models::LldpNeighbor> = HashMap::new();
@@ -186,13 +201,13 @@ pub async fn get_lldp_neighbors_via_snmp(
             let local_port_num = oid_parts[12].to_string();
             let rem_index = oid_parts[13].to_string();
             let key = (local_port_num.clone(), rem_index);
-            
+
             let entry = neighbor_data.entry(key.clone()).or_insert_with(|| {
                 let local_port = get_local_port_name(
                     &local_port_num,
                     &if_name_map,
                     &port_id_map,
-                    &port_desc_map
+                    &port_desc_map,
                 );
                 crate::models::LldpNeighbor {
                     local_port,
@@ -234,7 +249,10 @@ pub async fn get_lldp_neighbors_via_snmp(
                     if let Some(port_id) = vb.value.as_bytes() {
                         let subtype = port_subtype_map.get(&key).copied().unwrap_or(1);
                         let port_id_str = format_lldp_id(port_id, subtype);
-                        debug!("邻居端口 {:?} subtype={} raw={:?} formatted={}", key, subtype, port_id, port_id_str);
+                        debug!(
+                            "邻居端口 {:?} subtype={} raw={:?} formatted={}",
+                            key, subtype, port_id, port_id_str
+                        );
                         entry.neighbor_port_id = Some(port_id_str);
                     }
                 }
@@ -255,21 +273,24 @@ pub async fn get_lldp_neighbors_via_snmp(
                     if let Some(sys_name) = vb.value.as_str() {
                         entry.neighbor_sys_name = Some(sys_name.to_string());
                     } else if let Some(sys_name) = vb.value.as_bytes() {
-                        entry.neighbor_sys_name = Some(String::from_utf8_lossy(sys_name).to_string());
+                        entry.neighbor_sys_name =
+                            Some(String::from_utf8_lossy(sys_name).to_string());
                     }
                 }
                 10 => {
                     if let Some(sys_desc) = vb.value.as_str() {
                         entry.neighbor_sys_desc = Some(sys_desc.to_string());
                     } else if let Some(sys_desc) = vb.value.as_bytes() {
-                        entry.neighbor_sys_desc = Some(String::from_utf8_lossy(sys_desc).to_string());
+                        entry.neighbor_sys_desc =
+                            Some(String::from_utf8_lossy(sys_desc).to_string());
                     }
                 }
                 _ => {}
             }
         }
         Ok(())
-    }).await?;
+    })
+    .await?;
 
     let neighbors: Vec<crate::models::LldpNeighbor> = neighbor_data
         .into_values()
@@ -289,12 +310,18 @@ fn get_local_port_name(
     if let Some(name) = if_name_map.get(local_port_num) {
         return name.clone();
     }
-    
-    let port_id = port_id_map.get(local_port_num).cloned().unwrap_or_else(|| local_port_num.to_string());
+
+    let port_id = port_id_map
+        .get(local_port_num)
+        .cloned()
+        .unwrap_or_else(|| local_port_num.to_string());
     let is_mac = is_mac_address(&port_id);
-    
+
     if is_mac {
-        port_desc_map.get(local_port_num).cloned().unwrap_or(port_id)
+        port_desc_map
+            .get(local_port_num)
+            .cloned()
+            .unwrap_or(port_id)
     } else {
         port_id
     }
@@ -305,16 +332,16 @@ fn is_mac_address(s: &str) -> bool {
     if parts.len() != 6 {
         return false;
     }
-    parts.iter().all(|part| {
-        part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit())
-    })
+    parts
+        .iter()
+        .all(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 fn format_lldp_id(bytes: &[u8], subtype: u8) -> String {
     if bytes.is_empty() {
         return String::new();
     }
-    
+
     match subtype {
         1 | 2 | 5 | 6 | 7 => String::from_utf8_lossy(bytes).to_string(),
         3 | 4 => format_mac_address(bytes),
@@ -329,18 +356,20 @@ fn format_lldp_id(bytes: &[u8], subtype: u8) -> String {
 }
 
 fn is_printable_string(bytes: &[u8]) -> bool {
-    bytes.iter().all(|&b| (0x20..=0x7E).contains(&b) || b == b'\t')
+    bytes
+        .iter()
+        .all(|&b| (0x20..=0x7E).contains(&b) || b == b'\t')
 }
 
 fn format_mac_address(bytes: &[u8]) -> String {
     if bytes.len() == 6 {
         format!(
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            bytes[0], bytes[1], bytes[2],
-            bytes[3], bytes[4], bytes[5]
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
         )
     } else {
-        bytes.iter()
+        bytes
+            .iter()
             .map(|b| format!("{:02X}", b))
             .collect::<Vec<_>>()
             .join(":")
@@ -353,20 +382,18 @@ pub async fn get_switch_lldp_neighbors(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)"
-    )
-    .bind(switch_id)
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or(false);
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
+        .bind(switch_id)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(false);
 
     if !exists {
         return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
     }
 
     let lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port"
+        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
@@ -384,8 +411,10 @@ pub async fn sync_lldp_from_snmp(
 
     let neighbors = match get_lldp_neighbors(pool.get_conn(), &switch_id).await {
         Ok(n) => n,
-        Err(e) => return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {}", e)))),
+        Err(e) => {
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {}", e))));
+        }
     };
 
     let now = chrono::Utc::now();
@@ -394,7 +423,7 @@ pub async fn sync_lldp_from_snmp(
 
     for neighbor in &neighbors {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE switch_id = $1 AND local_port = $2)"
+            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE switch_id = $1 AND local_port = $2)",
         )
         .bind(switch_id)
         .bind(&neighbor.local_port)
@@ -411,7 +440,7 @@ pub async fn sync_lldp_from_snmp(
                     neighbor_sys_name = $4,
                     neighbor_sys_desc = $5,
                     updated_at = $6
-                WHERE switch_id = $7 AND local_port = $8"#
+                WHERE switch_id = $7 AND local_port = $8"#,
             )
             .bind(&neighbor.neighbor_chassis_id)
             .bind(&neighbor.neighbor_port_id)
@@ -452,7 +481,7 @@ pub async fn sync_lldp_from_snmp(
     }
 
     let saved_lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port"
+        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
@@ -460,7 +489,10 @@ pub async fn sync_lldp_from_snmp(
     .unwrap_or_default();
 
     let message = if saved_count > 0 && updated_count > 0 {
-        format!("新增 {} 条，更新 {} 条 LLDP 记录", saved_count, updated_count)
+        format!(
+            "新增 {} 条，更新 {} 条 LLDP 记录",
+            saved_count, updated_count
+        )
     } else if saved_count > 0 {
         format!("新增 {} 条 LLDP 记录", saved_count)
     } else if updated_count > 0 {

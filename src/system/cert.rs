@@ -1,13 +1,13 @@
+use crate::config::Config;
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io;
 use std::io::Write;
 use std::path::Path;
 use tracing::info;
-use crate::config::Config;
-use std::io;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CertGenerateRequest {
@@ -286,8 +286,8 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
         use rcgen::generate_simple_self_signed;
 
         // 生成自签名证书
-        let certified_key = generate_simple_self_signed(vec!["localhost".to_string()])
-            .map_err(io::Error::other)?;
+        let certified_key =
+            generate_simple_self_signed(vec!["localhost".to_string()]).map_err(io::Error::other)?;
 
         // 获取证书 PEM
         let cert_pem = certified_key.cert.pem();
@@ -327,9 +327,12 @@ pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls:
         .filter(|pem| pem.tag() == "PRIVATE KEY")
         .map(|pem| rustls_pki_types::PrivatePkcs8KeyDer::from(pem.contents().to_vec()))
         .collect::<Vec<_>>();
-    
+
     if keys.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "No private key found"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "No private key found",
+        ));
     }
     let key = keys[0].clone_key();
 
@@ -339,10 +342,10 @@ pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls:
         .with_no_client_auth()
         .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    
+
     // 配置 ALPN 协议，支持 HTTP/2 和 HTTP/1.1
     // ALPN 协议顺序：h2（HTTP/2）优先，然后是 http/1.1
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    
+
     Ok(config)
 }

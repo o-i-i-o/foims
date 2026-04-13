@@ -1,9 +1,7 @@
 use crate::config::Config;
 use crate::db::DbPool;
-use crate::models::{
-    ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks,
-};
-use crate::utils::{log_system_operation, DEFAULT_PAGE};
+use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
+use crate::utils::{DEFAULT_PAGE, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -17,11 +15,23 @@ pub async fn get_rooms(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
-    let sort_by = query.get("sort_by").cloned().unwrap_or_else(|| "name".to_string());
-    let sort_order = query.get("sort_order").cloned().unwrap_or_else(|| "asc".to_string());
+    let sort_by = query
+        .get("sort_by")
+        .cloned()
+        .unwrap_or_else(|| "name".to_string());
+    let sort_order = query
+        .get("sort_order")
+        .cloned()
+        .unwrap_or_else(|| "asc".to_string());
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{}%", search);
@@ -43,9 +53,8 @@ pub async fn get_rooms(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 
@@ -123,13 +132,12 @@ pub async fn get_rooms(
             }
         };
 
-        let workstation_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM workstations WHERE room_id = $1"
-        )
-        .bind(room.id)
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or(0);
+        let workstation_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
+                .bind(room.id)
+                .fetch_one(pool.get_conn())
+                .await
+                .unwrap_or(0);
 
         let room_with_networks = RoomWithNetworks {
             id: room.id,
@@ -302,13 +310,12 @@ pub async fn get_room(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
     };
 
     // 创建带网络信息的房间对象
-    let workstation_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM workstations WHERE room_id = $1"
-    )
-    .bind(room.id)
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or(0);
+    let workstation_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
+            .bind(room.id)
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or(0);
 
     let room_with_networks = RoomWithNetworks {
         id: room.id,
@@ -567,7 +574,10 @@ pub async fn delete_room(
 }
 
 // 获取房间关联的网段
-pub async fn get_room_networks(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_room_networks(
+    pool: web::Data<DbPool>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
     let id = *id_path;
 
     // 检查房间是否存在

@@ -1,19 +1,21 @@
-use std::sync::Arc;
+use chrono::{Datelike, Timelike, Utc};
 use std::process::Command;
-use chrono::{Utc, Timelike, Datelike};
+use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
-use tracing::{info, error};
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::utils::{cleanup_expired_revoked_tokens, cleanup_old_token_usage};
 use crate::models::ScheduledTask;
+use crate::utils::{cleanup_expired_revoked_tokens, cleanup_old_token_usage};
 
 pub struct SchedulerState {
     pub scheduler: JobScheduler,
 }
 
-pub async fn start_scheduler(pool: Arc<DbPool>) -> Result<SchedulerState, Box<dyn std::error::Error>> {
+pub async fn start_scheduler(
+    pool: Arc<DbPool>,
+) -> Result<SchedulerState, Box<dyn std::error::Error>> {
     let scheduler = JobScheduler::new().await?;
 
     let db_config = pool.db_config.clone();
@@ -48,11 +50,23 @@ pub async fn start_scheduler(pool: Arc<DbPool>) -> Result<SchedulerState, Box<dy
             match result {
                 Ok(count) => {
                     info!("Token cleanup completed: {} expired tokens removed", count);
-                    log_task_execution(&pool, "system_token_cleanup", "success", &format!("清理了 {} 个过期token", count)).await;
+                    log_task_execution(
+                        &pool,
+                        "system_token_cleanup",
+                        "success",
+                        &format!("清理了 {} 个过期token", count),
+                    )
+                    .await;
                 }
                 Err(e) => {
                     error!("Token cleanup failed: {}", e);
-                    log_task_execution(&pool, "system_token_cleanup", "failed", &format!("Token清理失败: {}", e)).await;
+                    log_task_execution(
+                        &pool,
+                        "system_token_cleanup",
+                        "failed",
+                        &format!("Token清理失败: {}", e),
+                    )
+                    .await;
                 }
             }
         })
@@ -67,12 +81,27 @@ pub async fn start_scheduler(pool: Arc<DbPool>) -> Result<SchedulerState, Box<dy
             let result = cleanup_old_token_usage(&pool.pool, 30).await;
             match result {
                 Ok(count) => {
-                    info!("Token usage cleanup completed: {} old records removed", count);
-                    log_task_execution(&pool, "system_usage_cleanup", "success", &format!("清理了 {} 条30天前的token_usage记录", count)).await;
+                    info!(
+                        "Token usage cleanup completed: {} old records removed",
+                        count
+                    );
+                    log_task_execution(
+                        &pool,
+                        "system_usage_cleanup",
+                        "success",
+                        &format!("清理了 {} 条30天前的token_usage记录", count),
+                    )
+                    .await;
                 }
                 Err(e) => {
                     error!("Token usage cleanup failed: {}", e);
-                    log_task_execution(&pool, "system_usage_cleanup", "failed", &format!("Token使用记录清理失败: {}", e)).await;
+                    log_task_execution(
+                        &pool,
+                        "system_usage_cleanup",
+                        "failed",
+                        &format!("Token使用记录清理失败: {}", e),
+                    )
+                    .await;
                 }
             }
         })
@@ -109,17 +138,26 @@ async fn execute_database_backup(
     let backup_file = format!("{}/ipma_backup_{}.sql", backup_dir, timestamp);
 
     let output = Command::new("pg_dump")
-        .arg("-h").arg(&config.host)
-        .arg("-p").arg(config.port.to_string())
-        .arg("-U").arg(&config.username)
-        .arg("-d").arg(&config.database)
+        .arg("-h")
+        .arg(&config.host)
+        .arg("-p")
+        .arg(config.port.to_string())
+        .arg("-U")
+        .arg(&config.username)
+        .arg("-d")
+        .arg(&config.database)
         .arg("--no-owner")
         .arg("--no-acl")
         .arg("--clean")
         .arg("--if-exists")
         .env("PGPASSWORD", &config.password)
         .output()
-        .map_err(|e| format!("执行 pg_dump 失败: {}。请确保系统已安装 postgresql-client。", e))?;
+        .map_err(|e| {
+            format!(
+                "执行 pg_dump 失败: {}。请确保系统已安装 postgresql-client。",
+                e
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -131,8 +169,7 @@ async fn execute_database_backup(
         return Err("导出的 SQL 文件为空".to_string());
     }
 
-    std::fs::write(&backup_file, sql_content)
-        .map_err(|e| format!("写入备份文件失败: {}", e))?;
+    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {}", e))?;
 
     cleanup_old_backups(backup_dir, 7)?;
 
@@ -142,12 +179,14 @@ async fn execute_database_backup(
 
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
-    Ok(format!("备份成功: {} ({:.2} MB)", backup_file, file_size_mb))
+    Ok(format!(
+        "备份成功: {} ({:.2} MB)",
+        backup_file, file_size_mb
+    ))
 }
 
 fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
-    let entries = std::fs::read_dir(backup_dir)
-        .map_err(|e| format!("读取备份目录失败: {}", e))?;
+    let entries = std::fs::read_dir(backup_dir).map_err(|e| format!("读取备份目录失败: {}", e))?;
 
     let now = std::time::SystemTime::now();
     let cutoff = std::time::Duration::from_secs(keep_days * 24 * 60 * 60);
@@ -176,7 +215,7 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
 async fn log_task_execution(pool: &DbPool, task_name: &str, status: &str, details: &str) {
     let _ = sqlx::query(
         r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#
+           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
     )
     .bind(Uuid::new_v4())
     .bind(task_name)
@@ -209,23 +248,21 @@ async fn sync_user_tasks_from_db(pool: &DbPool) -> Result<(), String> {
 
 async fn update_next_run_at(pool: &DbPool, task: &ScheduledTask) -> Result<(), String> {
     let next_run = calculate_next_run(&task.cron_expression)?;
-    
-    sqlx::query(
-        "UPDATE scheduled_tasks SET next_run_at = $1, updated_at = $2 WHERE id = $3"
-    )
-    .bind(next_run)
-    .bind(Utc::now())
-    .bind(task.id)
-    .execute(pool.get_conn())
-    .await
-    .map_err(|e| format!("更新下次执行时间失败: {}", e))?;
+
+    sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1, updated_at = $2 WHERE id = $3")
+        .bind(next_run)
+        .bind(Utc::now())
+        .bind(task.id)
+        .execute(pool.get_conn())
+        .await
+        .map_err(|e| format!("更新下次执行时间失败: {}", e))?;
 
     Ok(())
 }
 
 pub fn calculate_next_run(cron_expression: &str) -> Result<chrono::DateTime<Utc>, String> {
     let parts: Vec<&str> = cron_expression.split_whitespace().collect();
-    
+
     if parts.len() != 5 && parts.len() != 6 {
         return Err(format!("无效的cron表达式: {}", cron_expression));
     }
@@ -235,7 +272,7 @@ pub fn calculate_next_run(cron_expression: &str) -> Result<chrono::DateTime<Utc>
 
     for _ in 0..366 * 24 * 60 {
         next += chrono::Duration::minutes(1);
-        
+
         let (sec, min, hour, day, month, weekday) = (
             next.second() as i32,
             next.minute() as i32,
@@ -251,12 +288,13 @@ pub fn calculate_next_run(cron_expression: &str) -> Result<chrono::DateTime<Utc>
             vec!["0", parts[0], parts[1], parts[2], parts[3], parts[4]]
         };
 
-        if matches_cron_field(cron_parts[0], sec).is_ok() &&
-           matches_cron_field(cron_parts[1], min).is_ok() &&
-           matches_cron_field(cron_parts[2], hour).is_ok() &&
-           matches_cron_field(cron_parts[3], day).is_ok() &&
-           matches_cron_field(cron_parts[4], month).is_ok() &&
-           matches_cron_field(cron_parts[5], weekday).is_ok() {
+        if matches_cron_field(cron_parts[0], sec).is_ok()
+            && matches_cron_field(cron_parts[1], min).is_ok()
+            && matches_cron_field(cron_parts[2], hour).is_ok()
+            && matches_cron_field(cron_parts[3], day).is_ok()
+            && matches_cron_field(cron_parts[4], month).is_ok()
+            && matches_cron_field(cron_parts[5], weekday).is_ok()
+        {
             return Ok(next);
         }
     }
@@ -283,13 +321,17 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
         if parts.len() != 2 {
             return Err(format!("无效的cron字段: {}", field));
         }
-        let step: i32 = parts[1].parse().map_err(|_| format!("无效的步长: {}", parts[1]))?;
+        let step: i32 = parts[1]
+            .parse()
+            .map_err(|_| format!("无效的步长: {}", parts[1]))?;
         let base_field = parts[0];
-        
+
         if base_field == "*" {
             return Ok(value % step == 0);
         } else {
-            let base: i32 = base_field.parse().map_err(|_| format!("无效的基础值: {}", base_field))?;
+            let base: i32 = base_field
+                .parse()
+                .map_err(|_| format!("无效的基础值: {}", base_field))?;
             return Ok((value - base) % step == 0 && value >= base);
         }
     }
@@ -299,12 +341,18 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
         if parts.len() != 2 {
             return Err(format!("无效的cron字段: {}", field));
         }
-        let start: i32 = parts[0].parse().map_err(|_| format!("无效的范围起始: {}", parts[0]))?;
-        let end: i32 = parts[1].parse().map_err(|_| format!("无效的范围结束: {}", parts[1]))?;
+        let start: i32 = parts[0]
+            .parse()
+            .map_err(|_| format!("无效的范围起始: {}", parts[0]))?;
+        let end: i32 = parts[1]
+            .parse()
+            .map_err(|_| format!("无效的范围结束: {}", parts[1]))?;
         return Ok(value >= start && value <= end);
     }
 
-    let field_value: i32 = field.parse().map_err(|_| format!("无效的cron字段值: {}", field))?;
+    let field_value: i32 = field
+        .parse()
+        .map_err(|_| format!("无效的cron字段值: {}", field))?;
     Ok(value == field_value)
 }
 
@@ -323,22 +371,33 @@ pub async fn execute_task_by_type(
     }
 }
 
-async fn execute_mac_sync(pool: &sqlx::PgPool, config: &serde_json::Value) -> Result<String, String> {
-    let switch_id = config.get("switch_id").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
-    let network_id = config.get("network_id").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
+async fn execute_mac_sync(
+    pool: &sqlx::PgPool,
+    config: &serde_json::Value,
+) -> Result<String, String> {
+    let switch_id = config
+        .get("switch_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    let network_id = config
+        .get("network_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
 
     match (switch_id, network_id) {
         (Some(switch_id), Some(network_id)) => {
-            crate::resource::ip::pull_ip_managers_internal(pool, switch_id, network_id).await
+            crate::resource::ip::pull_ip_managers_internal(pool, switch_id, network_id)
+                .await
                 .map(|_| "MAC同步成功".to_string())
                 .map_err(|e| format!("MAC同步失败: {}", e))
-        },
+        }
         _ => Err("MAC同步任务需要配置switch_id和network_id".to_string()),
     }
 }
 
 async fn execute_token_cleanup(pool: &sqlx::PgPool) -> Result<String, String> {
-    let count = crate::utils::cleanup_expired_revoked_tokens(pool).await
+    let count = crate::utils::cleanup_expired_revoked_tokens(pool)
+        .await
         .map_err(|e| format!("Token清理失败: {}", e))?;
     Ok(format!("清理了 {} 个过期token", count))
 }
@@ -353,10 +412,14 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
     let backup_file = format!("{}/ipma_manual_backup_{}.sql", backup_dir, timestamp);
 
     let output = Command::new("pg_dump")
-        .arg("-h").arg(&db_config.host)
-        .arg("-p").arg(db_config.port.to_string())
-        .arg("-U").arg(&db_config.username)
-        .arg("-d").arg(&db_config.database)
+        .arg("-h")
+        .arg(&db_config.host)
+        .arg("-p")
+        .arg(db_config.port.to_string())
+        .arg("-U")
+        .arg(&db_config.username)
+        .arg("-d")
+        .arg(&db_config.database)
         .arg("--no-owner")
         .arg("--no-acl")
         .arg("--clean")
@@ -375,8 +438,7 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
         return Err("导出的 SQL 文件为空".to_string());
     }
 
-    std::fs::write(&backup_file, sql_content)
-        .map_err(|e| format!("写入备份文件失败: {}", e))?;
+    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {}", e))?;
 
     let file_size = std::fs::metadata(&backup_file)
         .map(|m| m.len())
@@ -384,12 +446,18 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
 
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
-    Ok(format!("备份成功: {} ({:.2} MB)", backup_file, file_size_mb))
+    Ok(format!(
+        "备份成功: {} ({:.2} MB)",
+        backup_file, file_size_mb
+    ))
 }
 
-async fn execute_log_cleanup(pool: &sqlx::PgPool, config: &serde_json::Value) -> Result<String, String> {
+async fn execute_log_cleanup(
+    pool: &sqlx::PgPool,
+    config: &serde_json::Value,
+) -> Result<String, String> {
     let days = config.get("days").and_then(|v| v.as_i64()).unwrap_or(30) as i32;
-    
+
     if days < 0 {
         return Err("保留天数不能为负数".to_string());
     }
@@ -397,7 +465,10 @@ async fn execute_log_cleanup(pool: &sqlx::PgPool, config: &serde_json::Value) ->
     let mut deleted = 0u64;
 
     if days == 0 {
-        if let Ok(r) = sqlx::query("DELETE FROM operation_logs").execute(pool).await {
+        if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
+            .execute(pool)
+            .await
+        {
             deleted += r.rows_affected();
         }
         if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(pool).await {
@@ -407,16 +478,30 @@ async fn execute_log_cleanup(pool: &sqlx::PgPool, config: &serde_json::Value) ->
             deleted += r.rows_affected();
         }
     } else {
-        if let Ok(r) = sqlx::query("DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-            .bind(days).execute(pool).await {
+        if let Ok(r) = sqlx::query(
+            "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+        )
+        .bind(days)
+        .execute(pool)
+        .await
+        {
             deleted += r.rows_affected();
         }
-        if let Ok(r) = sqlx::query("DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-            .bind(days).execute(pool).await {
+        if let Ok(r) =
+            sqlx::query("DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1")
+                .bind(days)
+                .execute(pool)
+                .await
+        {
             deleted += r.rows_affected();
         }
-        if let Ok(r) = sqlx::query("DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-            .bind(days).execute(pool).await {
+        if let Ok(r) = sqlx::query(
+            "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+        )
+        .bind(days)
+        .execute(pool)
+        .await
+        {
             deleted += r.rows_affected();
         }
     }

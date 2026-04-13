@@ -1,9 +1,9 @@
 use log;
 use sqlx::PgPool;
-use tokio::time;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use tokio::sync::RwLock;
+use tokio::time;
 
 use crate::config::DatabaseConfig;
 
@@ -48,7 +48,7 @@ impl PoolMetrics {
     /// 记录请求完成
     pub fn record_request_complete(&self, wait_time_ms: u64, success: bool) {
         self.waiting_requests.fetch_sub(1, Ordering::Relaxed);
-        
+
         if !success {
             self.failed_requests.fetch_add(1, Ordering::Relaxed);
         }
@@ -61,7 +61,7 @@ impl PoolMetrics {
             (current_avg * 9 + wait_time_ms) / 10
         };
         self.avg_wait_time_ms.store(new_avg, Ordering::Relaxed);
-        
+
         // 更新最后更新时间
         self.last_updated.store(
             std::time::SystemTime::now()
@@ -219,8 +219,12 @@ impl DbPool {
             .max_connections(config.max_connections)
             .min_connections(config.min_connections)
             .acquire_timeout(std::time::Duration::from_secs(config.acquire_timeout_secs))
-            .idle_timeout(Some(std::time::Duration::from_secs(config.idle_timeout_secs)))
-            .max_lifetime(Some(std::time::Duration::from_secs(config.max_lifetime_secs)))
+            .idle_timeout(Some(std::time::Duration::from_secs(
+                config.idle_timeout_secs,
+            )))
+            .max_lifetime(Some(std::time::Duration::from_secs(
+                config.max_lifetime_secs,
+            )))
             .test_before_acquire(config.test_before_acquire)
             .connect(url)
             .await
@@ -267,10 +271,8 @@ impl DbPool {
     /// 更新指标
     async fn update_metrics(&self) {
         let status = self.pool.size();
-        self.metrics.update_connection_counts(
-            status,
-            self.pool.num_idle() as u32,
-        );
+        self.metrics
+            .update_connection_counts(status, self.pool.num_idle() as u32);
     }
 
     /// 获取当前指标快照
@@ -297,7 +299,7 @@ impl DbPool {
         // 检查冷却时间
         let last_scaling = self.last_scaling_time.load(Ordering::Relaxed);
         let config = self.config.read().await;
-        
+
         if current_time - last_scaling < config.scaling_cooldown_secs {
             log::warn!("连接池缩放冷却中，跳过本次调整");
             return Ok(());
@@ -311,13 +313,10 @@ impl DbPool {
         drop(config);
 
         // 记录缩放时间
-        self.last_scaling_time.store(current_time, Ordering::Relaxed);
+        self.last_scaling_time
+            .store(current_time, Ordering::Relaxed);
 
-        log::info!(
-            "连接池大小调整: {} -> {}",
-            old_max,
-            new_max_connections
-        );
+        log::info!("连接池大小调整: {} -> {}", old_max, new_max_connections);
 
         Ok(())
     }
@@ -325,14 +324,14 @@ impl DbPool {
     /// 自动缩放检查
     pub async fn check_and_scale(&self) {
         let config = self.config.read().await;
-        
+
         if !config.auto_scaling_enabled {
             return;
         }
 
         let metrics = self.metrics.snapshot();
         let total_connections = metrics.active_connections + metrics.idle_connections;
-        
+
         if total_connections == 0 {
             return;
         }
@@ -351,7 +350,7 @@ impl DbPool {
             let load_factor = utilization_rate / high_load_threshold;
             let growth_factor = 1.0 + (load_factor - 1.0) * 0.3; // 最大增长30%
             let new_max = (current_max as f32 * growth_factor).min(100.0) as u32;
-            
+
             // 只有当新的最大连接数比当前大至少2个时才进行调整
             if new_max > current_max + 1
                 && let Err(e) = self.resize_pool(new_max).await
@@ -365,8 +364,9 @@ impl DbPool {
             // 避免每次都减少20%，而是根据负载程度动态调整
             let load_factor = utilization_rate / low_load_threshold;
             let reduction_factor = 0.8 + (load_factor * 0.2); // 最小减少20%
-            let new_max = (current_max as f32 * reduction_factor).max(min_connections as f32) as u32;
-            
+            let new_max =
+                (current_max as f32 * reduction_factor).max(min_connections as f32) as u32;
+
             // 只有当新的最大连接数比当前小至少2个时才进行调整
             if new_max < current_max - 1
                 && let Err(e) = self.resize_pool(new_max).await
@@ -383,7 +383,7 @@ impl DbPool {
             let mut interval = time::interval(time::Duration::from_secs(interval_seconds));
             loop {
                 interval.tick().await;
-                
+
                 // 健康检查
                 match pool_clone.health_check().await {
                     Ok(_) => log::debug!("数据库连接池健康检查通过"),
@@ -406,10 +406,10 @@ impl DbPool {
             let mut interval = time::interval(time::Duration::from_secs(interval_seconds));
             loop {
                 interval.tick().await;
-                
+
                 let metrics = pool_clone.get_metrics();
                 let _status = pool_clone.get_pool_status();
-                
+
                 log::info!(
                     "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",
                     metrics.active_connections,
@@ -431,18 +431,28 @@ impl DbPool {
 
     /// 获取查询超时时间
     pub fn get_query_timeout(&self) -> std::time::Duration {
-        let config = self.config.try_read().map(|c| c.query_timeout_secs).unwrap_or(30);
+        let config = self
+            .config
+            .try_read()
+            .map(|c| c.query_timeout_secs)
+            .unwrap_or(30);
         std::time::Duration::from_secs(config)
     }
 
     /// 获取慢查询阈值
     pub fn get_slow_query_threshold_ms(&self) -> u64 {
-        
-        self.config.try_read().map(|c| c.slow_query_threshold_ms).unwrap_or(1000)
+        self.config
+            .try_read()
+            .map(|c| c.slow_query_threshold_ms)
+            .unwrap_or(1000)
     }
 
     /// 执行带超时的查询
-    pub async fn execute_with_timeout<F, T>(&self, query_name: &str, future: F) -> Result<T, sqlx::Error>
+    pub async fn execute_with_timeout<F, T>(
+        &self,
+        query_name: &str,
+        future: F,
+    ) -> Result<T, sqlx::Error>
     where
         F: std::future::Future<Output = Result<T, sqlx::Error>>,
     {
@@ -453,12 +463,14 @@ impl DbPool {
         let result = tokio::time::timeout(timeout, future).await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
-        
+
         // 记录慢查询
         if elapsed_ms > slow_threshold {
             log::warn!(
                 "慢查询警告: {} 耗时 {}ms (阈值: {}ms)",
-                query_name, elapsed_ms, slow_threshold
+                query_name,
+                elapsed_ms,
+                slow_threshold
             );
         }
 
@@ -487,15 +499,15 @@ mod tests {
     #[tokio::test]
     async fn test_pool_metrics() {
         let metrics = PoolMetrics::new();
-        
+
         metrics.record_request_start();
         assert_eq!(metrics.total_requests.load(Ordering::Relaxed), 1);
         assert_eq!(metrics.waiting_requests.load(Ordering::Relaxed), 1);
-        
+
         metrics.record_request_complete(100, true);
         assert_eq!(metrics.waiting_requests.load(Ordering::Relaxed), 0);
         assert_eq!(metrics.avg_wait_time_ms.load(Ordering::Relaxed), 100);
-        
+
         metrics.update_connection_counts(5, 3);
         assert_eq!(metrics.active_connections.load(Ordering::Relaxed), 5);
         assert_eq!(metrics.idle_connections.load(Ordering::Relaxed), 3);

@@ -4,7 +4,7 @@ use crate::models::{
     ApiResponse, Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate,
     NetworkUpdate,
 };
-use crate::utils::{log_system_operation, DEFAULT_PAGE};
+use crate::utils::{DEFAULT_PAGE, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -19,10 +19,18 @@ pub async fn get_networks(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
-    let region_id = query.get("region_id").and_then(|id| Uuid::parse_str(id).ok());
+    let region_id = query
+        .get("region_id")
+        .and_then(|id| Uuid::parse_str(id).ok());
     let offset = (page - 1) * page_size;
 
     let total: i64 = if !search.is_empty() || region_id.is_some() {
@@ -38,7 +46,7 @@ pub async fn get_networks(
                 .await
             } else {
                 sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM network_cidrs n WHERE n.network_region_id = $1"
+                    "SELECT COUNT(*) FROM network_cidrs n WHERE n.network_region_id = $1",
                 )
                 .bind(rid)
                 .fetch_one(pool.get_conn())
@@ -141,8 +149,12 @@ pub async fn get_networks(
                     ipv6_cidr: row.get(5),
                     ipv4_gateway: row.get(6),
                     ipv6_gateway: row.get(7),
-                    ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-                    ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
+                    ipv4_dns: row
+                        .get::<Option<serde_json::Value>, _>(8)
+                        .and_then(|v| serde_json::from_value(v).ok()),
+                    ipv6_dns: row
+                        .get::<Option<serde_json::Value>, _>(9)
+                        .and_then(|v| serde_json::from_value(v).ok()),
                     description: row.get(12),
                     created_at: row.get(13),
                     updated_at: row.get(14),
@@ -397,8 +409,12 @@ pub async fn get_network(
             ipv6_cidr: row.get(5),
             ipv4_gateway: row.get(6),
             ipv6_gateway: row.get(7),
-            ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-            ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
+            ipv4_dns: row
+                .get::<Option<serde_json::Value>, _>(8)
+                .and_then(|v| serde_json::from_value(v).ok()),
+            ipv6_dns: row
+                .get::<Option<serde_json::Value>, _>(9)
+                .and_then(|v| serde_json::from_value(v).ok()),
             description: row.get(12),
             created_at: row.get(13),
             updated_at: row.get(14),
@@ -746,14 +762,17 @@ pub async fn get_network_regions(
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
     let total: i64 = if !search.is_empty() {
         let pattern = format!("%{}%", search);
         match sqlx::query_scalar(
-            "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1"
+            "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1",
         )
         .bind(&pattern)
         .fetch_one(pool.get_conn())

@@ -1,6 +1,10 @@
 pub mod static_files;
 
-use crate::auth::login::{auth_middleware, forgot_password, get_current_user, init_two_factor, enable_two_factor, disable_two_factor, login, login_with_two_factor, logout, refresh_token, reset_password, send_two_factor_code, send_login_code, login_with_email_code};
+use crate::auth::login::{
+    auth_middleware, disable_two_factor, enable_two_factor, forgot_password, get_current_user,
+    init_two_factor, login, login_with_email_code, login_with_two_factor, logout, refresh_token,
+    reset_password, send_login_code, send_two_factor_code,
+};
 use crate::auth::user::{create_user, delete_user, get_user, get_users, update_user};
 use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
@@ -8,37 +12,38 @@ use crate::log::notification::{
 use crate::log::{get_login_logs, get_operation_logs};
 use crate::resource::switch::{
     create_switch, create_switch_port, delete_switch, delete_switch_port, get_all_switch_ports,
-    get_switch, get_switch_mac_table, get_switch_macs_from_db, sync_lldp_from_snmp, get_switch_info_snmp, get_switch_lldp_neighbors, get_switch_port, get_switch_ports,
-    get_switch_ports_snmp, get_switches, sync_ports_from_snmp, test_snmp_connection, test_snmp_connection_by_id, update_switch, update_switch_port,
+    get_switch, get_switch_info_snmp, get_switch_lldp_neighbors, get_switch_mac_table,
+    get_switch_macs_from_db, get_switch_port, get_switch_ports, get_switch_ports_snmp,
+    get_switches, sync_lldp_from_snmp, sync_ports_from_snmp, test_snmp_connection,
+    test_snmp_connection_by_id, update_switch, update_switch_port,
 };
 use crate::resource::{
-    create_cabinet, create_cabinet_position, create_network,
-    create_network_region, create_room, create_workstation, delete_cabinet,
-    delete_cabinet_position, delete_layout, delete_network,
-    delete_network_region, delete_positions_layout, delete_room, delete_workstation, get_cabinet,
-    get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets, get_cabinets_by_network_region, get_ip_managers,
-    get_layout, get_network, get_network_region, get_network_regions, get_networks, get_positions,
-    get_positions_layout, get_room, get_room_networks, get_rooms, get_switch_ips, get_workstation,
-    get_workstations, pull_ip_managers, save_layout, update_cabinet,
-    update_cabinet_position, update_network, update_network_region, update_room,
-    update_workstation, get_workstation_ips,
-    get_available_ips, auto_assign_ip, batch_create_ip_managers,
+    auto_assign_ip, batch_create_ip_managers, create_cabinet, create_cabinet_position,
+    create_network, create_network_region, create_room, create_workstation, delete_cabinet,
+    delete_cabinet_position, delete_layout, delete_network, delete_network_region,
+    delete_positions_layout, delete_room, delete_workstation, get_available_ips, get_cabinet,
+    get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
+    get_cabinets_by_network_region, get_ip_managers, get_layout, get_network, get_network_region,
+    get_network_regions, get_networks, get_positions, get_positions_layout, get_room,
+    get_room_networks, get_rooms, get_switch_ips, get_workstation, get_workstation_ips,
+    get_workstations, pull_ip_managers, save_layout, update_cabinet, update_cabinet_position,
+    update_network, update_network_region, update_room, update_workstation,
 };
 use crate::system::config::{
-    backup_config, check_service_status, disable_init_mode, generate_certificate,
-    get_certificate_status, get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages, get_system_info, get_dashboard_stats, import_certificate, register_service, restart_application, restart_os, restore_config,
-    send_email, test_smtp_connection as test_smtp, update_language_setting,
-    update_page_timeout_config, update_session_timeout_config, update_smtp_config, update_system_config, download_certificate,
-    get_notification_settings, update_notification_settings,
+    backup_config, check_service_status, disable_init_mode, download_certificate,
+    generate_certificate, get_certificate_status, get_dashboard_stats, get_notification_settings,
+    get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages,
+    get_system_info, import_certificate, register_service, restart_application, restart_os,
+    restore_config, send_email, test_smtp_connection as test_smtp, update_language_setting,
+    update_notification_settings, update_page_timeout_config, update_session_timeout_config,
+    update_smtp_config, update_system_config,
 };
 use crate::system::data::{
-    download_template, export_csv, export_database, import_csv,
-    clear_logs, get_logs_stats,
+    clear_logs, download_template, export_csv, export_database, get_logs_stats, import_csv,
 };
 use crate::system::scheduled_task::{
-    get_scheduled_tasks, get_scheduled_task, create_scheduled_task,
-    update_scheduled_task, delete_scheduled_task, toggle_scheduled_task,
-    run_scheduled_task_now, get_task_logs,
+    create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
+    get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
 use actix_web::{HttpResponse, middleware, web};
 
@@ -61,7 +66,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                 .service(
                     web::resource("/me")
                         .wrap(middleware::from_fn(auth_middleware))
-                        .route(web::get().to(get_current_user))
+                        .route(web::get().to(get_current_user)),
                 ),
         )
         // 健康检查（不需要认证）
@@ -112,7 +117,10 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::get().to(get_network_region))
                                 .route("/{id}", web::put().to(update_network_region))
                                 .route("/{id}", web::delete().to(delete_network_region))
-                                .route("/{id}/cabinets", web::get().to(get_cabinets_by_network_region)),
+                                .route(
+                                    "/{id}/cabinets",
+                                    web::get().to(get_cabinets_by_network_region),
+                                ),
                         )
                         // 房间管理
                         .service(
@@ -195,11 +203,20 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .route("/{id}", web::delete().to(delete_switch))
                         .route("/{id}/ports", web::get().to(get_switch_ports))
                         .route("/{id}/ports", web::post().to(create_switch_port))
-                        .route("/{id}/ports/sync-snmp", web::post().to(sync_ports_from_snmp))
-                        .route("/{id}/test-snmp", web::post().to(test_snmp_connection_by_id))
+                        .route(
+                            "/{id}/ports/sync-snmp",
+                            web::post().to(sync_ports_from_snmp),
+                        )
+                        .route(
+                            "/{id}/test-snmp",
+                            web::post().to(test_snmp_connection_by_id),
+                        )
                         .route("/{id}/macs", web::get().to(get_switch_macs_from_db))
                         .route("/{id}/macs/sync", web::post().to(get_switch_mac_table))
-                        .route("/{id}/lldp-neighbors", web::get().to(get_switch_lldp_neighbors))
+                        .route(
+                            "/{id}/lldp-neighbors",
+                            web::get().to(get_switch_lldp_neighbors),
+                        )
                         .route("/{id}/lldp/sync", web::post().to(sync_lldp_from_snmp))
                         .route("/{id}/snmp-info", web::get().to(get_switch_info_snmp))
                         .route("/{id}/snmp-ports", web::get().to(get_switch_ports_snmp))
@@ -261,11 +278,23 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .route("/page-timeout", web::get().to(get_page_timeout_config))
                         .route("/page-timeout", web::put().to(update_page_timeout_config))
                         // 会话超时配置
-                        .route("/session-timeout", web::get().to(get_session_timeout_config))
-                        .route("/session-timeout", web::put().to(update_session_timeout_config))
+                        .route(
+                            "/session-timeout",
+                            web::get().to(get_session_timeout_config),
+                        )
+                        .route(
+                            "/session-timeout",
+                            web::put().to(update_session_timeout_config),
+                        )
                         // 通知设置
-                        .route("/notification/settings", web::get().to(get_notification_settings))
-                        .route("/notification/settings", web::put().to(update_notification_settings))
+                        .route(
+                            "/notification/settings",
+                            web::get().to(get_notification_settings),
+                        )
+                        .route(
+                            "/notification/settings",
+                            web::put().to(update_notification_settings),
+                        )
                         // 导入导出功能
                         .service(
                             web::scope("/import-export")
@@ -289,7 +318,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}/run", web::post().to(run_scheduled_task_now))
                                 .route("/logs", web::get().to(get_task_logs)),
                         ),
-                )
+                ),
         );
 
     // 注意：初始化相关路由将在main.rs中根据配置动态添加

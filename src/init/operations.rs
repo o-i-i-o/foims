@@ -5,8 +5,7 @@ use crate::init::config::get_backup_dir;
 
 pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<String, String> {
     let backup_dir = get_backup_dir();
-    std::fs::create_dir_all(&backup_dir)
-        .map_err(|e| format!("创建备份目录失败: {}", e))?;
+    std::fs::create_dir_all(&backup_dir).map_err(|e| format!("创建备份目录失败: {}", e))?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{}/ipma_backup_{}.sql", backup_dir, timestamp);
@@ -52,7 +51,7 @@ pub async fn drop_database(config: &crate::config::DatabaseConfig) -> Result<(),
            AND pid <> pg_backend_pid()"#,
         config.database
     );
-    
+
     sqlx::query(&terminate_query)
         .execute(&postgres_pool)
         .await
@@ -79,23 +78,25 @@ pub async fn create_database(config: &crate::config::DatabaseConfig) -> Result<(
         .await
         .map_err(|e| format!("连接PostgreSQL失败: {}", e))?;
 
-    let db_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
-    )
-    .bind(&config.database)
-    .fetch_one(&postgres_pool)
-    .await
-    .map_err(|e| format!("检查数据库是否存在失败: {}", e))?;
+    let db_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+            .bind(&config.database)
+            .fetch_one(&postgres_pool)
+            .await
+            .map_err(|e| format!("检查数据库是否存在失败: {}", e))?;
 
     if db_exists {
         info!("数据库 {} 已存在，跳过创建", config.database);
         return Ok(());
     }
 
-    sqlx::query(&format!("CREATE DATABASE \"{}\" CONNECTION LIMIT = -1", config.database))
-        .execute(&postgres_pool)
-        .await
-        .map_err(|e| format!("创建数据库失败: {}", e))?;
+    sqlx::query(&format!(
+        "CREATE DATABASE \"{}\" CONNECTION LIMIT = -1",
+        config.database
+    ))
+    .execute(&postgres_pool)
+    .await
+    .map_err(|e| format!("创建数据库失败: {}", e))?;
 
     info!("数据库 {} 创建成功", config.database);
     Ok(())

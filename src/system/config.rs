@@ -1,8 +1,11 @@
 use crate::config::{Config, I18nConfig, ServerConfig};
-use crate::system::smtp::{get_smtp_config_from_db, save_smtp_config_to_db, test_smtp_connection as test_smtp_connection_impl, send_email_to_users};
-use crate::system::smtp::SmtpConfig;
 use crate::db::DbPool;
 use crate::models::ApiResponse;
+use crate::system::smtp::SmtpConfig;
+use crate::system::smtp::{
+    get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
+    test_smtp_connection as test_smtp_connection_impl,
+};
 use actix_web::{HttpResponse, Result, web};
 use chrono;
 use serde::{Deserialize, Serialize};
@@ -82,17 +85,20 @@ pub fn init_start_time() {
 fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = crate::config::get_config_file_path();
     tracing::info!("[save_config] 开始保存配置到: {}", config_path);
-    
+
     let toml_str = toml::to_string_pretty(config)?;
     tracing::info!("[save_config] TOML 内容长度: {}", toml_str.len());
-    
+
     std::fs::write(&config_path, &toml_str)?;
     tracing::info!("[save_config] 配置已写入文件");
-    
+
     // 验证写入
     let verify_content = std::fs::read_to_string(&config_path)?;
-    tracing::info!("[save_config] 验证读取成功，内容长度: {}", verify_content.len());
-    
+    tracing::info!(
+        "[save_config] 验证读取成功，内容长度: {}",
+        verify_content.len()
+    );
+
     Ok(())
 }
 
@@ -143,18 +149,17 @@ pub async fn get_system_info(
 }
 
 // 获取仪表盘统计数据
-pub async fn get_dashboard_stats(
-    pool: web::Data<DbPool>,
-) -> Result<HttpResponse> {
+pub async fn get_dashboard_stats(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(pool.get_conn())
         .await
         .unwrap_or_default();
 
-    let active_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = 'active'")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let active_users: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = 'active'")
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or_default();
 
     let total_network_regions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
         .fetch_one(pool.get_conn())
@@ -196,10 +201,11 @@ pub async fn get_dashboard_stats(
         .await
         .unwrap_or_default();
 
-    let active_ips: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers WHERE status = 'active'")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let active_ips: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers WHERE status = 'active'")
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or_default();
 
     let ips_by_device_type: Vec<(String, i64)> = sqlx::query_as(
         "SELECT device_type, COUNT(*) as count FROM ip_managers WHERE device_type IS NOT NULL GROUP BY device_type"
@@ -208,29 +214,27 @@ pub async fn get_dashboard_stats(
     .await
     .unwrap_or_default();
 
-    let ips_by_status: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status"
-    )
-    .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
+    let ips_by_status: Vec<(String, i64)> =
+        sqlx::query_as("SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status")
+            .fetch_all(pool.get_conn())
+            .await
+            .unwrap_or_default();
 
-    let rooms_by_type: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type"
-    )
-    .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
+    let rooms_by_type: Vec<(String, i64)> =
+        sqlx::query_as("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
+            .fetch_all(pool.get_conn())
+            .await
+            .unwrap_or_default();
 
     let recent_logs: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+        "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'",
     )
     .fetch_one(pool.get_conn())
     .await
     .unwrap_or_default();
 
     let login_logs_today: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+        "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'",
     )
     .fetch_one(pool.get_conn())
     .await
@@ -283,27 +287,36 @@ pub async fn update_system_config(
 
     // 创建新的配置对象，只更新提供的字段
     tracing::info!("[update_config] 请求数据: {:?}", req);
-    
+
     let new_config = Config {
-        database: req.database.clone().unwrap_or_else(|| config.database.clone()),
+        database: req
+            .database
+            .clone()
+            .unwrap_or_else(|| config.database.clone()),
         server: req.server.clone().unwrap_or_else(|| config.server.clone()),
         jwt: req.jwt.clone().unwrap_or_else(|| config.jwt.clone()),
         init: req.init.clone().unwrap_or_else(|| config.init.clone()),
         i18n: config.i18n.clone(),
-        rate_limit: req.rate_limit.clone().unwrap_or_else(|| config.rate_limit.clone()),
+        rate_limit: req
+            .rate_limit
+            .clone()
+            .unwrap_or_else(|| config.rate_limit.clone()),
     };
-    
-    tracing::info!("[update_config] 新的 rate_limit: {:?}", new_config.rate_limit);
+
+    tracing::info!(
+        "[update_config] 新的 rate_limit: {:?}",
+        new_config.rate_limit
+    );
 
     // 保存配置到文件
     let config_path = crate::config::get_config_file_path();
     tracing::info!("[update_config] 准备保存配置到: {}", config_path);
-    
+
     match save_config_to_file(&new_config) {
         Ok(_) => {
             tracing::info!("配置已保存到: {}", config_path);
             Ok(HttpResponse::Ok().json(ApiResponse::success(new_config, "配置更新成功")))
-        },
+        }
         Err(e) => {
             tracing::error!("配置保存失败: {}", e);
             Ok(HttpResponse::InternalServerError()
@@ -315,17 +328,20 @@ pub async fn update_system_config(
 // 统一的服务重启函数
 pub fn trigger_service_restart() -> Result<HttpResponse> {
     let service_name = "ipma.service";
-    
+
     let is_running_as_service = check_if_running_as_service();
-    
-    tracing::info!("触发服务重启, is_running_as_service: {}", is_running_as_service);
-    
+
+    tracing::info!(
+        "触发服务重启, is_running_as_service: {}",
+        is_running_as_service
+    );
+
     if is_running_as_service {
         // 先尝试 systemctl restart（检查权限）
         let check_output = Command::new("systemctl")
             .args(["show", "ipma.service", "--property=ActiveState"])
             .output();
-        
+
         let is_active = match check_output {
             Ok(output) => {
                 let status = String::from_utf8_lossy(&output.stdout);
@@ -333,24 +349,28 @@ pub fn trigger_service_restart() -> Result<HttpResponse> {
             }
             Err(_) => true,
         };
-        
+
         tracing::info!("服务当前状态: active={}", is_active);
-        
+
         // 尝试重启
         let output = Command::new("systemctl")
             .arg("restart")
             .arg(service_name)
             .output();
-        
+
         match output {
             Ok(output) => {
                 let exit_code = output.status.code().unwrap_or(-1);
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                
-                tracing::info!("systemctl restart 执行完成: exit_code={}, stdout='{}', stderr='{}'", 
-                    exit_code, stdout.trim(), stderr.trim());
-                
+
+                tracing::info!(
+                    "systemctl restart 执行完成: exit_code={}, stdout='{}', stderr='{}'",
+                    exit_code,
+                    stdout.trim(),
+                    stderr.trim()
+                );
+
                 // exit code 0 表示成功
                 if output.status.success() {
                     tracing::info!("systemctl restart 执行成功");
@@ -359,26 +379,26 @@ pub fn trigger_service_restart() -> Result<HttpResponse> {
                         "服务重启命令已发送，服务正在重启...",
                     )));
                 }
-                
+
                 // 非 0 退出码，检查具体错误
-                if stderr.contains("Access denied") || 
-                   stderr.contains("Permission denied") || 
-                   stderr.contains("Interactive authentication required") {
+                if stderr.contains("Access denied")
+                    || stderr.contains("Permission denied")
+                    || stderr.contains("Interactive authentication required")
+                {
                     tracing::info!("权限不足，使用进程退出方式重启");
                     return restart_by_exit();
                 }
-                
+
                 // 如果 stderr 包含 "Failed"，说明真的失败了
                 if stderr.contains("Failed") && !stderr.contains("Failed to restart") {
                     tracing::error!("服务重启失败: {}", stderr);
                     return Ok(
-                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                            "服务重启失败: {}",
-                            stderr.trim()
-                        ))),
+                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            format!("服务重启失败: {}", stderr.trim()),
+                        )),
                     );
                 }
-                
+
                 // 其他情况，可能是警告，尝试退出方式
                 tracing::info!("systemctl 返回非零状态码，使用进程退出方式重启");
                 restart_by_exit()
@@ -402,30 +422,28 @@ pub async fn restart_application() -> Result<HttpResponse> {
 
 fn restart_by_exit() -> Result<HttpResponse> {
     tracing::info!("使用进程退出方式触发重启（systemd Restart=always 会自动重启）");
-    
+
     // 先返回响应，然后在后台线程中退出
     std::thread::spawn(|| {
         std::thread::sleep(std::time::Duration::from_millis(500));
         tracing::info!("程序即将退出，等待 systemd 自动重启...");
         std::process::exit(0);
     });
-    
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-        (),
-        "服务正在重启...",
-    )))
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "服务正在重启...")))
 }
 
 fn check_if_running_as_service() -> bool {
     if std::env::var("INVOCATION_ID").is_ok() {
         return true;
     }
-    
+
     if let Ok(pid) = std::fs::read_to_string("/proc/self/cgroup")
-        && (pid.contains("systemd") || pid.contains(".service")) {
-            return true;
+        && (pid.contains("systemd") || pid.contains(".service"))
+    {
+        return true;
     }
-    
+
     std::path::Path::new("/etc/systemd/system/ipma.service").exists()
 }
 
@@ -433,19 +451,19 @@ fn restart_standalone_process() -> Result<HttpResponse> {
     let exe_path = std::env::current_exe().map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("获取可执行文件路径失败: {}", e))
     })?;
-    
+
     let exe_path_str = exe_path.to_str().ok_or_else(|| {
         actix_web::error::ErrorInternalServerError("无法将可执行文件路径转换为字符串")
     })?;
-    
+
     let working_dir = std::env::current_dir().map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("获取工作目录失败: {}", e))
     })?;
-    
+
     let working_dir_str = working_dir.to_str().ok_or_else(|| {
         actix_web::error::ErrorInternalServerError("无法将工作目录路径转换为字符串")
     })?;
-    
+
     let restart_script = format!(
         r#"#!/bin/bash
 sleep 3
@@ -454,12 +472,12 @@ exec "{}"
 "#,
         working_dir_str, exe_path_str
     );
-    
+
     let script_path = "/tmp/ipma_restart.sh";
     std::fs::write(script_path, restart_script).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("创建重启脚本失败: {}", e))
     })?;
-    
+
     let output = Command::new("chmod")
         .arg("+x")
         .arg(script_path)
@@ -467,17 +485,15 @@ exec "{}"
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("设置脚本权限失败: {}", e))
         })?;
-    
+
     if !output.status.success() {
         return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("设置脚本权限失败")),
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("设置脚本权限失败"))
         );
     }
-    
-    let _ = Command::new("nohup")
-        .arg(script_path)
-        .spawn();
-    
+
+    let _ = Command::new("nohup").arg(script_path).spawn();
+
     // 延迟退出，确保HTTP响应能成功发送给客户端
     std::thread::spawn(|| {
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -521,13 +537,13 @@ pub async fn restart_os() -> Result<HttpResponse> {
 pub async fn check_service_status() -> Result<HttpResponse> {
     // 检查服务文件路径（deb 包和手动注册）
     let service_paths = [
-        "/usr/lib/systemd/system/ipma.service",  // deb 包安装的路径
-        "/etc/systemd/system/ipma.service",       // 手动注册的路径
+        "/usr/lib/systemd/system/ipma.service", // deb 包安装的路径
+        "/etc/systemd/system/ipma.service",     // 手动注册的路径
     ];
-    
+
     let mut service_file_exists = false;
     let mut service_file_path = String::new();
-    
+
     for path in &service_paths {
         if std::path::Path::new(path).exists() {
             service_file_exists = true;
@@ -547,7 +563,7 @@ pub async fn check_service_status() -> Result<HttpResponse> {
             .arg("ipma.service")
             .output()
             .ok();
-        
+
         if let Some(output) = enable_output {
             is_enabled = output.status.success();
         }
@@ -557,7 +573,7 @@ pub async fn check_service_status() -> Result<HttpResponse> {
             .arg("ipma.service")
             .output()
             .ok();
-        
+
         if let Some(output) = active_output {
             is_active = output.status.success();
             status_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -568,16 +584,20 @@ pub async fn check_service_status() -> Result<HttpResponse> {
                 .args(["show", "ipma.service", "--property=ExecMainStartTimestamp"])
                 .output()
                 .ok();
-            
+
             if let Some(output) = show_output {
                 let prop = String::from_utf8_lossy(&output.stdout);
                 if let Some(timestamp_str) = prop.strip_prefix("ExecMainStartTimestamp=") {
                     let timestamp_str = timestamp_str.trim();
-                    if !timestamp_str.is_empty() && timestamp_str != "n/a"
-                        && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
-                            let now = chrono::Utc::now();
-                            uptime_seconds = Some((now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64);
-                        }
+                    if !timestamp_str.is_empty()
+                        && timestamp_str != "n/a"
+                        && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str)
+                    {
+                        let now = chrono::Utc::now();
+                        uptime_seconds = Some(
+                            (now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64,
+                        );
+                    }
                 }
             }
         }
@@ -596,8 +616,13 @@ pub async fn check_service_status() -> Result<HttpResponse> {
         "uptime_seconds": uptime_seconds
     });
 
-    tracing::info!("服务状态: registered={}, enabled={}, active={}, running_as_service={}", 
-        service_file_exists && is_enabled, is_enabled, is_active, running_as_service);
+    tracing::info!(
+        "服务状态: registered={}, enabled={}, active={}, running_as_service={}",
+        service_file_exists && is_enabled,
+        is_enabled,
+        is_active,
+        running_as_service
+    );
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(status_data, "服务状态检查成功")))
 }
@@ -605,13 +630,13 @@ pub async fn check_service_status() -> Result<HttpResponse> {
 // 注册为服务
 pub async fn register_service() -> Result<HttpResponse> {
     tracing::info!("收到注册服务请求");
-    
+
     // 检查服务是否已存在
     let service_paths = [
-        "/usr/lib/systemd/system/ipma.service",  // deb 包安装的路径
-        "/etc/systemd/system/ipma.service",       // 手动注册的路径
+        "/usr/lib/systemd/system/ipma.service", // deb 包安装的路径
+        "/etc/systemd/system/ipma.service",     // 手动注册的路径
     ];
-    
+
     for path in &service_paths {
         if std::path::Path::new(path).exists() {
             // 检查服务是否已启用
@@ -620,9 +645,9 @@ pub async fn register_service() -> Result<HttpResponse> {
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false);
-            
+
             tracing::info!("服务文件已存在: {}, 已启用: {}", path, is_enabled);
-            
+
             return Ok(HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({
                     "registered": true,
@@ -634,10 +659,10 @@ pub async fn register_service() -> Result<HttpResponse> {
             )));
         }
     }
-    
+
     // 服务不存在，尝试注册
     tracing::info!("服务文件不存在，尝试创建服务文件");
-    
+
     // 获取当前可执行文件路径
     let exe_path = std::env::current_exe().map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("获取当前可执行文件路径失败: {}", e))
@@ -645,14 +670,14 @@ pub async fn register_service() -> Result<HttpResponse> {
     let exe_path_str = exe_path.to_str().ok_or_else(|| {
         actix_web::error::ErrorInternalServerError("无法将可执行文件路径转换为字符串")
     })?;
-    
+
     // 获取配置文件路径
     let config_path = crate::config::get_config_file_path();
     let config_dir = std::path::Path::new(&config_path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "/etc/ipma".to_string());
-    
+
     // 创建 systemd 服务文件内容
     let service_content = format!(
         r#"[Unit]
@@ -688,7 +713,7 @@ WantedBy=multi-user.target
 "#,
         exe_path_str, config_dir
     );
-    
+
     // 尝试写入服务文件（需要权限）
     let write_result = Command::new("pkexec")
         .args(["--user", "root", "tee", "/etc/systemd/system/ipma.service"])
@@ -696,7 +721,7 @@ WantedBy=multi-user.target
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn();
-    
+
     let result = match write_result {
         Ok(mut child) => {
             // 写入服务文件内容
@@ -723,24 +748,21 @@ WantedBy=multi-user.target
                 })
         }
     };
-    
+
     match result {
         Ok(output) if output.status.success() => {
             tracing::info!("服务文件创建成功");
-            
+
             // 执行后续命令
-            let commands = vec![
-                vec!["daemon-reload"],
-                vec!["enable", "ipma.service"],
-            ];
-            
+            let commands = vec![vec!["daemon-reload"], vec!["enable", "ipma.service"]];
+
             for args in commands {
                 let cmd_result = execute_systemctl_with_privilege(&args);
                 if let Err(e) = cmd_result {
                     tracing::warn!("执行 systemctl {:?} 失败: {}", args, e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({
                     "registered": true,
@@ -754,10 +776,12 @@ WantedBy=multi-user.target
         Ok(output) => {
             let error = String::from_utf8_lossy(&output.stderr);
             tracing::error!("创建服务文件失败: {}", error);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "创建服务文件失败，需要管理员权限: {}",
-                error
-            ))))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                    "创建服务文件失败，需要管理员权限: {}",
+                    error
+                ))),
+            )
         }
         Err(e) => {
             tracing::error!("执行命令失败: {}", e);
@@ -772,10 +796,8 @@ WantedBy=multi-user.target
 // 使用权限执行 systemctl 命令
 fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
     // 首先尝试直接执行（可能有 polkit 权限）
-    let direct_result = Command::new("systemctl")
-        .args(args)
-        .output();
-    
+    let direct_result = Command::new("systemctl").args(args).output();
+
     match direct_result {
         Ok(output) if output.status.success() => {
             return Ok(());
@@ -783,13 +805,13 @@ fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
         Ok(_) => {}
         Err(_) => {}
     }
-    
+
     // 尝试 pkexec
     let pkexec_result = Command::new("pkexec")
         .args(["--user", "root", "systemctl"])
         .args(args)
         .output();
-    
+
     match pkexec_result {
         Ok(output) if output.status.success() => {
             return Ok(());
@@ -797,13 +819,10 @@ fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
         Ok(_) => {}
         Err(_) => {}
     }
-    
+
     // 尝试 sudo
-    let sudo_result = Command::new("sudo")
-        .args(["systemctl"])
-        .args(args)
-        .output();
-    
+    let sudo_result = Command::new("sudo").args(["systemctl"]).args(args).output();
+
     match sudo_result {
         Ok(output) if output.status.success() => Ok(()),
         Ok(output) => {
@@ -822,8 +841,7 @@ pub async fn get_smtp_config(
     // 从数据库中获取SMTP配置
     let smtp_config = get_smtp_config_from_db(pool.get_conn()).await;
 
-    Ok(HttpResponse::Ok()
-        .json(ApiResponse::success(smtp_config, "SMTP配置获取成功")))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(smtp_config, "SMTP配置获取成功")))
 }
 
 // 更新SMTP配置
@@ -851,8 +869,12 @@ pub async fn update_smtp_config(
 
     // 保存SMTP配置到数据库
     if let Err(e) = save_smtp_config_to_db(pool.get_conn(), &smtp_config).await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("保存SMTP配置失败: {:?}", e))));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
+                "保存SMTP配置失败: {:?}",
+                e
+            ))),
+        );
     }
 
     // 记录SMTP配置更新日志
@@ -969,7 +991,8 @@ pub async fn send_email(
     }
 
     // 实际发送邮件
-    let send_result: anyhow::Result<()> = send_email_to_users(pool.get_conn(), &req.user_ids, &req.subject, &req.body).await;
+    let send_result: anyhow::Result<()> =
+        send_email_to_users(pool.get_conn(), &req.user_ids, &req.subject, &req.body).await;
 
     // 记录操作日志
     let end_time = chrono::Utc::now();
@@ -1213,40 +1236,53 @@ pub async fn import_certificate(
 pub async fn download_certificate() -> Result<HttpResponse> {
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{}/certs", app_name);
-    
+
     // 获取当前生效的证书类型
     let cert_type = match Config::load() {
-        Ok(config) => config.server.cert_type.unwrap_or_else(|| "self_signed".to_string()),
+        Ok(config) => config
+            .server
+            .cert_type
+            .unwrap_or_else(|| "self_signed".to_string()),
         Err(_) => "self_signed".to_string(),
     };
-    
-    let prefix = if cert_type == "imported" { "import" } else { "create" };
-    
+
+    let prefix = if cert_type == "imported" {
+        "import"
+    } else {
+        "create"
+    };
+
     // 查找最新的证书文件
     let mut latest_cert: Option<(String, SystemTime)> = None;
-    
+
     if let Ok(entries) = std::fs::read_dir(&certs_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(filename) = path.file_name().and_then(|f| f.to_str())
-                && filename.starts_with(prefix) && filename.ends_with(".pem")
-                    && let Ok(metadata) = entry.metadata()
-                        && let Ok(modified) = metadata.modified() {
-                            if let Some((_, latest_time)) = latest_cert {
-                                if modified > latest_time {
-                                    latest_cert = Some((path.to_string_lossy().to_string(), modified));
-                                }
-                            } else {
-                                latest_cert = Some((path.to_string_lossy().to_string(), modified));
-                            }
-                        }
+                && filename.starts_with(prefix)
+                && filename.ends_with(".pem")
+                && let Ok(metadata) = entry.metadata()
+                && let Ok(modified) = metadata.modified()
+            {
+                if let Some((_, latest_time)) = latest_cert {
+                    if modified > latest_time {
+                        latest_cert = Some((path.to_string_lossy().to_string(), modified));
+                    }
+                } else {
+                    latest_cert = Some((path.to_string_lossy().to_string(), modified));
+                }
+            }
         }
     }
-    
+
     if let Some((path, _)) = latest_cert {
         let content = std::fs::read(&path).map_err(actix_web::error::ErrorInternalServerError)?;
-        let filename = std::path::Path::new(&path).file_name().unwrap().to_str().unwrap();
-        
+        let filename = std::path::Path::new(&path)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
+
         Ok(HttpResponse::Ok()
             .content_type("application/x-pem-file")
             .append_header((
@@ -1275,19 +1311,19 @@ fn generate_self_signed_cert(
     // 1. 创建密钥对 (ECDSA P-256)
     // KeyPair::generate() 默认生成 PKCS_ECDSA_P256_SHA256
     let key_pair = KeyPair::generate()?;
-    
+
     // 2. 创建证书参数
     let mut params = CertificateParams::default();
-    
+
     // 设置默认有效期：从现在开始，有效期 10 年
     let now = time::OffsetDateTime::now_utc();
     params.not_before = now;
     params.not_after = now + time::Duration::days(3650); // 10年
-    
+
     if let Some(days) = req.validity {
         params.not_after = now + time::Duration::days(days as i64);
     }
-    
+
     // 3. 设置主体信息 (Distinguished Name)
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, &req.common_name);
@@ -1307,48 +1343,50 @@ fn generate_self_signed_cert(
         dn.push(DnType::LocalityName, locality);
     }
     params.distinguished_name = dn;
-    
+
     // 4. 设置 SAN (Subject Alternative Name)
     let mut sans = Vec::new();
-    
+
     // 从配置的 Public URL 提取 SAN
     if !config.server.public_url.is_empty() {
-         let public_url = &config.server.public_url;
-         // 简单解析 URL
-         let host = public_url.trim_start_matches("http://").trim_start_matches("https://");
-         let host = host.split('/').next().unwrap_or(host);
-         let host = host.split(':').next().unwrap_or(host);
-         
-         if !host.is_empty() {
-             if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-                 sans.push(SanType::IpAddress(ip));
-             } else if let Ok(dns_name) = host.try_into() {
-                 sans.push(SanType::DnsName(dns_name));
-             }
-         }
+        let public_url = &config.server.public_url;
+        // 简单解析 URL
+        let host = public_url
+            .trim_start_matches("http://")
+            .trim_start_matches("https://");
+        let host = host.split('/').next().unwrap_or(host);
+        let host = host.split(':').next().unwrap_or(host);
+
+        if !host.is_empty() {
+            if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+                sans.push(SanType::IpAddress(ip));
+            } else if let Ok(dns_name) = host.try_into() {
+                sans.push(SanType::DnsName(dns_name));
+            }
+        }
     }
-    
+
     // 如果没有提取到 SAN，尝试使用 Common Name
     if sans.is_empty() {
-         if let Ok(ip) = req.common_name.parse::<std::net::IpAddr>() {
-             sans.push(SanType::IpAddress(ip));
-         } else if let Ok(dns_name) = req.common_name.as_str().try_into() {
-             sans.push(SanType::DnsName(dns_name));
-         }
+        if let Ok(ip) = req.common_name.parse::<std::net::IpAddr>() {
+            sans.push(SanType::IpAddress(ip));
+        } else if let Ok(dns_name) = req.common_name.as_str().try_into() {
+            sans.push(SanType::DnsName(dns_name));
+        }
     }
     params.subject_alt_names = sans;
-    
+
     // 5. 设置 Extended Key Usage (服务器认证)
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-    
+
     // 6. 设置 Key Usage (数字签名)
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
-    
+
     // 生成证书
     let cert = params.self_signed(&key_pair)?;
     let cert_pem = cert.pem();
     let key_pem = key_pair.serialize_pem();
-    
+
     // 保存证书和密钥
     std::fs::write(cert_path, cert_pem)?;
     std::fs::write(key_path, key_pem)?;
@@ -1362,7 +1400,7 @@ pub async fn disable_init_mode(
     config: web::Data<Config>,
 ) -> Result<HttpResponse> {
     tracing::info!("收到关闭初始化模式请求");
-    
+
     // 创建更新后的配置，将init.enabled设置为false
     let mut new_config = config.get_ref().clone();
     new_config.init.enabled = false;
@@ -1378,7 +1416,7 @@ pub async fn disable_init_mode(
     })?;
 
     tracing::info!("初始化模式已关闭，配置已保存，正在触发服务重启");
-    
+
     // 使用统一的重启函数
     trigger_service_restart()
 }
@@ -1450,9 +1488,7 @@ pub struct UpdatePageTimeoutRequest {
 }
 
 // 获取会话超时配置
-pub async fn get_session_timeout_config(
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+pub async fn get_session_timeout_config(config: web::Data<Config>) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "session_timeout": config.server.session_timeout
@@ -1555,9 +1591,7 @@ pub async fn update_language_setting(
 }
 
 // 获取页面超时配置
-pub async fn get_page_timeout_config(
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+pub async fn get_page_timeout_config(config: web::Data<Config>) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "page_timeout": config.server.page_timeout
@@ -1599,9 +1633,7 @@ pub struct NotificationSettings {
 }
 
 // 获取通知设置
-pub async fn get_notification_settings(
-    pool: web::Data<DbPool>,
-) -> Result<HttpResponse> {
+pub async fn get_notification_settings(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let recipients = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
@@ -1618,7 +1650,9 @@ pub async fn get_notification_settings(
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
-        NotificationSettings { email_recipients: recipients },
+        NotificationSettings {
+            email_recipients: recipients,
+        },
         "通知设置获取成功",
     )))
 }
@@ -1628,7 +1662,8 @@ pub async fn update_notification_settings(
     pool: web::Data<DbPool>,
     req: web::Json<NotificationSettings>,
 ) -> Result<HttpResponse> {
-    let recipients_str = req.email_recipients
+    let recipients_str = req
+        .email_recipients
         .iter()
         .map(|id| id.to_string())
         .collect::<Vec<String>>()
@@ -1643,9 +1678,7 @@ pub async fn update_notification_settings(
     .bind(&recipients_str)
     .execute(pool.get_conn())
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
 }

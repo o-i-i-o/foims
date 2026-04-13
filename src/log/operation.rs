@@ -12,15 +12,21 @@ pub async fn get_operation_logs(
     let resource_id = query.get("resource_id").cloned().unwrap_or_default();
     let user_id = query.get("user_id").cloned().unwrap_or_default();
     let action = query.get("action").cloned().unwrap_or_default();
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{}%", action);
 
-    let has_filters = !resource_type.is_empty() 
-        || !resource_id.is_empty() 
-        || !user_id.is_empty() 
+    let has_filters = !resource_type.is_empty()
+        || !resource_id.is_empty()
+        || !user_id.is_empty()
         || !action.is_empty();
 
     let (total, logs) = if !has_filters {
@@ -30,9 +36,8 @@ pub async fn get_operation_logs(
         {
             Ok(t) => t,
             Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
             }
         };
 

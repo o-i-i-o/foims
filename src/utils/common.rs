@@ -78,7 +78,10 @@ pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     }
 }
 
-pub fn validate_ip_in_cidr(ip_address: &str, network: &crate::models::Network) -> Result<bool, actix_web::HttpResponse> {
+pub fn validate_ip_in_cidr(
+    ip_address: &str,
+    network: &crate::models::Network,
+) -> Result<bool, actix_web::HttpResponse> {
     let ip_addr = match std::net::IpAddr::from_str(ip_address) {
         Ok(ip) => ip,
         Err(_) => {
@@ -219,28 +222,33 @@ pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, 
     let result = sqlx::query("DELETE FROM revoked_tokens WHERE expiry < NOW()")
         .execute(pool)
         .await?;
-    
+
     let deleted_count = result.rows_affected();
     if deleted_count > 0 {
         info!("Cleaned up {} expired revoked tokens", deleted_count);
     }
-    
+
     Ok(deleted_count)
 }
 
-pub async fn cleanup_old_token_usage(pool: &sqlx::PgPool, days_to_keep: i32) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM token_usage WHERE created_at < NOW() - INTERVAL '1 day' * $1"
-    )
-    .bind(days_to_keep)
-    .execute(pool)
-    .await?;
-    
+pub async fn cleanup_old_token_usage(
+    pool: &sqlx::PgPool,
+    days_to_keep: i32,
+) -> Result<u64, sqlx::Error> {
+    let result =
+        sqlx::query("DELETE FROM token_usage WHERE created_at < NOW() - INTERVAL '1 day' * $1")
+            .bind(days_to_keep)
+            .execute(pool)
+            .await?;
+
     let deleted_count = result.rows_affected();
     if deleted_count > 0 {
-        info!("Cleaned up {} old token usage records (older than {} days)", deleted_count, days_to_keep);
+        info!(
+            "Cleaned up {} old token usage records (older than {} days)",
+            deleted_count, days_to_keep
+        );
     }
-    
+
     Ok(deleted_count)
 }
 
@@ -344,11 +352,12 @@ pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
         return normalize_ipv4_address(real_ip_str.trim());
     }
 
-    let ip = req.connection_info()
+    let ip = req
+        .connection_info()
         .realip_remote_addr()
         .unwrap_or("unknown")
         .to_string();
-    
+
     normalize_ipv4_address(&ip)
 }
 
@@ -370,10 +379,10 @@ pub fn detect_user_language(req: &HttpRequest) -> String {
 
 pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web::HttpResponse {
     use tracing::error;
-    
+
     let err_str = err.to_string();
     error!("数据库错误: {}", err_str);
-    
+
     if err_str.contains("invalid cidr value") {
         return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
@@ -381,7 +390,7 @@ pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web
             "data": null
         }));
     }
-    
+
     if err_str.contains("invalid inet value") {
         return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
@@ -389,7 +398,7 @@ pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web
             "data": null
         }));
     }
-    
+
     if err_str.contains("duplicate key") || err_str.contains("unique constraint") {
         return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
@@ -397,7 +406,7 @@ pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web
             "data": null
         }));
     }
-    
+
     if err_str.contains("foreign key") || err_str.contains("violates foreign key constraint") {
         return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
@@ -405,7 +414,7 @@ pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web
             "data": null
         }));
     }
-    
+
     if err_str.contains("connection") || err_str.contains("timeout") {
         return actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
@@ -413,7 +422,7 @@ pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web
             "data": null
         }));
     }
-    
+
     actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
         "success": false,
         "message": message,
@@ -459,11 +468,25 @@ pub async fn send_mac_change_notification(
         None,
     )
     .await?;
-    info!("MAC地址变更站内通知创建成功: 工位={}, IP={}", workstation_name, ip_address);
+    info!(
+        "MAC地址变更站内通知创建成功: 工位={}, IP={}",
+        workstation_name, ip_address
+    );
 
-    match crate::system::smtp::send_mac_change_email(pool, &workstation_name, ip_address, old_mac, new_mac).await {
+    match crate::system::smtp::send_mac_change_email(
+        pool,
+        &workstation_name,
+        ip_address,
+        old_mac,
+        new_mac,
+    )
+    .await
+    {
         Ok(_) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
-        Err(e) => error!("MAC地址变更邮件通知发送失败: 工位={}, 错误: {}", workstation_name, e),
+        Err(e) => error!(
+            "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
+            workstation_name, e
+        ),
     }
 
     Ok(())
@@ -682,7 +705,7 @@ pub const NETWORK_QUERY: &str = r#"
 
 pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Network {
     use sqlx::Row;
-    
+
     crate::models::Network {
         id: row.get(0),
         name: row.get(1),
@@ -692,8 +715,12 @@ pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Net
         ipv6_cidr: row.get(5),
         ipv4_gateway: row.get(6),
         ipv6_gateway: row.get(7),
-        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
+        ipv4_dns: row
+            .get::<Option<serde_json::Value>, _>(8)
+            .and_then(|v| serde_json::from_value(v).ok()),
+        ipv6_dns: row
+            .get::<Option<serde_json::Value>, _>(9)
+            .and_then(|v| serde_json::from_value(v).ok()),
         description: row.get(12),
         created_at: row.get(13),
         updated_at: row.get(14),

@@ -100,7 +100,10 @@ impl JwtUtils {
     // 验证密钥强度
     fn validate_secret_strength(secret: &str) {
         if secret.len() < 22 {
-            panic!("JWT密钥长度不足22个字符，请配置更强的密钥。当前长度: {}", secret.len());
+            panic!(
+                "JWT密钥长度不足22个字符，请配置更强的密钥。当前长度: {}",
+                secret.len()
+            );
         }
 
         // 检查密钥复杂度
@@ -186,9 +189,9 @@ impl JwtUtils {
             self.config.refresh_token_expiry
         } else {
             // 未勾选保持登录，Refresh Token 有效期设为 24 小时
-            86400 
+            86400
         };
-        
+
         let exp = (now + Duration::seconds(expiry_seconds as i64)).timestamp() as usize;
         let iat = now.timestamp() as usize;
         let jti = Uuid::new_v4().to_string();
@@ -271,7 +274,8 @@ impl JwtUtils {
 
         let decoded = decode::<JwtClaims>(token, &self.decoding_key, &validation)?;
 
-        self.token_cache.insert(token.to_string(), (decoded.claims.clone(), Utc::now()));
+        self.token_cache
+            .insert(token.to_string(), (decoded.claims.clone(), Utc::now()));
 
         Ok(decoded.claims)
     }
@@ -320,7 +324,7 @@ pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String
             return Some(token.to_string());
         }
     }
-    
+
     // 回退到 Authorization 头（用于向后兼容或 API 调用）
     req.headers()
         .get("Authorization")
@@ -349,7 +353,10 @@ pub fn get_client_info(req: &actix_web::HttpRequest) -> (String, String) {
         .unwrap_or("unknown")
         .to_string();
 
-    (crate::utils::normalize_ipv4_address(&ip_address), user_agent)
+    (
+        crate::utils::normalize_ipv4_address(&ip_address),
+        user_agent,
+    )
 }
 
 // 从ServiceRequest中提取令牌

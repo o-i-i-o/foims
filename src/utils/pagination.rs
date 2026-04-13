@@ -16,12 +16,22 @@ impl Pagination {
         let page = page.max(1);
         let page_size = page_size.clamp(1, MAX_PAGE_SIZE);
         let offset = (page - 1) * page_size;
-        Self { page, page_size, offset }
+        Self {
+            page,
+            page_size,
+            offset,
+        }
     }
 
     pub fn from_query(query: &HashMap<String, String>) -> Self {
-        let page = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-        let page_size = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE_SIZE);
+        let page = query
+            .get("page")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_PAGE);
+        let page_size = query
+            .get("page_size")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_PAGE_SIZE);
         Self::new(page, page_size)
     }
 

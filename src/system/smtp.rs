@@ -50,7 +50,7 @@ pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
                             "password" => password = decrypt_password(&value),
                             "from" => from = value,
                             "secure" => secure = value.parse().unwrap_or(false),
-                            _ => {},
+                            _ => {}
                         }
                     }
                 }
@@ -117,13 +117,19 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
         // 对于需要安全连接的情况，使用SSL配置
         SmtpTransport::relay(&config.host)?
             .port(config.port)
-            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .credentials(Credentials::new(
+                config.username.clone(),
+                config.password.clone(),
+            ))
             .build()
     } else {
         // 非安全连接
         SmtpTransport::builder_dangerous(&config.host)
             .port(config.port)
-            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .credentials(Credentials::new(
+                config.username.clone(),
+                config.password.clone(),
+            ))
             .build()
     };
 
@@ -140,7 +146,9 @@ pub async fn send_email_to_users(
     body: &str,
 ) -> Result<()> {
     // 获取SMTP配置
-    let smtp_config = get_smtp_config_from_db(pool).await.ok_or_else(|| anyhow::anyhow!("SMTP配置未设置"))?;
+    let smtp_config = get_smtp_config_from_db(pool)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("SMTP配置未设置"))?;
 
     // 根据user_ids查询用户邮箱
     let users = sqlx::query("SELECT email FROM users WHERE id = ANY($1)")
@@ -182,12 +190,18 @@ pub async fn send_email_to_users(
     let transport = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
         SmtpTransport::relay(&smtp_config.host)?
             .port(smtp_config.port)
-            .credentials(Credentials::new(smtp_config.username.clone(), smtp_config.password.clone()))
+            .credentials(Credentials::new(
+                smtp_config.username.clone(),
+                smtp_config.password.clone(),
+            ))
             .build()
     } else {
         SmtpTransport::builder_dangerous(&smtp_config.host)
             .port(smtp_config.port)
-            .credentials(Credentials::new(smtp_config.username.clone(), smtp_config.password.clone()))
+            .credentials(Credentials::new(
+                smtp_config.username.clone(),
+                smtp_config.password.clone(),
+            ))
             .build()
     };
 
@@ -235,6 +249,11 @@ pub async fn send_mac_change_email(
         workstation_name, workstation_name, ip_address, old_mac, new_mac
     );
 
-    send_email_to_users(pool, &user_ids, &format!("MAC地址变更通知 - 工位: {}", workstation_name), &email_body)
-        .await
+    send_email_to_users(
+        pool,
+        &user_ids,
+        &format!("MAC地址变更通知 - 工位: {}", workstation_name),
+        &email_body,
+    )
+    .await
 }

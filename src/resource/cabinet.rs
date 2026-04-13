@@ -5,7 +5,7 @@ use crate::models::{
     CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
-use crate::utils::{log_system_operation, validate_ip_in_cidr, DEFAULT_PAGE};
+use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -18,12 +18,26 @@ pub async fn get_positions(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query.get("page_size").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let page: i64 = query
+        .get("page")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PAGE);
+    let page_size: i64 = query
+        .get("page_size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
-    let cabinet_id = query.get("cabinet_id").and_then(|id| Uuid::parse_str(id).ok());
-    let sort_by = query.get("sort_by").cloned().unwrap_or_else(|| "name".to_string());
-    let sort_order = query.get("sort_order").cloned().unwrap_or_else(|| "asc".to_string());
+    let cabinet_id = query
+        .get("cabinet_id")
+        .and_then(|id| Uuid::parse_str(id).ok());
+    let sort_by = query
+        .get("sort_by")
+        .cloned()
+        .unwrap_or_else(|| "name".to_string());
+    let sort_order = query
+        .get("sort_order")
+        .cloned()
+        .unwrap_or_else(|| "asc".to_string());
     let offset = (page - 1) * page_size;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -60,7 +74,7 @@ pub async fn get_positions(
                         SELECT id FROM positions WHERE cabinet_id = $1
                         UNION ALL
                         SELECT id FROM switches WHERE cabinet_id = $1
-                    ) AS combined"#
+                    ) AS combined"#,
                 )
                 .bind(cid)
                 .fetch_one(pool.get_conn())
@@ -73,7 +87,7 @@ pub async fn get_positions(
                     SELECT id FROM positions WHERE name ILIKE $1 OR description ILIKE $1
                     UNION ALL
                     SELECT id FROM switches WHERE name ILIKE $1 OR description ILIKE $1
-                ) AS combined"#
+                ) AS combined"#,
             )
             .bind(&pattern)
             .fetch_one(pool.get_conn())
@@ -91,7 +105,7 @@ pub async fn get_positions(
                 SELECT id FROM positions
                 UNION ALL
                 SELECT id FROM switches WHERE cabinet_id IS NOT NULL
-            ) AS combined"#
+            ) AS combined"#,
         )
         .fetch_one(pool.get_conn())
         .await
@@ -256,7 +270,8 @@ pub async fn get_positions(
         Vec::new()
     };
 
-    let mut ports_map: std::collections::HashMap<Uuid, Vec<CabinetPositionPortWithSwitchPort>> = std::collections::HashMap::new();
+    let mut ports_map: std::collections::HashMap<Uuid, Vec<CabinetPositionPortWithSwitchPort>> =
+        std::collections::HashMap::new();
     for port in all_ports {
         ports_map.entry(port.position_id).or_default().push(port);
     }
@@ -275,9 +290,9 @@ pub async fn get_positions(
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-        
+
         let ports = ports_map.get(&id).cloned().unwrap_or_default();
-        
+
         let position_with_details = CabinetPositionWithDetails {
             id,
             name,
@@ -397,11 +412,15 @@ pub async fn create_cabinet_position(
 
             let network = match sqlx::query(crate::utils::NETWORK_QUERY)
                 .bind(ip.network_id)
-                .fetch_optional(&mut *tx).await {
+                .fetch_optional(&mut *tx)
+                .await
+            {
                 Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
                 Ok(None) => {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到")));
-                },
+                    return Ok(
+                        HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到"))
+                    );
+                }
                 Err(err) => {
                     return Ok(crate::utils::handle_db_error(err, "查询网络失败"));
                 }
@@ -506,13 +525,17 @@ pub async fn get_cabinet_position(
            SELECT id, name, cabinet_id, start_u, end_u, NULL as network_id, description, 
                   'switch' as device_type,
                   created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
-           FROM switches WHERE id = $1"#
-    ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+           FROM switches WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(pool.get_conn())
+    .await
+    {
         Ok(Some(row)) => row,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error("机位未找到")));
-        },
+            return Ok(HttpResponse::NotFound()
+                .json(ApiResponse::<serde_json::Value>::error("机位未找到")));
+        }
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询机位失败"));
         }
@@ -536,9 +559,12 @@ pub async fn get_cabinet_position(
             LEFT JOIN network_cidrs n ON m.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
             WHERE m.switch_id = $1
-            ORDER BY m.ip_address"#
-        ).bind(id)
-        .fetch_all(pool.get_conn()).await {
+            ORDER BY m.ip_address"#,
+        )
+        .bind(id)
+        .fetch_all(pool.get_conn())
+        .await
+        {
             Ok(ips) => ips,
             Err(err) => {
                 return Ok(crate::utils::handle_db_error(err, "查询交换机IP信息失败"));
@@ -558,9 +584,12 @@ pub async fn get_cabinet_position(
             LEFT JOIN network_cidrs n ON m.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
             WHERE m.position_id = $1
-            ORDER BY m.ip_address"#
-        ).bind(id)
-        .fetch_all(pool.get_conn()).await {
+            ORDER BY m.ip_address"#,
+        )
+        .bind(id)
+        .fetch_all(pool.get_conn())
+        .await
+        {
             Ok(ips) => ips,
             Err(err) => {
                 return Ok(crate::utils::handle_db_error(err, "查询机位IP信息失败"));
@@ -568,27 +597,30 @@ pub async fn get_cabinet_position(
         }
     };
 
-    let ips_with_region: Vec<serde_json::Value> = position_ips.into_iter().map(|row| {
-        serde_json::json!({
-            "id": row.get::<Uuid, _>(0),
-            "workstation_id": row.get::<Option<Uuid>, _>(1),
-            "position_id": row.get::<Option<Uuid>, _>(2),
-            "switch_id": row.get::<Option<Uuid>, _>(3),
-            "switch_port_id": row.get::<Option<Uuid>, _>(4),
-            "device_type": row.get::<Option<String>, _>(5),
-            "network_id": row.get::<Uuid, _>(6),
-            "ip_address": row.get::<String, _>(7),
-            "ip_version": row.get::<i16, _>(8),
-            "mac_address": row.get::<Option<String>, _>(9),
-            "hostname": row.get::<Option<String>, _>(10),
-            "status": row.get::<String, _>(11),
-            "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
-            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(13),
-            "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(14),
-            "network_region_id": row.get::<Option<Uuid>, _>(15),
-            "network_region": row.get::<Option<String>, _>(16)
+    let ips_with_region: Vec<serde_json::Value> = position_ips
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "id": row.get::<Uuid, _>(0),
+                "workstation_id": row.get::<Option<Uuid>, _>(1),
+                "position_id": row.get::<Option<Uuid>, _>(2),
+                "switch_id": row.get::<Option<Uuid>, _>(3),
+                "switch_port_id": row.get::<Option<Uuid>, _>(4),
+                "device_type": row.get::<Option<String>, _>(5),
+                "network_id": row.get::<Uuid, _>(6),
+                "ip_address": row.get::<String, _>(7),
+                "ip_version": row.get::<i16, _>(8),
+                "mac_address": row.get::<Option<String>, _>(9),
+                "hostname": row.get::<Option<String>, _>(10),
+                "status": row.get::<String, _>(11),
+                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(13),
+                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(14),
+                "network_region_id": row.get::<Option<Uuid>, _>(15),
+                "network_region": row.get::<Option<String>, _>(16)
+            })
         })
-    }).collect();
+        .collect();
 
     let cabinet_name: String = if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
         let cabinet_id: Uuid = position_data.get("cabinet_id");
@@ -771,8 +803,12 @@ pub async fn update_cabinet_position(
         }
 
         for ip in ips {
-            let ip_version = if ip.ip_address.contains(":") { 6i16 } else { 4i16 };
-            
+            let ip_version = if ip.ip_address.contains(":") {
+                6i16
+            } else {
+                4i16
+            };
+
             if is_switch {
                 if let Err(err) = sqlx::query(
                     "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id as parent_switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
@@ -822,7 +858,8 @@ pub async fn update_cabinet_position(
     }
 
     if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
     let (row, ips, device_type) = if is_switch {
@@ -875,7 +912,9 @@ pub async fn update_cabinet_position(
         id: row.get("id"),
         name: row.get("name"),
         cabinet_id: row.get("cabinet_id"),
-        cabinet_name: row.get::<Option<String>, _>("cabinet_name").unwrap_or_default(),
+        cabinet_name: row
+            .get::<Option<String>, _>("cabinet_name")
+            .unwrap_or_default(),
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
         network_id: row.get("network_id"),
@@ -962,11 +1001,9 @@ pub async fn delete_cabinet_position(
     .unwrap_or(false);
 
     if has_switch {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "该机位已关联交换机，请通过删除交换机来删除机位"
-            ))
-        );
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "该机位已关联交换机，请通过删除交换机来删除机位",
+        )));
     }
 
     if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
@@ -996,7 +1033,8 @@ pub async fn delete_cabinet_position(
     }
 
     if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error(format!("提交事务失败: {}", err))));
     }
 
     let details = serde_json::json!({
