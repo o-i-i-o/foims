@@ -213,7 +213,7 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
 }
 
 async fn log_task_execution(pool: &DbPool, task_name: &str, status: &str, details: &str) {
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
            VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
     )
@@ -225,7 +225,10 @@ async fn log_task_execution(pool: &DbPool, task_name: &str, status: &str, detail
     .bind(Utc::now())
     .bind(0i32)
     .execute(pool.get_conn())
-    .await;
+    .await
+    {
+        tracing::warn!("记录任务日志失败: {}", e);
+    }
 }
 
 async fn sync_user_tasks_from_db(pool: &DbPool) -> Result<(), String> {

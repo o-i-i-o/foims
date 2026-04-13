@@ -307,8 +307,11 @@ pub async fn login_with_email_code(
         let trimmed_db_code = c.trim();
         if trimmed_db_code == trimmed_input_code && e > Utc::now() {
             verified = true;
-            let _ = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
-                .bind(id).execute(&pool.pool).await;
+            if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
+                .bind(id).execute(&pool.pool).await
+            {
+                tracing::warn!("清除2FA邮箱验证码失败: {}", e);
+            }
         }
     }
 
@@ -443,8 +446,12 @@ pub async fn send_login_code(
         .collect();
     let expiry = Utc::now() + chrono::Duration::minutes(5);
 
-    let _ = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
-        .bind(&code).bind(expiry).bind(id).execute(&pool.pool).await;
+    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
+        .bind(&code).bind(expiry).bind(id).execute(&pool.pool).await
+    {
+        tracing::error!("保存2FA邮箱验证码失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
+    }
 
     let smtp_config = get_smtp_config_from_db(&pool.pool).await;
     if let Some(smtp_config) = smtp_config {
@@ -693,7 +700,10 @@ pub async fn send_two_factor_code(
         .map(|_| rng.random_range(0..10).to_string())
         .collect();
     let expiry = Utc::now() + chrono::Duration::minutes(5);
-    let _ = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3").bind(&code).bind(expiry).bind(user.0).execute(&pool.pool).await;
+    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3").bind(&code).bind(expiry).bind(user.0).execute(&pool.pool).await {
+        tracing::error!("保存2FA邮箱验证码失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
+    }
 
     // 发邮件逻辑...
 
@@ -948,11 +958,15 @@ pub async fn init_two_factor(
 
     // 将密钥加密后存储到数据库（尚未启用）
     let encrypted_secret = encrypt_password(&secret_base32);
-    let _ = sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
+    if let Err(e) = sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
         .bind(target_user_id)
         .execute(&pool.pool)
-        .await;
+        .await
+    {
+        tracing::error!("保存2FA密钥失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存2FA密钥失败")));
+    }
 
     // 返回密钥和otpauth URL
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -1077,12 +1091,16 @@ pub async fn enable_two_factor(
     }
 
     // 启用2FA
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1",
     )
     .bind(target_user_id)
     .execute(&pool.pool)
-    .await;
+    .await
+    {
+        tracing::error!("启用2FA失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("启用2FA失败")));
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已启用")))
 }
@@ -1187,12 +1205,16 @@ pub async fn disable_two_factor(
     }
 
     // 禁用2FA并清除密钥
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_verified = false WHERE id = $1"
     )
     .bind(target_user_id)
     .execute(&pool.pool)
-    .await;
+    .await
+    {
+        tracing::error!("禁用2FA失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("禁用2FA失败")));
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已禁用")))
 }

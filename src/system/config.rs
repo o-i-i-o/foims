@@ -961,14 +961,17 @@ pub async fn test_smtp_connection(
         )
     };
 
-    let _ = sqlx::query("UPDATE task_logs SET status = $1, end_time = $2, duration = $3, details = $4 WHERE id = $5")
+    if let Err(e) = sqlx::query("UPDATE task_logs SET status = $1, end_time = $2, duration = $3, details = $4 WHERE id = $5")
         .bind(status)
         .bind(end_time)
         .bind(duration as i32)
         .bind(sqlx::types::Json(details))
         .bind(task_id)
         .execute(pool.get_conn())
-        .await;
+        .await
+    {
+        tracing::warn!("更新SMTP测试日志失败: {}", e);
+    }
 
     match test_result {
         Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功"))),

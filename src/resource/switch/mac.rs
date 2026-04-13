@@ -434,7 +434,7 @@ pub async fn get_switch_mac_table(
 
     for entry in &entries {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_macs WHERE switch_id = $1 AND ip_address = $2)",
+            "SELECT EXISTS(SELECT 1 FROM switch_macs WHERE switch_id = $1 AND ip_address = CAST($2 AS INET))",
         )
         .bind(switch_id)
         .bind(&entry.ip_address)
@@ -448,7 +448,7 @@ pub async fn get_switch_mac_table(
                     mac_address = $1, 
                     interface = COALESCE($2, interface),
                     updated_at = $3
-                WHERE switch_id = $4 AND ip_address = $5"#,
+                WHERE switch_id = $4 AND ip_address = CAST($5 AS INET)"#,
             )
             .bind(&entry.mac_address)
             .bind(&entry.interface)
@@ -465,7 +465,7 @@ pub async fn get_switch_mac_table(
             let id = Uuid::new_v4();
             let result = sqlx::query(
                 r#"INSERT INTO switch_macs (id, switch_id, ip_address, mac_address, interface, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $6)"#
+                   VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $6)"#
             )
             .bind(id)
             .bind(switch_id)

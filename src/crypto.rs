@@ -6,7 +6,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use std::fs;
 use std::path::Path;
-use tracing::info;
+use tracing::{error, info};
 
 const NONCE_SIZE: usize = 12;
 
@@ -15,26 +15,35 @@ pub fn get_encryption_key() -> Vec<u8> {
     let key_path = format!("/etc/{}/encryption.key", app_name);
 
     let key_dir = Path::new(&key_path).parent().unwrap();
-    if !key_dir.exists() {
-        fs::create_dir_all(key_dir).unwrap_or_else(|e| {
-            info!("创建加密密钥目录失败: {}", e);
-        });
-    }
-
-    if Path::new(&key_path).exists()
-        && let Ok(key) = fs::read(&key_path)
-        && key.len() == 32
+    if !key_dir.exists()
+        && let Err(e) = fs::create_dir_all(key_dir)
     {
-        return key;
+        error!("创建加密密钥目录失败: {}", e);
+        panic!("创建加密密钥目录失败: {}", e);
     }
 
+    if Path::new(&key_path).exists() {
+        if let Ok(key) = fs::read(&key_path) {
+            if key.len() == 32 {
+                return key;
+            }
+            error!("加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥", key.len());
+            panic!("加密密钥文件长度不正确（期望32字节，实际{}字节）", key.len());
+        }
+        error!("读取加密密钥文件失败，请检查文件权限");
+        panic!("读取加密密钥文件失败，请检查文件权限");
+    }
+
+    info!("加密密钥文件不存在，正在自动生成新密钥: {}", key_path);
     let mut key = vec![0u8; 32];
     rand::rng().fill(&mut key);
 
     if let Err(e) = fs::write(&key_path, &key) {
-        info!("保存加密密钥失败: {}", e);
+        error!("保存加密密钥失败: {}", e);
+        panic!("保存加密密钥失败: {}", e);
     }
 
+    info!("加密密钥已生成并保存到: {}", key_path);
     key
 }
 

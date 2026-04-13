@@ -345,7 +345,7 @@ pub async fn create_switch(
                 let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
 
                 let ip_manager_id = Uuid::new_v4();
-                let _ = sqlx::query(
+                if let Err(e) = sqlx::query(
                     "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
                      VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
                 )
@@ -362,7 +362,12 @@ pub async fn create_switch(
                 .bind(now)
                 .bind(now)
                 .execute(pool.get_conn())
-                .await;
+                .await
+                {
+                    tracing::error!("创建交换机IP记录失败: {}", e);
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error(format!("创建IP记录失败: {}", e))));
+                }
             }
 
             let switch = sqlx::query_as::<_, Switch>(
@@ -536,10 +541,13 @@ pub async fn update_switch(
     match result {
         Ok(_) => {
             if let Some(ips) = &req.ips {
-                let _ = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
+                if let Err(e) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
                     .bind(id)
                     .execute(pool.get_conn())
-                    .await;
+                    .await
+                {
+                    tracing::error!("删除交换机旧IP记录失败: {}", e);
+                }
 
                 for ip in ips {
                     let ip_exists = sqlx::query_scalar::<_, bool>(
@@ -560,7 +568,7 @@ pub async fn update_switch(
                     let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
 
                     let ip_manager_id = Uuid::new_v4();
-                    let _ = sqlx::query(
+                    if let Err(e) = sqlx::query(
                         "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
                          VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
                     )
@@ -577,7 +585,12 @@ pub async fn update_switch(
                     .bind(now)
                     .bind(now)
                     .execute(pool.get_conn())
-                    .await;
+                    .await
+                    {
+                        tracing::error!("更新交换机IP记录失败: {}", e);
+                        return Ok(HttpResponse::InternalServerError()
+                            .json(ApiResponse::<()>::error(format!("创建IP记录失败: {}", e))));
+                    }
                 }
             }
 
@@ -661,10 +674,13 @@ pub async fn delete_switch(
             .json(ApiResponse::<()>::error("该交换机存在下级交换机，无法删除")));
     }
 
-    let _ = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
+    if let Err(e) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
         .bind(id)
         .execute(pool.get_conn())
-        .await;
+        .await
+    {
+        tracing::error!("删除交换机IP记录失败: {}", e);
+    }
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")
         .bind(id)

@@ -91,11 +91,14 @@ pub async fn update_scheduled_task(
     if let Some(ref cron_expr) = req.cron_expression
         && let Ok(next_run) = calculate_next_run(cron_expr)
     {
-        let _ = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
+        if let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
             .bind(next_run)
             .bind(id)
             .execute(pool.get_conn())
-            .await;
+            .await
+        {
+            tracing::warn!("更新下次运行时间失败: {}", e);
+        }
     }
 
     let result = sqlx::query(
@@ -253,7 +256,7 @@ pub async fn run_scheduled_task_now(
         ),
     };
 
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
            VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
     )
@@ -265,7 +268,10 @@ pub async fn run_scheduled_task_now(
     .bind(end_time)
     .bind(duration)
     .execute(pool.get_conn())
-    .await;
+    .await
+    {
+        tracing::warn!("记录任务日志失败: {}", e);
+    }
 
     let next_run_at = calculate_next_run(&task.cron_expression).ok();
 
