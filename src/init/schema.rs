@@ -1,5 +1,6 @@
 use sqlx::Row;
 use tracing::warn;
+use uuid::Uuid;
 
 pub async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
@@ -582,6 +583,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_mac_history_switch_port_id(pool).await?;
     migrate_log_cleanup_tasks(pool).await?;
     migrate_log_table_partitions(pool).await?;
+    migrate_switch_position_link(pool).await?;
     Ok(())
 }
 
@@ -975,6 +977,75 @@ async fn migrate_log_table_partitions(pool: &sqlx::PgPool) -> Result<(), sqlx::E
 
         sqlx::query(
             r#"INSERT INTO schema_migrations (version, description) VALUES ('log_table_partitions', '日志表按时间分区（RANGE by month）')"#
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'switch_position_link'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        let rows = sqlx::query(
+            r#"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+               FROM switches s
+               WHERE s.cabinet_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM ip_managers im WHERE im.switch_id = s.id AND im.position_id IS NOT NULL
+               )"#
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        for row in &rows {
+            let switch_id: Uuid = row.get("id");
+            let name: String = row.get("name");
+            let cabinet_id: Option<Uuid> = row.get("cabinet_id");
+            let start_u: Option<i32> = row.get("start_u");
+            let end_u: Option<i32> = row.get("end_u");
+            let description: Option<String> = row.get("description");
+
+            let pos_id = Uuid::new_v4();
+            if let Err(e) = sqlx::query(
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+            )
+            .bind(pos_id)
+            .bind(&name)
+            .bind(cabinet_id)
+            .bind(start_u.unwrap_or(1i32))
+            .bind(end_u.unwrap_or(1i32))
+            .bind(&description)
+            .execute(pool)
+            .await
+            {
+                warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
+                continue;
+            }
+
+            if let Err(e) = sqlx::query(
+                "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2 AND position_id IS NULL"
+            )
+            .bind(pos_id)
+            .bind(switch_id)
+            .execute(pool)
+            .await
+            {
+                warn!("关联交换机 {} 的IP到机位失败: {}", switch_id, e);
+            }
+        }
+
+        sqlx::query(
+            r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_link', '为有cabinet_id但无position关联的交换机创建position记录并关联ip_managers')"#
         )
         .execute(pool)
         .await?;

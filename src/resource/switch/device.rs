@@ -324,6 +324,31 @@ pub async fn create_switch(
 
     match result {
         Ok(_) => {
+            let position_id = if req.cabinet_id.is_some() {
+                let pos_id = Uuid::new_v4();
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+                )
+                .bind(pos_id)
+                .bind(&req.name)
+                .bind(req.cabinet_id)
+                .bind(req.start_u.unwrap_or(1))
+                .bind(req.end_u.unwrap_or(1))
+                .bind(&req.description)
+                .bind(now)
+                .bind(now)
+                .execute(pool.get_conn())
+                .await
+                {
+                    tracing::error!("创建交换机关联机位记录失败: {}", e);
+                    None
+                } else {
+                    Some(pos_id)
+                }
+            } else {
+                None
+            };
+
             for ip in ips {
                 let ip_exists = sqlx::query_scalar::<_, bool>(
                     "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
@@ -346,8 +371,8 @@ pub async fn create_switch(
 
                 let ip_manager_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
+                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
                 )
                 .bind(ip_manager_id)
                 .bind(id)
@@ -357,6 +382,7 @@ pub async fn create_switch(
                 .bind(ip_version)
                 .bind(&ip.mac_address)
                 .bind(&ip.hostname)
+                .bind(position_id)
                 .bind("active")
                 .bind(now)
                 .bind(now)
@@ -540,7 +566,102 @@ pub async fn update_switch(
 
     match result {
         Ok(_) => {
+            if req.cabinet_id.is_some() || req.start_u.is_some() || req.end_u.is_some() || req.name.is_some() {
+                let existing_position_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+                )
+                .bind(id)
+                .fetch_optional(pool.get_conn())
+                .await
+                .unwrap_or(None);
+
+                if let Some(pos_id) = existing_position_id {
+                    let mut updates = Vec::new();
+                    let mut param_idx = 2u32;
+
+                    if req.name.is_some() {
+                        updates.push(format!("name = ${}", param_idx));
+                        param_idx += 1;
+                    }
+                    if req.cabinet_id.is_some() {
+                        updates.push(format!("cabinet_id = ${}", param_idx));
+                        param_idx += 1;
+                    }
+                    if req.start_u.is_some() {
+                        updates.push(format!("start_u = ${}", param_idx));
+                        param_idx += 1;
+                    }
+                    if req.end_u.is_some() {
+                        updates.push(format!("end_u = ${}", param_idx));
+                        param_idx += 1;
+                    }
+                    updates.push("updated_at = $1".to_string());
+
+                    if !updates.is_empty() {
+                        let query_str = format!(
+                            "UPDATE positions SET {} WHERE id = ${}",
+                            updates.join(", "),
+                            param_idx
+                        );
+
+                        let mut query = sqlx::query(&query_str).bind(now);
+                        if let Some(ref name) = req.name {
+                            query = query.bind(name);
+                        }
+                        if let Some(cabinet_id) = req.cabinet_id {
+                            query = query.bind(cabinet_id);
+                        }
+                        if let Some(start_u) = req.start_u {
+                            query = query.bind(start_u);
+                        }
+                        if let Some(end_u) = req.end_u {
+                            query = query.bind(end_u);
+                        }
+                        query = query.bind(pos_id);
+
+                        if let Err(e) = query.execute(pool.get_conn()).await {
+                            tracing::error!("同步更新交换机关联机位失败: {}", e);
+                        }
+                    }
+                } else if req.cabinet_id.is_some() {
+                    let pos_id = Uuid::new_v4();
+                    if let Err(e) = sqlx::query(
+                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+                    )
+                    .bind(pos_id)
+                    .bind(req.name.as_ref().unwrap_or(&String::new()))
+                    .bind(req.cabinet_id)
+                    .bind(req.start_u.unwrap_or(1))
+                    .bind(req.end_u.unwrap_or(1))
+                    .bind(&req.description)
+                    .bind(now)
+                    .bind(now)
+                    .execute(pool.get_conn())
+                    .await
+                    {
+                        tracing::error!("创建交换机关联机位记录失败: {}", e);
+                    } else if let Err(e) = sqlx::query(
+                        "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2"
+                    )
+                    .bind(pos_id)
+                    .bind(id)
+                    .execute(pool.get_conn())
+                    .await
+                    {
+                        tracing::error!("关联交换机IP到机位失败: {}", e);
+                    }
+                }
+            }
+
             if let Some(ips) = &req.ips {
+                let position_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+                )
+                .bind(id)
+                .fetch_optional(pool.get_conn())
+                .await
+                .unwrap_or(None);
+
                 if let Err(e) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
                     .bind(id)
                     .execute(pool.get_conn())
@@ -569,8 +690,8 @@ pub async fn update_switch(
 
                     let ip_manager_id = Uuid::new_v4();
                     if let Err(e) = sqlx::query(
-                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
+                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, status, last_seen, created_at, updated_at) 
+                         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
                     )
                     .bind(ip_manager_id)
                     .bind(id)
@@ -580,6 +701,7 @@ pub async fn update_switch(
                     .bind(ip_version)
                     .bind(&ip.mac_address)
                     .bind(&ip.hostname)
+                    .bind(position_id)
                     .bind("active")
                     .bind(now)
                     .bind(now)
@@ -680,6 +802,24 @@ pub async fn delete_switch(
         .await
     {
         tracing::error!("删除交换机IP记录失败: {}", e);
+    }
+
+    let linked_position_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT p.id FROM positions p JOIN ip_managers im ON im.position_id = p.id WHERE im.switch_id = $1"
+    )
+    .bind(id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
+
+    for pos_id in &linked_position_ids {
+        if let Err(e) = sqlx::query("DELETE FROM positions WHERE id = $1")
+            .bind(pos_id)
+            .execute(pool.get_conn())
+            .await
+        {
+            tracing::error!("删除交换机关联机位失败: {}", e);
+        }
     }
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")

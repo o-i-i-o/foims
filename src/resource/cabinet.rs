@@ -703,13 +703,23 @@ pub async fn update_cabinet_position(
             }
         };
 
-    let existing_switch: Option<Uuid> = if existing_position.is_none() {
+    let (switch_id, linked_position_id): (Option<Uuid>, Option<Uuid>) = if existing_position.is_none() {
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await
         {
-            Ok(switch) => switch,
+            Ok(Some(sid)) => {
+                let linked_pos: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+                )
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .unwrap_or(None);
+                (Some(sid), linked_pos)
+            }
+            Ok(None) => (None, None),
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
@@ -720,16 +730,17 @@ pub async fn update_cabinet_position(
             }
         }
     } else {
-        None
+        (None, None)
     };
 
-    if existing_position.is_none() && existing_switch.is_none() {
+    if existing_position.is_none() && switch_id.is_none() {
         return Ok(
             HttpResponse::NotFound().json(ApiResponse::<CabinetPosition>::error("机位未找到"))
         );
     }
 
-    let is_switch = existing_switch.is_some();
+    let is_switch = switch_id.is_some();
+    let effective_position_id = existing_position.or(linked_position_id);
 
     let now = Utc::now();
 
@@ -757,17 +768,72 @@ pub async fn update_cabinet_position(
             return Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
         }
+
+        if let Some(pos_id) = effective_position_id {
+            if let Err(err) = sqlx::query(
+                "UPDATE positions SET 
+                 name = COALESCE($1, name), 
+                 cabinet_id = COALESCE($2, cabinet_id),
+                 start_u = COALESCE($3, start_u),
+                 end_u = COALESCE($4, end_u),
+                 description = COALESCE($5, description), 
+                 updated_at = $6 
+                 WHERE id = $7",
+            )
+            .bind(&req.name)
+            .bind(req.cabinet_id)
+            .bind(req.start_u)
+            .bind(req.end_u)
+            .bind(&req.description)
+            .bind(now)
+            .bind(pos_id)
+            .execute(&mut *tx)
+            .await
+            {
+                tracing::error!("同步更新交换机关联机位失败: {}", err);
+            }
+        } else if req.cabinet_id.is_some() {
+            let pos_id = Uuid::new_v4();
+            let switch_name: String = req.name.clone().unwrap_or_default();
+            if let Err(err) = sqlx::query(
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+            )
+            .bind(pos_id)
+            .bind(&switch_name)
+            .bind(req.cabinet_id)
+            .bind(req.start_u.unwrap_or(1))
+            .bind(req.end_u.unwrap_or(1))
+            .bind(&req.description)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            {
+                tracing::error!("创建交换机关联机位记录失败: {}", err);
+            } else if let Err(err) = sqlx::query(
+                "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2"
+            )
+            .bind(pos_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            {
+                tracing::error!("关联交换机IP到机位失败: {}", err);
+            }
+        }
     } else {
         if let Err(err) = sqlx::query(
             "UPDATE positions SET 
              name = COALESCE($1, name), 
-             start_u = COALESCE($2, start_u),
-             end_u = COALESCE($3, end_u),
-             description = COALESCE($4, description), 
-             updated_at = $5 
-             WHERE id = $6",
+             cabinet_id = COALESCE($2, cabinet_id),
+             start_u = COALESCE($3, start_u),
+             end_u = COALESCE($4, end_u),
+             description = COALESCE($5, description), 
+             updated_at = $6 
+             WHERE id = $7",
         )
         .bind(&req.name)
+        .bind(req.cabinet_id)
         .bind(req.start_u)
         .bind(req.end_u)
         .bind(&req.description)
@@ -782,6 +848,18 @@ pub async fn update_cabinet_position(
     }
 
     if let Some(ips) = &req.ips {
+        let target_position_id = if is_switch {
+            sqlx::query_scalar(
+                "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .unwrap_or(None)
+        } else {
+            Some(id)
+        };
+
         if is_switch {
             if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
                 .bind(id)
@@ -811,8 +889,8 @@ pub async fn update_cabinet_position(
 
             if is_switch {
                 if let Err(err) = sqlx::query(
-                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id as parent_switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)"
                 )
                 .bind(Uuid::new_v4())
                 .bind(id)
@@ -822,7 +900,7 @@ pub async fn update_cabinet_position(
                 .bind(ip_version)
                 .bind(&ip.mac_address)
                 .bind(&ip.hostname)
-                .bind(ip.switch_id)
+                .bind(target_position_id)
                 .bind(ip.switch_port_id)
                 .bind("active")
                 .bind(now)
