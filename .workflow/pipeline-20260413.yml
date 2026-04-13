@@ -1,0 +1,31 @@
+version: '1.0'
+name: pipeline-20260413
+displayName: pipeline-20260413
+triggers:
+  trigger: auto
+  push:
+    tags:
+      prefix:
+        - v
+stages:
+  - name: stage-8779b8c6
+    displayName: checkd
+    strategy: naturally
+    trigger: auto
+    executor:
+      - oi-io0
+    steps:
+      - step: build@rust
+        name: build_rust
+        displayName: Rust 构建
+        rustVersion: '1.93'
+        commands:
+          - cargo build --release
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target/release
+        caches: []
+        notify: []
+        strategy:
+          retry: '0'
