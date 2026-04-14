@@ -591,6 +591,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_log_table_partitions(pool).await?;
     migrate_switch_position_link(pool).await?;
     migrate_switch_position_constraint(pool).await?;
+    migrate_position_device_type(pool).await?;
     Ok(())
 }
 
@@ -1163,6 +1164,136 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
 
         sqlx::query(
             r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_constraint', '更新chk_device_consistency约束允许switch类型有position_id，并为现有交换机创建position关联')"#
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'position_device_type'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE positions ADD COLUMN IF NOT EXISTS device_type VARCHAR(20) DEFAULT 'cabinet_position'"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("positions添加device_type列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE positions ADD COLUMN IF NOT EXISTS device_id UUID"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("positions添加device_id列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r#"ALTER TABLE positions ADD CONSTRAINT chk_position_device_type 
+               CHECK (device_type IN ('cabinet_position', 'switch'))"#
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("positions添加device_type约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_positions_device_type ON positions(device_type)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建positions.device_type索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_positions_device_id ON positions(device_id)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建positions.device_id索引失败: {}", e);
+        }
+
+        let switches = sqlx::query(
+            r#"SELECT s.id as switch_id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+               FROM switches s
+               WHERE s.cabinet_id IS NOT NULL"#
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        for row in &switches {
+            let switch_id: Uuid = row.get("switch_id");
+            let name: String = row.get("name");
+            let cabinet_id: Option<Uuid> = row.get("cabinet_id");
+            let start_u: Option<i32> = row.get("start_u");
+            let end_u: Option<i32> = row.get("end_u");
+            let description: Option<String> = row.get("description");
+
+            let existing_pos: Option<(Uuid, String)> = sqlx::query_as(
+                "SELECT id, device_type FROM positions WHERE name = $1 AND cabinet_id = $2"
+            )
+            .bind(&name)
+            .bind(cabinet_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+            match existing_pos {
+                Some((pos_id, device_type)) => {
+                    if device_type != "switch"
+                        && let Err(e) = sqlx::query(
+                            "UPDATE positions SET device_type = 'switch', device_id = $1 WHERE id = $2"
+                        )
+                        .bind(switch_id)
+                        .bind(pos_id)
+                        .execute(pool)
+                        .await
+                    {
+                        warn!("更新机位 {} 为交换机类型失败: {}", pos_id, e);
+                    }
+                }
+                None => {
+                    let pos_id = Uuid::new_v4();
+                    if let Err(e) = sqlx::query(
+                        r#"INSERT INTO positions 
+                           (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) 
+                           VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, NOW(), NOW())"#
+                    )
+                    .bind(pos_id)
+                    .bind(&name)
+                    .bind(cabinet_id)
+                    .bind(start_u.unwrap_or(1i32))
+                    .bind(end_u.unwrap_or(1i32))
+                    .bind(&description)
+                    .bind(switch_id)
+                    .execute(pool)
+                    .await
+                    {
+                        warn!("为交换机 {} 创建机位记录失败: {}", switch_id, e);
+                    }
+                }
+            }
+        }
+
+        sqlx::query(
+            r#"INSERT INTO schema_migrations (version, description) 
+               VALUES ('position_device_type', '为positions表添加device_type和device_id字段，并将交换机机位迁移到positions表')"#
         )
         .execute(pool)
         .await?;

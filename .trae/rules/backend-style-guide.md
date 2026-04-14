@@ -32,11 +32,11 @@
 
 ### 4. 部署与测试
 - **代码检查 ：** 每次代码更新后，必须使用 cargo clippy 检查代码风格。
-- **代码测试 ：** 通过./build-deb.sh && apt reinstall ./ipma_0.8* &&  systemctl restart ipma && rm -rf ipma_0.8* 安装测试
+- **代码测试 ：** 通过./pak.sh 测试
 - **测试用户 ：** API测试用户为admin，密码为admin123
 
 ---
 
-文档版本： 1.1.0
+文档版本： 1.1.1
 
 最后更新： 2026年3月

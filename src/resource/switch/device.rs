@@ -327,7 +327,7 @@ pub async fn create_switch(
             let position_id = if req.cabinet_id.is_some() {
                 let pos_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
                 )
                 .bind(pos_id)
                 .bind(&req.name)
@@ -335,6 +335,7 @@ pub async fn create_switch(
                 .bind(req.start_u.unwrap_or(1))
                 .bind(req.end_u.unwrap_or(1))
                 .bind(&req.description)
+                .bind(id)
                 .bind(now)
                 .bind(now)
                 .execute(pool.get_conn())
@@ -573,7 +574,7 @@ pub async fn update_switch(
                 || req.name.is_some()
             {
                 let existing_position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1"
                 )
                 .bind(id)
                 .fetch_optional(pool.get_conn())
@@ -631,7 +632,7 @@ pub async fn update_switch(
                 } else if req.cabinet_id.is_some() {
                     let pos_id = Uuid::new_v4();
                     if let Err(e) = sqlx::query(
-                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
                     )
                     .bind(pos_id)
                     .bind(req.name.as_ref().unwrap_or(&String::new()))
@@ -639,28 +640,20 @@ pub async fn update_switch(
                     .bind(req.start_u.unwrap_or(1))
                     .bind(req.end_u.unwrap_or(1))
                     .bind(&req.description)
+                    .bind(id)
                     .bind(now)
                     .bind(now)
                     .execute(pool.get_conn())
                     .await
                     {
                         tracing::error!("创建交换机关联机位记录失败: {}", e);
-                    } else if let Err(e) = sqlx::query(
-                        "UPDATE ip_managers SET position_id = $1 WHERE switch_id = $2"
-                    )
-                    .bind(pos_id)
-                    .bind(id)
-                    .execute(pool.get_conn())
-                    .await
-                    {
-                        tracing::error!("关联交换机IP到机位失败: {}", e);
                     }
                 }
             }
 
             if let Some(ips) = &req.ips {
                 let position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
+                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1"
                 )
                 .bind(id)
                 .fetch_optional(pool.get_conn())
@@ -810,22 +803,12 @@ pub async fn delete_switch(
         tracing::error!("删除交换机IP记录失败: {}", e);
     }
 
-    let linked_position_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT p.id FROM positions p JOIN ip_managers im ON im.position_id = p.id WHERE im.switch_id = $1"
-    )
-    .bind(id)
-    .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
-
-    for pos_id in &linked_position_ids {
-        if let Err(e) = sqlx::query("DELETE FROM positions WHERE id = $1")
-            .bind(pos_id)
-            .execute(pool.get_conn())
-            .await
-        {
-            tracing::error!("删除交换机关联机位失败: {}", e);
-        }
+    if let Err(e) = sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
+        .bind(id)
+        .execute(pool.get_conn())
+        .await
+    {
+        tracing::error!("删除交换机关联机位失败: {}", e);
     }
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")
