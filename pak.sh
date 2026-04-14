@@ -2,7 +2,7 @@
 set -e
 echo 删除旧程序
 rm -rf /opt/ipma/
-
+rm -f /usr/bin/ipma
 
 echo 创建工作目录
 mkdir  -p /opt/ipma/
@@ -13,7 +13,7 @@ echo 编译
 cargo build --release
 
 echo 安装
-cp -f  target/release/ipma /opt/ipma/
+cp -f  target/release/ipma /usr/bin/ipma
 cp -rf web/ /opt/ipma/
 cp -f  config.toml /opt/ipma/
 
