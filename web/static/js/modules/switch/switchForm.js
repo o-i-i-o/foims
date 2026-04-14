@@ -6,6 +6,15 @@ import {
   updateNetworkRegion
 } from "./switchState.js";
 
+const PASSWORD_MASK = '••••••••';
+
+function maskToNull(value) {
+  if (!value || value === PASSWORD_MASK || value.trim() === '') {
+    return null;
+  }
+  return value;
+}
+
 export const SWITCH_FORM_FIELDS = [
   'switch-id', 'switch-name', 'switch-model', 'switch-vendor',
   'switch-location', 'switch-description', 'switch-snmp-version',
@@ -48,12 +57,12 @@ export function getSwitchFormValues() {
     description: elementCache.getValue('switch-description') || null,
     snmp_version: elementCache.getValue('switch-snmp-version'),
     snmp_port: parseInt(elementCache.getValue('switch-snmp-port')) || 161,
-    snmp_community: elementCache.getValue('switch-snmp-community') || null,
+    snmp_community: maskToNull(elementCache.getValue('switch-snmp-community')),
     snmp_username: elementCache.getValue('switch-snmp-username') || null,
     snmp_auth_protocol: elementCache.getValue('switch-snmp-auth-protocol') || null,
-    snmp_auth_password: elementCache.getValue('switch-snmp-auth-password') || null,
+    snmp_auth_password: maskToNull(elementCache.getValue('switch-snmp-auth-password')),
     snmp_priv_protocol: elementCache.getValue('switch-snmp-priv-protocol') || null,
-    snmp_priv_password: elementCache.getValue('switch-snmp-priv-password') || null,
+    snmp_priv_password: maskToNull(elementCache.getValue('switch-snmp-priv-password')),
     parent_switch_id: parentSwitchId,
     parent_port_id: parentPortId,
     ips: ips,

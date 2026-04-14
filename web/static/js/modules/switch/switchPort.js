@@ -116,13 +116,13 @@ async function loadSwitchPortsBySwitchId(switchId) {
       actionButtonsContainer.appendChild(addBtn);
     }
 
-    let snmpPortsBtn = elementCache.get("get-snmp-ports-btn");
+    let snmpPortsBtn = elementCache.get("sync-snmp-ports-btn");
     if (!snmpPortsBtn) {
       snmpPortsBtn = document.createElement("button");
-      snmpPortsBtn.id = "get-snmp-ports-btn";
+      snmpPortsBtn.id = "sync-snmp-ports-btn";
       snmpPortsBtn.className = "btn btn-secondary btn-sm";
       snmpPortsBtn.textContent = "从SNMP获取端口";
-      snmpPortsBtn.addEventListener("click", () => getSwitchPortsFromSnmp(getCurrentSwitchId()));
+      snmpPortsBtn.addEventListener("click", () => syncPortsFromSnmp(getCurrentSwitchId()));
       actionButtonsContainer.appendChild(snmpPortsBtn);
     }
 

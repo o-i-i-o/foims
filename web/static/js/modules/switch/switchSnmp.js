@@ -6,16 +6,26 @@ import { getSwitchFormValues } from "./switchForm.js";
 function buildSnmpRequestData(formData) {
   const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
   const { snmp_port: port, snmp_version: version } = formData;
-  const data = { ip, port, version };
+  const data = {
+    ip_address: ip,
+    snmp_port: port,
+    snmp_version: version
+  };
 
   if (version === 'v3') {
-    data.username = formData.snmp_username;
-    data.auth_protocol = formData.snmp_auth_protocol;
-    data.auth_password = formData.snmp_auth_password;
-    data.priv_protocol = formData.snmp_priv_protocol;
-    data.priv_password = formData.snmp_priv_password;
+    data.snmp_username = formData.snmp_username;
+    data.snmp_auth_protocol = formData.snmp_auth_protocol;
+    if (formData.snmp_auth_password) {
+      data.snmp_auth_password = formData.snmp_auth_password;
+    }
+    data.snmp_priv_protocol = formData.snmp_priv_protocol;
+    if (formData.snmp_priv_password) {
+      data.snmp_priv_password = formData.snmp_priv_password;
+    }
   } else {
-    data.community = formData.snmp_community || 'public';
+    if (formData.snmp_community) {
+      data.snmp_community = formData.snmp_community;
+    }
   }
 
   return data;
@@ -51,13 +61,21 @@ export async function testSnmpConnection() {
   }
 
   const testBtn = elementCache.get('test-snmp-btn');
-  const originalText = testBtn.textContent;
-  testBtn.disabled = true;
-  testBtn.textContent = '测试中...';
+  const originalText = testBtn?.textContent || '测试连接';
+  if (testBtn) {
+    testBtn.disabled = true;
+    testBtn.textContent = '测试中...';
+  }
 
   try {
     const testData = buildSnmpRequestData(formData);
-    const result = await apiPost('/api/switches/snmp/test', testData);
+    const switchId = formData.id;
+
+    if (switchId) {
+      testData.switch_id = switchId;
+    }
+
+    const result = await apiPost('/api/switches/test-snmp', testData);
 
     if (result.success) {
       showToast('SNMP连接测试成功', 'success');
@@ -67,34 +85,41 @@ export async function testSnmpConnection() {
   } catch (error) {
     showToast('SNMP连接测试失败', 'error');
   } finally {
-    testBtn.disabled = false;
-    testBtn.textContent = originalText;
+    if (testBtn) {
+      testBtn.disabled = false;
+      testBtn.textContent = originalText;
+    }
   }
 }
 
 export async function getSwitchInfoFromSnmp() {
   const formData = getSwitchFormValues();
-  const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
+  const switchId = formData.id;
 
-  if (!ip) {
-    showToast('请输入交换机IP地址', 'warning');
+  if (!switchId) {
+    const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
+    if (!ip) {
+      showToast('请输入交换机IP地址', 'warning');
+      return;
+    }
+    showToast('请先保存交换机后再获取SNMP信息', 'warning');
     return;
   }
 
   const getInfoBtn = elementCache.get('get-snmp-info-btn');
-  const originalText = getInfoBtn.textContent;
-  getInfoBtn.disabled = true;
-  getInfoBtn.textContent = '获取中...';
+  const originalText = getInfoBtn?.textContent || '获取信息';
+  if (getInfoBtn) {
+    getInfoBtn.disabled = true;
+    getInfoBtn.textContent = '获取中...';
+  }
 
   try {
-    const requestData = buildSnmpRequestData(formData);
-    const result = await apiPost('/api/switches/snmp/info', requestData);
+    const result = await apiGet(`/api/switches/${switchId}/snmp-info`);
 
     if (result.success && result.data) {
       const info = result.data;
       if (info.vendor) elementCache.setValue('switch-vendor', info.vendor);
       if (info.model) elementCache.setValue('switch-model', info.model);
-      if (info.description) elementCache.setValue('switch-description', info.description);
       showToast('交换机信息获取成功', 'success');
     } else {
       showToast('获取交换机信息失败: ' + result.message, 'error');
@@ -102,8 +127,10 @@ export async function getSwitchInfoFromSnmp() {
   } catch (error) {
     showToast('获取交换机信息失败', 'error');
   } finally {
-    getInfoBtn.disabled = false;
-    getInfoBtn.textContent = originalText;
+    if (getInfoBtn) {
+      getInfoBtn.disabled = false;
+      getInfoBtn.textContent = originalText;
+    }
   }
 }
 

@@ -464,16 +464,26 @@ pub async fn test_snmp_connection(
                     .flatten();
 
                     let creds = DecryptedSnmpCredentials::from_switch_snmp(&s);
+
+                    let version = req.snmp_version.clone().unwrap_or(s.snmp_version);
+                    let community = req.snmp_community.clone().or(creds.community);
+                    let username = req.snmp_username.clone().or(s.snmp_username);
+                    let auth_proto = req.snmp_auth_protocol.clone().or(s.snmp_auth_protocol);
+                    let auth_pass = req.snmp_auth_password.clone().or(creds.auth_password);
+                    let priv_proto = req.snmp_priv_protocol.clone().or(s.snmp_priv_protocol);
+                    let priv_pass = req.snmp_priv_password.clone().or(creds.priv_password);
+                    let port = req.snmp_port.unwrap_or(s.snmp_port);
+
                     (
-                        ip_address,
-                        s.snmp_version,
-                        creds.community,
-                        s.snmp_username,
-                        s.snmp_auth_protocol,
-                        creds.auth_password,
-                        s.snmp_priv_protocol,
-                        creds.priv_password,
-                        s.snmp_port,
+                        req.ip_address.clone().or(ip_address),
+                        version,
+                        community,
+                        username,
+                        auth_proto,
+                        auth_pass,
+                        priv_proto,
+                        priv_pass,
+                        port,
                     )
                 }
                 Ok(None) => {

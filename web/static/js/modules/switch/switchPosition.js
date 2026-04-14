@@ -2,10 +2,6 @@ import { apiGet } from "../../utils/apiClient.js";
 import { elementCache } from "../../utils/helpers.js";
 import { showToast } from "../../utils/ui.js";
 import {
-  onNetworkRegionChange,
-  offNetworkRegionChange,
-  onNetworkChange,
-  offNetworkChange,
   dispatchNetworkRegionChange
 } from "../../utils/ipconfig.js";
 import {

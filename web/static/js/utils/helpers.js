@@ -256,10 +256,15 @@ class ElementCache {
   }
   
   get(id) {
-    if (!this.cache.has(id)) {
-      this.cache.set(id, document.getElementById(id));
+    const cached = this.cache.get(id);
+    if (cached) {
+      return cached;
     }
-    return this.cache.get(id);
+    const el = document.getElementById(id);
+    if (el) {
+      this.cache.set(id, el);
+    }
+    return el;
   }
   
   getMultiple(...ids) {

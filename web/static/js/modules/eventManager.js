@@ -267,7 +267,25 @@ const BUTTON_EVENT_BINDINGS = [
  * 初始化按钮事件绑定
  */
 function initButtonEventBindings() {
+  const clickHandlers = {};
+  const otherHandlers = [];
+
   BUTTON_EVENT_BINDINGS.forEach(({ id, event, handler }) => {
+    if (event === 'click') {
+      clickHandlers[id] = handler;
+    } else {
+      otherHandlers.push({ id, event, handler });
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    const handler = clickHandlers[e.target.id];
+    if (handler) {
+      handler(e);
+    }
+  });
+
+  otherHandlers.forEach(({ id, event, handler }) => {
     const element = document.getElementById(id);
     element?.addEventListener(event, handler);
   });

@@ -115,7 +115,21 @@ pub async fn get_switches(
     match switches {
         Ok(mut data) => {
             for switch in &mut data {
+                let has_community = switch.snmp_community.is_some();
+                let has_auth_password = switch.snmp_auth_password.is_some();
+                let has_priv_password = switch.snmp_priv_password.is_some();
+
                 decrypt_snmp_fields(switch);
+
+                if has_community {
+                    switch.snmp_community = Some("••••••••".to_string());
+                }
+                if has_auth_password {
+                    switch.snmp_auth_password = Some("••••••••".to_string());
+                }
+                if has_priv_password {
+                    switch.snmp_priv_password = Some("••••••••".to_string());
+                }
             }
             Ok(HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({
@@ -168,7 +182,21 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
 
     match switch {
         Ok(Some(mut data)) => {
+            let has_community = data.snmp_community.is_some();
+            let has_auth_password = data.snmp_auth_password.is_some();
+            let has_priv_password = data.snmp_priv_password.is_some();
+
             decrypt_snmp_fields(&mut data);
+
+            if has_community {
+                data.snmp_community = Some("••••••••".to_string());
+            }
+            if has_auth_password {
+                data.snmp_auth_password = Some("••••••••".to_string());
+            }
+            if has_priv_password {
+                data.snmp_priv_password = Some("••••••••".to_string());
+            }
 
             let ips = sqlx::query(
                 r#"SELECT 
@@ -283,9 +311,21 @@ pub async fn create_switch(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    let encrypted_snmp_community = req.snmp_community.as_ref().map(|c| encrypt_password(c));
-    let encrypted_snmp_auth_password = req.snmp_auth_password.as_ref().map(|p| encrypt_password(p));
-    let encrypted_snmp_priv_password = req.snmp_priv_password.as_ref().map(|p| encrypt_password(p));
+    let encrypted_snmp_community = req
+        .snmp_community
+        .as_ref()
+        .filter(|c| !c.is_empty())
+        .map(|c| encrypt_password(c));
+    let encrypted_snmp_auth_password = req
+        .snmp_auth_password
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| encrypt_password(p));
+    let encrypted_snmp_priv_password = req
+        .snmp_priv_password
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| encrypt_password(p));
 
     let result = sqlx::query(
         r#"INSERT INTO switches (
@@ -512,9 +552,21 @@ pub async fn update_switch(
 
     let now = Utc::now();
 
-    let encrypted_snmp_community = req.snmp_community.as_ref().map(|c| encrypt_password(c));
-    let encrypted_snmp_auth_password = req.snmp_auth_password.as_ref().map(|p| encrypt_password(p));
-    let encrypted_snmp_priv_password = req.snmp_priv_password.as_ref().map(|p| encrypt_password(p));
+    let encrypted_snmp_community = req
+        .snmp_community
+        .as_ref()
+        .filter(|c| !c.is_empty())
+        .map(|c| encrypt_password(c));
+    let encrypted_snmp_auth_password = req
+        .snmp_auth_password
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| encrypt_password(p));
+    let encrypted_snmp_priv_password = req
+        .snmp_priv_password
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| encrypt_password(p));
 
     let result = sqlx::query(
         r#"UPDATE switches SET
