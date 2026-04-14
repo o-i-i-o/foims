@@ -1023,7 +1023,7 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             let description: Option<String> = row.get("description");
 
             let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2"
+                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
             )
             .bind(&name)
             .bind(cabinet_id)
@@ -1120,7 +1120,7 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
             let description: Option<String> = row.get("description");
 
             let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2"
+                "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
             )
             .bind(&name)
             .bind(cabinet_id)

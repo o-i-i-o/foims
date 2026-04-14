@@ -566,7 +566,11 @@ pub async fn update_switch(
 
     match result {
         Ok(_) => {
-            if req.cabinet_id.is_some() || req.start_u.is_some() || req.end_u.is_some() || req.name.is_some() {
+            if req.cabinet_id.is_some()
+                || req.start_u.is_some()
+                || req.end_u.is_some()
+                || req.name.is_some()
+            {
                 let existing_position_id: Option<Uuid> = sqlx::query_scalar(
                     "SELECT position_id FROM ip_managers WHERE switch_id = $1 AND position_id IS NOT NULL LIMIT 1"
                 )

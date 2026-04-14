@@ -703,7 +703,9 @@ pub async fn update_cabinet_position(
             }
         };
 
-    let (switch_id, linked_position_id): (Option<Uuid>, Option<Uuid>) = if existing_position.is_none() {
+    let (switch_id, linked_position_id): (Option<Uuid>, Option<Uuid>) = if existing_position
+        .is_none()
+    {
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
