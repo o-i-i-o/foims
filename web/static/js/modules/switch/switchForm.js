@@ -137,16 +137,13 @@ export async function resetSwitchForm() {
   const endUInput = elementCache.get('switch-end-u');
 
   if (cabinetSelect) {
-    cabinetSelect.innerHTML = '<option value="">请先在IP配置中选择网络区域</option>';
-    cabinetSelect.disabled = true;
+    cabinetSelect.value = '';
   }
   if (startUInput) {
     startUInput.value = '';
-    startUInput.disabled = true;
   }
   if (endUInput) {
     endUInput.value = '';
-    endUInput.disabled = true;
   }
 
   const manager = getManager('switch');

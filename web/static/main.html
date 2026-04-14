@@ -1461,34 +1461,36 @@
               <input type="text" id="switch-vendor" name="vendor" autocomplete="off" />
             </div>
           </div>
-          <div class="form-row">     
+          <div class="form-row">
             <div class="form-group">
               <label for="switch-description" data-i18n="common.description">Description</label>
               <input type="text" id="switch-description" name="description" autocomplete="off" />
             </div>
-          </div>
-          <div class="form-group">
-            <div id="switch-ips-container"></div>
           </div>
           <hr class="section-divider" />
           <h4 class="section-subtitle" data-i18n="switch.position_config">机位配置</h4>
           <div class="form-row">
             <div class="form-group">
               <label for="switch-cabinet-select" data-i18n="switch.cabinet">机柜</label>
-              <select id="switch-cabinet-select" disabled>
-                <option value="" data-i18n="switch.select_cabinet_hint">请先在IP配置中选择网络区域</option>
+              <select id="switch-cabinet-select">
+                <option value="" data-i18n="switch.select_cabinet">请选择机柜</option>
               </select>
             </div>
             <div class="form-group">
               <label for="switch-start-u" data-i18n="switch.start_u">起始U位</label>
-              <input type="number" id="switch-start-u" name="start_u" min="1" max="48" placeholder="1" disabled />
+              <input type="number" id="switch-start-u" name="start_u" min="1" max="48" placeholder="1" />
             </div>
             <div class="form-group">
               <label for="switch-end-u" data-i18n="switch.end_u">结束U位</label>
-              <input type="number" id="switch-end-u" name="end_u" min="1" max="48" placeholder="1" disabled />
+              <input type="number" id="switch-end-u" name="end_u" min="1" max="48" placeholder="1" />
             </div>
           </div>
           <input type="hidden" id="switch-location" name="location" />
+          <hr class="section-divider" />
+          <h4 class="section-subtitle" data-i18n="switch.ip_config">IP配置</h4>
+          <div class="form-group">
+            <div id="switch-ips-container"></div>
+          </div>
           <hr class="section-divider" />
           <h4 class="section-subtitle" data-i18n="switch.snmp_config">SNMP Configuration</h4>
           <div class="form-row">

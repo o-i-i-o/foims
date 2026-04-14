@@ -5,7 +5,8 @@ import {
   onNetworkRegionChange,
   offNetworkRegionChange,
   onNetworkChange,
-  offNetworkChange
+  offNetworkChange,
+  dispatchNetworkRegionChange
 } from "../../utils/ipconfig.js";
 import {
   positionData,
@@ -13,13 +14,9 @@ import {
   updateNetworkRegion
 } from "./switchState.js";
 
-async function loadCabinetsByRegion(regionId, networkId = null) {
+async function loadAllCabinets() {
   try {
-    let url = `/api/resources/network-regions/${regionId}/cabinets`;
-    if (networkId) {
-      url += `?network_id=${networkId}`;
-    }
-    const result = await apiGet(url);
+    const result = await apiGet('/api/resources/cabinets?page_size=10000');
     if (result.success && result.data) {
       return result.data.items || result.data || [];
     }
@@ -47,41 +44,20 @@ export class PositionSelector {
     this.eventController = new AbortController();
     const { signal } = this.eventController;
 
-    if (this.boundHandleNetworkRegionChange) {
-      offNetworkRegionChange(this.boundHandleNetworkRegionChange);
-    }
-
-    if (this.boundHandleNetworkChange) {
-      offNetworkChange(this.boundHandleNetworkChange);
-    }
-
-    this.boundHandleNetworkRegionChange = (regionId, regionName) => {
-      this.handleNetworkRegionChange(regionId, regionName);
-    };
-
-    this.boundHandleNetworkChange = (networkId, networkName, networkRegionId) => {
-      this.handleNetworkChange(networkId, networkName, networkRegionId);
-    };
-
     this.bindEvents(signal);
 
-    const regionId = networkRegion.id || (sw && (sw.network_region_id || sw.position?.network_region_id || (sw.ips && sw.ips[0]?.network_region_id)));
-    const networkId = sw && sw.ips && sw.ips[0]?.network_id;
+    const cabinets = await loadAllCabinets();
+    this.cabinetsCache = cabinets;
 
-    if (networkId) {
-      this.currentNetworkId = networkId;
-    }
-
-    if (regionId) {
-      await this.handleNetworkRegionChange(regionId, networkRegion.name || sw?.network_region_name || sw?.ips?.[0]?.network_region || '');
+    const cabinetSelect = elementCache.get('switch-cabinet-select');
+    if (cabinetSelect) {
+      cabinetSelect.innerHTML = '<option value="">请选择机柜</option>' +
+        cabinets.map(c => `<option value="${c.id}" data-name="${c.name}" data-region-id="${c.network_region_id || ''}">${c.name}</option>`).join('');
     }
 
     if (sw) {
       await this.loadFromSwitch(sw);
     }
-
-    onNetworkRegionChange(this.boundHandleNetworkRegionChange);
-    onNetworkChange(this.boundHandleNetworkChange);
   }
 
   bindEvents(signal) {
@@ -94,6 +70,13 @@ export class PositionSelector {
         const selectedOption = cabinetSelect.options[cabinetSelect.selectedIndex];
         positionData.cabinetId = cabinetSelect.value || null;
         positionData.cabinetName = selectedOption?.dataset?.name || null;
+        
+        const regionId = selectedOption?.dataset?.regionId;
+        if (regionId) {
+          updateNetworkRegion(regionId, '');
+          positionData.networkRegionId = regionId;
+          dispatchNetworkRegionChange(regionId, '');
+        }
       }, { signal });
     }
 
@@ -155,12 +138,18 @@ export class PositionSelector {
         console.log('loadFromSwitch - option found:', !!option, 'cabinetsCache length:', this.cabinetsCache.length);
         if (option) {
           cabinetSelect.value = cabinetId;
+          const regionId = option.dataset.regionId;
+          if (regionId) {
+            updateNetworkRegion(regionId, '');
+            positionData.networkRegionId = regionId;
+          }
         } else if (this.cabinetsCache.length > 0) {
           const cabinet = this.cabinetsCache.find(c => c.id === cabinetId);
           if (cabinet) {
             const newOption = document.createElement('option');
             newOption.value = cabinet.id;
             newOption.dataset.name = cabinet.name;
+            newOption.dataset.regionId = cabinet.network_region_id || '';
             newOption.textContent = cabinet.name;
             cabinetSelect.appendChild(newOption);
             cabinetSelect.value = cabinetId;
@@ -176,66 +165,6 @@ export class PositionSelector {
     } else if (sw.position?.network_region_id) {
       positionData.networkRegionId = sw.position.network_region_id;
       networkRegion.id = sw.position.network_region_id;
-    }
-  }
-
-  async handleNetworkRegionChange(regionId, regionName) {
-    updateNetworkRegion(regionId, regionName);
-    positionData.networkRegionId = regionId;
-
-    if (this.onRegionChange) {
-      this.onRegionChange(regionId, regionName);
-    }
-
-    const cabinetSelect = elementCache.get('switch-cabinet-select');
-    const startUInput = elementCache.get('switch-start-u');
-    const endUInput = elementCache.get('switch-end-u');
-
-    positionData.cabinetId = null;
-    positionData.cabinetName = null;
-    positionData.startU = null;
-    positionData.endU = null;
-    positionData.positionId = null;
-
-    if (startUInput) startUInput.value = '';
-    if (endUInput) endUInput.value = '';
-
-    if (regionId) {
-      const cabinets = await loadCabinetsByRegion(regionId, this.currentNetworkId);
-      this.cabinetsCache = cabinets;
-
-      if (cabinetSelect) {
-        cabinetSelect.disabled = false;
-        if (cabinets.length === 0) {
-          if (this.currentNetworkId) {
-            cabinetSelect.innerHTML = '<option value="">该网段没有机柜</option>';
-            showToast('该网段没有机柜，请选择其他网段或配置机柜', 'warning');
-          } else {
-            cabinetSelect.innerHTML = '<option value="">该网络区域暂无关联机柜</option>';
-            showToast('该网络区域暂无关联机柜，请先在机柜管理中配置', 'warning');
-          }
-        } else {
-          cabinetSelect.innerHTML = '<option value="">选择机柜</option>' +
-            cabinets.map(c => `<option value="${c.id}" data-name="${c.name}">${c.name}</option>`).join('');
-        }
-      }
-      if (startUInput) startUInput.disabled = false;
-      if (endUInput) endUInput.disabled = false;
-    } else {
-      if (cabinetSelect) {
-        cabinetSelect.innerHTML = '<option value="">请先在IP配置中选择网络区域</option>';
-        cabinetSelect.disabled = true;
-      }
-      if (startUInput) startUInput.disabled = true;
-      if (endUInput) endUInput.disabled = true;
-    }
-  }
-
-  async handleNetworkChange(networkId, networkName, networkRegionId) {
-    this.currentNetworkId = networkId;
-    
-    if (networkRegionId) {
-      await this.handleNetworkRegionChange(networkRegionId, networkName || '');
     }
   }
 
@@ -259,10 +188,6 @@ export class PositionSelector {
     if (this.eventController) {
       this.eventController.abort();
       this.eventController = null;
-    }
-    if (this.boundHandleNetworkRegionChange) {
-      offNetworkRegionChange(this.boundHandleNetworkRegionChange);
-      this.boundHandleNetworkRegionChange = null;
     }
   }
 }

@@ -310,6 +310,39 @@ pub async fn create_network(
         )));
     }
 
+    // 检查网段唯一性：ipv4或ipv6任一重复即视为重复
+    if let Some(ref ipv4) = ipv4_cidr_val {
+        let existing_ipv4: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR)"
+        )
+        .bind(ipv4)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
+
+        if existing_ipv4.is_some() {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "IPv4网段已存在，网段不能重复",
+            )));
+        }
+    }
+
+    if let Some(ref ipv6) = ipv6_cidr_val {
+        let existing_ipv6: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR)"
+        )
+        .bind(ipv6)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
+
+        if existing_ipv6.is_some() {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "IPv6网段已存在，网段不能重复",
+            )));
+        }
+    }
+
     let id = Uuid::new_v4();
     let now = Utc::now();
 
@@ -552,6 +585,41 @@ pub async fn update_network(
                 "同一网络区域内网络名称已存在",
             )),
         );
+    }
+
+    // 检查网段唯一性：ipv4或ipv6任一重复即视为重复（排除当前网段）
+    if let Some(ref ipv4) = req.ipv4_cidr {
+        let existing_ipv4: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR) AND id != $2"
+        )
+        .bind(ipv4)
+        .bind(id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
+
+        if existing_ipv4.is_some() {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "IPv4网段已被其他网段使用，网段不能重复",
+            )));
+        }
+    }
+
+    if let Some(ref ipv6) = req.ipv6_cidr {
+        let existing_ipv6: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR) AND id != $2"
+        )
+        .bind(ipv6)
+        .bind(id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .unwrap_or(None);
+
+        if existing_ipv6.is_some() {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "IPv6网段已被其他网段使用，网段不能重复",
+            )));
+        }
     }
 
     let ipv4_dns_array: Option<Vec<String>> = req.ipv4_dns.clone();
