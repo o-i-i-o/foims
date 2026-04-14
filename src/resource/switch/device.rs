@@ -371,7 +371,7 @@ pub async fn create_switch(
 
                 let ip_manager_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, status, last_seen, created_at, updated_at) 
+                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
                      VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
                 )
                 .bind(ip_manager_id)
@@ -383,6 +383,7 @@ pub async fn create_switch(
                 .bind(&ip.mac_address)
                 .bind(&ip.hostname)
                 .bind(position_id)
+                .bind(ip.switch_port_id)
                 .bind("active")
                 .bind(now)
                 .bind(now)
@@ -694,7 +695,7 @@ pub async fn update_switch(
 
                     let ip_manager_id = Uuid::new_v4();
                     if let Err(e) = sqlx::query(
-                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, status, last_seen, created_at, updated_at) 
+                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
                          VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
                     )
                     .bind(ip_manager_id)
@@ -706,6 +707,7 @@ pub async fn update_switch(
                     .bind(&ip.mac_address)
                     .bind(&ip.hostname)
                     .bind(position_id)
+                    .bind(ip.switch_port_id)
                     .bind("active")
                     .bind(now)
                     .bind(now)
