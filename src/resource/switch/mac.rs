@@ -483,7 +483,8 @@ pub async fn get_switch_mac_table(
     }
 
     let saved_macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
+        r#"SELECT id, switch_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
+           FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"#,
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
@@ -522,13 +523,21 @@ pub async fn get_switch_macs_from_db(
         return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
     }
 
-    let macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        "SELECT * FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
+    let macs_result = sqlx::query_as::<_, SwitchMac>(
+        r#"SELECT id, switch_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
+           FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address"#,
     )
     .bind(switch_id)
     .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
+    .await;
+
+    let macs = match macs_result {
+        Ok(m) => m,
+        Err(e) => {
+            error!("查询MAC表失败: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<Vec<SwitchMac>>::error("查询MAC表失败")));
+        }
+    };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(macs, "获取MAC表成功")))
 }
