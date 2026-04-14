@@ -967,6 +967,7 @@ pub struct ArpEntry {
     pub ip_address: String,
     pub mac_address: String,
     pub interface: Option<String>,
+    pub vlan_id: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
