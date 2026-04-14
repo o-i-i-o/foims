@@ -1,0 +1,81 @@
+version: '1.0'
+name: pipeline-20260414
+displayName: pipeline-20260414
+triggers:
+  trigger: auto
+  push:
+    tags:
+      prefix:
+        - ''
+variables:
+  RUSTUP_DIST_SERVER: https://mirrors.tuna.tsinghua.edu.cn/rustup
+  RUSTUP_UPDATE_ROOT: https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup
+stages:
+  - name: stage-62b56d40
+    displayName: 环境部署
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: build@rust
+        name: build_rust_fmt
+        displayName: Rust 代码格式化及检查
+        rustVersion: '1.93'
+        commands:
+          - pwd
+          - ls
+          - ''
+          - cargo fmt
+          - ''
+          - cargo fmt --check
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target/release/ipma
+        caches: []
+        notify: []
+        strategy:
+          retry: '0'
+          resource: '{"limits":{"cpu":"8","memory":"16"}}'
+      - step: build@rust
+        name: build_rust_clippy
+        displayName: Rust 静态检查
+        rustVersion: '1.93'
+        commands:
+          - cargo clippy --release
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target
+        caches: []
+        notify: []
+        strategy:
+          retry: '0'
+      - step: build@rust
+        name: build_rust_check
+        displayName: Rust 构建测试
+        rustVersion: '1.93'
+        commands:
+          - cargo check --release
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target/release/ipma
+        caches: []
+        notify: []
+        strategy:
+          retry: '0'
+      - step: build@rust
+        name: build_rust_build
+        displayName: Rust 正式构建
+        rustVersion: '1.93'
+        commands:
+          - cargo build --release
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target/release/ipma
+        caches: []
+        notify: []
+        strategy:
+          retry: '0'
