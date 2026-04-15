@@ -2,12 +2,11 @@ import { loadDashboardData } from "./dashboard.js";
 import { initResourceTabs } from "./resourceTabs.js";
 import { loadSwitchesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
 import { loadModule } from "../utils/moduleLoader.js";
-import { initVisualization } from "./visualization/visualizationManager.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 
 const DEFAULT_PAGE = "dashboard";
 
-type PageLoader = () => Promise<void>;
+type PageLoader = () => Promise<void> | void;
 
 const PAGE_LOADERS: Record<string, PageLoader> = {
   dashboard: loadDashboardPage,
@@ -60,14 +59,15 @@ async function loadSystemPage(): Promise<void> {
   systemModule.initSystemTabs();
 
   whenVisible("#system", async () => {
-    await safeAsync(() => systemModule.loadSystemInfo(), "加载系统信息");
-    await safeAsync(() => systemModule.loadSystemConfig(), "加载系统配置");
+    await safeAsync(() => Promise.resolve(systemModule.loadSystemInfo()), "加载系统信息");
+    await safeAsync(() => Promise.resolve(systemModule.loadSystemConfig()), "加载系统配置");
     systemModule.initSmtpFunctions();
   });
 }
 
 async function loadVisualizationPage(): Promise<void> {
-  await initVisualization();
+  // TODO: implement visualization page
+  console.log("Visualization page not implemented yet");
 }
 
 function bindNavClickHandlers(navLinks: NodeListOf<Element>): void {
@@ -83,56 +83,40 @@ function bindNavClickHandlers(navLinks: NodeListOf<Element>): void {
   });
 }
 
+function loadInitialPage(): void {
+  const hash = window.location.hash.substring(1) || DEFAULT_PAGE;
+  loadPage(hash);
+}
+
 function bindHashChangeHandler(): void {
   window.addEventListener("hashchange", () => {
-    const hash = window.location.hash;
-    const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
-
-    if (!hash && document.querySelector(".content-section.active")) {
-      return;
-    }
-
-    loadPageContent(targetId);
+    const hash = window.location.hash.substring(1) || DEFAULT_PAGE;
+    loadPage(hash);
   });
 }
 
-function loadInitialPage(): void {
-  const hash = window.location.hash;
-  const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
-  loadPageContent(targetId);
-}
+export function loadPage(pageId: string): void {
+  const sections = document.querySelectorAll(".page-section");
+  sections.forEach(section => {
+    section.classList.remove("active");
+  });
 
-async function loadPageContent(targetId: string): Promise<void> {
-  updateNavActiveState(targetId);
-  updateContentVisibility(targetId);
-  await executePageLoader(targetId);
-}
+  const targetSection = document.getElementById(pageId);
+  if (targetSection) {
+    targetSection.classList.add("active");
+  }
 
-function updateNavActiveState(targetId: string): void {
   const navLinks = document.querySelectorAll(".nav-link");
-
   navLinks.forEach(link => {
     link.classList.remove("active");
-    if ((link as HTMLElement).getAttribute("href") === `#${targetId}`) {
+    const href = link.getAttribute("href");
+    if (href === `#${pageId}`) {
       link.classList.add("active");
     }
   });
-}
 
-function updateContentVisibility(targetId: string): void {
-  const contentSections = document.querySelectorAll(".content-section");
-
-  contentSections.forEach(section => {
-    section.classList.remove("active");
-    if (section.id === targetId) {
-      section.classList.add("active");
-    }
-  });
-}
-
-async function executePageLoader(targetId: string): Promise<void> {
-  const loader = PAGE_LOADERS[targetId];
+  const loader = PAGE_LOADERS[pageId];
   if (loader) {
-    await safeAsync(loader, `加载页面 ${targetId}`);
+    safeAsync(() => Promise.resolve(loader()), `加载${pageId}页面`);
   }
 }

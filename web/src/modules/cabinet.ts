@@ -1,17 +1,4 @@
 import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
-} from "../utils/apiClient.js";
-
-import {
-  showToast,
-  renderTable,
-  getElementValue,
-  handleFormSubmit,
-  handleDelete,
-  handleError,
   appendPaginationToTable,
   escapeHtml,
   DEFAULT_PAGE_SIZE,
@@ -28,73 +15,113 @@ import {
   loadCabinets,
 } from "../utils/resources.js";
 
+import { cabinetManager } from "../utils/managers.js";
+import { eventDelegator, setupTableEvents } from "../utils/eventDelegator.js";
+import { templateManager, renderEmptyRow, renderActionButtons } from "../utils/templateManager.js";
+import { errorHandler, wrapAsync } from "../utils/errorHandler.js";
 import type { Cabinet } from "../types/resources.js";
 
 const tableState = createSortState("name", "asc");
-let currentPage = 1;
 
 let roomSelectHandler: ((event: Event) => Promise<void>) | null = null;
 
+const cabinetTemplates = {
+  tableRow: `
+    <tr data-id="{{id}}">
+      <td class="index-column">{{index}}</td>
+      <td>{{roomName}}{{name}}</td>
+      <td>{{networks}}</td>
+      <td>{{description}}</td>
+      <td>{{createdAt}}</td>
+      <td>{{actions}}</td>
+    </tr>
+  `,
+};
+
+function renderCabinetRow(cabinet: Record<string, unknown>, index: number): string {
+  const roomName = cabinet.room_name ? `${escapeHtml(cabinet.room_name as string)} / ` : "";
+  const networks = cabinet.networks && (cabinet.networks as unknown[]).length > 0
+    ? (cabinet.networks as { name: string; network_region: string }[])
+        .map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`)
+        .join("<br>")
+    : "-";
+
+  return templateManager.render(cabinetTemplates.tableRow, {
+    id: cabinet.id,
+    index,
+    roomName,
+    name: escapeHtml(cabinet.name as string),
+    networks,
+    description: escapeHtml(cabinet.description as string) || "-",
+    createdAt: new Date(cabinet.created_at as string).toLocaleString(),
+    actions: renderActionButtons(cabinet.id as string),
+  });
+}
+
 export async function loadCabinetsData(page = 1, sortBy: string | null = null, sortOrder: string | null = null): Promise<void> {
-  currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
 
-  try {
-    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const cabinets = (data as { items?: unknown[] }).items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-
-    renderTable("#cabinets-table", {
-      data: cabinets as Record<string, unknown>[],
-      columns: [
-        { field: "id", render: (_v: unknown, _row: unknown, index: number) => startIndex + index + 1, className: "index-column" },
-        { field: "name", render: (v: unknown, row: unknown) => {
-          const r = row as Record<string, unknown>;
-          const roomName = r.room_name ? `${escapeHtml(r.room_name as string)} / ` : "";
-          return `${roomName}${escapeHtml(v as string)}`;
-        }},
-        { field: "networks", render: (v: unknown) => v && (v as unknown[]).length > 0 ? (v as { name: string; network_region: string }[]).map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : "-" },
-        { field: "description", render: (v: unknown) => escapeHtml(v as string) || "-" },
-        { field: "created_at", render: (v: unknown) => new Date(v as string).toLocaleString() },
-        { field: "id", render: (v: unknown) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
-        ` },
-      ],
-      emptyMessage: "暂无机柜数据",
+  await wrapAsync(async () => {
+    const result = await cabinetManager.list({
+      page,
+      pageSize: DEFAULT_PAGE_SIZE,
+      sort_by: tableState.sortBy,
+      sort_order: tableState.sortOrder,
     });
 
-    if ((data as { total?: number }).total !== undefined) {
+    if (!result) return;
+
+    const data = result.data as { items?: Cabinet[]; total?: number };
+    const cabinets = data.items || [];
+    const tbody = document.querySelector("#cabinets-table tbody");
+
+    if (!tbody) {
+      errorHandler.handle(errorHandler.createError("DOM_ERROR", "未找到机柜表格元素", "error"));
+      return;
+    }
+
+    if (cabinets.length === 0) {
+      tbody.innerHTML = renderEmptyRow(6, "暂无机柜数据");
+      return;
+    }
+
+    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    tbody.innerHTML = cabinets
+      .map((cabinet, index) => renderCabinetRow(cabinet as unknown as Record<string, unknown>, startIndex + index + 1))
+      .join("");
+
+    if (data.total !== undefined) {
       appendPaginationToTable("#cabinets-table", data as { total?: number; page?: number; page_size?: number }, loadCabinetsData);
     }
     updateSortIcons("cabinets-table", tableState);
-  } catch (error) {
-    handleError(error, "加载机柜数据失败", () => {
-      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
-    });
-  }
+  }, "加载机柜数据失败")();
 }
 
 export function initCabinetSortEvents(): void {
   initSortEvents("cabinets-table", tableState, loadCabinetsData);
 }
 
+export function initCabinetTableEvents(): void {
+  setupTableEvents(document, "#cabinets-table", {
+    onEdit: (id) => editCabinet(id),
+    onDelete: (id) => deleteCabinet(id),
+  });
+}
+
 export async function editCabinet(id: string | number): Promise<void> {
-  try {
-    const result = await apiGet(`/api/resources/cabinets/${id}`);
-    if (result.success) {
-      openCabinetModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取机柜数据失败: ${result.message}`, "error");
+  await wrapAsync(async () => {
+    const cabinet = await cabinetManager.get(id);
+    if (cabinet) {
+      openCabinetModal(cabinet as unknown as Record<string, unknown>);
     }
-  } catch (error) {
-    handleError(error, "获取机柜数据失败");
-  }
+  }, "获取机柜数据失败")();
 }
 
 export async function deleteCabinet(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/cabinets", "机柜删除成功", loadCabinetsData);
+  const result = await cabinetManager.delete(id, { confirmMessage: "确定要删除这个机柜吗？" });
+  if (result.success) {
+    await loadCabinetsData();
+  }
 }
 
 export async function openCabinetModal(cabinet: Record<string, unknown> | null = null): Promise<void> {
@@ -121,13 +148,13 @@ export async function openCabinetModal(cabinet: Record<string, unknown> | null =
 
   if (cabinet) {
     if (title) title.textContent = "编辑机柜";
-    (document.getElementById("cabinet-id") as HTMLInputElement).value = cabinet.id as string;
+    (document.getElementById("cabinet-id") as HTMLInputElement).value = String(cabinet.id);
     (document.getElementById("cabinet-name") as HTMLInputElement).value = cabinet.name as string;
     if (cabinet.room_id) {
-      (document.getElementById("cabinet-room") as HTMLSelectElement).value = cabinet.room_id as string;
-      await loadRoomNetworksForCabinet(cabinet.room_id as string);
+      (document.getElementById("cabinet-room") as HTMLSelectElement).value = String(cabinet.room_id);
+      await loadRoomNetworksForCabinet(String(cabinet.room_id));
     }
-    if (capacityInput) capacityInput.value = String(cabinet.capacity || 42);
+    if (capacityInput) capacityInput.value = String(cabinet.capacity || cabinet.total_units || 42);
     (document.getElementById("cabinet-description") as HTMLTextAreaElement).value = (cabinet.description as string) || "";
   } else {
     if (title) title.textContent = "添加机柜";
@@ -141,25 +168,19 @@ export async function openCabinetModal(cabinet: Record<string, unknown> | null =
 }
 
 export async function submitCabinetForm(): Promise<boolean | void> {
-  const id = getElementValue("cabinet-id") as string;
-  const name = getElementValue("cabinet-name") as string;
-  const roomId = getElementValue("cabinet-room") as string;
-  const capacityStr = getElementValue("cabinet-capacity") as string;
+  const form = document.getElementById("cabinet-form") as HTMLFormElement | null;
+  if (!form) return;
+
+  const formData = new FormData(form);
+  const id = formData.get("cabinet-id") as string;
+  const name = formData.get("cabinet-name") as string;
+  const roomId = formData.get("cabinet-room") as string;
+  const capacityStr = formData.get("cabinet-capacity") as string;
   const capacity = parseInt(capacityStr, 10);
-  const description = getElementValue("cabinet-description") as string;
-
-  if (!name.trim()) {
-    showToast("机柜名称不能为空", "warning");
-    return;
-  }
-
-  if (!roomId) {
-    showToast("请选择所属机房", "warning");
-    return;
-  }
+  const description = formData.get("cabinet-description") as string;
 
   if (isNaN(capacity) || capacity <= 0) {
-    showToast("机柜容量必须是有效的正数", "warning");
+    errorHandler.handle(errorHandler.createError("VALIDATION_ERROR", "机柜容量必须是有效的正数", "warning"));
     return;
   }
 
@@ -170,20 +191,24 @@ export async function submitCabinetForm(): Promise<boolean | void> {
     description: description.trim() || null,
   };
 
-  const success = await handleFormSubmit({
-    formData: cabinetData,
-    id,
-    baseUrl: "/api/resources/cabinets",
-    successMessage: "机柜保存成功",
-    modalId: "cabinet-modal",
-    reloadFunction: loadCabinetsData,
-  });
+  await wrapAsync(async () => {
+    let result;
+    if (id) {
+      result = await cabinetManager.update(id, cabinetData);
+    } else {
+      result = await cabinetManager.create(cabinetData);
+    }
 
-  return success;
+    if (result.success) {
+      closeModal("cabinet-modal");
+      await loadCabinetsData();
+      return true;
+    }
+  }, "保存机柜数据失败")();
 }
 
 export async function loadCabinetsForModalSelect(): Promise<Cabinet[]> {
-  try {
+  return wrapAsync(async () => {
     const cabinets = await loadCabinets();
     const select = document.getElementById("cabinet-position-cabinet") as HTMLSelectElement | null;
 
@@ -197,7 +222,7 @@ export async function loadCabinetsForModalSelect(): Promise<Cabinet[]> {
 
       cabinets.forEach((cabinet) => {
         const option = document.createElement("option");
-        option.value = cabinet.id as string;
+        option.value = String(cabinet.id);
         option.textContent = cabinet.name;
         select.appendChild(option);
       });
@@ -205,8 +230,15 @@ export async function loadCabinetsForModalSelect(): Promise<Cabinet[]> {
       return cabinets;
     }
     return [];
-  } catch (error) {
-    console.error("加载机柜选项失败:", error);
-    return [];
+  }, "加载机柜选项失败")() || [];
+}
+
+export function cleanup(): void {
+  if (roomSelectHandler) {
+    const roomSelect = document.getElementById("cabinet-room") as HTMLSelectElement | null;
+    roomSelect?.removeEventListener("change", roomSelectHandler);
+    roomSelectHandler = null;
   }
+  eventDelegator.off(document, "click", "#cabinets-table .btn-edit");
+  eventDelegator.off(document, "click", "#cabinets-table .btn-delete");
 }

@@ -1,80 +1,30 @@
+// Switch state management
 export const SWITCH_PAGE_SIZE = 20;
-export const SWITCH_PORT_PAGE_SIZE = 50;
-
-const listState = {
-  currentPage: 1,
-  currentSwitchId: null,
-  currentSwitchName: null
+export const SWITCH_PORT_PAGE_SIZE = 20;
+export const listState = {
+    currentSwitchId: null,
+    currentSwitchName: "",
+    currentSwitchPage: 1,
+    networkRegionId: null,
+    networkRegionName: "",
 };
-
-const positionData = {
-  cabinetId: null,
-  cabinetName: null,
-  startU: null,
-  endU: null,
-  positionId: null,
-  networkRegionId: null
-};
-
-const networkRegion = {
-  id: null,
-  name: ''
-};
-
-export function createPositionState() {
-  return positionData;
+export function updateNetworkRegion(regionId, regionName) {
+    listState.networkRegionId = regionId;
+    listState.networkRegionName = regionName;
 }
-
-export function createNetworkRegionState() {
-  return networkRegion;
-}
-
-export function setCurrentSwitchPage(page) {
-  listState.currentPage = page;
-}
-
-export function getCurrentSwitchPage() {
-  return listState.currentPage;
-}
-
 export function setCurrentSwitchId(id) {
-  listState.currentSwitchId = id;
+    listState.currentSwitchId = id;
 }
-
-export function getCurrentSwitchId() {
-  return listState.currentSwitchId;
-}
-
 export function setCurrentSwitchName(name) {
-  listState.currentSwitchName = name;
+    listState.currentSwitchName = name;
 }
-
+export function setCurrentSwitchPage(page) {
+    listState.currentSwitchPage = page;
+}
+export function getCurrentSwitchId() {
+    return listState.currentSwitchId;
+}
 export function getCurrentSwitchName() {
-  return listState.currentSwitchName;
+    return listState.currentSwitchName;
 }
-
-export function getSwitchPositionData() {
-  return positionData;
-}
-
-export function resetSwitchPositionData() {
-  Object.assign(positionData, {
-    cabinetId: null,
-    cabinetName: null,
-    startU: null,
-    endU: null,
-    positionId: null,
-    networkRegionId: null
-  });
-}
-
-export function updateNetworkRegion(id, name = '') {
-  networkRegion.id = id;
-  networkRegion.name = name;
-}
-
-export function getNetworkRegion() {
-  return networkRegion;
-}
-
-export { listState, positionData, networkRegion };
+//# sourceMappingURL=switchState.js.map

@@ -80,7 +80,7 @@ export function initLogTabs(): void {
       else { loadLogsData(targetTabId); }
     }
   } else {
-    let defaultTabBtn = document.querySelector("#logs .tab-btn.active") || document.querySelector("#logs .tab-btn");
+    const defaultTabBtn = document.querySelector("#logs .tab-btn.active") || document.querySelector("#logs .tab-btn");
     if (defaultTabBtn) {
       const defaultTabId = defaultTabBtn.getAttribute("data-tab");
       if (defaultTabId === "notifications") { loadNotificationsData(); initMacNotificationEmail(); }
@@ -162,7 +162,6 @@ export async function loadLogsData(logType = "operation", searchParams: LogSearc
             rowHtml += `<td>${new Date(log.created_at as string).toLocaleString()}</td><td>${escapeHtml(log.username as string) || "-"}</td><td>${escapeHtml(opText)}</td><td>${escapeHtml(resText) || "-"}</td><td>${resultText}</td><td>${escapeHtml(log.ip_address as string) || "-"}</td><td><button class="btn btn-sm btn-info view-log-details" data-log="${logData}">${t('logs.details')}</button></td>`;
           } else if (logType === "login") {
             const loginResult = log.success ? t('common.success') : t('common.failed');
-            const logData = encodeURIComponent(JSON.stringify(log));
             rowHtml += `<td>${new Date(log.created_at as string).toLocaleString()}</td><td>${escapeHtml(log.username as string)}</td><td>${escapeHtml(log.ip_address as string)}</td><td>${escapeHtml(log.user_agent as string) || "-"}</td><td>${loginResult}</td><td>${escapeHtml(log.error_message as string) || "-"}</td>`;
           }
           row.innerHTML = rowHtml;

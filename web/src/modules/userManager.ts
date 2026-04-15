@@ -1,8 +1,5 @@
 import {
-  apiGet,
   apiPost,
-  apiPut,
-  apiDelete,
 } from "../utils/apiClient.js";
 
 import {
@@ -16,49 +13,50 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { getUser } from "../utils/sessionManager.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
+import { userManager } from "../utils/managers.js";
 
-let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
 
 export async function loadUsersData(page = 1): Promise<void> {
-  currentUserPage = page;
   try {
-    const response = await apiGet(`/api/users?page=${page}&page_size=${USER_PAGE_SIZE}`);
-    if (response.success) {
-      const data = response.data as { items?: Record<string, unknown>[]; total?: number };
-      const users = data.items || [];
-      const pagination = data.total !== undefined ? data : null;
-      const tableBody = document.querySelector("#users-table tbody");
+    const result = await userManager.list({
+      page,
+      pageSize: USER_PAGE_SIZE,
+    });
 
-      if (!tableBody) return;
+    if (!result) return;
 
-      if (users.length === 0) {
-        tableBody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">${t("common.no_data")}</td></tr>`;
-        return;
-      }
+    const data = result.data as { items?: Record<string, unknown>[]; total?: number };
+    const users = data.items || [];
+    const pagination = data.total !== undefined ? data : null;
+    const tableBody = document.querySelector("#users-table tbody");
 
-      tableBody.innerHTML = users.map((user, index) => {
-        const u = user as Record<string, unknown>;
-        return `<tr data-user-id="${u.id}">
-          <td>${escapeHtml(u.username as string)}</td>
-          <td>${escapeHtml(u.email as string)}</td>
-          <td>${u.role === "admin" ? t("user.role_admin") : t("user.role_user")}</td>
-          <td><span class="status-badge ${u.status ? "status-active" : "status-inactive"}">${u.status ? t("user.status_enabled") : t("user.status_disabled")}</span></td>
-          <td><span class="two-factor-badge ${u.two_factor_enabled ? "two-factor-enabled" : "two-factor-disabled"}">${u.two_factor_enabled ? t("user.two_factor_enabled") : t("user.two_factor_disabled")}</span></td>
-          <td>${formatDateTime(u.created_at as string)}</td>
-          <td>
-            <button class="btn btn-secondary btn-sm btn-edit" data-id="${u.id}">${t("common.edit")}</button>
-            <button class="btn btn-secondary btn-sm user-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username as string)}" data-enabled="${u.two_factor_enabled}">${u.two_factor_enabled ? t("user.manage_2fa") : t("user.enable_2fa")}</button>
-            <button class="btn btn-danger btn-sm btn-delete" data-id="${u.id}">${t("common.delete")}</button>
-          </td>
-        </tr>`;
-      }).join("");
+    if (!tableBody) return;
 
-      if (pagination) {
-        appendPaginationToTable("#users-table", pagination as { total?: number; page?: number; page_size?: number }, loadUsersData);
-      }
-    } else {
-      showToast(`${t("common.load_failed")}：${response.message}`, "error");
+    if (users.length === 0) {
+      tableBody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">${t("common.no_data")}</td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = users.map((user) => {
+      const u = user as Record<string, unknown>;
+      return `<tr data-user-id="${u.id}">
+        <td>${escapeHtml(u.username as string)}</td>
+        <td>${escapeHtml(u.email as string)}</td>
+        <td>${u.role === "admin" ? t("user.role_admin") : t("user.role_user")}</td>
+        <td><span class="status-badge ${u.status ? "status-active" : "status-inactive"}">${u.status ? t("user.status_enabled") : t("user.status_disabled")}</span></td>
+        <td><span class="two-factor-badge ${u.two_factor_enabled ? "two-factor-enabled" : "two-factor-disabled"}">${u.two_factor_enabled ? t("user.two_factor_enabled") : t("user.two_factor_disabled")}</span></td>
+        <td>${formatDateTime(u.created_at as string)}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm btn-edit" data-id="${u.id}">${t("common.edit")}</button>
+          <button class="btn btn-secondary btn-sm user-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username as string)}" data-enabled="${u.two_factor_enabled}">${u.two_factor_enabled ? t("user.manage_2fa") : t("user.enable_2fa")}</button>
+          <button class="btn btn-danger btn-sm btn-delete" data-id="${u.id}">${t("common.delete")}</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    if (pagination) {
+      appendPaginationToTable("#users-table", pagination as { total?: number; page?: number; page_size?: number }, loadUsersData);
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
@@ -118,9 +116,8 @@ window.openUserModal = openUserModal;
 
 async function loadUserData(userId: string): Promise<void> {
   try {
-    const response = await apiGet(`/api/users/${userId}`);
-    if (response.success) {
-      const user = response.data as Record<string, unknown>;
+    const user = await userManager.get(userId);
+    if (user) {
       elementCache.setValue("user-username", user.username as string);
       elementCache.setValue("user-email", user.email as string);
       elementCache.setValue("user-role", user.role as string);
@@ -133,18 +130,9 @@ async function loadUserData(userId: string): Promise<void> {
 }
 
 export async function deleteUser(userId: string | number): Promise<void> {
-  if (!confirm(t("user.delete_confirm"))) return;
-  try {
-    const response = await apiDelete(`/api/users/${userId}`);
-    if (response.success) {
-      showToast(t("user.delete_user") + t("common.success"), "success");
-      loadUsersData();
-    } else {
-      showToast(t("user.delete_user") + t("common.failed") + "：" + response.message, "error");
-    }
-  } catch (error) {
-    console.error("删除用户失败:", error);
-    showToast(t("user.delete_user") + t("common.failed"), "error");
+  const result = await userManager.delete(userId, { confirmMessage: t("user.delete_confirm") });
+  if (result.success) {
+    await loadUsersData();
   }
 }
 
@@ -214,7 +202,7 @@ window.openTwoFactorModal = openTwoFactorModal;
 async function initTwoFactorConfig(userId: string): Promise<void> {
   try {
     const currentUser = getUser();
-    if (currentUser && currentUser.id !== userId && currentUser.role !== "admin") {
+    if (currentUser && String(currentUser.id) !== userId && currentUser.role !== "admin") {
       showToast("权限不足，只有管理员可以为其他用户操作2FA", "error"); return;
     }
     const response = await apiPost("/api/two-factor/init", { user_id: userId });
@@ -275,36 +263,51 @@ async function handleTwoFactorDisable(): Promise<void> {
 }
 
 export async function submitUserForm(): Promise<void> {
-  const userId = elementCache.getValue("user-id");
-  const form = elementCache.get("user-form") as HTMLFormElement | null;
+  const form = document.getElementById("user-form") as HTMLFormElement | null;
   if (!form) return;
-  const formData = new FormData(form);
-  const userData: Record<string, unknown> = {
-    username: formData.get("username"),
-    email: formData.get("email"),
-    role: formData.get("role"),
-    status: formData.get("status") === "true",
-  };
 
+  const formData = new FormData(form);
+  const userId = formData.get("user-id") as string;
+  const username = formData.get("username") as string;
+  const email = formData.get("email") as string;
+  const role = formData.get("role") as string;
+  const status = formData.get("status") === "true";
   const password = formData.get("password") as string;
   const passwordConfirm = formData.get("password_confirm") as string;
+
+  if (password && password !== passwordConfirm) {
+    showToast("两次输入的密码不一致", "error");
+    return;
+  }
+
+  const userData: Record<string, unknown> = {
+    username: username.trim(),
+    email: email.trim(),
+    role,
+    status,
+  };
+
   if (password) {
-    if (password !== passwordConfirm) { showToast("两次输入的密码不一致", "error"); return; }
     userData.password = password;
   }
 
   try {
-    let response;
-    if (userId) { response = await apiPut(`/api/users/${userId}`, userData); }
-    else { response = await apiPost("/api/users", userData); }
+    let result;
+    if (userId) {
+      result = await userManager.update(userId, userData);
+    } else {
+      result = await userManager.create(userData);
+    }
 
-    if (response.success) {
-      showToast(userId ? "用户更新成功" : "用户添加成功", "success");
+    if (result.success) {
       closeModal("user-modal");
       form.reset();
-      loadUsersData();
-    } else { showToast((userId ? "更新" : "添加") + "用户失败：" + response.message, "error"); }
-  } catch (error) { console.error("保存用户失败:", error); showToast("保存用户失败，请检查网络连接", "error"); }
+      await loadUsersData();
+    }
+  } catch (error) {
+    console.error("保存用户失败:", error);
+    showToast("保存用户失败，请检查网络连接", "error");
+  }
 }
 
 const userForm = elementCache.get("user-form") as HTMLFormElement | null;

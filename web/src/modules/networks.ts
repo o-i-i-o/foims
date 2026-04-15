@@ -1,17 +1,11 @@
 import {
   apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
   renderTable,
   formatDateTime,
-  getElementValue,
-  handleFormSubmit,
-  handleDelete,
   debounce,
   handleError,
   appendPaginationToTable,
@@ -26,19 +20,24 @@ import {
 } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
+import { networkRegionManager, networkManager } from "../utils/managers.js";
 
-let currentNetworkTypePage = 1;
 const NETWORK_TYPE_PAGE_SIZE = 20;
 
 export async function loadNetworkTypesData(page = 1): Promise<void> {
-  currentNetworkTypePage = page;
   try {
-    const result = await apiGet(`/api/resources/network-regions?page=${page}&page_size=${NETWORK_TYPE_PAGE_SIZE}`);
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const items = (data as { items?: Record<string, unknown>[] }).items || data;
+    const result = await networkRegionManager.list({
+      page,
+      pageSize: NETWORK_TYPE_PAGE_SIZE,
+    });
+
+    if (!result) return;
+
+    const data = result.data as { items?: Record<string, unknown>[]; total?: number };
+    const items = data.items || [];
 
     renderTable("#network-types-table", {
-      data: items as Record<string, unknown>[],
+      data: items as unknown as Record<string, unknown>[],
       columns: [
         { field: "name", render: (v: unknown) => v as string },
         { field: "created_at", render: (v: unknown) => formatDateTime(v as string) },
@@ -50,8 +49,8 @@ export async function loadNetworkTypesData(page = 1): Promise<void> {
       emptyMessage: "暂无网络区域数据",
     });
 
-    if ((data as { total?: number }).total !== undefined) {
-      appendPaginationToTable("#network-types-table", data as { total?: number; page?: number; page_size?: number }, loadNetworkTypesData);
+    if (data.total !== undefined) {
+      appendPaginationToTable("#network-types-table", data, loadNetworkTypesData);
     }
   } catch (error) {
     console.error("加载网络区域数据失败:", error);
@@ -63,22 +62,26 @@ export async function loadNetworkTypesData(page = 1): Promise<void> {
   }
 }
 
-let currentNetworkPage = 1;
 const NETWORK_PAGE_SIZE = 20;
 
 export async function loadNetworksData(page = 1, searchTerm = ""): Promise<void> {
-  currentNetworkPage = page;
   try {
-    const url = `/api/resources/networks?page=${page}&page_size=${NETWORK_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
-    const result = await apiGet(url);
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const networks = (data as { items?: Record<string, unknown>[] }).items || data;
+    const result = await networkManager.list({
+      page,
+      pageSize: NETWORK_PAGE_SIZE,
+      search: searchTerm,
+    });
+
+    if (!result) return;
+
+    const data = result.data as { items?: Record<string, unknown>[]; total?: number };
+    const networks = data.items || [];
     const startIndex = (page - 1) * NETWORK_PAGE_SIZE;
 
     renderTable("#networks-table", {
-      data: networks as Record<string, unknown>[],
+      data: networks as unknown as Record<string, unknown>[],
       columns: [
-        { field: "id", render: (_v: unknown, _row: unknown, index: number) => startIndex + index + 1, className: "index-column" },
+        { field: "id", render: (_v: unknown, _row: unknown, index: number) => String(startIndex + index + 1), className: "index-column" },
         { field: "name", render: (v: unknown) => escapeHtml(v as string) },
         { field: "network_region", render: (v: unknown) => escapeHtml(v as string) },
         { field: "ipv4_cidr", render: (v: unknown) => escapeHtml(v as string) || "-" },
@@ -93,15 +96,14 @@ export async function loadNetworksData(page = 1, searchTerm = ""): Promise<void>
       emptyMessage: "没有找到匹配的网段数据",
     });
 
-    if ((data as { total?: number }).total !== undefined) {
-      appendPaginationToTable("#networks-table", data as { total?: number; page?: number; page_size?: number }, (p: number) => loadNetworksData(p, searchTerm));
+    if (data.total !== undefined) {
+      appendPaginationToTable("#networks-table", data, (p: number) => loadNetworksData(p, searchTerm));
     }
 
     await loadNetworkTypeOptions();
   } catch (error) {
-    handleError(error, "加载网络数据失败", () => {
-      renderTable("#networks-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
-    });
+    handleError(error);
+    renderTable("#networks-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
   }
 }
 
@@ -136,8 +138,7 @@ export function calculateTotalIps(cidr: string | null | undefined): number {
     const parts = cidr.split("/");
     if (parts.length !== 2) return 0;
 
-    const prefixLength = parseInt(parts[1]);
-    return Math.pow(2, 32 - prefixLength) - 2;
+    return Math.pow(2, 32 - parseInt(parts[1])) - 2;
   } catch (error) {
     console.error("计算总IP数量失败:", error);
     return 0;
@@ -152,7 +153,6 @@ export function generateIpAddresses(cidr: string | null | undefined): string[] {
     if (parts.length !== 2) return [];
 
     const ip = parts[0];
-    const prefixLength = parseInt(parts[1]);
 
     if (!/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(ip)) return [];
 
@@ -243,22 +243,22 @@ export async function showNetworkUsage(id: string | number): Promise<void> {
       `;
       contentHtml = `
         <div class="usage-tab-content active" id="ipv4-content">
-          ${buildIPv4Content(network, ipv4Ips, id)}
+          ${buildIPv4Content(network, ipv4Ips)}
         </div>
         <div class="usage-tab-content" id="ipv6-content">
-          ${buildIPv6Content(network, ipv6Ips, id)}
+          ${buildIPv6Content(network, ipv6Ips)}
         </div>
       `;
     } else if (hasIPv4) {
       contentHtml = `
         <div class="usage-tab-content active">
-          ${buildIPv4Content(network, ipv4Ips, id)}
+          ${buildIPv4Content(network, ipv4Ips)}
         </div>
       `;
     } else if (hasIPv6) {
       contentHtml = `
         <div class="usage-tab-content active">
-          ${buildIPv6Content(network, ipv6Ips, id)}
+          ${buildIPv6Content(network, ipv6Ips)}
         </div>
       `;
     } else {
@@ -328,8 +328,8 @@ export async function showNetworkUsage(id: string | number): Promise<void> {
       });
     });
 
-    bindIPv4Events(modalContainer, network, ipv4Ips, id);
-    bindIPv6Events(modalContainer, network, ipv6Ips, id);
+    bindIPv4Events(modalContainer, id);
+    bindIPv6Events(modalContainer, id);
 
   } catch (error) {
     console.error("获取网段使用情况失败:", error);
@@ -337,7 +337,7 @@ export async function showNetworkUsage(id: string | number): Promise<void> {
   }
 }
 
-function buildIPv4Content(network: NetworkData, networkIps: IpRecord[], networkId: string | number): string {
+function buildIPv4Content(network: NetworkData, networkIps: IpRecord[]): string {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
   const allIpAddresses = generateIpAddresses(cidr);
@@ -451,7 +451,7 @@ function buildIPv4Content(network: NetworkData, networkIps: IpRecord[], networkI
   `;
 }
 
-function buildIPv6Content(network: NetworkData, networkIps: IpRecord[], networkId: string | number): string {
+function buildIPv6Content(network: NetworkData, networkIps: IpRecord[]): string {
   const hasIPv6Config = !!network.ipv6_cidr;
 
   if (!hasIPv6Config) {
@@ -550,7 +550,7 @@ function buildIPv6Content(network: NetworkData, networkIps: IpRecord[], networkI
   `;
 }
 
-function bindIPv4Events(modalContainer: HTMLElement, network: NetworkData, networkIps: IpRecord[], networkId: string | number): void {
+function bindIPv4Events(modalContainer: HTMLElement, networkId: string | number): void {
   const filterSelect = modalContainer.querySelector("#ip-status-filter") as HTMLSelectElement | null;
   const ipGrid = modalContainer.querySelector("#ip-grid");
   const ipListBody = modalContainer.querySelector("#ipv4-list-body");
@@ -606,7 +606,7 @@ function bindIPv4Events(modalContainer: HTMLElement, network: NetworkData, netwo
 
               block.className = `ip-block ${statusClass}`;
               (block as HTMLElement).dataset.status = isUsed ? status : "unused";
-              block.title = tooltipText;
+              block.setAttribute("title", tooltipText);
             });
           }
 
@@ -639,7 +639,7 @@ function bindIPv4Events(modalContainer: HTMLElement, network: NetworkData, netwo
   }
 }
 
-function bindIPv6Events(modalContainer: HTMLElement, network: NetworkData, networkIps: IpRecord[], networkId: string | number): void {
+function bindIPv6Events(modalContainer: HTMLElement, networkId: string | number): void {
   const refreshButton = modalContainer.querySelector("#refresh-ipv6-usage") as HTMLButtonElement | null;
   const ipListBody = modalContainer.querySelector("#ipv6-list-body");
 
@@ -696,91 +696,91 @@ function bindIPv6Events(modalContainer: HTMLElement, network: NetworkData, netwo
 
 export async function editNetwork(id: string | number): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/networks/${id}`);
-    if (result.success) {
-      openNetworkModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取网络数据失败: ${result.message}`, "error");
+    const network = await networkManager.get(id);
+    if (network) {
+      openNetworkModal(network as unknown as Record<string, unknown>);
     }
   } catch (error) {
-    handleError(error, "获取网络数据失败");
+    handleError(error);
   }
 }
 
 export async function deleteNetwork(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/networks", "网络删除成功", loadNetworksData);
+  const result = await networkManager.delete(id, { confirmMessage: "确定要删除这个网络吗？" });
+  if (result.success) {
+    await loadNetworksData();
+  }
 }
 
 export async function editNetworkType(id: string | number): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/network-regions/${id}`);
-    if (result.success) {
-      openNetworkTypeModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取网络区域数据失败: ${result.message}`, "error");
+    const networkType = await networkRegionManager.get(id);
+    if (networkType) {
+      openNetworkTypeModal(networkType as unknown as Record<string, unknown>);
     }
   } catch (error) {
-    handleError(error, "获取网络区域数据失败");
+    handleError(error);
   }
 }
 
 export async function deleteNetworkType(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/network-regions", "网络区域删除成功", loadNetworkTypesData);
+  const result = await networkRegionManager.delete(id, { confirmMessage: "确定要删除这个网络区域吗？" });
+  if (result.success) {
+    await loadNetworkTypesData();
+    await loadNetworkTypeOptions();
+  }
 }
 
 export async function submitNetworkTypeForm(): Promise<boolean | void> {
-  const id = getElementValue("network-type-id") as string;
-  const name = getElementValue("network-type-name") as string;
-  const description = getElementValue("network-type-description") as string;
+  const form = document.getElementById("network-type-form") as HTMLFormElement | null;
+  if (!form) return;
 
-  if (!name) {
-    showToast("网络区域名称不能为空", "warning");
-    return;
-  }
+  const formData = new FormData(form);
+  const id = formData.get("network-type-id") as string;
+  const name = formData.get("network-type-name") as string;
+  const description = formData.get("network-type-description") as string;
 
   const networkTypeData = {
-    name,
-    description: description || null,
+    name: name.trim(),
+    description: description.trim() || null,
   };
 
-  const success = await handleFormSubmit({
-    formData: networkTypeData,
-    id,
-    baseUrl: "/api/resources/network-regions",
-    successMessage: "网络区域保存成功",
-    modalId: "network-type-modal",
-    reloadFunction: async () => {
-      loadNetworkTypesData();
-      loadNetworkTypeOptions();
-    },
-  });
+  try {
+    let result;
+    if (id) {
+      result = await networkRegionManager.update(id, networkTypeData);
+    } else {
+      result = await networkRegionManager.create(networkTypeData);
+    }
 
-  return success;
+    if (result.success) {
+      closeModal("network-type-modal");
+      await loadNetworkTypesData();
+      await loadNetworkTypeOptions();
+      return true;
+    }
+  } catch (error) {
+    handleError(error, "保存网络区域数据失败");
+  }
 }
 
 export async function submitNetworkForm(): Promise<boolean | void> {
-  const id = getElementValue("network-id") as string;
-  const name = getElementValue("network-name") as string;
-  const networkType = getElementValue("network-type") as string;
-  const ipv4_cidr = getElementValue("network-ipv4-cidr") as string;
-  const ipv6_cidr = getElementValue("network-ipv6-cidr") as string;
-  const ipv4_gateway = getElementValue("network-ipv4-gateway") as string;
-  const ipv6_gateway = getElementValue("network-ipv6-gateway") as string;
-  const ipv4_dns_str = getElementValue("network-ipv4-dns") as string;
-  const ipv6_dns_str = getElementValue("network-ipv6-dns") as string;
-  const description = getElementValue("network-description") as string;
+  const form = document.getElementById("network-form") as HTMLFormElement | null;
+  if (!form) return;
 
-  if (!name) {
-    showToast("网络名称不能为空", "warning");
-    return;
-  }
+  const formData = new FormData(form);
+  const id = formData.get("network-id") as string;
+  const name = formData.get("network-name") as string;
+  const networkRegionId = formData.get("network-type") as string;
+  const ipv4Cidr = formData.get("network-ipv4-cidr") as string;
+  const ipv6Cidr = formData.get("network-ipv6-cidr") as string;
+  const ipv4Gateway = formData.get("network-ipv4-gateway") as string;
+  const ipv6Gateway = formData.get("network-ipv6-gateway") as string;
+  const ipv4DnsStr = formData.get("network-ipv4-dns") as string;
+  const ipv6DnsStr = formData.get("network-ipv6-dns") as string;
+  const description = formData.get("network-description") as string;
 
-  if (!networkType) {
-    showToast("请选择网络区域", "warning");
-    return;
-  }
-
-  if (!ipv4_cidr && !ipv6_cidr) {
+  if (!ipv4Cidr && !ipv6Cidr) {
     showToast("至少需要提供一个有效的IPv4或IPv6 CIDR", "warning");
     return;
   }
@@ -795,34 +795,40 @@ export async function submitNetworkForm(): Promise<boolean | void> {
     return dnsList;
   };
 
-  const ipv4_dns = parseDnsList(ipv4_dns_str);
-  const ipv6_dns = parseDnsList(ipv6_dns_str);
+  const ipv4Dns = parseDnsList(ipv4DnsStr);
+  const ipv6Dns = parseDnsList(ipv6DnsStr);
 
-  if (ipv4_dns === null && ipv4_dns_str && ipv4_dns_str.trim()) return;
-  if (ipv6_dns === null && ipv6_dns_str && ipv6_dns_str.trim()) return;
+  if (ipv4Dns === null && ipv4DnsStr && ipv4DnsStr.trim()) return;
+  if (ipv6Dns === null && ipv6DnsStr && ipv6DnsStr.trim()) return;
 
-  const networkData: Record<string, unknown> = {
-    name,
-    network_region_id: networkType,
-    ipv4_cidr: ipv4_cidr || null,
-    ipv6_cidr: ipv6_cidr || null,
-    ipv4_gateway: ipv4_gateway || null,
-    ipv6_gateway: ipv6_gateway || null,
-    ipv4_dns,
-    ipv6_dns,
-    description: description || null,
+  const networkData = {
+    name: name.trim(),
+    network_region_id: networkRegionId,
+    ipv4_cidr: ipv4Cidr.trim() || null,
+    ipv6_cidr: ipv6Cidr.trim() || null,
+    ipv4_gateway: ipv4Gateway.trim() || null,
+    ipv6_gateway: ipv6Gateway.trim() || null,
+    ipv4_dns: ipv4Dns,
+    ipv6_dns: ipv6Dns,
+    description: description.trim() || null,
   };
 
-  const success = await handleFormSubmit({
-    formData: networkData,
-    id,
-    baseUrl: "/api/resources/networks",
-    successMessage: "网络保存成功",
-    modalId: "network-modal",
-    reloadFunction: loadNetworksData,
-  });
+  try {
+    let result;
+    if (id) {
+      result = await networkManager.update(id, networkData);
+    } else {
+      result = await networkManager.create(networkData);
+    }
 
-  return success;
+    if (result.success) {
+      closeModal("network-modal");
+      await loadNetworksData();
+      return true;
+    }
+  } catch (error) {
+    handleError(error, "保存网络数据失败");
+  }
 }
 
 export function openNetworkTypeModal(networkType: Record<string, unknown> | null = null): void {

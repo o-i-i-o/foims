@@ -8,7 +8,7 @@ export function createNetworkRegionManager() {
         modalId: "network-type-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "网络区域名称不能为空";
             }
             return null;
         },
@@ -16,9 +16,6 @@ export function createNetworkRegionManager() {
             name: String(data.name ?? "").trim(),
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export function createNetworkManager() {
@@ -30,27 +27,24 @@ export function createNetworkManager() {
         modalId: "network-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "网络名称不能为空";
             }
-            if (!data.network_type) {
-                return "common.required_field";
+            if (!data.network_region_id) {
+                return "请选择网络区域";
             }
             return null;
         },
         transformDataCallback: (data) => ({
             name: String(data.name ?? "").trim(),
-            network_type: data.network_type,
+            network_region_id: data.network_region_id,
             ipv4_cidr: data.ipv4_cidr ? String(data.ipv4_cidr).trim() : null,
             ipv6_cidr: data.ipv6_cidr ? String(data.ipv6_cidr).trim() : null,
             ipv4_gateway: data.ipv4_gateway ? String(data.ipv4_gateway).trim() : null,
             ipv6_gateway: data.ipv6_gateway ? String(data.ipv6_gateway).trim() : null,
-            ipv4_dns: data.ipv4_dns ? String(data.ipv4_dns).trim() : null,
-            ipv6_dns: data.ipv6_dns ? String(data.ipv6_dns).trim() : null,
+            ipv4_dns: data.ipv4_dns || null,
+            ipv6_dns: data.ipv6_dns || null,
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export function createRoomManager() {
@@ -62,21 +56,22 @@ export function createRoomManager() {
         modalId: "room-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "房间名称不能为空";
             }
             if (!data.room_type) {
-                return "common.required_field";
+                return "请选择房间类型";
+            }
+            if (!data.network_ids || data.network_ids.length === 0) {
+                return "请至少选择一个网段";
             }
             return null;
         },
         transformDataCallback: (data) => ({
             name: String(data.name ?? "").trim(),
             room_type: String(data.room_type ?? "").toUpperCase(),
+            network_ids: data.network_ids || [],
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export function createCabinetManager() {
@@ -88,19 +83,56 @@ export function createCabinetManager() {
         modalId: "cabinet-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "机柜名称不能为空";
+            }
+            if (!data.room_id) {
+                return "请选择所属机房";
             }
             return null;
         },
         transformDataCallback: (data) => ({
             name: String(data.name ?? "").trim(),
             room_id: data.room_id,
-            total_units: parseInt(String(data.total_units)) || 42,
+            capacity: parseInt(String(data.capacity || data.total_units)) || 42,
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
+    });
+}
+export function createCabinetPositionManager() {
+    return createCrudManager({
+        endpoint: "/api/resources/positions",
+        entityName: "cabinet_position",
+        entityNameKey: "position.position",
+        formId: "cabinet-position-form",
+        modalId: "cabinet-position-modal",
+        validateCallback: (data) => {
+            if (!data.name || !String(data.name).trim()) {
+                return "机位名称不能为空";
+            }
+            if (!data.cabinet_id) {
+                return "请选择所属机柜";
+            }
+            const startU = parseInt(String(data.start_u));
+            const endU = parseInt(String(data.end_u));
+            if (isNaN(startU) || startU < 1) {
+                return "起始U位必须是有效的正数";
+            }
+            if (isNaN(endU) || endU < 1) {
+                return "结束U位必须是有效的正数";
+            }
+            if (endU < startU) {
+                return "结束U位不能小于起始U位";
+            }
+            return null;
+        },
+        transformDataCallback: (data) => ({
+            name: String(data.name ?? "").trim(),
+            cabinet_id: data.cabinet_id,
+            start_u: parseInt(String(data.start_u)),
+            end_u: parseInt(String(data.end_u)),
+            ips: data.ips || [],
+            description: data.description ? String(data.description).trim() : null,
+        }),
     });
 }
 export function createWorkstationManager() {
@@ -112,18 +144,20 @@ export function createWorkstationManager() {
         modalId: "workstation-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "工位名称不能为空";
+            }
+            if (!data.room_id) {
+                return "请选择所属房间";
             }
             return null;
         },
         transformDataCallback: (data) => ({
             name: String(data.name ?? "").trim(),
             room_id: data.room_id,
+            manager: data.manager ? String(data.manager).trim() : null,
+            ips: data.ips || [],
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export function createSwitchManager() {
@@ -135,10 +169,10 @@ export function createSwitchManager() {
         modalId: "switch-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+                return "交换机名称不能为空";
             }
             if (!data.ip_address || !String(data.ip_address).trim()) {
-                return "common.required_field";
+                return "IP地址不能为空";
             }
             return null;
         },
@@ -150,11 +184,9 @@ export function createSwitchManager() {
             snmp_username: data.snmp_username ? String(data.snmp_username).trim() : null,
             snmp_auth_password: data.snmp_auth_password ? String(data.snmp_auth_password).trim() : null,
             snmp_priv_password: data.snmp_priv_password ? String(data.snmp_priv_password).trim() : null,
+            network_region_id: data.network_region_id || null,
             description: data.description ? String(data.description).trim() : null,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export function createUserManager() {
@@ -166,10 +198,13 @@ export function createUserManager() {
         modalId: "user-modal",
         validateCallback: (data) => {
             if (!data.username || !String(data.username).trim()) {
-                return "common.required_field";
+                return "用户名不能为空";
             }
             if (!data.email || !String(data.email).trim()) {
-                return "common.required_field";
+                return "邮箱不能为空";
+            }
+            if (data.password && data.password !== data.password_confirm) {
+                return "两次输入的密码不一致";
             }
             return null;
         },
@@ -177,11 +212,9 @@ export function createUserManager() {
             username: String(data.username ?? "").trim(),
             email: String(data.email ?? "").trim(),
             role: data.role || "user",
-            status: data.status || "active",
+            status: data.status === "true" || data.status === true,
+            password: data.password || undefined,
         }),
-        afterCreateCallback: () => { },
-        afterUpdateCallback: () => { },
-        afterDeleteCallback: () => { },
     });
 }
 export const managers = {
@@ -189,8 +222,17 @@ export const managers = {
     network: createNetworkManager(),
     room: createRoomManager(),
     cabinet: createCabinetManager(),
+    cabinetPosition: createCabinetPositionManager(),
     workstation: createWorkstationManager(),
     switch: createSwitchManager(),
     user: createUserManager(),
 };
+export const roomManager = createRoomManager();
+export const cabinetManager = createCabinetManager();
+export const cabinetPositionManager = createCabinetPositionManager();
+export const workstationManager = createWorkstationManager();
+export const switchManager = createSwitchManager();
+export const userManager = createUserManager();
+export const networkRegionManager = createNetworkRegionManager();
+export const networkManager = createNetworkManager();
 //# sourceMappingURL=managers.js.map

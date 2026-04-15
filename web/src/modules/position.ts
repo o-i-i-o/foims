@@ -1,13 +1,5 @@
 import {
-  apiGet,
-  apiPost,
-  apiPut,
-} from "../utils/apiClient.js";
-
-import {
   showToast,
-  getElementValue,
-  handleDelete,
   handleError,
   appendPaginationToTable,
   escapeHtml,
@@ -19,15 +11,15 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
-import { IpConfigManager, getManager, handleCabinetPositionCabinetChange } from "../utils/ipconfig.js";
+import { getManager, handleCabinetPositionCabinetChange } from "../utils/ipconfig.js";
 import { loadCabinetsForModalSelect } from "./cabinet.js";
+import { cabinetPositionManager } from "../utils/managers.js";
+import type { IpAssignment } from "../types/resources.js";
 
 const tableState = createSortState("name", "asc");
 let isLoading = false;
-let currentPage = 1;
 
 export async function loadCabinetPositionsData(page = 1, sortBy: string | null = null, sortOrder: string | null = null): Promise<void> {
-  currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
 
   if (isLoading) {
@@ -35,7 +27,16 @@ export async function loadCabinetPositionsData(page = 1, sortBy: string | null =
   }
   try {
     isLoading = true;
-    const result = await apiGet(`/api/resources/positions?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await cabinetPositionManager.list({
+      page,
+      pageSize: DEFAULT_PAGE_SIZE,
+      sort_by: tableState.sortBy,
+      sort_order: tableState.sortOrder,
+    });
+
+    if (!result) return;
+
+    const data = result.data as { items?: Record<string, unknown>[]; total?: number };
     const tbody = document.querySelector("#cabinet-positions-table tbody");
 
     if (!tbody) {
@@ -45,102 +46,57 @@ export async function loadCabinetPositionsData(page = 1, sortBy: string | null =
 
     tbody.innerHTML = "";
 
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const positions = (data as { items?: Record<string, unknown>[] }).items || data;
+    const positions = data.items || [];
 
-    if (Array.isArray(positions) && positions.length > 0) {
-      const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-
-      const ipPromises = positions.map(position =>
-        apiGet(`/api/resources/ip/cabinet-position/${position.id}`)
-          .then(ipsData => ({ position, ipsData }))
-          .catch(ipsError => {
-            console.error(`获取机位 ${position.id} 的IP地址失败:`, ipsError);
-            return { position, ipsData: { success: false, data: [] } };
-          })
-      );
-
-      const results = await Promise.all(ipPromises);
-      let rowIndex = 0;
-
-      for (const { position, ipsData } of results) {
-        const displayName = `${escapeHtml(position.cabinet_name as string)}-${escapeHtml(position.name as string)}`;
-
-        let ipsHtml = "-";
-        let portsHtml = "-";
-        let deviceTypeHtml = "-";
-        const ipsResult = ipsData as { success?: boolean; data?: Record<string, unknown>[] };
-        if (ipsResult.success && ipsResult.data && ipsResult.data.length > 0) {
-          ipsHtml = ipsResult.data.map(ip => escapeHtml(ip.ip_address as string)).join("<br>");
-
-          const portInfos = ipsResult.data
-            .filter(ip => ip.switch_name && ip.switch_port_number)
-            .map(ip => `${escapeHtml(ip.switch_name as string)}: ${escapeHtml(ip.switch_port_number as string)}`);
-          portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
-
-          const deviceTypes = [...new Set(ipsResult.data.map(ip => ip.device_type as string).filter(Boolean))];
-          if (deviceTypes.length > 0) {
-            deviceTypeHtml = deviceTypes.map(dt => {
-              const typeMap: Record<string, string> = {
-                "switch": "交换机",
-                "workstation": "工作站",
-                "cabinet_position": "机位",
-              };
-              return typeMap[dt] || dt;
-            }).join(", ");
-          }
-        }
-
-        const row = document.createElement("tr");
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${displayName}</td>
-                    <td>${deviceTypeHtml}</td>
-                    <td>${ipsHtml}</td>
-                    <td>${position.start_u} - ${position.end_u} U</td>
-                    <td>${portsHtml}</td>
-                    <td>${escapeHtml(position.description as string) || "-"}</td>
-                    <td>${new Date(position.created_at as string).toLocaleString()}</td>
-                    <td>
-                        <button class="btn btn-sm btn-edit" data-id="${position.id}">编辑</button>
-                        <button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>
-                    </td>
-                `;
-        tbody.appendChild(row);
-        rowIndex++;
-      }
-
-      if ((data as { total?: number }).total !== undefined) {
-        appendPaginationToTable("#cabinet-positions-table", data as { total?: number; page?: number; page_size?: number }, loadCabinetPositionsData);
-      }
-    } else {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="9" class="text-center">暂无机位数据</td></tr>';
+    if (!Array.isArray(positions) || positions.length === 0) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">暂无机位数据</td></tr>`;
+      return;
     }
+
+    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+
+    positions.forEach((position: Record<string, unknown>, index: number) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td class="index-column">${startIndex + index + 1}</td>
+        <td>${escapeHtml(position.name as string)}</td>
+        <td>${escapeHtml(position.cabinet_name as string) || "-"}</td>
+        <td>U${position.start_u} - U${position.end_u}</td>
+        <td>${(position.ips as unknown[])?.length || 0}</td>
+        <td>${escapeHtml(position.description as string) || "-"}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm btn-edit" data-id="${position.id}">编辑</button>
+          <button class="btn btn-danger btn-sm btn-delete" data-id="${position.id}">删除</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    if (data.total !== undefined) {
+      appendPaginationToTable("#cabinet-positions-table", data as { total?: number; page?: number; page_size?: number }, loadCabinetPositionsData);
+    }
+
     updateSortIcons("cabinet-positions-table", tableState);
   } catch (error) {
-    console.error("加载机位数据失败:", error);
+    handleError(error, "加载机位数据失败");
     const tbody = document.querySelector("#cabinet-positions-table tbody");
     if (tbody) {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="9" class="text-center">加载失败，请刷新页面重试</td></tr>';
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">加载失败，请刷新页面重试</td></tr>`;
     }
   } finally {
     isLoading = false;
   }
 }
 
-export function initPositionSortEvents(): void {
+export function initCabinetPositionSortEvents(): void {
   initSortEvents("cabinet-positions-table", tableState, loadCabinetPositionsData);
 }
 
 export async function editCabinetPosition(id: string | number): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/positions/${id}`);
-    if (result.success) {
-      openCabinetPositionModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取机位数据失败: ${result.message}`, "error");
+    const position = await cabinetPositionManager.get(id);
+    if (position) {
+      openCabinetPositionModal(position as unknown as Record<string, unknown>);
     }
   } catch (error) {
     handleError(error, "获取机位数据失败");
@@ -148,54 +104,33 @@ export async function editCabinetPosition(id: string | number): Promise<void> {
 }
 
 export async function deleteCabinetPosition(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/positions", "机位删除成功", loadCabinetPositionsData);
+  const result = await cabinetPositionManager.delete(id, { confirmMessage: "确定要删除这个机位吗？" });
+  if (result.success) {
+    await loadCabinetPositionsData();
+  }
 }
 
-export async function submitCabinetPositionForm(): Promise<void> {
-  const id = elementCache.getValue("cabinet-position-id");
-  const parsedId = id && id !== "" ? id : null;
-  const name = elementCache.getValue("cabinet-position-name");
-  const cabinetId = elementCache.getValue("cabinet-position-cabinet");
-  const startU = parseInt(elementCache.getValue("cabinet-position-start-u"));
-  const endU = parseInt(elementCache.getValue("cabinet-position-end-u"));
-  const description = elementCache.getValue("cabinet-position-description");
+export async function submitCabinetPositionForm(): Promise<boolean> {
+  const form = document.getElementById("cabinet-position-form") as HTMLFormElement | null;
+  if (!form) return false;
 
-  if (!name.trim()) {
-    showToast("名称不能为空", "warning");
-    return;
-  }
+  const formData = new FormData(form);
+  const id = formData.get("cabinet-position-id") as string;
+  const name = formData.get("cabinet-position-name") as string;
+  const cabinetId = formData.get("cabinet-position-cabinet") as string;
+  const startUStr = formData.get("cabinet-position-start-u") as string;
+  const endUStr = formData.get("cabinet-position-end-u") as string;
+  const description = formData.get("cabinet-position-description") as string;
 
-  if (!cabinetId) {
-    showToast("请选择机柜", "warning");
-    return;
-  }
-
-  if (isNaN(startU) || startU <= 0) {
-    showToast("起始U位必须是有效的正数", "warning");
-    return;
-  }
-
-  if (isNaN(endU) || endU <= 0) {
-    showToast("结束U位必须是有效的正数", "warning");
-    return;
-  }
-
-  if (startU > endU) {
-    showToast("起始U位不能大于结束U位", "warning");
-    return;
-  }
+  const startU = parseInt(startUStr, 10);
+  const endU = parseInt(endUStr, 10);
 
   const ipManager = getManager("cabinet-position");
-  const validation = ipManager.validateIps();
+  const { valid, errors, ips } = ipManager.validateIps();
 
-  if (validation.errors && validation.errors.length > 0) {
-    showToast(validation.errors[0], "warning");
-    return;
-  }
-
-  if (validation.ips.length === 0) {
-    showToast("请至少添加一个IP地址", "warning");
-    return;
+  if (!valid) {
+    showToast(errors?.[0] || "IP配置验证失败", "warning");
+    return false;
   }
 
   const positionData = {
@@ -203,30 +138,27 @@ export async function submitCabinetPositionForm(): Promise<void> {
     cabinet_id: cabinetId,
     start_u: startU,
     end_u: endU,
-    ips: validation.ips,
     description: description.trim() || null,
+    ips: ips,
   };
 
   try {
     let result;
-    if (parsedId) {
-      result = await apiPut(`/api/resources/positions/${parsedId}`, positionData);
+    if (id) {
+      result = await cabinetPositionManager.update(id, positionData);
     } else {
-      result = await apiPost("/api/resources/positions", positionData);
+      result = await cabinetPositionManager.create(positionData);
     }
 
     if (result.success) {
       closeModal("cabinet-position-modal");
-      loadCabinetPositionsData();
-      showToast("机位保存成功", "success");
-    } else {
-      const errorMsg = result.message || "操作失败，请检查输入信息";
-      showToast(`操作失败: ${errorMsg}`, "error");
-      console.error("服务器返回错误:", result);
+      await loadCabinetPositionsData();
+      return true;
     }
+    return false;
   } catch (error) {
-    console.error("提交机位表单失败:", error);
-    showToast("操作失败，请重试", "error");
+    handleError(error, "保存机位数据失败");
+    return false;
   }
 }
 
@@ -238,15 +170,13 @@ export async function openCabinetPositionModal(position: Record<string, unknown>
 
   await loadCabinetsForModalSelect();
 
-  const ipManager = getManager("cabinet-position");
-  ipManager.clear();
-
-  const cabinetSelect = elementCache.get("cabinet-position-cabinet") as HTMLSelectElement | null;
-
+  const cabinetSelect = document.getElementById("cabinet-position-cabinet") as HTMLSelectElement | null;
   if (cabinetSelect) {
-    cabinetSelect.removeEventListener("change", handleCabinetPositionCabinetChange);
     cabinetSelect.addEventListener("change", handleCabinetPositionCabinetChange);
   }
+
+  const ipManager = getManager("cabinet-position");
+  ipManager.clear();
 
   if (position) {
     if (title) title.textContent = "编辑机位";
@@ -258,7 +188,7 @@ export async function openCabinetPositionModal(position: Record<string, unknown>
     elementCache.setValue("cabinet-position-description", (position.description as string) || "");
 
     if (position.ips && (position.ips as unknown[]).length > 0) {
-      await ipManager.loadIps(position.ips as Record<string, unknown>[]);
+      await ipManager.loadIps(position.ips as unknown as IpAssignment[]);
     } else if (position.cabinet_id) {
       await ipManager.addIpRow();
     }

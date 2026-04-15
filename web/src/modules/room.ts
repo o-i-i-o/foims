@@ -1,16 +1,10 @@
 import {
   apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
   renderTable,
-  getElementValue,
-  handleFormSubmit,
-  handleDelete,
   handleError,
   appendPaginationToTable,
   escapeHtml,
@@ -23,8 +17,9 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
+import { roomManager } from "../utils/managers.js";
 import type { ApiResponse, PagedData } from "../types/api.js";
-import type { NetworkRegion, Network } from "../types/resources.js";
+import type { NetworkRegion, Network, Room } from "../types/resources.js";
 
 interface SelectItem {
   id: number;
@@ -44,7 +39,7 @@ const networkCache: {
 };
 
 function isCacheValid(timestamp: number): boolean {
-  return timestamp && (Date.now() - timestamp < networkCache.CACHE_TTL);
+  return !!timestamp && (Date.now() - timestamp < networkCache.CACHE_TTL);
 }
 
 function extractItems<T>(result: ApiResponse<T[] | PagedData<T>>): T[] {
@@ -120,12 +115,10 @@ async function loadNetworks(regionId: string | number | null, select: HTMLSelect
 }
 
 class EventHandler {
-  private manager: NetworkConfigManager;
-  private handlers: WeakMap<Element, EventListener>;
+  private handlers: Map<Element, EventListener>;
 
-  constructor(manager: NetworkConfigManager) {
-    this.manager = manager;
-    this.handlers = new WeakMap();
+  constructor() {
+    this.handlers = new Map();
   }
 
   bind(element: Element, event: string, handler: EventListener): EventListener {
@@ -144,7 +137,7 @@ class EventHandler {
         element.removeEventListener("change", handler);
       }
     }
-    this.handlers = new WeakMap();
+    this.handlers.clear();
   }
 }
 
@@ -164,7 +157,7 @@ class NetworkConfigManager {
   constructor(options: NetworkConfigOptions) {
     this.options = options;
     this.container = null;
-    this.eventHandler = new EventHandler(this);
+    this.eventHandler = new EventHandler();
   }
 
   async init(): Promise<boolean> {
@@ -398,22 +391,28 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 });
 
 const tableState = createSortState("name", "asc");
-let currentPage = 1;
 
 export async function loadRoomsData(page = 1, sortBy: string | null = null, sortOrder: string | null = null): Promise<void> {
-  currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
 
   try {
-    const roomsData = await apiGet(`/api/resources/rooms?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
-    const data = roomsData.success ? roomsData.data : { items: [], total: 0 };
-    const rooms = (data as { items?: unknown[] }).items || data;
+    const result = await roomManager.list({
+      page,
+      pageSize: DEFAULT_PAGE_SIZE,
+      sort_by: tableState.sortBy,
+      sort_order: tableState.sortOrder,
+    });
+
+    if (!result) return;
+
+    const data = result.data as { items?: Room[]; total?: number };
+    const rooms = data.items || [];
     const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
 
     renderTable("#rooms-table", {
-      data: rooms as Record<string, unknown>[],
+      data: rooms as unknown as Record<string, unknown>[],
       columns: [
-        { field: "id", render: (_v: unknown, _row: unknown, index: number) => startIndex + index + 1, className: "index-column" },
+        { field: "id", render: (_v: unknown, _row: unknown, index: number) => String(startIndex + index + 1), className: "index-column" },
         { field: "name", render: (v: unknown) => escapeHtml(v as string) },
         { field: "room_type", render: (v: unknown) => {
           const roomTypeLower = v ? (v as string).toLowerCase() : "";
@@ -430,14 +429,13 @@ export async function loadRoomsData(page = 1, sortBy: string | null = null, sort
       emptyMessage: t("common.no_data"),
     });
 
-    if ((data as { total?: number }).total !== undefined) {
+    if (data.total !== undefined) {
       appendPaginationToTable("#rooms-table", data as { total?: number; page?: number; page_size?: number }, loadRoomsData);
     }
     updateSortIcons("rooms-table", tableState);
   } catch (error) {
-    handleError(error, "加载房间数据失败", () => {
-      renderTable("#rooms-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
-    });
+    handleError(error);
+    renderTable("#rooms-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
   }
 }
 
@@ -447,36 +445,31 @@ export function initRoomSortEvents(): void {
 
 export async function editRoom(id: string | number): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/rooms/${id}`);
-    if (result.success) {
-      openRoomModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取房间数据失败: ${result.message}`, "error");
+    const room = await roomManager.get(id);
+    if (room) {
+      openRoomModal(room as unknown as Record<string, unknown>);
     }
   } catch (error) {
-    handleError(error, "获取房间数据失败");
+    handleError(error);
   }
 }
 
 export async function deleteRoom(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/rooms", "房间删除成功", loadRoomsData);
+  const result = await roomManager.delete(id, { confirmMessage: t("room.delete_confirm") });
+  if (result.success) {
+    await loadRoomsData();
+  }
 }
 
 export async function submitRoomForm(): Promise<boolean | void> {
-  const id = getElementValue("room-id") as string;
-  const name = getElementValue("room-name") as string;
-  const roomType = getElementValue("room-type") as string;
-  const description = getElementValue("room-description") as string;
+  const form = document.getElementById("room-form") as HTMLFormElement | null;
+  if (!form) return;
 
-  if (!name) {
-    showToast(t("room.name_required"), "warning");
-    return;
-  }
-
-  if (!roomType) {
-    showToast(t("room.type_required"), "warning");
-    return;
-  }
+  const formData = new FormData(form);
+  const id = formData.get("room-id") as string;
+  const name = formData.get("room-name") as string;
+  const roomType = formData.get("room-type") as string;
+  const description = formData.get("room-description") as string;
 
   const { networkIds, hasEmpty } = roomNetworkConfigManager.collectData();
 
@@ -485,37 +478,29 @@ export async function submitRoomForm(): Promise<boolean | void> {
     return;
   }
 
-  if (networkIds.length === 0) {
-    showToast(t("room.network_required"), "warning");
-    return;
-  }
-
-  let formattedRoomType: string;
-  if (roomType === "office") {
-    formattedRoomType = "OFFICE";
-  } else if (roomType === "data_center") {
-    formattedRoomType = "DATA_CENTER";
-  } else {
-    formattedRoomType = roomType;
-  }
-
   const roomData = {
     name: name.trim(),
-    room_type: formattedRoomType,
+    room_type: roomType.toUpperCase(),
     network_ids: networkIds,
     description: description || null,
   };
 
-  const success = await handleFormSubmit({
-    formData: roomData,
-    id,
-    baseUrl: "/api/resources/rooms",
-    successMessage: "房间保存成功",
-    modalId: "room-modal",
-    reloadFunction: loadRoomsData,
-  });
+  try {
+    let result;
+    if (id) {
+      result = await roomManager.update(id, roomData);
+    } else {
+      result = await roomManager.create(roomData);
+    }
 
-  return success;
+    if (result.success) {
+      closeModal("room-modal");
+      await loadRoomsData();
+      return true;
+    }
+  } catch (error) {
+    handleError(error, "保存房间数据失败");
+  }
 }
 
 export async function openRoomModal(room: Record<string, unknown> | null = null): Promise<void> {

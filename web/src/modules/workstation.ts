@@ -1,13 +1,9 @@
 import {
   apiGet,
-  apiPost,
-  apiPut,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
-  getElementValue,
-  handleDelete,
   handleError,
   appendPaginationToTable,
   escapeHtml,
@@ -20,28 +16,27 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 
 import {
-  IpConfigManager,
   getManager,
   handleWorkstationRoomChange,
 } from "../utils/ipconfig.js";
+
+import type { IpAssignment } from "../types/resources.js";
 
 import {
   loadRoomsForSelect,
 } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
+import { workstationManager } from "../utils/managers.js";
 
 const tableState = createSortState("name", "asc");
 let isLoading = false;
-let currentPage = 1;
 
 export async function editWorkstation(id: string | number): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/workstations/${id}`);
-    if (result.success) {
-      openWorkstationModal(result.data as Record<string, unknown> | null);
-    } else {
-      showToast(`获取工位数据失败: ${result.message}`, "error");
+    const workstation = await workstationManager.get(id);
+    if (workstation) {
+      openWorkstationModal(workstation as unknown as Record<string, unknown>);
     }
   } catch (error) {
     handleError(error, "获取工位数据失败");
@@ -49,7 +44,10 @@ export async function editWorkstation(id: string | number): Promise<void> {
 }
 
 export async function deleteWorkstation(id: string | number): Promise<void> {
-  await handleDelete(id, "/api/resources/workstations", "工位删除成功", loadWorkstationsData);
+  const result = await workstationManager.delete(id, { confirmMessage: "确定要删除这个工位吗？" });
+  if (result.success) {
+    await loadWorkstationsData();
+  }
 }
 
 export async function loadWorkstationsData(page = 1, sortBy: string | null = null, sortOrder: string | null = null): Promise<void> {
@@ -57,10 +55,18 @@ export async function loadWorkstationsData(page = 1, sortBy: string | null = nul
 
   try {
     isLoading = true;
-    currentPage = page;
     if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
 
-    const result = await apiGet(`/api/resources/workstations?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await workstationManager.list({
+      page,
+      pageSize: DEFAULT_PAGE_SIZE,
+      sort_by: tableState.sortBy,
+      sort_order: tableState.sortOrder,
+    });
+
+    if (!result) return;
+
+    const data = result.data as { items?: Record<string, unknown>[] };
     const tbody = document.querySelector("#workstations-table tbody");
 
     if (!tbody) {
@@ -70,8 +76,7 @@ export async function loadWorkstationsData(page = 1, sortBy: string | null = nul
 
     tbody.innerHTML = "";
 
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const workstations = (data as { items?: Record<string, unknown>[] }).items || data;
+    const workstations = data.items || [];
 
     if (Array.isArray(workstations) && workstations.length > 0) {
       const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
@@ -172,7 +177,7 @@ export async function openWorkstationModal(workstation: Record<string, unknown> 
     elementCache.setValue("workstation-description", (workstation.description as string) || "");
 
     if (workstation.ips && (workstation.ips as unknown[]).length > 0) {
-      await ipManager.loadIps(workstation.ips as Record<string, unknown>[]);
+      await ipManager.loadIps(workstation.ips as unknown as IpAssignment[]);
     } else {
       await ipManager.addIpRow();
     }
@@ -184,22 +189,15 @@ export async function openWorkstationModal(workstation: Record<string, unknown> 
 }
 
 export async function submitWorkstationForm(): Promise<void> {
-  const id = elementCache.getValue("workstation-id");
-  const parsedId = id && id !== "" ? id : null;
-  const name = elementCache.getValue("workstation-name");
-  const roomId = elementCache.getValue("workstation-room");
-  const manager = elementCache.getValue("workstation-manager");
-  const description = elementCache.getValue("workstation-description");
+  const form = document.getElementById("workstation-form") as HTMLFormElement | null;
+  if (!form) return;
 
-  if (!name?.trim()) {
-    showToast("工位名称不能为空", "warning");
-    return;
-  }
-
-  if (!roomId) {
-    showToast("请选择房间", "warning");
-    return;
-  }
+  const formData = new FormData(form);
+  const id = formData.get("workstation-id") as string;
+  const name = formData.get("workstation-name") as string;
+  const roomId = formData.get("workstation-room") as string;
+  const manager = formData.get("workstation-manager") as string;
+  const description = formData.get("workstation-description") as string;
 
   const ipManager = getManager("workstation");
   const validation = ipManager.validateIps();
@@ -219,29 +217,23 @@ export async function submitWorkstationForm(): Promise<void> {
     room_id: roomId,
     manager: manager.trim() || null,
     ports: null,
-    ips: validation.ips.map((ip: Record<string, unknown>) => ({ ...ip, device_type: "workstation" })),
+    ips: validation.ips.map((ip: IpAssignment) => ({ ...ip, device_type: "workstation" })),
     description: description.trim() || null,
   };
 
   try {
     let result;
-    if (parsedId) {
-      result = await apiPut(`/api/resources/workstations/${parsedId}`, workstationData);
+    if (id) {
+      result = await workstationManager.update(id, workstationData);
     } else {
-      result = await apiPost("/api/resources/workstations", workstationData);
+      result = await workstationManager.create(workstationData);
     }
 
     if (result.success) {
       closeModal("workstation-modal");
-      loadWorkstationsData();
-      showToast("工位保存成功", "success");
-    } else {
-      const errorMsg = result.message || "操作失败，请检查输入信息";
-      showToast(`操作失败: ${errorMsg}`, "error");
-      console.error("服务器返回错误:", result);
+      await loadWorkstationsData();
     }
   } catch (error) {
-    console.error("提交工位表单失败:", error);
-    showToast("操作失败，请重试", "error");
+    handleError(error, "保存工位数据失败");
   }
 }

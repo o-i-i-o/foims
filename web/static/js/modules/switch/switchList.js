@@ -1,164 +1,75 @@
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
-} from "../../utils/apiClient.js";
-
-import {
-  showToast,
-  renderTable,
-  handleDelete,
-  handleError,
-  appendPaginationToTable,
-  escapeHtml,
-} from "../../utils/ui.js";
-
-import { elementCache } from "../../utils/helpers.js";
-import {
-  listState,
-  SWITCH_PAGE_SIZE
-} from "./switchState.js";
-
-async function loadSwitchesData(searchTerm = "") {
-  listState.currentPage = listState.currentPage || 1;
-  try {
-    const url = `/api/switches?page=${listState.currentPage}&page_size=${SWITCH_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
-    const result = await apiGet(url);
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const switches = data.items || data;
-    const startIndex = (listState.currentPage - 1) * SWITCH_PAGE_SIZE;
-
-    renderTable("#switches-table", {
-      data: switches,
-      columns: [
-        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
-        { field: 'name', render: (v, row) => v },
-        { field: 'device_type', render: (v) => v || '-' },
-        { field: 'ip_address', render: (v) => v },
-        { field: 'mac_address', render: (v) => v || '-' },
-        { field: 'model', render: (v) => v || '-' },
-        { field: 'vendor', render: (v) => v || '-' },
-        { field: 'location', render: (v) => v || '-' },
-        { field: 'snmp_version', render: (v, row) => `<span class="status-badge ${row.snmp_community || row.snmp_username ? 'status-active' : 'status-inactive'}">${v || '-'}</span>` },
-        { field: 'parent_switch_name', render: (v) => v || '-' },
-        { field: 'id', render: (v, row) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-secondary btn-switch-ports" data-switch-id="${v}" data-switch-name="${escapeHtml(row.name)}">端口</button>
-          <button class="btn btn-sm btn-secondary btn-switch-arp" data-switch-id="${v}">MAC表</button>
-          <button class="btn btn-sm btn-secondary btn-switch-lldp" data-switch-id="${v}">LLDP</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
-        ` }
-      ],
-      emptyMessage: '暂无交换机数据'
-    });
-
-    if (data.total !== undefined) {
-      appendPaginationToTable("#switches-table", data, (p) => {
-        listState.currentPage = p;
-        loadSwitchesData(searchTerm);
-      });
+// Switch list management
+import { showToast, appendPaginationToTable, escapeHtml } from "../../utils/ui.js";
+import { switchManager } from "../../utils/managers.js";
+import { SWITCH_PAGE_SIZE } from "./switchState.js";
+export async function loadSwitchesData(page = 1, searchTerm = "") {
+    try {
+        const result = await switchManager.list({
+            page,
+            pageSize: SWITCH_PAGE_SIZE,
+            search: searchTerm,
+        });
+        if (!result)
+            return;
+        const data = result.data;
+        const switches = data.items || [];
+        const tableBody = document.querySelector("#switches-table tbody");
+        if (!tableBody)
+            return;
+        if (switches.length === 0) {
+            tableBody.innerHTML = '<tr class="empty-row"><td colspan="7" class="text-center">暂无交换机数据</td></tr>';
+            return;
+        }
+        tableBody.innerHTML = switches.map((sw) => `
+      <tr>
+        <td>${escapeHtml(sw.name)}</td>
+        <td>${escapeHtml(sw.ip_address)}</td>
+        <td>${escapeHtml(sw.vendor)}</td>
+        <td>${escapeHtml(sw.model)}</td>
+        <td><span class="status-badge ${sw.status === "active" ? "status-active" : "status-inactive"}">${sw.status || "未知"}</span></td>
+        <td>${sw.active_ports_count || 0}/${sw.ports_count || 0}</td>
+        <td>
+          <button class="btn btn-sm btn-edit" data-id="${sw.id}">编辑</button>
+          <button class="btn btn-sm btn-delete" data-id="${sw.id}">删除</button>
+        </td>
+      </tr>
+    `).join("");
+        if (data.total !== undefined) {
+            appendPaginationToTable("#switches-table", data, (p) => loadSwitchesData(p, searchTerm));
+        }
     }
-
-    bindSwitchButtonsEvents();
-  } catch (error) {
-    handleError(error, "加载交换机数据失败", () => {
-      renderTable("#switches-table", { data: [], columns: [], emptyMessage: "加载失败" });
-    });
-  }
-}
-
-let switchTableClickHandler = null;
-
-function bindSwitchButtonsEvents() {
-  const table = elementCache.get("switches-table");
-  if (!table) return;
-
-  if (switchTableClickHandler) {
-    table.removeEventListener("click", switchTableClickHandler);
-  }
-
-  switchTableClickHandler = async (e) => {
-    const target = e.target;
-    const id = target.dataset.id || target.dataset.switchId;
-
-    if (target.classList.contains("btn-delete")) {
-      deleteSwitch(id);
-    } else if (target.classList.contains("btn-switch-ports")) {
-      const switchName = target.dataset.switchName;
-      import('./switchPort.js').then(module => {
-        module.manageSwitchPorts(id, switchName);
-      });
-    } else if (target.classList.contains("btn-switch-arp")) {
-      import('./switchMacLldp.js').then(module => {
-        module.viewArpTable(id);
-      });
-    } else if (target.classList.contains("btn-switch-lldp")) {
-      import('./switchMacLldp.js').then(module => {
-        module.viewLldpNeighbors(id);
-      });
+    catch (error) {
+        console.error("获取交换机数据失败:", error);
+        showToast("加载交换机数据失败", "error");
     }
-  };
-
-  table.addEventListener("click", switchTableClickHandler);
 }
-
-async function fetchSwitchById(id) {
-  try {
-    const result = await apiGet(`/api/switches/${id}`);
+export async function fetchSwitchById(id) {
+    try {
+        const sw = await switchManager.get(id);
+        return sw;
+    }
+    catch (error) {
+        console.error("获取交换机数据失败:", error);
+        return null;
+    }
+}
+export async function deleteSwitch(id) {
+    const result = await switchManager.delete(id, { confirmMessage: "确定要删除此交换机吗？" });
     if (result.success) {
-      return result.data;
-    } else {
-      showToast("获取交换机信息失败", "error");
-      return null;
+        await loadSwitchesData();
+        return true;
     }
-  } catch (error) {
-    handleError(error, "获取交换机信息失败");
-    return null;
-  }
-}
-
-async function deleteSwitch(id) {
-  await handleDelete(id, "/api/switches", "交换机删除成功", () => loadSwitchesData());
-}
-
-async function submitSwitchForm(formData) {
-  const id = formData.id;
-
-  if (!formData.name) {
-    showToast("交换机名称不能为空", "warning");
     return false;
-  }
-
-  if (!formData.ips || formData.ips.length === 0) {
-    showToast("请至少配置一个IP地址", "warning");
-    return false;
-  }
-
-  try {
-    let result;
-    if (id) {
-      result = await apiPut(`/api/switches/${id}`, formData);
-    } else {
-      result = await apiPost("/api/switches", formData);
+}
+export async function submitSwitchForm() {
+    try {
+        showToast("交换机保存功能暂未实现", "warning");
+        return false;
     }
-
-    if (result.success) {
-      showToast(id ? "交换机更新成功" : "交换机添加成功", "success");
-      return true;
-    } else {
-      showToast((id ? "更新" : "添加") + "交换机失败：" + result.message, "error");
-      return false;
+    catch (error) {
+        console.error("保存交换机失败:", error);
+        showToast("保存失败", "error");
+        return false;
     }
-  } catch (error) {
-    handleError(error, "保存交换机失败");
-    return false;
-  }
 }
-
-export {
-  loadSwitchesData,
-  fetchSwitchById,
-  deleteSwitch,
-  submitSwitchForm
-};
+//# sourceMappingURL=switchList.js.map

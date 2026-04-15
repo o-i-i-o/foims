@@ -8,14 +8,9 @@ import {
   renderTable,
   formatDateTime,
   handleError,
-  appendPaginationToTable,
 } from "../utils/ui.js";
 
-import { t } from "../utils/i18n.js";
-
 import { getDeviceTypeName } from "../utils/formatter.js";
-
-const IP_PAGE_SIZE = 100;
 
 export async function loadSwitchesForPullMac(): Promise<void> {
   try {
@@ -174,9 +169,9 @@ export async function loadIpMacData(searchParams: IpSearchParams = {}): Promise<
       const startIndex = (pageNum - 1) * page_size;
 
       renderTable("#ip-table", {
-        data: (data.data || []) as Record<string, unknown>[],
+        data: (data.data || []) as unknown as Record<string, unknown>[],
         columns: [
-          { field: "id", render: (_v: unknown, _row: unknown, index: number) => startIndex + index + 1, className: "index-column" },
+          { field: "id", render: (_v: unknown, _row: unknown, index: number) => String(startIndex + index + 1), className: "index-column" },
           { field: "device_name", render: (v: unknown) => (v as string) || "-" },
           { field: "device_type", render: (v: unknown) => getDeviceTypeName(v as string) },
           { field: "network_name", render: (v: unknown, row: unknown) => `${v || "未知"} (${(row as Record<string, unknown>).network_region || "未知"})` },
