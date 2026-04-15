@@ -1,6 +1,6 @@
-type EventHandler = (event: Event, target: HTMLElement, data?: Record<string, string>) => void | Promise<void>;
+export type EventHandler = (event: Event, target: HTMLElement, data?: Record<string, string>) => void | Promise<void>;
 
-interface DelegatedEvent {
+export interface DelegatedEvent {
   selector: string;
   handler: EventHandler;
   eventType: string;

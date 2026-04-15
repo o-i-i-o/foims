@@ -1,6 +1,6 @@
-type TemplateData = Record<string, unknown>;
+export type TemplateData = Record<string, unknown>;
 
-interface TemplateCache {
+export interface TemplateCache {
   [key: string]: string;
 }
 

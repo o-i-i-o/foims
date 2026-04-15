@@ -18,6 +18,8 @@ interface ErrorHandlerOptions {
   customHandler?: (error: AppError) => void;
 }
 
+export type { ErrorHandlerOptions };
+
 class GlobalErrorHandler {
   private errorQueue: AppError[] = [];
   private maxQueueSize = 100;
