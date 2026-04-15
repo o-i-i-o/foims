@@ -1,4 +1,3 @@
-// Switch state management
 export const SWITCH_PAGE_SIZE = 20;
 export const SWITCH_PORT_PAGE_SIZE = 20;
 
@@ -16,6 +15,34 @@ export const listState: SwitchListState = {
   currentSwitchPage: 1,
   networkRegionId: null,
   networkRegionName: "",
+};
+
+interface PositionData {
+  cabinetId: string | null;
+  cabinetName: string | null;
+  startU: number | null;
+  endU: number | null;
+  positionId: string | null;
+  networkRegionId: string | null;
+}
+
+export const positionData: PositionData = {
+  cabinetId: null,
+  cabinetName: null,
+  startU: null,
+  endU: null,
+  positionId: null,
+  networkRegionId: null,
+};
+
+interface NetworkRegionState {
+  id: string | null;
+  name: string;
+}
+
+export const networkRegion: NetworkRegionState = {
+  id: null,
+  name: "",
 };
 
 export function updateNetworkRegion(regionId: string | null, regionName: string): void {
