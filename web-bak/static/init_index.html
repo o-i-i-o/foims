@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPMA - 系统初始化</title>
+    <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script type="module">
+        import { showToast } from '/static/js/utils/ui.js';
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            let currentStep = 1;
+            let dbStatus = null;
+            let initMode = 'create';
+
+            const goToStep = (stepNum) => {
+                document.querySelectorAll('.step-panel').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+                document.querySelector(`.step-panel[data-step="${stepNum}"]`).classList.add('active');
+                document.querySelectorAll('.step').forEach(step => {
+                    const stepData = parseInt(step.dataset.step);
+                    if (stepData < stepNum) {
+                        step.classList.add('completed');
+                        step.classList.remove('active');
+                    } else if (stepData === stepNum) {
+                        step.classList.add('active');
+                        step.classList.remove('completed');
+                    } else {
+                        step.classList.remove('active', 'completed');
+                    }
+                });
+                currentStep = stepNum;
+            };
+
+            const showError = (message) => {
+                const errorElement = document.getElementById('error-message');
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                setTimeout(() => {
+                    errorElement.style.display = 'none';
+                }, 5000);
+            };
+
+            const showLoading = () => {
+                document.getElementById('loading').style.display = 'flex';
+            };
+
+            const hideLoading = () => {
+                document.getElementById('loading').style.display = 'none';
+            };
+
+            const checkPostgreSQL = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/check-pgsql', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    const pgStatusElement = document.getElementById('pg-status');
+                    const nextButton = document.querySelector('.step-panel[data-step="1"] .btn-success');
+                    
+                    if (result.installed && result.running) {
+                        pgStatusElement.innerHTML = `
+                            <div class="status-success">✓</div>
+                            <h3>PostgreSQL 已安装并运行</h3>
+                            <p>${result.message || 'PostgreSQL 连接成功'}</p>
+                        `;
+                        pgStatusElement.classList.add('status-success');
+                        nextButton.disabled = false;
+                    } else {
+                        pgStatusElement.innerHTML = `
+                            <div class="status-error">✗</div>
+                            <h3>PostgreSQL 检查失败</h3>
+                            <p>${result.error || '未知错误'}</p>
+                            <div class="error-guide">
+                                <h4>解决建议：</h4>
+                                <ul>
+                                    ${!result.installed ? '<li>请先安装 PostgreSQL 数据库</li>' : ''}
+                                    ${result.installed && !result.running ? '<li>请启动 PostgreSQL 服务</li>' : ''}
+                                    <li>确保数据库配置正确</li>
+                                    <li>检查网络连接和防火墙设置</li>
+                                </ul>
+                            </div>
+                        `;
+                        pgStatusElement.classList.add('status-error');
+                        nextButton.disabled = true;
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            const checkDatabaseStatus = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/db-status', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        dbStatus = result.data;
+                        const dbStatusElement = document.getElementById('db-status');
+                        const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+                        
+                        dbStatusElement.className = 'status-container';
+                        
+                        if (dbStatus.connected) {
+                            if (dbStatus.has_data) {
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-warning">⚠</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，表结构完整，且包含数据。</p>
+                                    <p class="warning-text">初始化将备份并清空现有数据，请选择初始化方式。</p>
+                                `;
+                                dbStatusElement.classList.add('status-warning');
+                            } else if (!dbStatus.required_tables_exist) {
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-warning">⚠</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，但表结构不完整。</p>
+                                    <p>请选择初始化方式创建完整的表结构。</p>
+                                `;
+                                dbStatusElement.classList.add('status-warning');
+                            } else {
+                                dbStatusElement.innerHTML = `
+                                    <div class="status-success">✓</div>
+                                    <h3>数据库状态</h3>
+                                    <p>数据库已连接，表结构完整，且为空。</p>
+                                    <p>请选择初始化方式。</p>
+                                `;
+                                dbStatusElement.classList.add('status-success');
+                            }
+                            nextButton.disabled = false;
+                        } else {
+                            dbStatusElement.innerHTML = `
+                                <div class="status-error">✗</div>
+                                <h3>数据库连接失败</h3>
+                                <p>无法连接到数据库: ${dbStatus.error || '未知错误'}</p>
+                                <p>系统将尝试自动创建数据库。</p>
+                            `;
+                            dbStatusElement.classList.add('status-error');
+                            nextButton.disabled = false;
+                        }
+                    } else {
+                        showError('检查数据库状态失败');
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            const handleInitModeSubmit = async (e) => {
+                e.preventDefault();
+                
+                const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+                nextButton.disabled = true;
+                
+                const verificationCode = document.getElementById('verification-step2').value;
+                if (!verificationCode) {
+                    showError('请输入验证码');
+                    nextButton.disabled = false;
+                    return;
+                }
+                
+                showLoading();
+                
+                try {
+                    let apiEndpoint = '';
+                    let requestBody = { verification: verificationCode };
+                    
+                    if (initMode === 'create') {
+                        apiEndpoint = '/api/init/db/create';
+                    } else if (initMode === 'import') {
+                        const fileInput = document.getElementById('sql-file');
+                        if (fileInput && fileInput.files.length > 0) {
+                            const formData = new FormData();
+                            formData.append('verification', verificationCode);
+                            formData.append('sql_file', fileInput.files[0]);
+                            
+                            const response = await fetch('/api/init/db/import-file', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const result = await response.json();
+                            hideLoading();
+                            
+                            if (result.success) {
+                                let message = '数据库初始化成功';
+                                if (result.data && result.data.backup_file) {
+                                    message += `\n备份文件: ${result.data.backup_file}`;
+                                }
+                                showToast(message);
+                                setTimeout(() => {
+                                    goToStep(3);
+                                }, 1000);
+                            } else {
+                                showError(`操作失败: ${result.message || '未知错误'}`);
+                                nextButton.disabled = false;
+                            }
+                            return;
+                        } else {
+                            apiEndpoint = '/api/init/db/import';
+                        }
+                    }
+                    
+                    const response = await fetch(apiEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        let message = '数据库初始化成功';
+                        if (result.data && result.data.backup_file) {
+                            message += `\n备份文件: ${result.data.backup_file}`;
+                        }
+                        showToast(message);
+                        setTimeout(() => {
+                            goToStep(3);
+                        }, 1000);
+                    } else {
+                        showError(`操作失败: ${result.message || '未知错误'}`);
+                        nextButton.disabled = false;
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                    nextButton.disabled = false;
+                }
+            };
+
+            const handleAdminAccountSubmit = async (e) => {
+                e.preventDefault();
+                
+                const form = e.target;
+                const formData = new FormData(form);
+                
+                const password = formData.get('password');
+                const confirmPassword = formData.get('confirm_password');
+                
+                if (password !== confirmPassword) {
+                    showError('两次输入的密码不一致');
+                    return;
+                }
+                
+                const initConfig = {
+                    username: formData.get('username'),
+                    password: password,
+                    email: formData.get('email'),
+                    role: 'admin',
+                    verification: formData.get('verification')
+                };
+
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(initConfig)
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        goToStep(4);
+                        setTimeout(async () => {
+                            try {
+                                await fetch('/api/init/restart', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                            } catch (error) {
+                            }
+                            setTimeout(() => {
+                                window.location.href = '/main.html';
+                            }, 2000);
+                        }, 3000);
+                    } else {
+                        showError(`系统初始化失败: ${result.message || '未知错误'}`);
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            document.getElementById('init-mode-form')?.addEventListener('submit', handleInitModeSubmit);
+            document.getElementById('admin-account-form')?.addEventListener('submit', handleAdminAccountSubmit);
+
+            document.querySelectorAll('.prev-step').forEach(button => {
+                button.addEventListener('click', () => {
+                    goToStep(currentStep - 1);
+                });
+            });
+
+            document.querySelectorAll('.step').forEach(step => {
+                step.addEventListener('click', () => {
+                    const stepNum = parseInt(step.dataset.step);
+                    if (stepNum < currentStep) {
+                        goToStep(stepNum);
+                    }
+                });
+            });
+
+            window.getVerificationCode = async () => {
+                showLoading();
+                
+                try {
+                    const response = await fetch('/api/init/verification-code', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const result = await response.json();
+                    hideLoading();
+                    
+                    if (result.success) {
+                        showToast(result.message);
+                    } else {
+                        showError(`获取验证码失败: ${result.message || '未知错误'}`);
+                    }
+                } catch (error) {
+                    hideLoading();
+                    showError(`网络错误: ${error.message}`);
+                }
+            };
+
+            window.setInitMode = (mode) => {
+                initMode = mode;
+                document.querySelectorAll('.init-tab').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                document.querySelector(`.init-tab[data-mode="${mode}"]`).classList.add('active');
+                
+                const createPanel = document.getElementById('create-panel');
+                const importPanel = document.getElementById('import-panel');
+                
+                if (mode === 'create') {
+                    createPanel.style.display = 'block';
+                    importPanel.style.display = 'none';
+                } else {
+                    createPanel.style.display = 'none';
+                    importPanel.style.display = 'block';
+                }
+            };
+
+            document.querySelector('.step-panel[data-step="1"] .btn-success')?.addEventListener('click', () => {
+                goToStep(2);
+                checkDatabaseStatus();
+            });
+
+            await checkPostgreSQL();
+        });
+    </script>
+</head>
+<body class="init-body">
+    <div class="init-container">
+        <div class="init-header">
+            <h1>IPMA 系统初始化</h1>
+            <p>请完成以下初始化步骤，以启动 IP 地址管理系统</p>
+        </div>
+
+        <div class="init-steps">
+            <div class="step-indicator">
+                <div class="step active" data-step="1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">PostgreSQL 检查</span>
+                </div>
+                <div class="step" data-step="2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">数据库初始化</span>
+                </div>
+                <div class="step" data-step="3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">管理员账户</span>
+                </div>
+                <div class="step" data-step="4">
+                    <span class="step-number">4</span>
+                    <span class="step-label">初始化完成</span>
+                </div>
+            </div>
+
+            <div class="step-content">
+                <div class="step-panel active" data-step="1">
+                    <h2>PostgreSQL 检查</h2>
+                    <div id="pg-status" class="status-container">
+                        <div class="status-loading">
+                            <div class="loading-spinner"></div>
+                            <p>正在检查 PostgreSQL 状态...</p>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" onclick="location.reload()">重新检查</button>
+                        <button type="button" class="btn btn-success" disabled>下一步</button>
+                    </div>
+                </div>
+
+                <div class="step-panel" data-step="2">
+                    <h2>数据库初始化</h2>
+                    <div id="db-status" class="status-container">
+                        <div class="status-loading">
+                            <div class="loading-spinner"></div>
+                            <p>正在检查数据库状态...</p>
+                        </div>
+                    </div>
+                    
+                    <div class="init-tabs">
+                        <div class="init-tab active" data-mode="create" onclick="setInitMode('create')">
+                            <span class="tab-icon">📝</span>
+                            <span class="tab-text">新建数据库</span>
+                        </div>
+                        <div class="init-tab" data-mode="import" onclick="setInitMode('import')">
+                            <span class="tab-icon">📁</span>
+                            <span class="tab-text">导入数据库</span>
+                        </div>
+                    </div>
+                    
+                    <form id="init-mode-form" class="init-form">
+                        <div id="create-panel">
+                            <div class="panel-description">
+                                <h4>新建数据库</h4>
+                                <p>系统将创建全新的数据库结构，适用于首次部署。</p>
+                                <ul>
+                                    <li>自动创建所有必需的数据表</li>
+                                    <li>建立正确的表结构和关系</li>
+                                    <li>如数据库已有数据，将自动备份后重建</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div id="import-panel" style="display: none;">
+                            <div class="panel-description">
+                                <h4>导入数据库</h4>
+                                <p>从SQL备份文件恢复数据库，适用于数据迁移或恢复。</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="sql-file">SQL备份文件:</label>
+                                <input type="file" id="sql-file" name="sql_file" accept=".sql" class="file-input">
+                                <p class="help-text">选择要导入的 .sql 备份文件（可选，不选则创建空数据库结构）</p>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="verification-step2">控制台验证码:</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" required>
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                            </div>
+                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
+                            <button type="submit" class="btn btn-success" disabled>下一步</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="step-panel" data-step="3">
+                    <h2>管理员账户创建</h2>
+                    <form id="admin-account-form" class="init-form">
+                        <div class="form-group">
+                            <label for="admin-username">用户名:</label>
+                            <input type="text" id="admin-username" name="username" value="admin" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-password">密码:</label>
+                            <input type="password" id="admin-password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-confirm-password">确认密码:</label>
+                            <input type="password" id="admin-confirm-password" name="confirm_password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-email">邮箱:</label>
+                            <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="verification">控制台验证码:</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" required>
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                            </div>
+                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
+                            <button type="submit" class="btn btn-success">完成初始化</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="step-panel" data-step="4">
+                    <div class="init-success">
+                        <h2>初始化完成!</h2>
+                        <div class="success-icon">✓</div>
+                        <p>IPMA 系统已成功初始化。</p>
+                        <p>系统正在重启，请稍候...</p>
+                        <div class="form-actions">
+                            <a href="/main.html" class="btn btn-primary">登录系统</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-message" class="error-message" style="display: none;"></div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>正在处理...</p>
+        </div>
+    </div>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .init-body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .init-container {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 850px;
+            overflow: hidden;
+            animation: containerFadeIn 0.5s ease;
+        }
+
+        @keyframes containerFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .init-header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: #fff;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .init-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .init-header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .init-steps {
+            padding: 30px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #e5e7eb;
+            z-index: 1;
+        }
+
+        .step-indicator::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4f46e5, #10b981);
+            z-index: 2;
+            transition: width 0.5s ease;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 3;
+            cursor: pointer;
+        }
+
+        .step-number {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #e5e7eb;
+            color: #9ca3af;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            transition: all 0.3s ease;
+        }
+
+        .step.active .step-number {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+        }
+
+        .step.completed .step-number {
+            background: #10b981;
+            color: #fff;
+        }
+
+        .step-label {
+            font-size: 13px;
+            color: #9ca3af;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .step.active .step-label {
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        .step.completed .step-label {
+            color: #10b981;
+        }
+
+        .step-content {
+            min-height: 280px;
+        }
+
+        .step-panel {
+            display: none;
+            animation: panelFadeIn 0.3s ease;
+        }
+
+        .step-panel.active {
+            display: block;
+        }
+
+        @keyframes panelFadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .step-panel h2 {
+            font-size: 22px;
+            color: #1f2937;
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+
+        .status-container {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid #e5e7eb;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .status-container.status-success {
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            border-color: #a7f3d0;
+        }
+
+        .status-container.status-error {
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border-color: #fecaca;
+        }
+
+        .status-container.status-warning {
+            background: linear-gradient(135deg, #fffbeb, #fef3c7);
+            border-color: #fde68a;
+        }
+
+        .status-success, .status-error, .status-warning {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .status-success { color: #10b981; }
+        .status-error { color: #ef4444; }
+        .status-warning { color: #f59e0b; }
+
+        .status-container h3 {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .status-container p {
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .error-guide {
+            margin-top: 20px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        .error-guide h4 {
+            font-size: 14px;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .error-guide ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .error-guide li {
+            padding: 6px 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .error-guide li::before {
+            content: '•';
+            color: #ef4444;
+            margin-right: 8px;
+        }
+
+        .status-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .status-loading .loading-spinner {
+            margin-bottom: 16px;
+        }
+
+        .status-loading p {
+            color: #6b7280;
+        }
+
+        .init-tabs {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .init-tab {
+            flex: 1;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .init-tab:hover {
+            border-color: #4f46e5;
+            background: #f9fafb;
+        }
+
+        .init-tab.active {
+            border-color: #4f46e5;
+            background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+        }
+
+        .init-tab .tab-icon {
+            font-size: 28px;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .init-tab .tab-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .init-form {
+            margin-top: 20px;
+        }
+
+        .panel-description {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .panel-description h4 {
+            font-size: 16px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .panel-description p {
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+
+        .panel-description ul {
+            padding-left: 20px;
+            color: #6b7280;
+        }
+
+        .panel-description li {
+            margin-bottom: 6px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"],
+        .form-group input[type="email"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 15px;
+            color: #1f2937;
+            transition: all 0.2s ease;
+            background: #fff;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: #9ca3af;
+        }
+
+        .file-input {
+            border: 2px dashed #d1d5db !important;
+            background: #f9fafb !important;
+            cursor: pointer;
+        }
+
+        .file-input:hover {
+            border-color: #4f46e5 !important;
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-top: 6px;
+        }
+
+        .warning-text {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .form-actions {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e5e7eb;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .error-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+            display: none;
+            z-index: 1001;
+            animation: errorSlideIn 0.3s ease;
+            max-width: 400px;
+        }
+
+        @keyframes errorSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .loading-spinner::before,
+        .loading-spinner::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            box-sizing: border-box;
+        }
+
+        .loading-spinner::before {
+            border: 3px solid #e5e7eb;
+        }
+
+        .loading-spinner::after {
+            border: 3px solid transparent;
+            border-top-color: #4f46e5;
+            border-right-color: #4f46e5;
+            animation: spin 0.6s linear infinite;
+        }
+
+        .loading p {
+            color: #6b7280;
+            font-size: 15px;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .init-success {
+            text-align: center;
+            padding: 50px 20px;
+        }
+
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 48px;
+            color: #fff;
+            animation: successScale 0.5s ease;
+        }
+
+        @keyframes successScale {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .init-success h2 {
+            font-size: 28px;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .init-success p {
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .init-success .form-actions {
+            justify-content: center;
+            border-top: none;
+            margin-top: 32px;
+        }
+
+        @media (max-width: 640px) {
+            .init-container {
+                border-radius: 0;
+                margin: 0;
+            }
+
+            .init-header {
+                padding: 30px 20px;
+            }
+
+            .init-header h1 {
+                font-size: 24px;
+            }
+
+            .init-steps {
+                padding: 20px;
+            }
+
+            .step-number {
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
+            }
+
+            .step-label {
+                font-size: 11px;
+            }
+
+            .init-tabs {
+                flex-direction: column;
+            }
+
+            .form-actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</body>
+</html>
