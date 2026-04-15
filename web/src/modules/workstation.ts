@@ -3,8 +3,6 @@ import {
 } from "../utils/apiClient.js";
 
 import {
-  showToast,
-  handleError,
   appendPaginationToTable,
   escapeHtml,
   DEFAULT_PAGE_SIZE,
@@ -28,19 +26,35 @@ import {
 
 import { elementCache } from "../utils/helpers.js";
 import { workstationManager } from "../utils/managers.js";
+import { eventDelegator } from "../utils/eventDelegator.js";
+import { templateManager, renderEmptyRow, renderActionButtons } from "../utils/templateManager.js";
+import { errorHandler, wrapAsync } from "../utils/errorHandler.js";
 
 const tableState = createSortState("name", "asc");
 let isLoading = false;
 
+const workstationTemplates = {
+  tableRow: `
+    <tr data-id="{{id}}">
+      <td class="index-column">{{index}}</td>
+      <td>{{displayName}}</td>
+      <td>{{ips}}</td>
+      <td>{{manager}}</td>
+      <td>{{ports}}</td>
+      <td>{{description}}</td>
+      <td>{{createdAt}}</td>
+      <td>{{actions}}</td>
+    </tr>
+  `,
+};
+
 export async function editWorkstation(id: string | number): Promise<void> {
-  try {
+  await wrapAsync(async () => {
     const workstation = await workstationManager.get(id);
     if (workstation) {
       openWorkstationModal(workstation as unknown as Record<string, unknown>);
     }
-  } catch (error) {
-    handleError(error, "获取工位数据失败");
-  }
+  }, "获取工位数据失败")();
 }
 
 export async function deleteWorkstation(id: string | number): Promise<void> {
@@ -50,13 +64,29 @@ export async function deleteWorkstation(id: string | number): Promise<void> {
   }
 }
 
+function renderWorkstationRow(workstation: Record<string, unknown>, ipsHtml: string, portsHtml: string, index: number): string {
+  const displayName = `${escapeHtml(workstation.room_name as string)}-${escapeHtml(workstation.name as string)}`;
+
+  return templateManager.render(workstationTemplates.tableRow, {
+    id: workstation.id,
+    index,
+    displayName,
+    ips: ipsHtml,
+    manager: escapeHtml(workstation.manager as string) || "-",
+    ports: portsHtml,
+    description: escapeHtml(workstation.description as string) || "-",
+    createdAt: new Date(workstation.created_at as string).toLocaleString(),
+    actions: renderActionButtons(workstation.id as string),
+  });
+}
+
 export async function loadWorkstationsData(page = 1, sortBy: string | null = null, sortOrder: string | null = null): Promise<void> {
   if (isLoading) return;
 
-  try {
-    isLoading = true;
-    if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
+  isLoading = true;
+  if (sortBy) tableState.setSort(sortBy, sortOrder as "asc" | "desc" | null);
 
+  await wrapAsync(async () => {
     const result = await workstationManager.list({
       page,
       pageSize: DEFAULT_PAGE_SIZE,
@@ -66,11 +96,11 @@ export async function loadWorkstationsData(page = 1, sortBy: string | null = nul
 
     if (!result) return;
 
-    const data = result.data as { items?: Record<string, unknown>[] };
+    const data = result.data as { items?: Record<string, unknown>[]; total?: number };
     const tbody = document.querySelector("#workstations-table tbody");
 
     if (!tbody) {
-      console.error("未找到工位表格 tbody 元素");
+      errorHandler.handle(errorHandler.createError("DOM_ERROR", "未找到工位表格元素", "error"));
       return;
     }
 
@@ -84,18 +114,13 @@ export async function loadWorkstationsData(page = 1, sortBy: string | null = nul
       const ipPromises = workstations.map(workstation =>
         apiGet(`/api/resources/ip/workstation/${workstation.id}`)
           .then(ipsData => ({ workstation, ipsData }))
-          .catch(ipsError => {
-            console.error(`获取工位 ${workstation.id} 的IP地址失败:`, ipsError);
-            return { workstation, ipsData: { success: false, data: [] } };
-          })
+          .catch(() => ({ workstation, ipsData: { success: false, data: [] } }))
       );
 
       const results = await Promise.all(ipPromises);
-      let rowIndex = 0;
+      const rows: string[] = [];
 
       for (const { workstation, ipsData } of results) {
-        const displayName = `${escapeHtml(workstation.room_name as string)}-${escapeHtml(workstation.name as string)}`;
-
         let ipsHtml = "-";
         let portsHtml = "-";
         const ipsResult = ipsData as { success?: boolean; data?: Record<string, unknown>[] };
@@ -108,46 +133,34 @@ export async function loadWorkstationsData(page = 1, sortBy: string | null = nul
           portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
         }
 
-        const row = document.createElement("tr");
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${displayName}</td>
-                    <td>${ipsHtml}</td>
-                    <td>${escapeHtml(workstation.manager as string) || "-"}</td>
-                    <td>${portsHtml}</td>
-                    <td>${escapeHtml(workstation.description as string) || "-"}</td>
-                    <td>${new Date(workstation.created_at as string).toLocaleString()}</td>
-                    <td>
-                        <button class="btn btn-sm btn-edit" data-id="${workstation.id}">编辑</button>
-                        <button class="btn btn-sm btn-delete" data-id="${workstation.id}">删除</button>
-                    </td>
-                `;
-        tbody.appendChild(row);
-        rowIndex++;
+        rows.push(renderWorkstationRow(workstation, ipsHtml, portsHtml, startIndex + rows.length + 1));
       }
 
-      if ((data as { total?: number }).total !== undefined) {
-        appendPaginationToTable("#workstations-table", data as { total?: number; page?: number; page_size?: number }, loadWorkstationsData);
+      tbody.innerHTML = rows.join("");
+
+      if (data.total !== undefined) {
+        appendPaginationToTable("#workstations-table", data, loadWorkstationsData);
       }
     } else {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">暂无工位数据</td></tr>';
+      tbody.innerHTML = renderEmptyRow(8, "暂无工位数据");
     }
     updateSortIcons("workstations-table", tableState);
-  } catch (error) {
-    console.error("加载工位数据失败:", error);
-    const tbody = document.querySelector("#workstations-table tbody");
-    if (tbody) {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">加载失败，请刷新页面重试</td></tr>';
-    }
-  } finally {
-    isLoading = false;
-  }
+  }, "加载工位数据失败")();
+
+  isLoading = false;
 }
 
 export function initWorkstationSortEvents(): void {
   initSortEvents("workstations-table", tableState, loadWorkstationsData);
+}
+
+export function initWorkstationTableEvents(): void {
+  eventDelegator.on(document, "click", "#workstations-table .btn-edit", (_event, _target, data) => {
+    if (data?.id) editWorkstation(data.id);
+  });
+  eventDelegator.on(document, "click", "#workstations-table .btn-delete", (_event, _target, data) => {
+    if (data?.id) deleteWorkstation(data.id);
+  });
 }
 
 export async function openWorkstationModal(workstation: Record<string, unknown> | null = null): Promise<void> {
@@ -203,12 +216,12 @@ export async function submitWorkstationForm(): Promise<void> {
   const validation = ipManager.validateIps();
 
   if (validation.errors && validation.errors.length > 0) {
-    showToast(validation.errors[0], "warning");
+    errorHandler.handle(errorHandler.createError("VALIDATION_ERROR", validation.errors[0], "warning"));
     return;
   }
 
   if (validation.ips.length === 0) {
-    showToast("请至少添加一个IP地址", "warning");
+    errorHandler.handle(errorHandler.createError("VALIDATION_ERROR", "请至少添加一个IP地址", "warning"));
     return;
   }
 
@@ -221,7 +234,7 @@ export async function submitWorkstationForm(): Promise<void> {
     description: description.trim() || null,
   };
 
-  try {
+  await wrapAsync(async () => {
     let result;
     if (id) {
       result = await workstationManager.update(id, workstationData);
@@ -233,7 +246,10 @@ export async function submitWorkstationForm(): Promise<void> {
       closeModal("workstation-modal");
       await loadWorkstationsData();
     }
-  } catch (error) {
-    handleError(error, "保存工位数据失败");
-  }
+  }, "保存工位数据失败")();
+}
+
+export function cleanup(): void {
+  eventDelegator.off(document, "click", "#workstations-table .btn-edit");
+  eventDelegator.off(document, "click", "#workstations-table .btn-delete");
 }
