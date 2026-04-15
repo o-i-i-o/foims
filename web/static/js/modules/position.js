@@ -31,22 +31,30 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         tbody.innerHTML = "";
         const positions = data.items || [];
         if (!Array.isArray(positions) || positions.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">暂无机位数据</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="9" class="text-center">暂无机位数据</td></tr>`;
             return;
         }
         const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
         positions.forEach((position, index) => {
+            const ips = position.ips || [];
+            const deviceTypes = [...new Set(ips.map((ip) => ip.device_type).filter(Boolean))];
+            const ipAddresses = ips.map((ip) => ip.ip_address).filter(Boolean);
+            const switchPorts = ips
+                .filter((ip) => ip.switch_name && ip.switch_port_number)
+                .map((ip) => `${ip.switch_name}:${ip.switch_port_number}`);
             const row = document.createElement("tr");
             row.innerHTML = `
         <td class="index-column">${startIndex + index + 1}</td>
         <td>${escapeHtml(position.name)}</td>
-        <td>${escapeHtml(position.cabinet_name) || "-"}</td>
+        <td>${deviceTypes.length > 0 ? deviceTypes.map(t => escapeHtml(String(t))).join("<br>") : "-"}</td>
+        <td>${ipAddresses.length > 0 ? ipAddresses.map(a => escapeHtml(String(a))).join("<br>") : "-"}</td>
         <td>U${position.start_u} - U${position.end_u}</td>
-        <td>${position.ips?.length || 0}</td>
+        <td>${switchPorts.length > 0 ? switchPorts.map(p => escapeHtml(String(p))).join("<br>") : "-"}</td>
         <td>${escapeHtml(position.description) || "-"}</td>
+        <td>${position.created_at ? new Date(position.created_at).toLocaleString() : "-"}</td>
         <td>
-          <button class="btn btn-secondary btn-sm btn-edit" data-id="${position.id}">编辑</button>
-          <button class="btn btn-danger btn-sm btn-delete" data-id="${position.id}">删除</button>
+          <button class="btn btn-sm btn-edit" data-id="${position.id}">编辑</button>
+          <button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>
         </td>
       `;
             tbody.appendChild(row);
@@ -60,7 +68,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         handleError(error, "加载机位数据失败");
         const tbody = document.querySelector("#cabinet-positions-table tbody");
         if (tbody) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="7" class="text-center">加载失败，请刷新页面重试</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="9" class="text-center">加载失败，请刷新页面重试</td></tr>`;
         }
     }
     finally {

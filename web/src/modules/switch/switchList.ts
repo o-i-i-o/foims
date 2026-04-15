@@ -6,9 +6,16 @@ import { SWITCH_PAGE_SIZE } from "./switchState.js";
 interface Switch {
   id: string;
   name: string;
+  device_type?: string;
   ip_address: string;
-  vendor: string;
-  model: string;
+  mac_address?: string;
+  vendor?: string;
+  model?: string;
+  location?: string;
+  snmp_enabled?: boolean;
+  snmp_version?: string;
+  parent_switch_id?: string;
+  parent_switch_name?: string;
   description?: string;
   status?: string;
   ports_count?: number;
@@ -33,18 +40,24 @@ export async function loadSwitchesData(page = 1, searchTerm = ""): Promise<void>
     if (!tableBody) return;
 
     if (switches.length === 0) {
-      tableBody.innerHTML = '<tr class="empty-row"><td colspan="7" class="text-center">暂无交换机数据</td></tr>';
+      tableBody.innerHTML = '<tr class="empty-row"><td colspan="11" class="text-center">暂无交换机数据</td></tr>';
       return;
     }
 
-    tableBody.innerHTML = switches.map((sw) => `
+    const startIndex = (page - 1) * SWITCH_PAGE_SIZE;
+
+    tableBody.innerHTML = switches.map((sw, index) => `
       <tr>
+        <td class="index-column">${startIndex + index + 1}</td>
         <td>${escapeHtml(sw.name)}</td>
+        <td>${escapeHtml(sw.device_type || "-")}</td>
         <td>${escapeHtml(sw.ip_address)}</td>
-        <td>${escapeHtml(sw.vendor)}</td>
-        <td>${escapeHtml(sw.model)}</td>
-        <td><span class="status-badge ${sw.status === "active" ? "status-active" : "status-inactive"}">${sw.status || "未知"}</span></td>
-        <td>${sw.active_ports_count || 0}/${sw.ports_count || 0}</td>
+        <td>${escapeHtml(sw.mac_address || "-")}</td>
+        <td>${escapeHtml(sw.model || "-")}</td>
+        <td>${escapeHtml(sw.vendor || "-")}</td>
+        <td>${escapeHtml(sw.location || "-")}</td>
+        <td>${sw.snmp_enabled ? `<span class="status-badge status-active">${sw.snmp_version || "v2c"}</span>` : '<span class="status-badge status-inactive">禁用</span>'}</td>
+        <td>${sw.parent_switch_name ? escapeHtml(sw.parent_switch_name) : "-"}</td>
         <td>
           <button class="btn btn-sm btn-edit" data-id="${sw.id}">编辑</button>
           <button class="btn btn-sm btn-delete" data-id="${sw.id}">删除</button>

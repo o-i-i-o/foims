@@ -62,6 +62,9 @@ const MODAL_SUBMIT_FUNCTIONS = {
 export function initGlobalEvents() {
     document.addEventListener("click", handleGlobalClick);
 }
+export function initEventListeners() {
+    initGlobalEvents();
+}
 function handleGlobalClick(e) {
     const target = e.target;
     handleTableButtonClick(target);

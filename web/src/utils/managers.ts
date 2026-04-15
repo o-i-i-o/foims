@@ -13,7 +13,7 @@ export function createNetworkRegionManager(): CrudManager<NetworkRegion> {
 
     validateCallback: (data) => {
       if (!data.name || !String(data.name).trim()) {
-        return "网络区域名称不能为空";
+        return "common.required_field";
       }
       return null;
     },
@@ -184,7 +184,7 @@ export function createWorkstationManager(): CrudManager<Workstation> {
 
 export function createSwitchManager(): CrudManager<Switch> {
   return createCrudManager<Switch>({
-    endpoint: "/api/resources/switches",
+    endpoint: "/api/switches",
     entityName: "switch",
     entityNameKey: "switch.switch",
     formId: "switch-form",

@@ -3,6 +3,7 @@ import { loadRoomsData, initRoomSortEvents } from "./room.js";
 import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";
 import { loadCabinetsData, initCabinetSortEvents } from "./cabinet.js";
 import { loadCabinetPositionsData, initCabinetPositionSortEvents } from "./position.js";
+import { loadSwitchesData } from "./switch/switchList.js";
 import { nextFrame, safeAsync } from "../utils/helpers.js";
 
 const TAB_DATA_LOADERS: Record<string, () => Promise<void> | void> = {
@@ -12,7 +13,7 @@ const TAB_DATA_LOADERS: Record<string, () => Promise<void> | void> = {
     loadNetworkTypesData();
     loadNetworksData();
   },
-  switches: async () => { /* TODO: implement switch loading */ },
+  switches: loadSwitchesData,
   cabinets: loadCabinetsData,
   "cabinet-positions": loadCabinetPositionsData,
 };

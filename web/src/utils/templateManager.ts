@@ -28,13 +28,25 @@ class TemplateManager {
   }
 
   render(template: string, data: TemplateData): string {
-    return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    let result = template;
+
+    result = result.replace(/\{\{\{(\w+)\}\}\}/g, (_, key: string) => {
+      const value = data[key];
+      if (value === undefined || value === null) {
+        return "";
+      }
+      return String(value);
+    });
+
+    result = result.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
       const value = data[key];
       if (value === undefined || value === null) {
         return "";
       }
       return this.escapeHtml(String(value));
     });
+
+    return result;
   }
 
   renderList(template: string, items: TemplateData[]): string {
@@ -42,15 +54,27 @@ class TemplateManager {
   }
 
   renderWithCondition(template: string, data: TemplateData): string {
-    return template.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, key: string, content: string) => {
+    let result = template.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, key: string, content: string) => {
       return data[key] ? content : "";
-    }).replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    });
+
+    result = result.replace(/\{\{\{(\w+)\}\}\}/g, (_, key: string) => {
+      const value = data[key];
+      if (value === undefined || value === null) {
+        return "";
+      }
+      return String(value);
+    });
+
+    result = result.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
       const value = data[key];
       if (value === undefined || value === null) {
         return "";
       }
       return this.escapeHtml(String(value));
     });
+
+    return result;
   }
 
   renderTableRows(template: string, items: TemplateData[], startIndex = 0): string {

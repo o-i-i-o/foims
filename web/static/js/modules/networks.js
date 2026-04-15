@@ -644,11 +644,15 @@ export async function submitNetworkTypeForm() {
         return;
     const formData = new FormData(form);
     const id = formData.get("network-type-id");
-    const name = formData.get("network-type-name");
-    const description = formData.get("network-type-description");
+    const name = formData.get("name");
+    const description = formData.get("description");
+    if (!name || !name.trim()) {
+        showToast("网络区域名称不能为空", "warning");
+        return;
+    }
     const networkTypeData = {
         name: name.trim(),
-        description: description.trim() || null,
+        description: description?.trim() || null,
     };
     try {
         let result;
@@ -675,15 +679,15 @@ export async function submitNetworkForm() {
         return;
     const formData = new FormData(form);
     const id = formData.get("network-id");
-    const name = formData.get("network-name");
-    const networkRegionId = formData.get("network-type");
-    const ipv4Cidr = formData.get("network-ipv4-cidr");
-    const ipv6Cidr = formData.get("network-ipv6-cidr");
-    const ipv4Gateway = formData.get("network-ipv4-gateway");
-    const ipv6Gateway = formData.get("network-ipv6-gateway");
-    const ipv4DnsStr = formData.get("network-ipv4-dns");
-    const ipv6DnsStr = formData.get("network-ipv6-dns");
-    const description = formData.get("network-description");
+    const name = formData.get("name");
+    const networkRegionId = formData.get("network_type");
+    const ipv4Cidr = formData.get("ipv4_cidr");
+    const ipv6Cidr = formData.get("ipv6_cidr");
+    const ipv4Gateway = formData.get("ipv4_gateway");
+    const ipv6Gateway = formData.get("ipv6_gateway");
+    const ipv4DnsStr = formData.get("ipv4_dns");
+    const ipv6DnsStr = formData.get("ipv6_dns");
+    const description = formData.get("description");
     if (!ipv4Cidr && !ipv6Cidr) {
         showToast("至少需要提供一个有效的IPv4或IPv6 CIDR", "warning");
         return;

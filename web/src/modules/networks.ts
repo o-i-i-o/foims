@@ -737,12 +737,17 @@ export async function submitNetworkTypeForm(): Promise<boolean | void> {
 
   const formData = new FormData(form);
   const id = formData.get("network-type-id") as string;
-  const name = formData.get("network-type-name") as string;
-  const description = formData.get("network-type-description") as string;
+  const name = formData.get("name") as string;
+  const description = formData.get("description") as string;
+
+  if (!name || !name.trim()) {
+    showToast("网络区域名称不能为空", "warning");
+    return;
+  }
 
   const networkTypeData = {
     name: name.trim(),
-    description: description.trim() || null,
+    description: description?.trim() || null,
   };
 
   try {
@@ -770,15 +775,15 @@ export async function submitNetworkForm(): Promise<boolean | void> {
 
   const formData = new FormData(form);
   const id = formData.get("network-id") as string;
-  const name = formData.get("network-name") as string;
-  const networkRegionId = formData.get("network-type") as string;
-  const ipv4Cidr = formData.get("network-ipv4-cidr") as string;
-  const ipv6Cidr = formData.get("network-ipv6-cidr") as string;
-  const ipv4Gateway = formData.get("network-ipv4-gateway") as string;
-  const ipv6Gateway = formData.get("network-ipv6-gateway") as string;
-  const ipv4DnsStr = formData.get("network-ipv4-dns") as string;
-  const ipv6DnsStr = formData.get("network-ipv6-dns") as string;
-  const description = formData.get("network-description") as string;
+  const name = formData.get("name") as string;
+  const networkRegionId = formData.get("network_type") as string;
+  const ipv4Cidr = formData.get("ipv4_cidr") as string;
+  const ipv6Cidr = formData.get("ipv6_cidr") as string;
+  const ipv4Gateway = formData.get("ipv4_gateway") as string;
+  const ipv6Gateway = formData.get("ipv6_gateway") as string;
+  const ipv4DnsStr = formData.get("ipv4_dns") as string;
+  const ipv6DnsStr = formData.get("ipv6_dns") as string;
+  const description = formData.get("description") as string;
 
   if (!ipv4Cidr && !ipv6Cidr) {
     showToast("至少需要提供一个有效的IPv4或IPv6 CIDR", "warning");

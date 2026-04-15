@@ -11,7 +11,7 @@ ls /opt/
 
 echo 编译
 cargo build --release
-
+cd /root/ipma/web && npm run build 2>&1 && cd -
 echo 安装
 cp -f  target/release/ipma /usr/bin/ipma
 cp -rf web/ /opt/ipma/

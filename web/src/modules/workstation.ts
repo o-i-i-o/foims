@@ -38,12 +38,12 @@ const workstationTemplates = {
     <tr data-id="{{id}}">
       <td class="index-column">{{index}}</td>
       <td>{{displayName}}</td>
-      <td>{{ips}}</td>
+      <td>{{{ips}}}</td>
       <td>{{manager}}</td>
-      <td>{{ports}}</td>
+      <td>{{{ports}}}</td>
       <td>{{description}}</td>
       <td>{{createdAt}}</td>
-      <td>{{actions}}</td>
+      <td>{{{actions}}}</td>
     </tr>
   `,
 };

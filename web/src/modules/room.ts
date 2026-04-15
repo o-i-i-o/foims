@@ -396,10 +396,10 @@ const roomTemplates = {
       <td class="index-column">{{index}}</td>
       <td>{{name}}</td>
       <td>{{roomType}}</td>
-      <td>{{networks}}</td>
+      <td>{{{networks}}}</td>
       <td>{{description}}</td>
       <td>{{createdAt}}</td>
-      <td>{{actions}}</td>
+      <td>{{{actions}}}</td>
     </tr>
   `,
 };

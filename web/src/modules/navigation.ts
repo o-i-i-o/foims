@@ -1,6 +1,7 @@
 import { loadDashboardData } from "./dashboard.js";
 import { initResourceTabs } from "./resourceTabs.js";
 import { loadSwitchesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
+import { initVisualization } from "./visualization/visualizationManager.js";
 import { loadModule } from "../utils/moduleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 
@@ -66,8 +67,9 @@ async function loadSystemPage(): Promise<void> {
 }
 
 async function loadVisualizationPage(): Promise<void> {
-  // TODO: implement visualization page
-  console.log("Visualization page not implemented yet");
+  whenVisible("#visualization", async () => {
+    await initVisualization();
+  });
 }
 
 function bindNavClickHandlers(navLinks: NodeListOf<Element>): void {

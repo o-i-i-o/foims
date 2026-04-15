@@ -6,7 +6,7 @@ export { loadNetworkTypesData, loadNetworksData, editNetworkType, deleteNetworkT
 export { loadUsersData, openUserModal, deleteUser, submitUserForm, initUserEvents, } from "./userManager.js";
 export { initNavigation } from "./navigation.js";
 export { loadLogsData } from "./log.js";
-export { initGlobalEvents } from "./eventManager.js";
+export { initGlobalEvents, initEventListeners } from "./eventManager.js";
 export { loadIpMacData } from "./ipmanager.js";
 export { loadSwitchesData, deleteSwitch, fetchSwitchById, } from "./switch/switchList.js";
 export { initVisualization, destroyVisualization } from "./visualization/visualizationManager.js";

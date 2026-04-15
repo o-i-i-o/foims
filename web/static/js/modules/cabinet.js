@@ -12,10 +12,10 @@ const cabinetTemplates = {
     <tr data-id="{{id}}">
       <td class="index-column">{{index}}</td>
       <td>{{roomName}}{{name}}</td>
-      <td>{{networks}}</td>
+      <td>{{{networks}}}</td>
       <td>{{description}}</td>
       <td>{{createdAt}}</td>
-      <td>{{actions}}</td>
+      <td>{{{actions}}}</td>
     </tr>
   `,
 };

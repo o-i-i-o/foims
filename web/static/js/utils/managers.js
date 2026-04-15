@@ -8,7 +8,7 @@ export function createNetworkRegionManager() {
         modalId: "network-type-modal",
         validateCallback: (data) => {
             if (!data.name || !String(data.name).trim()) {
-                return "网络区域名称不能为空";
+                return "common.required_field";
             }
             return null;
         },
@@ -162,7 +162,7 @@ export function createWorkstationManager() {
 }
 export function createSwitchManager() {
     return createCrudManager({
-        endpoint: "/api/resources/switches",
+        endpoint: "/api/switches",
         entityName: "switch",
         entityNameKey: "switch.switch",
         formId: "switch-form",

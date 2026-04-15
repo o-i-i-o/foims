@@ -75,6 +75,10 @@ export function initGlobalEvents(): void {
   document.addEventListener("click", handleGlobalClick);
 }
 
+export function initEventListeners(): void {
+  initGlobalEvents();
+}
+
 function handleGlobalClick(e: Event): void {
   const target = e.target as HTMLElement;
 

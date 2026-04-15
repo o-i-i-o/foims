@@ -1,9 +1,16 @@
 interface Switch {
     id: string;
     name: string;
+    device_type?: string;
     ip_address: string;
-    vendor: string;
-    model: string;
+    mac_address?: string;
+    vendor?: string;
+    model?: string;
+    location?: string;
+    snmp_enabled?: boolean;
+    snmp_version?: string;
+    parent_switch_id?: string;
+    parent_switch_name?: string;
     description?: string;
     status?: string;
     ports_count?: number;

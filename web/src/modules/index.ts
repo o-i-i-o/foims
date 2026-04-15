@@ -65,7 +65,7 @@ export { initNavigation } from "./navigation.js";
 
 export { loadLogsData } from "./log.js";
 
-export { initGlobalEvents } from "./eventManager.js";
+export { initGlobalEvents, initEventListeners } from "./eventManager.js";
 
 export { loadIpMacData } from "./ipmanager.js";
 
