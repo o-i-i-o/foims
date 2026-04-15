@@ -3,6 +3,7 @@ import { resolve } from "path";
 
 export default defineConfig({
   root: "static",
+  base: "/static/",
   resolve: {
     alias: {
       "@utils": resolve(__dirname, "src/utils"),
@@ -10,13 +11,18 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(__dirname, "static/js"),
-    emptyOutDir: false,
-    copyPublicDir: false,
+    outDir: resolve(__dirname, "dist"),
+    emptyOutDir: true,
+    copyPublicDir: true,
     rollupOptions: {
       input: {
-        app: resolve(__dirname, "static/main.html"),
-        login: resolve(__dirname, "static/index.html"),
+        main: resolve(__dirname, "static/main.html"),
+        index: resolve(__dirname, "static/index.html"),
+      },
+      output: {
+        entryFileNames: "js/assets/[name]-[hash].js",
+        chunkFileNames: "js/assets/[name]-[hash].js",
+        assetFileNames: "js/assets/[name]-[hash][extname]",
       },
     },
   },

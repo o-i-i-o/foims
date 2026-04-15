@@ -3,6 +3,7 @@ import { closeModal, openModal } from "./utils/modal.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n } from "./utils/i18n.js";
 import { hasSession, clearSession } from "./utils/sessionManager.js";
+import type { LoginData } from "./types/session.js";
 
 type LoginState = "init" | "submitting" | "two_factor";
 type LoginMode = "password-login" | "email-login";
@@ -176,7 +177,7 @@ class LoginManager {
     this.setLoading(true);
 
     try {
-      const result = await apiPost<{ requires_two_factor?: boolean }>(
+      const result = await apiPost<LoginData>(
         "/api/auth/login",
         { username, password, remember_me: rememberMe },
         { skipAuthCheck: true },
@@ -187,7 +188,7 @@ class LoginManager {
           this.tempAuthData = { username, password, rememberMe };
           this.switchToTwoFactorView();
         } else {
-          loginUser(result.data as Parameters<typeof loginUser>[0], rememberMe);
+          loginUser(result.data!, rememberMe);
         }
       } else {
         this.showError(this.formatErrorMessage(result.message));
@@ -203,7 +204,7 @@ class LoginManager {
     this.setLoading(true);
 
     try {
-      const result = await apiPost<{ requires_two_factor?: boolean; username?: string }>(
+      const result = await apiPost<LoginData>(
         "/api/auth/login/email",
         { email, code, remember_me: rememberMe },
         { skipAuthCheck: true },
@@ -218,7 +219,7 @@ class LoginManager {
           };
           this.switchToTwoFactorView();
         } else {
-          loginUser(result.data as Parameters<typeof loginUser>[0], rememberMe);
+          loginUser(result.data!, rememberMe);
         }
       } else {
         this.showError(this.formatErrorMessage(result.message));
@@ -259,7 +260,7 @@ class LoginManager {
     this.setLoading(true);
 
     try {
-      const result = await apiPost(
+      const result = await apiPost<LoginData>(
         "/api/auth/login/two-factor",
         {
           username: this.tempAuthData.username,
@@ -271,7 +272,7 @@ class LoginManager {
       );
 
       if (result.success) {
-        loginUser(result.data as Parameters<typeof loginUser>[0], this.tempAuthData.rememberMe);
+        loginUser(result.data!, this.tempAuthData.rememberMe);
       } else {
         this.showError(result.message || t("login.two_factor_failed") || "2FA验证失败");
       }

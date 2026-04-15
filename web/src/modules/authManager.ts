@@ -2,10 +2,10 @@ import { apiPost, apiGet, redirectToLogin, refreshToken } from "../utils/apiClie
 import { showToast } from "../utils/ui.js";
 import { t } from "../utils/i18n.js";
 import { getUser, setUser, hasSession, isRememberMe } from "../utils/sessionManager.js";
-import type { User, LoginData } from "../types/session.js";
+import type { LoginData } from "../types/session.js";
 
 export const loginUser = (data: LoginData, rememberMe: boolean): void => {
-  const user = data.user as User;
+  const user = data.user;
   setUser(user, rememberMe);
   window.location.href = "/main.html";
 };
