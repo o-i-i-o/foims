@@ -8,6 +8,20 @@ interface SwitchListState {
     networkRegionName: string;
 }
 export declare const listState: SwitchListState;
+interface PositionData {
+    cabinetId: string | null;
+    cabinetName: string | null;
+    startU: number | null;
+    endU: number | null;
+    positionId: string | null;
+    networkRegionId: string | null;
+}
+export declare const positionData: PositionData;
+interface NetworkRegionState {
+    id: string | null;
+    name: string;
+}
+export declare const networkRegion: NetworkRegionState;
 export declare function updateNetworkRegion(regionId: string | null, regionName: string): void;
 export declare function setCurrentSwitchId(id: string | null): void;
 export declare function setCurrentSwitchName(name: string): void;
