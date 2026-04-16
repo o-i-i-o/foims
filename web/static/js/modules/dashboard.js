@@ -2,6 +2,7 @@ import { apiGet } from "../utils/apiClient.js";
 import { showToast } from "../utils/ui.js";
 import { cache, safeAsync, nextFrame } from "../utils/helpers.js";
 import { getStatusText, getDeviceTypeName, getRoomTypeName, getActionIcon, formatTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter.js";
+import { t } from "../utils/i18n.js";
 
 const CACHE_KEY_STATS = "dashboard_stats";
 const CACHE_KEY_TOP_LISTS = "dashboard_top_lists";
@@ -119,7 +120,7 @@ function renderTopNetworks(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无网络数据</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_network_data') + '</li>';
     return;
   }
   
@@ -142,7 +143,7 @@ function renderTopIPs(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无IP数据</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_ip_data') + '</li>';
     return;
   }
   
@@ -165,7 +166,7 @@ function renderTopRooms(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无房间数据</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_room_data') + '</li>';
     return;
   }
   
@@ -188,7 +189,7 @@ function renderTopSwitches(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无交换机数据</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_switch_data') + '</li>';
     return;
   }
   
@@ -211,7 +212,7 @@ function renderTopCabinets(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无机柜数据</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_cabinet_data') + '</li>';
     return;
   }
   
@@ -234,7 +235,7 @@ function renderTopLogs(items) {
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">暂无操作日志</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_log_data') + '</li>';
     return;
   }
   
@@ -302,7 +303,7 @@ function renderDeviceTypeChart(deviceTypes) {
   
   const total = Object.values(deviceTypes).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = '<div class="chart-empty">暂无数据</div>';
+    container.innerHTML = '<div class="chart-empty">' + t('common.no_data') + '</div>';
     return;
   }
   
@@ -335,14 +336,14 @@ function renderIpStatusChart(statusData) {
   
   const total = Object.values(statusData).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = '<div class="chart-empty">暂无数据</div>';
+    container.innerHTML = '<div class="chart-empty">' + t('common.no_data') + '</div>';
     return;
   }
   
   const statusNames = {
-    'active': '活跃',
-    'inactive': '不活跃',
-    'reserved': '保留'
+    'active': t('status.active', '活跃'),
+    'inactive': t('status.inactive', '不活跃'),
+    'reserved': t('status.reserved', '保留')
   };
   
   const colors = {
@@ -377,13 +378,13 @@ function renderRoomTypeChart(roomTypes) {
   
   const total = Object.values(roomTypes).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = '<div class="chart-empty">暂无数据</div>';
+    container.innerHTML = '<div class="chart-empty">' + t('common.no_data') + '</div>';
     return;
   }
   
   const typeNames = {
-    'office': '办公室',
-    'data_center': '机房'
+    'office': t('room.office', '办公室'),
+    'data_center': t('room.data_center', '机房')
   };
   
   const colors = {
@@ -415,21 +416,29 @@ function renderRoomTypeChart(roomTypes) {
 async function loadFallbackData() {
   try {
     const [networksResponse, regionsResponse, ipResponse] = await Promise.all([
-      apiGet("/api/resources/networks?page_size=1000"),
-      apiGet("/api/resources/network-regions?page_size=1000"),
-      apiGet("/api/resources/ip?page_size=1000")
+      apiGet("/api/resources/networks?page_size=1"),
+      apiGet("/api/resources/network-regions?page_size=1"),
+      apiGet("/api/resources/ip?page_size=1")
     ]);
+
+    const getCount = (response) => {
+      if (!response.success) return 0;
+      const data = response.data;
+      if (data.total !== undefined) return data.total;
+      if (Array.isArray(data)) return data.length;
+      if (data.items) return data.items.length;
+      if (data.data && Array.isArray(data.data)) return data.data.length;
+      return 0;
+    };
 
     const dashboardData = {
       networks: {
-        networks: networksResponse.success ? (networksResponse.data.items || networksResponse.data).length : 0,
-        regions: regionsResponse.success ? (regionsResponse.data.items || regionsResponse.data).length : 0
+        networks: getCount(networksResponse),
+        regions: getCount(regionsResponse)
       },
       ips: {
-        total: ipResponse.success ? (ipResponse.data.items || ipResponse.data).length : 0,
-        active: ipResponse.success
-          ? (ipResponse.data.items || ipResponse.data).filter(({ status }) => status === "active").length
-          : 0
+        total: getCount(ipResponse),
+        active: 0
       },
       activity: {
         operations_24h: 0

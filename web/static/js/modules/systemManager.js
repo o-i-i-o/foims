@@ -21,6 +21,7 @@ import { loadModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
 import { elementCache } from "../utils/helpers.js";
+import { showConfirm } from "../utils/confirm.js";
 
 // 初始化系统管理标签页
 export function initSystemTabs() {
@@ -552,7 +553,8 @@ async function checkServiceStatus() {
 
 // 注册为服务
 export async function registerService() {
-  if (confirm("确定要将系统注册为服务吗？此操作将在系统启动时自动运行IPMA服务。")) {
+  const confirmed = await showConfirm(t('system.confirm_register_service'));
+  if (confirmed) {
     try {
       const result = await apiPost("/api/system/register-service", {});
       if (result.success) {
@@ -573,10 +575,11 @@ export async function registerService() {
 export async function restartApplication() {
   const isService = await checkIfRunningAsService();
   const confirmMsg = isService 
-    ? "确定要重启IPMA服务吗？重启过程中服务将暂时不可用。" 
-    : "确定要重启IPMA程序吗？重启过程中服务将暂时不可用。";
+    ? t('system.confirm_restart_service')
+    : t('system.confirm_restart_app');
 
-  if (confirm(confirmMsg)) {
+  const confirmed = await showConfirm(confirmMsg);
+  if (confirmed) {
     clearConfigUpdateFlag();
     
     try {
@@ -609,7 +612,8 @@ async function checkIfRunningAsService() {
 
 // 重启操作系统
 export async function restartOs() {
-  if (confirm("确定要重启操作系统吗？重启过程中所有服务将暂时不可用。")) {
+  const confirmed = await showConfirm(t('system.confirm_restart_os'));
+  if (confirmed) {
     clearConfigUpdateFlag();
     
     try {
@@ -1079,7 +1083,12 @@ export async function clearLogs() {
     confirmMsg = t('logs.clear_days_confirm', { days }) || `确定要清理 ${days} 天前的日志吗？此操作不可撤销。`;
   }
   
-  if (!confirm(confirmMsg)) {
+  if (!confirmMsg) {
+    confirmMsg = t('logs.clear_all_confirm');
+  }
+  
+  const confirmed = await showConfirm(confirmMsg);
+  if (!confirmed) {
     return;
   }
   

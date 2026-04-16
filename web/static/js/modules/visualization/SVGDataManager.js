@@ -346,7 +346,8 @@ export class SVGDataManager {
         return;
       }
 
-      if (!confirm("确定要删除当前房间的工位布局数据吗？此操作不可恢复。")) {
+      const confirmed = await this.core.showConfirm("确定要删除当前房间的工位布局数据吗？此操作不可恢复。");
+      if (!confirmed) {
         return;
       }
 
@@ -361,7 +362,7 @@ export class SVGDataManager {
       } catch (error) {
         console.error("删除布局失败:", error);
         this.core.elementsGroup.innerHTML = "";
-        this.showToast("布局删除成功", "success");
+        this.showToast("布局删除失败", "error");
       }
     } else if (this.core.type === "cabinet") {
       if (!this.core.currentNetworkRegionId) {
@@ -369,7 +370,8 @@ export class SVGDataManager {
         return;
       }
 
-      if (!confirm("确定要删除当前网络区域的机位布局数据吗？此操作不可恢复。")) {
+      const confirmed = await this.core.showConfirm("确定要删除当前网络区域的机位布局数据吗？此操作不可恢复。");
+      if (!confirmed) {
         return;
       }
 
@@ -384,7 +386,7 @@ export class SVGDataManager {
       } catch (error) {
         console.error("删除布局失败:", error);
         this.core.elementsGroup.innerHTML = "";
-        this.showToast("布局删除成功", "success");
+        this.showToast("布局删除失败", "error");
       }
     }
   }

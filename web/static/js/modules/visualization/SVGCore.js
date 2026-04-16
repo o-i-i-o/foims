@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiDelete } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
+import { showConfirm } from "../../utils/confirm.js";
 
 export class SVGCore {
   constructor(containerId, type, callbacks = {}) {
@@ -26,6 +27,7 @@ export class SVGCore {
     this.apiPost = apiPost;
     this.apiDelete = apiDelete;
     this.showToast = showToast;
+    this.showConfirm = showConfirm;
 
     this._init();
   }

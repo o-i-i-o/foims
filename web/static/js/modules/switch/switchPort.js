@@ -28,6 +28,7 @@ import {
 import { syncPortsFromSnmp } from "./switchSnmp.js";
 
 import { elementCache } from "../../utils/helpers.js";
+import { showConfirm } from "../../utils/confirm.js";
 
 let currentSwitchPortPage = 1;
 let currentSwitchPortSearchTerm = "";
@@ -387,7 +388,8 @@ function openPortDetailModal(portData) {
   };
 
   deleteBtn.onclick = async () => {
-    if (confirm("确定要删除此端口吗？")) {
+    const confirmed = await showConfirm(t('switch.confirm_delete_port'));
+    if (confirmed) {
       const portId = elementCache.getValue("switch-port-id-expanded");
       if (portId) {
         const result = await apiDelete(`/api/switches/ports/${portId}`);

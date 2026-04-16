@@ -1,9 +1,4 @@
-/**
- * 模态框管理模块
- * 提供统一的模态框操作和事件处理
- */
-
-import { loadModal } from './modalLoader.js';
+import { loadModal, openModal as _openModal, closeModal as _closeModal, initModalTemplates } from './modalLoader.js';
 
 const BUTTON_CALLBACK_MAP = {
   "add-network-type-btn": "openNetworkTypeModal",
@@ -29,75 +24,12 @@ const FORM_CALLBACK_MAP = {
   "switch-port-form-expanded": "submitSwitchPortForm",
 };
 
-const SUBMIT_BUTTON_MAP = {
-  "network-type-modal": "network-type-form",
-  "network-modal": "network-form",
-  "room-modal": "room-form",
-  "workstation-modal": "workstation-form",
-  "cabinet-modal": "cabinet-form",
-  "cabinet-position-modal": "cabinet-position-form",
-  "user-modal": "user-form",
-  "switch-modal": "switch-form",
-  "switch-port-modal": "switch-port-form",
-  "switch-port-detail-modal": "switch-port-form-expanded",
-};
-
 export function openModal(modalId, title = "") {
-  let modal = document.getElementById(modalId);
-  
-  if (!modal) {
-    modal = loadModal(modalId);
-  }
-  
-  if (!modal) {
-    return null;
-  }
-  
-  modal.classList.add("active");
-  
-  if (title) {
-    const titleElement = modal.querySelector(".modal-title");
-    if (titleElement) {
-      titleElement.textContent = title;
-    }
-  }
-  
-  document.body.style.overflow = "hidden";
-  
-  return modal;
+  return _openModal(modalId, title);
 }
 
 export function closeModal(modalId) {
-  const modal = document.getElementById(modalId);
-  
-  if (!modal) {
-    return;
-  }
-  
-  modal.classList.remove("active");
-  resetModalForm(modal);
-  
-  document.body.style.overflow = "";
-}
-
-function resetModalForm(modal) {
-  const form = modal.querySelector("form");
-  
-  if (!form) {
-    return;
-  }
-  
-  form.reset();
-  
-  const hiddenIdField = form.querySelector('input[type="hidden"]');
-  if (hiddenIdField) {
-    hiddenIdField.value = "";
-  }
-
-  const ipContainers = modal.querySelectorAll('[id$="-ips-container"]');
-  ipContainers.forEach(container => {
-    container.innerHTML = '';
-  });
+  _closeModal(modalId);
 }
 
 export function initModals(callbacks = {}) {
@@ -144,3 +76,5 @@ function initSubmitHandlers(callbacks) {
     }
   });
 }
+
+export { initModalTemplates, loadModal };

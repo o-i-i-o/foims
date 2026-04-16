@@ -3,7 +3,7 @@
  * 处理全局事件绑定和委托
  */
 
-import { loadModule } from "../utils/moduleLoader.js";
+import { loadModule, getCachedModule } from "../utils/moduleLoader.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modal.js";
 import {
@@ -59,8 +59,6 @@ const DELETE_FUNCTIONS = {
 /**
  * 预加载模块缓存
  */
-const moduleCache = {};
-
 const MODULE_PATHS = {
   log: "/static/js/modules/log.js",
   systemManager: "/static/js/modules/systemManager.js",
@@ -70,21 +68,14 @@ const MODULE_PATHS = {
   i18n: "/static/js/utils/i18n.js",
 };
 
-/**
- * 预加载所有需要的模块
- */
 async function preloadModules() {
-  const loadPromises = Object.entries(MODULE_PATHS).map(async ([name, path]) => {
-    moduleCache[name] = await loadModule(name, path);
-  });
-  await Promise.all(loadPromises);
+  await Promise.all(
+    Object.entries(MODULE_PATHS).map(([name, path]) => loadModule(name, path))
+  );
 }
 
-/**
- * 获取缓存的模块
- */
 function getModule(name) {
-  return moduleCache[name];
+  return getCachedModule(name);
 }
 
 /**

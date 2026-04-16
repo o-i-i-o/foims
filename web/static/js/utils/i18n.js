@@ -39,6 +39,14 @@ export async function initI18n() {
       },
       
       t(key, options = {}) {
+        let defaultValue = null;
+        let replaceOptions = options;
+        
+        if (typeof options === 'string') {
+          defaultValue = options;
+          replaceOptions = {};
+        }
+        
         const keys = key.split('.');
         let value = this.translations[this.language];
         
@@ -46,16 +54,16 @@ export async function initI18n() {
           if (value && typeof value === 'object' && k in value) {
             value = value[k];
           } else {
-            return key;
+            return defaultValue !== null ? defaultValue : key;
           }
         }
         
         if (typeof value !== 'string') {
-          return key;
+          return defaultValue !== null ? defaultValue : key;
         }
         
         let result = value;
-        for (const [k, v] of Object.entries(options)) {
+        for (const [k, v] of Object.entries(replaceOptions)) {
           result = result.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
         }
         

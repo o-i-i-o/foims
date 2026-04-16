@@ -13,6 +13,17 @@ export class ApiClient {
   static requestQueue = [];
   
   static MAX_CONCURRENT_REQUESTS = 3;
+
+  static #hashBody(body) {
+    if (body instanceof FormData) {
+      const entries = [...body.entries()].sort(([a], [b]) => a.localeCompare(b));
+      return entries.map(([k, v]) => `${k}=${v}`).join('&');
+    }
+    if (typeof body === 'string') {
+      return body.length > 200 ? body.substring(0, 200) : body;
+    }
+    return String(body);
+  }
   
   static currentRequests = 0;
   
@@ -21,7 +32,8 @@ export class ApiClient {
   static #refreshPromise = null;
 
   static async request(url, options = {}, retryCount = 0) {
-    const requestKey = `${url}_${options.method || 'GET'}`;
+    const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : '';
+    const requestKey = `${url}_${options.method || 'GET'}${bodyHash}`;
     
     if (this.#pendingRequests.has(requestKey)) {
       return this.#pendingRequests.get(requestKey);
@@ -135,8 +147,8 @@ export class ApiClient {
           }
 
           const refreshSuccess = await this.refreshToken();
-          if (refreshSuccess) {
-            return this.request(url, options);
+          if (refreshSuccess && retryCount < 3) {
+            return this.request(url, options, retryCount + 1);
           }
           
           if (!this.#isRedirecting) {

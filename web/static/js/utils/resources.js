@@ -1,6 +1,8 @@
 import {
   apiGet,
 } from "./apiClient.js";
+import { t } from "./i18n.js";
+import { escapeHtml } from "./helpers.js";
 
 function extractItems(result) {
   if (!result.success || !result.data) return [];
@@ -9,10 +11,10 @@ function extractItems(result) {
   return [];
 }
 
-export async function loadNetworkTypeOptions() {
+export async function loadNetworkTypeOptions(selectId = "network-type") {
   try {
     const result = await apiGet("/api/resources/network-regions?page_size=1000");
-    const select = document.getElementById("network-type");
+    const select = document.getElementById(selectId);
 
     if (!select) return;
 
@@ -30,7 +32,7 @@ export async function loadNetworkTypeOptions() {
     } else {
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "请先添加网络区域";
+      option.textContent = t('network.add_region_first');
       option.disabled = true;
       select.appendChild(option);
     }
@@ -40,23 +42,24 @@ export async function loadNetworkTypeOptions() {
     }
   } catch (error) {
     console.error("加载网络区域选项失败:", error);
-    const select = document.getElementById("network-type");
+    const select = document.getElementById(selectId);
     if (select) {
       select.innerHTML = "";
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "加载失败";
+      option.textContent = t('common.load_failed');
       option.disabled = true;
       select.appendChild(option);
     }
   }
 }
 
-export async function loadRoomsForSelect(onlyOffice = false) {
+export async function loadRoomsForSelect(selectId = "workstation-room", options = {}) {
+  const { onlyOffice = false, includeVisualization = true } = options;
   try {
     const result = await apiGet("/api/resources/rooms?page_size=1000");
-    const select = document.getElementById("workstation-room");
-    const visualizationSelect = document.getElementById("room-select");
+    const select = document.getElementById(selectId);
+    const visualizationSelect = includeVisualization ? document.getElementById("room-select") : null;
 
     const rooms = extractItems(result);
 
@@ -65,7 +68,7 @@ export async function loadRoomsForSelect(onlyOffice = false) {
 
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = onlyOffice ? "选择办公室" : "选择房间";
+      placeholder.textContent = onlyOffice ? t('room.select_office') : t('room.select_room');
       select.appendChild(placeholder);
 
       rooms.forEach((room) => {
@@ -88,7 +91,7 @@ export async function loadRoomsForSelect(onlyOffice = false) {
       if (select.children.length === 1) {
         const noDataOption = document.createElement("option");
         noDataOption.value = "";
-        noDataOption.textContent = onlyOffice ? "暂无办公室数据" : "暂无房间数据";
+        noDataOption.textContent = onlyOffice ? t('room.no_office_data') : t('room.no_room_data');
         noDataOption.disabled = true;
         select.appendChild(noDataOption);
       }
@@ -113,7 +116,7 @@ export async function loadRoomsForSelect(onlyOffice = false) {
       select.innerHTML = "";
       const noDataOption = document.createElement("option");
       noDataOption.value = "";
-      noDataOption.textContent = "加载失败";
+      noDataOption.textContent = t('common.load_failed');
       noDataOption.disabled = true;
       select.appendChild(noDataOption);
     }
@@ -148,10 +151,10 @@ export async function loadNetworkRegionsForSelect(selectElement, autoSelectFirst
   }
 }
 
-export async function loadDataCenterRoomsForSelect() {
+export async function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
   try {
     const result = await apiGet("/api/resources/rooms?page_size=1000");
-    const select = document.getElementById("cabinet-room");
+    const select = document.getElementById(selectId);
 
     const rooms = extractItems(result);
     if (select) {
@@ -159,7 +162,7 @@ export async function loadDataCenterRoomsForSelect() {
 
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "选择机房";
+      placeholder.textContent = t('room.select_datacenter');
       select.appendChild(placeholder);
 
       rooms.forEach((room) => {
@@ -175,19 +178,19 @@ export async function loadDataCenterRoomsForSelect() {
       if (select.children.length === 1) {
         const noDataOption = document.createElement("option");
         noDataOption.value = "";
-        noDataOption.textContent = "暂无机房数据";
+        noDataOption.textContent = t('room.no_datacenter_data');
         noDataOption.disabled = true;
         select.appendChild(noDataOption);
       }
     }
   } catch (error) {
     console.error("加载机房数据失败:", error);
-    const select = document.getElementById("cabinet-room");
+    const select = document.getElementById(selectId);
     if (select) {
       select.innerHTML = "";
       const noDataOption = document.createElement("option");
       noDataOption.value = "";
-      noDataOption.textContent = "加载失败";
+      noDataOption.textContent = t('common.load_failed');
       noDataOption.disabled = true;
       select.appendChild(noDataOption);
     }
@@ -210,11 +213,13 @@ export function formatMacAddress(mac) {
   return cleaned.toUpperCase().match(/.{4}/g).join('-');
 }
 
-export async function loadRoomNetworksForCabinet(roomId) {
-  const inheritedNetworksContainer = document.getElementById("cabinet-inherited-networks");
+export async function loadRoomNetworksForCabinet(roomId, containerId = "cabinet-inherited-networks") {
+  const inheritedNetworksContainer = document.getElementById(containerId);
+  
+  if (!inheritedNetworksContainer) return;
   
   if (!roomId) {
-    inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
+    inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('cabinet.select_room_first') + '</p>';
     return;
   }
   
@@ -230,24 +235,24 @@ export async function loadRoomNetworksForCabinet(roomId) {
         networks.forEach(network => {
           networksHtml += `
             <li class="list-group-item">
-              <span class="font-weight-bold">${network.name}</span>
-              <span class="text-muted">(${network.network_region})</span>
-              ${network.ipv4_cidr ? `<div class="small">IPv4: ${network.ipv4_cidr}</div>` : ''}
-              ${network.ipv6_cidr ? `<div class="small">IPv6: ${network.ipv6_cidr}</div>` : ''}
+              <span class="font-weight-bold">${escapeHtml(network.name)}</span>
+              <span class="text-muted">(${escapeHtml(network.network_region)})</span>
+              ${network.ipv4_cidr ? `<div class="small">IPv4: ${escapeHtml(network.ipv4_cidr)}</div>` : ''}
+              ${network.ipv6_cidr ? `<div class="small">IPv6: ${escapeHtml(network.ipv6_cidr)}</div>` : ''}
             </li>
           `;
         });
         networksHtml += '</ul>';
         inheritedNetworksContainer.innerHTML = networksHtml;
       } else {
-        inheritedNetworksContainer.innerHTML = '<p class="text-muted">所选房间未配置网段，请先为房间添加网段配置</p>';
+        inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('cabinet.no_network_config') + '</p>';
       }
     } else {
-      inheritedNetworksContainer.innerHTML = '<p class="text-muted">获取房间信息失败，请重试</p>';
+      inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('common.load_failed_retry') + '</p>';
     }
   } catch (error) {
     console.error("加载房间网段配置失败:", error);
-    inheritedNetworksContainer.innerHTML = '<p class="text-muted">加载房间网段配置失败，请重试</p>';
+    inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('common.load_failed_retry') + '</p>';
   }
 }
 

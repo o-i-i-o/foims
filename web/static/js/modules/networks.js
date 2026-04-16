@@ -223,7 +223,7 @@ export async function showNetworkUsage(id) {
   try {
     const networkResult = await apiGet(`/api/resources/networks/${id}`);
     if (!networkResult.success) {
-      showToast("获取网段数据失败", "error");
+      showToast(t('network.load_failed'), "error");
       return;
     }
     
@@ -231,15 +231,15 @@ export async function showNetworkUsage(id) {
     const hasIPv4 = !!network.ipv4_cidr;
     const hasIPv6 = !!network.ipv6_cidr;
     
-    const ipResult = await apiGet("/api/resources/ip?page_size=1000");
+    const ipResult = await apiGet(`/api/resources/ip?network_id=${id}&page_size=1000`);
     if (!ipResult.success) {
-      showToast("获取IP数据失败", "error");
+      showToast(t('ip.load_failed'), "error");
       return;
     }
     
-    const ipData = ipResult.data?.data || ipResult.data || [];
-    const allNetworkIps = Array.isArray(ipData) ? ipData.filter(ip => ip.network_id === id) : [];
-    const isIPv6 = (ip) => ip.ip_address.includes(':');
+    const ipData = ipResult.data?.data || ipResult.data?.items || ipResult.data || [];
+    const allNetworkIps = Array.isArray(ipData) ? ipData : [];
+    const isIPv6 = (ip) => ip.ip_address && ip.ip_address.includes(':');
     const ipv4Ips = allNetworkIps.filter(ip => !isIPv6(ip));
     const ipv6Ips = allNetworkIps.filter(ip => isIPv6(ip));
     
@@ -249,8 +249,8 @@ export async function showNetworkUsage(id) {
     if (hasIPv4 && hasIPv6) {
       tabsHtml = `
         <div class="usage-tabs">
-          <button class="usage-tab-btn active" data-tab="ipv4">IPv4 信息</button>
-          <button class="usage-tab-btn" data-tab="ipv6">IPv6 信息</button>
+          <button class="usage-tab-btn active" data-tab="ipv4">IPv4</button>
+          <button class="usage-tab-btn" data-tab="ipv6">IPv6</button>
         </div>
       `;
       contentHtml = `
@@ -277,7 +277,7 @@ export async function showNetworkUsage(id) {
       contentHtml = `
         <div class="usage-tab-content active">
           <div class="no-network-info">
-            <p>该网段未配置IPv4或IPv6地址</p>
+            <p>${t('network.no_ip_config')}</p>
           </div>
         </div>
       `;
@@ -285,42 +285,44 @@ export async function showNetworkUsage(id) {
     
     const usageHtml = `
       <div class="network-usage-container">
-        <h4>${network.name} 使用情况</h4>
+        <h4>${escapeHtml(network.name)} - ${t('network.usage')}</h4>
         ${tabsHtml}
         ${contentHtml}
       </div>
     `;
     
-    const modalHtml = `
-      <div class="modal fade show" id="network-usage-modal" tabindex="-1" role="dialog" style="display: block; background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-xl" role="document">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">网段使用情况</h5>
-              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                <span aria-hidden="true">&times;</span>
-              </button>
-            </div>
-            <div class="modal-body">
-              ${usageHtml}
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
-            </div>
-          </div>
+    const modalContainer = document.createElement('div');
+    modalContainer.className = 'modal active';
+    modalContainer.id = 'network-usage-modal';
+    modalContainer.setAttribute('role', 'dialog');
+    modalContainer.setAttribute('aria-modal', 'true');
+    modalContainer.innerHTML = `
+      <div class="modal-content modal-lg">
+        <header class="modal-header">
+          <h3 class="modal-title">${t('network.usage')}</h3>
+          <button type="button" class="close" data-modal-id="network-usage-modal" aria-label="Close">&times;</button>
+        </header>
+        <div class="modal-body">
+          ${usageHtml}
         </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-id="network-usage-modal">${t('common.close')}</button>
+        </footer>
       </div>
     `;
     
-    const modalContainer = document.createElement('div');
-    modalContainer.innerHTML = modalHtml;
     document.body.appendChild(modalContainer);
+    document.body.style.overflow = 'hidden';
     
-    const closeButtons = modalContainer.querySelectorAll('[data-dismiss="modal"]');
-    closeButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        modalContainer.remove();
-      });
+    const cleanup = () => {
+      modalContainer.remove();
+      document.body.style.overflow = '';
+    };
+    
+    modalContainer.addEventListener('click', (e) => {
+      if (e.target === modalContainer || e.target.hasAttribute('data-modal-id')) {
+        cleanup();
+      }
     });
     
     const tabButtons = modalContainer.querySelectorAll('.usage-tab-btn');
@@ -345,7 +347,7 @@ export async function showNetworkUsage(id) {
     
   } catch (error) {
     console.error("获取网段使用情况失败:", error);
-    showToast("操作失败，请重试", "error");
+    showToast(t('common.load_failed_retry'), "error");
   }
 }
 
@@ -366,62 +368,62 @@ function buildIPv4Content(network, networkIps, networkId) {
   return `
     <div class="usage-stats">
       <div class="stat-item">
-        <span class="stat-label">IPv4网段:</span>
-        <span class="stat-value">${cidr || "未知"}</span>
+        <span class="stat-label">${t('network.ipv4_cidr')}:</span>
+        <span class="stat-value">${escapeHtml(cidr) || "-"}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">网络区域:</span>
-        <span class="stat-value">${network.network_region || "未知"}</span>
+        <span class="stat-label">${t('network.region')}:</span>
+        <span class="stat-value">${escapeHtml(network.network_region) || "-"}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">网关地址:</span>
-        <span class="stat-value">${network.ipv4_gateway || "-"}</span>
+        <span class="stat-label">${t('network.ipv4_gateway')}:</span>
+        <span class="stat-value">${escapeHtml(network.ipv4_gateway) || "-"}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">DNS服务器:</span>
-        <span class="stat-value">${Array.isArray(network.ipv4_dns) ? network.ipv4_dns.join(', ') : (network.ipv4_dns || "-")}</span>
+        <span class="stat-label">DNS:</span>
+        <span class="stat-value">${Array.isArray(network.ipv4_dns) ? network.ipv4_dns.map(d => escapeHtml(d)).join(', ') : (escapeHtml(network.ipv4_dns) || "-")}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">总IP数:</span>
+        <span class="stat-label">${t('network.total_ips')}:</span>
         <span class="stat-value">${totalIps}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">已使用IP数:</span>
+        <span class="stat-label">${t('network.used_ips')}:</span>
         <span class="stat-value">${usedIps}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">未使用IP数:</span>
+        <span class="stat-label">${t('network.unused_ips')}:</span>
         <span class="stat-value">${unusedIps}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">使用率:</span>
+        <span class="stat-label">${t('network.usage_rate')}:</span>
         <span class="stat-value">${usageRate}%</span>
       </div>
     </div>
     
     <div class="usage-controls">
       <div class="filter-controls">
-        <label>筛选: </label>
+        <label>${t('common.filter')}: </label>
         <select id="ip-status-filter" class="form-control form-control-sm d-inline-block w-auto mr-2">
-          <option value="all">全部</option>
-          <option value="used">已使用</option>
-          <option value="unused">未使用</option>
+          <option value="all">${t('common.all')}</option>
+          <option value="used">${t('network.used')}</option>
+          <option value="unused">${t('network.unused')}</option>
         </select>
-        <button id="refresh-ipv4-usage" class="btn btn-sm btn-secondary">刷新</button>
+        <button id="refresh-ipv4-usage" class="btn btn-sm btn-secondary">${t('common.refresh')}</button>
       </div>
     </div>
     
     <div class="usage-visualization">
-      <h5>IP地址可视化</h5>
+      <h5>${t('network.ip_visualization')}</h5>
       <div class="ip-grid" id="ip-grid">
         ${allIpAddresses.map(ip => {
           const isUsed = ipStatusMap.has(ip);
           const status = ipStatusMap.get(ip) || "unused";
           const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
-          const tooltipText = `${ip} (${isUsed ? status === "active" ? "活跃" : "非活跃" : "未使用"})`;
+          const tooltipText = `${escapeHtml(ip)} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
           
           return `
-            <div class="ip-block ${statusClass}" data-ip="${ip}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
+            <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
               <span class="ip-label">${ip.split('.').pop()}</span>
             </div>
           `;
@@ -430,32 +432,32 @@ function buildIPv4Content(network, networkIps, networkId) {
     </div>
     
     <div class="usage-ips">
-      <h5>IPv4 地址列表</h5>
+      <h5>${t('network.ipv4_list')}</h5>
       <div class="table-responsive">
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>IP地址</th>
-              <th>状态</th>
-              <th>所属资源</th>
-              <th>MAC地址</th>
+              <th>${t('ip.ip_address')}</th>
+              <th>${t('ip.status')}</th>
+              <th>${t('ip.location')}</th>
+              <th>${t('ip.mac_address')}</th>
               <th>${t('ip.hostname')}</th>
             </tr>
           </thead>
           <tbody id="ipv4-list-body">
             ${networkIps.length > 0 ? networkIps.map(ip => `
               <tr>
-                <td>${ip.ip_address}</td>
+                <td>${escapeHtml(ip.ip_address)}</td>
                 <td>
                   <span class="status-badge ${ip.status === "active" ? "status-active" : "status-inactive"}">
-                    ${ip.status}
+                    ${escapeHtml(ip.status)}
                   </span>
                 </td>
-                <td>${ip.workstation_name || ip.cabinet_position_name || "-"}</td>
-                <td>${ip.mac_address || "-"}</td>
-                <td>${ip.hostname || "-"}</td>
+                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name) || "-"}</td>
+                <td>${escapeHtml(ip.mac_address) || "-"}</td>
+                <td>${escapeHtml(ip.hostname) || "-"}</td>
               </tr>
-            `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv4地址记录</td></tr>'}
+            `).join('') : `<tr><td colspan="5" class="text-center">${t('network.no_ipv4_records')}</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -470,8 +472,8 @@ function buildIPv6Content(network, networkIps, networkId) {
     return `
       <div class="no-ipv6-info">
         <div class="no-ipv6-icon">📡</div>
-        <p>该网段未配置IPv6地址</p>
-        <p class="no-ipv6-hint">请在网络设置中添加IPv6网段信息</p>
+        <p>${t('network.no_ipv6_config')}</p>
+        <p class="no-ipv6-hint">${t('network.add_ipv6_hint')}</p>
       </div>
     `;
   }
@@ -482,25 +484,25 @@ function buildIPv6Content(network, networkIps, networkId) {
   
   return `
     <div class="ipv6-info-section">
-      <h5>IPv6 基本信息</h5>
+      <h5>${t('network.ipv6_info')}</h5>
       <div class="ipv6-info-grid">
         <div class="ipv6-info-item">
-          <span class="info-label">IPv6网段</span>
-          <span class="info-value ipv6-address">${network.ipv6_cidr}</span>
+          <span class="info-label">${t('network.ipv6_cidr')}</span>
+          <span class="info-value ipv6-address">${escapeHtml(network.ipv6_cidr)}</span>
         </div>
         <div class="ipv6-info-item">
-          <span class="info-label">网关地址</span>
-          <span class="info-value ipv6-address">${network.ipv6_gateway || "-"}</span>
+          <span class="info-label">${t('network.ipv6_gateway')}</span>
+          <span class="info-value ipv6-address">${escapeHtml(network.ipv6_gateway) || "-"}</span>
         </div>
         <div class="ipv6-info-item">
-          <span class="info-label">DNS服务器</span>
-          <span class="info-value ipv6-address">${Array.isArray(network.ipv6_dns) ? network.ipv6_dns.join(', ') : (network.ipv6_dns || "-")}</span>
+          <span class="info-label">DNS</span>
+          <span class="info-value ipv6-address">${Array.isArray(network.ipv6_dns) ? network.ipv6_dns.map(d => escapeHtml(d)).join(', ') : (escapeHtml(network.ipv6_dns) || "-")}</span>
         </div>
         <div class="ipv6-info-item">
-          <span class="info-label">连接状态</span>
+          <span class="info-label">${t('network.connection_status')}</span>
           <span class="info-value">
             <span class="connection-status ${totalAssigned > 0 ? 'status-enabled' : 'status-disabled'}">
-              ${totalAssigned > 0 ? '● 已启用' : '○ 未使用'}
+              ${totalAssigned > 0 ? t('network.enabled') : t('network.unused')}
             </span>
           </span>
         </div>
@@ -508,53 +510,53 @@ function buildIPv6Content(network, networkIps, networkId) {
     </div>
     
     <div class="ipv6-stats-section">
-      <h5>IPv6 地址使用统计</h5>
+      <h5>${t('network.ipv6_stats')}</h5>
       <div class="ipv6-stats-grid">
         <div class="ipv6-stat-card">
           <div class="stat-number">${totalAssigned}</div>
-          <div class="stat-desc">已分配地址</div>
+          <div class="stat-desc">${t('network.assigned')}</div>
         </div>
         <div class="ipv6-stat-card active">
           <div class="stat-number">${activeIps}</div>
-          <div class="stat-desc">活跃地址</div>
+          <div class="stat-desc">${t('status.active')}</div>
         </div>
         <div class="ipv6-stat-card inactive">
           <div class="stat-number">${inactiveIps}</div>
-          <div class="stat-desc">非活跃地址</div>
+          <div class="stat-desc">${t('status.inactive')}</div>
         </div>
       </div>
     </div>
     
     <div class="ipv6-list-section">
       <div class="ipv6-list-header">
-        <h5>IPv6 地址列表</h5>
-        <button id="refresh-ipv6-usage" class="btn btn-sm btn-secondary">刷新</button>
+        <h5>${t('network.ipv6_list')}</h5>
+        <button id="refresh-ipv6-usage" class="btn btn-sm btn-secondary">${t('common.refresh')}</button>
       </div>
       <div class="table-responsive">
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>IPv6地址</th>
-              <th>状态</th>
-              <th>所属资源</th>
-              <th>MAC地址</th>
+              <th>${t('ip.ip_address')}</th>
+              <th>${t('ip.status')}</th>
+              <th>${t('ip.location')}</th>
+              <th>${t('ip.mac_address')}</th>
               <th>${t('ip.hostname')}</th>
             </tr>
           </thead>
           <tbody id="ipv6-list-body">
             ${networkIps.length > 0 ? networkIps.map(ip => `
               <tr>
-                <td class="ipv6-address-cell">${ip.ip_address}</td>
+                <td class="ipv6-address-cell">${escapeHtml(ip.ip_address)}</td>
                 <td>
                   <span class="status-badge ${ip.status === "active" ? "status-active" : "status-inactive"}">
-                    ${ip.status}
+                    ${escapeHtml(ip.status)}
                   </span>
                 </td>
-                <td>${ip.workstation_name || ip.cabinet_position_name || ip.switch_name || "-"}</td>
-                <td>${ip.mac_address || "-"}</td>
-                <td>${ip.hostname || "-"}</td>
+                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name || ip.switch_name) || "-"}</td>
+                <td>${escapeHtml(ip.mac_address) || "-"}</td>
+                <td>${escapeHtml(ip.hostname) || "-"}</td>
               </tr>
-            `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv6地址记录</td></tr>'}
+            `).join('') : `<tr><td colspan="5" class="text-center">${t('network.no_ipv6_records')}</td></tr>`}
           </tbody>
         </table>
       </div>

@@ -17,6 +17,7 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { getUser } from "../utils/sessionManager.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
+import { showConfirm } from "../utils/confirm.js";
 
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
@@ -145,7 +146,8 @@ async function loadUserData(userId) {
 
 // 删除用户
 export async function deleteUser(userId) {
-  if (!confirm(t('user.delete_confirm'))) {
+  const confirmed = await showConfirm(t('user.delete_confirm'));
+  if (!confirmed) {
     return;
   }
 
@@ -166,7 +168,12 @@ export async function deleteUser(userId) {
 
 // 注意：用户编辑/删除按钮的点击事件已在 eventManager.js 中统一处理
 // 此处 initUserEvents 函数保留用于处理 2FA 相关按钮
+let userEventsInitialized = false;
+
 function initUserEvents() {
+  if (userEventsInitialized) return;
+  userEventsInitialized = true;
+  
   document.addEventListener("click", (e) => {
     if (e.target.classList.contains("user-2fa")) {
       const id = e.target.getAttribute("data-id");
@@ -362,7 +369,8 @@ async function handleTwoFactorDisable() {
     return;
   }
 
-  if (!confirm("确定要禁用双因素认证吗？这将降低账户安全性。")) {
+  const confirmed = await showConfirm(t('two_factor.disable_confirm'));
+  if (!confirmed) {
     return;
   }
 

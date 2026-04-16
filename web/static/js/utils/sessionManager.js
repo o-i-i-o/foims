@@ -2,6 +2,10 @@ export class SessionManager {
   static #userKey = "user";
   static #rememberMeKey = "rememberMe";
 
+  static #getStorage() {
+    return this.isRememberMe() ? localStorage : sessionStorage;
+  }
+
   static isRememberMe() {
     return localStorage.getItem(this.#rememberMeKey) === "true";
   }
@@ -11,7 +15,8 @@ export class SessionManager {
   }
 
   static getUser() {
-    const userJson = localStorage.getItem(this.#userKey);
+    const storage = this.#getStorage();
+    const userJson = storage.getItem(this.#userKey);
     
     if (userJson) {
       try {
@@ -20,6 +25,16 @@ export class SessionManager {
         return null;
       }
     }
+
+    const localUserJson = localStorage.getItem(this.#userKey);
+    if (localUserJson) {
+      try {
+        return JSON.parse(localUserJson);
+      } catch {
+        return null;
+      }
+    }
+
     return null;
   }
 
@@ -27,19 +42,22 @@ export class SessionManager {
     this.clear();
     
     localStorage.setItem(this.#rememberMeKey, rememberMe ? "true" : "false");
-    localStorage.setItem(this.#userKey, JSON.stringify(user));
+    const storage = this.#getStorage();
+    storage.setItem(this.#userKey, JSON.stringify(user));
   }
 
   static clear() {
     localStorage.removeItem(this.#userKey);
     localStorage.removeItem(this.#rememberMeKey);
+    sessionStorage.removeItem(this.#userKey);
   }
 
   static updateUser(updates) {
     const user = this.getUser();
     if (user) {
       const updatedUser = { ...user, ...updates };
-      localStorage.setItem(this.#userKey, JSON.stringify(updatedUser));
+      const storage = this.#getStorage();
+      storage.setItem(this.#userKey, JSON.stringify(updatedUser));
       return updatedUser;
     }
     return null;

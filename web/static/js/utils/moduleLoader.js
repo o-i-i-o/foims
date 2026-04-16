@@ -1,7 +1,5 @@
-// 动态导入模块缓存
 const moduleCache = new Map();
 
-// 动态导入辅助函数（带缓存）
 export async function loadModule(moduleName, modulePath) {
   if (moduleCache.has(moduleName)) {
     return moduleCache.get(moduleName);
@@ -15,4 +13,12 @@ export async function loadModule(moduleName, modulePath) {
     console.error(`加载模块 ${moduleName} 失败:`, error);
     throw error;
   }
+}
+
+export function getCachedModule(moduleName) {
+  return moduleCache.get(moduleName) || null;
+}
+
+export function hasModule(moduleName) {
+  return moduleCache.has(moduleName);
 }

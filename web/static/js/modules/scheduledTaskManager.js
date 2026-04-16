@@ -14,6 +14,7 @@ import {
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
+import { showConfirm } from "../utils/confirm.js";
 
 let switches = [];
 let networks = [];
@@ -311,7 +312,8 @@ window.toggleScheduledTask = async function(id) {
 };
 
 window.runScheduledTask = async function(id) {
-    if (!confirm(t('scheduled_tasks.confirm_run'))) return;
+    const confirmed = await showConfirm(t('scheduled_tasks.confirm_run'));
+    if (!confirmed) return;
 
     try {
         const response = await apiPost(`/api/system/scheduled-tasks/${id}/run`);
@@ -335,7 +337,8 @@ window.runScheduledTask = async function(id) {
 };
 
 window.deleteScheduledTask = async function(id) {
-    if (!confirm(t('scheduled_tasks.confirm_delete'))) return;
+    const confirmed = await showConfirm(t('scheduled_tasks.confirm_delete'));
+    if (!confirmed) return;
 
     try {
         const response = await apiDelete(`/api/system/scheduled-tasks/${id}`);

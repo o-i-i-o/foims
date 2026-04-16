@@ -13,6 +13,7 @@ import {
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
+import { showConfirm } from "../utils/confirm.js";
 
 // 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
@@ -396,19 +397,21 @@ export async function markNotificationAsRead(notificationId) {
 
 // 清除已读通知
 export async function clearReadNotifications() {
-  if (confirm("确定要清除所有已读通知吗？")) {
-    try {
-      const result = await apiPut("/api/notifications/mark-all-read", {});
-      if (result.success) {
-        loadNotificationsData();
-        showToast("已读通知已清除", "success");
-      } else {
-        showToast("操作失败: " + result.message, "error");
-      }
-    } catch (error) {
-      console.error("清除已读通知失败:", error);
-      showToast("操作失败，请重试", "error");
+  const confirmed = await showConfirm(t('notifications.confirm_clear_read'));
+  if (!confirmed) {
+    return;
+  }
+  try {
+    const result = await apiPut("/api/notifications/mark-all-read", {});
+    if (result.success) {
+      loadNotificationsData();
+      showToast("已读通知已清除", "success");
+    } else {
+      showToast("操作失败: " + result.message, "error");
     }
+  } catch (error) {
+    console.error("清除已读通知失败:", error);
+    showToast("操作失败，请重试", "error");
   }
 }
 
