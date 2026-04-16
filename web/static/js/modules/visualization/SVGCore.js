@@ -1,311 +1,416 @@
-// SVG Core - Base functionality for SVG visualization
 import { apiGet, apiPost, apiDelete } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
+
 export class SVGCore {
-    container;
-    svg;
-    elementsGroup;
-    gridGroup;
-    alignmentGroup;
-    type;
-    callbacks;
-    gridSize = 20;
-    snapToGrid = true;
-    showAlignmentLines = true;
-    selectedElement = null;
-    isDragging = false;
-    dragOffset = { x: 0, y: 0 };
-    currentRoomId = null;
-    currentNetworkRegionId = null;
-    // Expose API methods for data manager
-    apiGet = apiGet;
-    apiPost = apiPost;
-    apiDelete = apiDelete;
-    showToast = showToast;
-    constructor(containerId, type, callbacks = {}) {
-        this.container = document.getElementById(containerId);
-        if (!this.container) {
-            throw new Error(`Container #${containerId} not found`);
-        }
-        this.type = type;
-        this.callbacks = callbacks;
-        this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        this.svg.setAttribute("width", "100%");
-        this.svg.setAttribute("height", "100%");
-        this.svg.setAttribute("viewBox", "0 0 1000 800");
-        this.svg.style.cursor = "default";
-        this.gridGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        this.gridGroup.className.baseVal = "grid-group";
-        this.svg.appendChild(this.gridGroup);
-        this.alignmentGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        this.alignmentGroup.className.baseVal = "alignment-group";
-        this.svg.appendChild(this.alignmentGroup);
-        this.elementsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        this.elementsGroup.className.baseVal = "elements-group";
-        this.svg.appendChild(this.elementsGroup);
-        this.container.appendChild(this.svg);
-        this.drawGrid();
-        this.initEvents();
+  constructor(containerId, type, callbacks = {}) {
+    this.container = document.getElementById(containerId);
+    this.type = type;
+    this.svg = null;
+    this.elementsGroup = null;
+    this.selectedElement = null;
+    this.isDragging = false;
+    this.hasMoved = false;
+    this.elementStartPos = { x: 0, y: 0 };
+    this.mouseStartPos = { x: 0, y: 0 };
+    this.currentRoomId = null;
+    this.currentNetworkRegionId = null;
+    this.currentCabinetId = null;
+    this.gridSize = 20;
+    this.snapToGrid = true;
+    this.showAlignmentLines = true;
+    this.alignmentThreshold = 10;
+    this.alignmentLinesGroup = null;
+    this.tooltip = null;
+    this.callbacks = callbacks;
+    this.apiGet = apiGet;
+    this.apiPost = apiPost;
+    this.apiDelete = apiDelete;
+    this.showToast = showToast;
+
+    this._init();
+  }
+
+  _init() {
+    this._initSVG();
+    this._initTooltip();
+    this._initEventListeners();
+  }
+
+  _initSVG() {
+    this.container.innerHTML = "";
+
+    this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.svg.className.baseVal = "visualization-svg";
+    this.svg.setAttribute("width", "100%");
+    this.svg.setAttribute("height", "100%");
+    this.svg.setAttribute("viewBox", "0 0 2000 2000");
+
+    this._createDefs();
+    this._createGridBackground();
+
+    this.elementsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.svg.appendChild(this.elementsGroup);
+
+    this.alignmentLinesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.alignmentLinesGroup.className.baseVal = "alignment-lines";
+    this.svg.appendChild(this.alignmentLinesGroup);
+
+    this.container.appendChild(this.svg);
+
+    this.container.style.overflow = "auto";
+    this.container.style.maxHeight = "800px";
+    this.container.style.border = "1px solid #ddd";
+    this.container.style.borderRadius = "4px";
+  }
+
+  _createDefs() {
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+
+    const gridPattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+    const gridId = `grid-${this.type}`;
+    gridPattern.setAttribute("id", gridId);
+    gridPattern.setAttribute("width", this.gridSize);
+    gridPattern.setAttribute("height", this.gridSize);
+    gridPattern.setAttribute("patternUnits", "userSpaceOnUse");
+
+    const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    gridPath.setAttribute("d", `M ${this.gridSize} 0 L 0 0 0 ${this.gridSize}`);
+    gridPath.setAttribute("fill", "none");
+    gridPath.setAttribute("stroke", "var(--border-light)");
+    gridPath.setAttribute("stroke-width", "0.5");
+
+    gridPattern.appendChild(gridPath);
+    defs.appendChild(gridPattern);
+
+    this.svg.appendChild(defs);
+  }
+
+  _createGridBackground() {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("width", "100%");
+    rect.setAttribute("height", "100%");
+    rect.setAttribute("fill", `url(#grid-${this.type})`);
+    this.svg.appendChild(rect);
+  }
+
+  _initTooltip() {
+    const tooltipId = `visualization-tooltip-${this.type}`;
+    const existing = document.getElementById(tooltipId);
+    if (existing) {
+      this.tooltip = existing;
+      return;
     }
-    drawGrid() {
-        this.gridGroup.innerHTML = "";
-        const width = 2000;
-        const height = 2000;
-        for (let x = 0; x <= width; x += this.gridSize) {
-            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line.setAttribute("x1", String(x));
-            line.setAttribute("y1", "0");
-            line.setAttribute("x2", String(x));
-            line.setAttribute("y2", String(height));
-            line.setAttribute("stroke", "#e0e0e0");
-            line.setAttribute("stroke-width", "0.5");
-            this.gridGroup.appendChild(line);
-        }
-        for (let y = 0; y <= height; y += this.gridSize) {
-            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line.setAttribute("x1", "0");
-            line.setAttribute("y1", String(y));
-            line.setAttribute("x2", String(width));
-            line.setAttribute("y2", String(y));
-            line.setAttribute("stroke", "#e0e0e0");
-            line.setAttribute("stroke-width", "0.5");
-            this.gridGroup.appendChild(line);
-        }
+    const tooltip = document.createElement("div");
+    tooltip.id = tooltipId;
+    tooltip.className = "tooltip";
+    document.body.appendChild(tooltip);
+    this.tooltip = tooltip;
+  }
+
+  _initEventListeners() {
+    this.svg.addEventListener("mousedown", this._handleMouseDown.bind(this));
+    this.svg.addEventListener("mousemove", this._handleMouseMove.bind(this));
+    this.svg.addEventListener("mouseup", this._handleMouseUp.bind(this));
+    this.svg.addEventListener("mouseleave", () => {
+      this._handleMouseUp();
+      this._hideTooltip();
+      this._clearAlignmentLines();
+    });
+
+    this.svg.addEventListener("click", (e) => {
+      const isElement = e.target.closest("[data-id]");
+      if (!isElement) {
+        this._clearSelection();
+      }
+    });
+  }
+
+  _handleMouseDown(e) {
+    if (e.button !== 0) return;
+    const target = e.target.closest("[data-id]");
+    if (target) {
+      this.isDragging = true;
+      this.hasMoved = false;
+      this.selectedElement = target;
+      this._selectElement(target);
+
+      const rect = target.querySelector("rect");
+      if (rect) {
+        this.elementStartPos = {
+          x: parseFloat(rect.getAttribute("x")),
+          y: parseFloat(rect.getAttribute("y"))
+        };
+      }
+      this.mouseStartPos = this._getSvgCoordinates(e);
     }
-    initEvents() {
-        this.svg.addEventListener("mousedown", this.handleMouseDown.bind(this));
-        this.svg.addEventListener("mousemove", this.handleMouseMove.bind(this));
-        this.svg.addEventListener("mouseup", this.handleMouseUp.bind(this));
-        this.svg.addEventListener("click", this.handleClick.bind(this));
-        // Tooltip events
-        this.svg.addEventListener("mouseover", this.handleMouseOver.bind(this));
-        this.svg.addEventListener("mouseout", this.handleMouseOut.bind(this));
-    }
-    handleMouseDown(e) {
-        const target = e.target;
-        const group = target.closest("[data-id]");
-        if (group && group !== this.elementsGroup) {
-            this.selectedElement = group;
-            this.isDragging = true;
-            const rect = group.querySelector("rect");
-            if (rect) {
-                const x = parseFloat(rect.getAttribute("x") || "0");
-                const y = parseFloat(rect.getAttribute("y") || "0");
-                this.dragOffset = {
-                    x: e.offsetX - x,
-                    y: e.offsetY - y,
-                };
-            }
-            group.classList.add("selected");
-        }
-    }
-    handleMouseMove(e) {
-        if (!this.isDragging || !this.selectedElement)
-            return;
-        let x = e.offsetX - this.dragOffset.x;
-        let y = e.offsetY - this.dragOffset.y;
-        if (this.snapToGrid) {
-            x = Math.round(x / this.gridSize) * this.gridSize;
-            y = Math.round(y / this.gridSize) * this.gridSize;
-        }
-        this.updateElementPosition(this.selectedElement, x, y);
+  }
+
+  _handleMouseMove(e) {
+    if (this.isDragging && this.selectedElement) {
+      const currentPos = this._getSvgCoordinates(e);
+      const dx = currentPos.x - this.mouseStartPos.x;
+      const dy = currentPos.y - this.mouseStartPos.y;
+
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        this.hasMoved = true;
+
+        const newX = this.elementStartPos.x + dx;
+        const newY = this.elementStartPos.y + dy;
+
+        this._setElementPosition(this.selectedElement, newX, newY);
+
         if (this.showAlignmentLines) {
-            this.drawAlignmentLines(x, y);
+          this._updateAlignmentLines(this.selectedElement);
         }
+
+        this._hideTooltip();
+      }
+      return;
     }
-    handleMouseUp() {
-        if (this.isDragging && this.selectedElement) {
-            this.isDragging = false;
-            this.clearAlignmentLines();
-            if (this.callbacks.onElementMove) {
-                const position = this.getElementPosition(this.selectedElement);
-                this.callbacks.onElementMove(this.selectedElement, position);
-            }
+
+    this._updateTooltip(e);
+  }
+
+  _handleMouseUp(e) {
+    if (this.isDragging && !this.hasMoved && this.selectedElement) {
+      this._handleElementClick(this.selectedElement);
+    }
+
+    if (this.isDragging && this.hasMoved && this.selectedElement && this.snapToGrid) {
+      this._snapElementToGrid(this.selectedElement);
+    }
+
+    this._clearAlignmentLines();
+    this.isDragging = false;
+  }
+
+  _setElementPosition(element, x, y) {
+    const rect = element.querySelector("rect");
+    if (!rect) return;
+
+    const width = parseFloat(rect.getAttribute("width")) || 160;
+    const height = parseFloat(rect.getAttribute("height")) || 160;
+
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+
+    const texts = element.querySelectorAll("text");
+    texts.forEach((text) => {
+      const relX = parseFloat(text.dataset.relX || 0);
+      const relY = parseFloat(text.dataset.relY || 0);
+      text.setAttribute("x", x + width / 2 + relX);
+      text.setAttribute("y", y + relY);
+    });
+
+    const lines = element.querySelectorAll("line");
+    lines.forEach((line) => {
+      const relX1 = parseFloat(line.dataset.relX1 || 0);
+      const relY1 = parseFloat(line.dataset.relY1 || 0);
+      const relX2 = parseFloat(line.dataset.relX2 || 0);
+      const relY2 = parseFloat(line.dataset.relY2 || 0);
+      line.setAttribute("x1", x + relX1);
+      line.setAttribute("y1", y + relY1);
+      line.setAttribute("x2", x + relX2);
+      line.setAttribute("y2", y + relY2);
+    });
+
+    if (element.classList.contains("door-element")) {
+      const doorHandle = element.querySelector("circle");
+      if (doorHandle) {
+        const relCx = parseFloat(doorHandle.dataset.relCx || 0);
+        const relCy = parseFloat(doorHandle.dataset.relCy || 0);
+        doorHandle.setAttribute("cx", x + relCx);
+        doorHandle.setAttribute("cy", y + relCy);
+      }
+    }
+
+    if (element.classList.contains("cabinet-element")) {
+      this._updateChildPositions(element, x, y);
+    }
+  }
+
+  _updateChildPositions(element, parentX, parentY) {
+    const cabinetId = element.dataset.id;
+    const positions = this.elementsGroup.querySelectorAll(".cabinet-position-element");
+    positions.forEach((position) => {
+      if (position.dataset.cabinetId === cabinetId) {
+        const relX = parseFloat(position.dataset.relX || 0);
+        const relY = parseFloat(position.dataset.relY || 0);
+        const newX = parentX + relX;
+        const newY = parentY + relY;
+
+        const positionRect = position.querySelector("rect");
+        if (positionRect) {
+          positionRect.setAttribute("x", newX);
+          positionRect.setAttribute("y", newY);
         }
-    }
-    handleClick(e) {
-        const target = e.target;
-        if (target === this.svg || target === this.gridGroup) {
-            this.deselectAll();
-            return;
-        }
-        const group = target.closest("[data-id]");
-        if (group && this.callbacks.onElementSelect) {
-            const data = this.getElementData(group);
-            this.callbacks.onElementSelect(group, data);
-        }
-    }
-    handleMouseOver(e) {
-        const target = e.target;
-        const group = target.closest("[data-id]");
-        if (group && group.dataset.tooltip) {
-            this.showTooltip(e, group.dataset.tooltip);
-        }
-    }
-    handleMouseOut(e) {
-        const target = e.target;
-        const relatedTarget = e.relatedTarget;
-        if (target.closest("[data-id]") && !relatedTarget?.closest(".tooltip")) {
-            this.hideTooltip();
-        }
-    }
-    showTooltip(e, text) {
-        this.hideTooltip();
-        const tooltip = document.createElement("div");
-        tooltip.className = "tooltip";
-        tooltip.textContent = text;
-        tooltip.style.cssText = `
-      position: fixed;
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      pointer-events: none;
-      z-index: 1000;
-      white-space: pre-line;
-    `;
-        tooltip.style.left = `${e.clientX + 10}px`;
-        tooltip.style.top = `${e.clientY + 10}px`;
-        document.body.appendChild(tooltip);
-        this.container.dataset.activeTooltip = "true";
-    }
-    hideTooltip() {
-        const tooltip = document.querySelector(".tooltip");
-        if (tooltip) {
-            tooltip.remove();
-        }
-        delete this.container.dataset.activeTooltip;
-    }
-    updateElementPosition(element, x, y) {
-        const rect = element.querySelector("rect");
-        if (!rect)
-            return;
-        const oldX = parseFloat(rect.getAttribute("x") || "0");
-        const oldY = parseFloat(rect.getAttribute("y") || "0");
-        const dx = x - oldX;
-        const dy = y - oldY;
-        rect.setAttribute("x", String(x));
-        rect.setAttribute("y", String(y));
-        // Update child elements
-        const children = element.querySelectorAll("*");
-        children.forEach((child) => {
-            const el = child;
-            if (el.hasAttribute("x") && !el.dataset.relX) {
-                const cx = parseFloat(el.getAttribute("x") || "0");
-                el.setAttribute("x", String(cx + dx));
-            }
-            if (el.hasAttribute("y") && !el.dataset.relY) {
-                const cy = parseFloat(el.getAttribute("y") || "0");
-                el.setAttribute("y", String(cy + dy));
-            }
-            if (el.hasAttribute("x1")) {
-                const x1 = parseFloat(el.getAttribute("x1") || "0");
-                el.setAttribute("x1", String(x1 + dx));
-            }
-            if (el.hasAttribute("y1")) {
-                const y1 = parseFloat(el.getAttribute("y1") || "0");
-                el.setAttribute("y1", String(y1 + dy));
-            }
-            if (el.hasAttribute("x2")) {
-                const x2 = parseFloat(el.getAttribute("x2") || "0");
-                el.setAttribute("x2", String(x2 + dx));
-            }
-            if (el.hasAttribute("y2")) {
-                const y2 = parseFloat(el.getAttribute("y2") || "0");
-                el.setAttribute("y2", String(y2 + dy));
-            }
-            if (el.hasAttribute("cx")) {
-                const cx = parseFloat(el.getAttribute("cx") || "0");
-                el.setAttribute("cx", String(cx + dx));
-            }
-            if (el.hasAttribute("cy")) {
-                const cy = parseFloat(el.getAttribute("cy") || "0");
-                el.setAttribute("cy", String(cy + dy));
-            }
+        const positionTexts = position.querySelectorAll("text");
+        positionTexts.forEach((text) => {
+          const textRelX = parseFloat(text.dataset.relX || 0);
+          const textRelY = parseFloat(text.dataset.relY || 0);
+          text.setAttribute("x", newX + textRelX);
+          text.setAttribute("y", newY + textRelY);
         });
-        // Update relative positioned elements
-        const relElements = element.querySelectorAll("[data-rel-x], [data-rel-y]");
-        relElements.forEach((child) => {
-            const el = child;
-            if (el.dataset.relX) {
-                el.setAttribute("x", String(x + parseFloat(el.dataset.relX)));
-            }
-            if (el.dataset.relY) {
-                el.setAttribute("y", String(y + parseFloat(el.dataset.relY)));
-            }
-            if (el.dataset.relCx) {
-                el.setAttribute("cx", String(x + parseFloat(el.dataset.relCx)));
-            }
-            if (el.dataset.relCy) {
-                el.setAttribute("cy", String(y + parseFloat(el.dataset.relCy)));
-            }
-        });
+      }
+    });
+  }
+
+  _snapElementToGrid(element) {
+    const rect = element.querySelector("rect");
+    if (!rect) return;
+
+    const x = parseFloat(rect.getAttribute("x"));
+    const y = parseFloat(rect.getAttribute("y"));
+
+    const snappedX = Math.round(x / this.gridSize) * this.gridSize;
+    const snappedY = Math.round(y / this.gridSize) * this.gridSize;
+
+    if (snappedX !== x || snappedY !== y) {
+      this._setElementPosition(element, snappedX, snappedY);
     }
-    getElementPosition(element) {
-        const rect = element.querySelector("rect");
-        if (!rect) {
-            return { x: 0, y: 0, width: 0, height: 0 };
-        }
-        return {
-            x: parseFloat(rect.getAttribute("x") || "0"),
-            y: parseFloat(rect.getAttribute("y") || "0"),
-            width: parseFloat(rect.getAttribute("width") || "0"),
-            height: parseFloat(rect.getAttribute("height") || "0"),
-        };
+  }
+
+  _handleElementClick(element) {
+    const id = element.dataset.id;
+    const elementType = element.classList.contains("workstation-element")
+      ? "workstation"
+      : element.classList.contains("cabinet-element")
+        ? "cabinet"
+        : element.classList.contains("cabinet-position-element")
+          ? "cabinet-position"
+          : "";
+
+    if (elementType === "workstation" && this.callbacks.onEditWorkstation) {
+      this.callbacks.onEditWorkstation(id);
+    } else if (elementType === "cabinet" && this.callbacks.onEditCabinet) {
+      this.callbacks.onEditCabinet(id);
+    } else if (elementType === "cabinet-position" && this.callbacks.onEditCabinetPosition) {
+      this.callbacks.onEditCabinetPosition(id);
     }
-    getElementData(element) {
-        return {
-            id: element.dataset.id,
-            type: this.type,
-        };
+  }
+
+  _getSvgCoordinates(e) {
+    const pt = this.svg.createSVGPoint();
+    const rect = this.svg.getBoundingClientRect();
+    pt.x = e.clientX - rect.left;
+    pt.y = e.clientY - rect.top;
+    const ctm = this.svg.getScreenCTM().inverse();
+    return pt.matrixTransform(ctm);
+  }
+
+  _selectElement(element) {
+    this._clearSelection();
+    this.selectedElement = element;
+    element.classList.add("selected");
+  }
+
+  _clearSelection() {
+    const selected = this.elementsGroup.querySelector(".selected");
+    if (selected) {
+      selected.classList.remove("selected");
     }
-    drawAlignmentLines(x, y) {
-        this.clearAlignmentLines();
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", "0");
-        line.setAttribute("y1", String(y));
-        line.setAttribute("x2", "2000");
-        line.setAttribute("y2", String(y));
-        line.setAttribute("stroke", "#3b82f6");
-        line.setAttribute("stroke-width", "1");
-        line.setAttribute("stroke-dasharray", "5,5");
-        this.alignmentGroup.appendChild(line);
-        const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line2.setAttribute("x1", String(x));
-        line2.setAttribute("y1", "0");
-        line2.setAttribute("x2", String(x));
-        line2.setAttribute("y2", "2000");
-        line2.setAttribute("stroke", "#3b82f6");
-        line2.setAttribute("stroke-width", "1");
-        line2.setAttribute("stroke-dasharray", "5,5");
-        this.alignmentGroup.appendChild(line2);
+    this.selectedElement = null;
+  }
+
+  _updateAlignmentLines(element) {
+    this._clearAlignmentLines();
+
+    const rect = element.querySelector("rect");
+    if (!rect) return;
+
+    const x = parseFloat(rect.getAttribute("x"));
+    const y = parseFloat(rect.getAttribute("y"));
+    const width = parseFloat(rect.getAttribute("width"));
+    const height = parseFloat(rect.getAttribute("height"));
+
+    const elementCenterX = x + width / 2;
+    const elementCenterY = y + height / 2;
+
+    const allElements = this.elementsGroup.querySelectorAll("[data-id]");
+    const otherElements = Array.from(allElements).filter(el => el !== element);
+
+    otherElements.forEach(other => {
+      const otherRect = other.querySelector("rect");
+      if (!otherRect) return;
+
+      const ox = parseFloat(otherRect.getAttribute("x"));
+      const oy = parseFloat(otherRect.getAttribute("y"));
+      const ow = parseFloat(otherRect.getAttribute("width"));
+      const oh = parseFloat(otherRect.getAttribute("height"));
+      const otherCenterX = ox + ow / 2;
+      const otherCenterY = oy + oh / 2;
+
+      if (Math.abs(elementCenterX - otherCenterX) < this.alignmentThreshold) {
+        this._drawAlignmentLine(otherCenterX, Math.min(y, oy), otherCenterX, Math.max(y + height, oy + oh));
+      }
+
+      if (Math.abs(elementCenterY - otherCenterY) < this.alignmentThreshold) {
+        this._drawAlignmentLine(Math.min(x, ox), otherCenterY, Math.max(x + width, ox + ow), otherCenterY);
+      }
+
+      if (Math.abs(x - ox) < this.alignmentThreshold) {
+        this._drawAlignmentLine(ox, Math.min(y, oy), ox, Math.max(y + height, oy + oh));
+      }
+
+      if (Math.abs(y - oy) < this.alignmentThreshold) {
+        this._drawAlignmentLine(Math.min(x, ox), oy, Math.max(x + width, ox + ow), oy);
+      }
+    });
+  }
+
+  _drawAlignmentLine(x1, y1, x2, y2) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
+    line.setAttribute("y2", y2);
+    line.setAttribute("stroke", "#3b82f6");
+    line.setAttribute("stroke-width", "1");
+    line.setAttribute("stroke-dasharray", "4,4");
+    line.setAttribute("opacity", "0.7");
+    this.alignmentLinesGroup.appendChild(line);
+  }
+
+  _clearAlignmentLines() {
+    if (this.alignmentLinesGroup) {
+      this.alignmentLinesGroup.innerHTML = "";
     }
-    clearAlignmentLines() {
-        this.alignmentGroup.innerHTML = "";
+  }
+
+  _updateTooltip(e) {
+    if (!this.tooltip) return;
+    const target = e.target.closest("[data-tooltip]");
+    if (!target || !target.dataset.tooltip) {
+      this._hideTooltip();
+      return;
     }
-    deselectAll() {
-        this.selectedElement = null;
-        this.isDragging = false;
-        const selected = this.elementsGroup.querySelectorAll(".selected");
-        selected.forEach((el) => el.classList.remove("selected"));
+
+    this.tooltip.textContent = target.dataset.tooltip;
+    this.tooltip.style.left = `${e.clientX + 12}px`;
+    this.tooltip.style.top = `${e.clientY + 12}px`;
+    this.tooltip.classList.add("visible");
+  }
+
+  _hideTooltip() {
+    if (this.tooltip) {
+      this.tooltip.classList.remove("visible");
     }
-    setGridSize(size) {
-        this.gridSize = size;
-        this.drawGrid();
+  }
+
+  setGridSize(size) {
+    this.gridSize = size;
+    this._createDefs();
+    this._createGridBackground();
+  }
+
+  toggleSnapToGrid(enabled) {
+    this.snapToGrid = enabled;
+  }
+
+  toggleAlignmentLines(enabled) {
+    this.showAlignmentLines = enabled;
+    if (!enabled) {
+      this._clearAlignmentLines();
     }
-    toggleSnapToGrid(enabled) {
-        this.snapToGrid = enabled;
-    }
-    toggleAlignmentLines(enabled) {
-        this.showAlignmentLines = enabled;
-        if (!enabled) {
-            this.clearAlignmentLines();
-        }
-    }
-    destroy() {
-        this.hideTooltip();
-        this.container.removeChild(this.svg);
-    }
+  }
 }
-//# sourceMappingURL=SVGCore.js.map

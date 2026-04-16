@@ -1,201 +1,239 @@
-import { appendPaginationToTable, escapeHtml, DEFAULT_PAGE_SIZE, createSortState, updateSortIcons, initSortEvents, } from "../utils/ui.js";
+
+// 导入必要的模块
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+} from "../utils/apiClient.js";
+
+import {
+  showToast,
+  renderTable,
+  formatDateTime,
+  getElementValue,
+  handleFormSubmit,
+  handleDelete,
+  debounce,
+  handleError,
+  appendPaginationToTable,
+  escapeHtml,
+  DEFAULT_PAGE_SIZE,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
+} from "../utils/ui.js";
+
 import { openModal, closeModal } from "../utils/modal.js";
-import { loadDataCenterRoomsForSelect, loadRoomNetworksForCabinet, loadCabinets, } from "../utils/resources.js";
-import { cabinetManager } from "../utils/managers.js";
-import { eventDelegator, setupTableEvents } from "../utils/eventDelegator.js";
-import { templateManager, renderEmptyRow, renderActionButtons } from "../utils/templateManager.js";
-import { errorHandler, wrapAsync } from "../utils/errorHandler.js";
-const tableState = createSortState("name", "asc");
+
+import {
+  loadDataCenterRoomsForSelect,
+  loadRoomNetworksForCabinet,
+  loadCabinets
+} from "../utils/resources.js";
+
+const tableState = createSortState('name', 'asc');
+let currentPage = 1;
+
+// 房间选择事件监听器引用
 let roomSelectHandler = null;
-const cabinetTemplates = {
-    tableRow: `
-    <tr data-id="{{id}}">
-      <td class="index-column">{{index}}</td>
-      <td>{{roomName}}{{name}}</td>
-      <td>{{{networks}}}</td>
-      <td>{{description}}</td>
-      <td>{{createdAt}}</td>
-      <td>{{{actions}}}</td>
-    </tr>
-  `,
-};
-function renderCabinetRow(cabinet, index) {
-    const roomName = cabinet.room_name ? `${escapeHtml(cabinet.room_name)} / ` : "";
-    const networks = cabinet.networks && cabinet.networks.length > 0
-        ? cabinet.networks
-            .map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`)
-            .join("<br>")
-        : "-";
-    return templateManager.render(cabinetTemplates.tableRow, {
-        id: cabinet.id,
-        index,
-        roomName,
-        name: escapeHtml(cabinet.name),
-        networks,
-        description: escapeHtml(cabinet.description) || "-",
-        createdAt: new Date(cabinet.created_at).toLocaleString(),
-        actions: renderActionButtons(cabinet.id),
-    });
-}
+
+// 加载机柜数据
 export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null) {
-    if (sortBy)
-        tableState.setSort(sortBy, sortOrder);
-    await wrapAsync(async () => {
-        const result = await cabinetManager.list({
-            page,
-            pageSize: DEFAULT_PAGE_SIZE,
-            sort_by: tableState.sortBy,
-            sort_order: tableState.sortOrder,
-        });
-        if (!result)
-            return;
-        const data = result.data;
-        const cabinets = data.items || [];
-        const tbody = document.querySelector("#cabinets-table tbody");
-        if (!tbody) {
-            errorHandler.handle(errorHandler.createError("DOM_ERROR", "未找到机柜表格元素", "error"));
-            return;
-        }
-        if (cabinets.length === 0) {
-            tbody.innerHTML = renderEmptyRow(6, "暂无机柜数据");
-            return;
-        }
-        const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-        tbody.innerHTML = cabinets
-            .map((cabinet, index) => renderCabinetRow(cabinet, startIndex + index + 1))
-            .join("");
-        if (data.total !== undefined) {
-            appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
-        }
-        updateSortIcons("cabinets-table", tableState);
-    }, "加载机柜数据失败")();
-}
-export function initCabinetSortEvents() {
-    initSortEvents("cabinets-table", tableState, loadCabinetsData);
-}
-export function initCabinetTableEvents() {
-    setupTableEvents(document, "#cabinets-table", {
-        onEdit: (id) => editCabinet(id),
-        onDelete: (id) => deleteCabinet(id),
+  currentPage = page;
+  if (sortBy) tableState.setSort(sortBy, sortOrder);
+  
+  try {
+    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const data = result.success ? result.data : { items: [], total: 0 };
+    const cabinets = data.items || data;
+    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+
+    renderTable("#cabinets-table", {
+      data: cabinets,
+      columns: [
+        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
+        { field: 'name', render: (v, row) => {
+          const roomName = row.room_name ? `${escapeHtml(row.room_name)} / ` : '';
+          return `${roomName}${escapeHtml(v)}`;
+        }},
+        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
+        { field: 'description', render: (v) => escapeHtml(v) || '-' },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'id', render: (v) => `
+          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+        ` }
+      ],
+      emptyMessage: '暂无机柜数据'
     });
+
+    if (data.total !== undefined) {
+      appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
+    }
+    updateSortIcons("cabinets-table", tableState);
+  } catch (error) {
+    handleError(error, "加载机柜数据失败", () => {
+      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    });
+  }
 }
+
+export function initCabinetSortEvents() {
+  initSortEvents("cabinets-table", tableState, loadCabinetsData);
+}
+
+// 编辑机柜
 export async function editCabinet(id) {
-    await wrapAsync(async () => {
-        const cabinet = await cabinetManager.get(id);
-        if (cabinet) {
-            openCabinetModal(cabinet);
-        }
-    }, "获取机柜数据失败")();
-}
-export async function deleteCabinet(id) {
-    const result = await cabinetManager.delete(id, { confirmMessage: "确定要删除这个机柜吗？" });
+  try {
+    const result = await apiGet(`/api/resources/cabinets/${id}`);
     if (result.success) {
-        await loadCabinetsData();
+      openCabinetModal(result.data);
+    } else {
+      showToast(`获取机柜数据失败: ${result.message}`, "error");
     }
+  } catch (error) {
+    handleError(error, "获取机柜数据失败");
+  }
 }
+
+// 删除机柜
+export async function deleteCabinet(id) {
+  await handleDelete(id, "/api/resources/cabinets", "机柜删除成功", loadCabinetsData);
+}
+
+// ====== 机柜管理模态框 ======
 export async function openCabinetModal(cabinet = null) {
-    openModal("cabinet-modal");
-    const title = document.getElementById("cabinet-modal-title");
-    const form = document.getElementById("cabinet-form");
-    const capacityInput = document.getElementById("cabinet-capacity");
-    await loadDataCenterRoomsForSelect();
-    const roomSelect = document.getElementById("cabinet-room");
-    if (roomSelectHandler) {
-        roomSelect?.removeEventListener("change", roomSelectHandler);
+  openModal("cabinet-modal");
+  
+  const modal = document.getElementById("cabinet-modal");
+  const title = document.getElementById("cabinet-modal-title");
+  const form = document.getElementById("cabinet-form");
+
+  // 获取容量输入框
+  const capacityInput = document.getElementById("cabinet-capacity");
+  
+  // 加载机房选项
+  await loadDataCenterRoomsForSelect();
+  
+  // 获取房间选择框
+  const roomSelect = document.getElementById("cabinet-room");
+  
+  // 移除旧的事件监听器
+  if (roomSelectHandler) {
+    roomSelect.removeEventListener("change", roomSelectHandler);
+  }
+  
+  // 创建新的事件监听器 - 使用箭头函数确保this指向正确
+  roomSelectHandler = async (event) => {
+    const roomId = event.target.value;
+    await loadRoomNetworksForCabinet(roomId);
+  };
+  
+  // 添加房间选择事件监听器
+  roomSelect.addEventListener("change", roomSelectHandler);
+  
+  if (cabinet) {
+    // 编辑模式
+    title.textContent = "编辑机柜";
+    document.getElementById("cabinet-id").value = cabinet.id;
+    document.getElementById("cabinet-name").value = cabinet.name;
+    // 设置房间选择
+    if (cabinet.room_id) {
+      document.getElementById("cabinet-room").value = cabinet.room_id;
+      // 加载所选房间的网段配置
+      await loadRoomNetworksForCabinet(cabinet.room_id);
     }
-    roomSelectHandler = async (event) => {
-        const roomId = event.target.value;
-        await loadRoomNetworksForCabinet(roomId);
-    };
-    roomSelect?.addEventListener("change", roomSelectHandler);
-    if (cabinet) {
-        if (title)
-            title.textContent = "编辑机柜";
-        document.getElementById("cabinet-id").value = String(cabinet.id);
-        document.getElementById("cabinet-name").value = cabinet.name;
-        if (cabinet.room_id) {
-            document.getElementById("cabinet-room").value = String(cabinet.room_id);
-            await loadRoomNetworksForCabinet(String(cabinet.room_id));
-        }
-        if (capacityInput)
-            capacityInput.value = String(cabinet.capacity || cabinet.total_units || 42);
-        document.getElementById("cabinet-description").value = cabinet.description || "";
-    }
-    else {
-        if (title)
-            title.textContent = "添加机柜";
-        form?.reset();
-        document.getElementById("cabinet-id").value = "";
-        const inheritedNetworksContainer = document.getElementById("cabinet-inherited-networks");
-        if (inheritedNetworksContainer) {
-            inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
-        }
-    }
+    capacityInput.value = cabinet.capacity || 42; // 设置默认值42
+    document.getElementById("cabinet-description").value = cabinet.description || "";
+  } else {
+    // 添加模式
+    title.textContent = "添加机柜";
+    form.reset();
+    document.getElementById("cabinet-id").value = "";
+    // 初始化网段显示
+    const inheritedNetworksContainer = document.getElementById("cabinet-inherited-networks");
+    inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
+  }
 }
+
+// 提交机柜表单
 export async function submitCabinetForm() {
-    const form = document.getElementById("cabinet-form");
-    if (!form)
-        return;
-    const formData = new FormData(form);
-    const id = formData.get("cabinet-id");
-    const name = formData.get("cabinet-name");
-    const roomId = formData.get("cabinet-room");
-    const capacityStr = formData.get("cabinet-capacity");
-    const capacity = parseInt(capacityStr, 10);
-    const description = formData.get("cabinet-description");
-    if (isNaN(capacity) || capacity <= 0) {
-        errorHandler.handle(errorHandler.createError("VALIDATION_ERROR", "机柜容量必须是有效的正数", "warning"));
-        return;
-    }
-    const cabinetData = {
-        name: name.trim(),
-        room_id: roomId,
-        capacity,
-        description: description.trim() || null,
-    };
-    await wrapAsync(async () => {
-        let result;
-        if (id) {
-            result = await cabinetManager.update(id, cabinetData);
-        }
-        else {
-            result = await cabinetManager.create(cabinetData);
-        }
-        if (result.success) {
-            closeModal("cabinet-modal");
-            await loadCabinetsData();
-            return true;
-        }
-    }, "保存机柜数据失败")();
+// 使用通用工具函数获取表单数据
+  const id = getElementValue("cabinet-id"); // 直接获取UUID字符串，不转换为数字
+  const name = getElementValue("cabinet-name");
+  const roomId = getElementValue("cabinet-room"); // 获取房间ID
+  const capacityStr = getElementValue("cabinet-capacity");
+  const capacity = parseInt(capacityStr, 10);
+  const description = getElementValue("cabinet-description");
+  
+  // 验证必填字段
+  if (!name.trim()) {
+    showToast("机柜名称不能为空", "warning");
+    return;
+  }
+
+  if (!roomId) {
+    showToast("请选择所属机房", "warning");
+    return;
+  }
+
+  // 验证容量
+  if (isNaN(capacity) || capacity <= 0) {
+    showToast("机柜容量必须是有效的正数", "warning");
+    return;
+  }
+
+  // 后端期望的数据格式 - 机柜网络从房间继承，无需单独设置
+  const cabinetData = {
+    name: name.trim(),
+    room_id: roomId,
+    capacity,
+    description: description.trim() || null,
+  };
+
+  // 使用通用表单提交处理函数
+  const success = await handleFormSubmit({
+    formData: cabinetData,
+    id,
+    baseUrl: "/api/resources/cabinets",
+    successMessage: "机柜保存成功",
+    modalId: "cabinet-modal",
+    reloadFunction: loadCabinetsData
+  });
+
+  return success;
 }
+
+// 加载机柜选项（用于机位模态框）
 export async function loadCabinetsForModalSelect() {
-    return wrapAsync(async () => {
-        const cabinets = await loadCabinets();
-        const select = document.getElementById("cabinet-position-cabinet");
-        if (select) {
-            select.innerHTML = "";
-            const placeholder = document.createElement("option");
-            placeholder.value = "";
-            placeholder.textContent = "选择机柜";
-            select.appendChild(placeholder);
-            cabinets.forEach((cabinet) => {
-                const option = document.createElement("option");
-                option.value = String(cabinet.id);
-                option.textContent = cabinet.name;
-                select.appendChild(option);
-            });
-            return cabinets;
-        }
-        return [];
-    }, "加载机柜选项失败")() || [];
-}
-export function cleanup() {
-    if (roomSelectHandler) {
-        const roomSelect = document.getElementById("cabinet-room");
-        roomSelect?.removeEventListener("change", roomSelectHandler);
-        roomSelectHandler = null;
+  try {
+    const cabinets = await loadCabinets();
+    const select = document.getElementById("cabinet-position-cabinet");
+
+    if (select) {
+      // 清空现有选项
+      select.innerHTML = "";
+
+      // 添加默认占位符
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "选择机柜";
+      select.appendChild(placeholder);
+
+      // 添加新选项
+      cabinets.forEach((cabinet) => {
+        const option = document.createElement("option");
+        option.value = cabinet.id;
+        option.textContent = cabinet.name;
+        select.appendChild(option);
+      });
+
+      return cabinets;
     }
-    eventDelegator.off(document, "click", "#cabinets-table .btn-edit");
-    eventDelegator.off(document, "click", "#cabinets-table .btn-delete");
+    return [];
+  } catch (error) {
+    console.error("加载机柜选项失败:", error);
+    return [];
+  }
 }
-//# sourceMappingURL=cabinet.js.map

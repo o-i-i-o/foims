@@ -5,17 +5,17 @@ rm -rf /opt/ipma/
 rm -f /usr/bin/ipma
 
 echo 创建工作目录
-mkdir  -p /opt/ipma/
+mkdir -p /opt/ipma/
 
 ls /opt/
 
-echo 编译
+echo 编译后端
 cargo build --release
-cd /root/ipma/web && npm run build 2>&1 && cd -
-echo 安装
-cp -f  target/release/ipma /usr/bin/ipma
+
+echo 安装到生产目录
+cp -f target/release/ipma /usr/bin/ipma
 cp -rf web/ /opt/ipma/
-cp -f  config.toml /opt/ipma/
+cp -f config.toml /opt/ipma/
 
 echo 重启服务
 systemctl restart ipma

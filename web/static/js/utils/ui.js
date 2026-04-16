@@ -1,101 +1,117 @@
-export { showToast, showSuccess, showError, showWarning, showInfo } from "./toast.js";
-export { showConfirm, confirmDelete } from "./confirm.js";
-export { renderPagination, renderPageInfo, createPaginationState } from "./pagination.js";
-export { formatDateTime, formatDate, formatRelativeTime } from "./formatter.js";
+export { showToast, showSuccess, showError, showWarning, showInfo } from './toast.js';
+export { showConfirm, confirmDelete } from './confirm.js';
+export { renderPagination, renderPageInfo, createPaginationState } from './pagination.js';
+export { formatDateTime, formatDate, formatRelativeTime } from './formatter.js';
+
 export const DEFAULT_PAGE_SIZE = 20;
-import { renderPagination as renderPaginationFn } from "./pagination.js";
-import { showToast as showToastFn } from "./toast.js";
-import { closeModal as closeModalFn } from "./modal.js";
-import { apiPost, apiPut, apiDelete } from "./apiClient.js";
-import { showConfirm } from "./confirm.js";
-import { escapeHtml } from "./helpers.js";
+
+import { renderPagination as renderPaginationFn } from './pagination.js';
+import { showToast as showToastFn } from './toast.js';
+import { closeModal as closeModalFn } from './modal.js';
+import { apiPost, apiPut, apiDelete } from './apiClient.js';
+import { showConfirm } from './confirm.js';
+import { escapeHtml } from './helpers.js';
+
 export { escapeHtml };
-export function createSortState(defaultBy = "name", defaultOrder = "asc") {
-    let by = defaultBy;
-    let order = defaultOrder;
+
+export function createSortState(defaultBy = 'name', defaultOrder = 'asc') {
     return {
-        get by() { return by; },
-        get order() { return order; },
+        by: defaultBy,
+        order: defaultOrder,
         toggle(key) {
-            if (by === key) {
-                order = order === "asc" ? "desc" : "asc";
-            }
-            else {
-                by = key;
-                order = "asc";
-            }
-            return this;
-        },
-        setSort(newBy, newOrder = null) {
-            by = newBy;
-            if (newOrder) {
-                order = newOrder;
+            if (this.by === key) {
+                this.order = this.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.by = key;
+                this.order = 'asc';
             }
             return this;
         },
-        get sortBy() { return by; },
-        get sortOrder() { return order; },
+        setSort(by, order = null) {
+            this.by = by;
+            if (order) {
+                this.order = order;
+            }
+            return this;
+        },
+        get sortBy() {
+            return this.by;
+        },
+        get sortOrder() {
+            return this.order;
+        }
     };
 }
+
 export function updateSortIcons(tableId, sortState) {
-    const table = typeof tableId === "string" ? document.getElementById(tableId) : tableId;
-    if (!table)
-        return;
-    table.querySelectorAll("th.sortable").forEach(th => {
+    const table = typeof tableId === 'string' ? document.getElementById(tableId) : tableId;
+    if (!table) return;
+    
+    table.querySelectorAll('th.sortable').forEach(th => {
         const sortKey = th.dataset.sort;
-        if (sortKey === sortState.sortBy) {
-            th.classList.add("sorted", sortState.sortOrder);
-            th.classList.remove(sortState.sortOrder === "asc" ? "desc" : "asc");
-        }
-        else {
-            th.classList.remove("sorted", "asc", "desc");
+        
+        if (sortKey === sortState.by) {
+            th.classList.add('sorted', sortState.order);
+            th.classList.remove(sortState.order === 'asc' ? 'desc' : 'asc');
+        } else {
+            th.classList.remove('sorted', 'asc', 'desc');
         }
     });
 }
+
 export function initSortEvents(tableId, sortState, loadDataFn) {
-    const table = typeof tableId === "string" ? document.getElementById(tableId) : tableId;
-    if (!table)
-        return;
-    table.querySelectorAll("th.sortable").forEach(th => {
-        th.addEventListener("click", () => {
+    const table = typeof tableId === 'string' ? document.getElementById(tableId) : tableId;
+    if (!table) return;
+    
+    table.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
             const sortKey = th.dataset.sort;
-            if (sortKey) {
-                sortState.toggle(sortKey);
-                loadDataFn(1, sortState.sortBy, sortState.sortOrder);
-            }
+            sortState.toggle(sortKey);
+            loadDataFn(1, sortState.by, sortState.order);
         });
     });
 }
+
 export function createTableState(options = {}) {
-    const { pageSize = DEFAULT_PAGE_SIZE, defaultSortBy = "name", defaultSortOrder = "asc", } = options;
+    const {
+        pageSize = DEFAULT_PAGE_SIZE,
+        defaultSortBy = 'name',
+        defaultSortOrder = 'asc'
+    } = options;
+    
     let isLoading = false;
     let currentPage = 1;
     const sortState = createSortState(defaultSortBy, defaultSortOrder);
+    
     return {
         get isLoading() { return isLoading; },
         get currentPage() { return currentPage; },
-        get sortBy() { return sortState.sortBy; },
-        get sortOrder() { return sortState.sortOrder; },
+        get sortBy() { return sortState.by; },
+        get sortOrder() { return sortState.order; },
         get pageSize() { return pageSize; },
         get sortState() { return sortState; },
+        
         setLoading(value) { isLoading = value; },
         setPage(page) { currentPage = page; return this; },
-        setSort(by, order) { sortState.setSort(by, order); return this; },
+        setSort(by, order) { sortState.by = by; sortState.order = order; return this; },
+        
         toggleSort(key) {
             sortState.toggle(key);
             currentPage = 1;
             return this;
         },
+        
         getQueryParams() {
             return {
                 page: currentPage,
                 page_size: pageSize,
-                sort_by: sortState.sortBy,
-                sort_order: sortState.sortOrder,
+                sort_by: sortState.by,
+                sort_order: sortState.order
             };
-        },
+        }
     };
 }
+
 export function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -107,6 +123,7 @@ export function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
 export function throttle(func, limit) {
     let inThrottle;
     return function executedFunction(...args) {
@@ -117,126 +134,139 @@ export function throttle(func, limit) {
         }
     };
 }
+
 export function sanitizeHtml(html) {
-    if (!html)
-        return "";
-    const div = document.createElement("div");
+    if (!html) return '';
+    const div = document.createElement('div');
     div.textContent = html;
     return div.innerHTML;
 }
+
 export function createElement(tag, attributes = {}, children = []) {
     const element = document.createElement(tag);
+    
     Object.entries(attributes).forEach(([key, value]) => {
-        if (key === "className") {
+        if (key === 'className') {
             element.className = value;
-        }
-        else if (key.startsWith("data-")) {
-            element.dataset[key.slice(5)] = value;
-        }
-        else if (key.startsWith("on") && typeof value === "function") {
+        } else if (key.startsWith('data-')) {
+            element.dataset[key] = value;
+        } else if (key.startsWith('on') && typeof value === 'function') {
             const eventName = key.slice(2).toLowerCase();
             element.addEventListener(eventName, value);
-        }
-        else {
+        } else {
             element[key] = value;
         }
     });
+    
     if (children.length > 0) {
         children.forEach(child => {
-            if (typeof child === "string") {
-                element.insertAdjacentHTML("beforeend", child);
-            }
-            else {
+            if (typeof child === 'string') {
+                element.insertAdjacentHTML('beforeend', child);
+            } else {
                 element.appendChild(child);
             }
         });
     }
+    
     return element;
 }
+
 export function renderTable(container, dataOrOptions, renderFn, emptyMessage, colSpan) {
-    const el = typeof container === "string" ? document.querySelector(container) : container;
-    if (!el)
-        return;
-    let data;
-    let columns = [];
-    let empty;
-    let colspan;
+    const el = typeof container === 'string' ? document.querySelector(container) : container;
+    
+    if (!el) return;
+    
+    let data, columns, empty, colspan;
+    
     if (Array.isArray(dataOrOptions)) {
         data = dataOrOptions;
-        empty = emptyMessage || "暂无数据";
+        empty = emptyMessage || '暂无数据';
         colspan = colSpan || 1;
-        const tbody = el.querySelector("tbody") || el;
+        
+        const tbody = el.querySelector('tbody') || el;
+        
         if (!data.length) {
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">${empty}</td></tr>`;
             return;
         }
-        tbody.innerHTML = "";
+        
+        tbody.innerHTML = '';
         data.forEach((row, index) => {
-            const tr = document.createElement("tr");
+            const tr = document.createElement('tr');
             if (renderFn) {
                 tr.innerHTML = renderFn(row, index);
             }
             tbody.appendChild(tr);
         });
-    }
-    else if (typeof dataOrOptions === "object" && dataOrOptions !== null) {
+    } else if (typeof dataOrOptions === 'object' && dataOrOptions !== null) {
         const options = dataOrOptions;
         data = options.data || [];
         columns = options.columns || [];
-        empty = options.emptyMessage || "暂无数据";
-        const rowIdField = options.rowIdField;
+        empty = options.emptyMessage || '暂无数据';
+        const rowIdField = options.rowIdField || 'id';
         const onRowClick = options.onRowClick;
         const onRowDoubleClick = options.onRowDoubleClick;
-        const tbody = el.querySelector("tbody") || el;
-        const thead = el.querySelector("thead");
-        const headerColumnCount = thead ? thead.querySelectorAll("th").length : columns.length;
+        
+        const tbody = el.querySelector('tbody') || el;
+        const thead = el.querySelector('thead');
+        const headerColumnCount = thead ? thead.querySelectorAll('th').length : columns.length;
+        
         if (!data.length) {
             tbody.innerHTML = `<tr><td colspan="${headerColumnCount || columns.length || 1}" class="text-center text-muted">${empty}</td></tr>`;
             return;
         }
+        
         const fragment = document.createDocumentFragment();
+        
         data.forEach((row, index) => {
-            const tr = document.createElement("tr");
+            const tr = document.createElement('tr');
+            
             if (rowIdField && row[rowIdField]) {
-                tr.dataset.id = String(row[rowIdField]);
+                tr.dataset.id = row[rowIdField];
             }
+            
             columns.forEach(column => {
-                const td = document.createElement("td");
+                const td = document.createElement('td');
+                
                 if (column.render) {
                     const content = column.render(row[column.field], row, index);
-                    if (typeof content === "string") {
+                    if (typeof content === 'string') {
                         td.innerHTML = content;
-                    }
-                    else if (content instanceof Node) {
+                    } else if (content instanceof Node) {
                         td.appendChild(content);
+                    } else if (content !== undefined && content !== null) {
+                        td.textContent = content;
                     }
-                    else if (content !== undefined && content !== null) {
-                        td.textContent = String(content);
-                    }
+                } else {
+                    td.textContent = row[column.field] ?? '';
                 }
-                else {
-                    td.textContent = row[column.field] != null ? String(row[column.field]) : "";
-                }
+                
                 if (column.className) {
                     td.className = column.className;
                 }
+                
                 tr.appendChild(td);
             });
+            
             if (onRowClick) {
-                tr.addEventListener("click", () => onRowClick(row, index));
+                tr.addEventListener('click', () => onRowClick(row, index));
             }
+            
             if (onRowDoubleClick) {
-                tr.addEventListener("dblclick", () => onRowDoubleClick(row, index));
+                tr.addEventListener('dblclick', () => onRowDoubleClick(row, index));
             }
+            
             fragment.appendChild(tr);
         });
-        tbody.innerHTML = "";
+        
+        tbody.innerHTML = '';
         tbody.appendChild(fragment);
     }
 }
-export function showLoading(container, message = "加载中...") {
-    if (!container)
-        return;
+
+export function showLoading(container, message = '加载中...') {
+    if (!container) return;
+    
     container.innerHTML = `
         <div class="loading-overlay">
             <div class="loading-spinner"></div>
@@ -244,200 +274,220 @@ export function showLoading(container, message = "加载中...") {
         </div>
     `;
 }
+
 export function hideLoading(container) {
-    const loading = container?.querySelector(".loading-overlay");
+    const loading = container?.querySelector('.loading-overlay');
     if (loading) {
         loading.remove();
     }
 }
+
 export function setLoading(element, isLoading) {
-    if (!element)
-        return;
+    if (!element) return;
+    
     if (isLoading) {
-        element.classList.add("loading");
+        element.classList.add('loading');
         element.disabled = true;
-    }
-    else {
-        element.classList.remove("loading");
+    } else {
+        element.classList.remove('loading');
         element.disabled = false;
     }
 }
+
 export function highlightElement(element, duration = 2000) {
-    if (!element)
-        return;
-    element.classList.add("highlight");
+    if (!element) return;
+    
+    element.classList.add('highlight');
     setTimeout(() => {
-        element.classList.remove("highlight");
+        element.classList.remove('highlight');
     }, duration);
 }
+
 export function copyToClipboard(text) {
     return navigator.clipboard.writeText(text).then(() => {
         return true;
     }).catch(() => {
-        const textarea = document.createElement("textarea");
+        const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
+        
         try {
-            document.execCommand("copy");
+            document.execCommand('copy');
             document.body.removeChild(textarea);
             return true;
-        }
-        catch {
+        } catch {
             document.body.removeChild(textarea);
             return false;
         }
     });
 }
+
 export function getElementValue(id) {
     const element = document.getElementById(id);
-    if (!element)
-        return "";
-    if (element.type === "checkbox") {
+    if (!element) return '';
+    
+    if (element.type === 'checkbox') {
         return element.checked;
     }
-    return element.value?.trim() ?? "";
+    
+    return element.value?.trim() ?? '';
 }
-export function handleError(error, defaultMessage = "操作失败") {
-    console.error("Error:", error);
-    if (error instanceof Error && error.message) {
-        showToastFn(error.message, "error");
-    }
-    else if (typeof error === "string") {
-        showToastFn(error, "error");
-    }
-    else {
-        showToastFn(defaultMessage, "error");
+
+export function handleError(error, defaultMessage = '操作失败') {
+    console.error('Error:', error);
+    
+    if (error.message) {
+        showToastFn(error.message, 'error');
+    } else if (typeof error === 'string') {
+        showToastFn(error, 'error');
+    } else {
+        showToastFn(defaultMessage, 'error');
     }
 }
+
 export async function handleFormSubmit(config) {
-    const { formData, id, baseUrl, successMessage = "保存成功", errorMessage = "保存失败", modalId, reloadFunction, } = config;
+    const { 
+        formData, 
+        id, 
+        baseUrl, 
+        successMessage = '保存成功', 
+        errorMessage = '保存失败',
+        modalId,
+        reloadFunction
+    } = config;
+    
     try {
         let result;
         if (id) {
             result = await apiPut(`${baseUrl}/${id}`, formData);
-        }
-        else {
+        } else {
             result = await apiPost(baseUrl, formData);
         }
+        
         if (result.success) {
-            showToastFn(successMessage, "success");
+            showToastFn(successMessage, 'success');
+            
             if (modalId) {
                 closeModalFn(modalId);
             }
+            
             if (reloadFunction) {
                 await reloadFunction();
             }
+            
             return true;
-        }
-        else {
-            showToastFn(result.message || errorMessage, "error");
+        } else {
+            showToastFn(result.message || errorMessage, 'error');
             return false;
         }
-    }
-    catch (error) {
+    } catch (error) {
         handleError(error, errorMessage);
         return false;
     }
 }
-export async function handleDelete(id, apiOrCallback, successMessageOrOptions, callbackOrOptions) {
-    let apiPath = null;
-    let successMessage;
-    let refreshCallback = null;
-    let options = {};
-    if (typeof apiOrCallback === "string") {
+
+export async function handleDelete(id, apiOrCallback, successMessageOrOptions, callbackOrOptions = {}) {
+    let apiPath, successMessage, refreshCallback, options;
+    
+    if (typeof apiOrCallback === 'string') {
         apiPath = apiOrCallback;
-        if (typeof successMessageOrOptions === "string") {
+        if (typeof successMessageOrOptions === 'string') {
             successMessage = successMessageOrOptions;
-            options = typeof callbackOrOptions === "object" ? callbackOrOptions : {};
-        }
-        else {
-            successMessage = "删除成功";
+            options = typeof callbackOrOptions === 'object' ? callbackOrOptions : {};
+        } else {
+            successMessage = '删除成功';
             options = successMessageOrOptions || {};
         }
-        refreshCallback = typeof callbackOrOptions === "function" ? callbackOrOptions : null;
-    }
-    else {
+        refreshCallback = typeof callbackOrOptions === 'function' ? callbackOrOptions : null;
+    } else {
         options = successMessageOrOptions || {};
-        successMessage = options.successMessage || "删除成功";
+        successMessage = options.successMessage || '删除成功';
     }
-    const confirmMessage = options.confirmMessage || "确定要删除吗？";
-    const errorMsg = options.errorMessage || "删除失败";
+    
+    const confirmMessage = options.confirmMessage || '确定要删除吗？';
+    const errorMessage = options.errorMessage || '删除失败';
+    
     const confirmed = await showConfirm(confirmMessage);
-    if (!confirmed)
-        return { success: false, cancelled: true };
+    if (!confirmed) return { success: false, cancelled: true };
+    
     try {
         let result;
         if (apiPath) {
             result = await apiDelete(`${apiPath}/${id}`);
-        }
-        else if (typeof apiOrCallback === "function") {
+        } else if (typeof apiOrCallback === 'function') {
             result = await apiOrCallback(id);
+        } else {
+            throw new Error('No delete callback or API path provided');
         }
-        else {
-            throw new Error("No delete callback or API path provided");
-        }
+        
         if (result.success) {
-            showToastFn(successMessage, "success");
+            showToastFn(successMessage, 'success');
             if (refreshCallback) {
                 await refreshCallback();
             }
             return { success: true };
-        }
-        else {
-            showToastFn(result.message || errorMsg, "error");
+        } else {
+            showToastFn(result.message || errorMessage, 'error');
             return { success: false, message: result.message };
         }
-    }
-    catch (error) {
-        handleError(error, errorMsg);
+    } catch (error) {
+        handleError(error, errorMessage);
         return { success: false, message: error.message };
     }
 }
+
 export function appendPaginationToTable(container, data, onPageChange) {
-    const el = typeof container === "string" ? document.querySelector(container) : container;
-    if (!el)
-        return;
-    const tableContainer = el.closest(".table-container");
+    const el = typeof container === 'string' ? document.querySelector(container) : container;
+    
+    if (!el) return;
+    
+    const tableContainer = el.closest('.table-container');
     let paginationContainer;
+    
     if (tableContainer) {
-        const existingPagination = tableContainer.querySelector(".pagination-container");
+        let existingPagination = tableContainer.querySelector('.pagination-container');
         if (existingPagination) {
             existingPagination.remove();
         }
-        paginationContainer = document.createElement("div");
-        paginationContainer.className = "pagination-container";
+        paginationContainer = document.createElement('div');
+        paginationContainer.className = 'pagination-container';
         tableContainer.appendChild(paginationContainer);
-    }
-    else {
-        const existingPagination = el.querySelector(".pagination-wrapper");
+    } else {
+        const existingPagination = el.querySelector('.pagination-wrapper');
         if (existingPagination) {
             existingPagination.remove();
         }
         paginationContainer = el;
     }
+    
     const total = data.total || 0;
     const currentPage = data.page || 1;
     const pageSize = data.page_size || 20;
     const totalPages = Math.ceil(total / pageSize);
+    
     if (totalPages <= 1) {
-        if (paginationContainer && paginationContainer.classList.contains("pagination-container")) {
-            paginationContainer.innerHTML = "";
+        if (paginationContainer && paginationContainer.classList.contains('pagination-container')) {
+            paginationContainer.innerHTML = '';
         }
         return;
     }
-    const paginationWrapper = document.createElement("div");
-    paginationWrapper.className = "pagination-wrapper";
+    
+    const paginationWrapper = document.createElement('div');
+    paginationWrapper.className = 'pagination-wrapper';
+    
     renderPaginationFn(paginationWrapper, currentPage, totalPages, onPageChange, total);
-    paginationContainer.innerHTML = "";
+    
+    paginationContainer.innerHTML = '';
     paginationContainer.appendChild(paginationWrapper);
 }
+
 export function removeToast() {
-    const toasts = document.querySelectorAll(".toast");
+    const toasts = document.querySelectorAll('.toast');
     toasts.forEach(toast => {
-        toast.classList.remove("toast-visible");
+        toast.classList.remove('toast-visible');
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
@@ -445,4 +495,23 @@ export function removeToast() {
         }, 300);
     });
 }
-//# sourceMappingURL=ui.js.map
+
+export default {
+    debounce,
+    throttle,
+    escapeHtml,
+    sanitizeHtml,
+    createElement,
+    renderTable,
+    showLoading,
+    hideLoading,
+    setLoading,
+    highlightElement,
+    copyToClipboard,
+    getElementValue,
+    handleError,
+    handleFormSubmit,
+    handleDelete,
+    appendPaginationToTable,
+    removeToast
+};

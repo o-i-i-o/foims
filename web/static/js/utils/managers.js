@@ -1,238 +1,230 @@
-import { createCrudManager } from "./crudFactory.js";
+import { createCrudManager, createPaginatedLoader } from './crudFactory.js';
+import { showToast } from './toast.js';
+import { renderTable, formatDateTime, appendPaginationToTable } from './ui.js';
+import { openModal, closeModal } from './modal.js';
+import { t } from './i18n.js';
+
 export function createNetworkRegionManager() {
     return createCrudManager({
-        endpoint: "/api/resources/network-regions",
-        entityName: "network_region",
-        entityNameKey: "network.region",
-        formId: "network-type-form",
-        modalId: "network-type-modal",
+        endpoint: '/api/resources/network-regions',
+        entityName: 'network_region',
+        entityNameKey: 'network.region',
+        formId: 'network-type-form',
+        modalId: 'network-type-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "common.required_field";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
-            description: data.description ? String(data.description).trim() : null,
+            name: data.name?.trim(),
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => loadNetworkRegionsData(),
+        afterUpdateCallback: () => loadNetworkRegionsData(),
+        afterDeleteCallback: () => loadNetworkRegionsData()
     });
 }
+
 export function createNetworkManager() {
     return createCrudManager({
-        endpoint: "/api/resources/networks",
-        entityName: "network",
-        entityNameKey: "network.network",
-        formId: "network-form",
-        modalId: "network-modal",
+        endpoint: '/api/resources/networks',
+        entityName: 'network',
+        entityNameKey: 'network.network',
+        formId: 'network-form',
+        modalId: 'network-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "网络名称不能为空";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
-            if (!data.network_region_id) {
-                return "请选择网络区域";
+            if (!data.network_type) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
-            network_region_id: data.network_region_id,
-            ipv4_cidr: data.ipv4_cidr ? String(data.ipv4_cidr).trim() : null,
-            ipv6_cidr: data.ipv6_cidr ? String(data.ipv6_cidr).trim() : null,
-            ipv4_gateway: data.ipv4_gateway ? String(data.ipv4_gateway).trim() : null,
-            ipv6_gateway: data.ipv6_gateway ? String(data.ipv6_gateway).trim() : null,
-            ipv4_dns: data.ipv4_dns || null,
-            ipv6_dns: data.ipv6_dns || null,
-            description: data.description ? String(data.description).trim() : null,
+            name: data.name?.trim(),
+            network_type: data.network_type,
+            ipv4_cidr: data.ipv4_cidr?.trim() || null,
+            ipv6_cidr: data.ipv6_cidr?.trim() || null,
+            ipv4_gateway: data.ipv4_gateway?.trim() || null,
+            ipv6_gateway: data.ipv6_gateway?.trim() || null,
+            ipv4_dns: data.ipv4_dns?.trim() || null,
+            ipv6_dns: data.ipv6_dns?.trim() || null,
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => loadNetworksData(),
+        afterUpdateCallback: () => loadNetworksData(),
+        afterDeleteCallback: () => loadNetworksData()
     });
 }
+
 export function createRoomManager() {
     return createCrudManager({
-        endpoint: "/api/resources/rooms",
-        entityName: "room",
-        entityNameKey: "room.room",
-        formId: "room-form",
-        modalId: "room-modal",
+        endpoint: '/api/resources/rooms',
+        entityName: 'room',
+        entityNameKey: 'room.room',
+        formId: 'room-form',
+        modalId: 'room-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "房间名称不能为空";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
             if (!data.room_type) {
-                return "请选择房间类型";
-            }
-            if (!data.network_ids || data.network_ids.length === 0) {
-                return "请至少选择一个网段";
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
-            room_type: String(data.room_type ?? "").toUpperCase(),
-            network_ids: data.network_ids || [],
-            description: data.description ? String(data.description).trim() : null,
+            name: data.name?.trim(),
+            room_type: data.room_type?.toUpperCase(),
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => {},
+        afterUpdateCallback: () => {},
+        afterDeleteCallback: () => {}
     });
 }
+
 export function createCabinetManager() {
     return createCrudManager({
-        endpoint: "/api/resources/cabinets",
-        entityName: "cabinet",
-        entityNameKey: "cabinet.cabinet",
-        formId: "cabinet-form",
-        modalId: "cabinet-modal",
+        endpoint: '/api/resources/cabinets',
+        entityName: 'cabinet',
+        entityNameKey: 'cabinet.cabinet',
+        formId: 'cabinet-form',
+        modalId: 'cabinet-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "机柜名称不能为空";
-            }
-            if (!data.room_id) {
-                return "请选择所属机房";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
+            name: data.name?.trim(),
             room_id: data.room_id,
-            capacity: parseInt(String(data.capacity || data.total_units)) || 42,
-            description: data.description ? String(data.description).trim() : null,
+            total_units: parseInt(data.total_units) || 42,
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => {},
+        afterUpdateCallback: () => {},
+        afterDeleteCallback: () => {}
     });
 }
-export function createCabinetPositionManager() {
-    return createCrudManager({
-        endpoint: "/api/resources/positions",
-        entityName: "cabinet_position",
-        entityNameKey: "position.position",
-        formId: "cabinet-position-form",
-        modalId: "cabinet-position-modal",
-        validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "机位名称不能为空";
-            }
-            if (!data.cabinet_id) {
-                return "请选择所属机柜";
-            }
-            const startU = parseInt(String(data.start_u));
-            const endU = parseInt(String(data.end_u));
-            if (isNaN(startU) || startU < 1) {
-                return "起始U位必须是有效的正数";
-            }
-            if (isNaN(endU) || endU < 1) {
-                return "结束U位必须是有效的正数";
-            }
-            if (endU < startU) {
-                return "结束U位不能小于起始U位";
-            }
-            return null;
-        },
-        transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
-            cabinet_id: data.cabinet_id,
-            start_u: parseInt(String(data.start_u)),
-            end_u: parseInt(String(data.end_u)),
-            ips: data.ips || [],
-            description: data.description ? String(data.description).trim() : null,
-        }),
-    });
-}
+
 export function createWorkstationManager() {
     return createCrudManager({
-        endpoint: "/api/resources/workstations",
-        entityName: "workstation",
-        entityNameKey: "workstation.workstation",
-        formId: "workstation-form",
-        modalId: "workstation-modal",
+        endpoint: '/api/resources/workstations',
+        entityName: 'workstation',
+        entityNameKey: 'workstation.workstation',
+        formId: 'workstation-form',
+        modalId: 'workstation-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "工位名称不能为空";
-            }
-            if (!data.room_id) {
-                return "请选择所属房间";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
+            name: data.name?.trim(),
             room_id: data.room_id,
-            manager: data.manager ? String(data.manager).trim() : null,
-            ips: data.ips || [],
-            description: data.description ? String(data.description).trim() : null,
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => {},
+        afterUpdateCallback: () => {},
+        afterDeleteCallback: () => {}
     });
 }
+
 export function createSwitchManager() {
     return createCrudManager({
-        endpoint: "/api/switches",
-        entityName: "switch",
-        entityNameKey: "switch.switch",
-        formId: "switch-form",
-        modalId: "switch-modal",
+        endpoint: '/api/resources/switches',
+        entityName: 'switch',
+        entityNameKey: 'switch.switch',
+        formId: 'switch-form',
+        modalId: 'switch-modal',
+        
         validateCallback: (data) => {
-            if (!data.name || !String(data.name).trim()) {
-                return "交换机名称不能为空";
+            if (!data.name || !data.name.trim()) {
+                return t('common.required_field');
             }
-            if (!data.ip_address || !String(data.ip_address).trim()) {
-                return "IP地址不能为空";
+            if (!data.ip_address || !data.ip_address.trim()) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            name: String(data.name ?? "").trim(),
-            ip_address: String(data.ip_address ?? "").trim(),
-            snmp_version: data.snmp_version || "v2c",
-            snmp_community: data.snmp_community ? String(data.snmp_community).trim() : "public",
-            snmp_username: data.snmp_username ? String(data.snmp_username).trim() : null,
-            snmp_auth_password: data.snmp_auth_password ? String(data.snmp_auth_password).trim() : null,
-            snmp_priv_password: data.snmp_priv_password ? String(data.snmp_priv_password).trim() : null,
-            network_region_id: data.network_region_id || null,
-            description: data.description ? String(data.description).trim() : null,
+            name: data.name?.trim(),
+            ip_address: data.ip_address?.trim(),
+            snmp_version: data.snmp_version || 'v2c',
+            snmp_community: data.snmp_community?.trim() || 'public',
+            snmp_username: data.snmp_username?.trim() || null,
+            snmp_auth_password: data.snmp_auth_password?.trim() || null,
+            snmp_priv_password: data.snmp_priv_password?.trim() || null,
+            description: data.description?.trim() || null
         }),
+        
+        afterCreateCallback: () => {},
+        afterUpdateCallback: () => {},
+        afterDeleteCallback: () => {}
     });
 }
+
 export function createUserManager() {
     return createCrudManager({
-        endpoint: "/api/users",
-        entityName: "user",
-        entityNameKey: "user.user",
-        formId: "user-form",
-        modalId: "user-modal",
+        endpoint: '/api/users',
+        entityName: 'user',
+        entityNameKey: 'user.user',
+        formId: 'user-form',
+        modalId: 'user-modal',
+        
         validateCallback: (data) => {
-            if (!data.username || !String(data.username).trim()) {
-                return "用户名不能为空";
+            if (!data.username || !data.username.trim()) {
+                return t('common.required_field');
             }
-            if (!data.email || !String(data.email).trim()) {
-                return "邮箱不能为空";
-            }
-            if (data.password && data.password !== data.password_confirm) {
-                return "两次输入的密码不一致";
+            if (!data.email || !data.email.trim()) {
+                return t('common.required_field');
             }
             return null;
         },
+        
         transformDataCallback: (data) => ({
-            username: String(data.username ?? "").trim(),
-            email: String(data.email ?? "").trim(),
-            role: data.role || "user",
-            status: data.status === "true" || data.status === true,
-            password: data.password || undefined,
+            username: data.username?.trim(),
+            email: data.email?.trim(),
+            role: data.role || 'user',
+            status: data.status || 'active'
         }),
+        
+        afterCreateCallback: () => {},
+        afterUpdateCallback: () => {},
+        afterDeleteCallback: () => {}
     });
 }
+
 export const managers = {
     networkRegion: createNetworkRegionManager(),
     network: createNetworkManager(),
     room: createRoomManager(),
     cabinet: createCabinetManager(),
-    cabinetPosition: createCabinetPositionManager(),
     workstation: createWorkstationManager(),
     switch: createSwitchManager(),
-    user: createUserManager(),
+    user: createUserManager()
 };
-export const roomManager = createRoomManager();
-export const cabinetManager = createCabinetManager();
-export const cabinetPositionManager = createCabinetPositionManager();
-export const workstationManager = createWorkstationManager();
-export const switchManager = createSwitchManager();
-export const userManager = createUserManager();
-export const networkRegionManager = createNetworkRegionManager();
-export const networkManager = createNetworkManager();
-//# sourceMappingURL=managers.js.map
+
+export default managers;
