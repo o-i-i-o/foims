@@ -371,6 +371,7 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="cabinet_position.cabinet">Cabinet</th>
                   <th data-i18n="cabinet_position.name" class="sortable" data-sort="name">Position Name</th>
                   <th data-i18n="common.device_type">Device Type</th>
                   <th data-i18n="ip.ip_address">IP Address</th>
@@ -386,7 +387,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -399,6 +400,7 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="workstation.room">Room</th>
                   <th data-i18n="workstation.name" class="sortable" data-sort="name">Workstation Name</th>
                   <th data-i18n="ip.ip_address">IP Address</th>
                   <th data-i18n="workstation.manager" class="sortable" data-sort="manager">Manager</th>
@@ -413,7 +415,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -424,22 +426,6 @@
       <section id="ip" class="content-section" aria-labelledby="ip-heading">
         <div class="section-header-row">
           <div class="search-container">
-            <input type="text" id="ip-search-input" class="form-control" data-i18n-placeholder="ip.search_placeholder" placeholder="Search IP/MAC/Hostname" aria-label="Search IP" />
-            <select id="ip-device-type-filter" class="form-control inline-select">
-              <option value="" data-i18n="common.all_types">All Types</option>
-              <option value="workstation" data-i18n="resources.workstations">Workstation</option>
-              <option value="cabinet_position" data-i18n="resources.cabinet_positions">Cabinet Position</option>
-              <option value="switch" data-i18n="resources.switches">Switch</option>
-            </select>
-            <select id="ip-status-filter" class="form-control inline-select">
-              <option value="" data-i18n="common.all_status">All Status</option>
-              <option value="active" data-i18n="ip.active">Active</option>
-              <option value="inactive" data-i18n="ip.inactive">Inactive</option>
-            </select>
-            <button id="ip-search-btn" class="btn btn-secondary btn-sm" data-i18n="common.search">Search</button>
-            <button id="ip-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
-          </div>
-          <div class="action-buttons">
             <select id="pull-mac-switch-select" class="form-control inline-select">
               <option value="" data-i18n="switch.select_switch">-- Select Switch --</option>
             </select>
@@ -454,10 +440,23 @@
             <thead>
               <tr>
                 <th data-i18n="common.index" class="index-column">序号</th>
-                <th data-i18n="ip.device_name">Device Name</th>
-                <th data-i18n="ip.device_type">Device Type</th>
-                <th data-i18n="ip.network">Network</th>
-                <th data-i18n="ip.ip_address">IP Address</th>
+                <th data-i18n="ip.location">Location</th>
+                <th>
+                  <span data-i18n="ip.device_name">Device Name</span>
+                  <input type="text" id="ip-device-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                </th>
+                <th>
+                  <span data-i18n="ip.device_type">Device Type</span>
+                  <input type="text" id="ip-device-type-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                </th>
+                <th>
+                  <span data-i18n="ip.network">Network</span>
+                  <input type="text" id="ip-network-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                </th>
+                <th>
+                  <span data-i18n="ip.ip_address">IP Address</span>
+                  <input type="text" id="ip-address-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                </th>
                 <th data-i18n="ip.mac_address">MAC Address</th>
                 <th data-i18n="ip.hostname">Hostname</th>
                 <th data-i18n="ip.status">Status</th>
@@ -467,7 +466,7 @@
             </thead>
             <tbody>
               <tr class="empty-row">
-                <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
+                <td colspan="11" class="text-center" data-i18n="common.no_data">No data available</td>
               </tr>
             </tbody>
           </table>

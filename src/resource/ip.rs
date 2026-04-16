@@ -18,6 +18,9 @@ pub async fn get_ip_managers(
     let search = query.get("search").map(|s| s.as_str()).unwrap_or("");
     let device_type = query.get("device_type").map(|s| s.as_str()).unwrap_or("");
     let status = query.get("status").map(|s| s.as_str()).unwrap_or("");
+    let device_name = query.get("device_name").map(|s| s.as_str()).unwrap_or("");
+    let network = query.get("network").map(|s| s.as_str()).unwrap_or("");
+    let ip_address = query.get("ip_address").map(|s| s.as_str()).unwrap_or("");
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -60,6 +63,33 @@ pub async fn get_ip_managers(
         None
     };
 
+    let device_name_param = if !device_name.is_empty() {
+        let pattern = format!("%{}%", device_name);
+        conditions.push(format!("device_name ILIKE ${}", param_index));
+        param_index += 1;
+        Some(pattern)
+    } else {
+        None
+    };
+
+    let network_param = if !network.is_empty() {
+        let pattern = format!("%{}%", network);
+        conditions.push(format!("network_name ILIKE ${}", param_index));
+        param_index += 1;
+        Some(pattern)
+    } else {
+        None
+    };
+
+    let ip_address_param = if !ip_address.is_empty() {
+        let pattern = format!("%{}%", ip_address);
+        conditions.push(format!("ip_address::TEXT ILIKE ${}", param_index));
+        param_index += 1;
+        Some(pattern)
+    } else {
+        None
+    };
+
     let where_clause = if conditions.is_empty() {
         String::new()
     } else {
@@ -83,6 +113,15 @@ pub async fn get_ip_managers(
     if let Some(ref st) = status_param {
         count_sql = count_sql.bind(st);
     }
+    if let Some(ref pattern) = device_name_param {
+        count_sql = count_sql.bind(pattern);
+    }
+    if let Some(ref pattern) = network_param {
+        count_sql = count_sql.bind(pattern);
+    }
+    if let Some(ref pattern) = ip_address_param {
+        count_sql = count_sql.bind(pattern);
+    }
 
     let total: i64 = match count_sql.fetch_one(pool.get_conn()).await {
         Ok(count) => count,
@@ -92,7 +131,7 @@ pub async fn get_ip_managers(
     };
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at FROM ip_managers_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at FROM ip_managers_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -110,6 +149,15 @@ pub async fn get_ip_managers(
     }
     if let Some(ref st) = status_param {
         data_sql = data_sql.bind(st);
+    }
+    if let Some(ref pattern) = device_name_param {
+        data_sql = data_sql.bind(pattern);
+    }
+    if let Some(ref pattern) = network_param {
+        data_sql = data_sql.bind(pattern);
+    }
+    if let Some(ref pattern) = ip_address_param {
+        data_sql = data_sql.bind(pattern);
     }
     data_sql = data_sql.bind(page_size as i32).bind(offset as i32);
 
@@ -372,7 +420,7 @@ pub async fn get_workstation_ips(
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r#"SELECT 
             id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
         FROM ip_managers_with_details 
         WHERE workstation_id = $1"#
@@ -404,7 +452,7 @@ pub async fn get_cabinet_position_ips(
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r#"SELECT 
             id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
         FROM ip_managers_with_details 
         WHERE position_id = $1 OR switch_id = $1"#
@@ -435,7 +483,7 @@ pub async fn get_switch_ips(
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r#"SELECT 
             id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
         FROM ip_managers_with_details 
         WHERE switch_id = $1"#

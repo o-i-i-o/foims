@@ -1337,6 +1337,14 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 ELSE NULL
             END AS switch_name,
             sp.port_number::text AS switch_port_number,
+            CASE
+                WHEN r.id IS NOT NULL THEN r.name::text
+                ELSE NULL
+            END AS room_name,
+            CASE
+                WHEN c.id IS NOT NULL THEN c.name::text
+                ELSE NULL
+            END AS cabinet_name,
             COALESCE(n.name, '未知')::text AS network_name,
             COALESCE(nt.name, '未知')::text AS network_region,
             host(imm.ip_address) as ip_address,
@@ -1349,7 +1357,9 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.updated_at
         FROM ip_managers imm
         LEFT JOIN workstations w ON imm.workstation_id = w.id
+        LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
+        LEFT JOIN cabinets c ON cp.cabinet_id = c.id
         LEFT JOIN switches s ON imm.switch_id = s.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
         LEFT JOIN network_cidrs n ON imm.network_id = n.id

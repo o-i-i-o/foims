@@ -457,6 +457,7 @@
       "switch": "交换机"
     },
     "network": "网络",
+    "location": "位置",
     "last_seen": "最后在线",
     "management": "IP地址管理",
     "search_placeholder": "搜索IP/MAC/交换机端口",

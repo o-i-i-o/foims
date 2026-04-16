@@ -56,8 +56,8 @@ export function formatTime(timestamp) {
   const diff = now - date;
 
   if (diff < 60000) return t('time.just_now', '刚刚');
-  if (diff < 3600000) return t('time.minutes_ago', `${Math.floor(diff / 60000)}分钟前`);
-  if (diff < 86400000) return t('time.hours_ago', `${Math.floor(diff / 3600000)}小时前`);
+  if (diff < 3600000) return t('time.minutes_ago', { count: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('time.hours_ago', { count: Math.floor(diff / 3600000) });
   return date.toLocaleDateString();
 }
 
@@ -72,4 +72,14 @@ export function formatRelativeTime(timestamp) {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
   if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
   return date.toLocaleDateString();
+}
+
+export function getOperationTypeText(action) {
+  if (!action) return '-';
+  return t(`logs.operation_types.${action}`, action);
+}
+
+export function getResourceTypeText(resourceType) {
+  if (!resourceType) return '-';
+  return t(`logs.resource_types.${resourceType}`, resourceType);
 }

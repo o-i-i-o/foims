@@ -693,6 +693,8 @@ pub struct IpManagerWithNames {
     pub cabinet_position_name: Option<String>,
     pub switch_name: Option<String>,
     pub switch_port_number: Option<String>,
+    pub room_name: Option<String>,
+    pub cabinet_name: Option<String>,
     pub network_name: String,
     pub network_region: String,
     pub ip_address: String,

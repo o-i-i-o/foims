@@ -1,7 +1,7 @@
 import { apiGet } from "../utils/apiClient.js";
 import { showToast } from "../utils/ui.js";
 import { cache, safeAsync, nextFrame } from "../utils/helpers.js";
-import { getStatusText, getDeviceTypeName, getRoomTypeName, getActionIcon, formatTime } from "../utils/formatter.js";
+import { getStatusText, getDeviceTypeName, getRoomTypeName, getActionIcon, formatTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter.js";
 
 const CACHE_KEY_STATS = "dashboard_stats";
 const CACHE_KEY_TOP_LISTS = "dashboard_top_lists";
@@ -243,11 +243,11 @@ function renderTopLogs(items) {
       <div class="item-name">
         <span class="item-icon">${getActionIcon(log.action)}</span>
         <div>
-          <div>${log.action || '-'}</div>
+          <div>${getOperationTypeText(log.action)}</div>
           <div class="item-meta">${log.username || '-'} · ${formatTime(log.created_at)}</div>
         </div>
       </div>
-      <span class="item-value">${log.resource_type || '-'}</span>
+      <span class="item-value">${getResourceTypeText(log.resource_type)}</span>
     </li>
   `).join('');
 }

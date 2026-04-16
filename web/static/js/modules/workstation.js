@@ -98,7 +98,8 @@ export async function loadWorkstationsData(page = 1, sortBy = null, sortOrder = 
       let rowIndex = 0;
       
       for (const { workstation, ipsData } of results) {
-        const displayName = `${escapeHtml(workstation.room_name)}-${escapeHtml(workstation.name)}`;
+        const roomName = escapeHtml(workstation.room_name) || "-";
+        const workstationName = escapeHtml(workstation.name);
         
         let ipsHtml = "-";
         let portsHtml = "-";
@@ -114,7 +115,8 @@ export async function loadWorkstationsData(page = 1, sortBy = null, sortOrder = 
         const row = document.createElement("tr");
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${displayName}</td>
+                    <td>${roomName}</td>
+                    <td>${workstationName}</td>
                     <td>${ipsHtml}</td>
                     <td>${escapeHtml(workstation.manager) || "-"}</td>
                     <td>${portsHtml}</td>

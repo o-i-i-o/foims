@@ -77,7 +77,8 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
       let rowIndex = 0;
       
       for (const { position, ipsData } of results) {
-        const displayName = `${escapeHtml(position.cabinet_name)}-${escapeHtml(position.name)}`;
+        const cabinetName = escapeHtml(position.cabinet_name) || "-";
+        const positionName = escapeHtml(position.name);
         
         let ipsHtml = "-";
         let portsHtml = "-";
@@ -107,7 +108,8 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         const row = document.createElement("tr");
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${displayName}</td>
+                    <td>${cabinetName}</td>
+                    <td>${positionName}</td>
                     <td>${deviceTypeHtml}</td>
                     <td>${ipsHtml}</td>
                     <td>${position.start_u} - ${position.end_u} U</td>

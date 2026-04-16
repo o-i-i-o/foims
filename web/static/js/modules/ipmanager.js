@@ -9,6 +9,8 @@ import {
   formatDateTime,
   handleError,
   appendPaginationToTable,
+  debounce,
+  escapeHtml,
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
@@ -16,6 +18,15 @@ import { t } from "../utils/i18n.js";
 import { getDeviceTypeName } from "../utils/formatter.js";
 
 const IP_PAGE_SIZE = 100;
+
+let currentFilters = {
+  device_name: '',
+  device_type: '',
+  network: '',
+  ip_address: ''
+};
+
+let currentPage = 1;
 
 // ====== IP管理 ======
 
@@ -136,29 +147,42 @@ export async function pullIpMacData() {
   }
 }
 
-// 加载IP数据（支持搜索和分页）
-export async function loadIpMacData(searchParams = {}) {
+export async function loadIpMacData(filters = currentFilters, page = currentPage) {
+  currentFilters = filters;
+  currentPage = page;
+  
   try {
-    const { search = '', device_type = '', status = '', page = 1, page_size = 100 } = searchParams;
+    const { device_name = '', device_type = '', network = '', ip_address = '' } = filters;
     
     const params = new URLSearchParams();
-    if (search) params.append('search', search);
+    if (device_name) params.append('device_name', device_name);
     if (device_type) params.append('device_type', device_type);
-    if (status) params.append('status', status);
+    if (network) params.append('network', network);
+    if (ip_address) params.append('ip_address', ip_address);
     params.append('page', page);
-    params.append('page_size', page_size);
+    params.append('page_size', IP_PAGE_SIZE);
     
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
     if (result.success && result.data) {
       const { data, total, page: currentPage, total_pages } = result.data;
       const pageNum = currentPage || 1;
-      const startIndex = (pageNum - 1) * page_size;
+      const startIndex = (pageNum - 1) * IP_PAGE_SIZE;
       
       renderTable("#ip-table", {
         data: data || [],
         columns: [
           { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
+          { field: 'location', render: (v, row) => {
+            if (row.device_type === 'workstation' && row.room_name) {
+              return escapeHtml(row.room_name);
+            } else if (row.device_type === 'cabinet_position' && row.cabinet_name) {
+              return escapeHtml(row.cabinet_name);
+            } else if (row.switch_name) {
+              return escapeHtml(row.switch_name);
+            }
+            return '-';
+          }},
           { field: 'device_name', render: (v) => v || '-' },
           { field: 'device_type', render: (v) => getDeviceTypeName(v) },
           { field: 'network_name', render: (v, row) => `${v || '未知'} (${row.network_region || '未知'})` },
@@ -171,6 +195,10 @@ export async function loadIpMacData(searchParams = {}) {
         ],
         emptyMessage: '暂无IP数据'
       });
+      
+      if (total !== undefined) {
+        appendPaginationToTable("#ip-table", { total, page: pageNum, total_pages }, (p) => loadIpMacData(filters, p));
+      }
       
       return { total, page: currentPage, total_pages };
     }
@@ -187,48 +215,53 @@ export async function loadIpMacData(searchParams = {}) {
   }
 }
 
-// 初始化IP相关功能 - 使用事件委托
 export const initIpMacFunctions = () => {
   const ipSection = document.getElementById("ip");
   if (!ipSection) return;
 
   if (ipSection.dataset.initialized === "true") return;
   ipSection.dataset.initialized = "true";
+  
+  initIpFilters();
 
   ipSection.addEventListener("click", (e) => {
     const target = e.target;
     const id = target.id || target.dataset?.action;
 
     switch (id) {
-      case "ip-refresh-btn":
-      case "refresh":
-        handleSearch();
-        break;
-      case "ip-search-btn":
-      case "search":
-        handleSearch();
-        break;
       case "pull-ip-btn":
         pullIpMacData();
         break;
     }
   });
-
-  ipSection.addEventListener("keypress", (e) => {
-    if (e.target.id === "ip-search-input" && e.key === "Enter") {
-      handleSearch();
-    }
-  });
 };
 
-function handleSearch() {
-  const searchInput = document.getElementById("ip-search-input");
-  const deviceTypeSelect = document.getElementById("ip-device-type-filter");
-  const statusSelect = document.getElementById("ip-status-filter");
-
-  loadIpMacData({
-    search: searchInput?.value || '',
-    device_type: deviceTypeSelect?.value || '',
-    status: statusSelect?.value || ''
+export function initIpFilters() {
+  const filterIds = [
+    'ip-device-name-filter',
+    'ip-device-type-filter',
+    'ip-network-filter',
+    'ip-address-filter'
+  ];
+  
+  const debouncedFilter = debounce(applyIpFilters, 300);
+  
+  filterIds.forEach(filterId => {
+    const filterElement = document.getElementById(filterId);
+    if (filterElement) {
+      filterElement.addEventListener('input', debouncedFilter);
+    }
   });
+}
+
+function applyIpFilters() {
+  const filters = {
+    device_name: document.getElementById('ip-device-name-filter')?.value || '',
+    device_type: document.getElementById('ip-device-type-filter')?.value || '',
+    network: document.getElementById('ip-network-filter')?.value || '',
+    ip_address: document.getElementById('ip-address-filter')?.value || ''
+  };
+  
+  currentPage = 1;
+  loadIpMacData(filters, 1);
 }
