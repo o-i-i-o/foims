@@ -53,10 +53,8 @@ export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null
       data: cabinets,
       columns: [
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
-        { field: 'name', render: (v, row) => {
-          const roomName = row.room_name ? `${escapeHtml(row.room_name)} / ` : '';
-          return `${roomName}${escapeHtml(v)}`;
-        }},
+        { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
+        { field: 'name', render: (v) => escapeHtml(v) },
         { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
