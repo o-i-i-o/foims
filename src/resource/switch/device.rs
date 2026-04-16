@@ -30,69 +30,70 @@ pub async fn get_switches(
     let model_filter = query.get("model").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let has_filters = !search.is_empty() 
-        || !name_filter.is_empty() 
-        || !ip_filter.is_empty() 
+    let has_filters = !search.is_empty()
+        || !name_filter.is_empty()
+        || !ip_filter.is_empty()
         || !model_filter.is_empty();
 
     let total: i64 = if has_filters {
         let mut conditions = Vec::new();
         let mut param_count = 1;
-        
+
         if !search.is_empty() {
-            conditions.push(format!("(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})", 
-                param_count, param_count, param_count, param_count));
+            conditions.push(format!(
+                "(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})",
+                param_count, param_count, param_count, param_count
+            ));
             param_count += 1;
         }
-        
+
         if !name_filter.is_empty() {
             conditions.push(format!("name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ip_filter.is_empty() {
             conditions.push(format!("ip_address ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !model_filter.is_empty() {
             conditions.push(format!("model ILIKE ${}", param_count));
-            param_count += 1;
         }
-        
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {
             format!("WHERE {}", conditions.join(" AND "))
         };
-        
+
         let count_query = format!(
             "SELECT COUNT(*) FROM switches_with_details {}",
             where_clause
         );
-        
+
         let mut count_sql = sqlx::query_scalar(&count_query);
-        
+
         if !search.is_empty() {
             let pattern = format!("%{}%", search);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !name_filter.is_empty() {
             let pattern = format!("%{}%", name_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !ip_filter.is_empty() {
             let pattern = format!("%{}%", ip_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !model_filter.is_empty() {
             let pattern = format!("%{}%", model_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         match count_sql.fetch_one(pool.get_conn()).await {
             Ok(t) => t,
             Err(e) => {
@@ -116,34 +117,36 @@ pub async fn get_switches(
     let switches_result = if has_filters {
         let mut conditions = Vec::new();
         let mut param_count = 1;
-        
+
         if !search.is_empty() {
-            conditions.push(format!("(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})", 
-                param_count, param_count, param_count, param_count));
+            conditions.push(format!(
+                "(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})",
+                param_count, param_count, param_count, param_count
+            ));
             param_count += 1;
         }
-        
+
         if !name_filter.is_empty() {
             conditions.push(format!("name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ip_filter.is_empty() {
             conditions.push(format!("ip_address ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !model_filter.is_empty() {
             conditions.push(format!("model ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {
             format!("WHERE {}", conditions.join(" AND "))
         };
-        
+
         let data_query = format!(
             r#"SELECT 
                 id, name, network_region_id, network_id, model, vendor,
@@ -167,33 +170,35 @@ pub async fn get_switches(
             {}
             ORDER BY created_at DESC
             LIMIT ${} OFFSET ${}"#,
-            where_clause, param_count, param_count + 1
+            where_clause,
+            param_count,
+            param_count + 1
         );
-        
+
         let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
-        
+
         if !search.is_empty() {
             let pattern = format!("%{}%", search);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !name_filter.is_empty() {
             let pattern = format!("%{}%", name_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !ip_filter.is_empty() {
             let pattern = format!("%{}%", ip_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !model_filter.is_empty() {
             let pattern = format!("%{}%", model_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         data_sql = data_sql.bind(page_size).bind(offset);
-        
+
         data_sql.fetch_all(pool.get_conn()).await
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
@@ -740,7 +745,7 @@ pub async fn update_switch(
                 || req.name.is_some()
             {
                 let existing_position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1"
+                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
                 )
                 .bind(id)
                 .fetch_optional(pool.get_conn())
@@ -819,7 +824,7 @@ pub async fn update_switch(
 
             if let Some(ips) = &req.ips {
                 let position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1"
+                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
                 )
                 .bind(id)
                 .fetch_optional(pool.get_conn())
@@ -969,10 +974,11 @@ pub async fn delete_switch(
         tracing::error!("删除交换机IP记录失败: {}", e);
     }
 
-    if let Err(e) = sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
-        .bind(id)
-        .execute(pool.get_conn())
-        .await
+    if let Err(e) =
+        sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
+            .bind(id)
+            .execute(pool.get_conn())
+            .await
     {
         tracing::error!("删除交换机关联机位失败: {}", e);
     }

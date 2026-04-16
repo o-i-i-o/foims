@@ -132,14 +132,18 @@ export async function pullIpMacData() {
     btn.disabled = true;
 
     const result = await apiPost("/api/resources/ip/pull", { switch_id: switchId, network_id: networkId });
+    
+    console.log('pullIpMacData result:', result);
 
     if (result.success) {
       showToast(result.message || "MAC数据拉取成功", "success");
       loadIpMacData();
     } else {
+      console.log('显示错误通知:', result.message);
       showToast(`MAC数据拉取失败: ${result.message}`, "error");
     }
   } catch (error) {
+    console.error('pullIpMacData catch error:', error);
     handleError(error, "拉取MAC数据失败");
   } finally {
     btn.innerHTML = originalText;

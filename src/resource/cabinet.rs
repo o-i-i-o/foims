@@ -65,17 +65,15 @@ pub async fn get_positions(
                 .fetch_one(pool.get_conn())
                 .await
             } else {
-                sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM positions WHERE cabinet_id = $1"
-                )
-                .bind(cid)
-                .fetch_one(pool.get_conn())
-                .await
+                sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
+                    .bind(cid)
+                    .fetch_one(pool.get_conn())
+                    .await
             }
         } else {
             let pattern = format!("%{}%", search);
             sqlx::query_scalar(
-                "SELECT COUNT(*) FROM positions WHERE name ILIKE $1 OR description ILIKE $1"
+                "SELECT COUNT(*) FROM positions WHERE name ILIKE $1 OR description ILIKE $1",
             )
             .bind(&pattern)
             .fetch_one(pool.get_conn())
@@ -633,10 +631,12 @@ pub async fn update_cabinet_position(
     };
 
     let position_info: Option<(Uuid, String, Option<Uuid>)> =
-        match sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>("SELECT id, device_type, device_id FROM positions WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await
+        match sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
+            "SELECT id, device_type, device_id FROM positions WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
         {
             Ok(pos) => pos,
             Err(err) => {
@@ -847,10 +847,9 @@ pub async fn delete_cabinet_position(
                 Ok(switch) => switch,
                 Err(err) => {
                     return Ok(
-                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                            "Database query error: {}",
-                            err
-                        ))),
+                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            format!("Database query error: {}", err),
+                        )),
                     );
                 }
             };

@@ -84,7 +84,6 @@ function getResourceCallbacks() {
     submitSwitchForm: createCallback('switch/switchDevice', 'submitSwitchForm'),
     submitSwitchPortForm: createCallback('switch/switchDevice', 'submitSwitchPortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
-    pullIpMacData: createCallback('ipmanager', 'pullIpMacData'),
   };
 }
 

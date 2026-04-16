@@ -76,8 +76,12 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
             if mac_parts.len() == 6 {
                 let mac = format!(
                     "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                    mac_parts[0], mac_parts[1], mac_parts[2],
-                    mac_parts[3], mac_parts[4], mac_parts[5]
+                    mac_parts[0],
+                    mac_parts[1],
+                    mac_parts[2],
+                    mac_parts[3],
+                    mac_parts[4],
+                    mac_parts[5]
                 );
                 map.insert(mac, vlan_id);
             }
@@ -146,8 +150,11 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
                 if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
                     seen_ips.insert(ip_addr.clone());
                     let interface = if_name_map.get(&if_index).cloned();
-                    let vlan_id = vlan_map.get(&mac_addr).copied()
-                        .or_else(|| interface.as_ref().and_then(|i| parse_vlan_from_interface(i)));
+                    let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
+                        interface
+                            .as_ref()
+                            .and_then(|i| parse_vlan_from_interface(i))
+                    });
                     entries.push(ArpEntry {
                         ip_address: ip_addr,
                         mac_address: mac_addr,
@@ -208,8 +215,11 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
                     if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
                         seen_ips.insert(ip_addr.clone());
                         let interface = if_name_map.get(&if_index).cloned();
-                        let vlan_id = vlan_map.get(&mac_addr).copied()
-                            .or_else(|| interface.as_ref().and_then(|i| parse_vlan_from_interface(i)));
+                        let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
+                            interface
+                                .as_ref()
+                                .and_then(|i| parse_vlan_from_interface(i))
+                        });
                         entries.push(ArpEntry {
                             ip_address: ip_addr,
                             mac_address: mac_addr,
@@ -591,7 +601,8 @@ pub async fn get_switch_macs_from_db(
         Ok(m) => m,
         Err(e) => {
             error!("查询MAC表失败: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<Vec<SwitchMac>>::error("查询MAC表失败")));
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<Vec<SwitchMac>>::error("查询MAC表失败")));
         }
     };
 

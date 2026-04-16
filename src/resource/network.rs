@@ -31,15 +31,15 @@ pub async fn get_networks(
     let region_id = query
         .get("region_id")
         .and_then(|id| Uuid::parse_str(id).ok());
-    
+
     let name_filter = query.get("name").cloned().unwrap_or_default();
     let network_region_filter = query.get("network_region").cloned().unwrap_or_default();
     let ipv4_filter = query.get("ipv4_cidr").cloned().unwrap_or_default();
     let ipv6_filter = query.get("ipv6_cidr").cloned().unwrap_or_default();
-    
+
     let offset = (page - 1) * page_size;
 
-    let has_filters = !search.is_empty() 
+    let has_filters = !search.is_empty()
         || region_id.is_some()
         || !name_filter.is_empty()
         || !network_region_filter.is_empty()
@@ -49,80 +49,79 @@ pub async fn get_networks(
     let total: i64 = if has_filters {
         let mut conditions = Vec::new();
         let mut param_count = 1;
-        
+
         if !search.is_empty() {
             conditions.push(format!("(n.name ILIKE ${} OR n.description ILIKE ${} OR n.ipv4_cidr::TEXT ILIKE ${} OR n.ipv6_cidr::TEXT ILIKE {})", 
                 param_count, param_count, param_count, param_count));
             param_count += 1;
         }
-        
+
         if let Some(_rid) = region_id {
             conditions.push(format!("n.network_region_id = ${}", param_count));
             param_count += 1;
         }
-        
+
         if !name_filter.is_empty() {
             conditions.push(format!("n.name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !network_region_filter.is_empty() {
             conditions.push(format!("nt.name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ipv4_filter.is_empty() {
             conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ipv6_filter.is_empty() {
             conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${}", param_count));
-            param_count += 1;
         }
-        
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {
             format!("WHERE {}", conditions.join(" AND "))
         };
-        
+
         let count_query = format!(
             "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id {}",
             where_clause
         );
-        
+
         let mut count_sql = sqlx::query_scalar(&count_query);
-        
+
         if !search.is_empty() {
             let pattern = format!("%{}%", search);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if let Some(rid) = region_id {
             count_sql = count_sql.bind(rid);
         }
-        
+
         if !name_filter.is_empty() {
             let pattern = format!("%{}%", name_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !network_region_filter.is_empty() {
             let pattern = format!("%{}%", network_region_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !ipv4_filter.is_empty() {
             let pattern = format!("%{}%", ipv4_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         if !ipv6_filter.is_empty() {
             let pattern = format!("%{}%", ipv6_filter);
             count_sql = count_sql.bind(pattern);
         }
-        
+
         match count_sql.fetch_one(pool.get_conn()).await {
             Ok(t) => t,
             Err(err) => {
@@ -144,44 +143,44 @@ pub async fn get_networks(
     let networks: Vec<Network> = if has_filters {
         let mut conditions = Vec::new();
         let mut param_count = 1;
-        
+
         if !search.is_empty() {
             conditions.push(format!("(n.name ILIKE ${} OR n.description ILIKE ${} OR n.ipv4_cidr::TEXT ILIKE ${} OR n.ipv6_cidr::TEXT ILIKE {})", 
                 param_count, param_count, param_count, param_count));
             param_count += 1;
         }
-        
+
         if let Some(_rid) = region_id {
             conditions.push(format!("n.network_region_id = ${}", param_count));
             param_count += 1;
         }
-        
+
         if !name_filter.is_empty() {
             conditions.push(format!("n.name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !network_region_filter.is_empty() {
             conditions.push(format!("nt.name ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ipv4_filter.is_empty() {
             conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         if !ipv6_filter.is_empty() {
             conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${}", param_count));
             param_count += 1;
         }
-        
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {
             format!("WHERE {}", conditions.join(" AND "))
         };
-        
+
         let data_query = format!(
             r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
@@ -192,42 +191,44 @@ pub async fn get_networks(
                {}
                ORDER BY n.created_at DESC
                LIMIT ${} OFFSET ${}"#,
-            where_clause, param_count, param_count + 1
+            where_clause,
+            param_count,
+            param_count + 1
         );
-        
+
         let mut data_sql = sqlx::query(&data_query);
-        
+
         if !search.is_empty() {
             let pattern = format!("%{}%", search);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if let Some(rid) = region_id {
             data_sql = data_sql.bind(rid);
         }
-        
+
         if !name_filter.is_empty() {
             let pattern = format!("%{}%", name_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !network_region_filter.is_empty() {
             let pattern = format!("%{}%", network_region_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !ipv4_filter.is_empty() {
             let pattern = format!("%{}%", ipv4_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         if !ipv6_filter.is_empty() {
             let pattern = format!("%{}%", ipv6_filter);
             data_sql = data_sql.bind(pattern);
         }
-        
+
         data_sql = data_sql.bind(page_size).bind(offset);
-        
+
         match data_sql.fetch_all(pool.get_conn()).await {
             Ok(rows) => rows
                 .into_iter()
@@ -403,34 +404,30 @@ pub async fn create_network(
 
     // 检查网段唯一性：ipv4或ipv6任一重复即视为重复
     if let Some(ref ipv4) = ipv4_cidr_val {
-        let existing_ipv4: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR)"
-        )
-        .bind(ipv4)
-        .fetch_optional(pool.get_conn())
-        .await
-        .unwrap_or(None);
+        let existing_ipv4: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR)")
+                .bind(ipv4)
+                .fetch_optional(pool.get_conn())
+                .await
+                .unwrap_or(None);
 
         if existing_ipv4.is_some() {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "IPv4网段已存在，网段不能重复",
-            )));
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("IPv4网段已存在，网段不能重复")));
         }
     }
 
     if let Some(ref ipv6) = ipv6_cidr_val {
-        let existing_ipv6: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR)"
-        )
-        .bind(ipv6)
-        .fetch_optional(pool.get_conn())
-        .await
-        .unwrap_or(None);
+        let existing_ipv6: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR)")
+                .bind(ipv6)
+                .fetch_optional(pool.get_conn())
+                .await
+                .unwrap_or(None);
 
         if existing_ipv6.is_some() {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "IPv6网段已存在，网段不能重复",
-            )));
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("IPv6网段已存在，网段不能重复")));
         }
     }
 
@@ -681,7 +678,7 @@ pub async fn update_network(
     // 检查网段唯一性：ipv4或ipv6任一重复即视为重复（排除当前网段）
     if let Some(ref ipv4) = req.ipv4_cidr {
         let existing_ipv4: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR) AND id != $2"
+            "SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR) AND id != $2",
         )
         .bind(ipv4)
         .bind(id)
@@ -698,7 +695,7 @@ pub async fn update_network(
 
     if let Some(ref ipv6) = req.ipv6_cidr {
         let existing_ipv6: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR) AND id != $2"
+            "SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR) AND id != $2",
         )
         .bind(ipv6)
         .bind(id)

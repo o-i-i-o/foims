@@ -1191,18 +1191,16 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             warn!("positions添加device_type列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE positions ADD COLUMN IF NOT EXISTS device_id UUID"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE positions ADD COLUMN IF NOT EXISTS device_id UUID")
+            .execute(pool)
+            .await
         {
             warn!("positions添加device_id列失败: {}", e);
         }
 
         if let Err(e) = sqlx::query(
             r#"ALTER TABLE positions ADD CONSTRAINT chk_position_device_type 
-               CHECK (device_type IN ('cabinet_position', 'switch'))"#
+               CHECK (device_type IN ('cabinet_position', 'switch'))"#,
         )
         .execute(pool)
         .await
@@ -1211,7 +1209,7 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_positions_device_type ON positions(device_type)"
+            "CREATE INDEX IF NOT EXISTS idx_positions_device_type ON positions(device_type)",
         )
         .execute(pool)
         .await
@@ -1220,7 +1218,7 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_positions_device_id ON positions(device_id)"
+            "CREATE INDEX IF NOT EXISTS idx_positions_device_id ON positions(device_id)",
         )
         .execute(pool)
         .await
@@ -1231,7 +1229,7 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         let switches = sqlx::query(
             r#"SELECT s.id as switch_id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
                FROM switches s
-               WHERE s.cabinet_id IS NOT NULL"#
+               WHERE s.cabinet_id IS NOT NULL"#,
         )
         .fetch_all(pool)
         .await
@@ -1246,7 +1244,7 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             let description: Option<String> = row.get("description");
 
             let existing_pos: Option<(Uuid, String)> = sqlx::query_as(
-                "SELECT id, device_type FROM positions WHERE name = $1 AND cabinet_id = $2"
+                "SELECT id, device_type FROM positions WHERE name = $1 AND cabinet_id = $2",
             )
             .bind(&name)
             .bind(cabinet_id)

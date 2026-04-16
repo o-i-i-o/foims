@@ -12,7 +12,6 @@ const BUTTON_CALLBACK_MAP = {
   "add-workstation-btn": "openWorkstationModal",
   "add-cabinet-btn": "openCabinetModal",
   "add-cabinet-position-btn": "openCabinetPositionModal",
-  "pull-ip-btn": "pullIpMacData",
   "add-user-btn": "openUserModal",
   "add-switch-btn": "openSwitchModal",
 };

@@ -820,6 +820,7 @@ pub async fn delete_ip_manager(
 }
 
 // 拉取IP管理数据 - 从switch_macs缓存中匹配已存在的IP记录并更新MAC地址
+#[allow(clippy::type_complexity)]
 pub async fn pull_ip_managers(
     pool: web::Data<DbPool>,
     req: web::Json<serde_json::Value>,
@@ -879,17 +880,17 @@ pub async fn pull_ip_managers(
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("未找到网段信息")));
     }
 
-    let switch_macs: Vec<(String, String)> =
-        sqlx::query_as("SELECT ip_address, mac_address FROM switch_macs WHERE switch_id = $1")
-            .bind(switch_id)
-            .fetch_all(pool.get_conn())
-            .await
-            .unwrap_or_default();
+    let switch_macs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT host(ip_address), mac_address FROM switch_macs WHERE switch_id = $1",
+    )
+    .bind(switch_id)
+    .fetch_all(pool.get_conn())
+    .await
+    .unwrap_or_default();
 
     if switch_macs.is_empty() {
         return Ok(
-            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
-                vec![],
+            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
                 "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
             )),
         );
@@ -946,18 +947,66 @@ pub async fn pull_ip_managers(
             continue;
         }
 
-        let mac_conflict: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET)"
+        let old_mac: Option<String> = sqlx::query_scalar(
+            "SELECT mac_address FROM ip_managers WHERE ip_address = CAST($1 AS INET)",
         )
-        .bind(mac)
         .bind(ip)
         .fetch_optional(pool.get_conn())
         .await
         .ok()
         .flatten();
 
+        let current_device: Option<(String, Option<Uuid>, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+            "SELECT device_type, workstation_id, position_id, switch_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        )
+        .bind(ip)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        let mac_conflict: Option<String> = if let Some((device_type, ws_id, pos_id, sw_id)) =
+            current_device
+        {
+            sqlx::query_scalar(
+                r#"SELECT host(ip_address) FROM ip_managers
+                   WHERE mac_address = $1 
+                   AND ip_address != CAST($2 AS INET)
+                   AND (
+                       device_type != $3
+                       OR workstation_id IS DISTINCT FROM $4
+                       OR position_id IS DISTINCT FROM $5
+                       OR switch_id IS DISTINCT FROM $6
+                   )
+                   LIMIT 1"#,
+            )
+            .bind(mac)
+            .bind(ip)
+            .bind(&device_type)
+            .bind(ws_id)
+            .bind(pos_id)
+            .bind(sw_id)
+            .fetch_optional(pool.get_conn())
+            .await
+            .ok()
+            .flatten()
+        } else {
+            sqlx::query_scalar(
+                "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET) LIMIT 1"
+            )
+            .bind(mac)
+            .bind(ip)
+            .fetch_optional(pool.get_conn())
+            .await
+            .ok()
+            .flatten()
+        };
+
         if let Some(conflict_ip) = mac_conflict {
-            println!("MAC冲突: {} 已被 IP {} 使用，跳过更新", mac, conflict_ip);
+            warn!(
+                "MAC冲突: {} 已被不同设备的 IP {} 使用，跳过更新",
+                mac, conflict_ip
+            );
             skipped_count += 1;
             continue;
         }
@@ -977,6 +1026,37 @@ pub async fn pull_ip_managers(
             && res.rows_affected() > 0
         {
             updated_count += 1;
+
+            if let Some(ref old) = old_mac {
+                let mac_changed = old != mac && !old.is_empty();
+                if mac_changed {
+                    let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+                        "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+                    )
+                    .bind(ip)
+                    .fetch_optional(pool.get_conn())
+                    .await
+                    .ok()
+                    .flatten()
+                    .flatten();
+
+                    if let Some(ws_id) = workstation_id {
+                        info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
+                        match crate::utils::send_mac_change_notification(
+                            pool.get_conn(),
+                            &ws_id,
+                            ip,
+                            old,
+                            mac,
+                        )
+                        .await
+                        {
+                            Ok(_) => info!("MAC地址变更通知发送成功: IP={}", ip),
+                            Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1033,12 +1113,13 @@ pub async fn pull_ip_managers_internal(
         return Err("未找到网段信息".to_string());
     }
 
-    let switch_macs: Vec<(String, String)> =
-        sqlx::query_as("SELECT ip_address, mac_address FROM switch_macs WHERE switch_id = $1")
-            .bind(switch_id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
+    let switch_macs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT host(ip_address), mac_address FROM switch_macs WHERE switch_id = $1",
+    )
+    .bind(switch_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
 
     if switch_macs.is_empty() {
         return Err("该交换机暂无MAC数据".to_string());
@@ -1083,11 +1164,38 @@ pub async fn pull_ip_managers_internal(
             continue;
         }
 
+        let current_device = match sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>, Option<Uuid>)>(
+            "SELECT device_type, workstation_id, position_id, switch_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        )
+        .bind(ip)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询设备信息失败: {}", e))?
+        {
+            Some(device) => device,
+            None => continue,
+        };
+
+        let (device_type, ws_id, pos_id, sw_id) = current_device;
+
         let mac_conflict: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET)"
+            r#"SELECT host(ip_address) FROM ip_managers
+               WHERE mac_address = $1 
+               AND ip_address != CAST($2 AS INET)
+               AND (
+                   device_type != $3
+                   OR workstation_id IS DISTINCT FROM $4
+                   OR position_id IS DISTINCT FROM $5
+                   OR switch_id IS DISTINCT FROM $6
+               )
+               LIMIT 1"#,
         )
         .bind(mac)
         .bind(ip)
+        .bind(&device_type)
+        .bind(ws_id)
+        .bind(pos_id)
+        .bind(sw_id)
         .fetch_optional(pool)
         .await
         .map_err(|e| format!("查询MAC冲突失败: {}", e))?
