@@ -68,10 +68,29 @@ export async function loadNetworkTypesData(page = 1) {
 let currentNetworkPage = 1;
 const NETWORK_PAGE_SIZE = 20;
 
-export async function loadNetworksData(page = 1, searchTerm = "") {
+let currentFilters = {
+  name: '',
+  region: '',
+  ipv4: '',
+  ipv6: ''
+};
+
+export async function loadNetworksData(page = 1, filters = currentFilters) {
   currentNetworkPage = page;
+  currentFilters = filters;
+  
   try {
-    const url = `/api/resources/networks?page=${page}&page_size=${NETWORK_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
+    const params = new URLSearchParams({
+      page: page.toString(),
+      page_size: NETWORK_PAGE_SIZE.toString()
+    });
+    
+    if (filters.name) params.append('name', filters.name);
+    if (filters.region) params.append('network_region', filters.region);
+    if (filters.ipv4) params.append('ipv4_cidr', filters.ipv4);
+    if (filters.ipv6) params.append('ipv6_cidr', filters.ipv6);
+    
+    const url = `/api/resources/networks?${params.toString()}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const networks = data.items || data;
@@ -96,10 +115,8 @@ export async function loadNetworksData(page = 1, searchTerm = "") {
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, searchTerm));
+      appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, filters));
     }
-
-    await loadNetworkTypeOptions();
   } catch (error) {
     handleError(error, "加载网络数据失败", () => {
       renderTable("#networks-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
@@ -107,34 +124,33 @@ export async function loadNetworksData(page = 1, searchTerm = "") {
   }
 }
 
-// 初始化网段搜索和刷新功能
-export function initNetworksSearch() {
-  const searchInput = document.getElementById("networks-search");
-  const refreshBtn = document.getElementById("networks-refresh-btn");
+export function initNetworksFilters() {
+  const filterIds = [
+    'network-name-filter',
+    'network-region-filter', 
+    'network-ipv4-filter',
+    'network-ipv6-filter'
+  ];
+  
+  const debouncedFilter = debounce(applyNetworkFilters, 300);
+  
+  filterIds.forEach(filterId => {
+    const filterElement = document.getElementById(filterId);
+    if (filterElement) {
+      filterElement.addEventListener('input', debouncedFilter);
+    }
+  });
+}
 
-  if (searchInput) {
-    // 使用防抖函数包装搜索函数，延迟300ms
-    const debouncedSearch = debounce(function (value) {
-      loadNetworksData(1, value);
-    }, 300);
-
-    // 搜索输入事件监听
-    searchInput.addEventListener("input", function () {
-      debouncedSearch(this.value);
-    });
-  }
-
-  if (refreshBtn) {
-    // 刷新按钮事件监听
-    refreshBtn.addEventListener("click", function () {
-      // 清空搜索框
-      if (searchInput) {
-        searchInput.value = "";
-      }
-      // 重新加载数据
-      loadNetworksData();
-    });
-  }
+function applyNetworkFilters() {
+  const filters = {
+    name: getElementValue('network-name-filter') || '',
+    region: getElementValue('network-region-filter') || '',
+    ipv4: getElementValue('network-ipv4-filter') || '',
+    ipv6: getElementValue('network-ipv6-filter') || ''
+  };
+  
+  loadNetworksData(1, filters);
 }
 
 // 计算网段的总IP数量

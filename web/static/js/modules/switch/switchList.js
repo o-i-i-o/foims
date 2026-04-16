@@ -12,6 +12,7 @@ import {
   handleError,
   appendPaginationToTable,
   escapeHtml,
+  debounce,
 } from "../../utils/ui.js";
 
 import { elementCache } from "../../utils/helpers.js";
@@ -20,10 +21,26 @@ import {
   SWITCH_PAGE_SIZE
 } from "./switchState.js";
 
-async function loadSwitchesData(searchTerm = "") {
+let currentFilters = {
+  name: '',
+  ip: '',
+  model: ''
+};
+
+async function loadSwitchesData(filters = currentFilters) {
+  currentFilters = filters;
   listState.currentPage = listState.currentPage || 1;
   try {
-    const url = `/api/switches?page=${listState.currentPage}&page_size=${SWITCH_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
+    const params = new URLSearchParams({
+      page: listState.currentPage.toString(),
+      page_size: SWITCH_PAGE_SIZE.toString()
+    });
+    
+    if (filters.name) params.append('name', filters.name);
+    if (filters.ip) params.append('ip_address', filters.ip);
+    if (filters.model) params.append('model', filters.model);
+    
+    const url = `/api/switches?${params.toString()}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const switches = data.items || data;
@@ -56,7 +73,7 @@ async function loadSwitchesData(searchTerm = "") {
     if (data.total !== undefined) {
       appendPaginationToTable("#switches-table", data, (p) => {
         listState.currentPage = p;
-        loadSwitchesData(searchTerm);
+        loadSwitchesData(filters);
       });
     }
 
@@ -156,9 +173,38 @@ async function submitSwitchForm(formData) {
   }
 }
 
+function initSwitchFilters() {
+  const filterIds = [
+    'switch-name-filter',
+    'switch-ip-filter',
+    'switch-model-filter'
+  ];
+  
+  const debouncedFilter = debounce(applySwitchFilters, 300);
+  
+  filterIds.forEach(filterId => {
+    const filterElement = document.getElementById(filterId);
+    if (filterElement) {
+      filterElement.addEventListener('input', debouncedFilter);
+    }
+  });
+}
+
+function applySwitchFilters() {
+  const filters = {
+    name: document.getElementById('switch-name-filter')?.value || '',
+    ip: document.getElementById('switch-ip-filter')?.value || '',
+    model: document.getElementById('switch-model-filter')?.value || ''
+  };
+  
+  listState.currentPage = 1;
+  loadSwitchesData(filters);
+}
+
 export {
   loadSwitchesData,
   fetchSwitchById,
   deleteSwitch,
-  submitSwitchForm
+  submitSwitchForm,
+  initSwitchFilters
 };

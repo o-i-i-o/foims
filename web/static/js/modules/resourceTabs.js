@@ -4,7 +4,7 @@
  */
 
 import { loadSwitchesData, initSwitchSearch } from "./switch/switchDevice.js";
-import { loadNetworkTypesData, loadNetworksData, initNetworksSearch } from "./networks.js";
+import { loadNetworkTypesData, loadNetworksData, initNetworksFilters } from "./networks.js";
 import { loadRoomsData, initRoomSortEvents } from "./room.js";
 import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";
 import { loadCabinetsData, initCabinetSortEvents } from "./cabinet.js";
@@ -18,10 +18,8 @@ import { nextFrame, safeAsync } from "../utils/helpers.js";
 const TAB_DATA_LOADERS = {
   rooms: loadRoomsData,
   workstations: loadWorkstationsData,
-  networks: () => {
-    loadNetworkTypesData();
-    loadNetworksData();
-  },
+  "network-regions": loadNetworkTypesData,
+  networks: loadNetworksData,
   switches: loadSwitchesData,
   cabinets: loadCabinetsData,
   "cabinet-positions": loadCabinetPositionsData,
@@ -45,7 +43,7 @@ export function initResourceTabs() {
     return;
   }
   
-  initNetworksSearch();
+  initNetworksFilters();
   initSwitchSearch();
   initRoomSortEvents();
   initWorkstationSortEvents();

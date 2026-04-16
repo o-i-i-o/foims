@@ -25,35 +25,126 @@ pub async fn get_switches(
         .and_then(|s| s.parse().ok())
         .unwrap_or(20);
     let search = query.get("search").cloned().unwrap_or_default();
+    let name_filter = query.get("name").cloned().unwrap_or_default();
+    let ip_filter = query.get("ip_address").cloned().unwrap_or_default();
+    let model_filter = query.get("model").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let search_pattern = if !search.is_empty() {
-        Some(format!("%{}%", search))
-    } else {
-        None
-    };
+    let has_filters = !search.is_empty() 
+        || !name_filter.is_empty() 
+        || !ip_filter.is_empty() 
+        || !model_filter.is_empty();
 
-    let total: i64 = match if let Some(ref pattern) = search_pattern {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switches_with_details WHERE name ILIKE $1 OR location ILIKE $1 OR model ILIKE $1"
-        )
-        .bind(pattern)
-        .fetch_one(pool.get_conn())
-        .await
+    let total: i64 = if has_filters {
+        let mut conditions = Vec::new();
+        let mut param_count = 1;
+        
+        if !search.is_empty() {
+            conditions.push(format!("(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})", 
+                param_count, param_count, param_count, param_count));
+            param_count += 1;
+        }
+        
+        if !name_filter.is_empty() {
+            conditions.push(format!("name ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        if !ip_filter.is_empty() {
+            conditions.push(format!("ip_address ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        if !model_filter.is_empty() {
+            conditions.push(format!("model ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+        
+        let count_query = format!(
+            "SELECT COUNT(*) FROM switches_with_details {}",
+            where_clause
+        );
+        
+        let mut count_sql = sqlx::query_scalar(&count_query);
+        
+        if !search.is_empty() {
+            let pattern = format!("%{}%", search);
+            count_sql = count_sql.bind(pattern);
+        }
+        
+        if !name_filter.is_empty() {
+            let pattern = format!("%{}%", name_filter);
+            count_sql = count_sql.bind(pattern);
+        }
+        
+        if !ip_filter.is_empty() {
+            let pattern = format!("%{}%", ip_filter);
+            count_sql = count_sql.bind(pattern);
+        }
+        
+        if !model_filter.is_empty() {
+            let pattern = format!("%{}%", model_filter);
+            count_sql = count_sql.bind(pattern);
+        }
+        
+        match count_sql.fetch_one(pool.get_conn()).await {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
+            }
+        }
     } else {
-        sqlx::query_scalar("SELECT COUNT(*) FROM switches_with_details")
+        match sqlx::query_scalar("SELECT COUNT(*) FROM switches_with_details")
             .fetch_one(pool.get_conn())
             .await
-    } {
-        Ok(t) => t,
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
+        {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
+            }
         }
     };
 
-    let switches = if let Some(ref pattern) = search_pattern {
-        sqlx::query_as::<_, SwitchWithParent>(
+    let switches_result = if has_filters {
+        let mut conditions = Vec::new();
+        let mut param_count = 1;
+        
+        if !search.is_empty() {
+            conditions.push(format!("(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})", 
+                param_count, param_count, param_count, param_count));
+            param_count += 1;
+        }
+        
+        if !name_filter.is_empty() {
+            conditions.push(format!("name ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        if !ip_filter.is_empty() {
+            conditions.push(format!("ip_address ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        if !model_filter.is_empty() {
+            conditions.push(format!("model ILIKE ${}", param_count));
+            param_count += 1;
+        }
+        
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+        
+        let data_query = format!(
             r#"SELECT 
                 id, name, network_region_id, network_id, model, vendor,
                 location, snmp_version, 
@@ -73,15 +164,37 @@ pub async fn get_switches(
                 mac_address,
                 created_at, updated_at
             FROM switches_with_details
-            WHERE name ILIKE $1 OR location ILIKE $1 OR model ILIKE $1 OR ip_address ILIKE $1
+            {}
             ORDER BY created_at DESC
-            LIMIT $2 OFFSET $3"#,
-        )
-        .bind(pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(pool.get_conn())
-        .await
+            LIMIT ${} OFFSET ${}"#,
+            where_clause, param_count, param_count + 1
+        );
+        
+        let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
+        
+        if !search.is_empty() {
+            let pattern = format!("%{}%", search);
+            data_sql = data_sql.bind(pattern);
+        }
+        
+        if !name_filter.is_empty() {
+            let pattern = format!("%{}%", name_filter);
+            data_sql = data_sql.bind(pattern);
+        }
+        
+        if !ip_filter.is_empty() {
+            let pattern = format!("%{}%", ip_filter);
+            data_sql = data_sql.bind(pattern);
+        }
+        
+        if !model_filter.is_empty() {
+            let pattern = format!("%{}%", model_filter);
+            data_sql = data_sql.bind(pattern);
+        }
+        
+        data_sql = data_sql.bind(page_size).bind(offset);
+        
+        data_sql.fetch_all(pool.get_conn()).await
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
             r#"SELECT 
@@ -112,7 +225,7 @@ pub async fn get_switches(
         .await
     };
 
-    match switches {
+    match switches_result {
         Ok(mut data) => {
             for switch in &mut data {
                 let has_community = switch.snmp_community.is_some();
@@ -131,13 +244,14 @@ pub async fn get_switches(
                     switch.snmp_priv_password = Some("••••••••".to_string());
                 }
             }
+            let total_pages = (total + page_size - 1) / page_size;
             Ok(HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({
                     "items": data,
                     "total": total,
                     "page": page,
                     "page_size": page_size,
-                    "total_pages": (total + page_size - 1) / page_size
+                    "total_pages": total_pages
                 }),
                 "获取交换机列表成功",
             )))

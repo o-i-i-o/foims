@@ -34,7 +34,8 @@ import {
   loadSwitchesData,
   fetchSwitchById,
   deleteSwitch,
-  submitSwitchForm
+  submitSwitchForm,
+  initSwitchFilters
 } from "./switchList.js";
 
 import {
@@ -62,8 +63,6 @@ import {
 } from "./switchMacLldp.js";
 
 let positionSelector = null;
-
-const debouncedFilterSwitchesData = debounce(filterSwitchesData, 300);
 
 async function openSwitchModal(sw = null) {
   openModal("switch-modal");
@@ -159,27 +158,8 @@ function initSwitchTabs() {
 }
 
 function initSwitchSearch() {
-  const searchContainer = elementCache.get("switches-tab");
-  if (!searchContainer || searchContainer.dataset.searchInitialized === "true") return;
-
-  const searchInput = elementCache.get("switch-search");
-  const refreshBtn = elementCache.get("switch-refresh-btn");
-
-  if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => loadSwitchesData(""));
-  }
-
-  if (searchInput) {
-    searchInput.addEventListener("input", function () {
-      debouncedFilterSwitchesData();
-    });
-    searchInput.addEventListener("keypress", function (e) {
-      if (e.key === "Enter") {
-        filterSwitchesData();
-      }
-    });
-  }
-
+  initSwitchFilters();
+  
   const portSearchInput = elementCache.get("switch-port-search");
   const portFilterBtn = elementCache.get("switch-port-filter-btn");
   const portRefreshBtn = elementCache.get("switch-port-refresh-btn");
@@ -205,13 +185,6 @@ function initSwitchSearch() {
       }
     });
   }
-
-  searchContainer.dataset.searchInitialized = "true";
-}
-
-async function filterSwitchesData() {
-  const searchTerm = elementCache.getValue("switch-search");
-  await loadSwitchesData(searchTerm);
 }
 
 async function filterSwitchPortsData() {

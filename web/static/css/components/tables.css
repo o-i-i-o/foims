@@ -288,3 +288,34 @@
 .data-table td.checkbox-column {
     text-align: center;
 }
+
+.data-table th {
+    vertical-align: top;
+}
+
+.data-table th .filter-input {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: white;
+    transition: all 0.2s ease;
+}
+
+.data-table th .filter-input:hover {
+    border-color: var(--color-primary);
+}
+
+.data-table th .filter-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgb(102 126 234 / 0.1);
+}
+
+.data-table th .filter-input::placeholder {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+}

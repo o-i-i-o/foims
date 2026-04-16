@@ -72,7 +72,7 @@
               <div class="stat-value" id="total-networks">0</div>
             </div>
           </article>
-          <article class="stat-card clickable" data-nav="resources" data-tab="networks">
+          <article class="stat-card clickable" data-nav="resources" data-tab="network-regions">
             <div class="stat-icon">📍</div>
             <div class="stat-content">
               <h3 data-i18n="dashboard.total_network_types">Network Regions</h3>
@@ -206,7 +206,8 @@
 
       <section id="resources" class="content-section" aria-labelledby="resources-heading">
         <div class="tabs" role="tablist">
-          <button class="tab-btn active" data-tab="networks" role="tab" aria-selected="true" aria-controls="networks-tab" data-i18n="resources.networks">Networks</button>
+          <button class="tab-btn active" data-tab="network-regions" role="tab" aria-selected="true" aria-controls="network-regions-tab" data-i18n="resources.network_regions">Network Regions</button>
+          <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Network Segments</button>
           <button class="tab-btn" data-tab="switches" role="tab" aria-selected="false" aria-controls="switches-tab" data-i18n="resources.switches">Switches</button>
           <button class="tab-btn" data-tab="rooms" role="tab" aria-selected="false" aria-controls="rooms-tab" data-i18n="resources.rooms">Rooms</button>
           <button class="tab-btn" data-tab="workstations" role="tab" aria-selected="false" aria-controls="workstations-tab" data-i18n="resources.workstations">Workstations</button>
@@ -214,87 +215,94 @@
           <button class="tab-btn" data-tab="cabinet-positions" role="tab" aria-selected="false" aria-controls="cabinet-positions-tab" data-i18n="resources.cabinet_positions">Cabinet Positions</button>
         </div>
 
-        <div id="networks-tab" class="tab-content active" role="tabpanel">
-          <article class="card network-card">
-            <header class="card-header">
-              <h3 data-i18n="network.region_management">Network Region Management</h3>
-              <button id="add-network-type-btn" class="btn btn-primary btn-sm" data-i18n="network.add_region">Add Network Region</button>
-            </header>
-            <div class="table-container">
-              <table id="network-types-table" class="data-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="common.name">Name</th>
-                    <th data-i18n="common.created_at">Created At</th>
-                    <th data-i18n="common.actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr class="empty-row">
-                    <td colspan="3" class="text-center" data-i18n="common.no_data">No data available</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
+        <div id="network-regions-tab" class="tab-content active" role="tabpanel">
+          <div class="table-container">
+            <table id="network-types-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.name">Name</th>
+                  <th data-i18n="common.created_at">Created At</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-network-type-btn" class="btn btn-primary btn-sm" data-i18n="network.add_region">Add Network Region</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="3" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          <article class="card">
-            <header class="card-header">
-              <h3 data-i18n="network.management">Network Management</h3>
-              <div class="search-container">
-                <input type="text" id="networks-search" class="form-control" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
-                <button id="networks-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
-                <button id="add-network-btn" class="btn btn-primary btn-sm" data-i18n="network.add_network">Add Network</button>
-              </div>
-            </header>
-            <div class="table-container">
-              <table id="networks-table" class="data-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="common.index" class="index-column">序号</th>
-                    <th data-i18n="network.name">Network Name</th>
-                    <th data-i18n="network.region">Network Region</th>
-                    <th data-i18n="network.ipv4_cidr">IPv4 CIDR</th>
-                    <th data-i18n="network.ipv6_cidr">IPv6 CIDR</th>
-                    <th data-i18n="common.created_at">Created At</th>
-                    <th data-i18n="common.actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr class="empty-row">
-                    <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
+        <div id="networks-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="networks-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th>
+                    <span data-i18n="network.name">Network Name</span>
+                    <input type="text" id="network-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
+                  <th>
+                    <span data-i18n="network.region">Network Region</span>
+                    <input type="text" id="network-region-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
+                  <th>
+                    <span data-i18n="network.ipv4_cidr">IPv4 CIDR</span>
+                    <input type="text" id="network-ipv4-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
+                  <th>
+                    <span data-i18n="network.ipv6_cidr">IPv6 CIDR</span>
+                    <input type="text" id="network-ipv6-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
+                  <th data-i18n="common.created_at">Created At</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-network-btn" class="btn btn-primary btn-sm" data-i18n="network.add_network">Add Network</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div id="switches-tab" class="tab-content" role="tabpanel">
-          <div class="section-header-row">
-            <div class="search-container">
-              <input type="text" id="switch-search" class="form-control" data-i18n-placeholder="switch.search_placeholder" placeholder="Search switch name/IP" aria-label="Search switches" />
-              <button id="switch-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
-            </div>
-            <div class="action-buttons">
-              <button id="add-switch-btn" class="btn btn-primary btn-sm" data-i18n="switch.add_switch">Add Switch</button>
-            </div>
-          </div>
           <div class="table-container">
             <table id="switches-table" class="data-table" aria-label="Switch list">
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="switch.name">Switch Name</th>
+                  <th>
+                    <span data-i18n="switch.name">Switch Name</span>
+                    <input type="text" id="switch-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
                   <th data-i18n="switch.device_type">Device Type</th>
-                  <th data-i18n="switch.ip_address">IP Address</th>
+                  <th>
+                    <span data-i18n="switch.ip_address">IP Address</span>
+                    <input type="text" id="switch-ip-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
                   <th data-i18n="switch.mac_address">MAC Address</th>
-                  <th data-i18n="switch.model">Model</th>
+                  <th>
+                    <span data-i18n="switch.model">Model</span>
+                    <input type="text" id="switch-model-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
+                  </th>
                   <th data-i18n="switch.vendor">Vendor</th>
                   <th data-i18n="switch.location">Location</th>
                   <th>SNMP</th>
                   <th data-i18n="switch.parent_switch">Parent Switch</th>
-                  <th data-i18n="common.actions">Actions</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-switch-btn" class="btn btn-primary btn-sm" data-i18n="switch.add_switch">Add Switch</button>
+                  </th>
                 </tr>
               </thead>
               <tbody>

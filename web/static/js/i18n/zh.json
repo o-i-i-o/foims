@@ -116,6 +116,8 @@
     "rooms": "房间",
     "workstations": "工位",
     "networks": "网络",
+    "network_regions": "网络区域",
+    "network_segments": "网段",
     "switches": "交换机",
     "cabinets": "机柜",
     "cabinet_positions": "机位"
