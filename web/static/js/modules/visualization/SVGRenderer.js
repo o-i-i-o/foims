@@ -11,8 +11,8 @@ export class SVGRenderer {
 
     const x = workstation.position.x || 100;
     const y = workstation.position.y || 100;
-    const width = workstation.position.width || 160;
-    const height = workstation.position.height || 160;
+    const width = workstation.position.width || 240;
+    const height = workstation.position.height || 120;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     rect.setAttribute("x", x);
@@ -33,8 +33,8 @@ export class SVGRenderer {
 
     const nameText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     nameText.setAttribute("x", x + width / 2);
-    nameText.setAttribute("y", y + 40);
-    nameText.dataset.relY = 40;
+    nameText.setAttribute("y", y + 30);
+    nameText.dataset.relY = 30;
 
     const nameTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     nameTitleSpan.textContent = "工位: ";
@@ -48,8 +48,8 @@ export class SVGRenderer {
 
     const ipText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     ipText.setAttribute("x", x + width / 2);
-    ipText.setAttribute("y", y + 70);
-    ipText.dataset.relY = 70;
+    ipText.setAttribute("y", y + 55);
+    ipText.dataset.relY = 55;
 
     const ipTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     ipTitleSpan.textContent = "IP: ";
@@ -63,8 +63,8 @@ export class SVGRenderer {
 
     const portText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     portText.setAttribute("x", x + width / 2);
-    portText.setAttribute("y", y + 100);
-    portText.dataset.relY = 100;
+    portText.setAttribute("y", y + 80);
+    portText.dataset.relY = 80;
 
     const portTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     portTitleSpan.textContent = "端口: ";
@@ -77,8 +77,8 @@ export class SVGRenderer {
 
     const managerText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     managerText.setAttribute("x", x + width / 2);
-    managerText.setAttribute("y", y + 130);
-    managerText.dataset.relY = 130;
+    managerText.setAttribute("y", y + 105);
+    managerText.dataset.relY = 105;
 
     const managerTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     managerTitleSpan.textContent = "管理人: ";
