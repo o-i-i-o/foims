@@ -724,6 +724,25 @@ pub struct IpManagerCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct AutoAssignIpRequest {
+    pub network_id: Uuid,
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct PullIpManagersRequest {
+    pub switch_id: Uuid,
+    pub network_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct IpManagerUpdate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,

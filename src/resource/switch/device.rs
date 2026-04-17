@@ -434,17 +434,17 @@ pub async fn create_switch(
         .snmp_community
         .as_ref()
         .filter(|c| !c.is_empty())
-        .map(|c| encrypt_password(c));
+        .and_then(|c| encrypt_password(c));
     let encrypted_snmp_auth_password = req
         .snmp_auth_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .map(|p| encrypt_password(p));
+        .and_then(|p| encrypt_password(p));
     let encrypted_snmp_priv_password = req
         .snmp_priv_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .map(|p| encrypt_password(p));
+        .and_then(|p| encrypt_password(p));
 
     let result = sqlx::query(
         r#"INSERT INTO switches (
@@ -675,17 +675,17 @@ pub async fn update_switch(
         .snmp_community
         .as_ref()
         .filter(|c| !c.is_empty())
-        .map(|c| encrypt_password(c));
+        .and_then(|c| encrypt_password(c));
     let encrypted_snmp_auth_password = req
         .snmp_auth_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .map(|p| encrypt_password(p));
+        .and_then(|p| encrypt_password(p));
     let encrypted_snmp_priv_password = req
         .snmp_priv_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .map(|p| encrypt_password(p));
+        .and_then(|p| encrypt_password(p));
 
     let result = sqlx::query(
         r#"UPDATE switches SET

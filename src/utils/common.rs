@@ -545,6 +545,20 @@ pub fn get_real_mac_address(ip: &str) -> Option<String> {
 }
 
 fn read_mac_from_arp_cache(ip: &str) -> Option<String> {
+    if ip.contains(':') {
+        let content = std::fs::read_to_string("/proc/net/ndp").ok()?;
+        for line in content.lines().skip(1) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 && parts[0] == ip {
+                let mac = parts[2].to_uppercase();
+                if mac != "00:00:00:00:00:00" && validate_mac_address(&mac) {
+                    return Some(mac);
+                }
+            }
+        }
+        return None;
+    }
+
     let content = std::fs::read_to_string("/proc/net/arp").ok()?;
 
     for line in content.lines().skip(1) {
@@ -707,7 +721,6 @@ pub const NETWORK_QUERY: &str = r#"
            n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns, 
-           NULL as gateway, NULL as dns, 
            n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
     FROM network_cidrs n 
     JOIN network_regions nt ON n.network_region_id = nt.id 
@@ -732,8 +745,8 @@ pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Net
         ipv6_dns: row
             .get::<Option<serde_json::Value>, _>(9)
             .and_then(|v| serde_json::from_value(v).ok()),
-        description: row.get(12),
-        created_at: row.get(13),
-        updated_at: row.get(14),
+        description: row.get(10),
+        created_at: row.get(11),
+        updated_at: row.get(12),
     }
 }

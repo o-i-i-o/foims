@@ -5,9 +5,12 @@ use dashmap::DashMap;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+static GLOBAL_TOKEN_CACHE: LazyLock<Arc<DashMap<String, TokenCacheValue>>> =
+    LazyLock::new(|| Arc::new(DashMap::new()));
 
 type TokenCacheValue = (JwtClaims, chrono::DateTime<Utc>);
 
@@ -72,7 +75,7 @@ impl JwtUtils {
             },
             decoding_key: DecodingKey::from_secret(secret.as_bytes()),
             encoding_key: EncodingKey::from_secret(secret.as_bytes()),
-            token_cache: Arc::new(DashMap::new()),
+            token_cache: GLOBAL_TOKEN_CACHE.clone(),
         }
     }
 

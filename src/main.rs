@@ -7,7 +7,7 @@ use actix_files::Files;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 use std::path::Path;
-use tracing::info;
+use tracing::{error, info};
 
 use ipma::log::setup_logging;
 use ipma::routes::static_files::{
@@ -22,21 +22,42 @@ use ipma::system::config::init_start_time;
 use ipma::system::cron::start_scheduler;
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
+
+fn build_cors_middleware() -> Cors {
+    Cors::default()
+        .allowed_origin("http://localhost")
+        .allowed_origin("http://localhost:80")
+        .allowed_origin("http://localhost:443")
+        .allowed_origin("https://localhost")
+        .allowed_origin_fn(|origin, _req_head| {
+            if let Ok(origin_str) = origin.to_str() {
+                origin_str.starts_with("http://localhost:")
+                    || origin_str.starts_with("https://localhost:")
+                    || origin_str.starts_with("http://127.0.0.1:")
+                    || origin_str.starts_with("https://127.0.0.1:")
+            } else {
+                false
+            }
+        })
+        .allow_any_method()
+        .allow_any_header()
+        .supports_credentials()
+        .max_age(3600)
+}
 use std::fs;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // 初始化 rustls 密码学提供者
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .unwrap();
+    if let Err(e) = rustls::crypto::ring::default_provider().install_default() {
+        tracing::error!("初始化TLS密码学提供者失败: {:?}", e);
+        std::process::exit(1);
+    }
 
     // 初始化日志
-    let log_file_path = setup_logging();
+    let _log_file_path = setup_logging();
 
     // 使用双语日志
-    let mut args = std::collections::HashMap::new();
-    args.insert("path", log_file_path.as_str());
     log_bilingual("log.output_to");
 
     // 使用双语日志
@@ -45,10 +66,7 @@ async fn main() -> std::io::Result<()> {
     // 加载配置
     let config = Config::load().expect("Failed to load config");
 
-    // 使用双语日志
-    let config_str = format!("{:?}", config);
-    let mut args = std::collections::HashMap::new();
-    args.insert("config", config_str.as_str());
+    // 使用双语日志（不记录敏感信息）
     log_bilingual("system.config_loaded");
 
     // 条件创建数据库连接池
@@ -82,7 +100,7 @@ async fn main() -> std::io::Result<()> {
         let pool_for_scheduler = Arc::new(db_pool.clone());
         tokio::spawn(async move {
             if let Err(e) = start_scheduler(pool_for_scheduler).await {
-                info!("启动cron调度器失败: {:?}", e);
+                error!("启动cron调度器失败: {:?}", e);
             }
         });
 
@@ -157,27 +175,7 @@ async fn main() -> std::io::Result<()> {
         let enable_normal_routes = !auto_https;
 
         let mut app = App::new()
-            .wrap(
-                Cors::default()
-                    .allowed_origin("http://localhost")
-                    .allowed_origin("http://localhost:80")
-                    .allowed_origin("http://localhost:443")
-                    .allowed_origin("https://localhost")
-                    .allowed_origin_fn(|origin, _req_head| {
-                        if let Ok(origin_str) = origin.to_str() {
-                            origin_str.starts_with("http://localhost:")
-                                || origin_str.starts_with("https://localhost:")
-                                || origin_str.starts_with("http://127.0.0.1:")
-                                || origin_str.starts_with("https://127.0.0.1:")
-                        } else {
-                            false
-                        }
-                    })
-                    .allow_any_method()
-                    .allow_any_header()
-                    .supports_credentials()
-                    .max_age(3600),
-            )
+            .wrap(build_cors_middleware())
             .wrap(actix_web::middleware::Logger::default())
             .wrap(RateLimitMiddleware::new(
                 http_rate_limiter.clone(),
@@ -202,27 +200,7 @@ async fn main() -> std::io::Result<()> {
     let create_https_app = move || {
         App::new()
             .wrap(ipma::utils::hsts::hsts_middleware())
-            .wrap(
-                Cors::default()
-                    .allowed_origin("http://localhost")
-                    .allowed_origin("http://localhost:80")
-                    .allowed_origin("http://localhost:443")
-                    .allowed_origin("https://localhost")
-                    .allowed_origin_fn(|origin, _req_head| {
-                        if let Ok(origin_str) = origin.to_str() {
-                            origin_str.starts_with("http://localhost:")
-                                || origin_str.starts_with("https://localhost:")
-                                || origin_str.starts_with("http://127.0.0.1:")
-                                || origin_str.starts_with("https://127.0.0.1:")
-                        } else {
-                            false
-                        }
-                    })
-                    .allow_any_method()
-                    .allow_any_header()
-                    .supports_credentials()
-                    .max_age(3600),
-            )
+            .wrap(build_cors_middleware())
             .wrap(actix_web::middleware::Logger::default())
             .wrap(RateLimitMiddleware::new(
                 https_rate_limiter.clone(),
@@ -251,7 +229,7 @@ async fn main() -> std::io::Result<()> {
 
             actix_web::rt::spawn(async move {
                 if let Err(e) = http_server.run().await {
-                    info!("HTTP服务器失败: {:?}", e);
+                    error!("HTTP服务器失败: {:?}", e);
                 }
             });
         } else {
@@ -272,7 +250,7 @@ async fn main() -> std::io::Result<()> {
 
                 actix_web::rt::spawn(async move {
                     if let Err(e) = http_server_ipv4.run().await {
-                        info!("HTTP IPv4服务器失败: {:?}", e);
+                        error!("HTTP IPv4服务器失败: {:?}", e);
                     }
                 });
             }
@@ -293,7 +271,7 @@ async fn main() -> std::io::Result<()> {
 
                 actix_web::rt::spawn(async move {
                     if let Err(e) = http_server_ipv6.run().await {
-                        info!("HTTP IPv6服务器失败: {:?}", e);
+                        error!("HTTP IPv6服务器失败: {:?}", e);
                     }
                 });
             }
@@ -426,7 +404,7 @@ async fn main() -> std::io::Result<()> {
                 let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
                     Ok(config) => config,
                     Err(e) => {
-                        info!("加载TLS配置失败: {:?}", e);
+                        error!("加载TLS配置失败: {:?}", e);
                         return;
                     }
                 };
@@ -436,7 +414,7 @@ async fn main() -> std::io::Result<()> {
                 {
                     Ok(server) => server,
                     Err(e) => {
-                        info!("绑定HTTPS IPv4服务器失败: {:?}", e);
+                        error!("绑定HTTPS IPv4服务器失败: {:?}", e);
                         return;
                     }
                 };
@@ -462,7 +440,7 @@ async fn main() -> std::io::Result<()> {
                 );
 
                 if let Err(e) = https_server_ipv4.run().await {
-                    info!("HTTPS IPv4服务器失败: {:?}", e);
+                    error!("HTTPS IPv4服务器失败: {:?}", e);
                 }
             }));
         }
@@ -487,7 +465,7 @@ async fn main() -> std::io::Result<()> {
                 let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
                     Ok(config) => config,
                     Err(e) => {
-                        info!("加载TLS配置失败: {:?}", e);
+                        error!("加载TLS配置失败: {:?}", e);
                         return;
                     }
                 };
@@ -497,7 +475,7 @@ async fn main() -> std::io::Result<()> {
                 {
                     Ok(server) => server,
                     Err(e) => {
-                        info!("绑定HTTPS IPv6服务器失败: {:?}", e);
+                        error!("绑定HTTPS IPv6服务器失败: {:?}", e);
                         return;
                     }
                 };
@@ -523,7 +501,7 @@ async fn main() -> std::io::Result<()> {
                 );
 
                 if let Err(e) = https_server_ipv6.run().await {
-                    info!("HTTPS IPv6服务器失败: {:?}", e);
+                    error!("HTTPS IPv6服务器失败: {:?}", e);
                 }
             }));
         }
@@ -569,7 +547,7 @@ fn configure_app_services(
             web::scope("/api/init")
                 .route("", web::post().to(ipma::init::init_system))
                 .route("/db", web::post().to(ipma::init::init_db))
-                .route("/db/clear", web::delete().to(ipma::init::clear_database))
+                .route("/db/clear", web::post().to(ipma::init::clear_database))
                 .route(
                     "/db/create",
                     web::post().to(ipma::init::create_database_api),

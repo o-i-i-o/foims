@@ -643,7 +643,7 @@ pub async fn init_db(config: web::Data<Config>) -> Result<HttpResponse> {
 
 pub async fn clear_database(
     config: web::Data<Config>,
-    verification: web::Query<serde_json::Value>,
+    req: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse> {
     if !config.init.enabled {
         return Ok(
@@ -651,7 +651,7 @@ pub async fn clear_database(
         );
     }
 
-    let verification_code = match verification.get("code") {
+    let verification_code = match req.get("code") {
         Some(code) => code.as_str().unwrap_or(""),
         None => "",
     };

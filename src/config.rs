@@ -1,5 +1,4 @@
 use config::Config as ConfigBuilder;
-use regex;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

@@ -267,7 +267,7 @@ pub async fn update_user(
     };
 
     if existing_user.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("User not found")));
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("用户未找到")));
     }
 
     let now = Utc::now();
@@ -343,7 +343,7 @@ pub async fn delete_user(
     };
 
     if existing_user.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User not found")));
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户未找到")));
     }
 
     let mut tx = match pool.get_conn().begin().await {

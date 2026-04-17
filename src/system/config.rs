@@ -7,9 +7,7 @@ use crate::system::smtp::{
     test_smtp_connection as test_smtp_connection_impl,
 };
 use actix_web::{HttpResponse, Result, web};
-use chrono;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,7 +52,58 @@ pub struct SystemInfo {
     pub uptime: u64,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub database_status: String,
-    pub config: Config,
+    pub config: SafeConfig,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SafeDatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub max_connections: u32,
+    pub query_timeout_secs: u64,
+    pub slow_query_threshold_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SafeJwtConfig {
+    pub access_token_expiry: String,
+    pub refresh_token_expiry: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SafeConfig {
+    pub database: SafeDatabaseConfig,
+    pub server: ServerConfig,
+    pub jwt: SafeJwtConfig,
+    pub init: crate::config::InitConfig,
+    pub i18n: Option<I18nConfig>,
+    pub rate_limit: crate::config::RateLimitConfig,
+}
+
+impl From<Config> for SafeConfig {
+    fn from(config: Config) -> Self {
+        Self {
+            database: SafeDatabaseConfig {
+                host: config.database.host,
+                port: config.database.port,
+                database: config.database.database,
+                username: config.database.username,
+                max_connections: config.database.max_connections,
+                query_timeout_secs: config.database.query_timeout_secs,
+                slow_query_threshold_ms: config.database.slow_query_threshold_ms,
+            },
+            server: config.server,
+            jwt: SafeJwtConfig {
+                access_token_expiry: config.jwt.access_token_expiry,
+                refresh_token_expiry: config.jwt.refresh_token_expiry,
+            },
+            init: config.init,
+            i18n: config.i18n,
+            rate_limit: config.rate_limit,
+        }
+    }
 }
 
 // 系统配置更新请求模型
@@ -139,7 +188,7 @@ pub async fn get_system_info(
         uptime,
         timestamp: chrono::Utc::now(),
         database_status: database_status.to_string(),
-        config: latest_config,
+        config: SafeConfig::from(latest_config),
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::<SystemInfo>::success(
@@ -150,95 +199,75 @@ pub async fn get_system_info(
 
 // 获取仪表盘统计数据
 pub async fn get_dashboard_stats(pool: web::Data<DbPool>) -> Result<HttpResponse> {
-    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let (total_users, active_users, total_network_regions, total_networks) = tokio::join!(
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM users")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM users WHERE status = true")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM network_regions")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM network_cidrs")
+            .fetch_one(pool.get_conn()),
+    );
 
-    let active_users: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = 'active'")
-            .fetch_one(pool.get_conn())
-            .await
-            .unwrap_or_default();
+    let (total_rooms, total_cabinets, total_workstations, total_positions) = tokio::join!(
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM rooms")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM cabinets")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM workstations")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM positions")
+            .fetch_one(pool.get_conn()),
+    );
 
-    let total_network_regions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let (total_switches, total_ips, active_ips) = tokio::join!(
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM switches")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM ip_managers")
+            .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>(
+            "SELECT COUNT(*) FROM ip_managers WHERE status = 'active'"
+        )
+        .fetch_one(pool.get_conn()),
+    );
 
-    let total_networks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let (ips_by_device_type, ips_by_status, rooms_by_type) = tokio::join!(
+        sqlx::query_as::<_, (String, i64)>("SELECT device_type, COUNT(*) as count FROM ip_managers WHERE device_type IS NOT NULL GROUP BY device_type")
+            .fetch_all(pool.get_conn()),
+        sqlx::query_as::<_, (String, i64)>("SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status")
+            .fetch_all(pool.get_conn()),
+        sqlx::query_as::<_, (String, i64)>("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
+            .fetch_all(pool.get_conn()),
+    );
 
-    let total_rooms: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
+    let (recent_logs, login_logs_today) = tokio::join!(
+        sqlx::query_scalar::<sqlx::Postgres, i64>(
+            "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+        )
+        .fetch_one(pool.get_conn()),
+        sqlx::query_scalar::<sqlx::Postgres, i64>(
+            "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+        )
+        .fetch_one(pool.get_conn()),
+    );
 
-    let total_cabinets: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cabinets")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
-
-    let total_workstations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workstations")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
-
-    let total_positions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM positions")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
-
-    let total_switches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switches")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
-
-    let total_ips: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers")
-        .fetch_one(pool.get_conn())
-        .await
-        .unwrap_or_default();
-
-    let active_ips: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM ip_managers WHERE status = 'active'")
-            .fetch_one(pool.get_conn())
-            .await
-            .unwrap_or_default();
-
-    let ips_by_device_type: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT device_type, COUNT(*) as count FROM ip_managers WHERE device_type IS NOT NULL GROUP BY device_type"
-    )
-    .fetch_all(pool.get_conn())
-    .await
-    .unwrap_or_default();
-
-    let ips_by_status: Vec<(String, i64)> =
-        sqlx::query_as("SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status")
-            .fetch_all(pool.get_conn())
-            .await
-            .unwrap_or_default();
-
-    let rooms_by_type: Vec<(String, i64)> =
-        sqlx::query_as("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
-            .fetch_all(pool.get_conn())
-            .await
-            .unwrap_or_default();
-
-    let recent_logs: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'",
-    )
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or_default();
-
-    let login_logs_today: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'",
-    )
-    .fetch_one(pool.get_conn())
-    .await
-    .unwrap_or_default();
+    let total_users = total_users.unwrap_or_default();
+    let active_users = active_users.unwrap_or_default();
+    let total_network_regions = total_network_regions.unwrap_or_default();
+    let total_networks = total_networks.unwrap_or_default();
+    let total_rooms = total_rooms.unwrap_or_default();
+    let total_cabinets = total_cabinets.unwrap_or_default();
+    let total_workstations = total_workstations.unwrap_or_default();
+    let total_positions = total_positions.unwrap_or_default();
+    let total_switches = total_switches.unwrap_or_default();
+    let total_ips = total_ips.unwrap_or_default();
+    let active_ips = active_ips.unwrap_or_default();
+    let ips_by_device_type = ips_by_device_type.unwrap_or_default();
+    let ips_by_status = ips_by_status.unwrap_or_default();
+    let rooms_by_type = rooms_by_type.unwrap_or_default();
+    let recent_logs = recent_logs.unwrap_or_default();
+    let login_logs_today = login_logs_today.unwrap_or_default();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({

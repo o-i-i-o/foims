@@ -81,7 +81,13 @@ pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Resul
         ("host", config.host.clone()),
         ("port", config.port.to_string()),
         ("username", config.username.clone()),
-        ("password", encrypt_password(&config.password)),
+        (
+            "password",
+            encrypt_password(&config.password).unwrap_or_else(|| {
+                tracing::error!("SMTP密码加密失败");
+                config.password.clone()
+            }),
+        ),
         ("from", config.from.clone()),
         ("secure", config.secure.to_string()),
     ];

@@ -14,7 +14,13 @@ pub fn get_encryption_key() -> Vec<u8> {
     let app_name = "ipma";
     let key_path = format!("/etc/{}/encryption.key", app_name);
 
-    let key_dir = Path::new(&key_path).parent().unwrap();
+    let key_dir = match Path::new(&key_path).parent() {
+        Some(dir) => dir,
+        None => {
+            error!("无法获取加密密钥目录的父目录");
+            panic!("无法获取加密密钥目录的父目录");
+        }
+    };
     if !key_dir.exists()
         && let Err(e) = fs::create_dir_all(key_dir)
     {
@@ -53,27 +59,28 @@ pub fn get_encryption_key() -> Vec<u8> {
     key
 }
 
-pub fn encrypt_password(password: &str) -> String {
+pub fn encrypt_password(password: &str) -> Option<String> {
     let key = get_encryption_key();
-    let cipher = Aes256Gcm::new_from_slice(&key).expect("无效的密钥长度");
+    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
 
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     rand::rng().fill(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ciphertext = cipher
-        .encrypt(nonce, password.as_bytes())
-        .expect("加密失败");
+    let ciphertext = cipher.encrypt(nonce, password.as_bytes()).ok()?;
 
     let mut result = nonce_bytes.to_vec();
     result.extend(ciphertext);
 
-    BASE64.encode(&result)
+    Some(BASE64.encode(&result))
 }
 
 pub fn decrypt_password(encrypted_password: &str) -> String {
     let key = get_encryption_key();
-    let cipher = Aes256Gcm::new_from_slice(&key).expect("无效的密钥长度");
+    let cipher = match Aes256Gcm::new_from_slice(&key) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
 
     let decoded = match BASE64.decode(encrypted_password) {
         Ok(d) => d,

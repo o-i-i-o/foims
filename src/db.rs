@@ -1,3 +1,4 @@
+use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -290,13 +291,14 @@ impl DbPool {
     }
 
     /// 动态调整连接池大小
+    /// 注意：SQLx 的 PgPool 创建后不支持动态调整大小，
+    /// 此方法仅更新内部配置记录，实际连接池大小需要重启服务才能生效。
     pub async fn resize_pool(&self, new_max_connections: u32) -> Result<(), sqlx::Error> {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        // 检查冷却时间
         let last_scaling = self.last_scaling_time.load(Ordering::Relaxed);
         let config = self.config.read().await;
 
@@ -306,17 +308,18 @@ impl DbPool {
         }
         drop(config);
 
-        // 更新配置
         let mut config = self.config.write().await;
         let old_max = config.max_connections;
         config.max_connections = new_max_connections;
         drop(config);
 
-        // 记录缩放时间
         self.last_scaling_time
             .store(current_time, Ordering::Relaxed);
 
-        info!("连接池大小调整: {} -> {}", old_max, new_max_connections);
+        warn!(
+            "连接池大小配置已更新: {} -> {}，但需要重启服务才能生效",
+            old_max, new_max_connections
+        );
 
         Ok(())
     }
@@ -487,8 +490,6 @@ pub struct PoolStatus {
     pub num_idle: u32,
     pub is_closed: bool,
 }
-
-use serde::Serialize;
 
 #[cfg(test)]
 mod tests {

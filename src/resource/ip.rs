@@ -455,7 +455,7 @@ pub async fn get_cabinet_position_ips(
             network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
         FROM ip_managers_with_details 
-        WHERE position_id = $1 OR switch_id = $1"#
+        WHERE position_id = $1 OR (switch_id = $1 AND device_type = 'cabinet_position')"#
     )
     .bind(position_id)
     .fetch_all(pool.get_conn())
@@ -823,49 +823,15 @@ pub async fn delete_ip_manager(
 #[allow(clippy::type_complexity)]
 pub async fn pull_ip_managers(
     pool: web::Data<DbPool>,
-    req: web::Json<serde_json::Value>,
+    req: web::Json<crate::models::PullIpManagersRequest>,
 ) -> Result<HttpResponse> {
-    let switch_id = match req.get("switch_id") {
-        Some(switch_id_value) => match switch_id_value.as_str() {
-            Some(switch_id_str) => match Uuid::parse_str(switch_id_str) {
-                Ok(switch_id) => switch_id,
-                Err(_) => {
-                    return Ok(HttpResponse::BadRequest()
-                        .json(ApiResponse::<()>::error("无效的switch_id格式")));
-                }
-            },
-            None => {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("switch_id必须是字符串")));
-            }
-        },
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少switch_id字段"))
-            );
-        }
-    };
+    if let Err(e) = req.validate() {
+        return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error(format!("请求参数验证失败: {}", e))));
+    }
 
-    let network_id = match req.get("network_id") {
-        Some(network_id_value) => match network_id_value.as_str() {
-            Some(network_id_str) => match Uuid::parse_str(network_id_str) {
-                Ok(network_id) => network_id,
-                Err(_) => {
-                    return Ok(HttpResponse::BadRequest()
-                        .json(ApiResponse::<()>::error("无效的network_id格式")));
-                }
-            },
-            None => {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("network_id必须是字符串")));
-            }
-        },
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少network_id字段"))
-            );
-        }
-    };
+    let switch_id = req.switch_id;
+    let network_id = req.network_id;
 
     let network_info: Option<(Option<String>, Option<String>)> =
         sqlx::query_as("SELECT ipv4_cidr::text, ipv6_cidr::text FROM network_cidrs WHERE id = $1")
@@ -1392,6 +1358,39 @@ pub async fn get_available_ips(
         }
     }
 
+    if let Some(ipv6_cidr) = &network.ipv6_cidr
+        && let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr)
+    {
+        let used_ips: Vec<String> =
+            sqlx::query_scalar("SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1")
+                .bind(network_id)
+                .fetch_all(pool.get_conn())
+                .await
+                .unwrap_or_default();
+
+        let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
+
+        let gateway_ip = network.ipv6_gateway.clone();
+        let network_addr = network_cidr.network();
+
+        for ip in network_cidr.iter() {
+            let ip_str = ip.to_string();
+            if used_set.contains(&ip_str) {
+                continue;
+            }
+            if Some(&ip_str) == gateway_ip.as_ref() {
+                continue;
+            }
+            if ip.to_string() == network_addr.to_string() {
+                continue;
+            }
+            available_ips.push(ip_str);
+            if available_ips.len() >= 256 {
+                break;
+            }
+        }
+    }
+
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "network_id": network_id,
@@ -1406,55 +1405,22 @@ pub async fn get_available_ips(
 // 自动分配IP地址
 pub async fn auto_assign_ip(
     pool: web::Data<DbPool>,
-    req: web::Json<serde_json::Value>,
+    req: web::Json<crate::models::AutoAssignIpRequest>,
     http_req: HttpRequest,
     config: web::Data<Config>,
 ) -> Result<HttpResponse> {
-    let network_id = match req.get("network_id") {
-        Some(v) => match v.as_str() {
-            Some(s) => match Uuid::parse_str(s) {
-                Ok(id) => id,
-                Err(_) => {
-                    return Ok(HttpResponse::BadRequest()
-                        .json(ApiResponse::<()>::error("无效的network_id格式")));
-                }
-            },
-            None => {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("network_id必须是字符串")));
-            }
-        },
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少network_id字段"))
-            );
-        }
-    };
+    if let Err(e) = req.validate() {
+        return Ok(HttpResponse::BadRequest()
+            .json(ApiResponse::<()>::error(format!("请求参数验证失败: {}", e))));
+    }
 
-    let workstation_id = req
-        .get("workstation_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok());
-    let position_id = req
-        .get("position_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok());
-    let switch_id = req
-        .get("switch_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok());
-    let switch_port_id = req
-        .get("switch_port_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok());
-    let mac_address = req
-        .get("mac_address")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let hostname = req
-        .get("hostname")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let network_id = req.network_id;
+    let workstation_id = req.workstation_id;
+    let position_id = req.position_id;
+    let switch_id = req.switch_id;
+    let switch_port_id = req.switch_port_id;
+    let mac_address = req.mac_address.clone();
+    let hostname = req.hostname.clone();
 
     let device_type = match (workstation_id, position_id, switch_id) {
         (Some(_), None, None) => "workstation",
@@ -1532,9 +1498,51 @@ pub async fn auto_assign_ip(
     let assigned_ip = match assigned_ip {
         Some(ip) => ip,
         None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("该网络没有可用的IP地址"))
-            );
+            if let Some(ipv6_cidr) = &network.ipv6_cidr {
+                if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr) {
+                    let used_ips: Vec<String> = sqlx::query_scalar(
+                        "SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1",
+                    )
+                    .bind(network_id)
+                    .fetch_all(pool.get_conn())
+                    .await
+                    .unwrap_or_default();
+
+                    let used_set: std::collections::HashSet<String> =
+                        used_ips.into_iter().collect();
+                    let gateway_ip = network.ipv6_gateway.clone();
+                    let network_addr = network_cidr.network();
+
+                    let mut found_ip = None;
+                    for ip in network_cidr.iter() {
+                        let ip_str = ip.to_string();
+                        if used_set.contains(&ip_str) {
+                            continue;
+                        }
+                        if Some(&ip_str) == gateway_ip.as_ref() {
+                            continue;
+                        }
+                        if ip.to_string() == network_addr.to_string() {
+                            continue;
+                        }
+                        found_ip = Some(ip_str);
+                        break;
+                    }
+                    match found_ip {
+                        Some(ip) => ip,
+                        None => {
+                            return Ok(HttpResponse::BadRequest()
+                                .json(ApiResponse::<()>::error("该网络没有可用的IP地址")));
+                        }
+                    }
+                } else {
+                    return Ok(HttpResponse::BadRequest()
+                        .json(ApiResponse::<()>::error("该网络没有可用的IP地址")));
+                }
+            } else {
+                return Ok(HttpResponse::BadRequest()
+                    .json(ApiResponse::<()>::error("该网络没有可用的IP地址")));
+            }
         }
     };
 
