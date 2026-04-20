@@ -251,14 +251,13 @@ pub async fn send_mac_change_email(
     }
 
     let email_body = format!(
-        "尊敬的管理员：\n\n工位 {} 的MAC地址已发生变更，详情如下：\n工位名称：{}\nIP地址：{}\n旧MAC地址：{}\n新MAC地址：{}\n\n请确认此变更是否为授权操作。\n\n此致，\nIPMA系统",
-        workstation_name, workstation_name, ip_address, old_mac, new_mac
+        "尊敬的管理员：\n\n工位 {workstation_name} 的MAC地址已发生变更，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n\n请确认此变更是否为授权操作。\n\n此致，\nIPMA系统"
     );
 
     send_email_to_users(
         pool,
         &user_ids,
-        &format!("MAC地址变更通知 - 工位: {}", workstation_name),
+        &format!("MAC地址变更通知 - 工位: {workstation_name}"),
         &email_body,
     )
     .await

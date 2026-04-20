@@ -29,11 +29,11 @@ pub async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_schema_migrations_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS schema_migrations (
+        r"CREATE TABLE IF NOT EXISTS schema_migrations (
             version VARCHAR(50) PRIMARY KEY,
             applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             description TEXT
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -42,7 +42,7 @@ async fn create_schema_migrations_table(pool: &sqlx::PgPool) -> Result<(), sqlx:
 
 async fn create_users_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS users (
+        r"CREATE TABLE IF NOT EXISTS users (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             username VARCHAR(50) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
@@ -58,7 +58,7 @@ async fn create_users_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             two_factor_email_code_expiry TIMESTAMP WITH TIME ZONE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -67,19 +67,19 @@ async fn create_users_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_network_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS network_regions (
+        r"CREATE TABLE IF NOT EXISTS network_regions (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(20) NOT NULL UNIQUE,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS network_cidrs (
+        r"CREATE TABLE IF NOT EXISTS network_cidrs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             network_region_id UUID NOT NULL REFERENCES network_regions(id),
@@ -92,7 +92,7 @@ async fn create_network_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -101,7 +101,7 @@ async fn create_network_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS rooms (
+        r"CREATE TABLE IF NOT EXISTS rooms (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             room_type VARCHAR(20) NOT NULL DEFAULT 'OFFICE',
@@ -109,7 +109,7 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_room_type CHECK (room_type IN ('OFFICE', 'DATA_CENTER'))
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -122,20 +122,20 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     }
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS room_networks (
+        r"CREATE TABLE IF NOT EXISTS room_networks (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
             network_id UUID NOT NULL REFERENCES network_cidrs(id),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(room_id, network_id)
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS svg_layouts (
+        r"CREATE TABLE IF NOT EXISTS svg_layouts (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             layout_type VARCHAR(20) NOT NULL,
             room_id UUID REFERENCES rooms(id) ON DELETE CASCADE,
@@ -150,7 +150,7 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE NULLS NOT DISTINCT(layout_type, room_id, network_region_id, element_id)
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -159,7 +159,7 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS cabinets (
+        r"CREATE TABLE IF NOT EXISTS cabinets (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
@@ -168,7 +168,7 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -183,7 +183,7 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     }
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS positions (
+        r"CREATE TABLE IF NOT EXISTS positions (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             cabinet_id UUID NOT NULL REFERENCES cabinets(id) ON DELETE CASCADE,
@@ -193,20 +193,20 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS position_ports (
+        r"CREATE TABLE IF NOT EXISTS position_ports (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             position_id UUID NOT NULL REFERENCES positions(id) ON DELETE CASCADE,
             switch_port_id UUID NOT NULL REFERENCES switch_ports(id) ON DELETE CASCADE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(position_id, switch_port_id)
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -215,7 +215,7 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_workstation_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS workstations (
+        r"CREATE TABLE IF NOT EXISTS workstations (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             room_id UUID NOT NULL REFERENCES rooms(id),
@@ -223,20 +223,20 @@ async fn create_workstation_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS workstation_ports (
+        r"CREATE TABLE IF NOT EXISTS workstation_ports (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             workstation_id UUID NOT NULL REFERENCES workstations(id) ON DELETE CASCADE,
             switch_port_id UUID NOT NULL REFERENCES switch_ports(id) ON DELETE CASCADE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(workstation_id, switch_port_id)
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -245,7 +245,7 @@ async fn create_workstation_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
 
 async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS switches (
+        r"CREATE TABLE IF NOT EXISTS switches (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(100) NOT NULL,
             network_region_id UUID NOT NULL REFERENCES network_regions(id),
@@ -266,7 +266,7 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -278,7 +278,7 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     }
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS switch_ports (
+        r"CREATE TABLE IF NOT EXISTS switch_ports (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             switch_id UUID NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
             port_number VARCHAR(30) NOT NULL,
@@ -291,13 +291,13 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(switch_id, port_number)
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS switch_macs (
+        r"CREATE TABLE IF NOT EXISTS switch_macs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             switch_id UUID NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
             ip_address INET NOT NULL,
@@ -307,13 +307,13 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(switch_id, ip_address)
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS switch_lldps (
+        r"CREATE TABLE IF NOT EXISTS switch_lldps (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             switch_id UUID NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
             local_port VARCHAR(50) NOT NULL,
@@ -325,7 +325,7 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(switch_id, local_port)
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -334,7 +334,7 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 }
 
 async fn create_ip_managers_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"CREATE TABLE IF NOT EXISTS ip_managers (
+    sqlx::query(r"CREATE TABLE IF NOT EXISTS ip_managers (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
@@ -357,14 +357,14 @@ async fn create_ip_managers_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
             )
-        )"#)
+        )")
         .execute(pool).await?;
     Ok(())
 }
 
 async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS operation_logs (
+        r"CREATE TABLE IF NOT EXISTS operation_logs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             user_id UUID NOT NULL REFERENCES users(id),
             action VARCHAR(100) NOT NULL,
@@ -374,13 +374,13 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             result BOOLEAN NOT NULL,
             ip_address VARCHAR(50) NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS task_logs (
+        r"CREATE TABLE IF NOT EXISTS task_logs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             task_name VARCHAR(100) NOT NULL,
             status VARCHAR(20) NOT NULL,
@@ -388,13 +388,13 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             start_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             end_time TIMESTAMP WITH TIME ZONE,
             duration INTEGER
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS login_logs (
+        r"CREATE TABLE IF NOT EXISTS login_logs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             username VARCHAR(50) NOT NULL,
             ip_address VARCHAR(50) NOT NULL,
@@ -402,13 +402,13 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             success BOOLEAN NOT NULL,
             error_message VARCHAR(255),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS mac_history (
+        r"CREATE TABLE IF NOT EXISTS mac_history (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             mac_address VARCHAR(20) NOT NULL,
             ip_address INET NOT NULL,
@@ -421,7 +421,7 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             network_id UUID NOT NULL REFERENCES network_cidrs(id),
             change_type VARCHAR(20) NOT NULL DEFAULT 'update',
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -431,19 +431,19 @@ async fn create_log_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_token_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS revoked_tokens (
+        r"CREATE TABLE IF NOT EXISTS revoked_tokens (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             token_hash VARCHAR(255) NOT NULL,
             user_id UUID REFERENCES users(id),
             revoked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             expiry TIMESTAMP WITH TIME ZONE NOT NULL
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS token_usage (
+        r"CREATE TABLE IF NOT EXISTS token_usage (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             token_hash VARCHAR(255) NOT NULL,
             user_id UUID REFERENCES users(id),
@@ -451,7 +451,7 @@ async fn create_token_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             user_agent VARCHAR(255),
             request_path VARCHAR(255) NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -460,7 +460,7 @@ async fn create_token_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_notification_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS notifications (
+        r"CREATE TABLE IF NOT EXISTS notifications (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             user_id UUID REFERENCES users(id),
             title VARCHAR(100) NOT NULL,
@@ -468,7 +468,7 @@ async fn create_notification_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Err
             notification_type VARCHAR(20) NOT NULL,
             read BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await
@@ -477,7 +477,7 @@ async fn create_notification_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Err
 
 async fn create_system_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS system_configs (
+        r"CREATE TABLE IF NOT EXISTS system_configs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             config_type VARCHAR(50) NOT NULL,
             key VARCHAR(100) NOT NULL,
@@ -485,13 +485,13 @@ async fn create_system_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(config_type, key)
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"CREATE TABLE IF NOT EXISTS scheduled_tasks (
+        r"CREATE TABLE IF NOT EXISTS scheduled_tasks (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(100) NOT NULL UNIQUE,
             task_type VARCHAR(50) NOT NULL,
@@ -503,7 +503,7 @@ async fn create_system_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             last_result TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )"#,
+        )",
     )
     .execute(pool)
     .await?;
@@ -614,18 +614,18 @@ async fn migrate_ip_managers_constraint(pool: &sqlx::PgPool) -> Result<(), sqlx:
             .await?;
 
         sqlx::query(
-            r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown'))"#
+            r"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown'))"
         )
         .execute(pool)
         .await?;
 
         sqlx::query(
-            r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
+            r"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
                 (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
-            )"#
+            )"
         )
         .execute(pool)
         .await?;
@@ -658,14 +658,14 @@ async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx:
         }
 
         if let Err(e) = sqlx::query(
-            r#"UPDATE switches s 
+            r"UPDATE switches s 
                SET cabinet_id = p.cabinet_id, 
                    start_u = p.start_u, 
                    end_u = p.end_u
                FROM positions p
                JOIN ip_managers im ON im.position_id = p.id 
                WHERE im.switch_id = s.id
-               AND s.cabinet_id IS NULL"#,
+               AND s.cabinet_id IS NULL",
         )
         .execute(pool)
         .await
@@ -688,7 +688,7 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     if count == 0 {
         sqlx::query(
-            r#"CREATE TABLE mac_history (
+            r"CREATE TABLE mac_history (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 mac_address VARCHAR(20) NOT NULL,
                 ip_address INET NOT NULL,
@@ -701,7 +701,7 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 network_id UUID NOT NULL REFERENCES network_cidrs(id),
                 change_type VARCHAR(20) NOT NULL DEFAULT 'update',
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-            )"#,
+            )",
         )
         .execute(pool)
         .await?;
@@ -715,7 +715,7 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .unwrap_or(false);
 
     if !trigger_exists {
-        sqlx::query(r#"
+        sqlx::query(r"
             CREATE OR REPLACE FUNCTION log_mac_address_change() RETURNS TRIGGER AS $$
             BEGIN
                 IF TG_OP = 'INSERT' THEN
@@ -744,7 +744,7 @@ async fn migrate_mac_history(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-        "#)
+        ")
         .execute(pool)
         .await?;
 
@@ -803,7 +803,7 @@ async fn migrate_drop_switch_cabinet_fields(pool: &sqlx::PgPool) -> Result<(), s
 
     if count == 0 {
         if let Err(e) = sqlx::query(
-            r#"CREATE OR REPLACE VIEW switches_with_details AS
+            r"CREATE OR REPLACE VIEW switches_with_details AS
             SELECT 
                 s.id, s.name, s.network_region_id, s.network_id, s.model, s.vendor,
                 s.location, s.snmp_version, 
@@ -832,7 +832,7 @@ async fn migrate_drop_switch_cabinet_fields(pool: &sqlx::PgPool) -> Result<(), s
                 LIMIT 1
             ) im ON true
             LEFT JOIN positions p ON im.position_id = p.id
-            LEFT JOIN cabinets c ON p.cabinet_id = c.id"#,
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id",
         )
         .execute(pool)
         .await
@@ -841,7 +841,7 @@ async fn migrate_drop_switch_cabinet_fields(pool: &sqlx::PgPool) -> Result<(), s
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) VALUES ('drop_switch_cabinet_fields', 'switches表cabinet_id/start_u/end_u通过ip_managers+positions关联获取')"#
+            r"INSERT INTO schema_migrations (version, description) VALUES ('drop_switch_cabinet_fields', 'switches表cabinet_id/start_u/end_u通过ip_managers+positions关联获取')"
         )
         .execute(pool)
         .await?;
@@ -917,9 +917,9 @@ async fn migrate_log_cleanup_tasks(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
 
         for (name, task_type, cron, config) in &tasks {
             if let Err(e) = sqlx::query(
-                r#"INSERT INTO scheduled_tasks (id, name, task_type, cron_expression, enabled, config, created_at, updated_at)
+                r"INSERT INTO scheduled_tasks (id, name, task_type, cron_expression, enabled, config, created_at, updated_at)
                    VALUES (uuid_generate_v4(), $1, $2, $3, TRUE, $4::JSONB, NOW(), NOW())
-                   ON CONFLICT (name) DO NOTHING"#
+                   ON CONFLICT (name) DO NOTHING"
             )
             .bind(name)
             .bind(task_type)
@@ -933,7 +933,7 @@ async fn migrate_log_cleanup_tasks(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) VALUES ('log_cleanup_tasks', '添加日志表定期清理任务')"#
+            r"INSERT INTO schema_migrations (version, description) VALUES ('log_cleanup_tasks', '添加日志表定期清理任务')"
         )
         .execute(pool)
         .await?;
@@ -970,8 +970,7 @@ async fn migrate_log_table_partitions(pool: &sqlx::PgPool) -> Result<(), sqlx::E
 
             if !is_partitioned
                 && let Err(e) = sqlx::query(&format!(
-                    "ALTER TABLE {} PARTITION BY RANGE ({})",
-                    table_name, partition_col
+                    "ALTER TABLE {table_name} PARTITION BY RANGE ({partition_col})"
                 ))
                 .execute(pool)
                 .await
@@ -984,7 +983,7 @@ async fn migrate_log_table_partitions(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) VALUES ('log_table_partitions', '日志表按时间分区（RANGE by month）')"#
+            r"INSERT INTO schema_migrations (version, description) VALUES ('log_table_partitions', '日志表按时间分区（RANGE by month）')"
         )
         .execute(pool)
         .await?;
@@ -1004,12 +1003,12 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
 
     if count == 0 {
         let rows = sqlx::query(
-            r#"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+            r"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
                FROM switches s
                WHERE s.cabinet_id IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM ip_managers im WHERE im.switch_id = s.id AND im.position_id IS NOT NULL
-               )"#
+               )"
         )
         .fetch_all(pool)
         .await
@@ -1023,34 +1022,30 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             let end_u: Option<i32> = row.get("end_u");
             let description: Option<String> = row.get("description");
 
-            let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
+            let pos_id: Uuid = if let Ok(Some(existing_id)) = sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
             )
             .bind(&name)
             .bind(cabinet_id)
             .fetch_optional(pool)
-            .await
-            {
-                Ok(Some(existing_id)) => existing_id,
-                _ => {
-                    let new_id = Uuid::new_v4();
-                    if let Err(e) = sqlx::query(
-                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
-                    )
-                    .bind(new_id)
-                    .bind(&name)
-                    .bind(cabinet_id)
-                    .bind(start_u.unwrap_or(1i32))
-                    .bind(end_u.unwrap_or(1i32))
-                    .bind(&description)
-                    .execute(pool)
-                    .await
-                    {
-                        warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
-                        continue;
-                    }
-                    new_id
+            .await { existing_id } else {
+                let new_id = Uuid::new_v4();
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+                )
+                .bind(new_id)
+                .bind(&name)
+                .bind(cabinet_id)
+                .bind(start_u.unwrap_or(1i32))
+                .bind(end_u.unwrap_or(1i32))
+                .bind(&description)
+                .execute(pool)
+                .await
+                {
+                    warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
+                    continue;
                 }
+                new_id
             };
 
             if let Err(e) = sqlx::query(
@@ -1066,7 +1061,7 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_link', '为有cabinet_id但无position关联的交换机创建position记录并关联ip_managers')"#
+            r"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_link', '为有cabinet_id但无position关联的交换机创建position记录并关联ip_managers')"
         )
         .execute(pool)
         .await?;
@@ -1090,23 +1085,23 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
             .await?;
 
         sqlx::query(
-            r#"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
+            r"ALTER TABLE ip_managers ADD CONSTRAINT chk_device_consistency CHECK (
                 (device_type = 'switch' AND switch_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL AND switch_id IS NULL) OR
                 (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_id IS NULL AND switch_port_id IS NULL)
-            )"#
+            )"
         )
         .execute(pool)
         .await?;
 
         let switches_without_position = sqlx::query(
-            r#"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+            r"SELECT s.id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
                FROM switches s
                WHERE s.cabinet_id IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM ip_managers im WHERE im.switch_id = s.id AND im.position_id IS NOT NULL
-               )"#
+               )"
         )
         .fetch_all(pool)
         .await
@@ -1120,34 +1115,30 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
             let end_u: Option<i32> = row.get("end_u");
             let description: Option<String> = row.get("description");
 
-            let pos_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
+            let pos_id: Uuid = if let Ok(Some(existing_id)) = sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
             )
             .bind(&name)
             .bind(cabinet_id)
             .fetch_optional(pool)
-            .await
-            {
-                Ok(Some(existing_id)) => existing_id,
-                _ => {
-                    let new_id = Uuid::new_v4();
-                    if let Err(e) = sqlx::query(
-                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
-                    )
-                    .bind(new_id)
-                    .bind(&name)
-                    .bind(cabinet_id)
-                    .bind(start_u.unwrap_or(1i32))
-                    .bind(end_u.unwrap_or(1i32))
-                    .bind(&description)
-                    .execute(pool)
-                    .await
-                    {
-                        warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
-                        continue;
-                    }
-                    new_id
+            .await { existing_id } else {
+                let new_id = Uuid::new_v4();
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+                )
+                .bind(new_id)
+                .bind(&name)
+                .bind(cabinet_id)
+                .bind(start_u.unwrap_or(1i32))
+                .bind(end_u.unwrap_or(1i32))
+                .bind(&description)
+                .execute(pool)
+                .await
+                {
+                    warn!("为交换机 {} 创建关联机位失败: {}", switch_id, e);
+                    continue;
                 }
+                new_id
             };
 
             if let Err(e) = sqlx::query(
@@ -1163,7 +1154,7 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_constraint', '更新chk_device_consistency约束允许switch类型有position_id，并为现有交换机创建position关联')"#
+            r"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_constraint', '更新chk_device_consistency约束允许switch类型有position_id，并为现有交换机创建position关联')"
         )
         .execute(pool)
         .await?;
@@ -1199,8 +1190,8 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         if let Err(e) = sqlx::query(
-            r#"ALTER TABLE positions ADD CONSTRAINT chk_position_device_type 
-               CHECK (device_type IN ('cabinet_position', 'switch'))"#,
+            r"ALTER TABLE positions ADD CONSTRAINT chk_position_device_type 
+               CHECK (device_type IN ('cabinet_position', 'switch'))",
         )
         .execute(pool)
         .await
@@ -1227,9 +1218,9 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         }
 
         let switches = sqlx::query(
-            r#"SELECT s.id as switch_id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
+            r"SELECT s.id as switch_id, s.name, s.cabinet_id, s.start_u, s.end_u, s.description
                FROM switches s
-               WHERE s.cabinet_id IS NOT NULL"#,
+               WHERE s.cabinet_id IS NOT NULL",
         )
         .fetch_all(pool)
         .await
@@ -1252,46 +1243,43 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             .await
             .unwrap_or(None);
 
-            match existing_pos {
-                Some((pos_id, device_type)) => {
-                    if device_type != "switch"
-                        && let Err(e) = sqlx::query(
-                            "UPDATE positions SET device_type = 'switch', device_id = $1 WHERE id = $2"
-                        )
-                        .bind(switch_id)
-                        .bind(pos_id)
-                        .execute(pool)
-                        .await
-                    {
-                        warn!("更新机位 {} 为交换机类型失败: {}", pos_id, e);
-                    }
-                }
-                None => {
-                    let pos_id = Uuid::new_v4();
-                    if let Err(e) = sqlx::query(
-                        r#"INSERT INTO positions 
-                           (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) 
-                           VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, NOW(), NOW())"#
+            if let Some((pos_id, device_type)) = existing_pos {
+                if device_type != "switch"
+                    && let Err(e) = sqlx::query(
+                        "UPDATE positions SET device_type = 'switch', device_id = $1 WHERE id = $2"
                     )
-                    .bind(pos_id)
-                    .bind(&name)
-                    .bind(cabinet_id)
-                    .bind(start_u.unwrap_or(1i32))
-                    .bind(end_u.unwrap_or(1i32))
-                    .bind(&description)
                     .bind(switch_id)
+                    .bind(pos_id)
                     .execute(pool)
                     .await
-                    {
-                        warn!("为交换机 {} 创建机位记录失败: {}", switch_id, e);
-                    }
+                {
+                    warn!("更新机位 {} 为交换机类型失败: {}", pos_id, e);
+                }
+            } else {
+                let pos_id = Uuid::new_v4();
+                if let Err(e) = sqlx::query(
+                    r"INSERT INTO positions 
+                       (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) 
+                       VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, NOW(), NOW())"
+                )
+                .bind(pos_id)
+                .bind(&name)
+                .bind(cabinet_id)
+                .bind(start_u.unwrap_or(1i32))
+                .bind(end_u.unwrap_or(1i32))
+                .bind(&description)
+                .bind(switch_id)
+                .execute(pool)
+                .await
+                {
+                    warn!("为交换机 {} 创建机位记录失败: {}", switch_id, e);
                 }
             }
         }
 
         sqlx::query(
-            r#"INSERT INTO schema_migrations (version, description) 
-               VALUES ('position_device_type', '为positions表添加device_type和device_id字段，并将交换机机位迁移到positions表')"#
+            r"INSERT INTO schema_migrations (version, description) 
+               VALUES ('position_device_type', '为positions表添加device_type和device_id字段，并将交换机机位迁移到positions表')"
         )
         .execute(pool)
         .await?;
@@ -1306,7 +1294,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .await?;
 
     sqlx::query(
-        r#"
+        r"
         CREATE VIEW ip_managers_with_details AS
         SELECT 
             imm.id,
@@ -1362,7 +1350,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
         LEFT JOIN network_cidrs n ON imm.network_id = n.id
         LEFT JOIN network_regions nt ON n.network_region_id = nt.id
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1372,7 +1360,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .await?;
 
     sqlx::query(
-        r#"
+        r"
         CREATE VIEW mac_comparison AS
         SELECT 
             sm.switch_id,
@@ -1388,7 +1376,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         FROM switch_macs sm
         JOIN switches s ON sm.switch_id = s.id
         LEFT JOIN ip_managers im ON sm.ip_address = im.ip_address AND im.device_type != 'switch'
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1398,7 +1386,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
 async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r#"
+        r"
         CREATE OR REPLACE FUNCTION update_updated_at_column()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -1406,7 +1394,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1433,10 +1421,9 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     ];
 
     for table in &tables_with_updated_at {
-        let trigger_name = format!("trg_{}_updated_at", table);
+        let trigger_name = format!("trg_{table}_updated_at");
         if let Err(e) = sqlx::query(&format!(
-            "CREATE TRIGGER {} BEFORE UPDATE ON {} FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()",
-            trigger_name, table
+            "CREATE TRIGGER {trigger_name} BEFORE UPDATE ON {table} FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
         ))
         .execute(pool)
         .await
@@ -1446,7 +1433,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     }
 
     sqlx::query(
-        r#"
+        r"
         CREATE OR REPLACE FUNCTION check_position_overlap() RETURNS TRIGGER AS $$
         BEGIN
             IF EXISTS (
@@ -1465,7 +1452,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1484,7 +1471,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        r#"
+        r"
         CREATE OR REPLACE FUNCTION check_switch_circular_dependency() RETURNS TRIGGER AS $$
         BEGIN
             IF NEW.parent_switch_id = NEW.id THEN
@@ -1508,7 +1495,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1528,7 +1515,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        r#"
+        r"
         CREATE OR REPLACE FUNCTION check_parent_port_consistency() RETURNS TRIGGER AS $$
         BEGIN
             IF NEW.parent_switch_id IS NOT NULL AND NEW.parent_port_id IS NOT NULL THEN
@@ -1542,7 +1529,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#,
+    ",
     )
     .execute(pool)
     .await?;
@@ -1561,7 +1548,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query(r#"
+    sqlx::query(r"
         CREATE OR REPLACE FUNCTION log_mac_address_change() RETURNS TRIGGER AS $$
         BEGIN
             IF TG_OP = 'INSERT' THEN
@@ -1590,7 +1577,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#)
+    ")
     .execute(pool)
     .await?;
 

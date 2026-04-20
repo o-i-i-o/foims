@@ -70,7 +70,11 @@ async fn main() -> std::io::Result<()> {
     log_bilingual("system.config_loaded");
 
     // 条件创建数据库连接池
-    let pool = if !config.init.enabled {
+    let pool = if config.init.enabled {
+        // 使用双语日志
+        log_bilingual("system.init_mode_enabled");
+        None
+    } else {
         let p = DbPool::new(&config.database)
             .await
             .expect("Failed to create database pool");
@@ -81,10 +85,6 @@ async fn main() -> std::io::Result<()> {
         }
 
         Some(p)
-    } else {
-        // 使用双语日志
-        log_bilingual("system.init_mode_enabled");
-        None
     };
 
     // 初始化系统启动时间
@@ -120,7 +120,7 @@ async fn main() -> std::io::Result<()> {
 
     // 启动速率限制清理任务
     if rate_limit_enabled {
-        start_cleanup_task(rate_limiter.clone()).await;
+        start_cleanup_task(rate_limiter.clone());
         info!("速率限制中间件已启用");
         info!(
             "IP限制: {}/{}秒",
@@ -182,7 +182,7 @@ async fn main() -> std::io::Result<()> {
                 http_rate_limit_enabled,
             ))
             .configure(|cfg| {
-                configure_app_services(cfg, &http_config, &http_pool, enable_normal_routes)
+                configure_app_services(cfg, &http_config, &http_pool, enable_normal_routes);
             });
 
         if !http_config.init.enabled && auto_https {
@@ -333,7 +333,7 @@ async fn main() -> std::io::Result<()> {
                 )
                 .await
                 {
-                    Ok(_) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
+                    Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
                     Err(e) => info!(
                         "启动HTTP/3服务器失败 ({}:{}): {:?}",
                         host_str_clone, port_clone, e
@@ -349,8 +349,6 @@ async fn main() -> std::io::Result<()> {
             HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
 
         let https_server = match http_version {
-            "HTTP/1.1" => https_server,
-            "HTTP/2" => https_server,
             "HTTP/3" => {
                 info!("启动HTTP/3服务器...");
                 https_server
@@ -373,8 +371,8 @@ async fn main() -> std::io::Result<()> {
             http_version,
             ipv6_address,
             https_port,
-            &cert_path.to_string(),
-            &key_path.to_string(),
+            &cert_path.clone(),
+            &key_path.clone(),
             &config,
             &pool,
         );
@@ -433,8 +431,8 @@ async fn main() -> std::io::Result<()> {
                     &http_version_clone,
                     &ipv4_address_clone,
                     https_port_clone,
-                    &cert_path_ipv4.to_string(),
-                    &key_path_ipv4.to_string(),
+                    &cert_path_ipv4.clone(),
+                    &key_path_ipv4.clone(),
                     &config_clone,
                     &pool_clone,
                 );
@@ -574,12 +572,12 @@ fn configure_app_services(
             "/init_index.html",
             web::get().to(|| async {
                 let web_dir = get_web_dir();
-                let path = format!("{}/static/init_index.html", web_dir);
+                let path = format!("{web_dir}/static/init_index.html");
                 actix_web::HttpResponse::Ok()
                     .content_type("text/html")
                     .body(
                         std::fs::read_to_string(&path)
-                            .unwrap_or_else(|e| format!("Error reading init_index.html: {}", e)),
+                            .unwrap_or_else(|e| format!("Error reading init_index.html: {e}")),
                     )
             }),
         )
@@ -619,12 +617,12 @@ fn configure_app_services(
             "/main.html",
             web::get().to(|| async {
                 let web_dir = get_web_dir();
-                let path = format!("{}/static/main.html", web_dir);
+                let path = format!("{web_dir}/static/main.html");
                 actix_web::HttpResponse::Ok()
                     .content_type("text/html")
                     .body(
                         std::fs::read_to_string(&path)
-                            .unwrap_or_else(|e| format!("Error reading main.html: {}", e)),
+                            .unwrap_or_else(|e| format!("Error reading main.html: {e}")),
                     )
             }),
         )

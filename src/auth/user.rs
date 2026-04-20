@@ -25,7 +25,7 @@ pub async fn get_users(
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let search_pattern = format!("%{}%", search);
+    let search_pattern = format!("%{search}%");
 
     let (total, users) = if search.is_empty() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
@@ -35,7 +35,7 @@ pub async fn get_users(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -50,7 +50,7 @@ pub async fn get_users(
             Ok(u) => u,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -67,7 +67,7 @@ pub async fn get_users(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -83,7 +83,7 @@ pub async fn get_users(
             Ok(u) => u,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -111,7 +111,7 @@ pub async fn create_user(
 ) -> Result<HttpResponse> {
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -125,8 +125,7 @@ pub async fn create_user(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -146,8 +145,7 @@ pub async fn create_user(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -161,7 +159,7 @@ pub async fn create_user(
         Ok(password) => password,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("密码哈希错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("密码哈希错误: {err}"))));
         }
     };
 
@@ -184,7 +182,7 @@ pub async fn create_user(
     .await
     {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                format!("数据库插入错误: {}", err),
+                format!("数据库插入错误: {err}"),
             )));
     }
 
@@ -228,7 +226,7 @@ pub async fn get_user(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
             return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("用户未找到")));
         },
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 
@@ -246,7 +244,7 @@ pub async fn update_user(
 
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -259,8 +257,7 @@ pub async fn update_user(
         Err(err) => {
             return Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {}",
-                    err
+                    "Database query error: {err}"
                 ))),
             );
         }
@@ -289,7 +286,7 @@ pub async fn update_user(
     .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
     }
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
@@ -311,7 +308,7 @@ pub async fn update_user(
     .fetch_one(pool.get_conn()).await {
         Ok(user) => user,
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
         }
     };
 
@@ -335,8 +332,7 @@ pub async fn delete_user(
         Err(err) => {
             return Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {}",
-                    err
+                    "Database query error: {err}"
                 ))),
             );
         }
@@ -351,8 +347,7 @@ pub async fn delete_user(
         Err(err) => {
             return Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "数据库事务启动失败: {}",
-                    err
+                    "数据库事务启动失败: {err}"
                 ))),
             );
         }
@@ -365,7 +360,7 @@ pub async fn delete_user(
     {
         let _ = tx.rollback().await;
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
 
     if let Err(err) = sqlx::query("DELETE FROM notifications WHERE user_id = $1")
@@ -375,7 +370,7 @@ pub async fn delete_user(
     {
         let _ = tx.rollback().await;
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
 
     if let Err(err) = sqlx::query("DELETE FROM users WHERE id = $1")
@@ -385,12 +380,12 @@ pub async fn delete_user(
     {
         let _ = tx.rollback().await;
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
 
     if let Err(err) = tx.commit().await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("事务提交失败: {}", err))));
+            .json(ApiResponse::<()>::error(format!("事务提交失败: {err}"))));
     }
 
     let details = json!({});

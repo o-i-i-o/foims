@@ -100,7 +100,7 @@ pub async fn create_database_api(
             }
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("备份失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("备份失败: {e}"))));
             }
         }
 
@@ -108,7 +108,7 @@ pub async fn create_database_api(
 
         if let Err(e) = drop_database(&config.database).await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
         }
     } else {
         drop(pool);
@@ -125,8 +125,7 @@ pub async fn create_database_api(
             Err(e) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "连接PostgreSQL失败: {}",
-                        e
+                        "连接PostgreSQL失败: {e}"
                     ))),
                 );
             }
@@ -141,7 +140,7 @@ pub async fn create_database_api(
                 Ok(exists) => exists,
                 Err(e) => {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {e}"))));
                 }
             };
 
@@ -149,14 +148,14 @@ pub async fn create_database_api(
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
             }
         }
     }
 
     if let Err(e) = create_database(&config.database).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建数据库失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建数据库失败: {e}"))));
     }
 
     let pool = match ensure_database_and_schema(&config.database).await {
@@ -168,7 +167,7 @@ pub async fn create_database_api(
 
     if let Err(e) = create_tables(&pool).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建表失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建表失败: {e}"))));
     }
 
     info!("数据库创建成功");
@@ -214,7 +213,7 @@ pub async fn import_database_api(
             }
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("备份失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("备份失败: {e}"))));
             }
         }
 
@@ -222,7 +221,7 @@ pub async fn import_database_api(
 
         if let Err(e) = drop_database(&config.database).await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
         }
     } else {
         drop(pool);
@@ -239,8 +238,7 @@ pub async fn import_database_api(
             Err(e) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "连接PostgreSQL失败: {}",
-                        e
+                        "连接PostgreSQL失败: {e}"
                     ))),
                 );
             }
@@ -255,7 +253,7 @@ pub async fn import_database_api(
                 Ok(exists) => exists,
                 Err(e) => {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {e}"))));
                 }
             };
 
@@ -263,14 +261,14 @@ pub async fn import_database_api(
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
             }
         }
     }
 
     if let Err(e) = create_database(&config.database).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建数据库失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建数据库失败: {e}"))));
     }
 
     let pool = match ensure_database_and_schema(&config.database).await {
@@ -282,14 +280,13 @@ pub async fn import_database_api(
 
     if let Err(e) = create_tables(&pool).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建表失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建表失败: {e}"))));
     }
 
     if let Err(e) = validate_table_columns(&pool).await {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "数据库字段完整性校验失败: {}",
-                e
+                "数据库字段完整性校验失败: {e}"
             ))),
         );
     }
@@ -318,7 +315,7 @@ pub async fn import_database_from_file(
     let mut sql_file_path: Option<PathBuf> = None;
 
     std::fs::create_dir_all("/tmp/ipma_import").map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("创建临时目录失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("创建临时目录失败: {e}"))
     })?;
 
     while let Some(mut field) = payload
@@ -340,11 +337,11 @@ pub async fn import_database_from_file(
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
         } else if field_name == "sql_file" {
             let filename = content_disposition
-                .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
+                .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string))
                 .unwrap_or_else(|| "import.sql".to_string());
-            let filepath = PathBuf::from(format!("/tmp/ipma_import/{}", filename));
+            let filepath = PathBuf::from(format!("/tmp/ipma_import/{filename}"));
             let mut f = std::fs::File::create(&filepath).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("创建文件失败: {}", e))
+                actix_web::error::ErrorInternalServerError(format!("创建文件失败: {e}"))
             })?;
 
             let data = field
@@ -353,20 +350,18 @@ pub async fn import_database_from_file(
                 .map_err(actix_web::error::ErrorBadRequest)?
                 .map_err(actix_web::error::ErrorBadRequest)?;
             f.write_all(&data).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("写入文件失败: {}", e))
+                actix_web::error::ErrorInternalServerError(format!("写入文件失败: {e}"))
             })?;
             sql_file_path = Some(filepath);
         }
     }
 
-    let verification = match verification_code {
-        Some(code) => code,
-        None => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少验证码"))),
+    let Some(verification) = verification_code else {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少验证码")))
     };
 
-    let sql_path = match sql_file_path {
-        Some(path) => path,
-        None => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少SQL文件"))),
+    let Some(sql_path) = sql_file_path else {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("缺少SQL文件")))
     };
 
     if let Err(e) = verify_code(&verification) {
@@ -392,7 +387,7 @@ pub async fn import_database_from_file(
             }
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("备份失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("备份失败: {e}"))));
             }
         }
 
@@ -400,7 +395,7 @@ pub async fn import_database_from_file(
 
         if let Err(e) = drop_database(&config.database).await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
         }
     } else {
         drop(pool);
@@ -417,8 +412,7 @@ pub async fn import_database_from_file(
             Err(e) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "连接PostgreSQL失败: {}",
-                        e
+                        "连接PostgreSQL失败: {e}"
                     ))),
                 );
             }
@@ -433,7 +427,7 @@ pub async fn import_database_from_file(
                 Ok(exists) => exists,
                 Err(e) => {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("检查数据库失败: {e}"))));
                 }
             };
 
@@ -441,14 +435,14 @@ pub async fn import_database_from_file(
             info!("数据库存在但无数据，正在删除重建...");
             if let Err(e) = drop_database(&config.database).await {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("删除数据库失败: {e}"))));
             }
         }
     }
 
     if let Err(e) = create_database(&config.database).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建数据库失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建数据库失败: {e}"))));
     }
 
     let output = std::process::Command::new("psql")
@@ -464,14 +458,13 @@ pub async fn import_database_from_file(
         .arg(&sql_path)
         .env("PGPASSWORD", &config.database.password)
         .output()
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("执行psql失败: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("执行psql失败: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "导入SQL文件失败: {}",
-                stderr
+                "导入SQL文件失败: {stderr}"
             ))),
         );
     }
@@ -486,8 +479,7 @@ pub async fn import_database_from_file(
     if let Err(e) = validate_table_columns(&pool).await {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "数据库字段完整性校验失败: {}",
-                e
+                "数据库字段完整性校验失败: {e}"
             ))),
         );
     }
@@ -510,7 +502,7 @@ pub async fn init_system(
 ) -> Result<HttpResponse> {
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -542,11 +534,11 @@ pub async fn init_system(
                     0
                 } else {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {e}"))));
                 }
             } else {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {e}"))));
             }
         }
     };
@@ -561,7 +553,7 @@ pub async fn init_system(
         && let Err(e) = create_tables(&pool).await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建表失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("创建表失败: {e}"))));
     }
 
     let password_hash = match hash(&req.password, BCRYPT_COST) {
@@ -569,7 +561,7 @@ pub async fn init_system(
         Err(e) => {
             tracing::error!("密码哈希错误: {:?}", e);
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("密码哈希错误: {}", e))));
+                .json(ApiResponse::<()>::error(format!("密码哈希错误: {e}"))));
         }
     };
 
@@ -584,8 +576,8 @@ pub async fn init_system(
     );
 
     if let Err(e) = sqlx::query(
-        r#"INSERT INTO users (id, username, password_hash, email, role, status) 
-               VALUES ($1, $2, $3, $4, $5, $6)"#,
+        r"INSERT INTO users (id, username, password_hash, email, role, status) 
+               VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(user_id)
     .bind(&req.username)
@@ -599,15 +591,14 @@ pub async fn init_system(
         tracing::error!("创建管理员用户失败: {:?}", e);
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "创建管理员用户失败: {}",
-                e
+                "创建管理员用户失败: {e}"
             ))),
         );
     }
 
     if let Err(e) = update_config_enabled(false) {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新配置失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("更新配置失败: {e}"))));
     }
 
     info!(
@@ -628,14 +619,14 @@ pub async fn init_db(config: web::Data<Config>) -> Result<HttpResponse> {
 
     let required_tables_exist = check_required_tables_exist(&pool).await;
 
-    if !required_tables_exist {
+    if required_tables_exist {
+        info!("数据库表结构已存在，跳过初始化");
+    } else {
         if let Err(e) = create_tables(&pool).await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("创建表失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("创建表失败: {e}"))));
         }
         info!("数据库表结构初始化成功");
-    } else {
-        info!("数据库表结构已存在，跳过初始化");
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库初始化成功")))
@@ -670,7 +661,7 @@ pub async fn clear_database(
     tracing::info!("正在通过API清空数据库...");
     if let Err(e) = drop_all_tables(&pool).await {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("清空数据库失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("清空数据库失败: {e}"))));
     }
 
     tracing::info!("通过API清空数据库成功");
@@ -678,14 +669,11 @@ pub async fn clear_database(
 }
 
 pub async fn check_init_status(config: web::Data<Config>) -> Result<HttpResponse> {
-    let pool = match ensure_database_and_schema(&config.database).await {
-        Ok(p) => p,
-        Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
-                "initialized": false,
-                "version": env!("CARGO_PKG_VERSION"),
-            })));
-        }
+    let Ok(pool) = ensure_database_and_schema(&config.database).await else {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "initialized": false,
+            "version": env!("CARGO_PKG_VERSION"),
+        })))
     };
 
     let initialized = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")

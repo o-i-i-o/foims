@@ -39,7 +39,7 @@ fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
         .ok()?;
     let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
 
-    claims.get("sub")?.as_str().map(|s| s.to_string())
+    claims.get("sub")?.as_str().map(std::string::ToString::to_string)
 }
 
 #[derive(Debug)]
@@ -77,7 +77,7 @@ impl RateLimitEntry {
         }
     }
 
-    fn increment(&mut self) -> u32 {
+    const fn increment(&mut self) -> u32 {
         self.count += 1;
         self.count
     }
@@ -98,6 +98,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    #[must_use] 
     pub fn new(ip_limit: u32, user_limit: u32, login_limit: u32, window_secs: u64) -> Self {
         Self {
             ip_limits: Arc::new(RwLock::new(HashMap::new())),
@@ -109,6 +110,7 @@ impl RateLimiter {
         }
     }
 
+    #[must_use] 
     pub fn default_limiter() -> Self {
         Self::new(
             DEFAULT_IP_LIMIT,
@@ -133,14 +135,14 @@ impl RateLimiter {
         };
 
         if let Some(uid) = user_id {
-            self.check_and_increment(&self.user_limits, &format!("user:{}", uid), limit)
+            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), limit)
                 .await?;
         }
 
         let ip_key = if is_login {
-            format!("login:{}", ip)
+            format!("login:{ip}")
         } else {
-            format!("ip:{}", ip)
+            format!("ip:{ip}")
         };
         let ip_limit = if is_login {
             self.login_limit
@@ -169,7 +171,7 @@ impl RateLimiter {
                 if count > limit {
                     let retry_after = self.window_secs - entry.window_start.elapsed().as_secs();
                     return Err(RateLimitError {
-                        message: format!("请求过于频繁，请在 {} 秒后重试", retry_after),
+                        message: format!("请求过于频繁，请在 {retry_after} 秒后重试"),
                     });
                 }
             }
@@ -195,7 +197,8 @@ pub struct RateLimitMiddleware {
 }
 
 impl RateLimitMiddleware {
-    pub fn new(limiter: RateLimiter, enabled: bool) -> Self {
+    #[must_use] 
+    pub const fn new(limiter: RateLimiter, enabled: bool) -> Self {
         Self { limiter, enabled }
     }
 }
@@ -281,7 +284,7 @@ where
     }
 }
 
-pub async fn start_cleanup_task(limiter: RateLimiter) {
+pub fn start_cleanup_task(limiter: RateLimiter) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;

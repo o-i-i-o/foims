@@ -10,9 +10,10 @@ pub const CONFIG_PATHS: [&str; 3] = [
 ];
 
 // 获取配置文件路径
+#[must_use] 
 pub fn get_config_path() -> &'static str {
     for path in &CONFIG_PATHS {
-        if Path::new(&format!("{}.toml", path)).exists() {
+        if Path::new(&format!("{path}.toml")).exists() {
             return path;
         }
     }
@@ -21,6 +22,7 @@ pub fn get_config_path() -> &'static str {
 }
 
 // 获取配置文件完整路径
+#[must_use] 
 pub fn get_config_file_path() -> String {
     format!("{}.toml", get_config_path())
 }
@@ -39,11 +41,11 @@ pub struct DatabaseConfig {
     pub slow_query_threshold_ms: u64,
 }
 
-fn default_query_timeout() -> u64 {
+const fn default_query_timeout() -> u64 {
     30
 }
 
-fn default_slow_query_threshold() -> u64 {
+const fn default_slow_query_threshold() -> u64 {
     1000
 }
 
@@ -95,19 +97,19 @@ pub struct RateLimitConfig {
     pub enabled: bool,
 }
 
-fn default_ip_limit() -> u32 {
+const fn default_ip_limit() -> u32 {
     100
 }
-fn default_user_limit() -> u32 {
+const fn default_user_limit() -> u32 {
     200
 }
-fn default_login_limit() -> u32 {
+const fn default_login_limit() -> u32 {
     5
 }
-fn default_window_secs() -> u64 {
+const fn default_window_secs() -> u64 {
     60
 }
-fn default_rate_limit_enabled() -> bool {
+const fn default_rate_limit_enabled() -> bool {
     true
 }
 
@@ -141,7 +143,7 @@ impl Config {
 
         // 首先加载配置文件（如果存在）
         let config_path = get_config_path();
-        let config_file = format!("{}.toml", config_path);
+        let config_file = format!("{config_path}.toml");
 
         if Path::new(&config_file).exists() {
             builder = builder.add_source(config::File::with_name(config_path));

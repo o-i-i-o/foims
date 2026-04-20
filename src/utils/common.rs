@@ -37,14 +37,17 @@ fn get_ipv6_cidr_pattern() -> &'static regex::Regex {
 
 // ==================== IP/MAC 地址验证与格式化 ====================
 
+#[must_use] 
 pub fn validate_ip_address(ip: &str) -> bool {
     ip.parse::<IpNetwork>().is_ok() || ip.parse::<std::net::IpAddr>().is_ok()
 }
 
+#[must_use] 
 pub fn validate_mac_address(mac: &str) -> bool {
     mac.parse::<MacAddr>().is_ok()
 }
 
+#[must_use] 
 pub fn format_ip_address(ip: &str) -> Option<String> {
     if let Ok(ip_net) = ip.parse::<IpNetwork>() {
         Some(ip_net.to_string())
@@ -55,10 +58,12 @@ pub fn format_ip_address(ip: &str) -> Option<String> {
     }
 }
 
+#[must_use] 
 pub fn format_mac_address(mac: &str) -> Option<String> {
     mac.parse::<MacAddr>().ok().map(|m| m.to_string())
 }
 
+#[must_use] 
 pub fn normalize_ipv4_address(ip: &str) -> String {
     if ip.starts_with("::ffff:") {
         ip.strip_prefix("::ffff:").unwrap_or(ip).to_string()
@@ -69,6 +74,7 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
 
 // ==================== CIDR 验证 ====================
 
+#[must_use] 
 pub fn validate_cidr(cidr: &str) -> bool {
     if !get_ipv4_cidr_pattern().is_match(cidr) && !get_ipv6_cidr_pattern().is_match(cidr) {
         return false;
@@ -77,6 +83,7 @@ pub fn validate_cidr(cidr: &str) -> bool {
     ipnetwork::IpNetwork::from_str(cidr).is_ok()
 }
 
+#[must_use] 
 pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     if get_ipv4_cidr_pattern().is_match(cidr) {
         Some("ipv4")
@@ -91,12 +98,9 @@ pub fn validate_ip_in_cidr(
     ip_address: &str,
     network: &crate::models::Network,
 ) -> Result<bool, actix_web::HttpResponse> {
-    let ip_addr = match std::net::IpAddr::from_str(ip_address) {
-        Ok(ip) => ip,
-        Err(_) => {
-            return Err(actix_web::HttpResponse::BadRequest()
-                .json(crate::models::ApiResponse::<()>::error("无效的IP地址格式")));
-        }
+    let Ok(ip_addr) = std::net::IpAddr::from_str(ip_address) else {
+        return Err(actix_web::HttpResponse::BadRequest()
+            .json(crate::models::ApiResponse::<()>::error("无效的IP地址格式")))
     };
 
     let is_ipv4 = matches!(ip_addr, std::net::IpAddr::V4(_));
@@ -106,12 +110,12 @@ pub fn validate_ip_in_cidr(
         if is_ipv4 {
             network.ipv4_cidr.clone().unwrap_or_default()
         } else {
-            "".to_string()
+            String::new()
         },
-        if !is_ipv4 {
-            network.ipv6_cidr.clone().unwrap_or_default()
+        if is_ipv4 {
+            String::new()
         } else {
-            "".to_string()
+            network.ipv6_cidr.clone().unwrap_or_default()
         },
     ];
 
@@ -138,6 +142,7 @@ pub fn validate_ip_in_cidr(
 
 // ==================== Token 管理 ====================
 
+#[must_use] 
 pub fn generate_token_hash(token: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -279,8 +284,8 @@ pub async fn log_operation(
     pool: &sqlx::PgPool,
     params: OperationLogParams<'_>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#)
+    sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(Uuid::new_v4())
         .bind(params.user_id)
         .bind(params.action)
@@ -349,6 +354,7 @@ pub async fn log_system_operation(
 
 // ==================== HTTP 请求处理 ====================
 
+#[must_use] 
 pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
     if let Some(xff) = req.headers().get("X-Forwarded-For")
         && let Ok(xff_str) = xff.to_str()
@@ -372,6 +378,7 @@ pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
     normalize_ipv4_address(&ip)
 }
 
+#[must_use] 
 pub fn detect_user_language(req: &HttpRequest) -> String {
     if let Some(accept_language) = req.headers().get("Accept-Language")
         && let Ok(accept_language_str) = accept_language.to_str()
@@ -468,8 +475,7 @@ pub async fn send_mac_change_notification(
         };
 
     let content = format!(
-        "工位 {} {} 的MAC地址已从 {} 变更为 {}",
-        workstation_name, ip_address, old_mac, new_mac
+        "工位 {workstation_name} {ip_address} 的MAC地址已从 {old_mac} 变更为 {new_mac}"
     );
     crate::log::notification::create_notification(
         pool,
@@ -493,7 +499,7 @@ pub async fn send_mac_change_notification(
     )
     .await
     {
-        Ok(_) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
+        Ok(()) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
         Err(e) => error!(
             "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
             workstation_name, e
@@ -510,8 +516,8 @@ pub async fn send_system_alert(
     alert_type: &str,
     user_id: Option<&Uuid>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#)
+    sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7)")
         .bind(Uuid::new_v4())
         .bind(user_id)
         .bind(title)
@@ -526,6 +532,7 @@ pub async fn send_system_alert(
 
 // ==================== MAC 地址获取 ====================
 
+#[must_use] 
 pub fn get_real_mac_address(ip: &str) -> Option<String> {
     if let Some(mac) = read_mac_from_arp_cache(ip) {
         return Some(mac);
@@ -628,7 +635,7 @@ async fn batch_ping(ips: &[&String]) -> Vec<bool> {
     let mut handles = Vec::new();
 
     for ip in ips {
-        let ip_clone = ip.to_string();
+        let ip_clone = (*ip).clone();
         let handle = tokio::spawn(async move { ping_ip(&ip_clone).await });
         handles.push(handle);
     }
@@ -656,17 +663,13 @@ async fn ping_ip(ip: &str) -> bool {
     };
 
     let protocol = Layer4(Ipv4(IpNextHeaderProtocols::Icmp));
-    let (mut tx, _rx) = match transport_channel(1024, protocol) {
-        Ok((tx, rx)) => (tx, rx),
-        Err(_) => {
-            return system_ping(ip);
-        }
+    let Ok((mut tx, _rx)) = transport_channel(1024, protocol) else {
+        return system_ping(ip)
     };
 
     let mut buffer = [0u8; 64];
-    let mut icmp_packet = match MutableEchoRequestPacket::new(&mut buffer) {
-        Some(packet) => packet,
-        None => return system_ping(ip),
+    let Some(mut icmp_packet) = MutableEchoRequestPacket::new(&mut buffer) else {
+        return system_ping(ip)
     };
 
     icmp_packet.set_icmp_type(IcmpTypes::EchoRequest);
@@ -715,7 +718,7 @@ pub fn log_bilingual(message_key: &str) {
 
 // ==================== 网络查询工具 ====================
 
-pub const NETWORK_QUERY: &str = r#"
+pub const NETWORK_QUERY: &str = r"
     SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
            n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
            n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
@@ -725,7 +728,7 @@ pub const NETWORK_QUERY: &str = r#"
     FROM network_cidrs n 
     JOIN network_regions nt ON n.network_region_id = nt.id 
     WHERE n.id = $1
-"#;
+";
 
 pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Network {
     use sqlx::Row;

@@ -68,19 +68,19 @@ pub async fn start_http3_server(
     let addr = match server_host.as_str() {
         "::" => {
             // IPv6双栈模式
-            format!("[::]:{}", port)
+            format!("[::]:{port}")
                 .parse::<SocketAddr>()
                 .context("Failed to parse IPv6 address")?
         }
         "0.0.0.0" => {
             // IPv4通配符地址
-            format!("0.0.0.0:{}", port)
+            format!("0.0.0.0:{port}")
                 .parse::<SocketAddr>()
                 .context("Failed to parse IPv4 address")?
         }
         _ => {
             // 具体IP地址
-            format!("{}:{}", server_host, port)
+            format!("{server_host}:{port}")
                 .parse::<SocketAddr>()
                 .context("Failed to parse server address")?
         }
@@ -196,9 +196,8 @@ async fn handle_bi_stream_optimized(
     // 流式处理请求体
     loop {
         match recv_stream.read(&mut chunk).await {
-            Ok(Some(0)) => break, // 流结束
+            Ok(Some(0)) | Ok(None) => break,
             Ok(Some(n)) => buf.extend_from_slice(&chunk[..n]),
-            Ok(None) => break, // 流结束
             Err(e) => {
                 // 归还缓冲区到池
                 buffer_pool.put(buf);
@@ -209,7 +208,7 @@ async fn handle_bi_stream_optimized(
     }
 
     // 解析并处理HTTP/3请求
-    let response = process_http3_request_optimized(&buf, app_state).await?;
+    let response = process_http3_request_optimized(&buf, app_state)?;
 
     // 归还缓冲区到池
     buffer_pool.put(buf);
@@ -229,7 +228,7 @@ async fn handle_bi_stream_optimized(
 }
 
 // 优化的 HTTP/3 请求处理
-async fn process_http3_request_optimized(
+fn process_http3_request_optimized(
     request_data: &[u8],
     app_state: AppState,
 ) -> anyhow::Result<Vec<u8>> {
@@ -280,8 +279,7 @@ async fn process_http3_request_optimized(
             // 根路径重定向到登录页面
             let location = "/static/index.html";
             format!(
-                "HTTP/3 302 Found\r\ncontent-type: text/plain\r\ncontent-length: 0\r\nlocation: {}\r\n\r\n",
-                location
+                "HTTP/3 302 Found\r\ncontent-type: text/plain\r\ncontent-length: 0\r\nlocation: {location}\r\n\r\n"
             )
         }
         "/health" => {
@@ -363,9 +361,8 @@ async fn handle_stream(mut stream: quinn::RecvStream) -> anyhow::Result<()> {
 
     loop {
         match stream.read(&mut chunk).await {
-            Ok(Some(0)) => break, // 流结束
+            Ok(Some(0)) | Ok(None) => break,
             Ok(Some(n)) => buf.extend_from_slice(&chunk[..n]),
-            Ok(None) => break, // 流结束
             Err(e) => return Err(e.into()),
         }
     }
@@ -498,7 +495,6 @@ mod tests {
             let health_request = "GET /health HTTP/3\r\nHost: localhost\r\n\r\n";
             let response =
                 process_http3_request_optimized(health_request.as_bytes(), app_state.clone())
-                    .await
                     .unwrap();
             let response_str = String::from_utf8_lossy(&response);
             assert!(response_str.contains("200 OK"));
@@ -509,7 +505,6 @@ mod tests {
             let root_request = "GET / HTTP/3\r\nHost: localhost\r\n\r\n";
             let response =
                 process_http3_request_optimized(root_request.as_bytes(), app_state.clone())
-                    .await
                     .unwrap();
             let response_str = String::from_utf8_lossy(&response);
             assert!(response_str.contains("302 Found"));

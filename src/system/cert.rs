@@ -3,9 +3,7 @@ use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::Path;
 use tracing::info;
 
@@ -33,37 +31,25 @@ pub struct CertInfo {
     pub exists: bool,
 }
 
-// 生成自签名证书
 pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> HttpResponse {
     info!("正在生成自签名证书");
 
     let cert_path = "certs/cert.pem";
     let key_path = "certs/key.pem";
 
-    // 确保证书目录存在
     if !Path::new("certs").exists() {
-        fs::create_dir_all("certs").unwrap();
+        tokio::fs::create_dir_all("certs").await.unwrap();
     }
 
-    // 生成自签名证书
     use rcgen::generate_simple_self_signed;
 
-    // 生成自签名证书
     let certified_key = generate_simple_self_signed(vec![req.common_name.clone()]).unwrap();
 
-    // 获取证书 PEM
     let cert_pem = certified_key.cert.pem();
-
-    // 获取私钥 PEM
     let key_pem = certified_key.signing_key.serialize_pem();
 
-    // 保存证书
-    let mut cert_file = fs::File::create(cert_path).unwrap();
-    cert_file.write_all(cert_pem.as_bytes()).unwrap();
-
-    // 保存私钥
-    let mut key_file = fs::File::create(key_path).unwrap();
-    key_file.write_all(key_pem.as_bytes()).unwrap();
+    tokio::fs::write(cert_path, cert_pem.as_bytes()).await.unwrap();
+    tokio::fs::write(key_path, key_pem.as_bytes()).await.unwrap();
 
     info!("自签名证书生成成功");
 
@@ -74,7 +60,6 @@ pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> HttpResponse 
     }))
 }
 
-// 导入证书
 pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
     info!("正在导入证书");
 
@@ -104,17 +89,15 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
         }));
     }
 
-    // 确保证书目录存在
     if !Path::new("certs").exists() {
-        fs::create_dir_all("certs").unwrap();
+        tokio::fs::create_dir_all("certs").await.unwrap();
     }
 
-    // 保存导入的证书
     let cert_path = "certs/imported_cert.pem";
     let key_path = "certs/imported_key.pem";
 
-    fs::write(cert_path, cert_data.unwrap()).unwrap();
-    fs::write(key_path, key_data.unwrap()).unwrap();
+    tokio::fs::write(cert_path, cert_data.unwrap()).await.unwrap();
+    tokio::fs::write(key_path, key_data.unwrap()).await.unwrap();
 
     info!("证书导入成功");
 
@@ -125,7 +108,6 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
     }))
 }
 
-// 获取证书信息
 pub async fn get_cert_info() -> HttpResponse {
     info!("正在获取证书信息");
 
@@ -134,10 +116,10 @@ pub async fn get_cert_info() -> HttpResponse {
     let imported_cert_path = "certs/imported_cert.pem";
     let imported_key_path = "certs/imported_key.pem";
 
-    let self_signed_exists =
-        Path::new(self_signed_cert_path).exists() && Path::new(self_signed_key_path).exists();
-    let imported_exists =
-        Path::new(imported_cert_path).exists() && Path::new(imported_key_path).exists();
+    let self_signed_exists = tokio::fs::metadata(self_signed_cert_path).await.is_ok()
+        && tokio::fs::metadata(self_signed_key_path).await.is_ok();
+    let imported_exists = tokio::fs::metadata(imported_cert_path).await.is_ok()
+        && tokio::fs::metadata(imported_key_path).await.is_ok();
 
     let cert_info = CertInfo {
         cert_type: if imported_exists {
@@ -165,19 +147,18 @@ pub async fn get_cert_info() -> HttpResponse {
     }))
 }
 
-// 删除导入的证书
 pub async fn delete_imported_cert() -> HttpResponse {
     info!("正在删除导入的证书");
 
     let imported_cert_path = "certs/imported_cert.pem";
     let imported_key_path = "certs/imported_key.pem";
 
-    if Path::new(imported_cert_path).exists() {
-        fs::remove_file(imported_cert_path).unwrap();
+    if tokio::fs::metadata(imported_cert_path).await.is_ok() {
+        tokio::fs::remove_file(imported_cert_path).await.unwrap();
     }
 
-    if Path::new(imported_key_path).exists() {
-        fs::remove_file(imported_key_path).unwrap();
+    if tokio::fs::metadata(imported_key_path).await.is_ok() {
+        tokio::fs::remove_file(imported_key_path).await.unwrap();
     }
 
     info!("导入的证书删除成功");
@@ -189,36 +170,30 @@ pub async fn delete_imported_cert() -> HttpResponse {
     }))
 }
 
-// 辅助函数：获取最新的证书文件
+#[must_use]
 pub fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, String)> {
     let mut cert_files = Vec::new();
 
-    // 遍历目录下的所有文件
-    if let Ok(entries) = fs::read_dir(dir) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(filename_os) = path.file_name()
                 && let Some(filename) = filename_os.to_str()
+                && ((cert_type == "create" && filename.starts_with("create_"))
+                    || (cert_type == "import" && filename.starts_with("import_")))
             {
-                // 检查文件名是否符合规则
-                if (cert_type == "create" && filename.starts_with("create_"))
-                    || (cert_type == "import" && filename.starts_with("import_"))
-                {
-                    cert_files.push(filename.to_string());
-                }
+                cert_files.push(filename.to_string());
             }
         }
     }
 
-    // 按时间戳排序，获取最新的文件
     cert_files.sort_by(|a, b| b.cmp(a));
 
     if let Some(latest) = cert_files.first() {
         let base_name = latest.strip_suffix(".pem").unwrap_or(latest);
-        let cert_path = format!("{}/{}.pem", dir, base_name);
-        let key_path = format!("{}/{}.key", dir, base_name);
+        let cert_path = format!("{dir}/{base_name}.pem");
+        let key_path = format!("{dir}/{base_name}.key");
 
-        // 检查证书和密钥文件是否都存在
         if Path::new(&cert_path).exists() && Path::new(&key_path).exists() {
             return Some((cert_path, key_path));
         }
@@ -227,79 +202,63 @@ pub fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, Str
     None
 }
 
-// 准备服务器证书（查找现有或生成新的）
 pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String)> {
     let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
     let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{}/certs", app_name);
+    let certs_dir = format!("/etc/{app_name}/certs");
 
-    // 确保证书目录存在
     if !Path::new(&certs_dir).exists() {
         info!("创建证书目录: {}", certs_dir);
-        fs::create_dir_all(&certs_dir)?;
+        std::fs::create_dir_all(&certs_dir)?;
     }
 
-    // 获取最新的证书文件
     let (cert_path, key_path) = match cert_type {
         "imported" => {
-            // 检查导入的证书是否存在
             if let Some((cert, key)) = get_latest_certificate(&certs_dir, "import") {
                 info!("使用导入的证书: {}", cert);
                 (cert, key)
             } else {
-                // 如果导入的证书不存在，使用自签名证书
                 info!("未找到导入的证书，使用自签名证书");
                 if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create") {
                     (cert, key)
                 } else {
-                    // 如果自签名证书也不存在，生成带时间戳的文件名
                     let timestamp = chrono::Utc::now().timestamp();
-                    let base_name = format!("create_{}_cert", timestamp);
+                    let base_name = format!("create_{timestamp}_cert");
                     (
-                        format!("{}/{}.pem", certs_dir, base_name),
-                        format!("{}/{}.key", certs_dir, base_name),
+                        format!("{certs_dir}/{base_name}.pem"),
+                        format!("{certs_dir}/{base_name}.key"),
                     )
                 }
             }
         }
         _ => {
-            // 默认使用自签名证书
             if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create") {
                 info!("使用自签名证书: {}", cert);
                 (cert, key)
             } else {
-                // 如果自签名证书不存在，生成带时间戳的文件名
                 let timestamp = chrono::Utc::now().timestamp();
-                let base_name = format!("create_{}_cert", timestamp);
+                let base_name = format!("create_{timestamp}_cert");
                 (
-                    format!("{}/{}.pem", certs_dir, base_name),
-                    format!("{}/{}.key", certs_dir, base_name),
+                    format!("{certs_dir}/{base_name}.pem"),
+                    format!("{certs_dir}/{base_name}.key"),
                 )
             }
         }
     };
 
-    // 如果证书文件不存在，生成自签名证书
     if !Path::new(&cert_path).exists() || !Path::new(&key_path).exists() {
         info!("生成自签名证书");
-        // 生成自签名证书
         use rcgen::generate_simple_self_signed;
 
-        // 生成自签名证书
         let certified_key =
             generate_simple_self_signed(vec!["localhost".to_string()]).map_err(io::Error::other)?;
 
-        // 获取证书 PEM
         let cert_pem = certified_key.cert.pem();
-
-        // 获取私钥 PEM
         let key_pem = certified_key.signing_key.serialize_pem();
 
-        // 保存证书
         let mut cert_file = std::fs::File::create(&cert_path)?;
         cert_file.write_all(cert_pem.as_bytes())?;
 
-        // 保存私钥
         let mut key_file = std::fs::File::create(&key_path)?;
         key_file.write_all(key_pem.as_bytes())?;
 
@@ -309,7 +268,6 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
     Ok((cert_path, key_path))
 }
 
-// 加载 Rustls 配置（支持 HTTP/1.1 和 HTTP/2）
 pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls::ServerConfig> {
     let cert_data = std::fs::read(cert_path)?;
     let key_data = std::fs::read(key_path)?;
@@ -343,8 +301,6 @@ pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls:
         .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-    // 配置 ALPN 协议，支持 HTTP/2 和 HTTP/1.1
-    // ALPN 协议顺序：h2（HTTP/2）优先，然后是 http/1.1
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
     Ok(config)

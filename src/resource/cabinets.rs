@@ -37,12 +37,11 @@ pub async fn get_cabinets(
         .unwrap_or_else(|| "asc".to_string());
     let offset = (page - 1) * page_size;
 
-    let search_pattern = format!("%{}%", search);
+    let search_pattern = format!("%{search}%");
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY c.name DESC",
-        ("name", _) => "ORDER BY c.name ASC",
         ("capacity", "desc") => "ORDER BY c.capacity DESC, c.name ASC",
         ("capacity", _) => "ORDER BY c.capacity ASC, c.name ASC",
         ("created_at", "desc") => "ORDER BY c.created_at DESC",
@@ -58,12 +57,12 @@ pub async fn get_cabinets(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {} LIMIT $1 OFFSET $2", order_clause)
+            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2")
         )
         .bind(page_size)
         .bind(offset)
@@ -73,7 +72,7 @@ pub async fn get_cabinets(
             Ok(c) => c,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -89,12 +88,12 @@ pub async fn get_cabinets(
                 Ok(t) => t,
                 Err(err) => {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
                 }
             };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {} LIMIT $2 OFFSET $3", order_clause)
+            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3")
         )
         .bind(parsed_room_id)
         .bind(page_size)
@@ -105,7 +104,7 @@ pub async fn get_cabinets(
             Ok(c) => c,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -123,13 +122,13 @@ pub async fn get_cabinets(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {} LIMIT $3 OFFSET $4", order_clause)
+            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4")
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
@@ -141,7 +140,7 @@ pub async fn get_cabinets(
             Ok(c) => c,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -158,12 +157,12 @@ pub async fn get_cabinets(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {} LIMIT $2 OFFSET $3", order_clause)
+            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3")
         )
         .bind(&search_pattern)
         .bind(page_size)
@@ -174,7 +173,7 @@ pub async fn get_cabinets(
             Ok(c) => c,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -187,13 +186,13 @@ pub async fn get_cabinets(
     for cabinet in cabinets {
         // 获取机柜关联的网络（从房间继承所有网络）
         let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-            r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+            r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
                FROM rooms r 
                JOIN room_networks rn ON r.id = rn.room_id
                JOIN network_cidrs n ON rn.network_id = n.id 
                JOIN network_regions nr ON n.network_region_id = nr.id 
                WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-               AND r.room_type = 'DATA_CENTER'"#,
+               AND r.room_type = 'DATA_CENTER'",
         )
         .bind(cabinet.id)
         .fetch_all(pool.get_conn())
@@ -202,7 +201,7 @@ pub async fn get_cabinets(
             Ok(networks) => networks,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -255,13 +254,10 @@ pub async fn get_cabinets_by_network_region(
 ) -> Result<HttpResponse> {
     let region_id_str = path.into_inner();
 
-    let region_id = match Uuid::parse_str(&region_id_str) {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的网络区域ID"))
-            );
-        }
+    let Ok(region_id) = Uuid::parse_str(&region_id_str) else {
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的网络区域ID"))
+        )
     };
 
     let network_id_filter = query
@@ -270,19 +266,19 @@ pub async fn get_cabinets_by_network_region(
 
     let cabinets = if let Some(network_id) = network_id_filter {
         sqlx::query_as::<_, Cabinet>(
-            r#"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
                WHERE c.network_id = $1 OR rn.network_id = $1
-               ORDER BY c.name"#
+               ORDER BY c.name"
         )
         .bind(network_id)
         .fetch_all(pool.get_conn())
         .await
     } else {
         sqlx::query_as::<_, Cabinet>(
-            r#"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
                FROM cabinets c
                LEFT JOIN network_cidrs nc1 ON c.network_id = nc1.id
                LEFT JOIN rooms r ON c.room_id = r.id
@@ -290,7 +286,7 @@ pub async fn get_cabinets_by_network_region(
                LEFT JOIN network_cidrs nc2 ON rn.network_id = nc2.id
                WHERE nc1.network_region_id = $1 
                   OR nc2.network_region_id = $1
-               ORDER BY c.name"#
+               ORDER BY c.name"
         )
         .bind(region_id)
         .fetch_all(pool.get_conn())
@@ -301,7 +297,7 @@ pub async fn get_cabinets_by_network_region(
         Ok(c) => c,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 
@@ -318,7 +314,7 @@ pub async fn create_cabinet(
     // 验证创建机柜请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -335,8 +331,7 @@ pub async fn create_cabinet(
         Err(err) => {
             return Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {}",
-                    err
+                    "Database query error: {err}"
                 ))),
             );
         }
@@ -366,7 +361,7 @@ pub async fn create_cabinet(
     .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库插入错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
     }
 
     // 返回创建的机柜
@@ -421,19 +416,19 @@ pub async fn get_cabinet(
             return Ok(HttpResponse::NotFound().json(ApiResponse::<Cabinet>::error("机柜未找到")));
         },
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
         }
     };
 
     // 获取机柜关联的网络（从房间继承所有网络）
     let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-        r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+        r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
            FROM rooms r 
            JOIN room_networks rn ON r.id = rn.room_id
            JOIN network_cidrs n ON rn.network_id = n.id 
            JOIN network_regions nr ON n.network_region_id = nr.id 
            WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-           AND r.room_type = 'DATA_CENTER'"#,
+           AND r.room_type = 'DATA_CENTER'",
     )
     .bind(id)
     .fetch_all(pool.get_conn())
@@ -442,7 +437,7 @@ pub async fn get_cabinet(
         Ok(networks) => networks,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 
@@ -496,8 +491,7 @@ pub async fn update_cabinet(
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Validation error: {:?}",
-                e
+                "Validation error: {e:?}"
             ))),
         );
     }
@@ -513,8 +507,7 @@ pub async fn update_cabinet(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -548,7 +541,7 @@ pub async fn update_cabinet(
     .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
     }
 
     // 返回更新后的机柜
@@ -558,7 +551,7 @@ pub async fn update_cabinet(
     .fetch_one(pool.get_conn()).await {
         Ok(cabinet) => cabinet,
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {}", err))));
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
         }
     };
 
@@ -604,8 +597,7 @@ pub async fn delete_cabinet(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -626,8 +618,7 @@ pub async fn delete_cabinet(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -649,8 +640,7 @@ pub async fn delete_cabinet(
     {
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "Database deletion error: {}",
-                err
+                "Database deletion error: {err}"
             ))),
         );
     }
@@ -692,8 +682,7 @@ pub async fn get_cabinet_networks(
             Err(err) => {
                 return Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {}",
-                        err
+                        "Database query error: {err}"
                     ))),
                 );
             }
@@ -705,13 +694,13 @@ pub async fn get_cabinet_networks(
 
     // 获取机柜关联的网络（从房间继承所有网络）
     let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-        r#"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
+        r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
            FROM rooms r 
            JOIN room_networks rn ON r.id = rn.room_id
            JOIN network_cidrs n ON rn.network_id = n.id 
            JOIN network_regions nr ON n.network_region_id = nr.id 
            WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-           AND r.room_type = 'DATA_CENTER'"#,
+           AND r.room_type = 'DATA_CENTER'",
     )
     .bind(id)
     .fetch_all(pool.get_conn())
@@ -720,7 +709,7 @@ pub async fn get_cabinet_networks(
         Ok(networks) => networks,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 

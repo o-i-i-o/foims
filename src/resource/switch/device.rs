@@ -41,24 +41,23 @@ pub async fn get_switches(
 
         if !search.is_empty() {
             conditions.push(format!(
-                "(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})",
-                param_count, param_count, param_count, param_count
+                "(name ILIKE ${param_count} OR location ILIKE ${param_count} OR model ILIKE ${param_count} OR ip_address ILIKE {param_count})"
             ));
             param_count += 1;
         }
 
         if !name_filter.is_empty() {
-            conditions.push(format!("name ILIKE ${}", param_count));
+            conditions.push(format!("name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ip_filter.is_empty() {
-            conditions.push(format!("ip_address ILIKE ${}", param_count));
+            conditions.push(format!("ip_address ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !model_filter.is_empty() {
-            conditions.push(format!("model ILIKE ${}", param_count));
+            conditions.push(format!("model ILIKE ${param_count}"));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -68,29 +67,28 @@ pub async fn get_switches(
         };
 
         let count_query = format!(
-            "SELECT COUNT(*) FROM switches_with_details {}",
-            where_clause
+            "SELECT COUNT(*) FROM switches_with_details {where_clause}"
         );
 
         let mut count_sql = sqlx::query_scalar(&count_query);
 
         if !search.is_empty() {
-            let pattern = format!("%{}%", search);
+            let pattern = format!("%{search}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{}%", name_filter);
+            let pattern = format!("%{name_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !ip_filter.is_empty() {
-            let pattern = format!("%{}%", ip_filter);
+            let pattern = format!("%{ip_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !model_filter.is_empty() {
-            let pattern = format!("%{}%", model_filter);
+            let pattern = format!("%{model_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
@@ -98,7 +96,7 @@ pub async fn get_switches(
             Ok(t) => t,
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {e}"))));
             }
         }
     } else {
@@ -109,7 +107,7 @@ pub async fn get_switches(
             Ok(t) => t,
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {e}"))));
             }
         }
     };
@@ -120,24 +118,23 @@ pub async fn get_switches(
 
         if !search.is_empty() {
             conditions.push(format!(
-                "(name ILIKE ${} OR location ILIKE ${} OR model ILIKE ${} OR ip_address ILIKE {})",
-                param_count, param_count, param_count, param_count
+                "(name ILIKE ${param_count} OR location ILIKE ${param_count} OR model ILIKE ${param_count} OR ip_address ILIKE {param_count})"
             ));
             param_count += 1;
         }
 
         if !name_filter.is_empty() {
-            conditions.push(format!("name ILIKE ${}", param_count));
+            conditions.push(format!("name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ip_filter.is_empty() {
-            conditions.push(format!("ip_address ILIKE ${}", param_count));
+            conditions.push(format!("ip_address ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !model_filter.is_empty() {
-            conditions.push(format!("model ILIKE ${}", param_count));
+            conditions.push(format!("model ILIKE ${param_count}"));
             param_count += 1;
         }
 
@@ -148,7 +145,7 @@ pub async fn get_switches(
         };
 
         let data_query = format!(
-            r#"SELECT 
+            r"SELECT 
                 id, name, network_region_id, network_id, model, vendor,
                 location, snmp_version, 
                 snmp_community,
@@ -169,7 +166,7 @@ pub async fn get_switches(
             FROM switches_with_details
             {}
             ORDER BY created_at DESC
-            LIMIT ${} OFFSET ${}"#,
+            LIMIT ${} OFFSET ${}",
             where_clause,
             param_count,
             param_count + 1
@@ -178,22 +175,22 @@ pub async fn get_switches(
         let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
 
         if !search.is_empty() {
-            let pattern = format!("%{}%", search);
+            let pattern = format!("%{search}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{}%", name_filter);
+            let pattern = format!("%{name_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !ip_filter.is_empty() {
-            let pattern = format!("%{}%", ip_filter);
+            let pattern = format!("%{ip_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !model_filter.is_empty() {
-            let pattern = format!("%{}%", model_filter);
+            let pattern = format!("%{model_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
@@ -202,7 +199,7 @@ pub async fn get_switches(
         data_sql.fetch_all(pool.get_conn()).await
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
-            r#"SELECT 
+            r"SELECT 
                 id, name, network_region_id, network_id, model, vendor,
                 location, snmp_version, 
                 snmp_community,
@@ -222,7 +219,7 @@ pub async fn get_switches(
                 created_at, updated_at
             FROM switches_with_details
             ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2"#,
+            LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
         .bind(offset)
@@ -263,8 +260,7 @@ pub async fn get_switches(
         }
         Err(e) => Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "获取交换机列表失败: {}",
-                e
+                "获取交换机列表失败: {e}"
             ))),
         ),
     }
@@ -274,7 +270,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
     let id = path.into_inner();
 
     let switch = sqlx::query_as::<_, SwitchWithParent>(
-        r#"SELECT 
+        r"SELECT 
             id, name, network_region_id, network_id, model, vendor,
             location, snmp_version, 
             snmp_community,
@@ -293,7 +289,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             mac_address,
             created_at, updated_at
         FROM switches_with_details
-        WHERE id = $1"#,
+        WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool.get_conn())
@@ -318,7 +314,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             }
 
             let ips = sqlx::query(
-                r#"SELECT 
+                r"SELECT 
                     m.id, m.switch_id, m.device_type, m.network_id, 
                     host(m.ip_address) as ip_address,
                     m.ip_version, m.mac_address, m.hostname,
@@ -328,7 +324,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                 LEFT JOIN network_cidrs n ON m.network_id = n.id
                 LEFT JOIN network_regions nr ON n.network_region_id = nr.id
                 WHERE m.switch_id = $1 AND m.device_type = 'switch'
-                ORDER BY m.ip_address"#,
+                ORDER BY m.ip_address",
             )
             .bind(id)
             .fetch_all(pool.get_conn())
@@ -364,7 +360,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取交换机失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("获取交换机失败: {e}")))),
     }
 }
 
@@ -376,7 +372,7 @@ pub async fn create_switch(
 ) -> Result<HttpResponse> {
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
         );
     }
 
@@ -447,13 +443,13 @@ pub async fn create_switch(
         .and_then(|p| encrypt_password(p));
 
     let result = sqlx::query(
-        r#"INSERT INTO switches (
+        r"INSERT INTO switches (
             id, name, network_region_id, network_id, model, vendor,
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
             cabinet_id, start_u, end_u, description, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"#
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"
     )
     .bind(id)
     .bind(&req.name)
@@ -527,7 +523,7 @@ pub async fn create_switch(
                     );
                 }
 
-                let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
+                let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
 
                 let ip_manager_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
@@ -536,7 +532,7 @@ pub async fn create_switch(
                 )
                 .bind(ip_manager_id)
                 .bind(id)
-                .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
+                .bind(ip.device_type.as_deref().unwrap_or("switch"))
                 .bind(ip.network_id)
                 .bind(&ip.ip_address)
                 .bind(ip_version)
@@ -553,12 +549,12 @@ pub async fn create_switch(
                 {
                     tracing::error!("创建交换机IP记录失败: {}", e);
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("创建IP记录失败: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("创建IP记录失败: {e}"))));
                 }
             }
 
             let switch = sqlx::query_as::<_, Switch>(
-                r#"SELECT 
+                r"SELECT 
                     id, name, network_region_id, network_id,
                     model, vendor, 
                     location, snmp_version, 
@@ -571,7 +567,7 @@ pub async fn create_switch(
                     parent_switch_id, parent_port_id, 
                     cabinet_id, start_u, end_u, 
                     description, created_at, updated_at 
-                FROM switches WHERE id = $1"#,
+                FROM switches WHERE id = $1",
             )
             .bind(id)
             .fetch_one(pool.get_conn())
@@ -605,14 +601,13 @@ pub async fn create_switch(
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "创建交换机成功但查询失败: {}",
-                        e
+                        "创建交换机成功但查询失败: {e}"
                     ))),
                 ),
             }
         }
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建交换机失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("创建交换机失败: {e}")))),
     }
 }
 
@@ -627,7 +622,7 @@ pub async fn update_switch(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
         );
     }
 
@@ -688,7 +683,7 @@ pub async fn update_switch(
         .and_then(|p| encrypt_password(p));
 
     let result = sqlx::query(
-        r#"UPDATE switches SET
+        r"UPDATE switches SET
             name = COALESCE($1, name),
             network_region_id = COALESCE($2, network_region_id),
             network_id = COALESCE($3, network_id),
@@ -710,7 +705,7 @@ pub async fn update_switch(
             end_u = $19,
             description = COALESCE($20, description),
             updated_at = $21
-        WHERE id = $22"#,
+        WHERE id = $22",
     )
     .bind(&req.name)
     .bind(req.network_region_id)
@@ -757,19 +752,19 @@ pub async fn update_switch(
                     let mut param_idx = 2u32;
 
                     if req.name.is_some() {
-                        updates.push(format!("name = ${}", param_idx));
+                        updates.push(format!("name = ${param_idx}"));
                         param_idx += 1;
                     }
                     if req.cabinet_id.is_some() {
-                        updates.push(format!("cabinet_id = ${}", param_idx));
+                        updates.push(format!("cabinet_id = ${param_idx}"));
                         param_idx += 1;
                     }
                     if req.start_u.is_some() {
-                        updates.push(format!("start_u = ${}", param_idx));
+                        updates.push(format!("start_u = ${param_idx}"));
                         param_idx += 1;
                     }
                     if req.end_u.is_some() {
-                        updates.push(format!("end_u = ${}", param_idx));
+                        updates.push(format!("end_u = ${param_idx}"));
                         param_idx += 1;
                     }
                     updates.push("updated_at = $1".to_string());
@@ -855,7 +850,7 @@ pub async fn update_switch(
                         )));
                     }
 
-                    let ip_version: i16 = if ip.ip_address.contains(":") { 6 } else { 4 };
+                    let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
 
                     let ip_manager_id = Uuid::new_v4();
                     if let Err(e) = sqlx::query(
@@ -864,7 +859,7 @@ pub async fn update_switch(
                     )
                     .bind(ip_manager_id)
                     .bind(id)
-                    .bind(ip.device_type.as_ref().unwrap_or(&"switch".to_string()))
+                    .bind(ip.device_type.as_deref().unwrap_or("switch"))
                     .bind(ip.network_id)
                     .bind(&ip.ip_address)
                     .bind(ip_version)
@@ -881,13 +876,13 @@ pub async fn update_switch(
                     {
                         tracing::error!("更新交换机IP记录失败: {}", e);
                         return Ok(HttpResponse::InternalServerError()
-                            .json(ApiResponse::<()>::error(format!("创建IP记录失败: {}", e))));
+                            .json(ApiResponse::<()>::error(format!("创建IP记录失败: {e}"))));
                     }
                 }
             }
 
             let switch = sqlx::query_as::<_, Switch>(
-                r#"SELECT 
+                r"SELECT 
                     id, name, network_region_id, network_id,
                     model, vendor, 
                     location, snmp_version, 
@@ -900,7 +895,7 @@ pub async fn update_switch(
                     parent_switch_id, parent_port_id, 
                     cabinet_id, start_u, end_u, 
                     description, created_at, updated_at 
-                FROM switches WHERE id = $1"#,
+                FROM switches WHERE id = $1",
             )
             .bind(id)
             .fetch_one(pool.get_conn())
@@ -934,14 +929,13 @@ pub async fn update_switch(
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "更新交换机成功但查询失败: {}",
-                        e
+                        "更新交换机成功但查询失败: {e}"
                     ))),
                 ),
             }
         }
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新交换机失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("更新交换机失败: {e}")))),
     }
 }
 
@@ -1009,7 +1003,7 @@ pub async fn delete_switch(
         }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除交换机失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("删除交换机失败: {e}")))),
     }
 }
 
@@ -1030,8 +1024,7 @@ async fn check_switch_cycle(pool: &sqlx::PgPool, switch_id: Uuid, parent_id: Uui
                 .await
             {
                 Ok(Some(id)) => id,
-                Ok(None) => break,
-                Err(_) => break,
+                Ok(None) | Err(_) => break,
             };
 
         match next_parent {

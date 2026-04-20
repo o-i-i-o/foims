@@ -34,12 +34,12 @@ pub async fn get_switch_ports(
             Ok(t) => t,
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("获取端口数量失败: {}", e))));
+                    .json(ApiResponse::<()>::error(format!("获取端口数量失败: {e}"))));
             }
         };
 
     let ports = sqlx::query_as::<_, SwitchPort>(
-        r#"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3"#,
+        r"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
     )
     .bind(switch_id)
     .bind(page_size)
@@ -59,7 +59,7 @@ pub async fn get_switch_ports(
             "获取端口列表成功",
         ))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取端口列表失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("获取端口列表失败: {e}")))),
     }
 }
 
@@ -75,10 +75,10 @@ pub async fn get_all_switch_ports(
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let search_pattern = if !search.is_empty() {
-        Some(format!("%{}%", search))
-    } else {
+    let search_pattern = if search.is_empty() {
         None
+    } else {
+        Some(format!("%{search}%"))
     };
 
     let total: i64 = match if let Some(ref pattern) = search_pattern {
@@ -98,13 +98,13 @@ pub async fn get_all_switch_ports(
         Ok(t) => t,
         Err(e) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("获取端口数量失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("获取端口数量失败: {e}"))));
         }
     };
 
     let ports = if let Some(ref pattern) = search_pattern {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
-            r#"SELECT 
+            r"SELECT 
                 sp.id, sp.switch_id, s.name as switch_name, 
                 COALESCE(
                     (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
@@ -116,7 +116,7 @@ pub async fn get_all_switch_ports(
             JOIN switches s ON sp.switch_id = s.id
             WHERE s.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1
             ORDER BY s.name, sp.port_number
-            LIMIT $2 OFFSET $3"#
+            LIMIT $2 OFFSET $3"
         )
         .bind(pattern)
         .bind(page_size)
@@ -125,7 +125,7 @@ pub async fn get_all_switch_ports(
         .await
     } else {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
-            r#"SELECT 
+            r"SELECT 
                 sp.id, sp.switch_id, s.name as switch_name, 
                 COALESCE(
                     (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
@@ -136,7 +136,7 @@ pub async fn get_all_switch_ports(
             FROM switch_ports sp
             JOIN switches s ON sp.switch_id = s.id
             ORDER BY s.name, sp.port_number
-            LIMIT $1 OFFSET $2"#
+            LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
         .bind(offset)
@@ -157,8 +157,7 @@ pub async fn get_all_switch_ports(
         ))),
         Err(e) => Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "获取所有端口列表失败: {}",
-                e
+                "获取所有端口列表失败: {e}"
             ))),
         ),
     }
@@ -175,7 +174,7 @@ pub async fn create_switch_port(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
         );
     }
 
@@ -207,10 +206,10 @@ pub async fn create_switch_port(
     let now = Utc::now();
 
     let result = sqlx::query(
-        r#"INSERT INTO switch_ports (
+        r"INSERT INTO switch_ports (
             id, switch_id, port_number, port_name, port_type, vlan_id,
             status, speed, description, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
     )
     .bind(id)
     .bind(switch_id)
@@ -258,14 +257,13 @@ pub async fn create_switch_port(
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "创建端口成功但查询失败: {}",
-                        e
+                        "创建端口成功但查询失败: {e}"
                     ))),
                 ),
             }
         }
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建端口失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("创建端口失败: {e}")))),
     }
 }
 
@@ -276,7 +274,7 @@ pub async fn get_switch_port(
     let port_id = path.into_inner();
 
     let port = sqlx::query_as::<_, SwitchPortWithSwitch>(
-        r#"SELECT 
+        r"SELECT 
             sp.id, sp.switch_id, s.name as switch_name, 
             COALESCE(
                 (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
@@ -286,7 +284,7 @@ pub async fn get_switch_port(
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
         FROM switch_ports sp
         JOIN switches s ON sp.switch_id = s.id
-        WHERE sp.id = $1"#,
+        WHERE sp.id = $1",
     )
     .bind(port_id)
     .fetch_optional(pool.get_conn())
@@ -296,7 +294,7 @@ pub async fn get_switch_port(
         Ok(Some(data)) => Ok(HttpResponse::Ok().json(ApiResponse::success(data, "获取端口成功"))),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取端口失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("获取端口失败: {e}")))),
     }
 }
 
@@ -311,14 +309,14 @@ pub async fn update_switch_port(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
         );
     }
 
     let now = Utc::now();
 
     let result = sqlx::query(
-        r#"UPDATE switch_ports SET
+        r"UPDATE switch_ports SET
             port_number = COALESCE($1, port_number),
             port_name = COALESCE($2, port_name),
             port_type = COALESCE($3, port_type),
@@ -327,7 +325,7 @@ pub async fn update_switch_port(
             speed = COALESCE($6, speed),
             description = COALESCE($7, description),
             updated_at = $8
-        WHERE id = $9"#,
+        WHERE id = $9",
     )
     .bind(&req.port_number)
     .bind(&req.port_name)
@@ -373,15 +371,14 @@ pub async fn update_switch_port(
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "更新端口成功但查询失败: {}",
-                        e
+                        "更新端口成功但查询失败: {e}"
                     ))),
                 ),
             }
         }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新端口失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("更新端口失败: {e}")))),
     }
 }
 
@@ -460,7 +457,7 @@ pub async fn delete_switch_port(
         }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除端口失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("删除端口失败: {e}")))),
     }
 }
 
@@ -471,12 +468,12 @@ pub async fn sync_ports_from_snmp(
     let switch_id = path.into_inner();
 
     let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
-        r#"SELECT 
+        r"SELECT 
             id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#,
+        FROM switches WHERE id = $1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -489,14 +486,14 @@ pub async fn sync_ports_from_snmp(
         }
         Err(e) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
         }
     };
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r#"SELECT host(ip_address) FROM ip_managers 
+        r"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#,
+           ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -520,8 +517,7 @@ pub async fn sync_ports_from_snmp(
         Err(e) => {
             return Ok(
                 HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                    "获取交换机端口信息失败: {}",
-                    e
+                    "获取交换机端口信息失败: {e}"
                 ))),
             );
         }
@@ -549,10 +545,10 @@ pub async fn sync_ports_from_snmp(
         let now = Utc::now();
 
         let result = sqlx::query(
-            r#"INSERT INTO switch_ports (
+            r"INSERT INTO switch_ports (
                 id, switch_id, port_number, port_name, port_type, vlan_id,
                 status, speed, description, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(id)
         .bind(switch_id)
@@ -583,13 +579,12 @@ pub async fn sync_ports_from_snmp(
 
     let message = if saved_count > 0 && skipped_count > 0 {
         format!(
-            "成功保存 {} 个端口，跳过 {} 个已存在的端口",
-            saved_count, skipped_count
+            "成功保存 {saved_count} 个端口，跳过 {skipped_count} 个已存在的端口"
         )
     } else if saved_count > 0 {
-        format!("成功保存 {} 个端口到数据库", saved_count)
+        format!("成功保存 {saved_count} 个端口到数据库")
     } else if skipped_count > 0 {
-        format!("所有 {} 个端口已存在，跳过保存", skipped_count)
+        format!("所有 {skipped_count} 个端口已存在，跳过保存")
     } else {
         "未获取到端口信息".to_string()
     };

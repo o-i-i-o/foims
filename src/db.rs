@@ -28,7 +28,8 @@ pub struct PoolMetrics {
 }
 
 impl PoolMetrics {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             active_connections: AtomicU32::new(0),
             idle_connections: AtomicU32::new(0),
@@ -251,13 +252,14 @@ impl DbPool {
         }
 
         // 更新连接数指标
-        self.update_metrics().await;
+        self.update_metrics();
 
         result
     }
 
     /// 获取连接引用
-    pub fn get_conn(&self) -> &PgPool {
+    #[must_use] 
+    pub const fn get_conn(&self) -> &PgPool {
         &self.pool
     }
 
@@ -270,18 +272,20 @@ impl DbPool {
     }
 
     /// 更新指标
-    async fn update_metrics(&self) {
+    fn update_metrics(&self) {
         let status = self.pool.size();
         self.metrics
             .update_connection_counts(status, self.pool.num_idle() as u32);
     }
 
     /// 获取当前指标快照
+    #[must_use] 
     pub fn get_metrics(&self) -> PoolMetricsSnapshot {
         self.metrics.snapshot()
     }
 
     /// 获取连接池状态
+    #[must_use] 
     pub fn get_pool_status(&self) -> PoolStatus {
         PoolStatus {
             size: self.pool.size(),
@@ -291,7 +295,7 @@ impl DbPool {
     }
 
     /// 动态调整连接池大小
-    /// 注意：SQLx 的 PgPool 创建后不支持动态调整大小，
+    /// 注意：SQLx 的 `PgPool` 创建后不支持动态调整大小，
     /// 此方法仅更新内部配置记录，实际连接池大小需要重启服务才能生效。
     pub async fn resize_pool(&self, new_max_connections: u32) -> Result<(), sqlx::Error> {
         let current_time = std::time::SystemTime::now()
@@ -351,8 +355,8 @@ impl DbPool {
             // 计算新的最大连接数，使用更保守的增长策略
             // 避免每次都增加50%，而是根据负载程度动态调整
             let load_factor = utilization_rate / high_load_threshold;
-            let growth_factor = 1.0 + (load_factor - 1.0) * 0.3; // 最大增长30%
-            let new_max = (current_max as f32 * growth_factor).min(100.0) as u32;
+            let growth_factor = (load_factor - 1.0).mul_add(0.3, 1.0); // 最大增长30%
+            let new_max = (current_max as f32 * growth_factor).min(100.0).round().clamp(0.0, u32::MAX as f32) as u32;
 
             // 只有当新的最大连接数比当前大至少2个时才进行调整
             if new_max > current_max + 1
@@ -366,9 +370,9 @@ impl DbPool {
             // 计算新的最大连接数，使用更保守的减少策略
             // 避免每次都减少20%，而是根据负载程度动态调整
             let load_factor = utilization_rate / low_load_threshold;
-            let reduction_factor = 0.8 + (load_factor * 0.2); // 最小减少20%
+            let reduction_factor = load_factor.mul_add(0.2, 0.8); // 最小减少20%
             let new_max =
-                (current_max as f32 * reduction_factor).max(min_connections as f32) as u32;
+                (current_max as f32 * reduction_factor).max(min_connections as f32).round().clamp(0.0, u32::MAX as f32) as u32;
 
             // 只有当新的最大连接数比当前小至少2个时才进行调整
             if new_max < current_max - 1
@@ -394,7 +398,7 @@ impl DbPool {
                 }
 
                 // 更新指标
-                pool_clone.update_metrics().await;
+                pool_clone.update_metrics();
 
                 // 自动缩放检查
                 pool_clone.check_and_scale().await;
@@ -433,6 +437,7 @@ impl DbPool {
     }
 
     /// 获取查询超时时间
+    #[must_use] 
     pub fn get_query_timeout(&self) -> std::time::Duration {
         let config = self
             .config
@@ -443,6 +448,7 @@ impl DbPool {
     }
 
     /// 获取慢查询阈值
+    #[must_use] 
     pub fn get_slow_query_threshold_ms(&self) -> u64 {
         self.config
             .try_read()

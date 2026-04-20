@@ -27,7 +27,7 @@ pub async fn start_scheduler(
         let config = backup_config.clone();
         Box::pin(async move {
             info!("Running data backup job...");
-            match execute_database_backup(&config, pool.get_conn()).await {
+            match execute_database_backup(&config, pool.get_conn()) {
                 Ok(msg) => {
                     info!("Data backup job completed: {}", msg);
                     log_task_execution(&pool, "system_backup", "success", &msg).await;
@@ -54,7 +54,7 @@ pub async fn start_scheduler(
                         &pool,
                         "system_token_cleanup",
                         "success",
-                        &format!("清理了 {} 个过期token", count),
+                        &format!("清理了 {count} 个过期token"),
                     )
                     .await;
                 }
@@ -64,7 +64,7 @@ pub async fn start_scheduler(
                         &pool,
                         "system_token_cleanup",
                         "failed",
-                        &format!("Token清理失败: {}", e),
+                        &format!("Token清理失败: {e}"),
                     )
                     .await;
                 }
@@ -89,7 +89,7 @@ pub async fn start_scheduler(
                         &pool,
                         "system_usage_cleanup",
                         "success",
-                        &format!("清理了 {} 条30天前的token_usage记录", count),
+                        &format!("清理了 {count} 条30天前的token_usage记录"),
                     )
                     .await;
                 }
@@ -99,7 +99,7 @@ pub async fn start_scheduler(
                         &pool,
                         "system_usage_cleanup",
                         "failed",
-                        &format!("Token使用记录清理失败: {}", e),
+                        &format!("Token使用记录清理失败: {e}"),
                     )
                     .await;
                 }
@@ -125,17 +125,17 @@ pub async fn start_scheduler(
     Ok(SchedulerState { scheduler })
 }
 
-async fn execute_database_backup(
+fn execute_database_backup(
     config: &crate::config::DatabaseConfig,
     _pool: &sqlx::PgPool,
 ) -> Result<String, String> {
     let backup_dir = "/var/lib/ipma/backups";
     if let Err(e) = std::fs::create_dir_all(backup_dir) {
-        return Err(format!("创建备份目录失败: {}", e));
+        return Err(format!("创建备份目录失败: {e}"));
     }
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-    let backup_file = format!("{}/ipma_backup_{}.sql", backup_dir, timestamp);
+    let backup_file = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
 
     let output = Command::new("pg_dump")
         .arg("-h")
@@ -154,14 +154,13 @@ async fn execute_database_backup(
         .output()
         .map_err(|e| {
             format!(
-                "执行 pg_dump 失败: {}。请确保系统已安装 postgresql-client。",
-                e
+                "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
             )
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("pg_dump 执行失败: {}", stderr));
+        return Err(format!("pg_dump 执行失败: {stderr}"));
     }
 
     let sql_content = output.stdout;
@@ -169,7 +168,7 @@ async fn execute_database_backup(
         return Err("导出的 SQL 文件为空".to_string());
     }
 
-    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {}", e))?;
+    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {e}"))?;
 
     cleanup_old_backups(backup_dir, 7)?;
 
@@ -180,13 +179,12 @@ async fn execute_database_backup(
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
     Ok(format!(
-        "备份成功: {} ({:.2} MB)",
-        backup_file, file_size_mb
+        "备份成功: {backup_file} ({file_size_mb:.2} MB)"
     ))
 }
 
 fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
-    let entries = std::fs::read_dir(backup_dir).map_err(|e| format!("读取备份目录失败: {}", e))?;
+    let entries = std::fs::read_dir(backup_dir).map_err(|e| format!("读取备份目录失败: {e}"))?;
 
     let now = std::time::SystemTime::now();
     let cutoff = std::time::Duration::from_secs(keep_days * 24 * 60 * 60);
@@ -214,8 +212,8 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
 
 async fn log_task_execution(pool: &DbPool, task_name: &str, status: &str, details: &str) {
     if let Err(e) = sqlx::query(
-        r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+        r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(Uuid::new_v4())
     .bind(task_name)
@@ -238,7 +236,7 @@ async fn sync_user_tasks_from_db(pool: &DbPool) -> Result<(), String> {
     )
     .fetch_all(pool.get_conn())
     .await
-    .map_err(|e| format!("查询用户任务失败: {}", e))?;
+    .map_err(|e| format!("查询用户任务失败: {e}"))?;
 
     for task in tasks {
         if let Err(e) = update_next_run_at(pool, &task).await {
@@ -258,7 +256,7 @@ async fn update_next_run_at(pool: &DbPool, task: &ScheduledTask) -> Result<(), S
         .bind(task.id)
         .execute(pool.get_conn())
         .await
-        .map_err(|e| format!("更新下次执行时间失败: {}", e))?;
+        .map_err(|e| format!("更新下次执行时间失败: {e}"))?;
 
     Ok(())
 }
@@ -267,7 +265,7 @@ pub fn calculate_next_run(cron_expression: &str) -> Result<chrono::DateTime<Utc>
     let parts: Vec<&str> = cron_expression.split_whitespace().collect();
 
     if parts.len() != 5 && parts.len() != 6 {
-        return Err(format!("无效的cron表达式: {}", cron_expression));
+        return Err(format!("无效的cron表达式: {cron_expression}"));
     }
 
     let now = Utc::now();
@@ -322,7 +320,7 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
     if field.contains('/') {
         let parts: Vec<&str> = field.split('/').collect();
         if parts.len() != 2 {
-            return Err(format!("无效的cron字段: {}", field));
+            return Err(format!("无效的cron字段: {field}"));
         }
         let step: i32 = parts[1]
             .parse()
@@ -334,7 +332,7 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
         } else {
             let base: i32 = base_field
                 .parse()
-                .map_err(|_| format!("无效的基础值: {}", base_field))?;
+                .map_err(|_| format!("无效的基础值: {base_field}"))?;
             return Ok((value - base) % step == 0 && value >= base);
         }
     }
@@ -342,7 +340,7 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
     if field.contains('-') {
         let parts: Vec<&str> = field.split('-').collect();
         if parts.len() != 2 {
-            return Err(format!("无效的cron字段: {}", field));
+            return Err(format!("无效的cron字段: {field}"));
         }
         let start: i32 = parts[0]
             .parse()
@@ -355,7 +353,7 @@ fn matches_cron_field(field: &str, value: i32) -> Result<bool, String> {
 
     let field_value: i32 = field
         .parse()
-        .map_err(|_| format!("无效的cron字段值: {}", field))?;
+        .map_err(|_| format!("无效的cron字段值: {field}"))?;
     Ok(value == field_value)
 }
 
@@ -368,9 +366,9 @@ pub async fn execute_task_by_type(
     match task_type {
         "mac_sync" => execute_mac_sync(pool, config).await,
         "token_cleanup" => execute_token_cleanup(pool).await,
-        "backup" => execute_backup_task(db_config).await,
+        "backup" => execute_backup_task(db_config),
         "log_cleanup" => execute_log_cleanup(pool, config).await,
-        _ => Err(format!("未知的任务类型: {}", task_type)),
+        _ => Err(format!("未知的任务类型: {task_type}")),
     }
 }
 
@@ -391,8 +389,8 @@ async fn execute_mac_sync(
         (Some(switch_id), Some(network_id)) => {
             crate::resource::ip::pull_ip_managers_internal(pool, switch_id, network_id)
                 .await
-                .map(|_| "MAC同步成功".to_string())
-                .map_err(|e| format!("MAC同步失败: {}", e))
+                .map(|()| "MAC同步成功".to_string())
+                .map_err(|e| format!("MAC同步失败: {e}"))
         }
         _ => Err("MAC同步任务需要配置switch_id和network_id".to_string()),
     }
@@ -401,18 +399,18 @@ async fn execute_mac_sync(
 async fn execute_token_cleanup(pool: &sqlx::PgPool) -> Result<String, String> {
     let count = crate::utils::cleanup_expired_revoked_tokens(pool)
         .await
-        .map_err(|e| format!("Token清理失败: {}", e))?;
-    Ok(format!("清理了 {} 个过期token", count))
+        .map_err(|e| format!("Token清理失败: {e}"))?;
+    Ok(format!("清理了 {count} 个过期token"))
 }
 
-async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Result<String, String> {
+fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Result<String, String> {
     let backup_dir = "/var/lib/ipma/backups";
     if let Err(e) = std::fs::create_dir_all(backup_dir) {
-        return Err(format!("创建备份目录失败: {}", e));
+        return Err(format!("创建备份目录失败: {e}"));
     }
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-    let backup_file = format!("{}/ipma_manual_backup_{}.sql", backup_dir, timestamp);
+    let backup_file = format!("{backup_dir}/ipma_manual_backup_{timestamp}.sql");
 
     let output = Command::new("pg_dump")
         .arg("-h")
@@ -429,11 +427,11 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
         .arg("--if-exists")
         .env("PGPASSWORD", &db_config.password)
         .output()
-        .map_err(|e| format!("执行 pg_dump 失败: {}", e))?;
+        .map_err(|e| format!("执行 pg_dump 失败: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("pg_dump 执行失败: {}", stderr));
+        return Err(format!("pg_dump 执行失败: {stderr}"));
     }
 
     let sql_content = output.stdout;
@@ -441,7 +439,7 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
         return Err("导出的 SQL 文件为空".to_string());
     }
 
-    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {}", e))?;
+    std::fs::write(&backup_file, sql_content).map_err(|e| format!("写入备份文件失败: {e}"))?;
 
     let file_size = std::fs::metadata(&backup_file)
         .map(|m| m.len())
@@ -450,8 +448,7 @@ async fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Resul
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
     Ok(format!(
-        "备份成功: {} ({:.2} MB)",
-        backup_file, file_size_mb
+        "备份成功: {backup_file} ({file_size_mb:.2} MB)"
     ))
 }
 
@@ -459,7 +456,7 @@ async fn execute_log_cleanup(
     pool: &sqlx::PgPool,
     config: &serde_json::Value,
 ) -> Result<String, String> {
-    let days = config.get("days").and_then(|v| v.as_i64()).unwrap_or(30) as i32;
+    let days = config.get("days").and_then(serde_json::Value::as_i64).unwrap_or(30) as i32;
 
     if days < 0 {
         return Err("保留天数不能为负数".to_string());
@@ -509,5 +506,5 @@ async fn execute_log_cleanup(
         }
     }
 
-    Ok(format!("清理了 {} 条日志记录", deleted))
+    Ok(format!("清理了 {deleted} 条日志记录"))
 }

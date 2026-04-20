@@ -14,7 +14,7 @@ pub async fn get_login_logs(
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let search_pattern = format!("%{}%", search);
+    let search_pattern = format!("%{search}%");
 
     let (total, logs) = if search.is_empty() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
@@ -24,7 +24,7 @@ pub async fn get_login_logs(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -39,7 +39,7 @@ pub async fn get_login_logs(
             Ok(l) => l,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -56,7 +56,7 @@ pub async fn get_login_logs(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };
@@ -73,7 +73,7 @@ pub async fn get_login_logs(
             Ok(l) => l,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };

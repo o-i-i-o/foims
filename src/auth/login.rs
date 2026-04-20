@@ -38,32 +38,25 @@ pub async fn auth_middleware(
     next: Next<impl MessageBody + 'static>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
     // 1. 从请求中提取 Token
-    let token = match extract_token_from_service_request(&req) {
-        Some(token) => token,
-        None => {
-            let user_lang = detect_user_language(req.request());
-            return Ok(req.into_response(
-                HttpResponse::Unauthorized()
-                    .json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang))
-                    .map_into_right_body(),
-            ));
-        }
+    let Some(token) = extract_token_from_service_request(&req) else {
+        let user_lang = detect_user_language(req.request());
+        return Ok(req.into_response(
+            HttpResponse::Unauthorized()
+                .json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang))
+                .map_into_right_body(),
+        ));
     };
 
-    // 2. 验证 Token
-    let config = match req.app_data::<web::Data<Config>>() {
-        Some(c) => c,
-        None => {
-            let user_lang = detect_user_language(req.request());
-            return Ok(req.into_response(
-                HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error_i18n(
-                        "api.server_error",
-                        &user_lang,
-                    ))
-                    .map_into_right_body(),
-            ));
-        }
+    let Some(config) = req.app_data::<web::Data<Config>>() else {
+        let user_lang = detect_user_language(req.request());
+        return Ok(req.into_response(
+            HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error_i18n(
+                    "api.server_error",
+                    &user_lang,
+                ))
+                .map_into_right_body(),
+        ));
     };
     let jwt_utils = JwtUtils::new(config);
 
@@ -119,11 +112,11 @@ pub async fn login(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
-    let user_row = match sqlx::query_as::<
+    let Ok(user_row) = sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool),
     >(
@@ -131,13 +124,9 @@ pub async fn login(
     )
     .bind(&req.username)
     .fetch_one(&pool.pool)
-    .await
-    {
-        Ok(row) => row,
-        Err(_) => {
-            let _ = log_login(&pool.pool, &req.username, &http_req, false, Some("用户未找到")).await;
-            return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
-        }
+    .await else {
+        let _ = log_login(&pool.pool, &req.username, &http_req, false, Some("用户未找到")).await;
+        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled) = user_row;
@@ -273,11 +262,11 @@ pub async fn login_with_email_code(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
-    let user_row = match sqlx::query_as::<
+    let Ok(user_row) = sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, bool, bool, Option<String>, Option<DateTime<Utc>>),
     >(
@@ -285,13 +274,9 @@ pub async fn login_with_email_code(
     )
     .bind(email)
     .fetch_one(&pool.pool)
-    .await
-    {
-        Ok(row) => row,
-        Err(_) => {
-            let _ = log_login(&pool.pool, email, &http_req, false, Some("用户未找到")).await;
-            return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_email_or_code", &user_lang)));
-        }
+    .await else {
+        let _ = log_login(&pool.pool, email, &http_req, false, Some("用户未找到")).await;
+        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_email_or_code", &user_lang)));
     };
 
     let (id, username, email, role, status, two_factor_enabled, code, expiry) = user_row;
@@ -436,7 +421,7 @@ pub async fn send_login_code(
 
     if let Err(e) = req.validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -483,7 +468,7 @@ pub async fn send_login_code(
             "Sending login code email to {} using host: {}",
             email, smtp_config.host
         );
-        let email_body = format!("您的登录验证码是：{}", code);
+        let email_body = format!("您的登录验证码是：{code}");
         let email_msg = match Message::builder()
             .from(match smtp_config.from.parse() {
                 Ok(addr) => addr,
@@ -567,7 +552,7 @@ pub async fn login_with_two_factor(
     let user_lang = detect_user_language(&http_req);
 
     // 验证用户
-    let user_row = match sqlx::query_as::<
+    let Ok(user_row) = sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool, Option<String>),
     >(
@@ -576,9 +561,8 @@ pub async fn login_with_two_factor(
     .bind(&req.username)
     .fetch_one(&pool.pool)
     .await
-    {
-        Ok(row) => row,
-        Err(_) => return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang))),
+    else {
+        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
@@ -612,50 +596,44 @@ pub async fn login_with_two_factor(
         // 解密密钥
         let secret = decrypt_password(&encrypted_secret);
         // 将 Base32 编码的密钥解码为字节
-        let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                // Base32 解码失败，密钥格式错误
-                let _ = log_login(
-                    &pool.pool,
-                    &username,
-                    &http_req,
-                    false,
-                    Some("Invalid 2FA secret format"),
-                )
-                .await;
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("2FA密钥格式错误")));
-            }
+        let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
+            // Base32 解码失败，密钥格式错误
+            let _ = log_login(
+                &pool.pool,
+                &username,
+                &http_req,
+                false,
+                Some("Invalid 2FA secret format"),
+            )
+            .await;
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("2FA密钥格式错误")));
         };
         // 使用 TOTP::new 验证密钥长度符合 RFC 4226 规范
-        match TOTP::new(
+        if let Ok(totp) = TOTP::new(
             Algorithm::SHA1,
             6,
             1,
             30,
             secret_bytes,
             None,
-            "".to_string(),
+            String::new(),
         ) {
-            Ok(totp) => {
-                if totp.check_current(&req.two_factor_code).unwrap_or(false) {
-                    verified = true;
-                }
+            if totp.check_current(&req.two_factor_code).unwrap_or(false) {
+                verified = true;
             }
-            Err(_) => {
-                // 密钥长度不符合规范（需要至少16字节）
-                let _ = log_login(
-                    &pool.pool,
-                    &username,
-                    &http_req,
-                    false,
-                    Some("2FA secret too short"),
-                )
-                .await;
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("2FA密钥长度不足，请重新设置")));
-            }
+        } else {
+            // 密钥长度不符合规范（需要至少16字节）
+            let _ = log_login(
+                &pool.pool,
+                &username,
+                &http_req,
+                false,
+                Some("2FA secret too short"),
+            )
+            .await;
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("2FA密钥长度不足，请重新设置")));
         }
     }
 
@@ -753,15 +731,14 @@ pub async fn send_two_factor_code(
     req: web::Json<SendTwoFactorCodeRequest>,
 ) -> Result<HttpResponse> {
     // 复用 send_login_code 逻辑，或者简单重写
-    let user = match sqlx::query_as::<sqlx::Postgres, (Uuid, String, String)>(
+    let Ok(Some(user)) = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String)>(
         "SELECT id, username, email FROM users WHERE username = $1",
     )
     .bind(&req.username)
     .fetch_optional(&pool.pool)
     .await
-    {
-        Ok(Some(u)) => u,
-        _ => return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "发送成功"))),
+    else {
+        return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "发送成功")));
     };
 
     // 生成并发送代码... (简化)
@@ -778,7 +755,7 @@ pub async fn send_two_factor_code(
 
     let smtp_config = get_smtp_config_from_db(&pool.pool).await;
     if let Some(smtp_config) = smtp_config {
-        let email_body = format!("您的两步验证码是：{}", code);
+        let email_body = format!("您的两步验证码是：{code}");
         let email_msg = match Message::builder()
             .from(match smtp_config.from.parse() {
                 Ok(addr) => addr,
@@ -1000,11 +977,8 @@ pub async fn refresh_token(
 // 获取当前用户
 pub async fn get_current_user(http_req: HttpRequest) -> Result<HttpResponse> {
     let extensions = http_req.extensions();
-    let claims = match extensions.get::<crate::auth::utils::JwtClaims>() {
-        Some(c) => c,
-        None => {
-            return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权访问")));
-        }
+    let Some(claims) = extensions.get::<crate::auth::utils::JwtClaims>() else {
+        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权访问")));
     };
     // 使用 serde_json::Value 作为泛型
     Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(serde_json::json!({ "id": claims.sub, "username": claims.username, "role": claims.role }), "Success")))
@@ -1018,16 +992,13 @@ pub async fn forgot_password(
 ) -> Result<HttpResponse> {
     let user_lang = detect_user_language(&http_req);
 
-    let email = match req.get("email").and_then(|v| v.as_str()) {
-        Some(e) => e,
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                    "api.invalid_request",
-                    &user_lang,
-                )),
-            );
-        }
+    let Some(email) = req.get("email").and_then(|v| v.as_str()) else {
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
+                "api.invalid_request",
+                &user_lang,
+            )),
+        );
     };
 
     let user_result = sqlx::query_as::<_, (Uuid, String, bool)>(
@@ -1057,7 +1028,7 @@ pub async fn forgot_password(
                 } else {
                     let reset_link =
                         format!("{}/reset-password?token={}", smtp_config.host, reset_token);
-                    let email_body = format!("请点击以下链接重置密码：{}", reset_link);
+                    let email_body = format!("请点击以下链接重置密码：{reset_link}");
                     let email_msg = Message::builder()
                         .from(match smtp_config.from.parse() {
                             Ok(addr) => addr,
@@ -1144,28 +1115,22 @@ pub async fn reset_password(
 ) -> Result<HttpResponse> {
     let user_lang = detect_user_language(&http_req);
 
-    let token = match req.get("token").and_then(|v| v.as_str()) {
-        Some(t) => t,
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                    "api.invalid_request",
-                    &user_lang,
-                )),
-            );
-        }
+    let Some(token) = req.get("token").and_then(|v| v.as_str()) else {
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
+                "api.invalid_request",
+                &user_lang,
+            )),
+        );
     };
 
-    let new_password = match req.get("new_password").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                    "api.invalid_request",
-                    &user_lang,
-                )),
-            );
-        }
+    let Some(new_password) = req.get("new_password").and_then(|v| v.as_str()) else {
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
+                "api.invalid_request",
+                &user_lang,
+            )),
+        );
     };
 
     if new_password.len() < 8 {
@@ -1282,7 +1247,7 @@ pub async fn init_two_factor(
     let secret_base32 = secret.to_encoded().to_string();
 
     // 创建TOTP实例用于生成URL（SHA-1算法保证兼容性）
-    let totp = match TOTP::new(
+    let Ok(totp) = TOTP::new(
         Algorithm::SHA1,
         6,
         1,
@@ -1290,22 +1255,15 @@ pub async fn init_two_factor(
         secret.to_bytes().unwrap(),
         Some("IPMA".to_string()),
         target_username.clone(),
-    ) {
-        Ok(t) => t,
-        Err(_) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("生成TOTP失败"))
-            );
-        }
+    ) else {
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("生成TOTP失败"))
+        );
     };
 
-    // 将密钥加密后存储到数据库（尚未启用）
-    let encrypted_secret = match encrypt_password(&secret_base32) {
-        Some(encrypted) => encrypted,
-        None => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("2FA密钥加密失败")));
-        }
+    let Some(encrypted_secret) = encrypt_password(&secret_base32) else {
+        return Ok(HttpResponse::InternalServerError()
+            .json(ApiResponse::<()>::error("2FA密钥加密失败")));
     };
     if let Err(e) = sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
@@ -1385,11 +1343,8 @@ pub async fn enable_two_factor(
             }
         };
 
-    let encrypted_secret = match secret {
-        Some(s) => s,
-        None => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA")));
-        }
+    let Some(encrypted_secret) = secret else {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA")));
     };
 
     // 解密密钥
@@ -1413,14 +1368,11 @@ pub async fn enable_two_factor(
         };
 
     // 验证TOTP码
-    let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("密钥格式错误")));
-        }
+    let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("密钥格式错误")));
     };
 
-    let totp = match TOTP::new(
+    let Ok(totp) = TOTP::new(
         Algorithm::SHA1,
         6,
         1,
@@ -1428,13 +1380,10 @@ pub async fn enable_two_factor(
         secret_bytes,
         Some("IPMA".to_string()),
         target_username,
-    ) {
-        Ok(t) => t,
-        Err(_) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("TOTP创建失败"))
-            );
-        }
+    ) else {
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("TOTP创建失败"))
+        );
     };
 
     if !totp.check_current(&req.code).unwrap_or(false) {

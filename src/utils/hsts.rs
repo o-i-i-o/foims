@@ -59,6 +59,7 @@ where
     }
 }
 
-pub fn hsts_middleware() -> Hsts {
+#[must_use] 
+pub const fn hsts_middleware() -> Hsts {
     Hsts
 }

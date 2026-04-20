@@ -43,6 +43,7 @@ pub struct SwitchForSnmpWithNetwork {
 }
 
 impl SwitchForSnmp {
+    #[must_use] 
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_switch_snmp(self);
         SnmpParamsLegacy {
@@ -60,6 +61,7 @@ impl SwitchForSnmp {
 }
 
 impl SwitchForSnmpWithNetwork {
+    #[must_use] 
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_switch_snmp_with_network(self);
         SnmpParamsLegacy {
@@ -84,6 +86,7 @@ pub struct DecryptedSnmpCredentials {
 }
 
 impl DecryptedSnmpCredentials {
+    #[must_use] 
     pub fn from_switch_snmp(switch: &SwitchForSnmp) -> Self {
         Self {
             community: decrypt_credential(switch.snmp_community.as_deref()),
@@ -92,6 +95,7 @@ impl DecryptedSnmpCredentials {
         }
     }
 
+    #[must_use] 
     pub fn from_switch_snmp_with_network(switch: &SwitchForSnmpWithNetwork) -> Self {
         Self {
             community: decrypt_credential(switch.snmp_community.as_deref()),
@@ -142,7 +146,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
             let username = params
                 .username
                 .as_deref()
-                .ok_or("SNMPv3需要用户名".to_string())?;
+                .ok_or_else(|| "SNMPv3需要用户名".to_string())?;
             let mut auth = Auth::usm(username);
 
             if let (Some(proto), Some(pass)) =
@@ -155,7 +159,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                     "SHA-256" => AuthProtocol::Sha256,
                     "SHA-384" => AuthProtocol::Sha384,
                     "SHA-512" => AuthProtocol::Sha512,
-                    _ => return Err(format!("不支持的认证协议: {}", proto)),
+                    _ => return Err(format!("不支持的认证协议: {proto}")),
                 };
                 auth = auth.auth(auth_protocol, pass);
 
@@ -168,7 +172,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                         "AES" | "AES-128" | "AES128" => PrivProtocol::Aes128,
                         "AES-192" | "AES192" => PrivProtocol::Aes192,
                         "AES-256" | "AES256" => PrivProtocol::Aes256,
-                        _ => return Err(format!("不支持的隐私协议: {}", proto)),
+                        _ => return Err(format!("不支持的隐私协议: {proto}")),
                     };
                     auth = auth.privacy(priv_protocol, pass);
                 }
@@ -180,15 +184,16 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     }
 }
 
+#[must_use] 
 pub fn format_snmp_error(e: Box<Error>) -> String {
     match *e {
         Error::Timeout {
             target, retries, ..
         } => {
-            format!("连接超时 (目标: {}, 重试次数: {})", target, retries)
+            format!("连接超时 (目标: {target}, 重试次数: {retries})")
         }
         Error::Network { target, source } => {
-            format!("网络错误 (目标: {}): {}", target, source)
+            format!("网络错误 (目标: {target}): {source}")
         }
         Error::Snmp {
             target,
@@ -197,26 +202,25 @@ pub fn format_snmp_error(e: Box<Error>) -> String {
             ..
         } => {
             format!(
-                "SNMP错误 (目标: {}, 状态: {:?}, 索引: {})",
-                target, status, index
+                "SNMP错误 (目标: {target}, 状态: {status:?}, 索引: {index})"
             )
         }
         Error::Auth { target } => {
-            format!("认证失败 (目标: {})", target)
+            format!("认证失败 (目标: {target})")
         }
         Error::MalformedResponse { target } => {
-            format!("响应格式错误 (目标: {})", target)
+            format!("响应格式错误 (目标: {target})")
         }
         Error::WalkAborted { target, reason } => {
-            format!("Walk中断 (目标: {}, 原因: {:?})", target, reason)
+            format!("Walk中断 (目标: {target}, 原因: {reason:?})")
         }
         Error::Config(msg) => {
-            format!("配置错误: {}", msg)
+            format!("配置错误: {msg}")
         }
         Error::InvalidOid(oid) => {
-            format!("无效OID: {}", oid)
+            format!("无效OID: {oid}")
         }
-        _ => format!("未知错误: {:?}", e),
+        _ => format!("未知错误: {e:?}"),
     }
 }
 
@@ -400,9 +404,7 @@ pub async fn get_switch_ports_via_snmp(
 
         let port_number = vb
             .value
-            .as_str()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| if_index.clone());
+            .as_str().map_or_else(|| if_index.clone(), std::string::ToString::to_string);
 
         ports.push(SwitchPortCreate {
             port_number: port_number.clone(),
@@ -439,12 +441,12 @@ pub async fn test_snmp_connection(
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(switch_id) = req.switch_id {
             let switch = sqlx::query_as::<_, SwitchForSnmp>(
-                r#"SELECT 
+                r"SELECT 
                     id, name, snmp_version, snmp_community, 
                     snmp_username, snmp_auth_protocol, 
                     snmp_auth_password, snmp_priv_protocol, 
                     snmp_priv_password, snmp_port
-                FROM switches WHERE id = $1"#,
+                FROM switches WHERE id = $1",
             )
             .bind(switch_id)
             .fetch_optional(pool.get_conn())
@@ -453,9 +455,9 @@ pub async fn test_snmp_connection(
             match switch {
                 Ok(Some(s)) => {
                     let ip_address: Option<String> = sqlx::query_scalar(
-                        r#"SELECT host(ip_address) FROM ip_managers 
+                        r"SELECT host(ip_address) FROM ip_managers 
                            WHERE switch_id = $1 AND device_type = 'switch' 
-                           ORDER BY created_at LIMIT 1"#,
+                           ORDER BY created_at LIMIT 1",
                     )
                     .bind(switch_id)
                     .fetch_optional(pool.get_conn())
@@ -493,7 +495,7 @@ pub async fn test_snmp_connection(
                 }
                 Err(e) => {
                     return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("查询交换机失败: {}", e))));
+                        .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
                 }
             }
         } else {
@@ -546,7 +548,7 @@ pub async fn test_snmp_connection(
             "SNMP连接测试成功",
         ))),
         Err(e) => Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("SNMP连接测试失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("SNMP连接测试失败: {e}")))),
     }
 }
 
@@ -557,12 +559,12 @@ pub async fn get_switch_info_snmp(
     let switch_id = path.into_inner();
 
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r#"SELECT 
+        r"SELECT 
             id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#,
+        FROM switches WHERE id = $1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -575,14 +577,14 @@ pub async fn get_switch_info_snmp(
         }
         Err(e) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
         }
     };
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r#"SELECT host(ip_address) FROM ip_managers 
+        r"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#,
+           ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -608,8 +610,7 @@ pub async fn get_switch_info_snmp(
         ))),
         Err(e) => Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "获取交换机信息失败: {}",
-                e
+                "获取交换机信息失败: {e}"
             ))),
         ),
     }
@@ -622,12 +623,12 @@ pub async fn get_switch_ports_snmp(
     let switch_id = path.into_inner();
 
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r#"SELECT 
+        r"SELECT 
             id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#,
+        FROM switches WHERE id = $1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -640,14 +641,14 @@ pub async fn get_switch_ports_snmp(
         }
         Err(e) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
         }
     };
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r#"SELECT host(ip_address) FROM ip_managers 
+        r"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#,
+           ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
     .fetch_optional(pool.get_conn())
@@ -672,8 +673,7 @@ pub async fn get_switch_ports_snmp(
         }
         Err(e) => Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "获取交换机端口信息失败: {}",
-                e
+                "获取交换机端口信息失败: {e}"
             ))),
         ),
     }

@@ -15,12 +15,12 @@ pub async fn get_lldp_neighbors(
     switch_id: &Uuid,
 ) -> Result<Vec<LldpNeighbor>, SnmpError> {
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r#"SELECT 
+        r"SELECT 
             id, name, snmp_version, snmp_community, 
             snmp_username, snmp_auth_protocol, 
             snmp_auth_password, snmp_priv_protocol, 
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1"#,
+        FROM switches WHERE id = $1",
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -29,9 +29,9 @@ pub async fn get_lldp_neighbors(
     .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r#"SELECT host(ip_address) FROM ip_managers 
+        r"SELECT host(ip_address) FROM ip_managers 
            WHERE switch_id = $1 AND device_type = 'switch' 
-           ORDER BY created_at LIMIT 1"#,
+           ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
     .fetch_optional(pool)
@@ -133,7 +133,7 @@ pub async fn get_lldp_neighbors_via_snmp(
                 let subtype = if let Some(s) = vb.value.as_u32() {
                     s as u8
                 } else if let Some(bytes) = vb.value.as_bytes() {
-                    if !bytes.is_empty() { bytes[0] } else { 0 }
+                    if bytes.is_empty() { 0 } else { bytes[0] }
                 } else {
                     0
                 };
@@ -370,7 +370,7 @@ fn format_mac_address(bytes: &[u8]) -> String {
     } else {
         bytes
             .iter()
-            .map(|b| format!("{:02X}", b))
+            .map(|b| format!("{b:02X}"))
             .collect::<Vec<_>>()
             .join(":")
     }
@@ -413,7 +413,7 @@ pub async fn sync_lldp_from_snmp(
         Ok(n) => n,
         Err(e) => {
             return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {e}"))));
         }
     };
 
@@ -433,14 +433,14 @@ pub async fn sync_lldp_from_snmp(
 
         if exists {
             let result = sqlx::query(
-                r#"UPDATE switch_lldps SET 
+                r"UPDATE switch_lldps SET 
                     neighbor_chassis_id = $1,
                     neighbor_port_id = $2,
                     neighbor_port_desc = $3,
                     neighbor_sys_name = $4,
                     neighbor_sys_desc = $5,
                     updated_at = $6
-                WHERE switch_id = $7 AND local_port = $8"#,
+                WHERE switch_id = $7 AND local_port = $8",
             )
             .bind(&neighbor.neighbor_chassis_id)
             .bind(&neighbor.neighbor_port_id)
@@ -459,8 +459,8 @@ pub async fn sync_lldp_from_snmp(
         } else {
             let id = Uuid::new_v4();
             let result = sqlx::query(
-                r#"INSERT INTO switch_lldps (id, switch_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"#
+                r"INSERT INTO switch_lldps (id, switch_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"
             )
             .bind(id)
             .bind(switch_id)
@@ -490,13 +490,12 @@ pub async fn sync_lldp_from_snmp(
 
     let message = if saved_count > 0 && updated_count > 0 {
         format!(
-            "新增 {} 条，更新 {} 条 LLDP 记录",
-            saved_count, updated_count
+            "新增 {saved_count} 条，更新 {updated_count} 条 LLDP 记录"
         )
     } else if saved_count > 0 {
-        format!("新增 {} 条 LLDP 记录", saved_count)
+        format!("新增 {saved_count} 条 LLDP 记录")
     } else if updated_count > 0 {
-        format!("更新 {} 条 LLDP 记录", updated_count)
+        format!("更新 {updated_count} 条 LLDP 记录")
     } else {
         "LLDP 数据无变化".to_string()
     };

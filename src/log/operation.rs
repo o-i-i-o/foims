@@ -22,14 +22,81 @@ pub async fn get_operation_logs(
         .unwrap_or(50);
     let offset = (page - 1) * page_size;
 
-    let search_pattern = format!("%{}%", action);
+    let search_pattern = format!("%{action}%");
 
     let has_filters = !resource_type.is_empty()
         || !resource_id.is_empty()
         || !user_id.is_empty()
         || !action.is_empty();
 
-    let (total, logs) = if !has_filters {
+    let (total, logs) = if has_filters {
+        let parsed_resource_id = if resource_id.is_empty() {
+            None
+        } else {
+            Uuid::parse_str(&resource_id).ok()
+        };
+
+        let parsed_user_id = if user_id.is_empty() {
+            None
+        } else {
+            Uuid::parse_str(&user_id).ok()
+        };
+
+        let total: i64 = match sqlx::query_scalar::<_, i64>(
+            r"SELECT COUNT(*) FROM operation_logs ol 
+               LEFT JOIN users u ON ol.user_id = u.id 
+               WHERE ($1::text = '' OR ol.resource_type = $1)
+               AND ($2::uuid IS NULL OR ol.resource_id = $2)
+               AND ($3::uuid IS NULL OR ol.user_id = $3)
+               AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)"
+        )
+        .bind(&resource_type)
+        .bind(parsed_resource_id)
+        .bind(parsed_user_id)
+        .bind(&action)
+        .bind(&search_pattern)
+        .fetch_one(pool.get_conn())
+        .await
+        {
+            Ok(t) => t,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    format!("数据库查询错误: {err}"),
+                )));
+            }
+        };
+
+        let logs = match sqlx::query_as::<_, OperationLog>(
+            r"SELECT ol.id, ol.user_id, COALESCE(u.username, '已删除用户') as username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ 
+               FROM operation_logs ol 
+               LEFT JOIN users u ON ol.user_id = u.id 
+               WHERE ($1::text = '' OR ol.resource_type = $1)
+               AND ($2::uuid IS NULL OR ol.resource_id = $2)
+               AND ($3::uuid IS NULL OR ol.user_id = $3)
+               AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)
+               ORDER BY ol.created_at DESC 
+               LIMIT $6 OFFSET $7"
+        )
+        .bind(&resource_type)
+        .bind(parsed_resource_id)
+        .bind(parsed_user_id)
+        .bind(&action)
+        .bind(&search_pattern)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool.get_conn())
+        .await
+        {
+            Ok(l) => l,
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    format!("数据库查询错误: {err}"),
+                )));
+            }
+        };
+
+        (total, logs)
+    } else {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs ol")
             .fetch_one(pool.get_conn())
             .await
@@ -37,7 +104,7 @@ pub async fn get_operation_logs(
             Ok(t) => t,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -52,74 +119,7 @@ pub async fn get_operation_logs(
             Ok(l) => l,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
-            }
-        };
-
-        (total, logs)
-    } else {
-        let parsed_resource_id = if resource_id.is_empty() {
-            None
-        } else {
-            Uuid::parse_str(&resource_id).ok()
-        };
-
-        let parsed_user_id = if user_id.is_empty() {
-            None
-        } else {
-            Uuid::parse_str(&user_id).ok()
-        };
-
-        let total: i64 = match sqlx::query_scalar::<_, i64>(
-            r#"SELECT COUNT(*) FROM operation_logs ol 
-               LEFT JOIN users u ON ol.user_id = u.id 
-               WHERE ($1::text = '' OR ol.resource_type = $1)
-               AND ($2::uuid IS NULL OR ol.resource_id = $2)
-               AND ($3::uuid IS NULL OR ol.user_id = $3)
-               AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)"#
-        )
-        .bind(&resource_type)
-        .bind(parsed_resource_id)
-        .bind(parsed_user_id)
-        .bind(&action)
-        .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
-                )));
-            }
-        };
-
-        let logs = match sqlx::query_as::<_, OperationLog>(
-            r#"SELECT ol.id, ol.user_id, COALESCE(u.username, '已删除用户') as username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ 
-               FROM operation_logs ol 
-               LEFT JOIN users u ON ol.user_id = u.id 
-               WHERE ($1::text = '' OR ol.resource_type = $1)
-               AND ($2::uuid IS NULL OR ol.resource_id = $2)
-               AND ($3::uuid IS NULL OR ol.user_id = $3)
-               AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)
-               ORDER BY ol.created_at DESC 
-               LIMIT $6 OFFSET $7"#
-        )
-        .bind(&resource_type)
-        .bind(parsed_resource_id)
-        .bind(parsed_user_id)
-        .bind(&action)
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(pool.get_conn())
-        .await
-        {
-            Ok(l) => l,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {}", err),
+                    format!("数据库查询错误: {err}"),
                 )));
             }
         };

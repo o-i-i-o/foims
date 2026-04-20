@@ -51,33 +51,32 @@ pub async fn get_networks(
         let mut param_count = 1;
 
         if !search.is_empty() {
-            conditions.push(format!("(n.name ILIKE ${} OR n.description ILIKE ${} OR n.ipv4_cidr::TEXT ILIKE ${} OR n.ipv6_cidr::TEXT ILIKE {})", 
-                param_count, param_count, param_count, param_count));
+            conditions.push(format!("(n.name ILIKE ${param_count} OR n.description ILIKE ${param_count} OR n.ipv4_cidr::TEXT ILIKE ${param_count} OR n.ipv6_cidr::TEXT ILIKE {param_count})"));
             param_count += 1;
         }
 
         if let Some(_rid) = region_id {
-            conditions.push(format!("n.network_region_id = ${}", param_count));
+            conditions.push(format!("n.network_region_id = ${param_count}"));
             param_count += 1;
         }
 
         if !name_filter.is_empty() {
-            conditions.push(format!("n.name ILIKE ${}", param_count));
+            conditions.push(format!("n.name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !network_region_filter.is_empty() {
-            conditions.push(format!("nt.name ILIKE ${}", param_count));
+            conditions.push(format!("nt.name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ipv4_filter.is_empty() {
-            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${}", param_count));
+            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ipv6_filter.is_empty() {
-            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${}", param_count));
+            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${param_count}"));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -87,14 +86,13 @@ pub async fn get_networks(
         };
 
         let count_query = format!(
-            "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id {}",
-            where_clause
+            "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id {where_clause}"
         );
 
         let mut count_sql = sqlx::query_scalar(&count_query);
 
         if !search.is_empty() {
-            let pattern = format!("%{}%", search);
+            let pattern = format!("%{search}%");
             count_sql = count_sql.bind(pattern);
         }
 
@@ -103,22 +101,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{}%", name_filter);
+            let pattern = format!("%{name_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = format!("%{}%", network_region_filter);
+            let pattern = format!("%{network_region_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = format!("%{}%", ipv4_filter);
+            let pattern = format!("%{ipv4_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = format!("%{}%", ipv6_filter);
+            let pattern = format!("%{ipv6_filter}%");
             count_sql = count_sql.bind(pattern);
         }
 
@@ -145,33 +143,32 @@ pub async fn get_networks(
         let mut param_count = 1;
 
         if !search.is_empty() {
-            conditions.push(format!("(n.name ILIKE ${} OR n.description ILIKE ${} OR n.ipv4_cidr::TEXT ILIKE ${} OR n.ipv6_cidr::TEXT ILIKE {})", 
-                param_count, param_count, param_count, param_count));
+            conditions.push(format!("(n.name ILIKE ${param_count} OR n.description ILIKE ${param_count} OR n.ipv4_cidr::TEXT ILIKE ${param_count} OR n.ipv6_cidr::TEXT ILIKE {param_count})"));
             param_count += 1;
         }
 
         if let Some(_rid) = region_id {
-            conditions.push(format!("n.network_region_id = ${}", param_count));
+            conditions.push(format!("n.network_region_id = ${param_count}"));
             param_count += 1;
         }
 
         if !name_filter.is_empty() {
-            conditions.push(format!("n.name ILIKE ${}", param_count));
+            conditions.push(format!("n.name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !network_region_filter.is_empty() {
-            conditions.push(format!("nt.name ILIKE ${}", param_count));
+            conditions.push(format!("nt.name ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ipv4_filter.is_empty() {
-            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${}", param_count));
+            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${param_count}"));
             param_count += 1;
         }
 
         if !ipv6_filter.is_empty() {
-            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${}", param_count));
+            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${param_count}"));
             param_count += 1;
         }
 
@@ -182,7 +179,7 @@ pub async fn get_networks(
         };
 
         let data_query = format!(
-            r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
@@ -190,7 +187,7 @@ pub async fn get_networks(
                JOIN network_regions nt ON n.network_region_id = nt.id 
                {}
                ORDER BY n.created_at DESC
-               LIMIT ${} OFFSET ${}"#,
+               LIMIT ${} OFFSET ${}",
             where_clause,
             param_count,
             param_count + 1
@@ -199,7 +196,7 @@ pub async fn get_networks(
         let mut data_sql = sqlx::query(&data_query);
 
         if !search.is_empty() {
-            let pattern = format!("%{}%", search);
+            let pattern = format!("%{search}%");
             data_sql = data_sql.bind(pattern);
         }
 
@@ -208,22 +205,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{}%", name_filter);
+            let pattern = format!("%{name_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = format!("%{}%", network_region_filter);
+            let pattern = format!("%{network_region_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = format!("%{}%", ipv4_filter);
+            let pattern = format!("%{ipv4_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = format!("%{}%", ipv6_filter);
+            let pattern = format!("%{ipv6_filter}%");
             data_sql = data_sql.bind(pattern);
         }
 
@@ -258,14 +255,14 @@ pub async fn get_networks(
         }
     } else {
         match sqlx::query(
-            r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
                FROM network_cidrs n 
                JOIN network_regions nt ON n.network_region_id = nt.id 
                ORDER BY n.created_at DESC
-               LIMIT $1 OFFSET $2"#
+               LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
         .bind(offset)
@@ -318,7 +315,7 @@ pub async fn create_network(
     // 验证创建网络请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -505,7 +502,7 @@ pub async fn get_network(
     let id = *id_path;
 
     let network = match sqlx::query(
-        r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
                   n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
                   n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                   (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
@@ -515,7 +512,7 @@ pub async fn get_network(
                   n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
            FROM network_cidrs n 
            JOIN network_regions nt ON n.network_region_id = nt.id 
-           WHERE n.id = $1"#,
+           WHERE n.id = $1",
     )
     .bind(id)
     .fetch_optional(pool.get_conn())
@@ -565,8 +562,7 @@ pub async fn update_network(
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Validation error: {:?}",
-                e
+                "Validation error: {e:?}"
             ))),
         );
     }
@@ -603,20 +599,20 @@ pub async fn update_network(
             Err(err) => {
                 return Ok(crate::utils::handle_db_error(err, "数据库查询错误"));
             }
-        };
+        }
     }
 
     let now = Utc::now();
 
     // 获取当前网络区域信息，用于构建完整网络名称
     let current_network = match sqlx::query(
-        r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
            n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
            FROM network_cidrs n 
            JOIN network_regions nt ON n.network_region_id = nt.id 
-           WHERE n.id = $1"#
+           WHERE n.id = $1"
     ).bind(id)
     .fetch_one(pool.get_conn()).await {
         Ok(row) => Network {
@@ -746,13 +742,13 @@ pub async fn update_network(
 
     // 返回更新后的网络
     let network = match sqlx::query(
-        r#"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
            NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
            FROM network_cidrs n 
            JOIN network_regions nt ON n.network_region_id = nt.id 
-           WHERE n.id = $1"#
+           WHERE n.id = $1"
     ).bind(id)
     .fetch_one(pool.get_conn()).await {
         Ok(row) => Network {
@@ -925,8 +921,18 @@ pub async fn get_network_regions(
     let search = query.get("search").cloned().unwrap_or_default();
     let offset = (page - 1) * page_size;
 
-    let total: i64 = if !search.is_empty() {
-        let pattern = format!("%{}%", search);
+    let total: i64 = if search.is_empty() {
+        match sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
+            .fetch_one(pool.get_conn())
+            .await
+        {
+            Ok(t) => t,
+            Err(err) => {
+                return Ok(crate::utils::handle_db_error(err, "查询网络区域数量失败"));
+            }
+        }
+    } else {
+        let pattern = format!("%{search}%");
         match sqlx::query_scalar(
             "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1",
         )
@@ -939,24 +945,12 @@ pub async fn get_network_regions(
                 return Ok(crate::utils::handle_db_error(err, "查询网络区域数量失败"));
             }
         }
-    } else {
-        match sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
-            .fetch_one(pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询网络区域数量失败"));
-            }
-        }
     };
 
-    let network_regions = if !search.is_empty() {
-        let pattern = format!("%{}%", search);
+    let network_regions = if search.is_empty() {
         match sqlx::query_as::<_, NetworkRegion>(
-            "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         )
-        .bind(&pattern)
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool.get_conn())
@@ -968,9 +962,11 @@ pub async fn get_network_regions(
             }
         }
     } else {
+        let pattern = format!("%{search}%");
         match sqlx::query_as::<_, NetworkRegion>(
-            "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+            "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
+        .bind(&pattern)
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool.get_conn())
@@ -1005,7 +1001,7 @@ pub async fn create_network_region(
     // 验证创建网络区域请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -1023,7 +1019,7 @@ pub async fn create_network_region(
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询网络区域失败"));
         }
-    };
+    }
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -1120,8 +1116,7 @@ pub async fn update_network_region(
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Validation error: {:?}",
-                e
+                "Validation error: {e:?}"
             ))),
         );
     }
@@ -1140,7 +1135,7 @@ pub async fn update_network_region(
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询网络区域失败"));
         }
-    };
+    }
 
     // 检查新名称是否已被其他网络区域使用
     if let Some(name) = &req.name {
@@ -1160,7 +1155,7 @@ pub async fn update_network_region(
             Err(err) => {
                 return Ok(crate::utils::handle_db_error(err, "查询网络区域失败"));
             }
-        };
+        }
     }
 
     let now = Utc::now();
@@ -1242,7 +1237,7 @@ pub async fn delete_network_region(
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询网络区域失败"));
         }
-    };
+    }
 
     // 检查是否有网络关联到该区域
     let network_count = match sqlx::query_scalar::<_, i64>(

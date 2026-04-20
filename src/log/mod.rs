@@ -20,16 +20,16 @@ pub fn setup_logging() -> String {
     );
 
     let app_name = env!("CARGO_PKG_NAME");
-    let log_dir = format!("/var/log/{}", app_name);
+    let log_dir = format!("/var/log/{app_name}");
 
     if !Path::new(&log_dir).exists() {
         fs::create_dir_all(&log_dir).unwrap_or_else(|e| {
-            eprintln!("创建日志目录失败: {}", e);
+            eprintln!("创建日志目录失败: {e}");
         });
     }
 
     let today = chrono::Local::now().format("%Y-%m-%d-%H-%M").to_string();
-    let log_file_path = format!("{}/{}.log", log_dir, today);
+    let log_file_path = format!("{log_dir}/{today}.log");
 
     tracing_subscriber::registry()
         .with(
@@ -40,7 +40,7 @@ pub fn setup_logging() -> String {
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(std::fs::File::create(&log_file_path).unwrap_or_else(|e| {
-                    eprintln!("创建日志文件失败: {}", e);
+                    eprintln!("创建日志文件失败: {e}");
                     std::fs::File::create("ipma.log").unwrap()
                 }))
                 .with_timer(timer)

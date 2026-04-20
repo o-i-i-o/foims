@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[must_use] 
 pub fn get_required_tables() -> Vec<&'static str> {
     vec![
         "users",
@@ -30,6 +31,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
     ]
 }
 
+#[must_use] 
 pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     let mut columns: HashMap<&'static str, Vec<&'static str>> = HashMap::new();
 
@@ -378,14 +380,13 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     let required_tables = get_required_tables();
 
     for table in &required_tables {
-        let exists = match sqlx::query_scalar::<_, bool>(
-            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{}')", table)
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(
+            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')")
         )
         .fetch_one(pool)
         .await
-        {
-            Ok(exists) => exists,
-            Err(_) => return false,
+        else {
+            return false
         };
 
         if !exists {
@@ -401,35 +402,34 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
 
     for (table, columns) in required_columns {
         let table_exists: bool = match sqlx::query_scalar(
-            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{}')", table)
+            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')")
         )
         .fetch_one(pool)
         .await
         {
             Ok(exists) => exists,
-            Err(e) => return Err(format!("检查表 {} 是否存在时出错: {}", table, e)),
+            Err(e) => return Err(format!("检查表 {table} 是否存在时出错: {e}")),
         };
 
         if !table_exists {
-            return Err(format!("表 {} 不存在", table));
+            return Err(format!("表 {table} 不存在"));
         }
 
         for column in columns {
             let column_exists: bool = match sqlx::query_scalar(
                 &format!(
-                    "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{}' AND column_name = '{}')",
-                    table, column
+                    "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{table}' AND column_name = '{column}')"
                 )
             )
             .fetch_one(pool)
             .await
             {
                 Ok(exists) => exists,
-                Err(e) => return Err(format!("检查列 {}.{} 是否存在时出错: {}", table, column, e)),
+                Err(e) => return Err(format!("检查列 {table}.{column} 是否存在时出错: {e}")),
             };
 
             if !column_exists {
-                return Err(format!("表 {} 缺少必需的列: {}", table, column));
+                return Err(format!("表 {table} 缺少必需的列: {column}"));
             }
         }
     }

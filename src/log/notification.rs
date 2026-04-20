@@ -40,8 +40,7 @@ pub async fn get_notifications(
     };
 
     let total: i64 = match sqlx::query_scalar(&format!(
-        "SELECT COUNT(*) FROM notifications {}",
-        where_clause
+        "SELECT COUNT(*) FROM notifications {where_clause}"
     ))
     .fetch_one(pool.get_conn())
     .await
@@ -49,13 +48,12 @@ pub async fn get_notifications(
         Ok(t) => t,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 
     let notifications = match sqlx::query_as::<_, Notification>(&format!(
-        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {} ORDER BY created_at DESC LIMIT {} OFFSET {}",
-        where_clause, page_size, offset
+        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} ORDER BY created_at DESC LIMIT {page_size} OFFSET {offset}"
     ))
     .fetch_all(pool.get_conn())
     .await
@@ -63,7 +61,7 @@ pub async fn get_notifications(
         Ok(notifications) => notifications,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
         }
     };
 
@@ -96,7 +94,7 @@ pub async fn mark_notification_read(
             Ok(notification) => notification,
             Err(err) => {
                 return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {}", err))));
+                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
             }
         };
 
@@ -111,7 +109,7 @@ pub async fn mark_notification_read(
         .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知已标记为已读")))
@@ -124,7 +122,7 @@ pub async fn mark_all_notifications_read(pool: web::Data<DbPool>) -> Result<Http
         .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {}", err))));
+            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "所有通知已标记为已读")))
@@ -138,8 +136,8 @@ pub async fn create_notification(
     notification_type: &str,
     user_id: Option<&Uuid>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#)
+    sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7)")
         .bind(Uuid::new_v4())
         .bind(user_id)
         .bind(title)

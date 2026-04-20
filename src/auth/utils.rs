@@ -102,16 +102,14 @@ impl JwtUtils {
 
     // 验证密钥强度
     fn validate_secret_strength(secret: &str) {
-        if secret.len() < 22 {
-            panic!(
-                "JWT密钥长度不足22个字符，请配置更强的密钥。当前长度: {}",
-                secret.len()
-            );
-        }
+        assert!(secret.len() >= 22, 
+            "JWT密钥长度不足22个字符，请配置更强的密钥。当前长度: {}",
+            secret.len()
+        );
 
         // 检查密钥复杂度
-        let has_uppercase = secret.chars().any(|c| c.is_uppercase());
-        let has_lowercase = secret.chars().any(|c| c.is_lowercase());
+        let has_uppercase = secret.chars().any(char::is_uppercase);
+        let has_lowercase = secret.chars().any(char::is_lowercase);
         let has_digit = secret.chars().any(|c| c.is_ascii_digit());
         let has_special = secret.chars().any(|c| !c.is_alphanumeric());
 
@@ -121,6 +119,7 @@ impl JwtUtils {
     }
 
     // 生成安全的随机密钥（用于HMAC算法）
+    #[must_use] 
     pub fn generate_secure_secret() -> String {
         let mut bytes = [0u8; 64]; // 64字节 = 512位
         let mut rng = rand::rng();
@@ -129,11 +128,13 @@ impl JwtUtils {
     }
 
     // 验证令牌签名
+    #[must_use] 
     pub fn verify_signature(&self, token: &str) -> bool {
         self.validate_token(token).is_ok()
     }
 
     // 检查令牌是否即将过期（例如，在5分钟内）
+    #[must_use] 
     pub fn is_token_about_to_expire(&self, claims: &JwtClaims) -> bool {
         let now = Utc::now().timestamp() as usize;
         let exp = claims.exp;
@@ -164,8 +165,8 @@ impl JwtUtils {
             iss: self.config.issuer.clone(),
             jti,
             aud: self.config.audience.clone(),
-            device_fingerprint: device_fingerprint.map(|s| s.to_string()),
-            ip_address: ip_address.map(|s| s.to_string()),
+            device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
+            ip_address: ip_address.map(std::string::ToString::to_string),
         };
 
         encode(
@@ -208,8 +209,8 @@ impl JwtUtils {
             iss: self.config.issuer.clone(),
             jti,
             aud: self.config.audience.clone(),
-            device_fingerprint: device_fingerprint.map(|s| s.to_string()),
-            ip_address: ip_address.map(|s| s.to_string()),
+            device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
+            ip_address: ip_address.map(std::string::ToString::to_string),
         };
 
         encode(
@@ -220,6 +221,7 @@ impl JwtUtils {
     }
 
     // 生成设备指纹
+    #[must_use] 
     pub fn generate_device_fingerprint(user_agent: &str, ip_address: &str) -> String {
         use sha2::{Digest, Sha256};
 
@@ -233,6 +235,7 @@ impl JwtUtils {
     }
 
     // 验证设备指纹
+    #[must_use] 
     pub fn validate_device_fingerprint(
         &self,
         claims: &JwtClaims,
@@ -300,17 +303,20 @@ impl JwtUtils {
     }
 
     // 获取访问令牌过期时间
-    pub fn get_access_token_expiry(&self) -> u64 {
+    #[must_use] 
+    pub const fn get_access_token_expiry(&self) -> u64 {
         self.config.access_token_expiry
     }
 
     // 获取刷新令牌过期时间
-    pub fn get_refresh_token_expiry(&self) -> u64 {
+    #[must_use] 
+    pub const fn get_refresh_token_expiry(&self) -> u64 {
         self.config.refresh_token_expiry
     }
 
     // 获取基于 remember_me 的实际刷新令牌过期时间
-    pub fn get_actual_refresh_token_expiry(&self, remember_me: bool) -> u64 {
+    #[must_use] 
+    pub const fn get_actual_refresh_token_expiry(&self, remember_me: bool) -> u64 {
         if remember_me {
             self.config.refresh_token_expiry
         } else {
@@ -320,6 +326,7 @@ impl JwtUtils {
 }
 
 // 从请求中提取令牌（优先从 Cookie，其次从 Authorization 头）
+#[must_use] 
 pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String> {
     // 优先从 Cookie 中获取 access_token
     if let Some(cookie) = req.cookie("access_token") {
@@ -364,11 +371,13 @@ pub fn get_client_info(req: &actix_web::HttpRequest) -> (String, String) {
 }
 
 // 从ServiceRequest中提取令牌
+#[must_use] 
 pub fn extract_token_from_service_request(req: &actix_web::dev::ServiceRequest) -> Option<String> {
     extract_token_from_request(req.request())
 }
 
 // 从ServiceRequest中获取客户端信息
+#[must_use] 
 pub fn get_client_info_from_service_request(
     req: &actix_web::dev::ServiceRequest,
 ) -> (String, String) {

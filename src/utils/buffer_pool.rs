@@ -9,6 +9,7 @@ pub struct BufferPool {
 }
 
 impl BufferPool {
+    #[must_use] 
     pub fn new(max_size: usize) -> Self {
         Self {
             buffers: Mutex::new(Vec::with_capacity(max_size)),

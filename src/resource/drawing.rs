@@ -7,7 +7,7 @@ use serde_json;
 use uuid::Uuid;
 
 // 生成区域图
-pub async fn generate_region_map(
+pub fn generate_region_map(
     _pool: web::Data<DbPool>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse> {
@@ -17,8 +17,7 @@ pub async fn generate_region_map(
     )))
 }
 
-// 生成房间图
-pub async fn generate_room_map(
+pub fn generate_room_map(
     _pool: web::Data<DbPool>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse> {
@@ -28,8 +27,7 @@ pub async fn generate_room_map(
     )))
 }
 
-// 生成工位图
-pub async fn generate_workstation_map(
+pub fn generate_workstation_map(
     _pool: web::Data<DbPool>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse> {
@@ -48,19 +46,16 @@ pub async fn save_layout(
 ) -> Result<HttpResponse> {
     if req.r#type == "workstation" {
         // 检查 room_id 是否存在
-        let room_id = match req.room_id {
-            Some(room_id) => room_id,
-            None => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("房间ID不能为空"))
-                );
-            }
+        let Some(room_id) = req.room_id else {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("房间ID不能为空"))
+            )
         };
 
         // 开始事务
         let mut tx = pool.get_conn().begin().await.map_err(|e| {
             actix_web::error::InternalError::new(
-                format!("获取数据库连接失败: {}", e),
+                format!("获取数据库连接失败: {e}"),
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
             )
         })?;
@@ -89,20 +84,20 @@ pub async fn save_layout(
             .bind::<Option<Uuid>>(None) // 工位布局时network_region_id为NULL
             .bind(item.id)
             .bind(element_type)
-            .bind(item.position.x as i32)
-            .bind(item.position.y as i32)
-            .bind(item.position.width as i32)
-            .bind(item.position.height as i32)
-            .bind(item.position.rotation as i32)
+            .bind(item.position.x_i32())
+            .bind(item.position.y_i32())
+            .bind(item.position.width_i32())
+            .bind(item.position.height_i32())
+            .bind(item.position.rotation_i32())
             .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {}", e))));
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {e}"))));
             }
         }
 
         // 提交事务
         if let Err(e) = tx.commit().await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("提交事务失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("提交事务失败: {e}"))));
         }
 
         // 记录操作日志
@@ -126,19 +121,16 @@ pub async fn save_layout(
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位布局保存成功")))
     } else if req.r#type == "network_region" {
         // 检查 network_region_id 是否存在
-        let network_region_id = match req.network_region_id {
-            Some(network_region_id) => network_region_id,
-            None => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络区域ID不能为空"))
-                );
-            }
+        let Some(network_region_id) = req.network_region_id else {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络区域ID不能为空"))
+            )
         };
 
         // 开始事务
         let mut tx = pool.get_conn().begin().await.map_err(|e| {
             actix_web::error::InternalError::new(
-                format!("获取数据库连接失败: {}", e),
+                format!("获取数据库连接失败: {e}"),
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
             )
         })?;
@@ -167,20 +159,20 @@ pub async fn save_layout(
             .bind(network_region_id)
             .bind(item.id)
             .bind(element_type)
-            .bind(item.position.x as i32)
-            .bind(item.position.y as i32)
-            .bind(item.position.width as i32)
-            .bind(item.position.height as i32)
-            .bind(item.position.rotation as i32)
+            .bind(item.position.x_i32())
+            .bind(item.position.y_i32())
+            .bind(item.position.width_i32())
+            .bind(item.position.height_i32())
+            .bind(item.position.rotation_i32())
             .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {}", e))));
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {e}"))));
             }
         }
 
         // 提交事务
         if let Err(e) = tx.commit().await {
             return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("提交事务失败: {}", e))));
+                .json(ApiResponse::<()>::error(format!("提交事务失败: {e}"))));
         }
 
         // 记录操作日志
@@ -208,14 +200,14 @@ pub async fn save_layout(
             if let Err(e) = sqlx::query(
                 "UPDATE cabinets SET x = $1, y = $2, width = $3, height = $4, rotation = $5 WHERE id = $6"
             )
-            .bind(item.position.x as i32)
-            .bind(item.position.y as i32)
-            .bind(item.position.width as i32)
-            .bind(item.position.height as i32)
-            .bind(item.position.rotation as i32)
+            .bind(item.position.x_i32())
+            .bind(item.position.y_i32())
+            .bind(item.position.width_i32())
+            .bind(item.position.height_i32())
+            .bind(item.position.rotation_i32())
             .bind(item.id)
             .execute(pool.get_conn()).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("布局保存失败: {}", e))));
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("布局保存失败: {e}"))));
             }
         }
 
@@ -259,7 +251,7 @@ pub async fn delete_layout(
             .await
     {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除布局失败: {}", e))));
+            .json(ApiResponse::<()>::error(format!("删除布局失败: {e}"))));
     }
 
     // 记录操作日志
@@ -300,8 +292,7 @@ pub async fn delete_positions_layout(
     {
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "删除网络区域布局失败: {}",
-                e
+                "删除网络区域布局失败: {e}"
             ))),
         );
     }
@@ -331,7 +322,7 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
 
     // 从数据库获取布局数据
     let layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
-        r#"SELECT element_id, element_type, 
+        r"SELECT element_id, element_type, 
                   json_build_object(
                       'x', x, 
                       'y', y, 
@@ -340,14 +331,14 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
                       'rotation', rotation
                   ) as position
            FROM svg_layouts 
-           WHERE layout_type = 'workstation' AND room_id = $1"#,
+           WHERE layout_type = 'workstation' AND room_id = $1",
     )
     .bind(room_id)
     .fetch_all(pool.get_conn())
     .await
     .map_err(|e| {
         actix_web::error::InternalError::new(
-            format!("获取布局失败: {}", e),
+            format!("获取布局失败: {e}"),
             actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         )
     })?;
@@ -384,7 +375,7 @@ pub async fn get_positions_layout(
 
     // 从数据库获取布局数据
     let layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
-        r#"SELECT element_id, element_type, 
+        r"SELECT element_id, element_type, 
                   json_build_object(
                       'x', x, 
                       'y', y, 
@@ -393,14 +384,14 @@ pub async fn get_positions_layout(
                       'rotation', rotation
                   ) as position
            FROM svg_layouts 
-           WHERE layout_type = 'network_region' AND network_region_id = $1"#,
+           WHERE layout_type = 'network_region' AND network_region_id = $1",
     )
     .bind(network_region_id)
     .fetch_all(pool.get_conn())
     .await
     .map_err(|e| {
         actix_web::error::InternalError::new(
-            format!("获取布局失败: {}", e),
+            format!("获取布局失败: {e}"),
             actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         )
     })?;

@@ -178,7 +178,7 @@ pub async fn get_system_info(
 
     // 从文件加载最新配置
     let latest_config = Config::load().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to load latest config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to load latest config: {e}"))
     })?;
 
     // 创建系统信息响应
@@ -310,7 +310,7 @@ pub async fn update_system_config(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -342,14 +342,14 @@ pub async fn update_system_config(
     tracing::info!("[update_config] 准备保存配置到: {}", config_path);
 
     match save_config_to_file(&new_config) {
-        Ok(_) => {
+        Ok(()) => {
             tracing::info!("配置已保存到: {}", config_path);
             Ok(HttpResponse::Ok().json(ApiResponse::success(new_config, "配置更新成功")))
         }
         Err(e) => {
             tracing::error!("配置保存失败: {}", e);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("配置保存失败: {:?}", e))))
+                .json(ApiResponse::<()>::error(format!("配置保存失败: {e:?}"))))
         }
     }
 }
@@ -478,7 +478,7 @@ fn check_if_running_as_service() -> bool {
 
 fn restart_standalone_process() -> Result<HttpResponse> {
     let exe_path = std::env::current_exe().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("获取可执行文件路径失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("获取可执行文件路径失败: {e}"))
     })?;
 
     let exe_path_str = exe_path.to_str().ok_or_else(|| {
@@ -486,7 +486,7 @@ fn restart_standalone_process() -> Result<HttpResponse> {
     })?;
 
     let working_dir = std::env::current_dir().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("获取工作目录失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("获取工作目录失败: {e}"))
     })?;
 
     let working_dir_str = working_dir.to_str().ok_or_else(|| {
@@ -496,15 +496,14 @@ fn restart_standalone_process() -> Result<HttpResponse> {
     let restart_script = format!(
         r#"#!/bin/bash
 sleep 3
-cd "{}"
-exec "{}"
-"#,
-        working_dir_str, exe_path_str
+cd "{working_dir_str}"
+exec "{exe_path_str}"
+"#
     );
 
     let script_path = "/tmp/ipma_restart.sh";
     std::fs::write(script_path, restart_script).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("创建重启脚本失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("创建重启脚本失败: {e}"))
     })?;
 
     let output = Command::new("chmod")
@@ -512,7 +511,7 @@ exec "{}"
         .arg(script_path)
         .output()
         .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("设置脚本权限失败: {}", e))
+            actix_web::error::ErrorInternalServerError(format!("设置脚本权限失败: {e}"))
         })?;
 
     if !output.status.success() {
@@ -543,15 +542,14 @@ pub async fn restart_os() -> Result<HttpResponse> {
         .arg("sleep 2 && sudo reboot")
         .output()
         .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("执行重启命令失败: {}", e))
+            actix_web::error::ErrorInternalServerError(format!("执行重启命令失败: {e}"))
         })?;
 
     if !output.status.success() {
         let error_message = String::from_utf8_lossy(&output.stderr);
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "操作系统重启失败: {}",
-                error_message
+                "操作系统重启失败: {error_message}"
             ))),
         );
     }
@@ -694,7 +692,7 @@ pub async fn register_service() -> Result<HttpResponse> {
 
     // 获取当前可执行文件路径
     let exe_path = std::env::current_exe().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("获取当前可执行文件路径失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("获取当前可执行文件路径失败: {e}"))
     })?;
     let exe_path_str = exe_path.to_str().ok_or_else(|| {
         actix_web::error::ErrorInternalServerError("无法将可执行文件路径转换为字符串")
@@ -703,13 +701,11 @@ pub async fn register_service() -> Result<HttpResponse> {
     // 获取配置文件路径
     let config_path = crate::config::get_config_file_path();
     let config_dir = std::path::Path::new(&config_path)
-        .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "/etc/ipma".to_string());
+        .parent().map_or_else(|| "/etc/ipma".to_string(), |p| p.to_string_lossy().to_string());
 
     // 创建 systemd 服务文件内容
     let service_content = format!(
-        r#"[Unit]
+        r"[Unit]
 Description=IP Management Application
 Documentation=man:ipma(1)
 After=network.target postgresql.service
@@ -720,7 +716,7 @@ Type=simple
 User=ipma
 Group=ipma
 WorkingDirectory=/opt/ipma
-ExecStart={}
+ExecStart={exe_path_str}
 Restart=always
 RestartSec=5s
 
@@ -731,7 +727,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ipma /var/log/ipma {}
+ReadWritePaths=/opt/ipma /var/log/ipma {config_dir}
 PrivateTmp=true
 
 # 资源限制
@@ -739,8 +735,7 @@ LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
-"#,
-        exe_path_str, config_dir
+"
     );
 
     // 尝试写入服务文件（需要权限）
@@ -807,8 +802,7 @@ WantedBy=multi-user.target
             tracing::error!("创建服务文件失败: {}", error);
             Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "创建服务文件失败，需要管理员权限: {}",
-                    error
+                    "创建服务文件失败，需要管理员权限: {error}"
                 ))),
             )
         }
@@ -816,7 +810,7 @@ WantedBy=multi-user.target
             tracing::error!("执行命令失败: {}", e);
             Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
                 "需要管理员权限来注册服务。请手动执行以下命令：\nsudo tee /etc/systemd/system/ipma.service <<< '{}'\nsudo systemctl daemon-reload\nsudo systemctl enable ipma.service",
-                service_content.replace("'", "'\\''")
+                service_content.replace('\'', "'\\''")
             ))))
         }
     }
@@ -831,11 +825,9 @@ fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
         Ok(output) if output.status.success() => {
             return Ok(());
         }
-        Ok(_) => {}
-        Err(_) => {}
+        Ok(_) | Err(_) => {}
     }
 
-    // 尝试 pkexec
     let pkexec_result = Command::new("pkexec")
         .args(["--user", "root", "systemctl"])
         .args(args)
@@ -845,8 +837,7 @@ fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
         Ok(output) if output.status.success() => {
             return Ok(());
         }
-        Ok(_) => {}
-        Err(_) => {}
+        Ok(_) | Err(_) => {}
     }
 
     // 尝试 sudo
@@ -856,9 +847,9 @@ fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
         Ok(output) if output.status.success() => Ok(()),
         Ok(output) => {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(format!("systemctl {:?} 失败: {}", args, error))
+            Err(format!("systemctl {args:?} 失败: {error}"))
         }
-        Err(e) => Err(format!("执行命令失败: {}", e)),
+        Err(e) => Err(format!("执行命令失败: {e}")),
     }
 }
 
@@ -882,7 +873,7 @@ pub async fn update_smtp_config(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -900,8 +891,7 @@ pub async fn update_smtp_config(
     if let Err(e) = save_smtp_config_to_db(pool.get_conn(), &smtp_config).await {
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "保存SMTP配置失败: {:?}",
-                e
+                "保存SMTP配置失败: {e:?}"
             ))),
         );
     }
@@ -937,7 +927,7 @@ pub async fn test_smtp_connection(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -1003,9 +993,9 @@ pub async fn test_smtp_connection(
     }
 
     match test_result {
-        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功"))),
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("SMTP连接测试失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("SMTP连接测试失败: {e}")))),
     }
 }
 
@@ -1018,7 +1008,7 @@ pub async fn send_email(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -1052,9 +1042,9 @@ pub async fn send_email(
     .await;
 
     match send_result {
-        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功"))),
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("邮件发送失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("邮件发送失败: {e}")))),
     }
 }
 
@@ -1063,16 +1053,13 @@ pub async fn update_config(
     _pool: web::Data<DbPool>,
     req: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse> {
-    // 加载当前配置
     let mut current_config = Config::load().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {e}"))
     })?;
 
-    // 只更新server部分
     if let Some(server_value) = req.get("server")
         && let Ok(server_config) = serde_json::from_value::<ServerConfig>(server_value.clone())
     {
-        // 验证端口配置：确保至少有一个端口是启用的
         let http_enabled = server_config.http_enabled.unwrap_or(false);
         let https_enabled = server_config.https_enabled.unwrap_or(false);
 
@@ -1085,14 +1072,13 @@ pub async fn update_config(
         current_config.server = server_config;
     }
 
-    // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置更新成功")))
@@ -1126,7 +1112,7 @@ fn check_certificate_exists(dir: &str, cert_type: &str) -> bool {
 pub async fn get_certificate_status() -> Result<HttpResponse> {
     // 检查是否存在导入的证书
     let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{}/certs", app_name);
+    let certs_dir = format!("/etc/{app_name}/certs");
 
     let has_imported_cert = check_certificate_exists(&certs_dir, "import");
 
@@ -1173,29 +1159,29 @@ pub async fn generate_certificate(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
     // 确保证书目录存在
     let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{}/certs", app_name);
+    let certs_dir = format!("/etc/{app_name}/certs");
 
     if !std::path::Path::new(&certs_dir).exists() {
         std::fs::create_dir_all(&certs_dir).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("创建证书目录失败: {}", e))
+            actix_web::error::ErrorInternalServerError(format!("创建证书目录失败: {e}"))
         })?;
     }
 
     // 生成带时间戳的证书文件名
     let timestamp = chrono::Utc::now().timestamp();
-    let base_name = format!("create_{}_cert", timestamp);
-    let cert_path = format!("{}/{}.pem", certs_dir, base_name);
-    let key_path = format!("{}/{}.key", certs_dir, base_name);
+    let base_name = format!("create_{timestamp}_cert");
+    let cert_path = format!("{certs_dir}/{base_name}.pem");
+    let key_path = format!("{certs_dir}/{base_name}.key");
 
     if let Err(e) = generate_self_signed_cert(&cert_path, &key_path, &req, &config) {
         return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("生成证书失败: {:?}", e))));
+            .json(ApiResponse::<()>::error(format!("生成证书失败: {e:?}"))));
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书生成成功")))
@@ -1237,28 +1223,28 @@ pub async fn import_certificate(
 
     // 确保证书目录存在
     let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{}/certs", app_name);
+    let certs_dir = format!("/etc/{app_name}/certs");
 
     if !std::path::Path::new(&certs_dir).exists() {
         std::fs::create_dir_all(&certs_dir).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("创建证书目录失败: {}", e))
+            actix_web::error::ErrorInternalServerError(format!("创建证书目录失败: {e}"))
         })?;
     }
 
     // 生成带时间戳的证书文件名
     let timestamp = chrono::Utc::now().timestamp();
-    let base_name = format!("import_{}_cert", timestamp);
-    let cert_path = format!("{}/{}.pem", certs_dir, base_name);
-    let key_path = format!("{}/{}.key", certs_dir, base_name);
+    let base_name = format!("import_{timestamp}_cert");
+    let cert_path = format!("{certs_dir}/{base_name}.pem");
+    let key_path = format!("{certs_dir}/{base_name}.key");
 
     // 保存证书文件
     std::fs::write(&cert_path, cert_data).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("保存证书文件失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("保存证书文件失败: {e}"))
     })?;
 
     // 保存私钥文件
     std::fs::write(&key_path, key_data).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("保存私钥文件失败: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("保存私钥文件失败: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
@@ -1267,7 +1253,7 @@ pub async fn import_certificate(
 // 下载证书 CA
 pub async fn download_certificate() -> Result<HttpResponse> {
     let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{}/certs", app_name);
+    let certs_dir = format!("/etc/{app_name}/certs");
 
     // 获取当前生效的证书类型
     let cert_type = match Config::load() {
@@ -1319,7 +1305,7 @@ pub async fn download_certificate() -> Result<HttpResponse> {
             .content_type("application/x-pem-file")
             .append_header((
                 actix_web::http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", filename),
+                format!("attachment; filename=\"{filename}\""),
             ))
             .body(content))
     } else {
@@ -1353,7 +1339,7 @@ fn generate_self_signed_cert(
     params.not_after = now + time::Duration::days(3650); // 10年
 
     if let Some(days) = req.validity {
-        params.not_after = now + time::Duration::days(days as i64);
+        params.not_after = now + time::Duration::days(i64::from(days));
     }
 
     // 3. 设置主体信息 (Distinguished Name)
@@ -1440,11 +1426,11 @@ pub async fn disable_init_mode(
     // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     tracing::info!("初始化模式已关闭，配置已保存，正在触发服务重启");
@@ -1457,7 +1443,7 @@ pub async fn disable_init_mode(
 pub async fn backup_config(config: web::Data<Config>) -> Result<HttpResponse> {
     // 将配置序列化为JSON格式
     let config_json = serde_json::to_string_pretty(&config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     Ok(HttpResponse::Ok()
@@ -1490,11 +1476,11 @@ pub async fn restore_config(payload: web::Json<Config>) -> Result<HttpResponse> 
     // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置恢复成功")))
@@ -1536,7 +1522,7 @@ pub async fn update_session_timeout_config(
 ) -> Result<HttpResponse> {
     // 加载当前配置
     let mut current_config = Config::load().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {e}"))
     })?;
 
     // 更新会话超时配置
@@ -1545,11 +1531,11 @@ pub async fn update_session_timeout_config(
     // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "会话超时配置更新成功")))
@@ -1586,7 +1572,7 @@ pub async fn update_language_setting(
     // 验证请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {:?}", e)))
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
@@ -1600,23 +1586,23 @@ pub async fn update_language_setting(
 
     // 加载当前配置
     let mut current_config = Config::load().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {e}"))
     })?;
 
     // 更新语言设置
     current_config.i18n = Some(I18nConfig {
-        default_language: language.clone(),
+        default_language: language,
         supported_languages: vec!["zh".to_string(), "en".to_string()],
     });
 
     // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "语言设置更新成功")))
@@ -1639,7 +1625,7 @@ pub async fn update_page_timeout_config(
 ) -> Result<HttpResponse> {
     // 加载当前配置
     let mut current_config = Config::load().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to load current config: {e}"))
     })?;
 
     // 更新页面超时配置
@@ -1648,11 +1634,11 @@ pub async fn update_page_timeout_config(
     // 将配置保存到文件
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(&config_path, config_str).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "页面超时配置更新成功")))
@@ -1677,8 +1663,7 @@ pub async fn get_notification_settings(pool: web::Data<DbPool>) -> Result<HttpRe
                 .filter_map(|id| Uuid::parse_str(id.trim()).ok())
                 .collect::<Vec<Uuid>>()
         }
-        Ok(None) => Vec::new(),
-        Err(_) => Vec::new(),
+        Ok(None) | Err(_) => Vec::new(),
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -1697,7 +1682,7 @@ pub async fn update_notification_settings(
     let recipients_str = req
         .email_recipients
         .iter()
-        .map(|id| id.to_string())
+        .map(std::string::ToString::to_string)
         .collect::<Vec<String>>()
         .join(",");
 
@@ -1710,7 +1695,7 @@ pub async fn update_notification_settings(
     .bind(&recipients_str)
     .execute(pool.get_conn())
     .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {}", e)))?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
 }

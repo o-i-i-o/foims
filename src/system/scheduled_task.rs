@@ -46,18 +46,18 @@ pub async fn create_scheduled_task(
 ) -> Result<HttpResponse> {
     if let Err(e) = req.validate() {
         return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("参数验证失败: {:?}", e))));
+            .json(ApiResponse::<()>::error(format!("参数验证失败: {e:?}"))));
     }
 
-    let config = req.config.clone().unwrap_or(serde_json::json!({}));
+    let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
     let enabled = req.enabled.unwrap_or(true);
 
     let next_run_at = calculate_next_run(&req.cron_expression).ok();
 
     let task: Result<ScheduledTask, sqlx::Error> = sqlx::query_as(
-        r#"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
+        r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
            VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at"#
+           RETURNING id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at"
     )
     .bind(&req.name)
     .bind(&req.task_type)
@@ -71,7 +71,7 @@ pub async fn create_scheduled_task(
     match task {
         Ok(t) => Ok(HttpResponse::Created().json(ApiResponse::success(t, "创建定时任务成功"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建定时任务失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("创建定时任务失败: {e}")))),
     }
 }
 
@@ -82,7 +82,7 @@ pub async fn update_scheduled_task(
 ) -> Result<HttpResponse> {
     if let Err(e) = req.validate() {
         return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("参数验证失败: {:?}", e))));
+            .json(ApiResponse::<()>::error(format!("参数验证失败: {e:?}"))));
     }
 
     let id = path.into_inner();
@@ -100,14 +100,14 @@ pub async fn update_scheduled_task(
     }
 
     let result = sqlx::query(
-        r#"UPDATE scheduled_tasks SET
+        r"UPDATE scheduled_tasks SET
            name = COALESCE($1, name),
            task_type = COALESCE($2, task_type),
            cron_expression = COALESCE($3, cron_expression),
            enabled = COALESCE($4, enabled),
            config = COALESCE($5, config),
            updated_at = $6
-           WHERE id = $7"#,
+           WHERE id = $7",
     )
     .bind(&req.name)
     .bind(&req.task_type)
@@ -132,15 +132,14 @@ pub async fn update_scheduled_task(
                 Ok(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "更新定时任务成功"))),
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "查询更新后的任务失败: {}",
-                        e
+                        "查询更新后的任务失败: {e}"
                     ))),
                 ),
             }
         }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新定时任务失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("更新定时任务失败: {e}")))),
     }
 }
 
@@ -161,7 +160,7 @@ pub async fn delete_scheduled_task(
         }
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
         Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除定时任务失败: {}", e)))),
+            .json(ApiResponse::<()>::error(format!("删除定时任务失败: {e}")))),
     }
 }
 
@@ -194,8 +193,7 @@ pub async fn toggle_scheduled_task(
                 }
                 Err(e) => Ok(
                     HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "查询切换后的任务失败: {}",
-                        e
+                        "查询切换后的任务失败: {e}"
                     ))),
                 ),
             }
@@ -203,8 +201,7 @@ pub async fn toggle_scheduled_task(
         Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
         Err(e) => Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "切换定时任务状态失败: {}",
-                e
+                "切换定时任务状态失败: {e}"
             ))),
         ),
     }
@@ -225,11 +222,8 @@ pub async fn run_scheduled_task_now(
     .ok()
     .flatten();
 
-    let task = match task {
-        Some(t) => t,
-        None => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在")));
-        }
+    let Some(task) = task else {
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在")))
     };
 
     let start_time = Utc::now();
@@ -255,8 +249,8 @@ pub async fn run_scheduled_task_now(
     };
 
     if let Err(e) = sqlx::query(
-        r#"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+        r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(Uuid::new_v4())
     .bind(&task_name)

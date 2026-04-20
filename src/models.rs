@@ -63,6 +63,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    #[must_use] 
     pub fn error_i18n(message_key: &str, lang: &str) -> Self {
         rust_i18n::set_locale(lang);
         let message = rust_i18n::t!(message_key);
@@ -87,6 +88,7 @@ pub struct PaginatedResponse<T> {
 }
 
 impl<T: Serialize> PaginatedResponse<T> {
+    #[must_use] 
     pub fn new(items: Vec<T>, total: i64, page: i64, page_size: i64, message: &str) -> Self {
         let total_pages = if page_size > 0 {
             (total + page_size - 1) / page_size
@@ -114,6 +116,28 @@ pub struct Position {
     pub width: f64,
     pub height: f64,
     pub rotation: f64,
+}
+
+impl Position {
+    pub fn x_i32(&self) -> i32 {
+        self.x.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+    }
+
+    pub fn y_i32(&self) -> i32 {
+        self.y.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+    }
+
+    pub fn width_i32(&self) -> i32 {
+        self.width.round().clamp(0.0, i32::MAX as f64) as i32
+    }
+
+    pub fn height_i32(&self) -> i32 {
+        self.height.round().clamp(0.0, i32::MAX as f64) as i32
+    }
+
+    pub fn rotation_i32(&self) -> i32 {
+        self.rotation.round().clamp(0.0, 360.0) as i32
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
