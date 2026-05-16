@@ -1,26 +1,30 @@
-use crate::auth::utils::JwtUtils;
 use crate::config::Config;
 use crate::db::DbPool;
-use crate::utils::buffer_pool::get_buffer_pool;
 use anyhow::Context;
-use quinn::{Endpoint, ServerConfig};
-use serde_json::json;
+use bytes::{Buf, Bytes};
+use h3::server::RequestResolver;
+use h3_quinn::quinn;
+use h3_quinn::quinn::crypto::rustls::QuicServerConfig;
+use http::StatusCode;
+use pem::parse_many;
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::PrivateKeyDer;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
-use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
-// 应用状态
+static H3_ALPN: &[u8] = b"h3";
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub pool: Option<DbPool>,
     pub semaphore: Arc<Semaphore>,
-    pub rt_handle: Handle,
+    pub http_port: u16,
 }
 
-// 启动 HTTP/3 服务器
 pub async fn start_http3_server(
     server_host: String,
     port: u16,
@@ -28,79 +32,64 @@ pub async fn start_http3_server(
     key_path: &str,
     app_state: AppState,
 ) -> anyhow::Result<()> {
-    use pem::parse_many;
-    use rustls_pki_types::CertificateDer;
-    use rustls_pki_types::PrivateKeyDer;
+    let cert_data = std::fs::read(cert_path).context("读取证书文件失败")?;
+    let key_data = std::fs::read(key_path).context("读取私钥文件失败")?;
 
-    // 读取证书和私钥文件
-    let cert_data = std::fs::read(cert_path).context("Failed to read certificate file")?;
-    let key_data = std::fs::read(key_path).context("Failed to read private key file")?;
-
-    // 解析证书
     let certs = parse_many(&cert_data)
-        .context("Failed to parse certificate")?
+        .context("解析证书失败")?
         .into_iter()
-        .filter(|pem| pem.tag() == "CERTIFICATE")
-        .map(|pem| CertificateDer::from(pem.contents().to_vec()))
+        .filter(|p| p.tag() == "CERTIFICATE")
+        .map(|p| CertificateDer::from(p.contents().to_vec()))
         .collect::<Vec<_>>();
 
-    // 解析私钥
     let keys = parse_many(&key_data)
-        .context("Failed to parse private key")?
+        .context("解析私钥失败")?
         .into_iter()
-        .filter(|pem| pem.tag() == "PRIVATE KEY")
-        .map(|pem| PrivateKeyDer::Pkcs8(pem.contents().to_vec().into()))
+        .filter(|p| p.tag() == "PRIVATE KEY")
+        .map(|p| PrivateKeyDer::Pkcs8(p.contents().to_vec().into()))
         .collect::<Vec<_>>();
 
     if certs.is_empty() {
-        return Err(anyhow::anyhow!("No valid certificate found"));
+        return Err(anyhow::anyhow!("未找到有效证书"));
     }
-
     if keys.is_empty() {
-        return Err(anyhow::anyhow!("No valid private key found"));
+        return Err(anyhow::anyhow!("未找到有效私钥"));
     }
 
-    // 创建服务器配置
-    let server_config = ServerConfig::with_single_cert(certs, keys[0].clone_key())
-        .context("Failed to create server config")?;
+    let mut tls_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, keys[0].clone_key())
+        .map_err(|e| anyhow::anyhow!("创建TLS配置失败: {}", e))?;
+    tls_config.alpn_protocols = vec![H3_ALPN.to_vec()];
 
-    // 绑定到指定地址
-    let addr = match server_host.as_str() {
-        "::" => {
-            // IPv6双栈模式
-            format!("[::]:{port}")
-                .parse::<SocketAddr>()
-                .context("Failed to parse IPv6 address")?
-        }
-        "0.0.0.0" => {
-            // IPv4通配符地址
-            format!("0.0.0.0:{port}")
-                .parse::<SocketAddr>()
-                .context("Failed to parse IPv4 address")?
-        }
-        _ => {
-            // 具体IP地址
-            format!("{server_host}:{port}")
-                .parse::<SocketAddr>()
-                .context("Failed to parse server address")?
-        }
-    };
+    let quic_server_config = QuicServerConfig::try_from(tls_config)
+        .map_err(|e| anyhow::anyhow!("创建QUIC服务端配置失败: {}", e))?;
+    let server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
 
-    // 创建 QUIC 端点
-    let endpoint =
-        Endpoint::server(server_config, addr).context("Failed to create QUIC endpoint")?;
+    let addr = parse_listen_addr(&server_host, port)?;
 
-    let local_addr = endpoint
-        .local_addr()
-        .context("Failed to get local address")?;
-    info!("HTTP/3服务器监听在 {:?} (QUIC与TLS共存)", local_addr);
+    let endpoint = quinn::Endpoint::server(server_config, addr)
+        .with_context(|| format!("创建QUIC端点失败 (地址: {addr}), 端口可能被占用"))?;
 
-    // 处理传入的连接
-    while let Some(conn) = endpoint.accept().await {
-        let app_state_clone = app_state.clone();
-        app_state.rt_handle.spawn(async move {
-            if let Err(e) = handle_h3_connection_with_h3(conn, app_state_clone).await {
-                warn!("Connection error: {:?}", e);
+    let local_addr = endpoint.local_addr().context("获取本地地址失败")?;
+    info!("HTTP/3服务器监听在 {:?} (QUIC/UDP)", local_addr);
+
+    let http_port = app_state.http_port;
+
+    while let Some(incoming_conn) = endpoint.accept().await {
+        let app_state = app_state.clone();
+        tokio::spawn(async move {
+            match incoming_conn.await {
+                Ok(conn) => {
+                    let remote = conn.remote_address();
+                    debug!("新的QUIC连接: {:?}", remote);
+                    if let Err(e) = handle_h3_connection(conn, app_state, http_port).await {
+                        error!("HTTP/3连接处理错误: {:?}", e);
+                    }
+                }
+                Err(e) => {
+                    error!("接受QUIC连接失败: {:?}", e);
+                }
             }
         });
     }
@@ -108,72 +97,34 @@ pub async fn start_http3_server(
     Ok(())
 }
 
-// 优化的 HTTP/3 连接处理
-async fn handle_h3_connection_with_h3(
-    conn: quinn::Incoming,
+async fn handle_h3_connection(
+    conn: quinn::Connection,
     app_state: AppState,
+    http_port: u16,
 ) -> anyhow::Result<()> {
-    let connection = conn.await.context("Failed to accept QUIC connection")?;
-    let remote_addr = connection.remote_address();
-    debug!("新的HTTP/3连接: {:?}", remote_addr);
+    let quinn_conn = h3_quinn::Connection::new(conn);
+    let mut h3_conn = h3::server::Connection::new(quinn_conn).await?;
 
-    // 处理连接上的流
     loop {
-        tokio::select! {
-            // 接受单向流（通常用于请求）
-            uni_stream = connection.accept_uni() => {
-                match uni_stream {
-                    Ok(stream) => {
-                        let app_state_clone = app_state.clone();
-                        app_state.rt_handle.spawn(async move {
-                            // 获取信号量许可
-                            let permit = app_state_clone.semaphore.acquire().await;
-                            if let Ok(_permit) = permit {
-                                if let Err(e) = handle_stream(stream).await {
-                                    debug!("流错误: {:?}", e);
-                                }
-                                // 许可会在作用域结束时自动释放
-                            } else {
-                                warn!("Failed to acquire semaphore permit for uni stream");
-                            }
-                        });
+        match h3_conn.accept().await {
+            Ok(Some(resolver)) => {
+                let app_state = app_state.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = handle_h3_request(resolver, app_state, http_port).await {
+                        warn!("HTTP/3请求处理错误: {:?}", e);
                     }
-                    Err(e) => {
-                        debug!("接受单向流错误: {:?}", e);
-                        break;
-                    }
-                }
+                });
             }
-
-            // 接受双向流
-            bi_stream = connection.accept_bi() => {
-                match bi_stream {
-                    Ok((send_stream, recv_stream)) => {
-                        let app_state_clone = app_state.clone();
-                        let semaphore_clone = app_state_clone.semaphore.clone();
-                        app_state.rt_handle.spawn(async move {
-                            // 获取信号量许可
-                            let permit = semaphore_clone.acquire().await;
-                            if let Ok(_permit) = permit {
-                                if let Err(e) = handle_bi_stream_optimized(send_stream, recv_stream, app_state_clone).await {
-                                    debug!("双向流错误: {:?}", e);
-                                }
-                                // 许可会在作用域结束时自动释放
-                            } else {
-                                warn!("Failed to acquire semaphore permit for bi stream");
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        debug!("接受双向流错误: {:?}", e);
-                        break;
-                    }
-                }
+            Ok(None) => {
+                debug!("HTTP/3连接关闭 (GOAWAY)");
+                break;
             }
-
-            // 连接关闭
-            _ = connection.closed() => {
-                debug!("连接关闭: {:?}", remote_addr);
+            Err(e) => {
+                if e.is_h3_no_error() {
+                    debug!("HTTP/3连接正常关闭");
+                } else {
+                    warn!("HTTP/3连接错误: {}", e);
+                }
                 break;
             }
         }
@@ -182,347 +133,286 @@ async fn handle_h3_connection_with_h3(
     Ok(())
 }
 
-// 优化的 HTTP/3 双向流处理
-async fn handle_bi_stream_optimized(
-    mut send_stream: quinn::SendStream,
-    mut recv_stream: quinn::RecvStream,
+async fn handle_h3_request(
+    resolver: RequestResolver<h3_quinn::Connection, Bytes>,
     app_state: AppState,
+    http_port: u16,
 ) -> anyhow::Result<()> {
-    // 从缓冲区池获取缓冲区
-    let buffer_pool = get_buffer_pool();
-    let mut buf = buffer_pool.get();
-    let mut chunk = [0; 1024];
+    let (request, mut stream) = resolver
+        .resolve_request()
+        .await
+        .map_err(|e| anyhow::anyhow!("解析HTTP/3请求失败: {}", e))?;
 
-    // 流式处理请求体
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let path = uri.path().to_string();
+    let host_header = request
+        .headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost");
+
+    debug!("HTTP/3请求: {} {} (host: {})", method, path, host_header);
+
+    let mut request_body = Bytes::new();
     loop {
-        match recv_stream.read(&mut chunk).await {
-            Ok(Some(0)) | Ok(None) => break,
-            Ok(Some(n)) => buf.extend_from_slice(&chunk[..n]),
+        match stream.recv_data().await {
+            Ok(Some(mut chunk)) => {
+                let buf = chunk.copy_to_bytes(chunk.remaining());
+                if request_body.is_empty() {
+                    request_body = buf;
+                } else {
+                    let mut combined = Vec::with_capacity(request_body.len() + buf.len());
+                    combined.extend_from_slice(&request_body);
+                    combined.extend_from_slice(&buf);
+                    request_body = Bytes::from(combined);
+                }
+            }
+            Ok(None) => break,
             Err(e) => {
-                // 归还缓冲区到池
-                buffer_pool.put(buf);
-                debug!("读取请求流错误: {:?}", e);
-                return Err(e.into());
+                debug!("接收数据流错误: {}", e);
+                break;
             }
         }
     }
 
-    // 解析并处理HTTP/3请求
-    let response = process_http3_request_optimized(&buf, app_state)?;
+    let response = proxy_to_local_server(
+        &method,
+        &uri,
+        host_header,
+        &request_body,
+        http_port,
+        &app_state,
+    )
+    .await;
 
-    // 归还缓冲区到池
-    buffer_pool.put(buf);
+    match response {
+        Ok((status, headers, body)) => {
+            let mut builder = http::Response::builder().status(status);
+            for (name, value) in &headers {
+                if let Ok(v) = http::HeaderValue::from_bytes(value.as_bytes()) {
+                    builder = builder.header(name.as_str(), v);
+                }
+            }
 
-    // 发送响应
-    send_stream
-        .write_all(&response)
-        .await
-        .context("Failed to send response")?;
+            let resp = builder
+                .body(())
+                .map_err(|e| anyhow::anyhow!("构建响应失败: {}", e))?;
 
-    // 结束发送流
-    send_stream
-        .finish()
-        .context("Failed to finish send stream")?;
+            stream
+                .send_response(resp)
+                .await
+                .map_err(|e| anyhow::anyhow!("发送响应失败: {}", e))?;
+
+            if !body.is_empty() {
+                stream
+                    .send_data(body)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("发送数据失败: {}", e))?;
+            }
+            stream
+                .finish()
+                .await
+                .map_err(|e| anyhow::anyhow!("结束流失败: {}", e))?;
+        }
+        Err(e) => {
+            warn!("代理请求到本地服务器失败: {:?}", e);
+            let resp = http::Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(())
+                .map_err(|e| anyhow::anyhow!("构建错误响应失败: {}", e))?;
+
+            stream
+                .send_response(resp)
+                .await
+                .map_err(|e| anyhow::anyhow!("发送错误响应失败: {}", e))?;
+            let body = Bytes::from("Bad Gateway: failed to proxy request");
+            stream
+                .send_data(body)
+                .await
+                .map_err(|e| anyhow::anyhow!("发送错误数据失败: {}", e))?;
+            stream
+                .finish()
+                .await
+                .map_err(|e| anyhow::anyhow!("结束错误流失败: {}", e))?;
+        }
+    }
 
     Ok(())
 }
 
-// 优化的 HTTP/3 请求处理
-fn process_http3_request_optimized(
-    request_data: &[u8],
-    app_state: AppState,
-) -> anyhow::Result<Vec<u8>> {
-    // 尝试解析HTTP请求
-    let request_str = String::from_utf8_lossy(request_data);
-    debug!("接收到HTTP/3请求: {}", request_str);
+async fn proxy_to_local_server(
+    method: &http::Method,
+    uri: &http::Uri,
+    host: &str,
+    body: &[u8],
+    http_port: u16,
+    app_state: &AppState,
+) -> anyhow::Result<(StatusCode, Vec<(String, String)>, Bytes)> {
+    let path_and_query = uri
+        .path_and_query()
+        .map(|pq| pq.as_str())
+        .unwrap_or(uri.path());
 
-    // 简单的HTTP请求解析
-    let mut _method = "GET";
-    let mut path = "/";
-    let mut headers = std::collections::HashMap::new();
+    let target = format!("http://127.0.0.1:{}{}", http_port, path_and_query);
 
-    // 解析请求行和头信息
-    let mut lines = request_str.lines();
-    if let Some(first_line) = lines.next() {
-        let parts: Vec<&str> = first_line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            _method = parts[0];
-            path = parts[1];
+    let mut req = http::Request::builder()
+        .method(method)
+        .uri(&target)
+        .header("host", host)
+        .header("x-forwarded-for", "127.0.0.1")
+        .header("x-forwarded-proto", "https")
+        .header("x-forwarded-host", host)
+        .header("via", "h3");
+
+    for (idx, value) in app_state.config.server.cors_allowed_origins.iter().enumerate() {
+        if idx == 0 {
+            req = req.header("x-original-origin", value.as_str());
         }
     }
 
-    // 解析头信息
-    for line in lines {
-        if line.is_empty() {
-            break; // 头信息结束
-        }
-        if let Some((key, value)) = line.split_once(": ") {
-            headers.insert(key.to_lowercase(), value.to_string());
-        }
-    }
-
-    // 处理认证
-    let mut user_info = None;
-    if let Some(auth_header) = headers.get("authorization")
-        && auth_header.starts_with("Bearer ")
-    {
-        let token = auth_header.trim_start_matches("Bearer ");
-        let jwt_utils = JwtUtils::new(&app_state.config);
-        if let Ok(claims) = jwt_utils.validate_token(token) {
-            user_info = Some((claims.sub, claims.username, claims.role));
-        }
-    }
-
-    // 处理不同的路径
-    let response = match path {
-        "/" => {
-            // 根路径重定向到登录页面
-            let location = "/static/index.html";
-            format!(
-                "HTTP/3 302 Found\r\ncontent-type: text/plain\r\ncontent-length: 0\r\nlocation: {location}\r\n\r\n"
-            )
-        }
-        "/health" => {
-            // 健康检查
-            let body = json!({"status": "ok"}).to_string();
-            format!(
-                "HTTP/3 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
-                body.len(),
-                body
-            )
-        }
-        "/api/auth/me" => {
-            // 获取当前用户信息
-            if let Some((user_id, username, role)) = user_info {
-                let body = json!({"success": true, "message": "Success", "data": {"id": user_id, "username": username, "role": role}}).to_string();
-                format!(
-                    "HTTP/3 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                )
-            } else {
-                let body =
-                    json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
-                format!(
-                    "HTTP/3 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                )
-            }
-        }
-        _ if path.starts_with("/static/") => {
-            // 静态文件请求
-            let body = "Static file access via HTTP/3";
-            format!(
-                "HTTP/3 200 OK\r\ncontent-type: text/plain\r\ncontent-length: {}\r\n\r\n{}",
-                body.len(),
-                body
-            )
-        }
-        _ if path.starts_with("/api/") => {
-            // API请求
-            if user_info.is_some() {
-                let body = json!({"success": true, "message": "API endpoint accessed via HTTP/3"})
-                    .to_string();
-                format!(
-                    "HTTP/3 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                )
-            } else {
-                let body =
-                    json!({"success": false, "message": "Unauthorized", "data": null}).to_string();
-                format!(
-                    "HTTP/3 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                )
-            }
-        }
-        _ => {
-            // 默认响应
-            let body = "Hello from HTTP/3 server!";
-            format!(
-                "HTTP/3 200 OK\r\ncontent-type: text/plain\r\ncontent-length: {}\r\n\r\n{}",
-                body.len(),
-                body
-            )
-        }
+    let request = if !body.is_empty() {
+        req.body(body.to_vec())?
+    } else {
+        req.body(Vec::new())?
     };
 
-    Ok(response.into_bytes())
+    let response = simple_http_request(request).await?;
+
+    Ok((response.status, response.headers, response.body))
 }
 
-// 处理 HTTP/3 流
-async fn handle_stream(mut stream: quinn::RecvStream) -> anyhow::Result<()> {
-    // 读取流数据
-    let mut buf = Vec::new();
-    let mut chunk = [0; 1024];
+struct SimpleHttpResponse {
+    status: StatusCode,
+    headers: Vec<(String, String)>,
+    body: Bytes,
+}
 
-    loop {
-        match stream.read(&mut chunk).await {
-            Ok(Some(0)) | Ok(None) => break,
-            Ok(Some(n)) => buf.extend_from_slice(&chunk[..n]),
-            Err(e) => return Err(e.into()),
+async fn simple_http_request(
+    request: http::Request<Vec<u8>>,
+) -> anyhow::Result<SimpleHttpResponse> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    let uri = request.uri();
+    let host = uri.host().unwrap_or("127.0.0.1");
+    let port = uri.port_u16().unwrap_or(80);
+    let method = request.method();
+    let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+    let body = request.body();
+
+    let stream = TcpStream::connect((host, port))
+        .await
+        .with_context(|| format!("连接本地HTTP服务器失败 ({}:{})", host, port))?;
+    let (mut read_half, mut write_half) = stream.into_split();
+
+    let mut request_bytes = format!(
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
+        method, path, host
+    );
+
+    let mut headers_to_forward = Vec::new();
+    for (name, value) in request.headers() {
+        let name_lower = name.as_str().to_lowercase();
+        if name_lower == "host"
+            || name_lower == "connection"
+            || name_lower == "transfer-encoding"
+        {
+            continue;
+        }
+        if let Ok(v) = value.to_str() {
+            headers_to_forward.push((name.as_str().to_string(), v.to_string()));
         }
     }
 
-    // 处理单向流数据（通常用于服务器推送等）
-    info!("在HTTP/3单向流上接收到 {} 字节", buf.len());
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio::runtime::Runtime;
-
-    #[test]
-    fn test_app_state_creation() {
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            // 创建一个简单的配置
-            let config = Config {
-                database: crate::config::DatabaseConfig {
-                    host: "localhost".to_string(),
-                    port: 5432,
-                    database: "ipma".to_string(),
-                    username: "postgres".to_string(),
-                    password: "password".to_string(),
-                    max_connections: 10,
-                    min_connections: 5,
-                    acquire_timeout_secs: 15,
-                    idle_timeout_secs: 60,
-                    max_lifetime_secs: 1800,
-                    query_timeout_secs: 30,
-                    slow_query_threshold_ms: 1000,
-                    health_check_interval_secs: 30,
-                },
-                server: crate::config::ServerConfig {
-                    host: "0.0.0.0".to_string(),
-                    host_ipv6: Some("::".to_string()),
-                    http_enabled: Some(true),
-                    http_port: Some(80),
-                    https_enabled: Some(true),
-                    https_port: Some(443),
-                    auto_https: Some(false),
-                    http_version: Some("HTTP/3".to_string()),
-                    cert_type: Some("self_signed".to_string()),
-                    public_url: "http://localhost".to_string(),
-                    session_timeout: Some(30),
-                    page_timeout: Some(30),
-                    cors_allowed_origins: vec![],
-                },
-                jwt: crate::config::JwtConfig {
-                    secret: "test_secret".to_string(),
-                    access_token_expiry: "15m".to_string(),
-                    refresh_token_expiry: "7d".to_string(),
-                },
-                init: crate::config::InitConfig { enabled: false },
-                i18n: Some(crate::config::I18nConfig {
-                    default_language: "zh".to_string(),
-                    supported_languages: vec!["zh".to_string(), "en".to_string()],
-                }),
-                rate_limit: crate::config::RateLimitConfig::default(),
-                snmp: crate::config::SnmpConfig::default(),
-            };
-
-            // 创建 AppState
-            let semaphore = Arc::new(Semaphore::new(100));
-            let rt_handle = Handle::current();
-
-            let app_state = AppState {
-                config,
-                pool: None,
-                semaphore,
-                rt_handle,
-            };
-
-            // 验证 AppState 创建成功
-            assert_eq!(app_state.semaphore.available_permits(), 100);
-        });
+    if !body.is_empty() {
+        headers_to_forward.push(("content-length".to_string(), body.len().to_string()));
     }
 
-    #[test]
-    fn test_process_http3_request() {
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            // 创建一个简单的配置
-            let config = Config {
-                database: crate::config::DatabaseConfig {
-                    host: "localhost".to_string(),
-                    port: 5432,
-                    database: "ipma".to_string(),
-                    username: "postgres".to_string(),
-                    password: "password".to_string(),
-                    max_connections: 10,
-                    min_connections: 5,
-                    acquire_timeout_secs: 15,
-                    idle_timeout_secs: 60,
-                    max_lifetime_secs: 1800,
-                    query_timeout_secs: 30,
-                    slow_query_threshold_ms: 1000,
-                    health_check_interval_secs: 30,
-                },
-                server: crate::config::ServerConfig {
-                    host: "0.0.0.0".to_string(),
-                    host_ipv6: Some("::".to_string()),
-                    http_enabled: Some(true),
-                    http_port: Some(80),
-                    https_enabled: Some(true),
-                    https_port: Some(443),
-                    auto_https: Some(false),
-                    http_version: Some("HTTP/3".to_string()),
-                    cert_type: Some("self_signed".to_string()),
-                    public_url: "http://localhost".to_string(),
-                    session_timeout: Some(30),
-                    page_timeout: Some(30),
-                    cors_allowed_origins: vec![],
-                },
-                jwt: crate::config::JwtConfig {
-                    secret: "test_secret".to_string(),
-                    access_token_expiry: "15m".to_string(),
-                    refresh_token_expiry: "7d".to_string(),
-                },
-                init: crate::config::InitConfig { enabled: false },
-                i18n: Some(crate::config::I18nConfig {
-                    default_language: "zh".to_string(),
-                    supported_languages: vec!["zh".to_string(), "en".to_string()],
-                }),
-                rate_limit: crate::config::RateLimitConfig::default(),
-                snmp: crate::config::SnmpConfig::default(),
-            };
+    for (name, value) in &headers_to_forward {
+        request_bytes.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    request_bytes.push_str("\r\n");
 
-            // 创建 AppState
-            let semaphore = Arc::new(Semaphore::new(100));
-            let rt_handle = Handle::current();
+    write_half.write_all(request_bytes.as_bytes()).await?;
+    if !body.is_empty() {
+        write_half.write_all(body).await?;
+    }
+    write_half.shutdown().await?;
 
-            let app_state = AppState {
-                config,
-                pool: None,
-                semaphore,
-                rt_handle,
-            };
+    let mut response_bytes = Vec::new();
+    read_half.read_to_end(&mut response_bytes).await?;
 
-            // 测试健康检查请求
-            let health_request = "GET /health HTTP/3\r\nHost: localhost\r\n\r\n";
-            let response =
-                process_http3_request_optimized(health_request.as_bytes(), app_state.clone())
-                    .unwrap();
-            let response_str = String::from_utf8_lossy(&response);
-            assert!(response_str.contains("200 OK"));
-            assert!(response_str.contains("status"));
-            assert!(response_str.contains("ok"));
+    let response_str = String::from_utf8_lossy(&response_bytes);
+    parse_http_response(&response_str, &response_bytes)
+}
 
-            // 测试根路径重定向
-            let root_request = "GET / HTTP/3\r\nHost: localhost\r\n\r\n";
-            let response =
-                process_http3_request_optimized(root_request.as_bytes(), app_state.clone())
-                    .unwrap();
-            let response_str = String::from_utf8_lossy(&response);
-            assert!(response_str.contains("302 Found"));
-            assert!(response_str.contains("location: /static/index.html"));
-        });
+fn parse_http_response(
+    response_str: &str,
+    raw_bytes: &[u8],
+) -> anyhow::Result<SimpleHttpResponse> {
+    let header_end = response_str
+        .find("\r\n\r\n")
+        .ok_or_else(|| anyhow::anyhow!("HTTP响应格式无效: 未找到头部结束标记"))?;
+
+    let header_section = &response_str[..header_end];
+    let body_start = header_end + 4;
+
+    let mut lines = header_section.lines();
+    let status_line = lines
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("HTTP响应格式无效: 缺少状态行"))?;
+
+    let status: StatusCode = parse_status_line(status_line)?;
+
+    let mut headers = Vec::new();
+    for line in lines {
+        if let Some((name, value)) = line.split_once(": ") {
+            let name_lower = name.to_lowercase();
+            if name_lower == "transfer-encoding"
+                || name_lower == "connection"
+                || name_lower == "keep-alive"
+            {
+                continue;
+            }
+            headers.push((name.to_string(), value.to_string()));
+        }
+    }
+
+    let body = if body_start < raw_bytes.len() {
+        Bytes::copy_from_slice(&raw_bytes[body_start..])
+    } else {
+        Bytes::new()
+    };
+
+    Ok(SimpleHttpResponse {
+        status,
+        headers,
+        body,
+    })
+}
+
+fn parse_status_line(line: &str) -> anyhow::Result<StatusCode> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return Err(anyhow::anyhow!("无效的HTTP状态行: {}", line));
+    }
+    let code: u16 = parts[1].parse().context("解析HTTP状态码失败")?;
+    StatusCode::from_u16(code).context("无效的HTTP状态码")
+}
+
+fn parse_listen_addr(host: &str, port: u16) -> anyhow::Result<SocketAddr> {
+    match host {
+        "::" => SocketAddr::from_str(&format!("[::]:{port}")).context("解析IPv6双栈地址失败"),
+        "0.0.0.0" => {
+            SocketAddr::from_str(&format!("0.0.0.0:{port}")).context("解析IPv4地址失败")
+        }
+        _ => {
+            if host.contains(':') {
+                SocketAddr::from_str(&format!("[{host}]:{port}")).context("解析IPv6地址失败")
+            } else {
+                SocketAddr::from_str(&format!("{host}:{port}")).context("解析服务器地址失败")
+            }
+        }
     }
 }

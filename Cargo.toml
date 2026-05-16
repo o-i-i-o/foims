@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.8.80"
+version = "0.8.82"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -22,6 +22,9 @@ rcgen = "0.14.7"
 quinn = "0.11.9"
 quinn-proto = "0.11.14"
 quinn-udp = "0.6.1"
+
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
 
 bytes = "1.11.1"
 http = "1.4.0"

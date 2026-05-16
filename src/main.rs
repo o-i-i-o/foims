@@ -6,8 +6,9 @@ use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
+use std::net::TcpListener;
 use std::path::Path;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use ipma::log::setup_logging;
 use ipma::routes::static_files::{
@@ -63,24 +64,103 @@ fn build_cors_middleware(config: &Config) -> Cors {
 }
 use std::fs;
 
+fn check_port_available(addr: &str, port: u16) -> std::io::Result<()> {
+    match TcpListener::bind((addr, port)) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            warn!("端口 {}:{} 已被占用，等待释放...", addr, port);
+            Err(e)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn wait_for_port(addr: &str, port: u16, max_retries: u32) -> std::io::Result<()> {
+    for i in 0..max_retries {
+        if check_port_available(addr, port).is_ok() {
+            return Ok(());
+        }
+        if i < max_retries - 1 {
+            warn!("等待端口 {}:{} 释放... ({}/{})", addr, port, i + 1, max_retries);
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
+    check_port_available(addr, port)
+}
+
+fn is_http3_enabled(http_version: &str) -> bool {
+    matches!(http_version.to_lowercase().as_str(), "http3" | "http/3")
+}
+
+struct Http3StartParams<'a> {
+    http_version: &'a str,
+    host: &'a str,
+    port: u16,
+    cert_path: &'a str,
+    key_path: &'a str,
+    config: &'a Config,
+    pool: &'a Option<DbPool>,
+    http_port: u16,
+}
+
+fn start_http3_server_if_enabled(params: Http3StartParams) {
+    if !is_http3_enabled(params.http_version) {
+        return;
+    }
+
+    let host_str = params.host.to_string();
+    let cert_path_str = params.cert_path.to_string();
+    let key_path_str = params.key_path.to_string();
+    let config_clone = params.config.clone();
+    let pool_clone = params.pool.clone();
+    let port = params.port;
+    let http_port = params.http_port;
+
+    tokio::spawn(async move {
+        use std::sync::Arc;
+        use tokio::sync::Semaphore;
+
+        let semaphore = Arc::new(Semaphore::new(100));
+
+        let app_state = ipma::system::http3::AppState {
+            config: config_clone,
+            pool: pool_clone,
+            semaphore,
+            http_port,
+        };
+
+        let host_str_clone = host_str.clone();
+        match ipma::system::http3::start_http3_server(
+            host_str,
+            port,
+            &cert_path_str,
+            &key_path_str,
+            app_state,
+        )
+        .await
+        {
+            Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port),
+            Err(e) => error!(
+                "启动HTTP/3服务器失败 ({}:{}): {:?}",
+                host_str_clone, port, e
+            ),
+        }
+    });
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // 初始化 rustls 密码学提供者
     if let Err(e) = rustls::crypto::ring::default_provider().install_default() {
         tracing::error!("初始化TLS密码学提供者失败: {:?}", e);
         std::process::exit(1);
     }
 
-    // 初始化日志
     let _log_file_path = setup_logging();
 
-    // 使用双语日志
     log_bilingual("log.output_to");
 
-    // 使用双语日志
     log_bilingual("system.start");
 
-    // 加载配置
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -90,12 +170,9 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    // 使用双语日志（不记录敏感信息）
     log_bilingual("system.config_loaded");
 
-    // 条件创建数据库连接池
     let pool = if config.init.enabled {
-        // 使用双语日志
         log_bilingual("system.init_mode_enabled");
         None
     } else {
@@ -116,15 +193,11 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    // 初始化系统启动时间
     init_start_time();
-    // 系统启动时间初始化完成的日志使用简单信息
     info!("[中文] 系统启动时间初始化完成");
     info!("[English] System startup time initialized");
 
-    // 只有在非初始化模式下才启动cron调度器和健康检查
     if let Some(ref db_pool) = pool {
-        // 启动cron调度器
         use std::sync::Arc;
         let pool_for_scheduler = Arc::new(db_pool.clone());
         tokio::spawn(async move {
@@ -133,12 +206,10 @@ async fn main() -> std::io::Result<()> {
             }
         });
 
-        // 启动数据库连接池健康检查任务（每30秒检查一次）
         db_pool.start_health_check_task(30);
         info!("数据库连接池健康检查任务已启动");
     }
 
-    // 创建速率限制器
     let rate_limiter = RateLimiter::new(
         config.rate_limit.ip_limit,
         config.rate_limit.user_limit,
@@ -147,7 +218,6 @@ async fn main() -> std::io::Result<()> {
     );
     let rate_limit_enabled = config.rate_limit.enabled;
 
-    // 启动速率限制清理任务
     if rate_limit_enabled {
         start_cleanup_task(rate_limiter.clone());
         info!("速率限制中间件已启用");
@@ -165,36 +235,32 @@ async fn main() -> std::io::Result<()> {
         );
     }
 
-    // 保存服务器配置用于绑定和日志
-    let server_host = config.server.host.clone(); // IPv4地址
-    let server_host_ipv6 = config.server.host_ipv6.clone(); // IPv6地址
+    let server_host = config.server.host.clone();
+    let server_host_ipv6 = config.server.host_ipv6.clone();
     let http_enabled = config.server.http_enabled.unwrap_or(true);
     let http_port = config.server.http_port.unwrap_or(80);
 
-    // 检查前端资源目录是否存在
     let web_dir = get_web_dir();
     if !Path::new(web_dir).exists() {
         info!("创建web目录: {}", web_dir);
         fs::create_dir_all(web_dir)?;
     }
 
-    // 输出HTTP服务器启动信息
     let init_enabled = config.init.enabled;
     let auto_https = config.server.auto_https.unwrap_or(false);
 
     if init_enabled {
-        // 使用双语日志
         log_bilingual("system.init_mode_enabled");
     } else {
-        // 使用双语日志
         log_bilingual("system.init_mode_disabled");
         if auto_https {
-            // 使用双语日志
             log_bilingual("system.auto_https_enabled");
         }
     }
 
-    // 创建应用工厂函数（用于HTTP服务器）
+    let http_version = config.server.http_version.as_deref().unwrap_or("http2");
+    let http3_enabled = is_http3_enabled(http_version);
+
     let http_config = config.clone();
     let http_pool = pool.clone();
     let http_rate_limiter = rate_limiter.clone();
@@ -221,13 +287,14 @@ async fn main() -> std::io::Result<()> {
         app
     };
 
-    // 创建应用工厂函数（用于HTTPS服务器）
     let https_config = config.clone();
     let https_pool = pool.clone();
     let https_rate_limiter = rate_limiter.clone();
     let https_rate_limit_enabled = rate_limit_enabled;
+    let https_port = config.server.https_port.unwrap_or(443);
     let create_https_app = move || {
         App::new()
+            .wrap(ipma::utils::alt_svc::AltSvc::new(http3_enabled, https_port))
             .wrap(ipma::utils::hsts::hsts_middleware())
             .wrap(build_cors_middleware(&https_config))
             .wrap(actix_web::middleware::Logger::default())
@@ -238,18 +305,15 @@ async fn main() -> std::io::Result<()> {
             .configure(|cfg| configure_app_services(cfg, &https_config, &https_pool, true))
     };
 
-    // 处理HTTP服务器
     if http_enabled || auto_https {
-        // 检查IPv6地址配置
         let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
         let ipv4_address = server_host.as_str();
 
-        // 情况1：IPv6地址是::，只启动IPv6服务器（双栈模式）
         if !ipv6_address.is_empty() && ipv6_address == "::" {
+            wait_for_port(ipv6_address, http_port, 10)?;
             let http_server =
                 HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
 
-            // HTTP服务器只支持HTTP/1.1（HTTP/2需要TLS支持）
             let http_server = http_server.bind((ipv6_address, http_port))?;
 
             info!("HTTP服务器运行在 http://{}:{}", ipv6_address, http_port);
@@ -262,13 +326,11 @@ async fn main() -> std::io::Result<()> {
                 }
             });
         } else {
-            // 情况2：启动多个服务器
-            // 启动IPv4服务器
             if !ipv4_address.is_empty() {
+                wait_for_port(ipv4_address, http_port, 10)?;
                 let http_server_ipv4 = HttpServer::new(create_http_app.clone())
                     .workers(std::cmp::max(2, num_cpus::get()));
 
-                // HTTP服务器只支持HTTP/1.1（HTTP/2需要TLS支持）
                 let http_server_ipv4 = http_server_ipv4.bind((ipv4_address, http_port))?;
 
                 info!(
@@ -284,12 +346,11 @@ async fn main() -> std::io::Result<()> {
                 });
             }
 
-            // 启动IPv6服务器
             if !ipv6_address.is_empty() && ipv6_address != "::" {
+                wait_for_port(ipv6_address, http_port, 10)?;
                 let http_server_ipv6 =
                     HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
 
-                // HTTP服务器只支持HTTP/1.1（HTTP/2需要TLS支持）
                 let http_server_ipv6 = http_server_ipv6.bind((ipv6_address, http_port))?;
 
                 info!(
@@ -307,112 +368,51 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    // 启用HTTPS服务器
-    let http_version = config.server.http_version.as_deref().unwrap_or("HTTP/1.1");
     let https_enabled = config.server.https_enabled.unwrap_or(true);
-    let https_port = config.server.https_port.unwrap_or(443);
 
     if https_enabled {
-        // 准备服务器证书
         let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
         let (cert_path, key_path) = prepare_server_certificate(&config)?;
 
-        // 检查IPv6地址配置
         let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
         let ipv4_address = server_host.as_str();
 
-        fn start_http3_server_if_enabled(
-            http_version: &str,
-            host: &str,
-            port: u16,
-            cert_path: &str,
-            key_path: &str,
-            config: &Config,
-            pool: &Option<DbPool>,
-        ) {
-            if http_version == "HTTP/3" {
-                let host_str = host.to_string();
-                let cert_path_str = cert_path.to_string();
-                let key_path_str = key_path.to_string();
-                let port_clone = port;
-                let config_clone = config.clone();
-                let pool_clone = pool.clone();
-
-                tokio::spawn(async move {
-                    use std::sync::Arc;
-                    use tokio::runtime::Handle;
-                    use tokio::sync::Semaphore;
-
-                    let semaphore = Arc::new(Semaphore::new(100));
-                    let rt_handle = Handle::current();
-
-                    let app_state = ipma::system::http3::AppState {
-                        config: config_clone,
-                        pool: pool_clone,
-                        semaphore,
-                        rt_handle,
-                    };
-
-                    let host_str_clone = host_str.clone();
-                    match ipma::system::http3::start_http3_server(
-                        host_str,
-                        port_clone,
-                        &cert_path_str,
-                        &key_path_str,
-                        app_state,
-                    )
-                    .await
-                    {
-                        Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
-                        Err(e) => error!(
-                            "启动HTTP/3服务器失败 ({}:{}): {:?}",
-                            host_str_clone, port_clone, e
-                        ),
-                    }
-                });
-            }
-        }
-
-        // 情况1：IPv6地址是::，只启动IPv6服务器（双栈模式）
         if !ipv6_address.is_empty() && ipv6_address == "::" {
+            wait_for_port(ipv6_address, https_port, 10)?;
             let https_server =
                 HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
 
-            let https_server = match http_version {
-                "HTTP/3" => {
-                    info!("启动HTTP/3服务器...");
-                    https_server
-                }
-                _ => https_server,
-            };
-
             let https_server = https_server.bind_rustls_0_23(
                 (ipv6_address, https_port),
-                load_rustls_config(&cert_path, &key_path)?,
+                load_rustls_config(&cert_path, &key_path, http3_enabled)?,
             )?;
 
             info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
-            info!("HTTP版本: {}", http_version);
+            if http3_enabled {
+                info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
+            } else {
+                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+            }
             info!("证书类型: {}", cert_type);
             info!("使用双栈模式 (IPv4 和 IPv6)");
 
-            start_http3_server_if_enabled(
+            start_http3_server_if_enabled(Http3StartParams {
                 http_version,
-                ipv6_address,
-                https_port,
-                &cert_path.clone(),
-                &key_path.clone(),
-                &config,
-                &pool,
-            );
+                host: ipv6_address,
+                port: https_port,
+                cert_path: &cert_path.clone(),
+                key_path: &key_path.clone(),
+                config: &config,
+                pool: &pool,
+                http_port,
+            });
 
             return https_server.run().await;
         } else {
-            // 情况2：启动多个服务器
             let mut server_handles = Vec::new();
 
-            // 启动IPv4服务器
             if !ipv4_address.is_empty() {
+                wait_for_port(ipv4_address, https_port, 10)?;
                 let create_https_app_ipv4 = create_https_app.clone();
                 let cert_path_ipv4 = cert_path.clone();
                 let key_path_ipv4 = key_path.clone();
@@ -420,6 +420,7 @@ async fn main() -> std::io::Result<()> {
                 let http_version_clone = http_version.to_string();
                 let cert_type_clone = cert_type.to_string();
                 let https_port_clone = https_port;
+                let http3_enabled_clone = http3_enabled;
 
                 let config_clone_ipv4 = config.clone();
                 let pool_clone_ipv4 = pool.clone();
@@ -427,7 +428,7 @@ async fn main() -> std::io::Result<()> {
                     let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
+                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4, http3_enabled_clone) {
                         Ok(config) => config,
                         Err(e) => {
                             error!("加载TLS配置失败: {:?}", e);
@@ -449,20 +450,25 @@ async fn main() -> std::io::Result<()> {
                         "HTTPS IPv4服务器运行在 https://{}:{}",
                         ipv4_address_clone, https_port_clone
                     );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    if http3_enabled_clone {
+                        info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
+                    } else {
+                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    }
                     info!("证书类型: {}", cert_type_clone);
 
                     let config_clone = config_clone_ipv4.clone();
                     let pool_clone = pool_clone_ipv4.clone();
-                    start_http3_server_if_enabled(
-                        &http_version_clone,
-                        &ipv4_address_clone,
-                        https_port_clone,
-                        &cert_path_ipv4.clone(),
-                        &key_path_ipv4.clone(),
-                        &config_clone,
-                        &pool_clone,
-                    );
+                    start_http3_server_if_enabled(Http3StartParams {
+                        http_version: &http_version_clone,
+                        host: &ipv4_address_clone,
+                        port: https_port_clone,
+                        cert_path: &cert_path_ipv4.clone(),
+                        key_path: &key_path_ipv4.clone(),
+                        config: &config_clone,
+                        pool: &pool_clone,
+                        http_port,
+                    });
 
                     if let Err(e) = https_server_ipv4.run().await {
                         error!("HTTPS IPv4服务器失败: {:?}", e);
@@ -470,8 +476,8 @@ async fn main() -> std::io::Result<()> {
                 }));
             }
 
-            // 启动IPv6服务器
             if !ipv6_address.is_empty() && ipv6_address != "::" {
+                wait_for_port(ipv6_address, https_port, 10)?;
                 let create_https_app_ipv6 = create_https_app;
                 let cert_path_ipv6 = cert_path;
                 let key_path_ipv6 = key_path;
@@ -479,6 +485,7 @@ async fn main() -> std::io::Result<()> {
                 let http_version_clone = http_version.to_string();
                 let cert_type_clone = cert_type.to_string();
                 let https_port_clone = https_port;
+                let http3_enabled_clone = http3_enabled;
 
                 let config_clone_ipv6 = config.clone();
                 let pool_clone_ipv6 = pool.clone();
@@ -486,7 +493,7 @@ async fn main() -> std::io::Result<()> {
                     let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
+                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6, http3_enabled_clone) {
                         Ok(config) => config,
                         Err(e) => {
                             error!("加载TLS配置失败: {:?}", e);
@@ -508,20 +515,25 @@ async fn main() -> std::io::Result<()> {
                         "HTTPS IPv6服务器运行在 https://{}:{}",
                         ipv6_address_clone, https_port_clone
                     );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    if http3_enabled_clone {
+                        info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
+                    } else {
+                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    }
                     info!("证书类型: {}", cert_type_clone);
 
                     let config_clone = config_clone_ipv6.clone();
                     let pool_clone = pool_clone_ipv6.clone();
-                    start_http3_server_if_enabled(
-                        &http_version_clone,
-                        &ipv6_address_clone,
-                        https_port_clone,
-                        &cert_path_ipv6,
-                        &key_path_ipv6,
-                        &config_clone,
-                        &pool_clone,
-                    );
+                    start_http3_server_if_enabled(Http3StartParams {
+                        http_version: &http_version_clone,
+                        host: &ipv6_address_clone,
+                        port: https_port_clone,
+                        cert_path: &cert_path_ipv6,
+                        key_path: &key_path_ipv6,
+                        config: &config_clone,
+                        pool: &pool_clone,
+                        http_port,
+                    });
 
                     if let Err(e) = https_server_ipv6.run().await {
                         error!("HTTPS IPv6服务器失败: {:?}", e);
@@ -529,7 +541,6 @@ async fn main() -> std::io::Result<()> {
                 }));
             }
 
-            // 等待所有服务器启动
             if !server_handles.is_empty() {
                 let (_result, _index, remaining) =
                     futures_util::future::select_all(server_handles).await;
@@ -554,17 +565,13 @@ fn configure_app_services(
     pool: &Option<DbPool>,
     enable_normal_routes: bool,
 ) {
-    // 初始化应用数据
     cfg.app_data(Data::new(config.clone()));
-    // 配置JSON请求体大小限制（10MB）
     cfg.app_data(
         web::JsonConfig::default()
             .limit(10 * 1024 * 1024)
             .error_handler(json_error_handler),
     );
-    // 配置表单请求体大小限制（50MB，用于文件上传）
     cfg.app_data(web::FormConfig::default().limit(50 * 1024 * 1024));
-    // 配置Payload大小限制
     cfg.app_data(web::PayloadConfig::new(50 * 1024 * 1024));
 
     if let Some(pool) = pool {
@@ -598,7 +605,6 @@ fn configure_app_services(
                 )
                 .route("/check-pgsql", web::get().to(ipma::init::check_pgsql)),
         )
-        // 配置初始化页面路由
         .route(
             "/init_index.html",
             web::get().to(|| async {
@@ -612,13 +618,11 @@ fn configure_app_services(
                     )
             }),
         )
-        // 配置静态文件服务
         .service(
             Files::new("/static", format!("{}/static", get_web_dir()))
                 .prefer_utf8(true)
                 .use_etag(true),
         )
-        // 根路径跳转到初始化页面
         .route(
             "/",
             web::get().to(|| async {
@@ -628,22 +632,18 @@ fn configure_app_services(
             }),
         );
     } else if enable_normal_routes {
-        // 关闭初始化时，注册完整的应用系统路由
         let static_path = format!("{}/static", get_web_dir());
         cfg.service(
             Files::new("/static", &static_path)
                 .prefer_utf8(true)
                 .use_etag(true),
         )
-        // 添加专门处理 JSON 文件的路径
         .route(
             "/static/locales/{lang}/{file:.*\\.json}",
             web::get().to(serve_json),
         )
         .route("/static/{path:.*\\.json}", web::get().to(serve_json))
-        // 配置完整API路由
         .configure(init_routes)
-        // 配置应用首页路由
         .route(
             "/main.html",
             web::get().to(|| async {
@@ -657,7 +657,6 @@ fn configure_app_services(
                     )
             }),
         )
-        // 根路径跳转到登录页面
         .route(
             "/",
             web::get().to(|| async {

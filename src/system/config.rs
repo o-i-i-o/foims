@@ -764,6 +764,10 @@ ExecStart={exe_path_str}
 Restart=always
 RestartSec=5s
 
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+KillMode=mixed
+
 # 允许绑定低端口 (80, 443)
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
