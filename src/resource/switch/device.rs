@@ -477,6 +477,30 @@ pub async fn create_switch(
                     );
                 }
 
+                let room_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+                )
+                .bind(position_id)
+                .fetch_optional(pool.get_conn())
+                .await
+                .ok()
+                .flatten();
+
+                if let Some(rid) = room_id {
+                    let network_in_room: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                    )
+                    .bind(rid)
+                    .bind(ip.network_id)
+                    .fetch_one(pool.get_conn())
+                    .await
+                    .unwrap_or(false);
+
+                    if !network_in_room {
+                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该交换机所在房间的可用网段")));
+                    }
+                }
+
                 let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
 
                 let ip_manager_id = Uuid::new_v4();
@@ -693,6 +717,32 @@ pub async fn update_switch(
                         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
                             format!("IP地址 {} 已被其他设备使用", ip.ip_address),
                         )));
+                    }
+
+                    if let Some(pos_id) = position_id {
+                        let room_id: Option<Uuid> = sqlx::query_scalar(
+                            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+                        )
+                        .bind(pos_id)
+                        .fetch_optional(pool.get_conn())
+                        .await
+                        .ok()
+                        .flatten();
+
+                        if let Some(rid) = room_id {
+                            let network_in_room: bool = sqlx::query_scalar(
+                                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                            )
+                            .bind(rid)
+                            .bind(ip.network_id)
+                            .fetch_one(pool.get_conn())
+                            .await
+                            .unwrap_or(false);
+
+                            if !network_in_room {
+                                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该交换机所在房间的可用网段")));
+                            }
+                        }
                     }
 
                     let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };

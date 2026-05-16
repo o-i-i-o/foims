@@ -351,6 +351,30 @@ pub async fn create_cabinet_position(
                     .json(ApiResponse::<()>::error("IP地址不在所属网络网段内")));
             }
 
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(ip.network_id)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该机位所在房间的可用网段")));
+                }
+            }
+
             let ip_version = detect_ip_version(&ip.ip_address);
 
             if let Err(err) = sqlx::query(
@@ -664,6 +688,30 @@ pub async fn update_cabinet_position(
             } else {
                 4i16
             };
+
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(ip.network_id)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该机位所在房间的可用网段")));
+                }
+            }
 
             if let Err(err) = sqlx::query(
                 "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 

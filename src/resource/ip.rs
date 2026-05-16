@@ -224,6 +224,58 @@ pub async fn create_ip_manager(
         }
     }
 
+    if device_type == "workstation" {
+        if let Some(ws_id) = req.workstation_id {
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT room_id FROM workstations WHERE id = $1",
+            )
+            .bind(ws_id)
+            .fetch_optional(pool.get_conn())
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(req.network_id)
+                .fetch_one(pool.get_conn())
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<IpManager>::error("所选网段不属于该工位所在房间的可用网段")));
+                }
+            }
+        }
+    } else if let Some(pos_id) = req.position_id {
+        let room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(rid) = room_id {
+            let network_in_room: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+            )
+            .bind(rid)
+            .bind(req.network_id)
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or(false);
+
+            if !network_in_room {
+                return Ok(HttpResponse::BadRequest().json(ApiResponse::<IpManager>::error("所选网段不属于该机位所在房间的可用网段")));
+            }
+        }
+    }
+
     let existing_mapping = match sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
     )
@@ -688,6 +740,62 @@ pub async fn update_ip_manager(
         if pos_device_type.as_deref() != Some("switch") {
             return Ok(HttpResponse::BadRequest()
                 .json(ApiResponse::<()>::error("该位置不是交换机位置")));
+        }
+    }
+
+    let effective_device_type = req.device_type.as_deref().or(existing_mapping.device_type.as_deref());
+    let effective_workstation_id = req.workstation_id.or(existing_mapping.workstation_id);
+    let effective_position_id = req.position_id.or(existing_mapping.position_id);
+
+    if effective_device_type == Some("workstation") {
+        if let Some(ws_id) = effective_workstation_id {
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT room_id FROM workstations WHERE id = $1",
+            )
+            .bind(ws_id)
+            .fetch_optional(pool.get_conn())
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(network_id)
+                .fetch_one(pool.get_conn())
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<IpManager>::error("所选网段不属于该工位所在房间的可用网段")));
+                }
+            }
+        }
+    } else if let Some(pos_id) = effective_position_id {
+        let room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(rid) = room_id {
+            let network_in_room: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+            )
+            .bind(rid)
+            .bind(network_id)
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or(false);
+
+            if !network_in_room {
+                return Ok(HttpResponse::BadRequest().json(ApiResponse::<IpManager>::error("所选网段不属于该机位所在房间的可用网段")));
+            }
         }
     }
 
@@ -1321,6 +1429,58 @@ pub async fn auto_assign_ip(
         )));
     };
 
+    if device_type == "workstation" {
+        if let Some(ws_id) = workstation_id {
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT room_id FROM workstations WHERE id = $1",
+            )
+            .bind(ws_id)
+            .fetch_optional(pool.get_conn())
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(network_id)
+                .fetch_one(pool.get_conn())
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该工位所在房间的可用网段")));
+                }
+            }
+        }
+    } else if let Some(pos_id) = position_id {
+        let room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(rid) = room_id {
+            let network_in_room: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+            )
+            .bind(rid)
+            .bind(network_id)
+            .fetch_one(pool.get_conn())
+            .await
+            .unwrap_or(false);
+
+            if !network_in_room {
+                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该机位所在房间的可用网段")));
+            }
+        }
+    }
+
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(network_id)
         .fetch_optional(pool.get_conn())
@@ -1580,6 +1740,61 @@ pub async fn batch_create_ip_managers(
                 ip_req.ip_address
             ));
             continue;
+        }
+
+        let device_type_str = ip_req.device_type.as_deref().unwrap_or("");
+        if device_type_str == "workstation" {
+            if let Some(ws_id) = ip_req.workstation_id {
+                let room_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT room_id FROM workstations WHERE id = $1",
+                )
+                .bind(ws_id)
+                .fetch_optional(tx.as_mut())
+                .await
+                .ok()
+                .flatten();
+
+                if let Some(rid) = room_id {
+                    let network_in_room: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                    )
+                    .bind(rid)
+                    .bind(ip_req.network_id)
+                    .fetch_one(tx.as_mut())
+                    .await
+                    .unwrap_or(false);
+
+                    if !network_in_room {
+                        duplicate_errors.push(format!("第{}条记录: 所选网段不属于该工位所在房间的可用网段", index + 1));
+                        continue;
+                    }
+                }
+            }
+        } else if let Some(pos_id) = ip_req.position_id {
+            let room_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+            )
+            .bind(pos_id)
+            .fetch_optional(tx.as_mut())
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(rid) = room_id {
+                let network_in_room: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+                )
+                .bind(rid)
+                .bind(ip_req.network_id)
+                .fetch_one(tx.as_mut())
+                .await
+                .unwrap_or(false);
+
+                if !network_in_room {
+                    duplicate_errors.push(format!("第{}条记录: 所选网段不属于该机位所在房间的可用网段", index + 1));
+                    continue;
+                }
+            }
         }
 
         if let Err(err) = sqlx::query(
