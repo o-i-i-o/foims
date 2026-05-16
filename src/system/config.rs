@@ -119,14 +119,18 @@ pub struct UpdateSystemConfigRequest {
     pub init: Option<crate::config::InitConfig>,
     #[serde(default)]
     pub rate_limit: Option<crate::config::RateLimitConfig>,
+    #[serde(default)]
+    pub snmp: Option<crate::config::SnmpConfig>,
 }
 
-// 初始化系统启动时间
 pub fn init_start_time() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+        .map(|d| d.as_secs())
+        .unwrap_or_else(|e| {
+            tracing::warn!("初始化系统启动时间失败: {}", e);
+            0
+        });
     START_TIME.store(now, Ordering::SeqCst);
 }
 
@@ -156,21 +160,27 @@ pub async fn get_system_info(
     pool: web::Data<DbPool>,
     _config: web::Data<Config>,
 ) -> Result<HttpResponse> {
-    // 检查数据库连接状态
     let database_status = match sqlx::query("SELECT 1").execute(&pool.get_conn()).await {
-        Ok(_) => "connected",
-        Err(_) => "disconnected",
+        Ok(_) => "connected".to_string(),
+        Err(e) => {
+            tracing::error!("数据库连接检查失败: {}", e);
+            format!("disconnected: {}", e)
+        }
     };
 
-    // 计算系统运行时间（秒）
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+        .map(|d| d.as_secs())
+        .unwrap_or_else(|e| {
+            tracing::warn!("系统时间异常: {}", e);
+            0
+        });
     let start_time = START_TIME.load(Ordering::SeqCst);
     let uptime = if start_time == 0 {
-        // 如果还未初始化，先初始化
         init_start_time();
+        0
+    } else if start_time > now {
+        tracing::warn!("系统启动时间晚于当前时间，时间可能已被调整");
         0
     } else {
         now - start_time
@@ -257,13 +267,48 @@ pub async fn get_dashboard_stats(pool: web::Data<DbPool>) -> Result<HttpResponse
         total_positions,
         total_switches,
         total_ips,
-    ) = stats_row1.unwrap_or_default();
+    ) = match stats_row1 {
+        Ok(stats) => stats,
+        Err(e) => {
+            tracing::error!("获取仪表盘统计失败: {}", e);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("获取统计数据失败: {}", e))));
+        }
+    };
 
-    let (active_ips, recent_logs, login_logs_today) = stats_row2.unwrap_or_default();
+    let (active_ips, recent_logs, login_logs_today) = match stats_row2 {
+        Ok(stats) => stats,
+        Err(e) => {
+            tracing::error!("获取活跃IP统计失败: {}", e);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("获取活跃IP统计失败: {}", e))));
+        }
+    };
 
-    let ips_by_device_type = ips_by_device_type.unwrap_or_default();
-    let ips_by_status = ips_by_status.unwrap_or_default();
-    let rooms_by_type = rooms_by_type.unwrap_or_default();
+    let ips_by_device_type = match ips_by_device_type {
+        Ok(data) => data,
+        Err(e) => {
+            tracing::error!("获取IP设备类型统计失败: {}", e);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("获取IP设备类型统计失败: {}", e))));
+        }
+    };
+    let ips_by_status = match ips_by_status {
+        Ok(data) => data,
+        Err(e) => {
+            tracing::error!("获取IP状态统计失败: {}", e);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("获取IP状态统计失败: {}", e))));
+        }
+    };
+    let rooms_by_type = match rooms_by_type {
+        Ok(data) => data,
+        Err(e) => {
+            tracing::error!("获取房间类型统计失败: {}", e);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("获取房间类型统计失败: {}", e))));
+        }
+    };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
@@ -326,6 +371,7 @@ pub async fn update_system_config(
             .rate_limit
             .clone()
             .unwrap_or_else(|| config.rate_limit.clone()),
+        snmp: req.snmp.clone().unwrap_or_else(|| config.snmp.clone()),
     };
 
     tracing::info!(

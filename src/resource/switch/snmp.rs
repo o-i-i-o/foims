@@ -224,11 +224,11 @@ pub fn format_snmp_error(e: Box<Error>) -> String {
     }
 }
 
-pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
+pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<String, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
-    let timeout = Duration::from_secs(5);
+    let timeout = Duration::from_secs(timeout_secs);
 
-    tracing::info!("[test_snmp] 开始连接: {}", addr);
+    tracing::info!("[test_snmp] 开始连接: {} (超时: {}秒)", addr, timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
@@ -284,7 +284,7 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
 pub async fn get_switch_info_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<(String, String), SnmpError> {
-    let sys_descr = test_snmp(params).await?;
+    let sys_descr = test_snmp(params, 5).await?;
 
     let vendor = identify_vendor(&sys_descr);
     let model = extract_model(&sys_descr);
@@ -542,7 +542,7 @@ pub async fn test_snmp_connection(
         priv_pass
     );
 
-    match test_snmp(&snmp_params).await {
+    match test_snmp(&snmp_params, 5).await {
         Ok(sys_descr) => Ok(HttpResponse::Ok().json(ApiResponse::success(
             serde_json::json!({ "sysDescr": sys_descr }),
             "SNMP连接测试成功",

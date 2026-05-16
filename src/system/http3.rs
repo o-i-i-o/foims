@@ -391,8 +391,13 @@ mod tests {
                     username: "postgres".to_string(),
                     password: "password".to_string(),
                     max_connections: 10,
+                    min_connections: 2,
+                    acquire_timeout_secs: 5,
+                    idle_timeout_secs: 60,
+                    max_lifetime_secs: 1800,
                     query_timeout_secs: 30,
                     slow_query_threshold_ms: 1000,
+                    health_check_interval_secs: 30,
                 },
                 server: crate::config::ServerConfig {
                     host: "0.0.0.0".to_string(),
@@ -407,6 +412,7 @@ mod tests {
                     public_url: "http://localhost".to_string(),
                     session_timeout: Some(30),
                     page_timeout: Some(30),
+                    cors_allowed_origins: vec![],
                 },
                 jwt: crate::config::JwtConfig {
                     secret: "test_secret".to_string(),
@@ -419,6 +425,7 @@ mod tests {
                     supported_languages: vec!["zh".to_string(), "en".to_string()],
                 }),
                 rate_limit: crate::config::RateLimitConfig::default(),
+                snmp: crate::config::SnmpConfig::default(),
             };
 
             // 创建 AppState
@@ -450,8 +457,13 @@ mod tests {
                     username: "postgres".to_string(),
                     password: "password".to_string(),
                     max_connections: 10,
+                    min_connections: 2,
+                    acquire_timeout_secs: 5,
+                    idle_timeout_secs: 60,
+                    max_lifetime_secs: 1800,
                     query_timeout_secs: 30,
                     slow_query_threshold_ms: 1000,
+                    health_check_interval_secs: 30,
                 },
                 server: crate::config::ServerConfig {
                     host: "0.0.0.0".to_string(),
@@ -466,6 +478,7 @@ mod tests {
                     public_url: "http://localhost".to_string(),
                     session_timeout: Some(30),
                     page_timeout: Some(30),
+                    cors_allowed_origins: vec![],
                 },
                 jwt: crate::config::JwtConfig {
                     secret: "test_secret".to_string(),
@@ -478,6 +491,7 @@ mod tests {
                     supported_languages: vec!["zh".to_string(), "en".to_string()],
                 }),
                 rate_limit: crate::config::RateLimitConfig::default(),
+                snmp: crate::config::SnmpConfig::default(),
             };
 
             // 创建 AppState

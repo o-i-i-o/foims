@@ -1,7 +1,12 @@
 [database]
+acquire_timeout_secs = 5
 database = "ipma"
+health_check_interval_secs = 30
 host = "localhost"
+idle_timeout_secs = 60
 max_connections = 20
+max_lifetime_secs = 1800
+min_connections = 2
 password = "password"
 port = 5432
 query_timeout_secs = 30
@@ -23,6 +28,7 @@ secret = "451#*jdhjhdfskdsHASDGJSAD256dgdfgs4dfs45werr2x"
 [server]
 auto_https = true
 cert_type = "self_signed"
+cors_allowed_origins = ["http://localhost", "http://localhost:80", "https://localhost", "https://localhost:443"]
 host = ""
 host_ipv6 = "::"
 http_enabled = true
@@ -39,3 +45,9 @@ user_limit = 2000
 login_limit = 5
 window_secs = 600
 enabled = true
+
+[snmp]
+timeout_secs = 5
+retries = 3
+lldp_timeout_secs = 30
+mac_scan_timeout_secs = 10

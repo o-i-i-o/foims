@@ -23,28 +23,43 @@ use ipma::system::cron::start_scheduler;
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
 
-fn build_cors_middleware() -> Cors {
-    Cors::default()
-        .allowed_origin("http://localhost")
-        .allowed_origin("http://localhost:80")
-        .allowed_origin("https://localhost")
-        .allowed_origin("https://localhost:443")
-        .allowed_origin_fn(|origin, _req_head| {
-            if let Ok(origin_str) = origin.to_str() {
-                origin_str.starts_with("http://localhost:")
-                    || origin_str.starts_with("https://localhost:")
-                    || origin_str.starts_with("http://127.0.0.1:")
-                    || origin_str.starts_with("https://127.0.0.1:")
-                    || origin_str.starts_with("http://[::1]:")
-                    || origin_str.starts_with("https://[::1]:")
-            } else {
-                false
-            }
-        })
+fn build_cors_middleware(config: &Config) -> Cors {
+    let mut cors = Cors::default()
         .allow_any_method()
         .allow_any_header()
         .supports_credentials()
-        .max_age(3600)
+        .max_age(3600);
+
+    let allowed_origins = config.server.cors_allowed_origins.clone();
+
+    for origin in &allowed_origins {
+        cors = cors.allowed_origin(origin.as_str());
+    }
+
+    cors = cors.allowed_origin_fn(move |origin, _req_head| {
+        if let Ok(origin_str) = origin.to_str() {
+            for allowed in &allowed_origins {
+                if origin_str == allowed {
+                    return true;
+                }
+                if origin_str.starts_with(allowed.trim_end_matches('/'))
+                    && (origin_str.ends_with(":80") || origin_str.ends_with(":443"))
+                {
+                    return true;
+                }
+            }
+            origin_str.starts_with("http://localhost:")
+                || origin_str.starts_with("https://localhost:")
+                || origin_str.starts_with("http://127.0.0.1:")
+                || origin_str.starts_with("https://127.0.0.1:")
+                || origin_str.starts_with("http://[::1]:")
+                || origin_str.starts_with("https://[::1]:")
+        } else {
+            false
+        }
+    });
+
+    cors
 }
 use std::fs;
 
@@ -188,7 +203,7 @@ async fn main() -> std::io::Result<()> {
         let enable_normal_routes = !auto_https;
 
         let mut app = App::new()
-            .wrap(build_cors_middleware())
+            .wrap(build_cors_middleware(&http_config))
             .wrap(actix_web::middleware::Logger::default())
             .wrap(RateLimitMiddleware::new(
                 http_rate_limiter.clone(),
@@ -213,7 +228,7 @@ async fn main() -> std::io::Result<()> {
     let create_https_app = move || {
         App::new()
             .wrap(ipma::utils::hsts::hsts_middleware())
-            .wrap(build_cors_middleware())
+            .wrap(build_cors_middleware(&https_config))
             .wrap(actix_web::middleware::Logger::default())
             .wrap(RateLimitMiddleware::new(
                 https_rate_limiter.clone(),

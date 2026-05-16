@@ -34,11 +34,42 @@ pub struct DatabaseConfig {
     pub database: String,
     pub username: String,
     pub password: String,
+    #[serde(default = "default_max_connections")]
     pub max_connections: u32,
+    #[serde(default = "default_min_connections")]
+    pub min_connections: u32,
+    #[serde(default = "default_acquire_timeout")]
+    pub acquire_timeout_secs: u64,
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
+    #[serde(default = "default_max_lifetime")]
+    pub max_lifetime_secs: u64,
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: u64,
     #[serde(default = "default_slow_query_threshold")]
     pub slow_query_threshold_ms: u64,
+    #[serde(default = "default_health_check_interval")]
+    pub health_check_interval_secs: u64,
+}
+
+const fn default_max_connections() -> u32 {
+    10
+}
+
+const fn default_min_connections() -> u32 {
+    2
+}
+
+const fn default_acquire_timeout() -> u64 {
+    5
+}
+
+const fn default_idle_timeout() -> u64 {
+    60
+}
+
+const fn default_max_lifetime() -> u64 {
+    1800
 }
 
 const fn default_query_timeout() -> u64 {
@@ -47,6 +78,10 @@ const fn default_query_timeout() -> u64 {
 
 const fn default_slow_query_threshold() -> u64 {
     1000
+}
+
+const fn default_health_check_interval() -> u64 {
+    30
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -63,6 +98,8 @@ pub struct ServerConfig {
     pub public_url: String,           // 服务器公共URL，用于构建重置链接等
     pub session_timeout: Option<u64>, // 会话超时时间（分钟）
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
+    #[serde(default)]
+    pub cors_allowed_origins: Vec<String>, // CORS允许的源列表
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -126,6 +163,45 @@ impl Default for RateLimitConfig {
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct SnmpConfig {
+    #[serde(default = "default_snmp_timeout")]
+    pub timeout_secs: u64,
+    #[serde(default = "default_snmp_retries")]
+    pub retries: u32,
+    #[serde(default = "default_lldp_timeout")]
+    pub lldp_timeout_secs: u64,
+    #[serde(default = "default_mac_scan_timeout")]
+    pub mac_scan_timeout_secs: u64,
+}
+
+const fn default_snmp_timeout() -> u64 {
+    5
+}
+
+const fn default_snmp_retries() -> u32 {
+    3
+}
+
+const fn default_lldp_timeout() -> u64 {
+    30
+}
+
+const fn default_mac_scan_timeout() -> u64 {
+    10
+}
+
+impl Default for SnmpConfig {
+    fn default() -> Self {
+        Self {
+            timeout_secs: default_snmp_timeout(),
+            retries: default_snmp_retries(),
+            lldp_timeout_secs: default_lldp_timeout(),
+            mac_scan_timeout_secs: default_mac_scan_timeout(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Config {
     pub database: DatabaseConfig,
     pub server: ServerConfig,
@@ -134,6 +210,8 @@ pub struct Config {
     pub i18n: Option<I18nConfig>,
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+    #[serde(default)]
+    pub snmp: SnmpConfig,
 }
 
 impl Config {

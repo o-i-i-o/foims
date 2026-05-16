@@ -57,8 +57,11 @@ impl PoolMetrics {
         self.last_updated.store(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
+                .map(|d| d.as_secs())
+                .unwrap_or_else(|e| {
+                    tracing::warn!("系统时间异常: {}, 使用0作为时间戳", e);
+                    0
+                }),
             Ordering::Relaxed,
         );
     }
@@ -131,16 +134,14 @@ impl Default for PoolConfig {
 
 impl From<&DatabaseConfig> for PoolConfig {
     fn from(config: &DatabaseConfig) -> Self {
-        let max_connections = config.max_connections;
-        let min_connections = 2.min(max_connections);
         Self {
-            max_connections,
-            min_connections,
-            acquire_timeout_secs: 5,
-            idle_timeout_secs: 60,
-            max_lifetime_secs: 1800,
+            max_connections: config.max_connections,
+            min_connections: config.min_connections.min(config.max_connections),
+            acquire_timeout_secs: config.acquire_timeout_secs,
+            idle_timeout_secs: config.idle_timeout_secs,
+            max_lifetime_secs: config.max_lifetime_secs,
             test_before_acquire: true,
-            health_check_interval_secs: 30,
+            health_check_interval_secs: config.health_check_interval_secs,
             auto_scaling_enabled: true,
             low_load_threshold: 0.3,
             high_load_threshold: 0.8,
@@ -576,8 +577,13 @@ mod tests {
             username: "user".to_string(),
             password: "pass".to_string(),
             max_connections: 1,
+            min_connections: 1,
+            acquire_timeout_secs: 5,
+            idle_timeout_secs: 60,
+            max_lifetime_secs: 1800,
             query_timeout_secs: 30,
             slow_query_threshold_ms: 1000,
+            health_check_interval_secs: 30,
         };
         let pool_config = PoolConfig::from(&db_config);
         assert_eq!(pool_config.min_connections, 1);
