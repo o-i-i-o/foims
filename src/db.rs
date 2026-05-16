@@ -116,8 +116,8 @@ impl Default for PoolConfig {
     fn default() -> Self {
         Self {
             max_connections: 10,
-            min_connections: 2,
-            acquire_timeout_secs: 5,
+            min_connections: 5,
+            acquire_timeout_secs: 15,
             idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
             test_before_acquire: true,
@@ -257,10 +257,16 @@ impl DbPool {
 
     pub async fn health_check(&self) -> Result<bool, sqlx::Error> {
         let pool = self.read_pool();
-        sqlx::query("SELECT 1")
-            .execute(&pool)
-            .await
-            .map(|_| true)
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            sqlx::query("SELECT 1").execute(&pool),
+        )
+        .await;
+        match result {
+            Ok(Ok(_)) => Ok(true),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(sqlx::Error::PoolTimedOut),
+        }
     }
 
     fn update_metrics(&self) {
@@ -297,7 +303,6 @@ impl DbPool {
         if current_time - self.last_scaling_time.load(Ordering::Relaxed)
             < config.scaling_cooldown_secs
         {
-            warn!("连接池缩放冷却中，跳过本次调整");
             return Ok(());
         }
 
@@ -307,8 +312,30 @@ impl DbPool {
         let new_config = config.clone();
         drop(config);
 
+        let metrics = self.get_metrics();
+        let status = self.get_pool_status();
+        if metrics.waiting_requests > 0 {
+            warn!(
+                "连接池存在等待请求({}), 跳过重建 (当前: {}, 目标: {})",
+                metrics.waiting_requests, old_max, new_max_connections
+            );
+            return Ok(());
+        }
+
+        if status.size == 0 {
+            return Ok(());
+        }
+
         let url = self.build_database_url();
-        let new_pool = Self::create_pool(&url, &new_config).await?;
+        let new_pool = match Self::create_pool(&url, &new_config).await {
+            Ok(p) => p,
+            Err(e) => {
+                error!("创建新连接池失败: {}", e);
+                let mut config = self.config.write().await;
+                config.max_connections = old_max;
+                return Err(e);
+            }
+        };
 
         let old_pool = {
             let mut pool_lock = self.pool.write().unwrap_or_else(|e| {
@@ -319,6 +346,7 @@ impl DbPool {
         };
 
         tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             old_pool.close().await;
         });
 
@@ -327,10 +355,12 @@ impl DbPool {
 
         self.update_metrics();
 
-        warn!(
-            "连接池已重建: 最大连接数 {} -> {}",
-            old_max, new_max_connections
-        );
+        if old_max != new_max_connections {
+            warn!(
+                "连接池已重建: 最大连接数 {} -> {}",
+                old_max, new_max_connections
+            );
+        }
 
         Ok(())
     }
@@ -395,10 +425,28 @@ impl DbPool {
 
                 match pool_clone.health_check().await {
                     Ok(_) => debug!("数据库连接池健康检查通过"),
-                    Err(e) => error!("数据库连接池健康检查失败: {}", e),
+                    Err(e) => {
+                        let metrics = pool_clone.get_metrics();
+                        let status = pool_clone.get_pool_status();
+                        error!(
+                            "数据库连接池健康检查失败: {} (活跃: {}, 空闲: {}, 等待: {}, 池大小: {})",
+                            e, metrics.active_connections, metrics.idle_connections,
+                            metrics.waiting_requests, status.size
+                        );
+                    }
                 }
 
                 pool_clone.update_metrics();
+
+                let metrics = pool_clone.get_metrics();
+                let status = pool_clone.get_pool_status();
+                if metrics.waiting_requests > 0 || metrics.active_connections as f32 / status.size as f32 > 0.8 {
+                    info!(
+                        "连接池状态 - 活跃: {}, 空闲: {}, 等待: {}, 池大小: {}",
+                        metrics.active_connections, metrics.idle_connections,
+                        metrics.waiting_requests, status.size
+                    );
+                }
 
                 pool_clone.check_and_scale().await;
             }
@@ -563,8 +611,8 @@ mod tests {
     fn test_pool_config_default() {
         let config = PoolConfig::default();
         assert_eq!(config.max_connections, 10);
-        assert_eq!(config.min_connections, 2);
-        assert_eq!(config.acquire_timeout_secs, 5);
+        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.acquire_timeout_secs, 15);
         assert!(config.auto_scaling_enabled);
     }
 
@@ -578,7 +626,7 @@ mod tests {
             password: "pass".to_string(),
             max_connections: 1,
             min_connections: 1,
-            acquire_timeout_secs: 5,
+            acquire_timeout_secs: 15,
             idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
             query_timeout_secs: 30,

@@ -57,11 +57,11 @@ const fn default_max_connections() -> u32 {
 }
 
 const fn default_min_connections() -> u32 {
-    2
+    5
 }
 
 const fn default_acquire_timeout() -> u64 {
-    5
+    15
 }
 
 const fn default_idle_timeout() -> u64 {
