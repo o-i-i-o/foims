@@ -157,7 +157,7 @@ pub async fn get_system_info(
     _config: web::Data<Config>,
 ) -> Result<HttpResponse> {
     // 检查数据库连接状态
-    let database_status = match sqlx::query("SELECT 1").execute(pool.get_conn()).await {
+    let database_status = match sqlx::query("SELECT 1").execute(&pool.get_conn()).await {
         Ok(_) => "connected",
         Err(_) => "disconnected",
     };
@@ -198,76 +198,72 @@ pub async fn get_system_info(
 }
 
 // 获取仪表盘统计数据
+type CountStats = (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64);
+
 pub async fn get_dashboard_stats(pool: web::Data<DbPool>) -> Result<HttpResponse> {
-    let (total_users, active_users, total_network_regions, total_networks) = tokio::join!(
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM users")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM users WHERE status = true")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM network_regions")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM network_cidrs")
-            .fetch_one(pool.get_conn()),
-    );
+    let conn = pool.get_conn();
 
-    let (total_rooms, total_cabinets, total_workstations, total_positions) = tokio::join!(
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM rooms")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM cabinets")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM workstations")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM positions")
-            .fetch_one(pool.get_conn()),
-    );
-
-    let (total_switches, total_ips, active_ips) = tokio::join!(
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM switches")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM ips")
-            .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>(
-            "SELECT COUNT(*) FROM ips WHERE status = 'active'"
+    let stats_row1: sqlx::Result<CountStats> =
+        sqlx::query_as(
+            r"SELECT
+                (SELECT COUNT(*) FROM users) AS total_users,
+                (SELECT COUNT(*) FROM users WHERE status = true) AS active_users,
+                (SELECT COUNT(*) FROM network_regions) AS total_network_regions,
+                (SELECT COUNT(*) FROM network_cidrs) AS total_networks,
+                (SELECT COUNT(*) FROM rooms) AS total_rooms,
+                (SELECT COUNT(*) FROM cabinets) AS total_cabinets,
+                (SELECT COUNT(*) FROM workstations) AS total_workstations,
+                (SELECT COUNT(*) FROM positions) AS total_positions,
+                (SELECT COUNT(*) FROM switches) AS total_switches,
+                (SELECT COUNT(*) FROM ips) AS total_ips
+            ",
         )
-        .fetch_one(pool.get_conn()),
-    );
+        .fetch_one(&conn)
+        .await;
+
+    let stats_row2: sqlx::Result<(i64, i64, i64)> = sqlx::query_as(
+        r"SELECT
+            (SELECT COUNT(*) FROM ips WHERE status = 'active') AS active_ips,
+            (SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours') AS recent_logs,
+            (SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours') AS login_logs_today
+        ",
+    )
+    .fetch_one(&conn)
+    .await;
 
     let (ips_by_device_type, ips_by_status, rooms_by_type) = tokio::join!(
-        sqlx::query_as::<_, (String, i64)>("SELECT device_type, COUNT(*) as count FROM ips WHERE device_type IS NOT NULL GROUP BY device_type")
-            .fetch_all(pool.get_conn()),
-        sqlx::query_as::<_, (String, i64)>("SELECT status, COUNT(*) as count FROM ips GROUP BY status")
-            .fetch_all(pool.get_conn()),
-        sqlx::query_as::<_, (String, i64)>("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
-            .fetch_all(pool.get_conn()),
+        sqlx::query_as::<_, (String, i64)>(
+            "SELECT device_type, COUNT(*) as count FROM ips WHERE device_type IS NOT NULL GROUP BY device_type"
+        )
+        .fetch_all(&conn),
+        sqlx::query_as::<_, (String, i64)>(
+            "SELECT status, COUNT(*) as count FROM ips GROUP BY status"
+        )
+        .fetch_all(&conn),
+        sqlx::query_as::<_, (String, i64)>(
+            "SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type"
+        )
+        .fetch_all(&conn),
     );
 
-    let (recent_logs, login_logs_today) = tokio::join!(
-        sqlx::query_scalar::<sqlx::Postgres, i64>(
-            "SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
-        )
-        .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>(
-            "SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
-        )
-        .fetch_one(pool.get_conn()),
-    );
+    let (
+        total_users,
+        active_users,
+        total_network_regions,
+        total_networks,
+        total_rooms,
+        total_cabinets,
+        total_workstations,
+        total_positions,
+        total_switches,
+        total_ips,
+    ) = stats_row1.unwrap_or_default();
 
-    let total_users = total_users.unwrap_or_default();
-    let active_users = active_users.unwrap_or_default();
-    let total_network_regions = total_network_regions.unwrap_or_default();
-    let total_networks = total_networks.unwrap_or_default();
-    let total_rooms = total_rooms.unwrap_or_default();
-    let total_cabinets = total_cabinets.unwrap_or_default();
-    let total_workstations = total_workstations.unwrap_or_default();
-    let total_positions = total_positions.unwrap_or_default();
-    let total_switches = total_switches.unwrap_or_default();
-    let total_ips = total_ips.unwrap_or_default();
-    let active_ips = active_ips.unwrap_or_default();
+    let (active_ips, recent_logs, login_logs_today) = stats_row2.unwrap_or_default();
+
     let ips_by_device_type = ips_by_device_type.unwrap_or_default();
     let ips_by_status = ips_by_status.unwrap_or_default();
     let rooms_by_type = rooms_by_type.unwrap_or_default();
-    let recent_logs = recent_logs.unwrap_or_default();
-    let login_logs_today = login_logs_today.unwrap_or_default();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
@@ -859,7 +855,7 @@ pub async fn get_smtp_config(
     _config: web::Data<Config>,
 ) -> Result<HttpResponse> {
     // 从数据库中获取SMTP配置
-    let smtp_config = get_smtp_config_from_db(pool.get_conn()).await;
+    let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(smtp_config, "SMTP配置获取成功")))
 }
@@ -888,7 +884,7 @@ pub async fn update_smtp_config(
     };
 
     // 保存SMTP配置到数据库
-    if let Err(e) = save_smtp_config_to_db(pool.get_conn(), &smtp_config).await {
+    if let Err(e) = save_smtp_config_to_db(&pool.get_conn(), &smtp_config).await {
         return Ok(
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
                 "保存SMTP配置失败: {e:?}"
@@ -913,7 +909,7 @@ pub async fn update_smtp_config(
     })))
     .bind(chrono::Utc::now())
     .bind(chrono::Utc::now())
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
@@ -951,7 +947,7 @@ pub async fn test_smtp_connection(
         "secure": req.secure
     })))
     .bind(start_time)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     // 构建SMTP配置对象
@@ -986,7 +982,7 @@ pub async fn test_smtp_connection(
         .bind(duration as i32)
         .bind(sqlx::types::Json(details))
         .bind(task_id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         tracing::warn!("更新SMTP测试日志失败: {}", e);
@@ -1014,7 +1010,7 @@ pub async fn send_email(
 
     // 实际发送邮件
     let send_result: anyhow::Result<()> =
-        send_email_to_users(pool.get_conn(), &req.user_ids, &req.subject, &req.body).await;
+        send_email_to_users(&pool.get_conn(), &req.user_ids, &req.subject, &req.body).await;
 
     // 记录操作日志
     let end_time = chrono::Utc::now();
@@ -1038,7 +1034,7 @@ pub async fn send_email(
     .bind(result)
     .bind("system")
     .bind(end_time)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match send_result {
@@ -1297,9 +1293,8 @@ pub async fn download_certificate() -> Result<HttpResponse> {
         let content = std::fs::read(&path).map_err(actix_web::error::ErrorInternalServerError)?;
         let filename = std::path::Path::new(&path)
             .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap();
+            .and_then(|name| name.to_str())
+            .unwrap_or("certificate.pem");
 
         Ok(HttpResponse::Ok()
             .content_type("application/x-pem-file")
@@ -1655,7 +1650,7 @@ pub async fn get_notification_settings(pool: web::Data<DbPool>) -> Result<HttpRe
     let recipients = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(Some(recips)) => {
@@ -1693,7 +1688,7 @@ pub async fn update_notification_settings(
          DO UPDATE SET value = $1, updated_at = NOW()",
     )
     .bind(&recipients_str)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     .map_err(|e| actix_web::error::ErrorInternalServerError(format!("保存通知设置失败: {e}")))?;
 

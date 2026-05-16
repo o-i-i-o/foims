@@ -57,7 +57,7 @@ pub async fn get_positions(
             if search.is_empty() {
                 sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
                     .bind(cid)
-                    .fetch_one(pool.get_conn())
+                    .fetch_one(&pool.get_conn())
                     .await
             } else {
                 let pattern = format!("%{search}%");
@@ -66,7 +66,7 @@ pub async fn get_positions(
                 )
                 .bind(cid)
                 .bind(&pattern)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
             }
         } else {
@@ -75,7 +75,7 @@ pub async fn get_positions(
                 "SELECT COUNT(*) FROM positions WHERE name ILIKE $1 OR description ILIKE $1",
             )
             .bind(&pattern)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         };
         match count_result {
@@ -86,7 +86,7 @@ pub async fn get_positions(
         }
     } else {
         match sqlx::query_scalar("SELECT COUNT(*) FROM positions")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -115,7 +115,7 @@ pub async fn get_positions(
                 .bind(cid)
                 .bind(page_size)
                 .bind(offset)
-                .fetch_all(pool.get_conn())
+                .fetch_all(&pool.get_conn())
                 .await
             } else {
                 let pattern = format!("%{search}%");
@@ -135,7 +135,7 @@ pub async fn get_positions(
                 .bind(&pattern)
                 .bind(page_size)
                 .bind(offset)
-                .fetch_all(pool.get_conn())
+                .fetch_all(&pool.get_conn())
                 .await
             }
         } else {
@@ -155,7 +155,7 @@ pub async fn get_positions(
             .bind(&pattern)
             .bind(page_size)
             .bind(offset)
-            .fetch_all(pool.get_conn())
+            .fetch_all(&pool.get_conn())
             .await
         };
         match query_result {
@@ -178,7 +178,7 @@ pub async fn get_positions(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(rows) => rows,
@@ -251,7 +251,7 @@ pub async fn create_cabinet_position(
         );
     }
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "开启事务失败"));
@@ -429,7 +429,7 @@ pub async fn create_cabinet_position(
         "ip_count": ip_count
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -461,7 +461,7 @@ pub async fn get_cabinet_position(
            FROM positions WHERE id = $1",
     )
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(Some(row)) => row,
@@ -494,7 +494,7 @@ pub async fn get_cabinet_position(
             ORDER BY m.ip_address",
         )
         .bind(device_id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(ips) => ips,
@@ -518,7 +518,7 @@ pub async fn get_cabinet_position(
             ORDER BY m.ip_address",
         )
         .bind(id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(ips) => ips,
@@ -556,7 +556,7 @@ pub async fn get_cabinet_position(
         let cabinet_id: Uuid = position_data.get("cabinet_id");
         match sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
             .bind(cabinet_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(name)) => name,
@@ -606,7 +606,7 @@ pub async fn update_cabinet_position(
         );
     }
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
@@ -747,7 +747,7 @@ pub async fn update_cabinet_position(
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
         WHERE p.id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(r) => r,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机位失败: {err}"))));
@@ -759,7 +759,7 @@ pub async fn update_cabinet_position(
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)
-    .fetch_all(pool.get_conn()).await.unwrap_or_default();
+    .fetch_all(&pool.get_conn()).await.unwrap_or_default();
 
     let result = CabinetPositionWithDetails {
         id: row.get("id"),
@@ -785,7 +785,7 @@ pub async fn update_cabinet_position(
         "description": result.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -812,7 +812,7 @@ pub async fn delete_cabinet_position(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
@@ -924,7 +924,7 @@ pub async fn delete_cabinet_position(
         "position_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",

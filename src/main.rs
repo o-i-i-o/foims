@@ -66,7 +66,14 @@ async fn main() -> std::io::Result<()> {
     log_bilingual("system.start");
 
     // 加载配置
-    let config = Config::load().expect("Failed to load config");
+    let config = match Config::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("加载配置文件失败: {:?}", e);
+            eprintln!("Error: Failed to load config: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     // 使用双语日志（不记录敏感信息）
     log_bilingual("system.config_loaded");
@@ -77,16 +84,20 @@ async fn main() -> std::io::Result<()> {
         log_bilingual("system.init_mode_enabled");
         None
     } else {
-        let p = DbPool::new(&config.database)
-            .await
-            .expect("Failed to create database pool");
-        info!("数据库连接池创建成功");
-
-        if let Err(e) = ipma::init::schema::run_migrations_only(&p.pool).await {
-            tracing::error!("数据库迁移失败: {}", e);
+        match DbPool::new(&config.database).await {
+            Ok(p) => {
+                info!("数据库连接池创建成功");
+                if let Err(e) = ipma::init::schema::run_migrations_only(&p.get_conn()).await {
+                    tracing::error!("数据库迁移失败: {}", e);
+                }
+                Some(p)
+            }
+            Err(e) => {
+                tracing::error!("创建数据库连接池失败: {:?}", e);
+                eprintln!("Error: Failed to create database pool: {}", e);
+                std::process::exit(1);
+            }
         }
-
-        Some(p)
     };
 
     // 初始化系统启动时间
@@ -280,241 +291,241 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    // 启用HTTPS服务器（默认启用）
+    // 启用HTTPS服务器
     let http_version = config.server.http_version.as_deref().unwrap_or("HTTP/1.1");
-    let https_port = 443;
+    let https_enabled = config.server.https_enabled.unwrap_or(true);
+    let https_port = config.server.https_port.unwrap_or(443);
 
-    // 准备服务器证书
-    let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
-    let (cert_path, key_path) = prepare_server_certificate(&config)?;
+    if https_enabled {
+        // 准备服务器证书
+        let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
+        let (cert_path, key_path) = prepare_server_certificate(&config)?;
 
-    // 检查IPv6地址配置
-    let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
-    let ipv4_address = server_host.as_str();
+        // 检查IPv6地址配置
+        let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
+        let ipv4_address = server_host.as_str();
 
-    // 启动HTTP/3服务器的辅助函数
-    fn start_http3_server_if_enabled(
-        http_version: &str,
-        host: &str,
-        port: u16,
-        cert_path: &str,
-        key_path: &str,
-        config: &Config,
-        pool: &Option<DbPool>,
-    ) {
-        if http_version == "HTTP/3" {
-            let host_str = host.to_string();
-            let cert_path_str = cert_path.to_string();
-            let key_path_str = key_path.to_string();
-            let port_clone = port;
-            let config_clone = config.clone();
-            let pool_clone = pool.clone();
+        fn start_http3_server_if_enabled(
+            http_version: &str,
+            host: &str,
+            port: u16,
+            cert_path: &str,
+            key_path: &str,
+            config: &Config,
+            pool: &Option<DbPool>,
+        ) {
+            if http_version == "HTTP/3" {
+                let host_str = host.to_string();
+                let cert_path_str = cert_path.to_string();
+                let key_path_str = key_path.to_string();
+                let port_clone = port;
+                let config_clone = config.clone();
+                let pool_clone = pool.clone();
 
-            tokio::spawn(async move {
-                use std::sync::Arc;
-                use tokio::runtime::Handle;
-                use tokio::sync::Semaphore;
+                tokio::spawn(async move {
+                    use std::sync::Arc;
+                    use tokio::runtime::Handle;
+                    use tokio::sync::Semaphore;
 
-                let semaphore = Arc::new(Semaphore::new(100)); // 限制并发连接数为100
-                let rt_handle = Handle::current();
+                    let semaphore = Arc::new(Semaphore::new(100));
+                    let rt_handle = Handle::current();
 
-                let app_state = ipma::system::http3::AppState {
-                    config: config_clone,
-                    pool: pool_clone,
-                    semaphore,
-                    rt_handle,
-                };
+                    let app_state = ipma::system::http3::AppState {
+                        config: config_clone,
+                        pool: pool_clone,
+                        semaphore,
+                        rt_handle,
+                    };
 
-                let host_str_clone = host_str.clone();
-                match ipma::system::http3::start_http3_server(
-                    host_str,
-                    port_clone,
-                    &cert_path_str,
-                    &key_path_str,
-                    app_state,
-                )
-                .await
-                {
-                    Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
-                    Err(e) => info!(
-                        "启动HTTP/3服务器失败 ({}:{}): {:?}",
-                        host_str_clone, port_clone, e
-                    ),
-                }
-            });
-        }
-    }
-
-    // 情况1：IPv6地址是::，只启动IPv6服务器（双栈模式）
-    if !ipv6_address.is_empty() && ipv6_address == "::" {
-        let https_server =
-            HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
-
-        let https_server = match http_version {
-            "HTTP/3" => {
-                info!("启动HTTP/3服务器...");
-                https_server
+                    let host_str_clone = host_str.clone();
+                    match ipma::system::http3::start_http3_server(
+                        host_str,
+                        port_clone,
+                        &cert_path_str,
+                        &key_path_str,
+                        app_state,
+                    )
+                    .await
+                    {
+                        Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
+                        Err(e) => info!(
+                            "启动HTTP/3服务器失败 ({}:{}): {:?}",
+                            host_str_clone, port_clone, e
+                        ),
+                    }
+                });
             }
-            _ => https_server,
-        };
+        }
 
-        let https_server = https_server.bind_rustls_0_23(
-            (ipv6_address, https_port),
-            load_rustls_config(&cert_path, &key_path)?,
-        )?;
+        // 情况1：IPv6地址是::，只启动IPv6服务器（双栈模式）
+        if !ipv6_address.is_empty() && ipv6_address == "::" {
+            let https_server =
+                HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
 
-        info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
-        info!("HTTP版本: {}", http_version);
-        info!("证书类型: {}", cert_type);
-        info!("使用双栈模式 (IPv4 和 IPv6)");
+            let https_server = match http_version {
+                "HTTP/3" => {
+                    info!("启动HTTP/3服务器...");
+                    https_server
+                }
+                _ => https_server,
+            };
 
-        // 启动 HTTP/3 服务器
-        start_http3_server_if_enabled(
-            http_version,
-            ipv6_address,
-            https_port,
-            &cert_path.clone(),
-            &key_path.clone(),
-            &config,
-            &pool,
-        );
+            let https_server = https_server.bind_rustls_0_23(
+                (ipv6_address, https_port),
+                load_rustls_config(&cert_path, &key_path)?,
+            )?;
 
-        return https_server.run().await;
+            info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
+            info!("HTTP版本: {}", http_version);
+            info!("证书类型: {}", cert_type);
+            info!("使用双栈模式 (IPv4 和 IPv6)");
+
+            start_http3_server_if_enabled(
+                http_version,
+                ipv6_address,
+                https_port,
+                &cert_path.clone(),
+                &key_path.clone(),
+                &config,
+                &pool,
+            );
+
+            return https_server.run().await;
+        } else {
+            // 情况2：启动多个服务器
+            let mut server_handles = Vec::new();
+
+            // 启动IPv4服务器
+            if !ipv4_address.is_empty() {
+                let create_https_app_ipv4 = create_https_app.clone();
+                let cert_path_ipv4 = cert_path.clone();
+                let key_path_ipv4 = key_path.clone();
+                let ipv4_address_clone = ipv4_address.to_string();
+                let http_version_clone = http_version.to_string();
+                let cert_type_clone = cert_type.to_string();
+                let https_port_clone = https_port;
+
+                let config_clone_ipv4 = config.clone();
+                let pool_clone_ipv4 = pool.clone();
+                server_handles.push(tokio::spawn(async move {
+                    let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
+                        .workers(std::cmp::max(2, num_cpus::get()));
+
+                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
+                        Ok(config) => config,
+                        Err(e) => {
+                            error!("加载TLS配置失败: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let https_server_ipv4 = match https_server_ipv4
+                        .bind_rustls_0_23((ipv4_address_clone.as_str(), https_port_clone), tls_config)
+                    {
+                        Ok(server) => server,
+                        Err(e) => {
+                            error!("绑定HTTPS IPv4服务器失败: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    info!(
+                        "HTTPS IPv4服务器运行在 https://{}:{}",
+                        ipv4_address_clone, https_port_clone
+                    );
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    info!("证书类型: {}", cert_type_clone);
+
+                    let config_clone = config_clone_ipv4.clone();
+                    let pool_clone = pool_clone_ipv4.clone();
+                    start_http3_server_if_enabled(
+                        &http_version_clone,
+                        &ipv4_address_clone,
+                        https_port_clone,
+                        &cert_path_ipv4.clone(),
+                        &key_path_ipv4.clone(),
+                        &config_clone,
+                        &pool_clone,
+                    );
+
+                    if let Err(e) = https_server_ipv4.run().await {
+                        error!("HTTPS IPv4服务器失败: {:?}", e);
+                    }
+                }));
+            }
+
+            // 启动IPv6服务器
+            if !ipv6_address.is_empty() && ipv6_address != "::" {
+                let create_https_app_ipv6 = create_https_app;
+                let cert_path_ipv6 = cert_path;
+                let key_path_ipv6 = key_path;
+                let ipv6_address_clone = ipv6_address.to_string();
+                let http_version_clone = http_version.to_string();
+                let cert_type_clone = cert_type.to_string();
+                let https_port_clone = https_port;
+
+                let config_clone_ipv6 = config.clone();
+                let pool_clone_ipv6 = pool.clone();
+                server_handles.push(tokio::spawn(async move {
+                    let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
+                        .workers(std::cmp::max(2, num_cpus::get()));
+
+                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
+                        Ok(config) => config,
+                        Err(e) => {
+                            error!("加载TLS配置失败: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let https_server_ipv6 = match https_server_ipv6
+                        .bind_rustls_0_23((ipv6_address_clone.as_str(), https_port_clone), tls_config)
+                    {
+                        Ok(server) => server,
+                        Err(e) => {
+                            error!("绑定HTTPS IPv6服务器失败: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    info!(
+                        "HTTPS IPv6服务器运行在 https://{}:{}",
+                        ipv6_address_clone, https_port_clone
+                    );
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
+                    info!("证书类型: {}", cert_type_clone);
+
+                    let config_clone = config_clone_ipv6.clone();
+                    let pool_clone = pool_clone_ipv6.clone();
+                    start_http3_server_if_enabled(
+                        &http_version_clone,
+                        &ipv6_address_clone,
+                        https_port_clone,
+                        &cert_path_ipv6,
+                        &key_path_ipv6,
+                        &config_clone,
+                        &pool_clone,
+                    );
+
+                    if let Err(e) = https_server_ipv6.run().await {
+                        error!("HTTPS IPv6服务器失败: {:?}", e);
+                    }
+                }));
+            }
+
+            // 等待所有服务器启动
+            if !server_handles.is_empty() {
+                let (_result, _index, remaining) =
+                    futures_util::future::select_all(server_handles).await;
+                for handle in remaining {
+                    let _ = handle.await;
+                }
+            }
+
+            Ok(())
+        }
     } else {
-        // 情况2：启动多个服务器
-        let mut server_handles = Vec::new();
-
-        // 启动IPv4服务器
-        if !ipv4_address.is_empty() {
-            let create_https_app_ipv4 = create_https_app.clone();
-            let cert_path_ipv4 = cert_path.clone();
-            let key_path_ipv4 = key_path.clone();
-            let ipv4_address_clone = ipv4_address.to_string();
-            let http_version_clone = http_version.to_string();
-            let cert_type_clone = cert_type.to_string();
-            let https_port_clone = https_port;
-
-            let config_clone_ipv4 = config.clone();
-            let pool_clone_ipv4 = pool.clone();
-            server_handles.push(tokio::spawn(async move {
-                let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
-                    .workers(std::cmp::max(2, num_cpus::get()));
-
-                // 加载TLS配置（已包含ALPN协议支持，自动启用HTTP/2）
-                let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
-                    Ok(config) => config,
-                    Err(e) => {
-                        error!("加载TLS配置失败: {:?}", e);
-                        return;
-                    }
-                };
-
-                let https_server_ipv4 = match https_server_ipv4
-                    .bind_rustls_0_23((ipv4_address_clone.as_str(), https_port_clone), tls_config)
-                {
-                    Ok(server) => server,
-                    Err(e) => {
-                        error!("绑定HTTPS IPv4服务器失败: {:?}", e);
-                        return;
-                    }
-                };
-
-                info!(
-                    "HTTPS IPv4服务器运行在 https://{}:{}",
-                    ipv4_address_clone, https_port_clone
-                );
-                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                info!("证书类型: {}", cert_type_clone);
-
-                // 启动 HTTP/3 服务器
-                let config_clone = config_clone_ipv4.clone();
-                let pool_clone = pool_clone_ipv4.clone();
-                start_http3_server_if_enabled(
-                    &http_version_clone,
-                    &ipv4_address_clone,
-                    https_port_clone,
-                    &cert_path_ipv4.clone(),
-                    &key_path_ipv4.clone(),
-                    &config_clone,
-                    &pool_clone,
-                );
-
-                if let Err(e) = https_server_ipv4.run().await {
-                    error!("HTTPS IPv4服务器失败: {:?}", e);
-                }
-            }));
-        }
-
-        // 启动IPv6服务器
-        if !ipv6_address.is_empty() && ipv6_address != "::" {
-            let create_https_app_ipv6 = create_https_app;
-            let cert_path_ipv6 = cert_path;
-            let key_path_ipv6 = key_path;
-            let ipv6_address_clone = ipv6_address.to_string();
-            let http_version_clone = http_version.to_string();
-            let cert_type_clone = cert_type.to_string();
-            let https_port_clone = https_port;
-
-            let config_clone_ipv6 = config.clone();
-            let pool_clone_ipv6 = pool.clone();
-            server_handles.push(tokio::spawn(async move {
-                let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
-                    .workers(std::cmp::max(2, num_cpus::get()));
-
-                // 加载TLS配置（已包含ALPN协议支持，自动启用HTTP/2）
-                let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
-                    Ok(config) => config,
-                    Err(e) => {
-                        error!("加载TLS配置失败: {:?}", e);
-                        return;
-                    }
-                };
-
-                let https_server_ipv6 = match https_server_ipv6
-                    .bind_rustls_0_23((ipv6_address_clone.as_str(), https_port_clone), tls_config)
-                {
-                    Ok(server) => server,
-                    Err(e) => {
-                        error!("绑定HTTPS IPv6服务器失败: {:?}", e);
-                        return;
-                    }
-                };
-
-                info!(
-                    "HTTPS IPv6服务器运行在 https://{}:{}",
-                    ipv6_address_clone, https_port_clone
-                );
-                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                info!("证书类型: {}", cert_type_clone);
-
-                // 启动 HTTP/3 服务器
-                let config_clone = config_clone_ipv6.clone();
-                let pool_clone = pool_clone_ipv6.clone();
-                start_http3_server_if_enabled(
-                    &http_version_clone,
-                    &ipv6_address_clone,
-                    https_port_clone,
-                    &cert_path_ipv6,
-                    &key_path_ipv6,
-                    &config_clone,
-                    &pool_clone,
-                );
-
-                if let Err(e) = https_server_ipv6.run().await {
-                    error!("HTTPS IPv6服务器失败: {:?}", e);
-                }
-            }));
-        }
-
-        // 等待所有服务器启动
-        if !server_handles.is_empty() {
-            let (_result, _index, remaining) =
-                futures_util::future::select_all(server_handles).await;
-            for handle in remaining {
-                let _ = handle.await;
-            }
-        }
-
+        info!("HTTPS服务器已禁用");
         Ok(())
     }
 }

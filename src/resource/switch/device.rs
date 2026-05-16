@@ -92,7 +92,7 @@ pub async fn get_switches(
             count_sql = count_sql.bind(pattern);
         }
 
-        match count_sql.fetch_one(pool.get_conn()).await {
+        match count_sql.fetch_one(&pool.get_conn()).await {
             Ok(t) => t,
             Err(e) => {
                 return Ok(HttpResponse::InternalServerError()
@@ -101,7 +101,7 @@ pub async fn get_switches(
         }
     } else {
         match sqlx::query_scalar("SELECT COUNT(*) FROM switches_with_details")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -198,7 +198,7 @@ pub async fn get_switches(
 
         data_sql = data_sql.bind(page_size).bind(offset);
 
-        data_sql.fetch_all(pool.get_conn()).await
+        data_sql.fetch_all(&pool.get_conn()).await
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
             r"SELECT 
@@ -227,7 +227,7 @@ pub async fn get_switches(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
     };
 
@@ -298,7 +298,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
         WHERE id = $1",
     )
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     match switch {
@@ -333,7 +333,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                 ORDER BY m.ip_address",
             )
             .bind(id)
-            .fetch_all(pool.get_conn())
+            .fetch_all(&pool.get_conn())
             .await
             .unwrap_or_default();
 
@@ -358,8 +358,12 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                 })
                 .collect();
 
-            let mut response_data = serde_json::to_value(data).unwrap();
-            response_data["ips"] = serde_json::to_value(ips_json).unwrap();
+            let mut response_data = serde_json::to_value(&data)
+                .unwrap_or_else(|e| {
+                    tracing::error!("JSON序列化失败: {}", e);
+                    serde_json::json!({})
+                });
+            response_data["ips"] = serde_json::to_value(&ips_json).unwrap_or(serde_json::json!([]));
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
         }
@@ -381,14 +385,13 @@ pub async fn create_switch(
         );
     }
 
-    let has_ips = req.ips.is_some() && !req.ips.as_ref().unwrap().is_empty();
-
-    if !has_ips {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error("交换机必须至少配置一个IP地址")));
-    }
-
-    let ips = req.ips.as_ref().unwrap();
+    let ips = match &req.ips {
+        Some(ips) if !ips.is_empty() => ips,
+        _ => {
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("交换机必须至少配置一个IP地址")));
+        }
+    };
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -420,7 +423,7 @@ pub async fn create_switch(
         .bind(id)
         .bind(now)
         .bind(now)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         tracing::error!("创建交换机关联机位记录失败: {}", e);
@@ -454,7 +457,7 @@ pub async fn create_switch(
     .bind(now)
     .bind(now)
     .bind(position_id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
@@ -464,7 +467,7 @@ pub async fn create_switch(
                     "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
                 )
                 .bind(&ip.ip_address)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(false);
 
@@ -481,7 +484,7 @@ pub async fn create_switch(
                     "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
                 )
                 .bind(position_id)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
                 .ok()
                 .flatten();
@@ -492,7 +495,7 @@ pub async fn create_switch(
                     )
                     .bind(rid)
                     .bind(ip.network_id)
-                    .fetch_one(pool.get_conn())
+                    .fetch_one(&pool.get_conn())
                     .await
                     .unwrap_or(false);
 
@@ -521,7 +524,7 @@ pub async fn create_switch(
                 .bind(now)
                 .bind(now)
                 .bind(now)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     tracing::error!("创建交换机IP记录失败: {}", e);
@@ -547,7 +550,7 @@ pub async fn create_switch(
                 FROM switches WHERE id = $1",
             )
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await;
 
             match switch {
@@ -560,7 +563,7 @@ pub async fn create_switch(
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(
-                        pool.get_conn(),
+                        &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
                         "create",
@@ -603,7 +606,7 @@ pub async fn update_switch(
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(false);
 
@@ -617,7 +620,7 @@ pub async fn update_switch(
                 .json(ApiResponse::<()>::error("不能将自己设置为上级交换机")));
         }
 
-        if check_switch_cycle(pool.get_conn(), id, parent_switch_id).await? {
+        if check_switch_cycle(&pool.get_conn(), id, parent_switch_id).await? {
             return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
                 "检测到交换机层级循环引用，无法设置此上级交换机",
             )));
@@ -681,7 +684,7 @@ pub async fn update_switch(
     .bind(now)
     .bind(req.position_id)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
@@ -691,13 +694,13 @@ pub async fn update_switch(
                     "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
                 )
                 .bind(id)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
                 .unwrap_or(None);
 
                 if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
                     .bind(id)
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
                 {
                     tracing::error!("删除交换机旧IP记录失败: {}", e);
@@ -709,7 +712,7 @@ pub async fn update_switch(
                     )
                     .bind(&ip.ip_address)
                     .bind(id)
-                    .fetch_one(pool.get_conn())
+                    .fetch_one(&pool.get_conn())
                     .await
                     .unwrap_or(false);
 
@@ -724,7 +727,7 @@ pub async fn update_switch(
                             "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
                         )
                         .bind(pos_id)
-                        .fetch_optional(pool.get_conn())
+                        .fetch_optional(&pool.get_conn())
                         .await
                         .ok()
                         .flatten();
@@ -735,7 +738,7 @@ pub async fn update_switch(
                             )
                             .bind(rid)
                             .bind(ip.network_id)
-                            .fetch_one(pool.get_conn())
+                            .fetch_one(&pool.get_conn())
                             .await
                             .unwrap_or(false);
 
@@ -765,7 +768,7 @@ pub async fn update_switch(
                     .bind(now)
                     .bind(now)
                     .bind(now)
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
                     {
                         tracing::error!("更新交换机IP记录失败: {}", e);
@@ -792,7 +795,7 @@ pub async fn update_switch(
                 FROM switches WHERE id = $1",
             )
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await;
 
             match switch {
@@ -805,7 +808,7 @@ pub async fn update_switch(
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(
-                        pool.get_conn(),
+                        &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
                         "update",
@@ -842,7 +845,7 @@ pub async fn delete_switch(
         "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_switch_id = $1)",
     )
     .bind(id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -853,7 +856,7 @@ pub async fn delete_switch(
 
     if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         tracing::error!("删除交换机IP记录失败: {}", e);
@@ -862,7 +865,7 @@ pub async fn delete_switch(
     if let Err(e) =
         sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
             .bind(id)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await
     {
         tracing::error!("删除交换机关联机位失败: {}", e);
@@ -870,7 +873,7 @@ pub async fn delete_switch(
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await;
 
     match result {
@@ -879,7 +882,7 @@ pub async fn delete_switch(
                 "switch_id": id.to_string()
             });
             let _ = log_system_operation(
-                pool.get_conn(),
+                &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
                 "delete",

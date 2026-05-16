@@ -55,7 +55,7 @@ pub async fn get_operation_logs(
         .bind(parsed_user_id)
         .bind(&action)
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -84,7 +84,7 @@ pub async fn get_operation_logs(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(l) => l,
@@ -98,7 +98,7 @@ pub async fn get_operation_logs(
         (total, logs)
     } else {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs ol")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -113,7 +113,7 @@ pub async fn get_operation_logs(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(l) => l,

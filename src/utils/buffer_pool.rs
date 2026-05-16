@@ -18,14 +18,13 @@ impl BufferPool {
     }
 
     pub fn get(&self) -> Vec<u8> {
-        let mut buffers = self.buffers.lock().unwrap();
+        let mut buffers = self.buffers.lock().expect("缓冲区池锁获取失败");
         buffers.pop().unwrap_or_else(|| Vec::with_capacity(8192))
     }
 
     pub fn put(&self, mut buffer: Vec<u8>) {
-        let mut buffers = self.buffers.lock().unwrap();
+        let mut buffers = self.buffers.lock().expect("缓冲区池锁获取失败");
         if buffers.len() < self.max_size {
-            // 重置缓冲区大小但保留容量
             buffer.clear();
             buffers.push(buffer);
         }

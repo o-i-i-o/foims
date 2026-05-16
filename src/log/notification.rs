@@ -42,7 +42,7 @@ pub async fn get_notifications(
     let total: i64 = match sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM notifications {where_clause}"
     ))
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     {
         Ok(t) => t,
@@ -55,7 +55,7 @@ pub async fn get_notifications(
     let notifications = match sqlx::query_as::<_, Notification>(&format!(
         "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} ORDER BY created_at DESC LIMIT {page_size} OFFSET {offset}"
     ))
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(notifications) => notifications,
@@ -88,7 +88,7 @@ pub async fn mark_notification_read(
     let existing_notification =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM notifications WHERE id = $1")
             .bind(notification_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(notification) => notification,
@@ -105,7 +105,7 @@ pub async fn mark_notification_read(
     // 标记为已读
     if let Err(err) = sqlx::query("UPDATE notifications SET read = true WHERE id = $1")
         .bind(notification_id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -118,7 +118,7 @@ pub async fn mark_notification_read(
 // 标记所有通知为已读
 pub async fn mark_all_notifications_read(pool: web::Data<DbPool>) -> Result<HttpResponse> {
     if let Err(err) = sqlx::query("UPDATE notifications SET read = true")
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(HttpResponse::InternalServerError()

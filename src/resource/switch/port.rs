@@ -28,7 +28,7 @@ pub async fn get_switch_ports(
     let total: i64 =
         match sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
             .bind(switch_id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -44,7 +44,7 @@ pub async fn get_switch_ports(
     .bind(switch_id)
     .bind(page_size)
     .bind(offset)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     match ports {
@@ -86,13 +86,13 @@ pub async fn get_all_switch_ports(
             "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id WHERE s.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1"
         )
         .bind(pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
     } else {
         sqlx::query_scalar(
             "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id",
         )
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
     } {
         Ok(t) => t,
@@ -121,7 +121,7 @@ pub async fn get_all_switch_ports(
         .bind(pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
     } else {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
@@ -140,7 +140,7 @@ pub async fn get_all_switch_ports(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
     };
 
@@ -181,7 +181,7 @@ pub async fn create_switch_port(
     let switch_exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(switch_id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(false);
 
@@ -194,7 +194,7 @@ pub async fn create_switch_port(
     )
     .bind(switch_id)
     .bind(&req.port_number)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -222,14 +222,14 @@ pub async fn create_switch_port(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
         Ok(_) => {
             let port = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
                 .bind(id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await;
 
             match port {
@@ -242,7 +242,7 @@ pub async fn create_switch_port(
                         "vlan_id": data.vlan_id
                     });
                     let _ = log_system_operation(
-                        pool.get_conn(),
+                        &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
                         "create",
@@ -287,7 +287,7 @@ pub async fn get_switch_port(
         WHERE sp.id = $1",
     )
     .bind(port_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     match port {
@@ -336,14 +336,14 @@ pub async fn update_switch_port(
     .bind(&req.description)
     .bind(now)
     .bind(port_id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
             let port = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
                 .bind(port_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await;
 
             match port {
@@ -356,7 +356,7 @@ pub async fn update_switch_port(
                         "vlan_id": data.vlan_id
                     });
                     let _ = log_system_operation(
-                        pool.get_conn(),
+                        &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
                         "update",
@@ -394,7 +394,7 @@ pub async fn delete_switch_port(
         "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_port_id = $1)",
     )
     .bind(port_id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -407,7 +407,7 @@ pub async fn delete_switch_port(
         "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND workstation_id IS NOT NULL)",
     )
     .bind(port_id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -421,7 +421,7 @@ pub async fn delete_switch_port(
         "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND position_id IS NOT NULL)",
     )
     .bind(port_id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -433,7 +433,7 @@ pub async fn delete_switch_port(
 
     let result = sqlx::query("DELETE FROM switch_ports WHERE id = $1")
         .bind(port_id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await;
 
     match result {
@@ -442,7 +442,7 @@ pub async fn delete_switch_port(
                 "port_id": port_id
             });
             let _ = log_system_operation(
-                pool.get_conn(),
+                &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
                 "delete",
@@ -476,7 +476,7 @@ pub async fn sync_ports_from_snmp(
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     let switch_data = match switch_data {
@@ -496,7 +496,7 @@ pub async fn sync_ports_from_snmp(
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -532,7 +532,7 @@ pub async fn sync_ports_from_snmp(
         )
         .bind(switch_id)
         .bind(&port.port_number)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(true);
 
@@ -561,7 +561,7 @@ pub async fn sync_ports_from_snmp(
         .bind(&port.description)
         .bind(now)
         .bind(now)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await;
 
         if result.is_ok() {
@@ -573,7 +573,7 @@ pub async fn sync_ports_from_snmp(
         "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number",
     )
     .bind(switch_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 

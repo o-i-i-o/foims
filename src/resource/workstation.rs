@@ -54,7 +54,7 @@ pub async fn get_workstations(
 
     let (total, workstations_basic) = if search.is_empty() && parsed_room_id.is_none() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM workstations w")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -72,7 +72,7 @@ pub async fn get_workstations(
         ))
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(w) => w,
@@ -88,7 +88,7 @@ pub async fn get_workstations(
         let total: i64 =
             match sqlx::query_scalar("SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1")
                 .bind(parsed_room_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
             {
                 Ok(t) => t,
@@ -107,7 +107,7 @@ pub async fn get_workstations(
         .bind(parsed_room_id)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(w) => w,
@@ -125,7 +125,7 @@ pub async fn get_workstations(
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -146,7 +146,7 @@ pub async fn get_workstations(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(w) => w,
@@ -163,7 +163,7 @@ pub async fn get_workstations(
             "SELECT COUNT(*) FROM workstations w WHERE w.name ILIKE $1 OR w.manager ILIKE $1 OR w.description ILIKE $1"
         )
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -183,7 +183,7 @@ pub async fn get_workstations(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(w) => w,
@@ -258,7 +258,7 @@ pub async fn create_workstation(
         );
     }
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
@@ -433,7 +433,7 @@ pub async fn create_workstation(
         "ip_count": ip_count
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -459,7 +459,7 @@ pub async fn get_workstation(
     let workstation = match sqlx::query_as::<_, Workstation>(
         "SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ FROM workstations w LEFT JOIN rooms r ON w.room_id = r.id WHERE w.id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(workstation)) => workstation,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<Workstation>::error("工位未找到")));
@@ -481,7 +481,7 @@ pub async fn get_workstation(
         ORDER BY m.ip_address",
     )
     .bind(id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(ips) => ips,
@@ -493,7 +493,7 @@ pub async fn get_workstation(
 
     let room_name = match sqlx::query_scalar::<_, String>("SELECT COALESCE((SELECT r.name FROM rooms r JOIN workstations w ON r.id = w.room_id WHERE w.id = $1), '未知房间')")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(name)) => name,
@@ -542,7 +542,7 @@ pub async fn update_workstation(
         );
     }
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
@@ -669,7 +669,7 @@ pub async fn update_workstation(
         LEFT JOIN rooms r ON w.room_id = r.id 
         WHERE w.id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(r) => r,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询工位失败: {err}"))));
@@ -681,7 +681,7 @@ pub async fn update_workstation(
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE workstation_id = $1"
     ).bind(id)
-    .fetch_all(pool.get_conn()).await.unwrap_or_default();
+    .fetch_all(&pool.get_conn()).await.unwrap_or_default();
 
     let result = WorkstationWithDetails {
         id: row.get("id"),
@@ -704,7 +704,7 @@ pub async fn update_workstation(
         "description": result.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -731,7 +731,7 @@ pub async fn delete_workstation(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    let mut tx = match pool.pool.begin().await {
+    let mut tx = match pool.get_conn().begin().await {
         Ok(tx) => tx,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError()
@@ -804,7 +804,7 @@ pub async fn delete_workstation(
         "workstation_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",

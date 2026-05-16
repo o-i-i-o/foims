@@ -123,7 +123,7 @@ pub async fn get_ip_managers(
         count_sql = count_sql.bind(pattern);
     }
 
-    let total: i64 = match count_sql.fetch_one(pool.get_conn()).await {
+    let total: i64 = match count_sql.fetch_one(&pool.get_conn()).await {
         Ok(count) => count,
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询IP数量失败"));
@@ -161,7 +161,7 @@ pub async fn get_ip_managers(
     }
     data_sql = data_sql.bind(page_size as i32).bind(offset as i32);
 
-    let mappings = match data_sql.fetch_all(pool.get_conn()).await {
+    let mappings = match data_sql.fetch_all(&pool.get_conn()).await {
         Ok(mappings) => mappings,
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询IP列表失败"));
@@ -213,7 +213,7 @@ pub async fn create_ip_manager(
             "SELECT device_type FROM positions WHERE id = $1",
         )
         .bind(req.position_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -230,7 +230,7 @@ pub async fn create_ip_manager(
                 "SELECT room_id FROM workstations WHERE id = $1",
             )
             .bind(ws_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
             .ok()
             .flatten();
@@ -241,7 +241,7 @@ pub async fn create_ip_manager(
                 )
                 .bind(rid)
                 .bind(req.network_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(false);
 
@@ -255,7 +255,7 @@ pub async fn create_ip_manager(
             "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
         )
         .bind(pos_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -266,7 +266,7 @@ pub async fn create_ip_manager(
             )
             .bind(rid)
             .bind(req.network_id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(false);
 
@@ -281,7 +281,7 @@ pub async fn create_ip_manager(
     )
     .bind(&req.ip_address)
     .bind(req.network_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(mapping) => mapping,
@@ -297,7 +297,7 @@ pub async fn create_ip_manager(
 
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(req.network_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
@@ -387,7 +387,7 @@ pub async fn create_ip_manager(
     .bind(now)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn()).await {
+    .execute(&pool.get_conn()).await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
     }
 
@@ -419,7 +419,7 @@ pub async fn create_ip_manager(
         "position_id": mapping.position_id
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -442,7 +442,7 @@ pub async fn get_ip_manager(
     let mapping = match sqlx::query_as::<_, IpManager>(
         "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(mapping)) => mapping,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<IpManager>::error("IP管理未找到")));
@@ -470,7 +470,7 @@ pub async fn get_workstation_ips(
         WHERE workstation_id = $1"
     )
     .bind(workstation_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     match ips {
@@ -500,7 +500,7 @@ pub async fn get_cabinet_position_ips(
         WHERE position_id = $1"
     )
     .bind(position_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     match ips {
@@ -525,7 +525,7 @@ pub async fn get_switch_ips(
         "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(Some(id)) => Some(id),
@@ -552,7 +552,7 @@ pub async fn get_switch_ips(
         WHERE position_id = $1"
     )
     .bind(position_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     match ips {
@@ -585,7 +585,7 @@ pub async fn update_ip_manager(
     let existing_mapping = match sqlx::query_as::<_, IpManager>(
         "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(mapping)) => mapping,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<IpManager>::error("IP管理未找到")));
@@ -608,7 +608,7 @@ pub async fn update_ip_manager(
         .bind(&ip_address)
         .bind(network_id)
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         {
             Ok(existing) => existing,
@@ -629,7 +629,7 @@ pub async fn update_ip_manager(
         let network =
             match sqlx::query(crate::utils::NETWORK_QUERY)
                 .bind(network_id)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
             {
                 Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
@@ -732,7 +732,7 @@ pub async fn update_ip_manager(
             "SELECT device_type FROM positions WHERE id = $1",
         )
         .bind(req.position_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -753,7 +753,7 @@ pub async fn update_ip_manager(
                 "SELECT room_id FROM workstations WHERE id = $1",
             )
             .bind(ws_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
             .ok()
             .flatten();
@@ -764,7 +764,7 @@ pub async fn update_ip_manager(
                 )
                 .bind(rid)
                 .bind(network_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(false);
 
@@ -778,7 +778,7 @@ pub async fn update_ip_manager(
             "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
         )
         .bind(pos_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -789,7 +789,7 @@ pub async fn update_ip_manager(
             )
             .bind(rid)
             .bind(network_id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(false);
 
@@ -826,7 +826,7 @@ pub async fn update_ip_manager(
     .bind(ip_version_num)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -836,7 +836,7 @@ pub async fn update_ip_manager(
     let mapping = match sqlx::query_as::<_, IpManager>(
         "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(mapping) => mapping,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
@@ -854,7 +854,7 @@ pub async fn update_ip_manager(
         "position_id": mapping.position_id
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -879,7 +879,7 @@ pub async fn delete_ip_manager(
     let existing_mapping =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(mapping) => mapping,
@@ -898,7 +898,7 @@ pub async fn delete_ip_manager(
 
     if let Err(err) = sqlx::query("DELETE FROM ips WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -909,7 +909,7 @@ pub async fn delete_ip_manager(
         "ip_manager_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",
@@ -940,7 +940,7 @@ pub async fn pull_ip_managers(
         "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
     )
     .bind(network_id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     .unwrap_or(false);
 
@@ -953,7 +953,7 @@ pub async fn pull_ip_managers(
     )
     .bind(switch_id)
     .bind(network_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 
@@ -962,7 +962,7 @@ pub async fn pull_ip_managers(
             "SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1",
         )
         .bind(switch_id)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(0);
 
@@ -991,7 +991,7 @@ pub async fn pull_ip_managers(
             "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -1016,7 +1016,7 @@ pub async fn pull_ip_managers(
         .bind(&device_type)
         .bind(ws_id)
         .bind(pos_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -1040,7 +1040,7 @@ pub async fn pull_ip_managers(
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
@@ -1055,7 +1055,7 @@ pub async fn pull_ip_managers(
                 )
                 .bind(now)
                 .bind(ip)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     error!("更新last_seen失败: IP={}, 错误: {}", ip, err);
@@ -1072,7 +1072,7 @@ pub async fn pull_ip_managers(
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
@@ -1084,7 +1084,7 @@ pub async fn pull_ip_managers(
                     "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
                 )
                 .bind(ip)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
                 .ok()
                 .flatten()
@@ -1093,7 +1093,7 @@ pub async fn pull_ip_managers(
                 if let Some(ws_id) = workstation_id {
                     info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
                     match crate::utils::send_mac_change_notification(
-                        pool.get_conn(),
+                        &pool.get_conn(),
                         &ws_id,
                         ip,
                         old,
@@ -1113,7 +1113,7 @@ pub async fn pull_ip_managers(
         "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE network_id = $1"
     )
     .bind(network_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(results) => results,
@@ -1293,7 +1293,7 @@ pub async fn get_available_ips(
 
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(network_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
@@ -1314,7 +1314,7 @@ pub async fn get_available_ips(
         let used_ips: Vec<String> =
             sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
-                .fetch_all(pool.get_conn())
+                .fetch_all(&pool.get_conn())
                 .await
                 .unwrap_or_default();
 
@@ -1351,7 +1351,7 @@ pub async fn get_available_ips(
         let used_ips: Vec<String> =
             sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
-                .fetch_all(pool.get_conn())
+                .fetch_all(&pool.get_conn())
                 .await
                 .unwrap_or_default();
 
@@ -1414,7 +1414,7 @@ pub async fn auto_assign_ip(
             "SELECT device_type FROM positions WHERE id = $1",
         )
         .bind(position_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -1435,7 +1435,7 @@ pub async fn auto_assign_ip(
                 "SELECT room_id FROM workstations WHERE id = $1",
             )
             .bind(ws_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
             .ok()
             .flatten();
@@ -1446,7 +1446,7 @@ pub async fn auto_assign_ip(
                 )
                 .bind(rid)
                 .bind(network_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(false);
 
@@ -1460,7 +1460,7 @@ pub async fn auto_assign_ip(
             "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
         )
         .bind(pos_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();
@@ -1471,7 +1471,7 @@ pub async fn auto_assign_ip(
             )
             .bind(rid)
             .bind(network_id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(false);
 
@@ -1483,7 +1483,7 @@ pub async fn auto_assign_ip(
 
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(network_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
@@ -1503,7 +1503,7 @@ pub async fn auto_assign_ip(
                     "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
                 )
                 .bind(network_id)
-                .fetch_all(pool.get_conn())
+                .fetch_all(&pool.get_conn())
                 .await
                 .unwrap_or_default();
 
@@ -1552,7 +1552,7 @@ pub async fn auto_assign_ip(
                         "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
                     )
                     .bind(network_id)
-                    .fetch_all(pool.get_conn())
+                    .fetch_all(&pool.get_conn())
                     .await
                     .unwrap_or_default();
 
@@ -1616,7 +1616,7 @@ pub async fn auto_assign_ip(
     .bind(now)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn()).await {
+    .execute(&pool.get_conn()).await {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
     }
 
@@ -1646,7 +1646,7 @@ pub async fn auto_assign_ip(
         "auto_assigned": true
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "auto_assign_ip",
@@ -1854,7 +1854,7 @@ pub async fn batch_create_ip_managers(
         "errors": errors
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "batch_create",

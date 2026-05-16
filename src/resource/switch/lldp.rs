@@ -384,7 +384,7 @@ pub async fn get_switch_lldp_neighbors(
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
         .bind(switch_id)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(false);
 
@@ -396,7 +396,7 @@ pub async fn get_switch_lldp_neighbors(
         "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 
@@ -409,7 +409,7 @@ pub async fn sync_lldp_from_snmp(
 ) -> Result<HttpResponse> {
     let switch_id = path.into_inner();
 
-    let neighbors = match get_lldp_neighbors(pool.get_conn(), &switch_id).await {
+    let neighbors = match get_lldp_neighbors(&pool.get_conn(), &switch_id).await {
         Ok(n) => n,
         Err(e) => {
             return Ok(HttpResponse::BadRequest()
@@ -427,7 +427,7 @@ pub async fn sync_lldp_from_snmp(
         )
         .bind(switch_id)
         .bind(&neighbor.local_port)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(false);
 
@@ -450,7 +450,7 @@ pub async fn sync_lldp_from_snmp(
             .bind(now)
             .bind(switch_id)
             .bind(&neighbor.local_port)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await;
 
             if result.is_ok() {
@@ -471,7 +471,7 @@ pub async fn sync_lldp_from_snmp(
             .bind(&neighbor.neighbor_sys_name)
             .bind(&neighbor.neighbor_sys_desc)
             .bind(now)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await;
 
             if result.is_ok() {
@@ -484,7 +484,7 @@ pub async fn sync_lldp_from_snmp(
         "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 

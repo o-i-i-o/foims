@@ -15,7 +15,10 @@ impl VerificationCode {
     pub fn new(code: String) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|e| {
+                tracing::warn!("系统时间计算警告: {}", e);
+                std::time::Duration::from_secs(0)
+            })
             .as_secs();
         Self {
             code,

@@ -449,7 +449,7 @@ pub async fn test_snmp_connection(
                 FROM switches WHERE id = $1",
             )
             .bind(switch_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await;
 
             match switch {
@@ -460,7 +460,7 @@ pub async fn test_snmp_connection(
                            ORDER BY created_at LIMIT 1",
                     )
                     .bind(switch_id)
-                    .fetch_optional(pool.get_conn())
+                    .fetch_optional(&pool.get_conn())
                     .await
                     .ok()
                     .flatten();
@@ -567,7 +567,7 @@ pub async fn get_switch_info_snmp(
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     let switch = match switch {
@@ -587,7 +587,7 @@ pub async fn get_switch_info_snmp(
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -631,7 +631,7 @@ pub async fn get_switch_ports_snmp(
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     let switch = match switch {
@@ -651,7 +651,7 @@ pub async fn get_switch_ports_snmp(
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();

@@ -6,41 +6,42 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use std::fs;
 use std::path::Path;
+use std::sync::OnceLock;
 use tracing::{error, info};
 
 const NONCE_SIZE: usize = 12;
 
-pub fn get_encryption_key() -> Vec<u8> {
+static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
+
+fn load_encryption_key() -> Vec<u8> {
     let app_name = "ipma";
     let key_path = format!("/etc/{app_name}/encryption.key");
 
-    let Some(key_dir) = Path::new(&key_path).parent() else {
-        error!("无法获取加密密钥目录的父目录");
-        panic!("无法获取加密密钥目录的父目录");
-    };
+    let key_dir = Path::new(&key_path).parent().expect("无法获取加密密钥目录的父目录");
     if !key_dir.exists()
-        && let Err(e) = fs::create_dir_all(key_dir)
-    {
-        error!("创建加密密钥目录失败: {}", e);
-        panic!("创建加密密钥目录失败: {e}");
-    }
+        && let Err(e) = fs::create_dir_all(key_dir) {
+            error!("创建加密密钥目录失败: {}", e);
+            panic!("创建加密密钥目录失败: {e}");
+        }
 
     if Path::new(&key_path).exists() {
-        if let Ok(key) = fs::read(&key_path) {
-            if key.len() == 32 {
-                return key;
+        match fs::read(&key_path) {
+            Ok(key) if key.len() == 32 => return key,
+            Ok(key) => {
+                error!(
+                    "加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥",
+                    key.len()
+                );
+                panic!(
+                    "加密密钥文件长度不正确（期望32字节，实际{}字节）",
+                    key.len()
+                );
             }
-            error!(
-                "加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥",
-                key.len()
-            );
-            panic!(
-                "加密密钥文件长度不正确（期望32字节，实际{}字节）",
-                key.len()
-            );
+            Err(e) => {
+                error!("读取加密密钥文件失败，请检查文件权限: {}", e);
+                panic!("读取加密密钥文件失败，请检查文件权限");
+            }
         }
-        error!("读取加密密钥文件失败，请检查文件权限");
-        panic!("读取加密密钥文件失败，请检查文件权限");
     }
 
     info!("加密密钥文件不存在，正在自动生成新密钥: {}", key_path);
@@ -54,6 +55,10 @@ pub fn get_encryption_key() -> Vec<u8> {
 
     info!("加密密钥已生成并保存到: {}", key_path);
     key
+}
+
+pub fn get_encryption_key() -> Vec<u8> {
+    ENCRYPTION_KEY.get_or_init(load_encryption_key).clone()
 }
 
 #[must_use] 
@@ -109,7 +114,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let password = "test_password_123";
-        let encrypted = encrypt_password(password);
+        let encrypted = encrypt_password(password).unwrap();
         let decrypted = decrypt_password(&encrypted);
         assert_eq!(password, decrypted);
     }
@@ -117,8 +122,8 @@ mod tests {
     #[test]
     fn test_encrypt_produces_different_output() {
         let password = "test_password_123";
-        let encrypted1 = encrypt_password(password);
-        let encrypted2 = encrypt_password(password);
+        let encrypted1 = encrypt_password(password).unwrap();
+        let encrypted2 = encrypt_password(password).unwrap();
         assert_ne!(encrypted1, encrypted2);
 
         assert_eq!(password, decrypt_password(&encrypted1));

@@ -120,7 +120,7 @@ pub async fn get_networks(
             count_sql = count_sql.bind(pattern);
         }
 
-        match count_sql.fetch_one(pool.get_conn()).await {
+        match count_sql.fetch_one(&pool.get_conn()).await {
             Ok(t) => t,
             Err(err) => {
                 return Ok(crate::utils::handle_db_error(err, "查询网络数量失败"));
@@ -128,7 +128,7 @@ pub async fn get_networks(
         }
     } else {
         match sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -226,7 +226,7 @@ pub async fn get_networks(
 
         data_sql = data_sql.bind(page_size).bind(offset);
 
-        match data_sql.fetch_all(pool.get_conn()).await {
+        match data_sql.fetch_all(&pool.get_conn()).await {
             Ok(rows) => rows
                 .into_iter()
                 .map(|row| Network {
@@ -266,7 +266,7 @@ pub async fn get_networks(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(rows) => rows
@@ -323,7 +323,7 @@ pub async fn create_network(
     let network_region = match sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(req.network_region_id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(network_region)) => network_region,
         Ok(None) => {
             return Ok(HttpResponse::BadRequest().json(ApiResponse::<Network>::error("网络区域不存在")));
@@ -342,7 +342,7 @@ pub async fn create_network(
     )
     .bind(&full_network_name)
     .bind(req.network_region_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(network) => network,
@@ -404,7 +404,7 @@ pub async fn create_network(
         let existing_ipv4: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR)")
                 .bind(ipv4)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
                 .unwrap_or(None);
 
@@ -418,7 +418,7 @@ pub async fn create_network(
         let existing_ipv6: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR)")
                 .bind(ipv6)
-                .fetch_optional(pool.get_conn())
+                .fetch_optional(&pool.get_conn())
                 .await
                 .unwrap_or(None);
 
@@ -451,7 +451,7 @@ pub async fn create_network(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn()).await {
+    .execute(&pool.get_conn()).await {
         return Ok(crate::utils::handle_db_error(err, "数据库插入错误"));
     }
 
@@ -463,7 +463,7 @@ pub async fn create_network(
         "ipv6_cidr": ipv6_cidr_val
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -515,7 +515,7 @@ pub async fn get_network(
            WHERE n.id = $1",
     )
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(Some(row)) => Network {
@@ -571,7 +571,7 @@ pub async fn update_network(
     let existing_network =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(network) => network,
@@ -588,7 +588,7 @@ pub async fn update_network(
     if let Some(network_region_id) = &req.network_region_id {
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
             .bind(network_region_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(_)) => (),
@@ -614,7 +614,7 @@ pub async fn update_network(
            JOIN network_regions nt ON n.network_region_id = nt.id 
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(row) => Network {
             id: row.get(0),
             name: row.get(1),
@@ -654,7 +654,7 @@ pub async fn update_network(
     .bind(&full_network_name)
     .bind(network_region_id)
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(network) => network,
@@ -678,7 +678,7 @@ pub async fn update_network(
         )
         .bind(ipv4)
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .unwrap_or(None);
 
@@ -695,7 +695,7 @@ pub async fn update_network(
         )
         .bind(ipv6)
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .unwrap_or(None);
 
@@ -734,7 +734,7 @@ pub async fn update_network(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(crate::utils::handle_db_error(err, "数据库更新错误"));
@@ -750,7 +750,7 @@ pub async fn update_network(
            JOIN network_regions nt ON n.network_region_id = nt.id 
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(row) => Network {
             id: row.get(0),
             name: row.get(1),
@@ -779,7 +779,7 @@ pub async fn update_network(
         "ipv6_cidr": network.ipv6_cidr
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -806,7 +806,7 @@ pub async fn delete_network(
     let existing_network =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(network) => network,
@@ -824,7 +824,7 @@ pub async fn delete_network(
         "SELECT COUNT(*) FROM ips WHERE network_id = $1",
     )
     .bind(id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     {
         Ok(count) => count,
@@ -844,7 +844,7 @@ pub async fn delete_network(
         "SELECT COUNT(*) FROM room_networks WHERE network_id = $1",
     )
     .bind(id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     {
         Ok(count) => count,
@@ -864,7 +864,7 @@ pub async fn delete_network(
         "SELECT COUNT(*) FROM cabinets c JOIN room_networks rn ON c.room_id = rn.room_id WHERE rn.network_id = $1"
     )
         .bind(id)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
     {
         Ok(count) => count,
@@ -882,7 +882,7 @@ pub async fn delete_network(
     // 删除网络
     if let Err(err) = sqlx::query("DELETE FROM network_cidrs WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(crate::utils::handle_db_error(err, "删除网络失败"));
@@ -893,7 +893,7 @@ pub async fn delete_network(
         "network_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",
@@ -923,7 +923,7 @@ pub async fn get_network_regions(
 
     let total: i64 = if search.is_empty() {
         match sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -937,7 +937,7 @@ pub async fn get_network_regions(
             "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1",
         )
         .bind(&pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -953,7 +953,7 @@ pub async fn get_network_regions(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(network_regions) => network_regions,
@@ -969,7 +969,7 @@ pub async fn get_network_regions(
         .bind(&pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(network_regions) => network_regions,
@@ -1008,7 +1008,7 @@ pub async fn create_network_region(
     // 检查网络区域名称是否已存在
     match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE name = $1")
         .bind(&req.name)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(_)) => {
@@ -1034,7 +1034,7 @@ pub async fn create_network_region(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(crate::utils::handle_db_error(err, "创建网络区域失败"));
@@ -1055,7 +1055,7 @@ pub async fn create_network_region(
         "description": network_region.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -1084,7 +1084,7 @@ pub async fn get_network_region(
     let network_region = match sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(network_type)) => network_type,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<NetworkRegion>::error("网络区域未找到")));
@@ -1124,7 +1124,7 @@ pub async fn update_network_region(
     // 检查网络区域是否存在
     match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(_)) => (),
@@ -1144,7 +1144,7 @@ pub async fn update_network_region(
         )
         .bind(name)
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         {
             Ok(Some(_)) => {
@@ -1172,7 +1172,7 @@ pub async fn update_network_region(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(crate::utils::handle_db_error(err, "更新网络区域失败"));
@@ -1182,7 +1182,7 @@ pub async fn update_network_region(
     let network_region = match sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(network_region) => network_region,
         Err(err) => {
             return Ok(crate::utils::handle_db_error(err, "查询更新后的网络区域失败"));
@@ -1195,7 +1195,7 @@ pub async fn update_network_region(
         "description": network_region.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -1226,7 +1226,7 @@ pub async fn delete_network_region(
     // 检查网络区域是否存在
     match sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(Some(_)) => (),
@@ -1244,7 +1244,7 @@ pub async fn delete_network_region(
         "SELECT COUNT(*) FROM network_cidrs WHERE network_region_id = $1",
     )
     .bind(id)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await
     {
         Ok(count) => count,
@@ -1262,7 +1262,7 @@ pub async fn delete_network_region(
     // 删除网络区域
     if let Err(err) = sqlx::query("DELETE FROM network_regions WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(crate::utils::handle_db_error(err, "删除网络区域失败"));
@@ -1273,7 +1273,7 @@ pub async fn delete_network_region(
         "network_region_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",

@@ -150,6 +150,11 @@ impl Config {
         }
 
         // 然后加载环境变量（优先级高于配置文件）
+        // 支持的环境变量：
+        // - IPMA_DATABASE__PASSWORD (注意双下划线表示嵌套)
+        // - IPMA_DATABASE_PASSWORD
+        // - IPMA_JWT__SECRET (注意双下划线表示嵌套)
+        // - IPMA_JWT_SECRET
         builder = builder.add_source(
             config::Environment::default()
                 .prefix("IPMA")
@@ -161,7 +166,18 @@ impl Config {
         let config = builder.build()?;
 
         // 尝试反序列化
-        let config: Self = config.try_deserialize()?;
+        let mut config: Self = config.try_deserialize()?;
+
+        // 环境变量覆盖敏感信息
+        if let Ok(db_password) = std::env::var("IPMA_DATABASE_PASSWORD")
+            && !db_password.is_empty() {
+                config.database.password = db_password;
+            }
+
+        if let Ok(jwt_secret) = std::env::var("IPMA_JWT_SECRET")
+            && !jwt_secret.is_empty() {
+                config.jwt.secret = jwt_secret;
+            }
 
         // 验证关键配置
         if config.database.host.is_empty() {
@@ -182,7 +198,8 @@ impl Config {
 
 // 解析带单位的时间字符串为秒数
 pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
-    let re = regex::Regex::new(r"^(\d+)([smhd])$").unwrap();
+    let re = regex::Regex::new(r"^(\d+)([smhd])$")
+        .expect("无法编译持续时间解析正则表达式");
     if let Some(captures) = re.captures(duration_str) {
         let value: u64 = captures[1].parse().map_err(|_| "Invalid duration value")?;
         let unit = &captures[2];

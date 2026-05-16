@@ -18,7 +18,7 @@ pub async fn get_login_logs(
 
     let (total, logs) = if search.is_empty() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -33,7 +33,7 @@ pub async fn get_login_logs(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(l) => l,
@@ -50,7 +50,7 @@ pub async fn get_login_logs(
             "SELECT COUNT(*) FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1"
         )
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -67,7 +67,7 @@ pub async fn get_login_logs(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(l) => l,

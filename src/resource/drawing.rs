@@ -91,7 +91,7 @@ pub async fn save_layout(
             "type": req.r#type
         });
         let _ = log_system_operation(
-            pool.get_conn(),
+            &pool.get_conn(),
             &http_req,
             config.get_ref(),
             "update",
@@ -152,7 +152,7 @@ pub async fn save_layout(
             "type": req.r#type
         });
         let _ = log_system_operation(
-            pool.get_conn(),
+            &pool.get_conn(),
             &http_req,
             config.get_ref(),
             "update",
@@ -180,7 +180,7 @@ pub async fn delete_layout(
     if let Err(e) =
         sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)")
             .bind(room_id)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -191,7 +191,7 @@ pub async fn delete_layout(
         "room_id": room_id
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",
@@ -217,7 +217,7 @@ pub async fn delete_positions_layout(
         "DELETE FROM cabinet_layouts WHERE cabinet_id IN (SELECT id FROM cabinets WHERE room_id = $1)"
     )
     .bind(room_id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
@@ -226,7 +226,7 @@ pub async fn delete_positions_layout(
                 "room_id": room_id
             });
             let _ = log_system_operation(
-                pool.get_conn(),
+                &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
                 "delete",
@@ -260,7 +260,7 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
            WHERE w.room_id = $1",
     )
     .bind(room_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .map_err(|e| {
         actix_web::error::InternalError::new(
@@ -304,7 +304,7 @@ pub async fn get_positions_layout(
           WHERE c.room_id = $1",
     )
     .bind(room_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     match layouts {
@@ -337,7 +337,7 @@ pub async fn get_room_cabinets_with_positions(
         "SELECT id, name, room_id, capacity, description FROM cabinets WHERE room_id = $1 ORDER BY name",
     )
     .bind(room_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     let cabinets = match cabinets {
@@ -351,7 +351,7 @@ pub async fn get_room_cabinets_with_positions(
             "SELECT id, name, cabinet_id, start_u, end_u, description, device_type, device_id FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
         )
         .bind(cab_id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         .unwrap_or_default();
 
@@ -372,7 +372,7 @@ pub async fn get_room_cabinets_with_positions(
             "SELECT x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = $1",
         )
         .bind(cab_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .ok()
         .flatten();

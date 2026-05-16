@@ -47,7 +47,7 @@ pub async fn get_rooms(
 
     let (total, rooms) = if search.is_empty() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -62,7 +62,7 @@ pub async fn get_rooms(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(r) => r,
@@ -79,7 +79,7 @@ pub async fn get_rooms(
             "SELECT COUNT(*) FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1"
         )
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -96,7 +96,7 @@ pub async fn get_rooms(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(r) => r,
@@ -121,7 +121,7 @@ pub async fn get_rooms(
                WHERE rn.room_id = $1",
         )
         .bind(room.id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(networks) => networks,
@@ -134,7 +134,7 @@ pub async fn get_rooms(
         let workstation_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
                 .bind(room.id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(0);
 
@@ -181,7 +181,7 @@ pub async fn create_room(
     // 检查房间名称是否已存在
     let existing_room = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE name = $1")
         .bind(&req.name)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(room) => room,
@@ -212,7 +212,7 @@ pub async fn create_room(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -230,7 +230,7 @@ pub async fn create_room(
         .bind(network_id)
         .bind(now)
         .bind(now)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
         {
             return Ok(HttpResponse::InternalServerError()
@@ -256,7 +256,7 @@ pub async fn create_room(
         "network_count": req.network_ids.len()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -278,7 +278,7 @@ pub async fn get_room(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
     let room = match sqlx::query_as::<_, Room>(
         "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(room)) => room,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<Room>::error("房间未找到")));
@@ -297,7 +297,7 @@ pub async fn get_room(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
            WHERE rn.room_id = $1",
     )
     .bind(id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(networks) => networks,
@@ -311,7 +311,7 @@ pub async fn get_room(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
     let workstation_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
             .bind(room.id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(0);
 
@@ -356,7 +356,7 @@ pub async fn update_room(
     // 检查房间是否存在
     let existing_room = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(room) => room,
@@ -389,7 +389,7 @@ pub async fn update_room(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -401,7 +401,7 @@ pub async fn update_room(
         // 删除现有网络关联
         if let Err(err) = sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
             .bind(id)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await
         {
             return Ok(HttpResponse::InternalServerError()
@@ -419,7 +419,7 @@ pub async fn update_room(
             .bind(network_id)
             .bind(now)
             .bind(now)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await
             {
                 return Ok(HttpResponse::InternalServerError()
@@ -432,7 +432,7 @@ pub async fn update_room(
     let room = match sqlx::query_as::<_, Room>(
         "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(room) => room,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
@@ -446,7 +446,7 @@ pub async fn update_room(
         "description": room.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -472,7 +472,7 @@ pub async fn delete_room(
     // 检查房间是否存在
     let existing_room = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(room) => room,
@@ -493,7 +493,7 @@ pub async fn delete_room(
     let cabinet_count =
         match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cabinets WHERE room_id = $1")
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(count) => count,
@@ -515,7 +515,7 @@ pub async fn delete_room(
     let workstation_count =
         match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(count) => count,
@@ -536,7 +536,7 @@ pub async fn delete_room(
     // 删除房间
     if let Err(err) = sqlx::query("DELETE FROM rooms WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(
@@ -551,7 +551,7 @@ pub async fn delete_room(
         "room_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",
@@ -575,7 +575,7 @@ pub async fn get_room_networks(
     // 检查房间是否存在
     let existing_room = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(room) => room,
@@ -601,7 +601,7 @@ pub async fn get_room_networks(
            WHERE rn.room_id = $1",
     )
     .bind(id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(networks) => networks,

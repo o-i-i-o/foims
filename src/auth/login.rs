@@ -123,9 +123,9 @@ pub async fn login(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled FROM users WHERE username = $1 OR email = $1",
     )
     .bind(&req.username)
-    .fetch_one(&pool.pool)
+    .fetch_one(&pool.get_conn())
     .await else {
-        let _ = log_login(&pool.pool, &req.username, &http_req, false, Some("用户未找到")).await;
+        let _ = log_login(&pool.get_conn(), &req.username, &http_req, false, Some("用户未找到")).await;
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
     };
 
@@ -133,7 +133,7 @@ pub async fn login(
 
     if !status {
         let _ = log_login(
-            &pool.pool,
+            &pool.get_conn(),
             &username,
             &http_req,
             false,
@@ -150,7 +150,7 @@ pub async fn login(
 
     if !verify(&req.password, &password_hash).unwrap_or(false) {
         let _ = log_login(
-            &pool.pool,
+            &pool.get_conn(),
             &username,
             &http_req,
             false,
@@ -224,7 +224,7 @@ pub async fn login(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.pool, &username, &http_req, true, None).await;
+    let _ = log_login(&pool.get_conn(), &username, &http_req, true, None).await;
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -273,9 +273,9 @@ pub async fn login_with_email_code(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_one(&pool.pool)
+    .fetch_one(&pool.get_conn())
     .await else {
-        let _ = log_login(&pool.pool, email, &http_req, false, Some("用户未找到")).await;
+        let _ = log_login(&pool.get_conn(), email, &http_req, false, Some("用户未找到")).await;
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_email_or_code", &user_lang)));
     };
 
@@ -283,7 +283,7 @@ pub async fn login_with_email_code(
 
     if !status {
         let _ = log_login(
-            &pool.pool,
+            &pool.get_conn(),
             &username,
             &http_req,
             false,
@@ -305,7 +305,7 @@ pub async fn login_with_email_code(
         if trimmed_db_code == trimmed_input_code && e > Utc::now() {
             verified = true;
             if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
-                .bind(id).execute(&pool.pool).await
+                .bind(id).execute(&pool.get_conn()).await
             {
                 tracing::warn!("清除2FA邮箱验证码失败: {}", e);
             }
@@ -314,7 +314,7 @@ pub async fn login_with_email_code(
 
     if !verified {
         let _ = log_login(
-            &pool.pool,
+            &pool.get_conn(),
             &username,
             &http_req,
             false,
@@ -385,7 +385,7 @@ pub async fn login_with_email_code(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.pool, &username, &http_req, true, None).await;
+    let _ = log_login(&pool.get_conn(), &username, &http_req, true, None).await;
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -429,7 +429,7 @@ pub async fn send_login_code(
         "SELECT id, username, status FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_optional(&pool.pool)
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(Some(row)) => row,
@@ -456,13 +456,13 @@ pub async fn send_login_code(
     let expiry = Utc::now() + chrono::Duration::minutes(5);
 
     if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
-        .bind(&code).bind(expiry).bind(id).execute(&pool.pool).await
+        .bind(&code).bind(expiry).bind(id).execute(&pool.get_conn()).await
     {
         tracing::error!("保存2FA邮箱验证码失败: {}", e);
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
     }
 
-    let smtp_config = get_smtp_config_from_db(&pool.pool).await;
+    let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
     if let Some(smtp_config) = smtp_config {
         info!(
             "Sending login code email to {} using host: {}",
@@ -559,7 +559,7 @@ pub async fn login_with_two_factor(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret FROM users WHERE username = $1",
     )
     .bind(&req.username)
-    .fetch_one(&pool.pool)
+    .fetch_one(&pool.get_conn())
     .await
     else {
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
@@ -599,7 +599,7 @@ pub async fn login_with_two_factor(
         let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
             // Base32 解码失败，密钥格式错误
             let _ = log_login(
-                &pool.pool,
+                &pool.get_conn(),
                 &username,
                 &http_req,
                 false,
@@ -625,7 +625,7 @@ pub async fn login_with_two_factor(
         } else {
             // 密钥长度不符合规范（需要至少16字节）
             let _ = log_login(
-                &pool.pool,
+                &pool.get_conn(),
                 &username,
                 &http_req,
                 false,
@@ -639,7 +639,7 @@ pub async fn login_with_two_factor(
 
     if !verified {
         let _ = log_login(
-            &pool.pool,
+            &pool.get_conn(),
             &username,
             &http_req,
             false,
@@ -699,7 +699,7 @@ pub async fn login_with_two_factor(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.pool, &user.username, &http_req, true, None).await;
+    let _ = log_login(&pool.get_conn(), &user.username, &http_req, true, None).await;
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -735,7 +735,7 @@ pub async fn send_two_factor_code(
         "SELECT id, username, email FROM users WHERE username = $1",
     )
     .bind(&req.username)
-    .fetch_optional(&pool.pool)
+    .fetch_optional(&pool.get_conn())
     .await
     else {
         return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "发送成功")));
@@ -748,12 +748,12 @@ pub async fn send_two_factor_code(
         .map(|_| rng.random_range(0..10).to_string())
         .collect();
     let expiry = Utc::now() + chrono::Duration::minutes(5);
-    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3").bind(&code).bind(expiry).bind(user.0).execute(&pool.pool).await {
+    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3").bind(&code).bind(expiry).bind(user.0).execute(&pool.get_conn()).await {
         tracing::error!("保存2FA邮箱验证码失败: {}", e);
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
     }
 
-    let smtp_config = get_smtp_config_from_db(&pool.pool).await;
+    let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
     if let Some(smtp_config) = smtp_config {
         let email_body = format!("您的两步验证码是：{code}");
         let email_msg = match Message::builder()
@@ -870,7 +870,7 @@ pub async fn refresh_token(
     };
 
     // 2. 检查 token 是否已被撤销
-    if crate::utils::is_token_revoked(&pool.pool, &token)
+    if crate::utils::is_token_revoked(&pool.get_conn(), &token)
         .await
         .unwrap_or(false)
     {
@@ -908,7 +908,7 @@ pub async fn refresh_token(
     };
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
-    let _ = crate::utils::revoke_token(&pool.pool, &token, &user_id, token_expiry).await;
+    let _ = crate::utils::revoke_token(&pool.get_conn(), &token, &user_id, token_expiry).await;
 
     // 5. 判断是否保持登录（如果 refresh_token 有效期大于 24 小时，说明用户选择了保持登录）
     let token_duration = claims.exp.saturating_sub(claims.iat);
@@ -1005,12 +1005,12 @@ pub async fn forgot_password(
         "SELECT id, username, two_factor_enabled FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_optional(&pool.pool)
+    .fetch_optional(&pool.get_conn())
     .await;
 
     match user_result {
         Ok(Some((_user_id, _username, _two_factor_enabled))) => {
-            let smtp_config = get_smtp_config_from_db(&pool.pool).await;
+            let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
             if let Some(smtp_config) = smtp_config {
                 let reset_token = Uuid::new_v4().to_string();
                 let expiry = Utc::now() + chrono::Duration::hours(1);
@@ -1021,7 +1021,7 @@ pub async fn forgot_password(
                 .bind(&reset_token)
                 .bind(expiry)
                 .bind(email)
-                .execute(&pool.pool)
+                .execute(&pool.get_conn())
                 .await
                 {
                     error!("保存重置令牌失败: {}", e);
@@ -1143,7 +1143,7 @@ pub async fn reset_password(
         "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()",
     )
     .bind(token)
-    .fetch_optional(&pool.pool)
+    .fetch_optional(&pool.get_conn())
     .await;
 
     match user_result {
@@ -1162,7 +1162,7 @@ pub async fn reset_password(
             )
             .bind(&hashed_password)
             .bind(user_id)
-            .execute(&pool.pool)
+            .execute(&pool.get_conn())
             .await
             {
                 error!("更新密码失败: {}", e);
@@ -1223,7 +1223,7 @@ pub async fn init_two_factor(
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.pool)
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(name)) => name,
@@ -1252,7 +1252,7 @@ pub async fn init_two_factor(
         6,
         1,
         30,
-        secret.to_bytes().unwrap(),
+        secret.to_bytes().expect("TOTP密钥转换失败"),
         Some("IPMA".to_string()),
         target_username.clone(),
     ) else {
@@ -1268,7 +1268,7 @@ pub async fn init_two_factor(
     if let Err(e) = sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
         .bind(target_user_id)
-        .execute(&pool.pool)
+        .execute(&pool.get_conn())
         .await
     {
         tracing::error!("保存2FA密钥失败: {}", e);
@@ -1328,7 +1328,7 @@ pub async fn enable_two_factor(
     let secret: Option<String> =
         match sqlx::query_scalar("SELECT two_factor_secret FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.pool)
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(s)) => s,
@@ -1354,7 +1354,7 @@ pub async fn enable_two_factor(
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.pool)
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(name)) => name,
@@ -1395,7 +1395,7 @@ pub async fn enable_two_factor(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1",
     )
     .bind(target_user_id)
-    .execute(&pool.pool)
+    .execute(&pool.get_conn())
     .await
     {
         tracing::error!("启用2FA失败: {}", e);
@@ -1448,7 +1448,7 @@ pub async fn disable_two_factor(
         "SELECT two_factor_secret, two_factor_enabled FROM users WHERE id = $1",
     )
     .bind(target_user_id)
-    .fetch_one(&pool.pool)
+    .fetch_one(&pool.get_conn())
     .await
     {
         Ok(row) => row,
@@ -1467,7 +1467,7 @@ pub async fn disable_two_factor(
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.pool)
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(Some(name)) => name,
@@ -1511,7 +1511,7 @@ pub async fn disable_two_factor(
         "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_verified = false WHERE id = $1"
     )
     .bind(target_user_id)
-    .execute(&pool.pool)
+    .execute(&pool.get_conn())
     .await
     {
         tracing::error!("禁用2FA失败: {}", e);

@@ -12,7 +12,7 @@ pub async fn get_scheduled_tasks(pool: web::Data<DbPool>) -> Result<HttpResponse
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks ORDER BY created_at DESC"
     )
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 
@@ -29,7 +29,7 @@ pub async fn get_scheduled_task(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -65,7 +65,7 @@ pub async fn create_scheduled_task(
     .bind(enabled)
     .bind(&config)
     .bind(next_run_at)
-    .fetch_one(pool.get_conn())
+    .fetch_one(&pool.get_conn())
     .await;
 
     match task {
@@ -93,7 +93,7 @@ pub async fn update_scheduled_task(
         && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
             .bind(next_run)
             .bind(id)
-            .execute(pool.get_conn())
+            .execute(&pool.get_conn())
             .await
     {
         tracing::warn!("更新下次运行时间失败: {}", e);
@@ -116,7 +116,7 @@ pub async fn update_scheduled_task(
     .bind(&req.config)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
@@ -125,7 +125,7 @@ pub async fn update_scheduled_task(
                 "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
             )
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await;
 
             match task {
@@ -151,7 +151,7 @@ pub async fn delete_scheduled_task(
 
     let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await;
 
     match result {
@@ -175,7 +175,7 @@ pub async fn toggle_scheduled_task(
     )
     .bind(Utc::now())
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await;
 
     match result {
@@ -184,7 +184,7 @@ pub async fn toggle_scheduled_task(
                 "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
             )
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await;
 
             match task {
@@ -217,7 +217,7 @@ pub async fn run_scheduled_task_now(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -232,7 +232,7 @@ pub async fn run_scheduled_task_now(
 
     let db_config = pool.db_config.clone();
     let result =
-        execute_task_by_type(pool.get_conn(), &task.task_type, &task.config, &db_config).await;
+        execute_task_by_type(&pool.get_conn(), &task.task_type, &task.config, &db_config).await;
 
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_milliseconds() as i32;
@@ -259,7 +259,7 @@ pub async fn run_scheduled_task_now(
     .bind(start_time)
     .bind(end_time)
     .bind(duration)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         tracing::warn!("记录任务日志失败: {}", e);
@@ -284,7 +284,7 @@ pub async fn run_scheduled_task_now(
         .bind(id)
     };
 
-    update_query.execute(pool.get_conn()).await.ok();
+    update_query.execute(&pool.get_conn()).await.ok();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({"result": result}),
@@ -308,7 +308,7 @@ pub async fn get_task_logs(
         )
         .bind(&name)
         .bind(limit)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         .unwrap_or_default()
     } else {
@@ -316,7 +316,7 @@ pub async fn get_task_logs(
             "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
         )
         .bind(limit)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         .unwrap_or_default()
     };

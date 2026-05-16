@@ -268,7 +268,7 @@ async fn export_rooms(
 
     let mut header = String::from("名称,类型");
     for i in 1..=max_networks {
-        write!(header, ",网络{i}").unwrap();
+        write!(header, ",网络{i}").expect("CSV头部写入失败");
     }
     header.push('\n');
     csv.extend_from_slice(header.as_bytes());
@@ -288,7 +288,7 @@ async fn export_rooms(
         let mut line = format!("{},{}", escape_csv_field(&name), room_type_display);
         for i in 0..max_networks {
             if i < networks.len() {
-                write!(line, ",{}", escape_csv_field(&networks[i])).unwrap();
+                write!(line, ",{}", escape_csv_field(&networks[i])).expect("CSV行写入失败");
             } else {
                 line.push(',');
             }
@@ -391,7 +391,7 @@ async fn export_cabinets(
 
     let mut header = String::from("名称,房间");
     for i in 1..=max_networks {
-        write!(header, ",网络{i}").unwrap();
+        write!(header, ",网络{i}").expect("CSV头部写入失败");
     }
     header.push_str(",描述\n");
     csv.extend_from_slice(header.as_bytes());
@@ -409,12 +409,12 @@ async fn export_cabinets(
         let mut line = format!("{},{}", escape_csv_field(&name), escape_csv_field(&room));
         for i in 0..max_networks {
             if i < networks.len() {
-                write!(line, ",{}", escape_csv_field(&networks[i])).unwrap();
+                write!(line, ",{}", escape_csv_field(&networks[i])).expect("CSV行写入失败");
             } else {
                 line.push(',');
             }
         }
-        writeln!(line, ",{}", escape_csv_field(&description.unwrap_or_default())).unwrap();
+        writeln!(line, ",{}", escape_csv_field(&description.unwrap_or_default())).expect("CSV行写入失败");
         csv.extend_from_slice(line.as_bytes());
     }
 
@@ -2283,42 +2283,42 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
         "operation" => {
             if days == 0 {
                 sqlx::query("DELETE FROM operation_logs")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
             }
         }
         "login" => {
             if days == 0 {
                 sqlx::query("DELETE FROM login_logs")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
             }
         }
         "notification" => {
             if days == 0 {
                 sqlx::query("DELETE FROM notifications")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
             }
         }
@@ -2327,19 +2327,19 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
 
             if days == 0 {
                 if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
                 {
                     deleted += r.rows_affected();
                 }
                 if let Ok(r) = sqlx::query("DELETE FROM login_logs")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
                 {
                     deleted += r.rows_affected();
                 }
                 if let Ok(r) = sqlx::query("DELETE FROM notifications")
-                    .execute(pool.get_conn())
+                    .execute(&pool.get_conn())
                     .await
                 {
                     deleted += r.rows_affected();
@@ -2349,7 +2349,7 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     deleted += r.rows_affected();
@@ -2358,7 +2358,7 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     deleted += r.rows_affected();
@@ -2367,7 +2367,7 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool.get_conn())
+                .execute(&pool.get_conn())
                 .await
                 {
                     deleted += r.rows_affected();
@@ -2399,24 +2399,24 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
 
 pub async fn get_logs_stats(pool: web::Data<DbPool>) -> HttpResponse {
     let operation_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs")
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(0);
 
     let login_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(0);
 
     let notification_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notifications")
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(0);
 
     let operation_oldest: Option<String> = sqlx::query_scalar(
         "SELECT created_at::text FROM operation_logs ORDER BY created_at ASC LIMIT 1",
     )
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -2424,7 +2424,7 @@ pub async fn get_logs_stats(pool: web::Data<DbPool>) -> HttpResponse {
     let login_oldest: Option<String> = sqlx::query_scalar(
         "SELECT created_at::text FROM login_logs ORDER BY created_at ASC LIMIT 1",
     )
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();

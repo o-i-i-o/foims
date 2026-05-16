@@ -29,7 +29,7 @@ pub async fn get_users(
 
     let (total, users) = if search.is_empty() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -44,7 +44,7 @@ pub async fn get_users(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(u) => u,
@@ -61,7 +61,7 @@ pub async fn get_users(
             "SELECT COUNT(*) FROM users WHERE username ILIKE $1 OR email ILIKE $1",
         )
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -77,7 +77,7 @@ pub async fn get_users(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(u) => u,
@@ -118,7 +118,7 @@ pub async fn create_user(
     let existing_user =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = $1")
             .bind(&req.username)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(user) => user,
@@ -138,7 +138,7 @@ pub async fn create_user(
     let existing_email =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
             .bind(&req.email)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(email) => email,
@@ -178,7 +178,7 @@ pub async fn create_user(
     .bind(true)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
@@ -188,7 +188,7 @@ pub async fn create_user(
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     let _ = log_system_operation(
-        &pool.pool,
+        &pool.get_conn(),
         &http_req,
         &config,
         "create_user",
@@ -220,7 +220,7 @@ pub async fn get_user(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Resu
     let user = match sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(user)) => user,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("用户未找到")));
@@ -250,7 +250,7 @@ pub async fn update_user(
 
     let existing_user = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(user) => user,
@@ -282,7 +282,7 @@ pub async fn update_user(
     .bind(req.status)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -291,7 +291,7 @@ pub async fn update_user(
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
     let _ = log_system_operation(
-        &pool.pool,
+        &pool.get_conn(),
         &http_req,
         &config,
         "update_user",
@@ -305,7 +305,7 @@ pub async fn update_user(
     let user = match sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(user) => user,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
@@ -325,7 +325,7 @@ pub async fn delete_user(
 
     let existing_user = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
     {
         Ok(user) => user,
@@ -390,7 +390,7 @@ pub async fn delete_user(
 
     let details = json!({});
     let _ = log_system_operation(
-        &pool.pool,
+        &pool.get_conn(),
         &http_req,
         &config,
         "delete_user",

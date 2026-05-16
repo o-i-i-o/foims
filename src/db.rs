@@ -1,6 +1,7 @@
 use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::sync::RwLock as SyncRwLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tokio::time;
@@ -8,27 +9,19 @@ use tracing::{debug, error, info, warn};
 
 use crate::config::DatabaseConfig;
 
-/// 连接池性能指标
 #[derive(Debug, Default)]
 pub struct PoolMetrics {
-    /// 活跃连接数
     pub active_connections: AtomicU32,
-    /// 空闲连接数
     pub idle_connections: AtomicU32,
-    /// 等待获取连接的请求数
     pub waiting_requests: AtomicU32,
-    /// 总请求数
     pub total_requests: AtomicU64,
-    /// 失败请求数
     pub failed_requests: AtomicU64,
-    /// 平均获取连接等待时间（毫秒）
     pub avg_wait_time_ms: AtomicU64,
-    /// 最后更新时间
     pub last_updated: AtomicU64,
 }
 
 impl PoolMetrics {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             active_connections: AtomicU32::new(0),
@@ -41,13 +34,11 @@ impl PoolMetrics {
         }
     }
 
-    /// 记录请求开始
     pub fn record_request_start(&self) {
         self.total_requests.fetch_add(1, Ordering::Relaxed);
         self.waiting_requests.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 记录请求完成
     pub fn record_request_complete(&self, wait_time_ms: u64, success: bool) {
         self.waiting_requests.fetch_sub(1, Ordering::Relaxed);
 
@@ -55,7 +46,6 @@ impl PoolMetrics {
             self.failed_requests.fetch_add(1, Ordering::Relaxed);
         }
 
-        // 使用指数移动平均计算平均等待时间
         let current_avg = self.avg_wait_time_ms.load(Ordering::Relaxed);
         let new_avg = if current_avg == 0 {
             wait_time_ms
@@ -64,7 +54,6 @@ impl PoolMetrics {
         };
         self.avg_wait_time_ms.store(new_avg, Ordering::Relaxed);
 
-        // 更新最后更新时间
         self.last_updated.store(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -74,13 +63,11 @@ impl PoolMetrics {
         );
     }
 
-    /// 更新连接数
     pub fn update_connection_counts(&self, active: u32, idle: u32) {
         self.active_connections.store(active, Ordering::Relaxed);
         self.idle_connections.store(idle, Ordering::Relaxed);
     }
 
-    /// 获取当前指标快照
     pub fn snapshot(&self) -> PoolMetricsSnapshot {
         PoolMetricsSnapshot {
             active_connections: self.active_connections.load(Ordering::Relaxed),
@@ -94,7 +81,6 @@ impl PoolMetrics {
     }
 }
 
-/// 连接池指标快照
 #[derive(Debug, Clone, Serialize)]
 pub struct PoolMetricsSnapshot {
     pub active_connections: u32,
@@ -106,34 +92,20 @@ pub struct PoolMetricsSnapshot {
     pub last_updated: u64,
 }
 
-/// 连接池配置选项
 #[derive(Debug, Clone)]
 pub struct PoolConfig {
-    /// 最大连接数
     pub max_connections: u32,
-    /// 最小连接数
     pub min_connections: u32,
-    /// 获取连接超时时间（秒）
     pub acquire_timeout_secs: u64,
-    /// 空闲连接超时时间（秒）
     pub idle_timeout_secs: u64,
-    /// 连接最大生命周期（秒）
     pub max_lifetime_secs: u64,
-    /// 是否在获取前测试连接
     pub test_before_acquire: bool,
-    /// 健康检查间隔（秒）
     pub health_check_interval_secs: u64,
-    /// 是否启用自动缩放
     pub auto_scaling_enabled: bool,
-    /// 连接池低负载阈值（活跃连接比例）
     pub low_load_threshold: f32,
-    /// 连接池高负载阈值（活跃连接比例）
     pub high_load_threshold: f32,
-    /// 最小缩放间隔（秒）
     pub scaling_cooldown_secs: u64,
-    /// 查询超时时间（秒）
     pub query_timeout_secs: u64,
-    /// 慢查询阈值（毫秒）
     pub slow_query_threshold_ms: u64,
 }
 
@@ -159,9 +131,11 @@ impl Default for PoolConfig {
 
 impl From<&DatabaseConfig> for PoolConfig {
     fn from(config: &DatabaseConfig) -> Self {
+        let max_connections = config.max_connections;
+        let min_connections = 2.min(max_connections);
         Self {
-            max_connections: config.max_connections,
-            min_connections: 2,
+            max_connections,
+            min_connections,
             acquire_timeout_secs: 5,
             idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
@@ -177,10 +151,9 @@ impl From<&DatabaseConfig> for PoolConfig {
     }
 }
 
-/// 数据库连接池包装器
 #[derive(Clone)]
 pub struct DbPool {
-    pub pool: PgPool,
+    pool: Arc<SyncRwLock<PgPool>>,
     pub metrics: Arc<PoolMetrics>,
     pub config: Arc<RwLock<PoolConfig>>,
     pub db_config: DatabaseConfig,
@@ -188,13 +161,11 @@ pub struct DbPool {
 }
 
 impl DbPool {
-    /// 创建新的连接池
     pub async fn new(config: &DatabaseConfig) -> Result<Self, sqlx::Error> {
         let pool_config = PoolConfig::from(config);
         Self::new_with_config(config, pool_config).await
     }
 
-    /// 使用自定义配置创建连接池
     pub async fn new_with_config(
         config: &DatabaseConfig,
         pool_config: PoolConfig,
@@ -207,7 +178,7 @@ impl DbPool {
         let pool = Self::create_pool(&url, &pool_config).await?;
 
         Ok(Self {
-            pool,
+            pool: Arc::new(SyncRwLock::new(pool)),
             metrics: Arc::new(PoolMetrics::new()),
             config: Arc::new(RwLock::new(pool_config)),
             db_config: config.clone(),
@@ -215,7 +186,6 @@ impl DbPool {
         })
     }
 
-    /// 创建连接池内部方法
     async fn create_pool(url: &str, config: &PoolConfig) -> Result<PgPool, sqlx::Error> {
         sqlx::postgres::PgPoolOptions::new()
             .max_connections(config.max_connections)
@@ -232,12 +202,25 @@ impl DbPool {
             .await
     }
 
-    /// 获取数据库连接（带监控）
-    pub async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
+    fn build_database_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.db_config.username,
+            self.db_config.password,
+            self.db_config.host,
+            self.db_config.port,
+            self.db_config.database
+        )
+    }
+
+    pub async fn acquire(
+        &self,
+    ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
         let start_time = std::time::Instant::now();
         self.metrics.record_request_start();
 
-        let result = self.pool.acquire().await;
+        let pool = self.read_pool();
+        let result = pool.acquire().await;
         let wait_time_ms = start_time.elapsed().as_millis() as u64;
 
         match &result {
@@ -251,85 +234,106 @@ impl DbPool {
             }
         }
 
-        // 更新连接数指标
         self.update_metrics();
 
         result
     }
 
-    /// 获取连接引用
-    #[must_use] 
-    pub const fn get_conn(&self) -> &PgPool {
-        &self.pool
+    #[must_use]
+    pub fn get_conn(&self) -> PgPool {
+        self.read_pool()
     }
 
-    /// 健康检查
+    fn read_pool(&self) -> PgPool {
+        self.pool
+            .read()
+            .unwrap_or_else(|e| {
+                warn!("数据库连接池读锁中毒，自动恢复: {}", e);
+                e.into_inner()
+            })
+            .clone()
+    }
+
     pub async fn health_check(&self) -> Result<bool, sqlx::Error> {
+        let pool = self.read_pool();
         sqlx::query("SELECT 1")
-            .execute(&self.pool)
+            .execute(&pool)
             .await
             .map(|_| true)
     }
 
-    /// 更新指标
     fn update_metrics(&self) {
-        let total = self.pool.size();
-        let idle = self.pool.num_idle() as u32;
+        let pool = self.read_pool();
+        let total = pool.size();
+        let idle = pool.num_idle() as u32;
         let active = total.saturating_sub(idle);
         self.metrics.update_connection_counts(active, idle);
     }
 
-    /// 获取当前指标快照
-    #[must_use] 
+    #[must_use]
     pub fn get_metrics(&self) -> PoolMetricsSnapshot {
         self.metrics.snapshot()
     }
 
-    /// 获取连接池状态
-    #[must_use] 
+    #[must_use]
     pub fn get_pool_status(&self) -> PoolStatus {
+        let pool = self.read_pool();
         PoolStatus {
-            size: self.pool.size(),
-            num_idle: self.pool.num_idle() as u32,
-            is_closed: self.pool.is_closed(),
+            size: pool.size(),
+            num_idle: pool.num_idle() as u32,
+            is_closed: pool.is_closed(),
         }
     }
 
-    /// 动态调整连接池大小
-    /// 注意：SQLx 的 `PgPool` 创建后不支持动态调整大小，
-    /// 此方法仅更新内部配置记录，实际连接池大小需要重启服务才能生效。
     pub async fn resize_pool(&self, new_max_connections: u32) -> Result<(), sqlx::Error> {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        let last_scaling = self.last_scaling_time.load(Ordering::Relaxed);
-        let config = self.config.read().await;
+        let mut config = self.config.write().await;
 
-        if current_time - last_scaling < config.scaling_cooldown_secs {
+        if current_time - self.last_scaling_time.load(Ordering::Relaxed)
+            < config.scaling_cooldown_secs
+        {
             warn!("连接池缩放冷却中，跳过本次调整");
             return Ok(());
         }
-        drop(config);
 
-        let mut config = self.config.write().await;
         let old_max = config.max_connections;
         config.max_connections = new_max_connections;
+        config.min_connections = config.min_connections.min(new_max_connections);
+        let new_config = config.clone();
         drop(config);
+
+        let url = self.build_database_url();
+        let new_pool = Self::create_pool(&url, &new_config).await?;
+
+        let old_pool = {
+            let mut pool_lock = self.pool.write().unwrap_or_else(|e| {
+                warn!("数据库连接池写锁中毒，自动恢复: {}", e);
+                e.into_inner()
+            });
+            std::mem::replace(&mut *pool_lock, new_pool)
+        };
+
+        tokio::spawn(async move {
+            old_pool.close().await;
+        });
 
         self.last_scaling_time
             .store(current_time, Ordering::Relaxed);
 
+        self.update_metrics();
+
         warn!(
-            "连接池大小配置已更新: {} -> {}，但需要重启服务才能生效",
+            "连接池已重建: 最大连接数 {} -> {}",
             old_max, new_max_connections
         );
 
         Ok(())
     }
 
-    /// 自动缩放检查
     pub async fn check_and_scale(&self) {
         let config = self.config.read().await;
 
@@ -338,7 +342,8 @@ impl DbPool {
         }
 
         let metrics = self.metrics.snapshot();
-        let pool_size = self.pool.size();
+        let pool = self.read_pool();
+        let pool_size = pool.size();
 
         if pool_size == 0 {
             return;
@@ -351,31 +356,27 @@ impl DbPool {
         let low_load_threshold = config.low_load_threshold;
         drop(config);
 
-        // 高负载：增加连接数
         if utilization_rate > high_load_threshold {
-            // 计算新的最大连接数，使用更保守的增长策略
-            // 避免每次都增加50%，而是根据负载程度动态调整
             let load_factor = utilization_rate / high_load_threshold;
-            let growth_factor = (load_factor - 1.0).mul_add(0.3, 1.0); // 最大增长30%
-            let new_max = (current_max as f32 * growth_factor).min(100.0).round().clamp(0.0, u32::MAX as f32) as u32;
+            let growth_factor = (load_factor - 1.0).mul_add(0.3, 1.0);
+            let new_max = (current_max as f32 * growth_factor)
+                .min(100.0)
+                .round()
+                .clamp(0.0, u32::MAX as f32) as u32;
 
-            // 只有当新的最大连接数比当前大至少2个时才进行调整
             if new_max > current_max + 1
                 && let Err(e) = self.resize_pool(new_max).await
             {
                 error!("连接池扩容失败: {}", e);
             }
-        }
-        // 低负载：减少连接数
-        else if utilization_rate < low_load_threshold {
-            // 计算新的最大连接数，使用更保守的减少策略
-            // 避免每次都减少20%，而是根据负载程度动态调整
+        } else if utilization_rate < low_load_threshold {
             let load_factor = utilization_rate / low_load_threshold;
-            let reduction_factor = load_factor.mul_add(0.2, 0.8); // 最小减少20%
-            let new_max =
-                (current_max as f32 * reduction_factor).max(min_connections as f32).round().clamp(0.0, u32::MAX as f32) as u32;
+            let reduction_factor = load_factor.mul_add(0.2, 0.8);
+            let new_max = (current_max as f32 * reduction_factor)
+                .max(min_connections as f32)
+                .round()
+                .clamp(0.0, u32::MAX as f32) as u32;
 
-            // 只有当新的最大连接数比当前小至少2个时才进行调整
             if new_max < current_max - 1
                 && let Err(e) = self.resize_pool(new_max).await
             {
@@ -384,7 +385,6 @@ impl DbPool {
         }
     }
 
-    /// 启动定期健康检查任务
     pub fn start_health_check_task(&self, interval_seconds: u64) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
@@ -392,22 +392,18 @@ impl DbPool {
             loop {
                 interval.tick().await;
 
-                // 健康检查
                 match pool_clone.health_check().await {
                     Ok(_) => debug!("数据库连接池健康检查通过"),
                     Err(e) => error!("数据库连接池健康检查失败: {}", e),
                 }
 
-                // 更新指标
                 pool_clone.update_metrics();
 
-                // 自动缩放检查
                 pool_clone.check_and_scale().await;
             }
         });
     }
 
-    /// 启动指标收集任务
     pub fn start_metrics_collection_task(&self, interval_seconds: u64) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
@@ -431,14 +427,13 @@ impl DbPool {
         });
     }
 
-    /// 关闭连接池
     pub async fn close(&self) {
-        self.pool.close().await;
+        let pool = self.read_pool();
+        pool.close().await;
         info!("数据库连接池已关闭");
     }
 
-    /// 获取查询超时时间
-    #[must_use] 
+    #[must_use]
     pub fn get_query_timeout(&self) -> std::time::Duration {
         let config = self
             .config
@@ -448,8 +443,7 @@ impl DbPool {
         std::time::Duration::from_secs(config)
     }
 
-    /// 获取慢查询阈值
-    #[must_use] 
+    #[must_use]
     pub fn get_slow_query_threshold_ms(&self) -> u64 {
         self.config
             .try_read()
@@ -457,7 +451,6 @@ impl DbPool {
             .unwrap_or(1000)
     }
 
-    /// 执行带超时的查询
     pub async fn execute_with_timeout<F, T>(
         &self,
         query_name: &str,
@@ -470,11 +463,12 @@ impl DbPool {
         let slow_threshold = self.get_slow_query_threshold_ms();
         let start = std::time::Instant::now();
 
+        self.metrics.record_request_start();
+
         let result = tokio::time::timeout(timeout, future).await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
-        // 记录慢查询
         if elapsed_ms > slow_threshold {
             warn!(
                 "慢查询警告: {} 耗时 {}ms (阈值: {}ms)",
@@ -483,14 +477,59 @@ impl DbPool {
         }
 
         match result {
-            Ok(Ok(value)) => Ok(value),
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(sqlx::Error::WorkerCrashed),
+            Ok(Ok(value)) => {
+                self.metrics.record_request_complete(elapsed_ms, true);
+                self.update_metrics();
+                Ok(value)
+            }
+            Ok(Err(e)) => {
+                self.metrics.record_request_complete(elapsed_ms, false);
+                self.update_metrics();
+                Err(e)
+            }
+            Err(_) => {
+                self.metrics.record_request_complete(elapsed_ms, false);
+                self.update_metrics();
+                Err(sqlx::Error::WorkerCrashed)
+            }
+        }
+    }
+
+    pub async fn query<F, T>(&self, query_name: &str, future: F) -> Result<T, sqlx::Error>
+    where
+        F: std::future::Future<Output = Result<T, sqlx::Error>>,
+    {
+        let slow_threshold = self.get_slow_query_threshold_ms();
+        let start = std::time::Instant::now();
+
+        self.metrics.record_request_start();
+
+        let result = future.await;
+
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+
+        if elapsed_ms > slow_threshold {
+            warn!(
+                "慢查询警告: {} 耗时 {}ms (阈值: {}ms)",
+                query_name, elapsed_ms, slow_threshold
+            );
+        }
+
+        match result {
+            Ok(value) => {
+                self.metrics.record_request_complete(elapsed_ms, true);
+                self.update_metrics();
+                Ok(value)
+            }
+            Err(e) => {
+                self.metrics.record_request_complete(elapsed_ms, false);
+                self.update_metrics();
+                Err(e)
+            }
         }
     }
 }
 
-/// 连接池状态
 #[derive(Debug, Clone, Serialize)]
 pub struct PoolStatus {
     pub size: u32,
@@ -526,5 +565,22 @@ mod tests {
         assert_eq!(config.min_connections, 2);
         assert_eq!(config.acquire_timeout_secs, 5);
         assert!(config.auto_scaling_enabled);
+    }
+
+    #[test]
+    fn test_pool_config_min_connections_validation() {
+        let db_config = DatabaseConfig {
+            host: "localhost".to_string(),
+            port: 5432,
+            database: "test".to_string(),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            max_connections: 1,
+            query_timeout_secs: 30,
+            slow_query_threshold_ms: 1000,
+        };
+        let pool_config = PoolConfig::from(&db_config);
+        assert_eq!(pool_config.min_connections, 1);
+        assert!(pool_config.min_connections <= pool_config.max_connections);
     }
 }

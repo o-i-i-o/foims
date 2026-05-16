@@ -16,20 +16,36 @@ pub fn setup_logging() -> String {
         time::format_description::parse(
             "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]",
         )
-        .unwrap(),
+        .unwrap_or_else(|e| {
+            eprintln!("警告: 无法解析时间格式，使用默认格式: {}", e);
+            time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").unwrap()
+        }),
     );
 
     let app_name = env!("CARGO_PKG_NAME");
     let log_dir = format!("/var/log/{app_name}");
 
-    if !Path::new(&log_dir).exists() {
-        fs::create_dir_all(&log_dir).unwrap_or_else(|e| {
-            eprintln!("创建日志目录失败: {e}");
-        });
-    }
+    if !Path::new(&log_dir).exists()
+        && let Err(e) = fs::create_dir_all(&log_dir) {
+            eprintln!("创建日志目录失败: {e}，将使用当前目录");
+        }
 
     let today = chrono::Local::now().format("%Y-%m-%d-%H-%M").to_string();
     let log_file_path = format!("{log_dir}/{today}.log");
+
+    let file_appender = match std::fs::File::create(&log_file_path) {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("创建日志文件失败: {e}，将使用默认日志文件");
+            match std::fs::File::create("ipma.log") {
+                Ok(file) => file,
+                Err(e2) => {
+                    eprintln!("创建默认日志文件也失败: {e2}，将只输出到控制台");
+                    return String::from("ipma.log");
+                }
+            }
+        }
+    };
 
     tracing_subscriber::registry()
         .with(
@@ -39,10 +55,7 @@ pub fn setup_logging() -> String {
         )
         .with(
             tracing_subscriber::fmt::layer()
-                .with_writer(std::fs::File::create(&log_file_path).unwrap_or_else(|e| {
-                    eprintln!("创建日志文件失败: {e}");
-                    std::fs::File::create("ipma.log").unwrap()
-                }))
+                .with_writer(file_appender)
                 .with_timer(timer)
                 .with_ansi(false),
         )

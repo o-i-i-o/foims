@@ -22,7 +22,11 @@ fn generate_verification_code() -> String {
 
     for _ in 0..16 {
         let idx = rng.random_range(0..chars.len());
-        code.push(chars.chars().nth(idx).unwrap());
+        if let Some(ch) = chars.chars().nth(idx) {
+            code.push(ch);
+        } else {
+            tracing::warn!("验证码生成警告：无法获取字符索引 {}", idx);
+        }
     }
 
     code
@@ -49,7 +53,10 @@ pub fn verify_code(provided_code: &str) -> Result<(), String> {
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_else(|e| {
+            tracing::warn!("系统时间计算警告: {}", e);
+            std::time::Duration::from_secs(0)
+        })
         .as_secs();
 
     if now - stored_code.created_at > VERIFICATION_CODE_EXPIRY_SECS {

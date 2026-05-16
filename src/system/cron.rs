@@ -27,14 +27,30 @@ pub async fn start_scheduler(
         let config = backup_config.clone();
         Box::pin(async move {
             info!("Running data backup job...");
-            match execute_database_backup(&config, pool.get_conn()) {
-                Ok(msg) => {
+            let config_move = config.clone();
+            let pool_conn = pool.get_conn();
+            let result = tokio::task::spawn_blocking(move || {
+                execute_database_backup(&config_move, &pool_conn)
+            })
+            .await;
+            match result {
+                Ok(Ok(msg)) => {
                     info!("Data backup job completed: {}", msg);
                     log_task_execution(&pool, "system_backup", "success", &msg).await;
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     error!("Data backup job failed: {}", e);
                     log_task_execution(&pool, "system_backup", "failed", &e).await;
+                }
+                Err(e) => {
+                    error!("Data backup task join error: {}", e);
+                    log_task_execution(
+                        &pool,
+                        "system_backup",
+                        "failed",
+                        &format!("任务执行异常: {e}"),
+                    )
+                    .await;
                 }
             }
         })
@@ -46,7 +62,7 @@ pub async fn start_scheduler(
         let pool = pool_for_tokens.clone();
         Box::pin(async move {
             info!("Running expired token cleanup job...");
-            let result = cleanup_expired_revoked_tokens(&pool.pool).await;
+            let result = cleanup_expired_revoked_tokens(&pool.get_conn()).await;
             match result {
                 Ok(count) => {
                     info!("Token cleanup completed: {} expired tokens removed", count);
@@ -78,7 +94,7 @@ pub async fn start_scheduler(
         let pool = pool_for_usage.clone();
         Box::pin(async move {
             info!("Running old token usage cleanup job...");
-            let result = cleanup_old_token_usage(&pool.pool, 30).await;
+            let result = cleanup_old_token_usage(&pool.get_conn(), 30).await;
             match result {
                 Ok(count) => {
                     info!(
@@ -222,7 +238,7 @@ async fn log_task_execution(pool: &DbPool, task_name: &str, status: &str, detail
     .bind(Utc::now())
     .bind(Utc::now())
     .bind(0i32)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         tracing::warn!("记录任务日志失败: {}", e);
@@ -234,7 +250,7 @@ async fn sync_user_tasks_from_db(pool: &DbPool) -> Result<(), String> {
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at 
          FROM scheduled_tasks WHERE enabled = true"
     )
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .map_err(|e| format!("查询用户任务失败: {e}"))?;
 
@@ -254,7 +270,7 @@ async fn update_next_run_at(pool: &DbPool, task: &ScheduledTask) -> Result<(), S
         .bind(next_run)
         .bind(Utc::now())
         .bind(task.id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
         .map_err(|e| format!("更新下次执行时间失败: {e}"))?;
 
@@ -366,7 +382,12 @@ pub async fn execute_task_by_type(
     match task_type {
         "mac_sync" => execute_mac_sync(pool, config).await,
         "token_cleanup" => execute_token_cleanup(pool).await,
-        "backup" => execute_backup_task(db_config),
+        "backup" => {
+            let db_config = db_config.clone();
+            tokio::task::spawn_blocking(move || execute_backup_task(&db_config))
+                .await
+                .unwrap_or_else(|e| Err(format!("备份任务执行异常: {e}")))
+        }
         "log_cleanup" => execute_log_cleanup(pool, config).await,
         _ => Err(format!("未知的任务类型: {task_type}")),
     }

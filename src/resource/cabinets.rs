@@ -49,7 +49,7 @@ pub async fn get_cabinets(
 
     let (total, cabinets) = if search.is_empty() && parsed_room_id.is_none() {
         let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM cabinets c")
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(t) => t,
@@ -64,7 +64,7 @@ pub async fn get_cabinets(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(c) => c,
@@ -80,7 +80,7 @@ pub async fn get_cabinets(
         let total: i64 =
             match sqlx::query_scalar("SELECT COUNT(*) FROM cabinets c WHERE c.room_id = $1")
                 .bind(parsed_room_id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
             {
                 Ok(t) => t,
@@ -96,7 +96,7 @@ pub async fn get_cabinets(
         .bind(parsed_room_id)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(c) => c,
@@ -114,7 +114,7 @@ pub async fn get_cabinets(
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -132,7 +132,7 @@ pub async fn get_cabinets(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(c) => c,
@@ -149,7 +149,7 @@ pub async fn get_cabinets(
             "SELECT COUNT(*) FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1",
         )
         .bind(&search_pattern)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         {
             Ok(t) => t,
@@ -165,7 +165,7 @@ pub async fn get_cabinets(
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
         {
             Ok(c) => c,
@@ -185,13 +185,13 @@ pub async fn get_cabinets(
         let position_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
                 .bind(cabinet.id)
-                .fetch_one(pool.get_conn())
+                .fetch_one(&pool.get_conn())
                 .await
                 .unwrap_or(0);
 
         let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
             .bind(cabinet.room_id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
             .unwrap_or(None);
 
@@ -249,7 +249,7 @@ pub async fn get_cabinets_by_network_region(
                ORDER BY c.name"
         )
         .bind(network_id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
     } else {
         sqlx::query_as::<_, Cabinet>(
@@ -262,7 +262,7 @@ pub async fn get_cabinets_by_network_region(
                ORDER BY c.name"
         )
         .bind(region_id)
-        .fetch_all(pool.get_conn())
+        .fetch_all(&pool.get_conn())
         .await
     };
 
@@ -294,7 +294,7 @@ pub async fn create_cabinet(
     )
     .bind(&req.name)
     .bind(req.room_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     {
         Ok(cabinet) => cabinet,
@@ -325,7 +325,7 @@ pub async fn create_cabinet(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -349,7 +349,7 @@ pub async fn create_cabinet(
         "description": cabinet.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "create",
@@ -372,7 +372,7 @@ pub async fn get_cabinet(
     let cabinet = match sqlx::query_as::<_, Cabinet>(
         "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
-    .fetch_optional(pool.get_conn()).await {
+    .fetch_optional(&pool.get_conn()).await {
         Ok(Some(cabinet)) => cabinet,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<Cabinet>::error("机柜未找到")));
@@ -385,13 +385,13 @@ pub async fn get_cabinet(
     let position_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(cabinet.id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
             .unwrap_or(0);
 
     let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
         .bind(cabinet.room_id)
-        .fetch_optional(pool.get_conn())
+        .fetch_optional(&pool.get_conn())
         .await
         .unwrap_or(None);
 
@@ -435,7 +435,7 @@ pub async fn update_cabinet(
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(cabinet) => cabinet,
@@ -469,7 +469,7 @@ pub async fn update_cabinet(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(pool.get_conn())
+    .execute(&pool.get_conn())
     .await
     {
         return Ok(HttpResponse::InternalServerError()
@@ -479,7 +479,7 @@ pub async fn update_cabinet(
     let cabinet = match sqlx::query_as::<_, Cabinet>(
         "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
-    .fetch_one(pool.get_conn()).await {
+    .fetch_one(&pool.get_conn()).await {
         Ok(cabinet) => cabinet,
         Err(err) => {
             return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
@@ -493,7 +493,7 @@ pub async fn update_cabinet(
         "description": cabinet.description
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "update",
@@ -518,7 +518,7 @@ pub async fn delete_cabinet(
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(cabinet) => cabinet,
@@ -538,7 +538,7 @@ pub async fn delete_cabinet(
     let position_count =
         match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(id)
-            .fetch_one(pool.get_conn())
+            .fetch_one(&pool.get_conn())
             .await
         {
             Ok(count) => count,
@@ -561,7 +561,7 @@ pub async fn delete_cabinet(
 
     if let Err(err) = sqlx::query("DELETE FROM cabinets WHERE id = $1")
         .bind(id)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await
     {
         return Ok(
@@ -575,7 +575,7 @@ pub async fn delete_cabinet(
         "cabinet_id": id.to_string()
     });
     let _ = log_system_operation(
-        pool.get_conn(),
+        &pool.get_conn(),
         &http_req,
         config.get_ref(),
         "delete",
@@ -598,7 +598,7 @@ pub async fn get_cabinet_networks(
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool.get_conn())
+            .fetch_optional(&pool.get_conn())
             .await
         {
             Ok(cabinet) => cabinet,
@@ -625,7 +625,7 @@ pub async fn get_cabinet_networks(
            AND r.room_type = 'DATA_CENTER'",
     )
     .bind(id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     {
         Ok(networks) => networks,

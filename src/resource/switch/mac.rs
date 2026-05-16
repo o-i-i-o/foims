@@ -279,7 +279,7 @@ fn simplify_ipv6(ipv6: &str) -> String {
             result.push(':');
         }
         let val = u16::from_str_radix(part, 16).unwrap_or(0);
-        write!(result, "{val:x}").unwrap();
+        write!(result, "{val:x}").expect("MAC地址格式化失败");
     }
 
     result
@@ -485,7 +485,7 @@ pub async fn get_switch_mac_table(
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await;
 
     let switch = match switch {
@@ -505,7 +505,7 @@ pub async fn get_switch_mac_table(
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(pool.get_conn())
+    .fetch_optional(&pool.get_conn())
     .await
     .ok()
     .flatten();
@@ -550,7 +550,7 @@ pub async fn get_switch_mac_table(
         .bind(&entry.interface)
         .bind(entry.vlan_id)
         .bind(now)
-        .execute(pool.get_conn())
+        .execute(&pool.get_conn())
         .await;
 
         if let Ok(r) = result
@@ -565,7 +565,7 @@ pub async fn get_switch_mac_table(
            FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await
     .unwrap_or_default();
 
@@ -582,7 +582,7 @@ pub async fn get_switch_macs_from_db(
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
         .bind(switch_id)
-        .fetch_one(pool.get_conn())
+        .fetch_one(&pool.get_conn())
         .await
         .unwrap_or(false);
 
@@ -595,7 +595,7 @@ pub async fn get_switch_macs_from_db(
            FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
-    .fetch_all(pool.get_conn())
+    .fetch_all(&pool.get_conn())
     .await;
 
     let macs = match macs_result {
