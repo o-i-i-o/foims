@@ -562,7 +562,9 @@ exec "{exe_path_str}"
         );
     }
 
-    let _ = Command::new("nohup").arg(script_path).spawn();
+    if let Err(e) = Command::new("nohup").arg(script_path).spawn() {
+        tracing::warn!("启动重启脚本失败: {}", e);
+    }
 
     // 延迟退出，确保HTTP响应能成功发送给客户端
     std::thread::spawn(|| {
@@ -792,13 +794,14 @@ WantedBy=multi-user.target
         Ok(mut child) => {
             // 写入服务文件内容
             use std::io::Write;
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(service_content.as_bytes());
+            if let Some(mut stdin) = child.stdin.take()
+                && let Err(e) = stdin.write_all(service_content.as_bytes())
+            {
+                tracing::warn!("写入服务文件内容失败: {}", e);
             }
             child.wait_with_output()
         }
         Err(_) => {
-            // pkexec 不可用，尝试 sudo
             Command::new("sudo")
                 .args(["tee", "/etc/systemd/system/ipma.service"])
                 .stdin(std::process::Stdio::piped())
@@ -807,8 +810,10 @@ WantedBy=multi-user.target
                 .spawn()
                 .and_then(|mut child| {
                     use std::io::Write;
-                    if let Some(mut stdin) = child.stdin.take() {
-                        let _ = stdin.write_all(service_content.as_bytes());
+                    if let Some(mut stdin) = child.stdin.take()
+                        && let Err(e) = stdin.write_all(service_content.as_bytes())
+                    {
+                        tracing::warn!("写入服务文件内容失败: {}", e);
                     }
                     child.wait_with_output()
                 })
@@ -939,7 +944,7 @@ pub async fn update_smtp_config(
     }
 
     // 记录SMTP配置更新日志
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO task_logs (id, task_name, status, details, start_time, end_time) 
          VALUES ($1, $2, $3, $4, $5, $6)",
     )
@@ -956,7 +961,9 @@ pub async fn update_smtp_config(
     .bind(chrono::Utc::now())
     .bind(chrono::Utc::now())
     .execute(&pool.get_conn())
-    .await;
+    .await {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
 }
@@ -978,7 +985,7 @@ pub async fn test_smtp_connection(
     let start_time = chrono::Utc::now();
 
     // 记录测试开始日志
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO task_logs (id, task_name, status, details, start_time) 
          VALUES ($1, $2, $3, $4, $5)",
     )
@@ -994,7 +1001,9 @@ pub async fn test_smtp_connection(
     })))
     .bind(start_time)
     .execute(&pool.get_conn())
-    .await;
+    .await {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     // 构建SMTP配置对象
     let smtp_config = SmtpConfig {
@@ -1067,21 +1076,23 @@ pub async fn send_email(
         "error": send_result.as_ref().err().map(|e: &anyhow::Error| e.to_string())
     });
 
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
     )
     .bind(Uuid::new_v4())
-    .bind(Uuid::nil()) // 系统操作，使用默认用户ID
+    .bind(Uuid::nil())
     .bind("send_email")
     .bind("email")
-    .bind(Uuid::nil()) // 使用默认值
+    .bind(Uuid::nil())
     .bind(sqlx::types::Json(details))
     .bind(result)
     .bind("system")
     .bind(end_time)
     .execute(&pool.get_conn())
-    .await;
+    .await {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     match send_result {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功"))),

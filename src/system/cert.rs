@@ -137,8 +137,26 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
     let cert_path = "certs/imported_cert.pem";
     let key_path = "certs/imported_key.pem";
 
-    let cert_data = cert_data.expect("证书数据丢失");
-    let key_data = key_data.expect("密钥数据丢失");
+    let cert_data = match cert_data {
+        Some(data) => data,
+        None => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "message": "证书数据丢失",
+                "data": null
+            }));
+        }
+    };
+    let key_data = match key_data {
+        Some(data) => data,
+        None => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "message": "密钥数据丢失",
+                "data": null
+            }));
+        }
+    };
 
     if let Err(e) = tokio::fs::write(cert_path, &cert_data).await {
         return HttpResponse::InternalServerError().json(serde_json::json!({
@@ -149,7 +167,9 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
     }
 
     if let Err(e) = tokio::fs::write(key_path, &key_data).await {
-        let _ = tokio::fs::remove_file(cert_path).await;
+        if let Err(e) = tokio::fs::remove_file(cert_path).await {
+            tracing::warn!("删除证书文件失败: {}", e);
+        }
         return HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "message": format!("密钥文件写入失败: {}", e),

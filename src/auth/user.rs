@@ -187,7 +187,7 @@ pub async fn create_user(
     }
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         &config,
@@ -197,7 +197,10 @@ pub async fn create_user(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     let user = User {
         id,
@@ -290,7 +293,7 @@ pub async fn update_user(
     }
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         &config,
@@ -300,7 +303,10 @@ pub async fn update_user(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     let user = match sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
@@ -358,7 +364,9 @@ pub async fn delete_user(
         .execute(&mut *tx)
         .await
     {
-        let _ = tx.rollback().await;
+        if let Err(e) = tx.rollback().await {
+            tracing::warn!("事务回滚失败: {}", e);
+        }
         return Ok(HttpResponse::InternalServerError()
             .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
@@ -368,7 +376,9 @@ pub async fn delete_user(
         .execute(&mut *tx)
         .await
     {
-        let _ = tx.rollback().await;
+        if let Err(e) = tx.rollback().await {
+            tracing::warn!("事务回滚失败: {}", e);
+        }
         return Ok(HttpResponse::InternalServerError()
             .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
@@ -378,7 +388,9 @@ pub async fn delete_user(
         .execute(&mut *tx)
         .await
     {
-        let _ = tx.rollback().await;
+        if let Err(e) = tx.rollback().await {
+            tracing::warn!("事务回滚失败: {}", e);
+        }
         return Ok(HttpResponse::InternalServerError()
             .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
@@ -389,7 +401,7 @@ pub async fn delete_user(
     }
 
     let details = json!({});
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         &config,
@@ -399,7 +411,10 @@ pub async fn delete_user(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "用户删除成功")))
 }

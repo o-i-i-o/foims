@@ -6,6 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
+use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -432,7 +433,7 @@ pub async fn create_workstation(
         "description": workstation.description,
         "ip_count": ip_count
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -442,7 +443,10 @@ pub async fn create_workstation(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Workstation>::success(
         workstation,
@@ -703,7 +707,7 @@ pub async fn update_workstation(
         "manager": result.manager,
         "description": result.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -713,7 +717,10 @@ pub async fn update_workstation(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
@@ -803,7 +810,7 @@ pub async fn delete_workstation(
     let details = serde_json::json!({
         "workstation_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -813,7 +820,10 @@ pub async fn delete_workstation(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位删除成功")))
 }

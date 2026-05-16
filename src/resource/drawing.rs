@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{ApiResponse, LayoutSaveRequest};
 use crate::utils::log_system_operation;
+use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use serde_json;
 use uuid::Uuid;
@@ -90,7 +91,7 @@ pub async fn save_layout(
             "layout_count": req.layout.len(),
             "type": req.r#type
         });
-        let _ = log_system_operation(
+        if let Err(e) = log_system_operation(
             &pool.get_conn(),
             &http_req,
             config.get_ref(),
@@ -100,7 +101,10 @@ pub async fn save_layout(
             &details,
             true,
         )
-        .await;
+        .await
+        {
+            warn!("记录操作日志失败: {}", e);
+        }
 
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位布局保存成功")))
     } else if req.r#type == "cabinet" {
@@ -151,7 +155,7 @@ pub async fn save_layout(
             "layout_count": req.layout.len(),
             "type": req.r#type
         });
-        let _ = log_system_operation(
+        if let Err(e) = log_system_operation(
             &pool.get_conn(),
             &http_req,
             config.get_ref(),
@@ -161,7 +165,10 @@ pub async fn save_layout(
             &details,
             true,
         )
-        .await;
+        .await
+        {
+            warn!("记录操作日志失败: {}", e);
+        }
 
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局保存成功")))
     } else {
@@ -190,7 +197,7 @@ pub async fn delete_layout(
     let details = serde_json::json!({
         "room_id": room_id
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -200,7 +207,10 @@ pub async fn delete_layout(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "布局删除成功")))
 }
@@ -225,7 +235,7 @@ pub async fn delete_positions_layout(
             let details = serde_json::json!({
                 "room_id": room_id
             });
-            let _ = log_system_operation(
+            if let Err(e) = log_system_operation(
                 &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
@@ -235,7 +245,10 @@ pub async fn delete_positions_layout(
                 &details,
                 true,
             )
-            .await;
+            .await
+            {
+                warn!("记录操作日志失败: {}", e);
+            }
 
             Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
         }

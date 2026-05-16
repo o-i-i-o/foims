@@ -5,6 +5,7 @@ use crate::models::{
     NetworkUpdate,
 };
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -462,7 +463,7 @@ pub async fn create_network(
         "ipv4_cidr": ipv4_cidr_val,
         "ipv6_cidr": ipv6_cidr_val
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -472,7 +473,10 @@ pub async fn create_network(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     // 返回创建的网络
     let network = Network {
@@ -778,7 +782,7 @@ pub async fn update_network(
         "ipv4_cidr": network.ipv4_cidr,
         "ipv6_cidr": network.ipv6_cidr
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -788,7 +792,10 @@ pub async fn update_network(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络更新成功")))
 }
@@ -892,7 +899,7 @@ pub async fn delete_network(
     let details = serde_json::json!({
         "network_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -902,7 +909,10 @@ pub async fn delete_network(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络删除成功")))
 }
@@ -1054,7 +1064,7 @@ pub async fn create_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -1064,7 +1074,10 @@ pub async fn create_network_region(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetworkRegion>::success(
@@ -1194,7 +1207,7 @@ pub async fn update_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -1204,7 +1217,10 @@ pub async fn update_network_region(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetworkRegion>::success(
@@ -1272,7 +1288,7 @@ pub async fn delete_network_region(
     let details = serde_json::json!({
         "network_region_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -1282,7 +1298,10 @@ pub async fn delete_network_region(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络区域删除成功")))
 }

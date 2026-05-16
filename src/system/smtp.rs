@@ -69,7 +69,10 @@ pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
                 }
             }
         }
-        Err(_) => None,
+        Err(e) => {
+            tracing::error!("查询SMTP配置失败: {}", e);
+            None
+        }
     }
 }
 
@@ -119,7 +122,7 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
         .body("这是一封SMTP连接测试邮件，无需回复".to_string())?;
 
     // 创建SMTP传输
-    let transport = if config.secure || config.host == "smtp.qq.com" {
+    let transport = if config.secure {
         // 对于需要安全连接的情况，使用SSL配置
         SmtpTransport::relay(&config.host)?
             .port(config.port)
@@ -193,7 +196,7 @@ pub async fn send_email_to_users(
     let email = email_builder.body(body.to_string())?;
 
     // 创建SMTP传输
-    let transport = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
+    let transport = if smtp_config.secure {
         SmtpTransport::relay(&smtp_config.host)?
             .port(smtp_config.port)
             .credentials(Credentials::new(

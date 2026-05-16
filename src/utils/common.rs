@@ -596,7 +596,7 @@ pub async fn batch_get_mac_addresses(ips: &[String]) -> HashMap<String, Option<S
         return results;
     }
 
-    let _ = batch_ping(&missing_ips).await;
+    batch_ping(&missing_ips).await;
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 

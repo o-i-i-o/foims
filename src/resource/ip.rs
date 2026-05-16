@@ -418,7 +418,7 @@ pub async fn create_ip_manager(
         "workstation_id": mapping.workstation_id,
         "position_id": mapping.position_id
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -428,7 +428,10 @@ pub async fn create_ip_manager(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理创建成功")))
 }
@@ -853,7 +856,7 @@ pub async fn update_ip_manager(
         "workstation_id": mapping.workstation_id,
         "position_id": mapping.position_id
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -863,7 +866,10 @@ pub async fn update_ip_manager(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理更新成功")))
 }
@@ -908,7 +914,7 @@ pub async fn delete_ip_manager(
     let details = serde_json::json!({
         "ip_manager_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -918,7 +924,10 @@ pub async fn delete_ip_manager(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }
@@ -1645,7 +1654,7 @@ pub async fn auto_assign_ip(
         "network_id": mapping.network_id,
         "auto_assigned": true
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -1655,7 +1664,10 @@ pub async fn auto_assign_ip(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "IP地址自动分配成功")))
 }
@@ -1853,7 +1865,7 @@ pub async fn batch_create_ip_managers(
         "error_count": errors.len(),
         "errors": errors
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -1863,7 +1875,10 @@ pub async fn batch_create_ip_managers(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({

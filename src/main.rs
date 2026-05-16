@@ -104,6 +104,7 @@ async fn main() -> std::io::Result<()> {
                 info!("数据库连接池创建成功");
                 if let Err(e) = ipma::init::schema::run_migrations_only(&p.get_conn()).await {
                     tracing::error!("数据库迁移失败: {}", e);
+                    std::process::exit(1);
                 }
                 Some(p)
             }
@@ -363,7 +364,7 @@ async fn main() -> std::io::Result<()> {
                     .await
                     {
                         Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port_clone),
-                        Err(e) => info!(
+                        Err(e) => error!(
                             "启动HTTP/3服务器失败 ({}:{}): {:?}",
                             host_str_clone, port_clone, e
                         ),
@@ -533,7 +534,9 @@ async fn main() -> std::io::Result<()> {
                 let (_result, _index, remaining) =
                     futures_util::future::select_all(server_handles).await;
                 for handle in remaining {
-                    let _ = handle.await;
+                    if let Err(e) = handle.await {
+                        tracing::error!("服务器任务异常退出: {:?}", e);
+                    }
                 }
             }
 

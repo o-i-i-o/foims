@@ -284,7 +284,9 @@ pub async fn run_scheduled_task_now(
         .bind(id)
     };
 
-    update_query.execute(&pool.get_conn()).await.ok();
+    if let Err(e) = update_query.execute(&pool.get_conn()).await {
+        tracing::warn!("更新定时任务执行结果失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({"result": result}),

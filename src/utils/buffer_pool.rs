@@ -2,14 +2,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
-// 缓冲区池实现
 pub struct BufferPool {
     buffers: Mutex<Vec<Vec<u8>>>,
     max_size: usize,
 }
 
 impl BufferPool {
-    #[must_use] 
+    #[must_use]
     pub fn new(max_size: usize) -> Self {
         Self {
             buffers: Mutex::new(Vec::with_capacity(max_size)),
@@ -18,12 +17,16 @@ impl BufferPool {
     }
 
     pub fn get(&self) -> Vec<u8> {
-        let mut buffers = self.buffers.lock().expect("缓冲区池锁获取失败");
+        let Ok(mut buffers) = self.buffers.lock() else {
+            return Vec::with_capacity(8192);
+        };
         buffers.pop().unwrap_or_else(|| Vec::with_capacity(8192))
     }
 
     pub fn put(&self, mut buffer: Vec<u8>) {
-        let mut buffers = self.buffers.lock().expect("缓冲区池锁获取失败");
+        let Ok(mut buffers) = self.buffers.lock() else {
+            return;
+        };
         if buffers.len() < self.max_size {
             buffer.clear();
             buffers.push(buffer);

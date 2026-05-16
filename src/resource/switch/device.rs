@@ -11,6 +11,7 @@ use crate::crypto::encrypt_password;
 use crate::db::DbPool;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use tracing::warn;
 
 pub async fn get_switches(
     pool: web::Data<DbPool>,
@@ -562,7 +563,7 @@ pub async fn create_switch(
                         "location": data.location,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
-                    let _ = log_system_operation(
+                    if let Err(e) = log_system_operation(
                         &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
@@ -572,7 +573,10 @@ pub async fn create_switch(
                         &details,
                         true,
                     )
-                    .await;
+                    .await
+                    {
+                        warn!("记录操作日志失败: {}", e);
+                    }
 
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
                 }
@@ -807,7 +811,7 @@ pub async fn update_switch(
                         "location": data.location,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
-                    let _ = log_system_operation(
+                    if let Err(e) = log_system_operation(
                         &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
@@ -817,7 +821,10 @@ pub async fn update_switch(
                         &details,
                         true,
                     )
-                    .await;
+                    .await
+                    {
+                        warn!("记录操作日志失败: {}", e);
+                    }
 
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
                 }
@@ -881,7 +888,7 @@ pub async fn delete_switch(
             let details = serde_json::json!({
                 "switch_id": id.to_string()
             });
-            let _ = log_system_operation(
+            if let Err(e) = log_system_operation(
                 &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
@@ -891,7 +898,10 @@ pub async fn delete_switch(
                 &details,
                 true,
             )
-            .await;
+            .await
+            {
+                warn!("记录操作日志失败: {}", e);
+            }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除交换机成功")))
         }

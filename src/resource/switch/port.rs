@@ -11,6 +11,7 @@ use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
 use crate::utils::log_system_operation;
+use tracing::warn;
 
 pub async fn get_switch_ports(
     pool: web::Data<DbPool>,
@@ -241,7 +242,7 @@ pub async fn create_switch_port(
                         "port_type": data.port_type,
                         "vlan_id": data.vlan_id
                     });
-                    let _ = log_system_operation(
+                    if let Err(e) = log_system_operation(
                         &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
@@ -251,7 +252,10 @@ pub async fn create_switch_port(
                         &details,
                         true,
                     )
-                    .await;
+                    .await
+                    {
+                        warn!("记录操作日志失败: {}", e);
+                    }
 
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建端口成功")))
                 }
@@ -355,7 +359,7 @@ pub async fn update_switch_port(
                         "port_type": data.port_type,
                         "vlan_id": data.vlan_id
                     });
-                    let _ = log_system_operation(
+                    if let Err(e) = log_system_operation(
                         &pool.get_conn(),
                         &http_req,
                         config.get_ref(),
@@ -365,7 +369,10 @@ pub async fn update_switch_port(
                         &details,
                         true,
                     )
-                    .await;
+                    .await
+                    {
+                        warn!("记录操作日志失败: {}", e);
+                    }
 
                     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新端口成功")))
                 }
@@ -441,7 +448,7 @@ pub async fn delete_switch_port(
             let details = serde_json::json!({
                 "port_id": port_id
             });
-            let _ = log_system_operation(
+            if let Err(e) = log_system_operation(
                 &pool.get_conn(),
                 &http_req,
                 config.get_ref(),
@@ -451,7 +458,10 @@ pub async fn delete_switch_port(
                 &details,
                 true,
             )
-            .await;
+            .await
+            {
+                warn!("记录操作日志失败: {}", e);
+            }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除端口成功")))
         }

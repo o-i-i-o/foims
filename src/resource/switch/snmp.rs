@@ -56,6 +56,7 @@ impl SwitchForSnmp {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
+            timeout_secs: 10,
         }
     }
 }
@@ -74,6 +75,7 @@ impl SwitchForSnmpWithNetwork {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
+            timeout_secs: 10,
         }
     }
 }
@@ -122,6 +124,7 @@ pub struct SnmpParamsLegacy {
     pub auth_pass: Option<String>,
     pub priv_proto: Option<String>,
     pub priv_pass: Option<String>,
+    pub timeout_secs: u64,
 }
 
 pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
@@ -369,7 +372,7 @@ pub async fn get_switch_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<SwitchPortCreate>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
@@ -529,6 +532,7 @@ pub async fn test_snmp_connection(
         auth_pass: auth_pass.clone(),
         priv_proto: priv_proto.clone(),
         priv_pass: priv_pass.clone(),
+        timeout_secs: 10,
     };
 
     tracing::info!(

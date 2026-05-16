@@ -1027,24 +1027,28 @@ async fn import_rooms(
 
                 match update_result {
                     Ok(_) => {
-                        sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
+                        let delete_result = sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
                             .bind(id)
                             .execute(&mut *conn)
-                            .await
-                            .ok();
+                            .await;
+                        if let Err(e) = delete_result {
+                            tracing::warn!("操作失败: {}", e);
+                        }
 
                         let mut linked_networks = Vec::new();
                         for network_name in &network_names {
                             if let Some(network_id) =
                                 find_network_id(&mut *conn, network_name).await
                             {
-                                sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
+                                let insert_result = sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
                                     .bind(uuid::Uuid::new_v4())
                                     .bind(id)
                                     .bind(network_id)
                                     .execute(&mut *conn)
-                                    .await
-                                    .ok();
+                                    .await;
+                                if let Err(e) = insert_result {
+                                    tracing::warn!("操作失败: {}", e);
+                                }
                                 linked_networks.push(*network_name);
                             }
                         }
@@ -2032,14 +2036,16 @@ async fn import_switches(
             let id = uuid::Uuid::new_v4();
             let position_id = uuid::Uuid::new_v4();
 
-            let _ = sqlx::query(
+            if let Err(e) = sqlx::query(
                 "INSERT INTO positions (id, name, device_type, device_id, created_at, updated_at) VALUES ($1, $2, 'switch', $3, NOW(), NOW())"
             )
             .bind(position_id)
             .bind(name)
             .bind(id)
             .execute(&mut *conn)
-            .await;
+            .await {
+                tracing::warn!("创建交换机位置记录失败: {}", e);
+            }
 
             let insert_result = sqlx::query(
                 r"INSERT INTO switches (

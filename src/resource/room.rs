@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -255,7 +256,7 @@ pub async fn create_room(
         "description": room.description,
         "network_count": req.network_ids.len()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -265,7 +266,10 @@ pub async fn create_room(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Room>::success(room, "房间创建成功")))
 }
@@ -445,7 +449,7 @@ pub async fn update_room(
         "room_type": room.room_type,
         "description": room.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -455,7 +459,10 @@ pub async fn update_room(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Room>::success(room, "房间更新成功")))
 }
@@ -550,7 +557,7 @@ pub async fn delete_room(
     let details = serde_json::json!({
         "room_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -560,7 +567,10 @@ pub async fn delete_room(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "房间删除成功")))
 }

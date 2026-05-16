@@ -78,18 +78,21 @@ pub fn encrypt_password(password: &str) -> Option<String> {
     Some(BASE64.encode(&result))
 }
 
-#[must_use] 
+#[must_use]
 pub fn decrypt_password(encrypted_password: &str) -> String {
     let key = get_encryption_key();
     let Ok(cipher) = Aes256Gcm::new_from_slice(&key) else {
+        error!("解密失败: 加密密钥长度不正确");
         return String::new();
     };
 
     let Ok(decoded) = BASE64.decode(encrypted_password) else {
+        error!("解密失败: Base64解码错误");
         return String::new();
     };
 
     if decoded.len() < NONCE_SIZE {
+        error!("解密失败: 密文长度不足 (期望>{NONCE_SIZE}字节, 实际{}字节)", decoded.len());
         return String::new();
     }
 
@@ -97,6 +100,7 @@ pub fn decrypt_password(encrypted_password: &str) -> String {
     let nonce = Nonce::from_slice(nonce_bytes);
 
     let Ok(plaintext) = cipher.decrypt(nonce, ciphertext) else {
+        error!("解密失败: AES-GCM解密错误，密钥可能不匹配");
         return String::new();
     };
 

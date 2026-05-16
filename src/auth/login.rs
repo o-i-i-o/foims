@@ -125,21 +125,26 @@ pub async fn login(
     .bind(&req.username)
     .fetch_one(&pool.get_conn())
     .await else {
-        let _ = log_login(&pool.get_conn(), &req.username, &http_req, false, Some("用户未找到")).await;
+        if let Err(e) = log_login(&pool.get_conn(), &req.username, &http_req, false, Some("用户未找到")).await {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled) = user_row;
 
     if !status {
-        let _ = log_login(
+        if let Err(e) = log_login(
             &pool.get_conn(),
             &username,
             &http_req,
             false,
             Some("Account disabled"),
         )
-        .await;
+        .await
+        {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(
             HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
                 "api.account_disabled",
@@ -149,14 +154,17 @@ pub async fn login(
     }
 
     if !verify(&req.password, &password_hash).unwrap_or(false) {
-        let _ = log_login(
+        if let Err(e) = log_login(
             &pool.get_conn(),
             &username,
             &http_req,
             false,
             Some("Invalid password"),
         )
-        .await;
+        .await
+        {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(
             HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
                 "api.login_failed",
@@ -224,7 +232,9 @@ pub async fn login(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.get_conn(), &username, &http_req, true, None).await;
+    if let Err(e) = log_login(&pool.get_conn(), &username, &http_req, true, None).await {
+        tracing::warn!("记录登录日志失败: {}", e);
+    }
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -275,21 +285,26 @@ pub async fn login_with_email_code(
     .bind(email)
     .fetch_one(&pool.get_conn())
     .await else {
-        let _ = log_login(&pool.get_conn(), email, &http_req, false, Some("用户未找到")).await;
+        if let Err(e) = log_login(&pool.get_conn(), email, &http_req, false, Some("用户未找到")).await {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_email_or_code", &user_lang)));
     };
 
     let (id, username, email, role, status, two_factor_enabled, code, expiry) = user_row;
 
     if !status {
-        let _ = log_login(
+        if let Err(e) = log_login(
             &pool.get_conn(),
             &username,
             &http_req,
             false,
             Some("Account disabled"),
         )
-        .await;
+        .await
+        {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(
             HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
                 "api.account_disabled",
@@ -313,14 +328,17 @@ pub async fn login_with_email_code(
     }
 
     if !verified {
-        let _ = log_login(
+        if let Err(e) = log_login(
             &pool.get_conn(),
             &username,
             &http_req,
             false,
             Some("Invalid email code"),
         )
-        .await;
+        .await
+        {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(
             HttpResponse::Unauthorized().json(ApiResponse::<()>::error("验证码无效或已过期"))
         );
@@ -385,7 +403,9 @@ pub async fn login_with_email_code(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.get_conn(), &username, &http_req, true, None).await;
+    if let Err(e) = log_login(&pool.get_conn(), &username, &http_req, true, None).await {
+        tracing::warn!("记录登录日志失败: {}", e);
+    }
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -598,14 +618,17 @@ pub async fn login_with_two_factor(
         // 将 Base32 编码的密钥解码为字节
         let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
             // Base32 解码失败，密钥格式错误
-            let _ = log_login(
+            if let Err(e) = log_login(
                 &pool.get_conn(),
                 &username,
                 &http_req,
                 false,
                 Some("Invalid 2FA secret format"),
             )
-            .await;
+            .await
+            {
+                tracing::warn!("记录登录日志失败: {}", e);
+            }
             return Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("2FA密钥格式错误")));
         };
@@ -624,28 +647,34 @@ pub async fn login_with_two_factor(
             }
         } else {
             // 密钥长度不符合规范（需要至少16字节）
-            let _ = log_login(
+            if let Err(e) = log_login(
                 &pool.get_conn(),
                 &username,
                 &http_req,
                 false,
                 Some("2FA secret too short"),
             )
-            .await;
+            .await
+            {
+                tracing::warn!("记录登录日志失败: {}", e);
+            }
             return Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("2FA密钥长度不足，请重新设置")));
         }
     }
 
     if !verified {
-        let _ = log_login(
+        if let Err(e) = log_login(
             &pool.get_conn(),
             &username,
             &http_req,
             false,
             Some("Invalid 2FA code"),
         )
-        .await;
+        .await
+        {
+            tracing::warn!("记录登录日志失败: {}", e);
+        }
         return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("验证码无效")));
     }
 
@@ -699,7 +728,9 @@ pub async fn login_with_two_factor(
         updated_at: Utc::now(),
     };
 
-    let _ = log_login(&pool.get_conn(), &user.username, &http_req, true, None).await;
+    if let Err(e) = log_login(&pool.get_conn(), &user.username, &http_req, true, None).await {
+        tracing::warn!("记录登录日志失败: {}", e);
+    }
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -908,7 +939,9 @@ pub async fn refresh_token(
     };
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
-    let _ = crate::utils::revoke_token(&pool.get_conn(), &token, &user_id, token_expiry).await;
+    if let Err(e) = crate::utils::revoke_token(&pool.get_conn(), &token, &user_id, token_expiry).await {
+        tracing::error!("撤销令牌失败: {}", e);
+    }
 
     // 5. 判断是否保持登录（如果 refresh_token 有效期大于 24 小时，说明用户选择了保持登录）
     let token_duration = claims.exp.saturating_sub(claims.iat);

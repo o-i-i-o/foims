@@ -4,6 +4,7 @@ use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, Result, web};
 use chrono::Utc;
 use serde_json::json;
@@ -348,7 +349,7 @@ pub async fn create_cabinet(
         "capacity": cabinet.capacity,
         "description": cabinet.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -358,7 +359,10 @@ pub async fn create_cabinet(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜创建成功")))
 }
@@ -492,7 +496,7 @@ pub async fn update_cabinet(
         "capacity": cabinet.capacity,
         "description": cabinet.description
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -502,7 +506,10 @@ pub async fn update_cabinet(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜更新成功")))
 }
@@ -574,7 +581,7 @@ pub async fn delete_cabinet(
     let details = serde_json::json!({
         "cabinet_id": id.to_string()
     });
-    let _ = log_system_operation(
+    if let Err(e) = log_system_operation(
         &pool.get_conn(),
         &http_req,
         config.get_ref(),
@@ -584,7 +591,10 @@ pub async fn delete_cabinet(
         &details,
         true,
     )
-    .await;
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜删除成功")))
 }

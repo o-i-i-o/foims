@@ -5,7 +5,7 @@ use futures_util::TryStreamExt;
 use sqlx::PgPool;
 use std::io::Write;
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -484,7 +484,9 @@ pub async fn import_database_from_file(
         );
     }
 
-    let _ = std::fs::remove_file(&sql_path);
+    if let Err(e) = std::fs::remove_file(&sql_path) {
+        warn!("删除SQL临时文件失败: {}", e);
+    }
 
     info!("数据库从文件导入成功");
     Ok(HttpResponse::Ok().json(ApiResponse::success(
