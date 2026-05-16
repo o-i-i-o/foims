@@ -273,9 +273,10 @@ impl DbPool {
 
     /// 更新指标
     fn update_metrics(&self) {
-        let status = self.pool.size();
-        self.metrics
-            .update_connection_counts(status, self.pool.num_idle() as u32);
+        let total = self.pool.size();
+        let idle = self.pool.num_idle() as u32;
+        let active = total.saturating_sub(idle);
+        self.metrics.update_connection_counts(active, idle);
     }
 
     /// 获取当前指标快照
@@ -337,13 +338,13 @@ impl DbPool {
         }
 
         let metrics = self.metrics.snapshot();
-        let total_connections = metrics.active_connections + metrics.idle_connections;
+        let pool_size = self.pool.size();
 
-        if total_connections == 0 {
+        if pool_size == 0 {
             return;
         }
 
-        let utilization_rate = metrics.active_connections as f32 / total_connections as f32;
+        let utilization_rate = metrics.active_connections as f32 / pool_size as f32;
         let current_max = config.max_connections;
         let min_connections = config.min_connections;
         let high_load_threshold = config.high_load_threshold;
@@ -484,7 +485,7 @@ impl DbPool {
         match result {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(e)) => Err(e),
-            Err(_) => Err(sqlx::Error::PoolTimedOut),
+            Err(_) => Err(sqlx::Error::WorkerCrashed),
         }
     }
 }

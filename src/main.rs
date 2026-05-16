@@ -27,14 +27,16 @@ fn build_cors_middleware() -> Cors {
     Cors::default()
         .allowed_origin("http://localhost")
         .allowed_origin("http://localhost:80")
-        .allowed_origin("http://localhost:443")
         .allowed_origin("https://localhost")
+        .allowed_origin("https://localhost:443")
         .allowed_origin_fn(|origin, _req_head| {
             if let Ok(origin_str) = origin.to_str() {
                 origin_str.starts_with("http://localhost:")
                     || origin_str.starts_with("https://localhost:")
                     || origin_str.starts_with("http://127.0.0.1:")
                     || origin_str.starts_with("https://127.0.0.1:")
+                    || origin_str.starts_with("http://[::1]:")
+                    || origin_str.starts_with("https://[::1]:")
             } else {
                 false
             }
