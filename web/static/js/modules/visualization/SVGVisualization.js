@@ -15,7 +15,6 @@ export class SVGVisualization {
     this.snapToGrid = this.core.snapToGrid;
     this.showAlignmentLines = this.core.showAlignmentLines;
     this.currentRoomId = null;
-    this.currentNetworkRegionId = null;
   }
 
   async autoDrawWorkstations(roomId) {
@@ -97,16 +96,16 @@ export class SVGVisualization {
     }
   }
 
-  async autoDrawCabinetPositions(networkRegionId) {
-    if (!networkRegionId) {
+  async autoDrawCabinetPositions(roomId) {
+    if (!roomId) {
       return;
     }
 
     try {
-      const cabinets = await this.dataManager.fetchCabinetsByNetworkRegion(networkRegionId);
+      const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
       
       if (cabinets.length === 0) {
-        this.core.showToast("该网络区域下暂无机柜数据", "info");
+        this.core.showToast("该房间下暂无机柜数据", "info");
         return;
       }
 
@@ -148,7 +147,7 @@ export class SVGVisualization {
       this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${svgHeight}`);
       this.core.svg.setAttribute("height", svgHeight);
 
-      this.currentNetworkRegionId = networkRegionId;
+      this.currentRoomId = roomId;
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
       this.core.showToast("绘制机位图失败: " + error.message, "error");

@@ -24,10 +24,11 @@ use crate::resource::{
     delete_positions_layout, delete_room, delete_workstation, get_available_ips, get_cabinet,
     get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
     get_cabinets_by_network_region, get_ip_managers, get_layout, get_network, get_network_region,
-    get_network_regions, get_networks, get_positions, get_positions_layout, get_room,
-    get_room_networks, get_rooms, get_switch_ips, get_workstation, get_workstation_ips,
-    get_workstations, pull_ip_managers, save_layout, update_cabinet, update_cabinet_position,
-    update_network, update_network_region, update_room, update_workstation,
+    get_network_regions, get_networks, get_positions, get_positions_layout,
+    get_room_cabinets_with_positions, get_room, get_room_networks, get_rooms, get_switch_ips,
+    get_workstation, get_workstation_ips, get_workstations, pull_ip_managers, save_layout,
+    update_cabinet, update_cabinet_position, update_network, update_network_region, update_room,
+    update_workstation,
 };
 use crate::system::config::{
     backup_config, check_service_status, disable_init_mode, download_certificate,
@@ -182,12 +183,16 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/workstation/{room_id}", web::get().to(get_layout))
                                 .route("/workstation/{room_id}", web::delete().to(delete_layout))
                                 .route(
-                                    "/positions/{network_region_id}",
+                                    "/positions/{room_id}",
                                     web::get().to(get_positions_layout),
                                 )
                                 .route(
-                                    "/positions/{network_region_id}",
+                                    "/positions/{room_id}",
                                     web::delete().to(delete_positions_layout),
+                                )
+                                .route(
+                                    "/room-cabinets/{room_id}",
+                                    web::get().to(get_room_cabinets_with_positions),
                                 ),
                         ),
                 )

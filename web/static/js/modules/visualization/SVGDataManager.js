@@ -38,26 +38,15 @@ export class SVGDataManager {
     }
   }
 
-  async fetchCabinetsByNetworkRegion(networkRegionId) {
+  async fetchCabinetsByRoom(roomId) {
     try {
-      const cabinetsResult = await this.apiGet("/api/resources/cabinets?page_size=1000");
-      
-      let cabinets = [];
-      if (cabinetsResult.success && cabinetsResult.data) {
-        if (Array.isArray(cabinetsResult.data)) {
-          cabinets = cabinetsResult.data;
-        } else if (cabinetsResult.data.items && Array.isArray(cabinetsResult.data.items)) {
-          cabinets = cabinetsResult.data.items;
-        }
+      const result = await this.apiGet(`/api/resources/layouts/room-cabinets/${roomId}`);
+      if (result.success && result.data) {
+        return result.data;
       }
-      
-      return cabinets.filter(cabinet => {
-        return cabinet.networks && cabinet.networks.some(network => 
-          network.network_region_id === networkRegionId
-        );
-      });
+      return [];
     } catch (error) {
-      console.error("获取机柜数据失败:", error);
+      console.error("获取房间机柜数据失败:", error);
       return [];
     }
   }
@@ -188,12 +177,12 @@ export class SVGDataManager {
         
         return hasSavedLayout;
       } else if (this.core.type === "cabinet") {
-        this.core.currentNetworkRegionId = id;
+        this.core.currentRoomId = id;
         this.core.elementsGroup.innerHTML = "";
         
         const [layoutResult, cabinets] = await Promise.all([
           this.apiGet(`/api/resources/layouts/positions/${id}`),
-          this.fetchCabinetsByNetworkRegion(id)
+          this.fetchCabinetsByRoom(id)
         ]);
         
         let layoutData = [];
@@ -203,7 +192,7 @@ export class SVGDataManager {
           layoutData = layoutResult.data;
           hasSavedLayout = true;
         } else {
-          this.showToast("数据库中没有网络区域布局数据", "info");
+          this.showToast("数据库中没有房间布局数据", "info");
         }
         
         if (hasSavedLayout && cabinets.length > 0) {
@@ -259,7 +248,7 @@ export class SVGDataManager {
 
   async drawCabinetPositionsWithIp(cabinet) {
     try {
-      const positions = await this.fetchCabinetPositions(cabinet.id);
+      const positions = cabinet.positions || [];
       const ipResult = await this.apiGet("/api/resources/ip");
       const ipMap = new Map();
       
@@ -321,9 +310,9 @@ export class SVGDataManager {
 
     try {
       const result = await this.apiPost("/api/resources/layouts", {
-        type: this.core.type === "cabinet" ? "network_region" : this.core.type,
-        room_id: this.core.type === "workstation" ? this.core.currentRoomId : null,
-        network_region_id: this.core.type === "cabinet" ? this.core.currentNetworkRegionId : null,
+        type: this.core.type === "cabinet" ? "cabinet" : this.core.type,
+        room_id: this.core.currentRoomId || null,
+        network_region_id: null,
         cabinet_id: null,
         layout: layoutData,
       });
@@ -365,18 +354,18 @@ export class SVGDataManager {
         this.showToast("布局删除失败", "error");
       }
     } else if (this.core.type === "cabinet") {
-      if (!this.core.currentNetworkRegionId) {
-        this.showToast("请先选择网络区域", "warning");
+      if (!this.core.currentRoomId) {
+        this.showToast("请先选择房间", "warning");
         return;
       }
 
-      const confirmed = await this.core.showConfirm("确定要删除当前网络区域的机位布局数据吗？此操作不可恢复。");
+      const confirmed = await this.core.showConfirm("确定要删除当前房间的机位布局数据吗？此操作不可恢复。");
       if (!confirmed) {
         return;
       }
 
       try {
-        const result = await this.apiDelete(`/api/resources/layouts/positions/${this.core.currentNetworkRegionId}`);
+        const result = await this.apiDelete(`/api/resources/layouts/positions/${this.core.currentRoomId}`);
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
           this.showToast("布局删除成功", "success");

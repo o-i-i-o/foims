@@ -14,7 +14,6 @@ export class SVGCore {
     this.elementStartPos = { x: 0, y: 0 };
     this.mouseStartPos = { x: 0, y: 0 };
     this.currentRoomId = null;
-    this.currentNetworkRegionId = null;
     this.currentCabinetId = null;
     this.gridSize = 20;
     this.snapToGrid = true;

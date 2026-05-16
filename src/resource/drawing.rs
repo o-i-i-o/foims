@@ -104,6 +104,12 @@ pub async fn save_layout(
 
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位布局保存成功")))
     } else if req.r#type == "cabinet" {
+        let Some(room_id) = req.room_id else {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("房间ID不能为空"))
+            )
+        };
+
         let mut tx = pool.get_conn().begin().await.map_err(|e| {
             actix_web::error::InternalError::new(
                 format!("获取数据库连接失败: {e}"),
@@ -141,6 +147,7 @@ pub async fn save_layout(
         }
 
         let details = serde_json::json!({
+            "room_id": room_id,
             "layout_count": req.layout.len(),
             "type": req.r#type
         });
@@ -150,7 +157,7 @@ pub async fn save_layout(
             config.get_ref(),
             "update",
             "layout",
-            &Uuid::nil(),
+            &room_id,
             &details,
             true,
         )
@@ -200,31 +207,40 @@ pub async fn delete_layout(
 
 pub async fn delete_positions_layout(
     pool: web::Data<DbPool>,
-    network_region_id: web::Path<Uuid>,
+    room_id: web::Path<Uuid>,
     http_req: HttpRequest,
     config: web::Data<Config>,
 ) -> Result<HttpResponse> {
-    let network_region_id = *network_region_id;
+    let room_id = *room_id;
 
-    let _ = pool;
-    let _ = network_region_id;
-
-    let details = serde_json::json!({
-        "network_region_id": network_region_id
-    });
-    let _ = log_system_operation(
-        pool.get_conn(),
-        &http_req,
-        config.get_ref(),
-        "delete",
-        "layout",
-        &network_region_id,
-        &details,
-        true,
+    let result = sqlx::query(
+        "DELETE FROM cabinet_layouts WHERE cabinet_id IN (SELECT id FROM cabinets WHERE room_id = $1)"
     )
+    .bind(room_id)
+    .execute(pool.get_conn())
     .await;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络区域布局删除成功")))
+    match result {
+        Ok(_) => {
+            let details = serde_json::json!({
+                "room_id": room_id
+            });
+            let _ = log_system_operation(
+                pool.get_conn(),
+                &http_req,
+                config.get_ref(),
+                "delete",
+                "layout",
+                &room_id,
+                &details,
+                true,
+            )
+            .await;
+
+            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
+        }
+        Err(err) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("删除机柜布局失败: {err}")))),
+    }
 }
 
 pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Result<HttpResponse> {
@@ -277,17 +293,102 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
 
 pub async fn get_positions_layout(
     pool: web::Data<DbPool>,
-    network_region_id: web::Path<Uuid>,
+    room_id: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
-    let network_region_id = *network_region_id;
+    let room_id = *room_id;
 
-    let _ = pool;
-    let _ = network_region_id;
-
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(
-            vec![],
-            "布局获取成功",
-        )),
+    let layouts = sqlx::query_as::<_, (Uuid, Uuid, i32, i32, i32, i32, i32)>(
+        r"SELECT cl.id, cl.cabinet_id, cl.x, cl.y, cl.width, cl.height, cl.rotation
+          FROM cabinet_layouts cl
+          JOIN cabinets c ON cl.cabinet_id = c.id
+          WHERE c.room_id = $1",
     )
+    .bind(room_id)
+    .fetch_all(pool.get_conn())
+    .await;
+
+    match layouts {
+        Ok(rows) => {
+            let items: Vec<serde_json::Value> = rows.iter().map(|(id, cabinet_id, x, y, width, height, rotation)| {
+                serde_json::json!({
+                    "id": id,
+                    "cabinet_id": cabinet_id,
+                    "x": x,
+                    "y": y,
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation,
+                    "element_type": "cabinet"
+                })
+            }).collect();
+            Ok(HttpResponse::Ok().json(ApiResponse::success(items, "获取机柜布局成功")))
+        }
+        Err(err) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机柜布局失败: {err}")))),
+    }
+}
+
+pub async fn get_room_cabinets_with_positions(
+    pool: web::Data<DbPool>,
+    room_id_path: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    let room_id = *room_id_path;
+
+    let cabinets = sqlx::query_as::<_, (Uuid, String, Uuid, i32, Option<String>)>(
+        "SELECT id, name, room_id, capacity, description FROM cabinets WHERE room_id = $1 ORDER BY name",
+    )
+    .bind(room_id)
+    .fetch_all(pool.get_conn())
+    .await;
+
+    let cabinets = match cabinets {
+        Ok(c) => c,
+        Err(err) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机柜失败: {err}")))),
+    };
+
+    let mut result = Vec::new();
+    for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {
+        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>, Option<String>, Option<Uuid>)>(
+            "SELECT id, name, cabinet_id, start_u, end_u, description, device_type, device_id FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
+        )
+        .bind(cab_id)
+        .fetch_all(pool.get_conn())
+        .await
+        .unwrap_or_default();
+
+        let pos_items: Vec<serde_json::Value> = positions.iter().map(|(id, name, pos_cab_id, start_u, end_u, desc, dt, did)| {
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "cabinet_id": pos_cab_id,
+                "start_u": start_u,
+                "end_u": end_u,
+                "description": desc,
+                "device_type": dt,
+                "device_id": did
+            })
+        }).collect();
+
+        let layout = sqlx::query_as::<_, (i32, i32, i32, i32, i32)>(
+            "SELECT x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = $1",
+        )
+        .bind(cab_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        let layout_json = layout.map(|(x, y, w, h, r)| serde_json::json!({"x": x, "y": y, "width": w, "height": h, "rotation": r}));
+
+        result.push(serde_json::json!({
+            "id": cab_id,
+            "name": cab_name,
+            "room_id": cab_room_id,
+            "capacity": capacity,
+            "description": cab_desc,
+            "positions": pos_items,
+            "layout": layout_json
+        }));
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(result, "获取房间机柜数据成功")))
 }

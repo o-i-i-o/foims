@@ -1,5 +1,5 @@
 import { loadModule } from "../../utils/moduleLoader.js";
-import { loadNetworkRegionsForSelect, loadRoomsForSelect, loadCabinets } from "../../utils/resources.js";
+import { loadRoomsForSelect, loadDataCenterRoomsForSelect, loadCabinets } from "../../utils/resources.js";
 import { elementCache } from "../../utils/helpers.js";
 import { editWorkstation, deleteWorkstation } from "../workstation.js";
 import { editCabinet, deleteCabinet } from "../cabinet.js";
@@ -8,19 +8,6 @@ import { editCabinetPosition, deleteCabinetPosition } from "../position.js";
 let workstationVisualization = null;
 let cabinetVisualization = null;
 let visualizationInitialized = false;
-
-async function loadNetworkRegionsForVisualization(autoSelectFirst = false) {
-  const select = elementCache.get("network-region-select");
-  if (!select) return [];
-  
-  const regions = await loadNetworkRegionsForSelect(select, autoSelectFirst);
-  
-  if (autoSelectFirst && regions.length > 0 && cabinetVisualization) {
-    cabinetVisualization.autoDrawCabinetPositions(regions[0].id);
-  }
-  
-  return regions;
-}
 
 export async function loadCabinetsForSelect(autoSelectFirst = false) {
   try {
@@ -62,9 +49,9 @@ function initTabSwitching() {
         targetTab.classList.add("active");
         
         if (tabId === "cabinet-visualization" && cabinetVisualization) {
-          const networkRegionId = elementCache.getValue("network-region-select");
-          if (networkRegionId) {
-            cabinetVisualization.loadSavedLayout(networkRegionId);
+          const roomId = elementCache.getValue("cabinet-room-select");
+          if (roomId) {
+            cabinetVisualization.loadSavedLayout(roomId);
           }
         }
       }
@@ -80,10 +67,10 @@ function bindSelectEvents() {
     }
   });
 
-  elementCache.get("network-region-select").addEventListener("change", (e) => {
-    const networkRegionId = e.target.value;
-    if (networkRegionId) {
-      cabinetVisualization.loadSavedLayout(networkRegionId);
+  elementCache.get("cabinet-room-select").addEventListener("change", (e) => {
+    const roomId = e.target.value;
+    if (roomId) {
+      cabinetVisualization.loadSavedLayout(roomId);
     }
   });
 }
@@ -98,9 +85,9 @@ function bindAutoDrawEvents() {
   });
 
   elementCache.get("auto-draw-cabinet-positions").addEventListener("click", async () => {
-    const networkRegionId = elementCache.getValue("network-region-select");
-    if (networkRegionId) {
-      await cabinetVisualization.autoDrawCabinetPositions(networkRegionId);
+    const roomId = elementCache.getValue("cabinet-room-select");
+    if (roomId) {
+      await cabinetVisualization.autoDrawCabinetPositions(roomId);
       cabinetVisualization.saveLayout();
     }
   });
@@ -126,7 +113,7 @@ function bindLayoutEvents() {
 
 function loadInitialData() {
   loadRoomsForSelect();
-  loadNetworkRegionsForVisualization(false);
+  loadDataCenterRoomsForSelect("cabinet-room-select");
 
   setTimeout(() => {
     const visualizationSelect = elementCache.get("room-select");
@@ -134,6 +121,14 @@ function loadInitialData() {
       const firstRoomId = visualizationSelect.options[0].value;
       if (firstRoomId) {
         workstationVisualization.loadSavedLayout(firstRoomId);
+      }
+    }
+
+    const cabinetRoomSelect = elementCache.get("cabinet-room-select");
+    if (cabinetRoomSelect && cabinetRoomSelect.options.length > 1) {
+      const firstRoomId = cabinetRoomSelect.options[1].value;
+      if (firstRoomId) {
+        cabinetVisualization.loadSavedLayout(firstRoomId);
       }
     }
   }, 500);
