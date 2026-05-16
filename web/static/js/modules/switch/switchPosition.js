@@ -90,7 +90,6 @@ export class PositionSelector {
   }
 
   async loadFromSwitch(sw) {
-    console.log('loadFromSwitch - switch data:', sw);
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     const startUInput = elementCache.get('switch-start-u');
     const endUInput = elementCache.get('switch-end-u');
@@ -100,24 +99,20 @@ export class PositionSelector {
     let startU = null;
     let endU = null;
 
-    if (sw.cabinet_id) {
-      console.log('loadFromSwitch - found cabinet_id:', sw.cabinet_id);
+    positionData.positionId = sw.position_id || null;
+
+    if (sw.position && sw.position.cabinet_id) {
+      const pos = sw.position;
+      cabinetId = pos.cabinet_id;
+      cabinetName = pos.cabinet_name;
+      startU = pos.start_u;
+      endU = pos.end_u;
+    } else if (sw.cabinet_id) {
       cabinetId = sw.cabinet_id;
       cabinetName = sw.cabinet_name;
       startU = sw.start_u;
       endU = sw.end_u;
-    } else if (sw.position) {
-      console.log('loadFromSwitch - found position:', sw.position);
-      const pos = sw.position;
-      if (pos.cabinet_id) {
-        cabinetId = pos.cabinet_id;
-        cabinetName = pos.cabinet_name;
-        startU = pos.start_u;
-        endU = pos.end_u;
-      }
     }
-
-    console.log('loadFromSwitch - extracted:', { cabinetId, cabinetName, startU, endU });
 
     if (cabinetId) {
       positionData.cabinetId = cabinetId;
@@ -131,7 +126,6 @@ export class PositionSelector {
       if (cabinetSelect && cabinetId) {
         await new Promise(resolve => setTimeout(resolve, 50));
         const option = cabinetSelect.querySelector(`option[value="${cabinetId}"]`);
-        console.log('loadFromSwitch - option found:', !!option, 'cabinetsCache length:', this.cabinetsCache.length);
         if (option) {
           cabinetSelect.value = cabinetId;
           const regionId = option.dataset.regionId;

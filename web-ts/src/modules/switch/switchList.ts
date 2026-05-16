@@ -11,7 +11,7 @@ import {
   appendPaginationToTable,
 } from "../../utils/ui.js";
 import { elementCache } from "../../utils/helpers.js";
-import { listState, SWITCH_PAGE_SIZE } from "./switchState.js";
+import { listState, positionData, SWITCH_PAGE_SIZE } from "./switchState.js";
 import { t } from "../../utils/i18n.js";
 import type { SwitchFormData } from "./switchForm.js";
 
@@ -167,6 +167,32 @@ export async function submitSwitchForm(formData: SwitchFormData): Promise<boolea
   }
 
   try {
+    if (positionData.cabinetId) {
+      const positionPayload = {
+        name: formData.name,
+        cabinet_id: positionData.cabinetId,
+        start_u: positionData.startU || 1,
+        end_u: positionData.endU || 1,
+        description: formData.description || null,
+      };
+
+      if (positionData.positionId) {
+        const posResult = await apiPut(`/api/resources/positions/${positionData.positionId}`, positionPayload);
+        if (!posResult.success) {
+          showToast(t("switch.position_update_failed") || "更新机位失败：" + posResult.message, "error");
+          return false;
+        }
+        formData.position_id = positionData.positionId;
+      } else {
+        const posResult = await apiPost("/api/resources/positions", positionPayload);
+        if (!posResult.success) {
+          showToast(t("switch.position_create_failed") || "创建机位失败：" + posResult.message, "error");
+          return false;
+        }
+        formData.position_id = (posResult.data as { id?: string })?.id || null;
+      }
+    }
+
     let result;
     if (id) {
       result = await apiPut(`/api/switches/${id}`, formData);

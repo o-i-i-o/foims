@@ -704,9 +704,6 @@ pub struct Switch {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub start_u: Option<i32>,
-    pub end_u: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -780,11 +777,6 @@ pub struct SwitchCreate {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
-    pub start_u: Option<i32>,
-    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
-    pub end_u: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -815,11 +807,6 @@ pub struct SwitchUpdate {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
-    pub start_u: Option<i32>,
-    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
-    pub end_u: Option<i32>,
 }
 
 // ==================== 交换机端口模型 ====================

@@ -39,15 +39,6 @@ export function getSwitchFormValues() {
     return rest;
   });
 
-  const cabinetSelect = elementCache.get('switch-cabinet-select');
-  const startUInput = elementCache.get('switch-start-u');
-  const endUInput = elementCache.get('switch-end-u');
-
-  const cabinetId = cabinetSelect?.value || null;
-  const cabinetName = cabinetSelect?.selectedOptions?.[0]?.dataset?.name || null;
-  const startU = startUInput?.value ? parseInt(startUInput.value) : null;
-  const endU = endUInput?.value ? parseInt(endUInput.value) : null;
-
   return {
     id: elementCache.getValue('switch-id'),
     name: elementCache.getValue('switch-name'),
@@ -67,14 +58,11 @@ export function getSwitchFormValues() {
     parent_port_id: parentPortId,
     ips: ips,
     network_region_id: networkRegionId || positionData.networkRegionId,
-    cabinet_id: cabinetId,
-    start_u: startU,
-    end_u: endU
+    position_id: positionData.positionId || null
   };
 }
 
 export async function setSwitchFormValues(sw) {
-  console.log('setSwitchFormValues - switch data:', sw);
   elementCache.setValue('switch-id', sw.id || '');
   elementCache.setValue('switch-name', sw.name || '');
   elementCache.setValue('switch-model', sw.model || '');
@@ -90,23 +78,22 @@ export async function setSwitchFormValues(sw) {
   elementCache.setValue('switch-snmp-priv-protocol', sw.snmp_priv_protocol || '');
   elementCache.setValue('switch-snmp-priv-password', sw.snmp_priv_password || '');
 
-  if (sw.cabinet_id) {
-    console.log('setSwitchFormValues - found cabinet_id:', sw.cabinet_id, 'start_u:', sw.start_u, 'end_u:', sw.end_u);
-    positionData.cabinetId = sw.cabinet_id;
-    positionData.cabinetName = sw.cabinet_name || '';
-    positionData.startU = sw.start_u;
-    positionData.endU = sw.end_u;
-  } else if (sw.position && sw.position.cabinet_id) {
-    console.log('setSwitchFormValues - found position.cabinet_id:', sw.position.cabinet_id);
+  positionData.positionId = sw.position_id || null;
+
+  if (sw.position && sw.position.cabinet_id) {
     const pos = sw.position;
     positionData.cabinetId = pos.cabinet_id;
     positionData.cabinetName = pos.cabinet_name || '';
-    positionData.positionId = pos.id || pos.position_id;
     positionData.startU = pos.start_u;
     positionData.endU = pos.end_u;
     if (pos.network_region_id) {
       positionData.networkRegionId = pos.network_region_id;
     }
+  } else if (sw.cabinet_id) {
+    positionData.cabinetId = sw.cabinet_id;
+    positionData.cabinetName = sw.cabinet_name || '';
+    positionData.startU = sw.start_u;
+    positionData.endU = sw.end_u;
   }
 
   if (sw.ips && sw.ips.length > 0) {

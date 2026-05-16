@@ -33,9 +33,7 @@ export interface SwitchFormData {
   snmp_priv_password?: string;
   parent_switch_id?: string;
   description?: string;
-  cabinet_id?: string;
-  start_u?: number;
-  end_u?: number;
+  position_id?: string | null;
   network_region_id?: string;
 }
 

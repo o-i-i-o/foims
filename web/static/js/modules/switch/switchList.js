@@ -18,6 +18,7 @@ import {
 import { elementCache } from "../../utils/helpers.js";
 import {
   listState,
+  positionData,
   SWITCH_PAGE_SIZE
 } from "./switchState.js";
 
@@ -153,6 +154,32 @@ async function submitSwitchForm(formData) {
   }
 
   try {
+    if (positionData.cabinetId) {
+      const positionPayload = {
+        name: formData.name,
+        cabinet_id: positionData.cabinetId,
+        start_u: positionData.startU || 1,
+        end_u: positionData.endU || 1,
+        description: formData.description || null,
+      };
+
+      if (positionData.positionId) {
+        const posResult = await apiPut(`/api/resources/positions/${positionData.positionId}`, positionPayload);
+        if (!posResult.success) {
+          showToast("更新机位失败：" + posResult.message, "error");
+          return false;
+        }
+        formData.position_id = positionData.positionId;
+      } else {
+        const posResult = await apiPost("/api/resources/positions", positionPayload);
+        if (!posResult.success) {
+          showToast("创建机位失败：" + posResult.message, "error");
+          return false;
+        }
+        formData.position_id = posResult.data?.id || null;
+      }
+    }
+
     let result;
     if (id) {
       result = await apiPut(`/api/switches/${id}`, formData);

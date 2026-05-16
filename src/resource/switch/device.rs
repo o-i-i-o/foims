@@ -388,20 +388,6 @@ pub async fn create_switch(
             .json(ApiResponse::<()>::error("交换机必须至少配置一个IP地址")));
     }
 
-    if req.cabinet_id.is_some() && (req.start_u.is_none() || req.end_u.is_none()) {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "选择机柜时必须填写起始U位和结束U位",
-        )));
-    }
-
-    if let (Some(start_u), Some(end_u)) = (req.start_u, req.end_u)
-        && start_u > end_u
-    {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error("起始U位不能大于结束U位"))
-        );
-    }
-
     let ips = req.ips.as_ref().unwrap();
 
     let id = Uuid::new_v4();
@@ -423,21 +409,19 @@ pub async fn create_switch(
         .filter(|p| !p.is_empty())
         .and_then(|p| encrypt_password(p));
 
-    let position_id = Uuid::new_v4();
-    if let Err(e) = sqlx::query(
-        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
-    )
-    .bind(position_id)
-    .bind(&req.name)
-    .bind(req.cabinet_id)
-    .bind(req.start_u.unwrap_or(1))
-    .bind(req.end_u.unwrap_or(1))
-    .bind(&req.description)
-    .bind(id)
-    .bind(now)
-    .bind(now)
-    .execute(pool.get_conn())
-    .await
+    let position_id = req.position_id.unwrap_or_else(Uuid::new_v4);
+
+    if req.position_id.is_none()
+        && let Err(e) = sqlx::query(
+            "INSERT INTO positions (id, name, device_type, device_id, created_at, updated_at) VALUES ($1, $2, 'switch', $3, $4, $5)"
+        )
+        .bind(position_id)
+        .bind(&req.name)
+        .bind(id)
+        .bind(now)
+        .bind(now)
+        .execute(pool.get_conn())
+        .await
     {
         tracing::error!("创建交换机关联机位记录失败: {}", e);
     }
@@ -448,8 +432,8 @@ pub async fn create_switch(
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
-            description, created_at, updated_at, position_id, cabinet_id, start_u, end_u
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)"
+            description, created_at, updated_at, position_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)"
     )
     .bind(id)
     .bind(&req.name)
@@ -470,9 +454,6 @@ pub async fn create_switch(
     .bind(now)
     .bind(now)
     .bind(position_id)
-    .bind(req.cabinet_id)
-    .bind(req.start_u)
-    .bind(req.end_u)
     .execute(pool.get_conn())
     .await;
 
@@ -538,7 +519,7 @@ pub async fn create_switch(
                     snmp_port, 
                     parent_switch_id, parent_port_id, 
                     description, created_at, updated_at,
-                    position_id, cabinet_id, start_u, end_u
+                    position_id
                 FROM switches WHERE id = $1",
             )
             .bind(id)
@@ -552,9 +533,6 @@ pub async fn create_switch(
                         "model": data.model,
                         "vendor": data.vendor,
                         "location": data.location,
-                        "cabinet_id": data.cabinet_id,
-                        "start_u": data.start_u,
-                        "end_u": data.end_u,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(
@@ -622,20 +600,6 @@ pub async fn update_switch(
         }
     }
 
-    if req.cabinet_id.is_some() && (req.start_u.is_none() || req.end_u.is_none()) {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "选择机柜时必须填写起始U位和结束U位",
-        )));
-    }
-
-    if let (Some(start_u), Some(end_u)) = (req.start_u, req.end_u)
-        && start_u > end_u
-    {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error("起始U位不能大于结束U位"))
-        );
-    }
-
     let now = Utc::now();
 
     let encrypted_snmp_community = req
@@ -672,11 +636,8 @@ pub async fn update_switch(
             parent_port_id = $14,
             description = COALESCE($15, description),
             updated_at = $16,
-            position_id = COALESCE($17, position_id),
-            cabinet_id = $18,
-            start_u = $19,
-            end_u = $20
-        WHERE id = $21",
+            position_id = COALESCE($17, position_id)
+        WHERE id = $18",
     )
     .bind(&req.name)
     .bind(&req.model)
@@ -695,98 +656,12 @@ pub async fn update_switch(
     .bind(&req.description)
     .bind(now)
     .bind(req.position_id)
-    .bind(req.cabinet_id)
-    .bind(req.start_u)
-    .bind(req.end_u)
     .bind(id)
     .execute(pool.get_conn())
     .await;
 
     match result {
         Ok(_) => {
-            if req.cabinet_id.is_some()
-                || req.start_u.is_some()
-                || req.end_u.is_some()
-                || req.name.is_some()
-            {
-                let existing_position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
-                )
-                .bind(id)
-                .fetch_optional(pool.get_conn())
-                .await
-                .unwrap_or(None);
-
-                if let Some(pos_id) = existing_position_id {
-                    let mut updates = Vec::new();
-                    let mut param_idx = 2u32;
-
-                    if req.name.is_some() {
-                        updates.push(format!("name = ${param_idx}"));
-                        param_idx += 1;
-                    }
-                    if req.cabinet_id.is_some() {
-                        updates.push(format!("cabinet_id = ${param_idx}"));
-                        param_idx += 1;
-                    }
-                    if req.start_u.is_some() {
-                        updates.push(format!("start_u = ${param_idx}"));
-                        param_idx += 1;
-                    }
-                    if req.end_u.is_some() {
-                        updates.push(format!("end_u = ${param_idx}"));
-                        param_idx += 1;
-                    }
-                    updates.push("updated_at = $1".to_string());
-
-                    if !updates.is_empty() {
-                        let query_str = format!(
-                            "UPDATE positions SET {} WHERE id = ${}",
-                            updates.join(", "),
-                            param_idx
-                        );
-
-                        let mut query = sqlx::query(&query_str).bind(now);
-                        if let Some(ref name) = req.name {
-                            query = query.bind(name);
-                        }
-                        if let Some(cabinet_id) = req.cabinet_id {
-                            query = query.bind(cabinet_id);
-                        }
-                        if let Some(start_u) = req.start_u {
-                            query = query.bind(start_u);
-                        }
-                        if let Some(end_u) = req.end_u {
-                            query = query.bind(end_u);
-                        }
-                        query = query.bind(pos_id);
-
-                        if let Err(e) = query.execute(pool.get_conn()).await {
-                            tracing::error!("同步更新交换机关联机位失败: {}", e);
-                        }
-                    }
-                } else if req.cabinet_id.is_some() {
-                    let pos_id = Uuid::new_v4();
-                    if let Err(e) = sqlx::query(
-                        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
-                    )
-                    .bind(pos_id)
-                    .bind(req.name.as_ref().unwrap_or(&String::new()))
-                    .bind(req.cabinet_id)
-                    .bind(req.start_u.unwrap_or(1))
-                    .bind(req.end_u.unwrap_or(1))
-                    .bind(&req.description)
-                    .bind(id)
-                    .bind(now)
-                    .bind(now)
-                    .execute(pool.get_conn())
-                    .await
-                    {
-                        tracing::error!("创建交换机关联机位记录失败: {}", e);
-                    }
-                }
-            }
-
             if let Some(ips) = &req.ips {
                 let position_id: Option<Uuid> = sqlx::query_scalar(
                     "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
@@ -863,7 +738,7 @@ pub async fn update_switch(
                     snmp_port, 
                     parent_switch_id, parent_port_id, 
                     description, created_at, updated_at,
-                    position_id, cabinet_id, start_u, end_u
+                    position_id
                 FROM switches WHERE id = $1",
             )
             .bind(id)
@@ -877,9 +752,6 @@ pub async fn update_switch(
                         "model": data.model,
                         "vendor": data.vendor,
                         "location": data.location,
-                        "cabinet_id": data.cabinet_id,
-                        "start_u": data.start_u,
-                        "end_u": data.end_u,
                         "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
                     });
                     let _ = log_system_operation(

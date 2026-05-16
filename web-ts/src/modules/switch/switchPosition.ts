@@ -15,6 +15,7 @@ interface Cabinet {
 }
 
 interface SwitchData {
+  position_id?: string;
   cabinet_id?: string;
   cabinet_name?: string;
   start_u?: number;
@@ -120,19 +121,19 @@ export class PositionSelector {
     let startU: number | null = null;
     let endU: number | null = null;
 
-    if (sw.cabinet_id) {
+    positionData.positionId = sw.position_id || null;
+
+    if (sw.position && sw.position.cabinet_id) {
+      const pos = sw.position;
+      cabinetId = pos.cabinet_id;
+      cabinetName = pos.cabinet_name || null;
+      startU = pos.start_u ?? null;
+      endU = pos.end_u ?? null;
+    } else if (sw.cabinet_id) {
       cabinetId = sw.cabinet_id;
       cabinetName = sw.cabinet_name || null;
       startU = sw.start_u ?? null;
       endU = sw.end_u ?? null;
-    } else if (sw.position) {
-      const pos = sw.position;
-      if (pos.cabinet_id) {
-        cabinetId = pos.cabinet_id;
-        cabinetName = pos.cabinet_name || null;
-        startU = pos.start_u ?? null;
-        endU = pos.end_u ?? null;
-      }
     }
 
     if (cabinetId) {

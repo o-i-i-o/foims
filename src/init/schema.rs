@@ -250,9 +250,6 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             snmp_port INTEGER DEFAULT 161,
             parent_switch_id UUID REFERENCES switches(id) ON DELETE SET NULL,
             parent_port_id UUID,
-            cabinet_id UUID REFERENCES cabinets(id) ON DELETE SET NULL,
-            start_u INTEGER,
-            end_u INTEGER,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -558,6 +555,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_switch_position_link(pool).await?;
     migrate_switch_position_constraint(pool).await?;
     migrate_position_device_type(pool).await?;
+    migrate_drop_switch_cabinet_columns(pool).await?;
     Ok(())
 }
 
@@ -1099,6 +1097,84 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
                VALUES ('position_device_type', '为positions表添加device_type和device_id字段，并将交换机机位迁移到positions表')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_drop_switch_cabinet_columns(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'drop_switch_cabinet_columns'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        let has_cabinet_id: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'switches' AND column_name = 'cabinet_id')"
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
+
+        if has_cabinet_id
+            && let Err(e) = sqlx::query(
+                "ALTER TABLE switches DROP COLUMN IF EXISTS cabinet_id, DROP COLUMN IF EXISTS start_u, DROP COLUMN IF EXISTS end_u"
+            )
+            .execute(pool)
+            .await
+        {
+            warn!("删除switches表cabinet_id/start_u/end_u列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE VIEW switches_with_details AS
+            SELECT 
+                s.id, s.name, s.position_id, s.model, s.vendor,
+                s.location, s.snmp_version, 
+                s.snmp_community,
+                s.snmp_username, s.snmp_auth_protocol, 
+                s.snmp_auth_password,
+                s.snmp_priv_protocol, 
+                s.snmp_priv_password,
+                s.snmp_port,
+                s.parent_switch_id, ps.name as parent_switch_name,
+                s.parent_port_id, pp.port_number as parent_port_number,
+                p.cabinet_id, c.name as cabinet_name,
+                p.start_u, p.end_u,
+                im.network_id as position_network_id,
+                n.network_region_id,
+                s.description,
+                'switch' as device_type,
+                host(im.ip_address) as ip_address,
+                im.mac_address,
+                s.created_at, s.updated_at
+            FROM switches s
+            LEFT JOIN switches ps ON s.parent_switch_id = ps.id
+            LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
+            LEFT JOIN positions p ON s.position_id = p.id
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN LATERAL (
+                SELECT ip_address, mac_address, network_id
+                FROM ips 
+                WHERE position_id = p.id AND device_type = 'switch' 
+                LIMIT 1
+            ) im ON true
+            LEFT JOIN network_cidrs n ON im.network_id = n.id",
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("更新switches_with_details视图失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('drop_switch_cabinet_columns', '从switches表删除cabinet_id/start_u/end_u列，通过positions表关联获取')"
         )
         .execute(pool)
         .await?;
