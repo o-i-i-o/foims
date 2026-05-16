@@ -10,6 +10,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
+type IpMacCurrentInfo = (Option<String>, String, Option<Uuid>, Option<Uuid>);
+
 pub async fn get_ip_managers(
     pool: web::Data<DbPool>,
     query: web::Query<std::collections::HashMap<String, String>>,
@@ -826,136 +828,90 @@ pub async fn pull_ip_managers(
     let switch_id = req.switch_id;
     let network_id = req.network_id;
 
-    let network_info: Option<(Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT ipv4_cidr::text, ipv6_cidr::text FROM network_cidrs WHERE id = $1")
-            .bind(network_id)
-            .fetch_optional(pool.get_conn())
-            .await
-            .map_err(|e| format!("查询网段信息失败: {e}"))
-            .ok()
-            .flatten();
+    let network_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
+    )
+    .bind(network_id)
+    .fetch_one(pool.get_conn())
+    .await
+    .unwrap_or(false);
 
-    if network_info.is_none() {
+    if !network_exists {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("未找到网段信息")));
     }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT host(ip_address), mac_address FROM switch_macs WHERE switch_id = $1",
+        "SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm INNER JOIN ips i ON sm.ip_address = i.ip_address WHERE sm.switch_id = $1 AND i.network_id = $2",
     )
     .bind(switch_id)
+    .bind(network_id)
     .fetch_all(pool.get_conn())
     .await
     .unwrap_or_default();
 
     if switch_macs.is_empty() {
-        return Ok(
-            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
-                "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
-            )),
-        );
-    }
+        let total_macs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1",
+        )
+        .bind(switch_id)
+        .fetch_one(pool.get_conn())
+        .await
+        .unwrap_or(0);
 
-    let mut filtered_entries: Vec<(String, String)> = Vec::new();
-    for (ip, mac) in switch_macs {
-        let is_ipv6 = ip.contains(':');
-
-        if let Some((ref ipv4_cidr, ref ipv6_cidr)) = network_info {
-            let belongs_to_network = if is_ipv6 {
-                ipv6_cidr
-                    .as_ref()
-                    .is_some_and(|cidr| ip_belongs_to_cidr(&ip, cidr))
-            } else {
-                ipv4_cidr
-                    .as_ref()
-                    .is_some_and(|cidr| ip_belongs_to_cidr(&ip, cidr))
-            };
-
-            if belongs_to_network {
-                filtered_entries.push((ip, mac));
-            }
+        if total_macs == 0 {
+            return Ok(
+                HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
+                    "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
+                )),
+            );
         }
-    }
-
-    if filtered_entries.is_empty() {
         return Ok(
             HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
                 vec![],
-                "未发现属于该网段的IP地址",
+                "未发现属于该网段的已管理IP地址",
             )),
         );
     }
 
     let now = Utc::now();
     let mut updated_count = 0usize;
+    let mut unchanged_count = 0usize;
     let mut skipped_count = 0usize;
-    let mut not_found_count = 0usize;
 
-    for (ip, mac) in &filtered_entries {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
+    for (ip, mac) in &switch_macs {
+        let current: Option<IpMacCurrentInfo> = sqlx::query_as(
+            "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
-        .fetch_one(pool.get_conn())
+        .fetch_optional(pool.get_conn())
         .await
-        .unwrap_or(false);
+        .ok()
+        .flatten();
 
-        if !exists {
-            not_found_count += 1;
+        let Some((old_mac, device_type, ws_id, pos_id)) = current else {
             continue;
-        }
-
-        let old_mac: Option<String> = sqlx::query_scalar(
-            "SELECT mac_address FROM ips WHERE ip_address = CAST($1 AS INET)",
-        )
-        .bind(ip)
-        .fetch_optional(pool.get_conn())
-        .await
-        .ok()
-        .flatten();
-
-        let current_device: Option<(String, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
-            "SELECT device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
-        )
-        .bind(ip)
-        .fetch_optional(pool.get_conn())
-        .await
-        .ok()
-        .flatten();
-
-        let mac_conflict: Option<String> = if let Some((device_type, ws_id, pos_id)) =
-            current_device
-        {
-            sqlx::query_scalar(
-                r"SELECT host(ip_address) FROM ips
-                   WHERE mac_address = $1 
-                   AND ip_address != CAST($2 AS INET)
-                   AND (
-                       device_type != $3
-                       OR workstation_id IS DISTINCT FROM $4
-                       OR position_id IS DISTINCT FROM $5
-                   )
-                   LIMIT 1",
-            )
-            .bind(mac)
-            .bind(ip)
-            .bind(&device_type)
-            .bind(ws_id)
-            .bind(pos_id)
-            .fetch_optional(pool.get_conn())
-            .await
-            .ok()
-            .flatten()
-        } else {
-            sqlx::query_scalar(
-                "SELECT host(ip_address) FROM ips WHERE mac_address = $1 AND ip_address != CAST($2 AS INET) LIMIT 1"
-            )
-            .bind(mac)
-            .bind(ip)
-            .fetch_optional(pool.get_conn())
-            .await
-            .ok()
-            .flatten()
         };
+
+        let mac_conflict: Option<String> = sqlx::query_scalar(
+            r"SELECT host(ip_address) FROM ips
+               WHERE mac_address = $1 
+               AND ip_address != CAST($2 AS INET)
+               AND (
+                   device_type != $3
+                   OR workstation_id IS DISTINCT FROM $4
+                   OR position_id IS DISTINCT FROM $5
+               )
+               LIMIT 1",
+        )
+        .bind(mac)
+        .bind(ip)
+        .bind(&device_type)
+        .bind(ws_id)
+        .bind(pos_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
 
         if let Some(conflict_ip) = mac_conflict {
             warn!(
@@ -966,49 +922,79 @@ pub async fn pull_ip_managers(
             continue;
         }
 
-        let result = sqlx::query(
-            r"UPDATE ips 
-               SET mac_address = $1, last_seen = $2, updated_at = $2
-               WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"
-        )
-        .bind(mac)
-        .bind(now)
-        .bind(ip)
-        .execute(pool.get_conn())
-        .await;
+        match old_mac.as_deref() {
+            None | Some("") => {
+                if let Err(err) = sqlx::query(
+                    r"UPDATE ips 
+                       SET mac_address = $1, last_seen = $2, updated_at = $2
+                       WHERE ip_address = CAST($3 AS INET)"
+                )
+                .bind(mac)
+                .bind(now)
+                .bind(ip)
+                .execute(pool.get_conn())
+                .await
+                {
+                    error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
+                    continue;
+                }
+                updated_count += 1;
+                info!("MAC地址写入: IP={}, MAC={}", ip, mac);
+            }
+            Some(old) if old == mac => {
+                if let Err(err) = sqlx::query(
+                    r"UPDATE ips SET last_seen = $1, updated_at = $1 WHERE ip_address = CAST($2 AS INET)"
+                )
+                .bind(now)
+                .bind(ip)
+                .execute(pool.get_conn())
+                .await
+                {
+                    error!("更新last_seen失败: IP={}, 错误: {}", ip, err);
+                }
+                unchanged_count += 1;
+            }
+            Some(old) => {
+                if let Err(err) = sqlx::query(
+                    r"UPDATE ips 
+                       SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
+                       WHERE ip_address = CAST($4 AS INET)"
+                )
+                .bind(old)
+                .bind(mac)
+                .bind(now)
+                .bind(ip)
+                .execute(pool.get_conn())
+                .await
+                {
+                    error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
+                    continue;
+                }
+                updated_count += 1;
 
-        if let Ok(res) = result
-            && res.rows_affected() > 0
-        {
-            updated_count += 1;
+                let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+                    "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
+                )
+                .bind(ip)
+                .fetch_optional(pool.get_conn())
+                .await
+                .ok()
+                .flatten()
+                .flatten();
 
-            if let Some(ref old) = old_mac {
-                let mac_changed = old != mac && !old.is_empty();
-                if mac_changed {
-                    let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-                        "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
+                if let Some(ws_id) = workstation_id {
+                    info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
+                    match crate::utils::send_mac_change_notification(
+                        pool.get_conn(),
+                        &ws_id,
+                        ip,
+                        old,
+                        mac,
                     )
-                    .bind(ip)
-                    .fetch_optional(pool.get_conn())
                     .await
-                    .ok()
-                    .flatten()
-                    .flatten();
-
-                    if let Some(ws_id) = workstation_id {
-                        info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                        match crate::utils::send_mac_change_notification(
-                            pool.get_conn(),
-                            &ws_id,
-                            ip,
-                            old,
-                            mac,
-                        )
-                        .await
-                        {
-                            Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
-                            Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
-                        }
+                    {
+                        Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
+                        Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
                     }
                 }
             }
@@ -1034,8 +1020,8 @@ pub async fn pull_ip_managers(
     if updated_count > 0 {
         message_parts.push(format!("更新 {updated_count} 条MAC地址"));
     }
-    if not_found_count > 0 {
-        message_parts.push(format!("{not_found_count} 条IP未在管理表中"));
+    if unchanged_count > 0 {
+        message_parts.push(format!("{unchanged_count} 条MAC无变化"));
     }
     if skipped_count > 0 {
         message_parts.push(format!("{skipped_count} 条MAC冲突跳过"));
@@ -1055,78 +1041,44 @@ pub async fn pull_ip_managers_internal(
     switch_id: Uuid,
     network_id: Uuid,
 ) -> Result<(), String> {
-    let network_info: Option<(Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT ipv4_cidr::text, ipv6_cidr::text FROM network_cidrs WHERE id = $1")
-            .bind(network_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| format!("查询网段信息失败: {e}"))?;
+    let network_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
+    )
+    .bind(network_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("查询网段失败: {e}"))?;
 
-    if network_info.is_none() {
+    if !network_exists {
         return Err("未找到网段信息".to_string());
     }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT host(ip_address), mac_address FROM switch_macs WHERE switch_id = $1",
+        "SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm INNER JOIN ips i ON sm.ip_address = i.ip_address WHERE sm.switch_id = $1 AND i.network_id = $2",
     )
     .bind(switch_id)
+    .bind(network_id)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
 
     if switch_macs.is_empty() {
-        return Err("该交换机暂无MAC数据".to_string());
-    }
-
-    let mut filtered_entries: Vec<(String, String)> = Vec::new();
-    for (ip, mac) in switch_macs {
-        let is_ipv6 = ip.contains(':');
-        if let Some((ref ipv4_cidr, ref ipv6_cidr)) = network_info {
-            let belongs_to_network = if is_ipv6 {
-                ipv6_cidr
-                    .as_ref()
-                    .is_some_and(|cidr| ip_belongs_to_cidr(&ip, cidr))
-            } else {
-                ipv4_cidr
-                    .as_ref()
-                    .is_some_and(|cidr| ip_belongs_to_cidr(&ip, cidr))
-            };
-            if belongs_to_network {
-                filtered_entries.push((ip, mac));
-            }
-        }
-    }
-
-    if filtered_entries.is_empty() {
-        return Err("未发现属于该网段的IP地址".to_string());
+        return Err("未发现属于该网段的已管理IP地址".to_string());
     }
 
     let now = Utc::now();
-    for (ip, mac) in &filtered_entries {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
-        )
-        .bind(ip)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| format!("查询IP存在失败: {e}"))?;
-
-        if !exists {
-            continue;
-        }
-
-        let Some(current_device) = sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>)>(
-            "SELECT device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
+    for (ip, mac) in &switch_macs {
+        let current: Option<IpMacCurrentInfo> = sqlx::query_as(
+            "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
         .fetch_optional(pool)
         .await
-        .map_err(|e| format!("查询设备信息失败: {e}"))?
-        else {
-            continue
-        };
+        .map_err(|e| format!("查询IP信息失败: {e}"))?;
 
-        let (device_type, ws_id, pos_id) = current_device;
+        let Some((old_mac, device_type, ws_id, pos_id)) = current else {
+            continue;
+        };
 
         let mac_conflict: Option<String> = sqlx::query_scalar(
             r"SELECT host(ip_address) FROM ips
@@ -1154,115 +1106,67 @@ pub async fn pull_ip_managers_internal(
             continue;
         }
 
-        let old_mac: Option<String> = sqlx::query_scalar(
-            "SELECT mac_address FROM ips WHERE ip_address = CAST($1 AS INET)",
-        )
-        .bind(ip)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| format!("查询旧MAC失败: {e}"))?
-        .flatten();
+        match old_mac.as_deref() {
+            None | Some("") => {
+                sqlx::query(
+                    r"UPDATE ips 
+                       SET mac_address = $1, last_seen = $2, updated_at = $2
+                       WHERE ip_address = CAST($3 AS INET)"
+                )
+                .bind(mac)
+                .bind(now)
+                .bind(ip)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("更新MAC地址失败: {e}"))?;
+                info!("MAC地址写入: IP={}, MAC={}", ip, mac);
+            }
+            Some(old) if old == mac => {
+                sqlx::query(
+                    r"UPDATE ips SET last_seen = $1, updated_at = $1 WHERE ip_address = CAST($2 AS INET)"
+                )
+                .bind(now)
+                .bind(ip)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("更新last_seen失败: {e}"))?;
+            }
+            Some(old) => {
+                sqlx::query(
+                    r"UPDATE ips 
+                       SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
+                       WHERE ip_address = CAST($4 AS INET)"
+                )
+                .bind(old)
+                .bind(mac)
+                .bind(now)
+                .bind(ip)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("更新MAC地址失败: {e}"))?;
 
-        let result = sqlx::query(
-            r"UPDATE ips 
-               SET mac_address = $1, last_seen = $2, updated_at = $2
-               WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"
-        )
-        .bind(mac)
-        .bind(now)
-        .bind(ip)
-        .execute(pool)
-        .await
-        .map_err(|e| format!("更新MAC地址失败: {e}"))?;
+                let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+                    "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)",
+                )
+                .bind(ip)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .flatten();
 
-        if result.rows_affected() == 0 {
-            continue;
-        }
-
-        let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-            "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)",
-        )
-        .bind(ip)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .flatten();
-
-        if let (Some(old), Some(ws_id)) = (&old_mac, &workstation_id) {
-            let mac_changed = old != mac && !old.is_empty();
-
-            if mac_changed {
-                info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                match crate::utils::send_mac_change_notification(pool, ws_id, ip, old, mac).await {
-                    Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
-                    Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
+                if let Some(ws_id) = workstation_id {
+                    info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
+                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac).await {
+                        Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
+                        Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
+                    }
                 }
             }
         }
     }
 
     Ok(())
-}
-
-fn ip_belongs_to_cidr(ip: &str, cidr: &str) -> bool {
-    let cidr_parts: Vec<&str> = cidr.split('/').collect();
-    if cidr_parts.len() != 2 {
-        return false;
-    }
-
-    let network_addr = cidr_parts[0];
-    let Ok(prefix_len) = cidr_parts[1].parse::<u32>() else {
-        return false
-    };
-
-    if ip.contains(':') {
-        let Ok(ip_parsed) = std::net::Ipv6Addr::from_str(ip) else {
-            return false
-        };
-        let Ok(network_parsed) = std::net::Ipv6Addr::from_str(network_addr) else {
-            return false
-        };
-
-        let ip_bytes = ip_parsed.octets();
-        let network_bytes = network_parsed.octets();
-
-        let full_bits = prefix_len as usize;
-        let byte_idx = full_bits / 8;
-        let bit_offset = full_bits % 8;
-
-        for i in 0..byte_idx {
-            if ip_bytes[i] != network_bytes[i] {
-                return false;
-            }
-        }
-
-        if byte_idx < 16 && bit_offset > 0 {
-            let mask = 0xFF_u8 << (8 - bit_offset);
-            if (ip_bytes[byte_idx] & mask) != (network_bytes[byte_idx] & mask) {
-                return false;
-            }
-        }
-
-        true
-    } else {
-        let Ok(ip_parsed) = std::net::Ipv4Addr::from_str(ip) else {
-            return false
-        };
-        let Ok(network_parsed) = std::net::Ipv4Addr::from_str(network_addr) else {
-            return false
-        };
-
-        let ip_u32 = u32::from(ip_parsed);
-        let network_u32 = u32::from(network_parsed);
-        let mask = if prefix_len == 0 {
-            0
-        } else {
-            !0u32 << (32 - prefix_len)
-        };
-
-        (ip_u32 & mask) == (network_u32 & mask)
-    }
 }
 
 #[must_use] 
