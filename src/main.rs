@@ -88,66 +88,6 @@ fn wait_for_port(addr: &str, port: u16, max_retries: u32) -> std::io::Result<()>
     check_port_available(addr, port)
 }
 
-fn is_http3_enabled(http_version: &str) -> bool {
-    matches!(http_version.to_lowercase().as_str(), "http3" | "http/3")
-}
-
-struct Http3StartParams<'a> {
-    http_version: &'a str,
-    host: &'a str,
-    port: u16,
-    cert_path: &'a str,
-    key_path: &'a str,
-    config: &'a Config,
-    pool: &'a Option<DbPool>,
-    http_port: u16,
-}
-
-fn start_http3_server_if_enabled(params: Http3StartParams) {
-    if !is_http3_enabled(params.http_version) {
-        return;
-    }
-
-    let host_str = params.host.to_string();
-    let cert_path_str = params.cert_path.to_string();
-    let key_path_str = params.key_path.to_string();
-    let config_clone = params.config.clone();
-    let pool_clone = params.pool.clone();
-    let port = params.port;
-    let http_port = params.http_port;
-
-    tokio::spawn(async move {
-        use std::sync::Arc;
-        use tokio::sync::Semaphore;
-
-        let semaphore = Arc::new(Semaphore::new(100));
-
-        let app_state = ipma::system::http3::AppState {
-            config: config_clone,
-            pool: pool_clone,
-            semaphore,
-            http_port,
-        };
-
-        let host_str_clone = host_str.clone();
-        match ipma::system::http3::start_http3_server(
-            host_str,
-            port,
-            &cert_path_str,
-            &key_path_str,
-            app_state,
-        )
-        .await
-        {
-            Ok(()) => info!("HTTP/3服务器启动成功 ({}:{})", host_str_clone, port),
-            Err(e) => error!(
-                "启动HTTP/3服务器失败 ({}:{}): {:?}",
-                host_str_clone, port, e
-            ),
-        }
-    });
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     if let Err(e) = rustls::crypto::ring::default_provider().install_default() {
@@ -259,7 +199,6 @@ async fn main() -> std::io::Result<()> {
     }
 
     let http_version = config.server.http_version.as_deref().unwrap_or("http2");
-    let http3_enabled = is_http3_enabled(http_version);
 
     let http_config = config.clone();
     let http_pool = pool.clone();
@@ -294,7 +233,6 @@ async fn main() -> std::io::Result<()> {
     let https_port = config.server.https_port.unwrap_or(443);
     let create_https_app = move || {
         App::new()
-            .wrap(ipma::utils::alt_svc::AltSvc::new(http3_enabled, https_port))
             .wrap(ipma::utils::hsts::hsts_middleware())
             .wrap(build_cors_middleware(&https_config))
             .wrap(actix_web::middleware::Logger::default())
@@ -384,28 +322,13 @@ async fn main() -> std::io::Result<()> {
 
             let https_server = https_server.bind_rustls_0_23(
                 (ipv6_address, https_port),
-                load_rustls_config(&cert_path, &key_path, http3_enabled)?,
+                load_rustls_config(&cert_path, &key_path)?,
             )?;
 
             info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
-            if http3_enabled {
-                info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
-            } else {
-                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-            }
+            info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
             info!("证书类型: {}", cert_type);
             info!("使用双栈模式 (IPv4 和 IPv6)");
-
-            start_http3_server_if_enabled(Http3StartParams {
-                http_version,
-                host: ipv6_address,
-                port: https_port,
-                cert_path: &cert_path.clone(),
-                key_path: &key_path.clone(),
-                config: &config,
-                pool: &pool,
-                http_port,
-            });
 
             return https_server.run().await;
         } else {
@@ -420,15 +343,12 @@ async fn main() -> std::io::Result<()> {
                 let http_version_clone = http_version.to_string();
                 let cert_type_clone = cert_type.to_string();
                 let https_port_clone = https_port;
-                let http3_enabled_clone = http3_enabled;
 
-                let config_clone_ipv4 = config.clone();
-                let pool_clone_ipv4 = pool.clone();
                 server_handles.push(tokio::spawn(async move {
                     let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4, http3_enabled_clone) {
+                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
                         Ok(config) => config,
                         Err(e) => {
                             error!("加载TLS配置失败: {:?}", e);
@@ -450,25 +370,8 @@ async fn main() -> std::io::Result<()> {
                         "HTTPS IPv4服务器运行在 https://{}:{}",
                         ipv4_address_clone, https_port_clone
                     );
-                    if http3_enabled_clone {
-                        info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
-                    } else {
-                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                    }
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
                     info!("证书类型: {}", cert_type_clone);
-
-                    let config_clone = config_clone_ipv4.clone();
-                    let pool_clone = pool_clone_ipv4.clone();
-                    start_http3_server_if_enabled(Http3StartParams {
-                        http_version: &http_version_clone,
-                        host: &ipv4_address_clone,
-                        port: https_port_clone,
-                        cert_path: &cert_path_ipv4.clone(),
-                        key_path: &key_path_ipv4.clone(),
-                        config: &config_clone,
-                        pool: &pool_clone,
-                        http_port,
-                    });
 
                     if let Err(e) = https_server_ipv4.run().await {
                         error!("HTTPS IPv4服务器失败: {:?}", e);
@@ -485,15 +388,12 @@ async fn main() -> std::io::Result<()> {
                 let http_version_clone = http_version.to_string();
                 let cert_type_clone = cert_type.to_string();
                 let https_port_clone = https_port;
-                let http3_enabled_clone = http3_enabled;
 
-                let config_clone_ipv6 = config.clone();
-                let pool_clone_ipv6 = pool.clone();
                 server_handles.push(tokio::spawn(async move {
                     let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6, http3_enabled_clone) {
+                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
                         Ok(config) => config,
                         Err(e) => {
                             error!("加载TLS配置失败: {:?}", e);
@@ -515,25 +415,8 @@ async fn main() -> std::io::Result<()> {
                         "HTTPS IPv6服务器运行在 https://{}:{}",
                         ipv6_address_clone, https_port_clone
                     );
-                    if http3_enabled_clone {
-                        info!("HTTP版本: HTTP/3 (同时支持HTTP/1.1和HTTP/2 over TCP, HTTP/3 over QUIC/UDP)");
-                    } else {
-                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                    }
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
                     info!("证书类型: {}", cert_type_clone);
-
-                    let config_clone = config_clone_ipv6.clone();
-                    let pool_clone = pool_clone_ipv6.clone();
-                    start_http3_server_if_enabled(Http3StartParams {
-                        http_version: &http_version_clone,
-                        host: &ipv6_address_clone,
-                        port: https_port_clone,
-                        cert_path: &cert_path_ipv6,
-                        key_path: &key_path_ipv6,
-                        config: &config_clone,
-                        pool: &pool_clone,
-                        http_port,
-                    });
 
                     if let Err(e) = https_server_ipv6.run().await {
                         error!("HTTPS IPv6服务器失败: {:?}", e);

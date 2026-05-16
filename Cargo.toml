@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.8.82"
+version = "0.8.83"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -18,16 +18,6 @@ rustls-pki-types = "1.14.0"
 pem = "3.0.6"
 tokio-rustls = "0.26.4"
 rcgen = "0.14.7"
-
-quinn = "0.11.9"
-quinn-proto = "0.11.14"
-quinn-udp = "0.6.1"
-
-h3 = "0.0.8"
-h3-quinn = "0.0.10"
-
-bytes = "1.11.1"
-http = "1.4.0"
 
 # SQLx PostgreSQL驱动
 sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json", "macros"] }

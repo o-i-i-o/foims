@@ -13,7 +13,6 @@ system:
   http_version: "HTTP version: {{version}}"
   cert_type: "Certificate type: {{type}}"
   cert_generated: "Self-signed certificate generated successfully"
-  http3_server_started: "HTTP/3 server started successfully"
   connection_error: "Connection error: {{error}}"
   stream_error: "Stream error: {{error}}"
 

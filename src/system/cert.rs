@@ -356,7 +356,7 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
     Ok((cert_path, key_path))
 }
 
-pub fn load_rustls_config(cert_path: &str, key_path: &str, http3_enabled: bool) -> io::Result<rustls::ServerConfig> {
+pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls::ServerConfig> {
     let cert_data = std::fs::read(cert_path)?;
     let key_data = std::fs::read(key_path)?;
 
@@ -389,11 +389,7 @@ pub fn load_rustls_config(cert_path: &str, key_path: &str, http3_enabled: bool) 
         .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-    if http3_enabled {
-        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"h3".to_vec()];
-    } else {
-        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    }
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
     Ok(config)
 }

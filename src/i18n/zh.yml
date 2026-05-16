@@ -13,7 +13,6 @@ system:
   http_version: "HTTP版本: {{version}}"
   cert_type: "证书类型: {{type}}"
   cert_generated: "自签名证书生成成功"
-  http3_server_started: "HTTP/3服务器启动成功"
   connection_error: "连接错误: {{error}}"
   stream_error: "流错误: {{error}}"
 
