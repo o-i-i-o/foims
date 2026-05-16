@@ -21,7 +21,7 @@ export class SVGDataManager {
     }
   }
 
-  async fetchIpManager() {
+  async fetchIps() {
     try {
       const result = await this.apiGet("/api/resources/ip");
       if (result.success && result.data) {
@@ -90,7 +90,7 @@ export class SVGDataManager {
         const [layoutResult, workstations, ipManagers] = await Promise.all([
           this.apiGet(`/api/resources/layouts/workstation/${id}`),
           this.fetchWorkstationsByRoom(id),
-          this.fetchIpManager()
+          this.fetchIps()
         ]);
         
         const ipMap = new Map();

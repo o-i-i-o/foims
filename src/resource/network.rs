@@ -821,7 +821,7 @@ pub async fn delete_network(
 
     // 检查是否有IP管理关联
     let ip_count = match sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM ip_managers WHERE network_id = $1",
+        "SELECT COUNT(*) FROM ips WHERE network_id = $1",
     )
     .bind(id)
     .fetch_one(pool.get_conn())

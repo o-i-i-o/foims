@@ -11,8 +11,6 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-// 机柜相关路由
-// 获取所有机柜（支持搜索和分页）
 pub async fn get_cabinets(
     pool: web::Data<DbPool>,
     query: web::Query<HashMap<String, String>>,
@@ -62,7 +60,7 @@ pub async fn get_cabinets(
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2")
+            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2")
         )
         .bind(page_size)
         .bind(offset)
@@ -93,7 +91,7 @@ pub async fn get_cabinets(
             };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3")
+            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3")
         )
         .bind(parsed_room_id)
         .bind(page_size)
@@ -128,7 +126,7 @@ pub async fn get_cabinets(
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4")
+            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4")
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
@@ -162,7 +160,7 @@ pub async fn get_cabinets(
         };
 
         let cabinets = match sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3")
+            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3")
         )
         .bind(&search_pattern)
         .bind(page_size)
@@ -184,27 +182,6 @@ pub async fn get_cabinets(
     let mut cabinets_with_networks = Vec::new();
 
     for cabinet in cabinets {
-        // 获取机柜关联的网络（从房间继承所有网络）
-        let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-            r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-               FROM rooms r 
-               JOIN room_networks rn ON r.id = rn.room_id
-               JOIN network_cidrs n ON rn.network_id = n.id 
-               JOIN network_regions nr ON n.network_region_id = nr.id 
-               WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-               AND r.room_type = 'DATA_CENTER'",
-        )
-        .bind(cabinet.id)
-        .fetch_all(pool.get_conn())
-        .await
-        {
-            Ok(networks) => networks,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
-
         let position_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
                 .bind(cabinet.id)
@@ -224,8 +201,6 @@ pub async fn get_cabinets(
             room_id: cabinet.room_id,
             room_name,
             capacity: cabinet.capacity,
-            network_id: cabinet.network_id,
-            networks: cabinet_networks,
             position_count,
             description: cabinet.description,
             created_at: cabinet.created_at,
@@ -266,11 +241,11 @@ pub async fn get_cabinets_by_network_region(
 
     let cabinets = if let Some(network_id) = network_id_filter {
         sqlx::query_as::<_, Cabinet>(
-            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at, c.updated_at
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
-               WHERE c.network_id = $1 OR rn.network_id = $1
+               WHERE rn.network_id = $1
                ORDER BY c.name"
         )
         .bind(network_id)
@@ -278,14 +253,12 @@ pub async fn get_cabinets_by_network_region(
         .await
     } else {
         sqlx::query_as::<_, Cabinet>(
-            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.network_id, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at, c.updated_at
                FROM cabinets c
-               LEFT JOIN network_cidrs nc1 ON c.network_id = nc1.id
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
-               LEFT JOIN network_cidrs nc2 ON rn.network_id = nc2.id
-               WHERE nc1.network_region_id = $1 
-                  OR nc2.network_region_id = $1
+               LEFT JOIN network_cidrs nc ON rn.network_id = nc.id
+               WHERE nc.network_region_id = $1
                ORDER BY c.name"
         )
         .bind(region_id)
@@ -304,21 +277,18 @@ pub async fn get_cabinets_by_network_region(
     Ok(HttpResponse::Ok().json(ApiResponse::success(cabinets, "机柜获取成功")))
 }
 
-// 创建机柜
 pub async fn create_cabinet(
     pool: web::Data<DbPool>,
     req: web::Json<CabinetCreate>,
     http_req: HttpRequest,
     config: web::Data<Config>,
 ) -> Result<HttpResponse> {
-    // 验证创建机柜请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
-    // 检查机柜名称是否已存在
     let existing_cabinet = match sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2",
     )
@@ -344,16 +314,14 @@ pub async fn create_cabinet(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // 创建机柜
     if let Err(err) = sqlx::query(
-        "INSERT INTO cabinets (id, name, room_id, capacity, network_id, description, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO cabinets (id, name, room_id, capacity, description, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
-    .bind(req.network_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -364,25 +332,21 @@ pub async fn create_cabinet(
             .json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
     }
 
-    // 返回创建的机柜
     let cabinet = Cabinet {
         id,
         name: req.name.clone(),
         room_id: req.room_id,
         capacity: req.capacity,
-        network_id: req.network_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
     };
 
-    // 记录操作日志
     let details = serde_json::json!({
         "name": cabinet.name,
         "room_id": cabinet.room_id,
         "capacity": cabinet.capacity,
-        "description": cabinet.description,
-        "network_id": req.network_id
+        "description": cabinet.description
     });
     let _ = log_system_operation(
         pool.get_conn(),
@@ -399,16 +363,14 @@ pub async fn create_cabinet(
     Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜创建成功")))
 }
 
-// 获取单个机柜
 pub async fn get_cabinet(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 获取机柜基本信息
     let cabinet = match sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
         Ok(Some(cabinet)) => cabinet,
@@ -420,28 +382,6 @@ pub async fn get_cabinet(
         }
     };
 
-    // 获取机柜关联的网络（从房间继承所有网络）
-    let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
-        r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
-           FROM rooms r 
-           JOIN room_networks rn ON r.id = rn.room_id
-           JOIN network_cidrs n ON rn.network_id = n.id 
-           JOIN network_regions nr ON n.network_region_id = nr.id 
-           WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-           AND r.room_type = 'DATA_CENTER'",
-    )
-    .bind(id)
-    .fetch_all(pool.get_conn())
-    .await
-    {
-        Ok(networks) => networks,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-        }
-    };
-
-    // 创建带网络信息的机柜对象
     let position_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(cabinet.id)
@@ -461,8 +401,6 @@ pub async fn get_cabinet(
         room_id: cabinet.room_id,
         room_name,
         capacity: cabinet.capacity,
-        network_id: cabinet.network_id,
-        networks: cabinet_networks,
         position_count,
         description: cabinet.description,
         created_at: cabinet.created_at,
@@ -477,7 +415,6 @@ pub async fn get_cabinet(
     )
 }
 
-// 更新机柜
 pub async fn update_cabinet(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -487,7 +424,6 @@ pub async fn update_cabinet(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 验证更新机柜请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
@@ -496,7 +432,6 @@ pub async fn update_cabinet(
         );
     }
 
-    // 检查机柜是否存在
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
@@ -519,21 +454,18 @@ pub async fn update_cabinet(
 
     let now = Utc::now();
 
-    // 更新机柜基本信息
     if let Err(err) = sqlx::query(
         "UPDATE cabinets SET 
          name = COALESCE($1, name), 
          room_id = COALESCE($2, room_id), 
          capacity = COALESCE($3, capacity), 
-         network_id = COALESCE($4, network_id), 
-         description = COALESCE($5, description), 
-         updated_at = $6 
-         WHERE id = $7",
+         description = COALESCE($4, description), 
+         updated_at = $5 
+         WHERE id = $6",
     )
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
-    .bind(req.network_id)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -544,9 +476,8 @@ pub async fn update_cabinet(
             .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
     }
 
-    // 返回更新后的机柜
     let cabinet = match sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, network_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_one(pool.get_conn()).await {
         Ok(cabinet) => cabinet,
@@ -555,7 +486,6 @@ pub async fn update_cabinet(
         }
     };
 
-    // 记录操作日志
     let details = serde_json::json!({
         "name": cabinet.name,
         "room_id": cabinet.room_id,
@@ -577,7 +507,6 @@ pub async fn update_cabinet(
     Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜更新成功")))
 }
 
-// 删除机柜
 pub async fn delete_cabinet(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -586,7 +515,6 @@ pub async fn delete_cabinet(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 检查机柜是否存在
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
@@ -607,7 +535,6 @@ pub async fn delete_cabinet(
         return Ok(HttpResponse::NotFound().json(ApiResponse::<Cabinet>::error("机柜未找到")));
     }
 
-    // 检查是否有机位关联到该机柜
     let position_count =
         match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(id)
@@ -632,7 +559,6 @@ pub async fn delete_cabinet(
         );
     }
 
-    // 删除机柜
     if let Err(err) = sqlx::query("DELETE FROM cabinets WHERE id = $1")
         .bind(id)
         .execute(pool.get_conn())
@@ -645,7 +571,6 @@ pub async fn delete_cabinet(
         );
     }
 
-    // 记录操作日志
     let details = serde_json::json!({
         "cabinet_id": id.to_string()
     });
@@ -664,14 +589,12 @@ pub async fn delete_cabinet(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜删除成功")))
 }
 
-// 获取机柜关联的网段
 pub async fn get_cabinet_networks(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 检查机柜是否存在
     let existing_cabinet =
         match sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
             .bind(id)
@@ -692,7 +615,6 @@ pub async fn get_cabinet_networks(
         return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("机柜未找到")));
     }
 
-    // 获取机柜关联的网络（从房间继承所有网络）
     let cabinet_networks = match sqlx::query_as::<_, NetworkInfo>(
         r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
            FROM rooms r 

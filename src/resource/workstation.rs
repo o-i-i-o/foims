@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{
-    ApiResponse, IpManager, Workstation, WorkstationCreate, WorkstationPortWithSwitchPort,
+    ApiResponse, IpManager, Workstation, WorkstationCreate,
     WorkstationUpdate, WorkstationWithDetails,
 };
 use crate::resource::ip::detect_ip_version;
@@ -203,30 +203,6 @@ pub async fn get_workstations(
         workstation_ids.push(id);
     }
 
-    let all_ports = if workstation_ids.is_empty() {
-        Vec::new()
-    } else {
-        match sqlx::query_as::<_, WorkstationPortWithSwitchPort>(
-            r"SELECT wp.id, wp.workstation_id, wp.switch_port_id, sp.switch_id, COALESCE(s.name, '未知交换机') as switch_name, COALESCE(sp.port_number, '') as port_number, sp.port_name, wp.created_at::TIMESTAMPTZ, wp.updated_at::TIMESTAMPTZ 
-               FROM workstation_ports wp 
-               LEFT JOIN switch_ports sp ON wp.switch_port_id = sp.id 
-               LEFT JOIN switches s ON sp.switch_id = s.id
-               WHERE wp.workstation_id = ANY($1)"
-        ).bind(&workstation_ids)
-        .fetch_all(pool.get_conn()).await {
-            Ok(ports) => ports,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        }
-    };
-
-    let mut ports_map: std::collections::HashMap<Uuid, Vec<WorkstationPortWithSwitchPort>> =
-        std::collections::HashMap::new();
-    for port in all_ports {
-        ports_map.entry(port.workstation_id).or_default().push(port);
-    }
-
     let mut workstations_with_details = Vec::new();
 
     for row in workstations_basic {
@@ -343,7 +319,7 @@ pub async fn create_workstation(
 
             let existing_mapping: Option<Uuid> =
                 match sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
+                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
                 )
                 .bind(&ip.ip_address)
                 .bind(ip.network_id)
@@ -395,13 +371,12 @@ pub async fn create_workstation(
             let ip_version = detect_ip_version(&ip.ip_address);
 
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(Some(id))
             .bind(ip.position_id)
-            .bind(ip.switch_id)
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
             .bind(ip.network_id)
@@ -483,12 +458,12 @@ pub async fn get_workstation(
 
     let workstation_ips = match sqlx::query_as::<_, IpManager>(
         r"SELECT 
-            m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.switch_port_id,
             m.device_type, m.network_id, 
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
-            m.status, m.last_seen, m.created_at, m.updated_at
-        FROM ip_managers m
+            m.status, m.last_seen, m.created_at, m.updated_at, m.last_mac
+        FROM ips m
         WHERE m.workstation_id = $1
         ORDER BY m.ip_address",
     )
@@ -607,7 +582,7 @@ pub async fn update_workstation(
     }
 
     if let Some(ips) = &req.ips {
-        if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE workstation_id = $1")
+        if let Err(err) = sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await
@@ -624,8 +599,8 @@ pub async fn update_workstation(
             };
 
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
@@ -635,7 +610,6 @@ pub async fn update_workstation(
             .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
-            .bind(ip.switch_id)
             .bind(ip.switch_port_id)
             .bind("active")
             .bind(now)
@@ -666,9 +640,9 @@ pub async fn update_workstation(
     };
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
-           host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
-           FROM ip_managers WHERE workstation_id = $1"
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, 
+           host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
+           FROM ips WHERE workstation_id = $1"
     ).bind(id)
     .fetch_all(pool.get_conn()).await.unwrap_or_default();
 
@@ -748,7 +722,7 @@ pub async fn delete_workstation(
         return Ok(HttpResponse::NotFound().json(ApiResponse::<Workstation>::error("工位未找到")));
     }
 
-    if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE workstation_id = $1")
+    if let Err(err) = sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
         .bind(id)
         .execute(&mut *tx)
         .await
@@ -760,7 +734,7 @@ pub async fn delete_workstation(
         );
     }
 
-    if let Err(err) = sqlx::query("DELETE FROM svg_layouts WHERE element_id = $1")
+    if let Err(err) = sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
         .bind(id)
         .execute(&mut *tx)
         .await

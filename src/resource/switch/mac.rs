@@ -343,8 +343,8 @@ async fn fetch_switch_arp(
     arp_entries: &mut HashMap<String, String>,
 ) -> Result<(), SnmpError> {
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers
-           WHERE switch_id = $1 AND device_type = 'switch'
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch.id)
@@ -391,8 +391,8 @@ pub async fn get_mac_from_switch(
     .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers
-           WHERE switch_id = $1 AND device_type = 'switch'
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
@@ -446,8 +446,8 @@ pub async fn get_all_arp_entries(
     .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers
-           WHERE switch_id = $1 AND device_type = 'switch'
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
@@ -500,8 +500,8 @@ pub async fn get_switch_mac_table(
     };
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers
-           WHERE switch_id = $1 AND device_type = 'switch'
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)

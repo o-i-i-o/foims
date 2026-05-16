@@ -107,7 +107,7 @@ pub async fn get_all_switch_ports(
             r"SELECT 
                 sp.id, sp.switch_id, s.name as switch_name, 
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                     ''
                 ) as switch_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -128,7 +128,7 @@ pub async fn get_all_switch_ports(
             r"SELECT 
                 sp.id, sp.switch_id, s.name as switch_name, 
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                     ''
                 ) as switch_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -277,7 +277,7 @@ pub async fn get_switch_port(
         r"SELECT 
             sp.id, sp.switch_id, s.name as switch_name, 
             COALESCE(
-                (SELECT host(im.ip_address) FROM ip_managers im WHERE im.switch_id = s.id LIMIT 1),
+                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                 ''
             ) as switch_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -404,7 +404,7 @@ pub async fn delete_switch_port(
     }
 
     let has_workstation = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM workstation_ports WHERE switch_port_id = $1)",
+        "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND workstation_id IS NOT NULL)",
     )
     .bind(port_id)
     .fetch_one(pool.get_conn())
@@ -418,7 +418,7 @@ pub async fn delete_switch_port(
     }
 
     let has_cabinet_position = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM position_ports WHERE switch_port_id = $1)",
+        "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND position_id IS NOT NULL)",
     )
     .bind(port_id)
     .fetch_one(pool.get_conn())
@@ -491,8 +491,8 @@ pub async fn sync_ports_from_snmp(
     };
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers 
-           WHERE switch_id = $1 AND device_type = 'switch' 
+        r"SELECT host(ip_address) FROM ips 
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)

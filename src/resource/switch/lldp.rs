@@ -29,8 +29,8 @@ pub async fn get_lldp_neighbors(
     .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ip_managers 
-           WHERE switch_id = $1 AND device_type = 'switch' 
+        r"SELECT host(ip_address) FROM ips 
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)

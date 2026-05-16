@@ -432,32 +432,7 @@ pub struct Cabinet {
     pub name: String,
     pub room_id: Uuid,
     pub capacity: i32,
-    pub network_id: Option<Uuid>,
     pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct CabinetNetwork {
-    pub id: Uuid,
-    pub cabinet_id: Uuid,
-    pub network_id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct CabinetNetworkDetail {
-    pub cabinet_id: Uuid,
-    pub cabinet_name: String,
-    pub room_id: Uuid,
-    pub capacity: i32,
-    pub description: Option<String>,
-    pub network_id: Option<Uuid>,
-    pub network_name: Option<String>,
-    pub network_region: Option<String>,
-    pub network_region_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -469,8 +444,6 @@ pub struct CabinetWithNetworks {
     pub room_id: Uuid,
     pub room_name: Option<String>,
     pub capacity: i32,
-    pub network_id: Option<Uuid>,
-    pub networks: Vec<NetworkInfo>,
     pub position_count: i64,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -484,7 +457,6 @@ pub struct CabinetCreate {
     pub room_id: Uuid,
     #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
     pub capacity: i32,
-    pub network_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -496,7 +468,6 @@ pub struct CabinetUpdate {
     pub room_id: Option<Uuid>,
     #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
     pub capacity: Option<i32>,
-    pub network_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -507,52 +478,27 @@ pub struct CabinetUpdate {
 pub struct CabinetPosition {
     pub id: Uuid,
     pub name: String,
-    pub cabinet_id: Uuid,
+    pub cabinet_id: Option<Uuid>,
     pub start_u: i32,
     pub end_u: i32,
-    pub network_id: Option<Uuid>,
-    pub device_type: String,
-    pub device_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct CabinetPositionPort {
-    pub id: Uuid,
-    pub position_id: Uuid,
-    pub switch_port_id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct CabinetPositionPortWithSwitchPort {
-    pub id: Uuid,
-    pub position_id: Uuid,
-    pub switch_port_id: Uuid,
-    pub switch_id: Uuid,
-    pub switch_name: String,
-    pub port_number: String,
-    pub port_name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub device_type: Option<String>,
+    pub device_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CabinetPositionWithDetails {
     pub id: Uuid,
     pub name: String,
-    pub cabinet_id: Uuid,
-    pub cabinet_name: String,
+    pub cabinet_id: Option<Uuid>,
+    pub cabinet_name: Option<String>,
     pub start_u: i32,
     pub end_u: i32,
-    pub network_id: Option<Uuid>,
-    pub device_type: String,
+    pub device_type: Option<String>,
     pub device_id: Option<Uuid>,
     pub ips: Vec<IpManager>,
-    pub ports: Vec<CabinetPositionPortWithSwitchPort>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -562,20 +508,14 @@ pub struct CabinetPositionWithDetails {
 pub struct CabinetPositionCreate {
     #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
     pub name: String,
-    pub cabinet_id: Uuid,
+    pub cabinet_id: Option<Uuid>,
     #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
     pub start_u: i32,
     #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
     pub end_u: i32,
-    pub network_id: Option<Uuid>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct CabinetPositionPortCreate {
-    pub switch_port_id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -587,7 +527,6 @@ pub struct CabinetPositionUpdate {
     pub start_u: Option<i32>,
     #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
     pub end_u: Option<i32>,
-    pub network_id: Option<Uuid>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -603,40 +542,6 @@ pub struct Workstation {
     pub room_name: Option<String>,
     pub manager: Option<String>,
     pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct WorkstationPort {
-    pub id: Uuid,
-    pub workstation_id: Uuid,
-    pub workstation_name: Option<String>,
-    pub switch_port_id: Uuid,
-    pub switch_port_number: Option<String>,
-    pub switch_name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct WorkstationPortWithSwitchPort {
-    pub id: Uuid,
-    pub workstation_id: Uuid,
-    pub switch_port_id: Uuid,
-    pub switch_id: Option<Uuid>,
-    pub switch_name: String,
-    pub port_number: String,
-    pub port_name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct WorkstationNetwork {
-    pub id: Uuid,
-    pub workstation_id: Uuid,
-    pub network_id: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -667,11 +572,6 @@ pub struct WorkstationCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct WorkstationPortCreate {
-    pub switch_port_id: Uuid,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct WorkstationUpdate {
     #[validate(length(min = 1, max = 50, message = "工位名称长度必须在1到50个字符之间"))]
     pub name: Option<String>,
@@ -689,7 +589,6 @@ pub struct IpManager {
     pub id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Uuid,
@@ -701,6 +600,7 @@ pub struct IpManager {
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_mac: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -708,7 +608,6 @@ pub struct IpManagerWithNames {
     pub id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
@@ -727,6 +626,7 @@ pub struct IpManagerWithNames {
     pub hostname: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
+    pub last_mac: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -735,7 +635,6 @@ pub struct IpManagerWithNames {
 pub struct IpManagerCreate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Uuid,
@@ -752,7 +651,6 @@ pub struct AutoAssignIpRequest {
     pub network_id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
     pub mac_address: Option<String>,
@@ -770,7 +668,6 @@ pub struct PullIpManagersRequest {
 pub struct IpManagerUpdate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Option<Uuid>,
@@ -790,8 +687,6 @@ pub struct IpManagerUpdate {
 pub struct Switch {
     pub id: Uuid,
     pub name: String,
-    pub network_region_id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
     pub model: Option<String>,
     pub vendor: Option<String>,
     pub location: Option<String>,
@@ -805,20 +700,19 @@ pub struct Switch {
     pub snmp_port: i32,
     pub parent_switch_id: Option<Uuid>,
     pub parent_port_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub start_u: Option<i32>,
-    pub end_u: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub position_id: Option<Uuid>,
+    pub cabinet_id: Option<Uuid>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SwitchWithParent {
     pub id: Uuid,
     pub name: String,
-    pub network_region_id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
     pub model: Option<String>,
     pub vendor: Option<String>,
     pub location: Option<String>,
@@ -834,10 +728,13 @@ pub struct SwitchWithParent {
     pub parent_switch_name: Option<String>,
     pub parent_port_id: Option<Uuid>,
     pub parent_port_number: Option<String>,
+    pub position_id: Option<Uuid>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
     pub start_u: Option<i32>,
     pub end_u: Option<i32>,
+    pub position_network_id: Option<Uuid>,
+    pub network_region_id: Option<Uuid>,
     pub description: Option<String>,
     pub device_type: Option<String>,
     pub ip_address: Option<String>,
@@ -859,8 +756,6 @@ pub struct SwitchPosition {
 pub struct SwitchCreate {
     #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
     pub name: String,
-    pub network_region_id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
     #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
     pub model: Option<String>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
@@ -884,6 +779,7 @@ pub struct SwitchCreate {
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub position_id: Option<Uuid>,
     pub cabinet_id: Option<Uuid>,
     #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
     pub start_u: Option<i32>,
@@ -895,8 +791,6 @@ pub struct SwitchCreate {
 pub struct SwitchUpdate {
     #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
-    pub network_region_id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
     #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
     pub model: Option<String>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
@@ -920,6 +814,7 @@ pub struct SwitchUpdate {
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub position_id: Option<Uuid>,
     pub cabinet_id: Option<Uuid>,
     #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
     pub start_u: Option<i32>,

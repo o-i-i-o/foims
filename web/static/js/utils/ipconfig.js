@@ -395,9 +395,6 @@ export class IpConfigManager {
       const networkSelect = row.querySelector(`.${this.config.classPrefix}-ip-network-select`);
       const ipAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-address-input`);
       const macAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-mac-address-input`);
-      const switchSelect = row.querySelector(`.${this.config.classPrefix}-switch-select`);
-      const switchPortSelect = row.querySelector(`.${this.config.classPrefix}-switch-port-select`);
-
       if (networkSelect && ipAddressInput) {
         const networkId = networkSelect.value;
         const ipAddress = ipAddressInput.value ? ipAddressInput.value.trim() : '';
@@ -409,25 +406,12 @@ export class IpConfigManager {
             mac_address: macAddressInput && macAddressInput.value ? macAddressInput.value.trim() : null,
           };
 
-          const switchId = switchSelect?.value || '';
-          const portId = switchPortSelect?.value || '';
-
           if (this.resourceType === 'switch') {
             ipData.device_type = 'switch';
-            if (switchId) ipData.parent_switch_id = switchId;
-            if (portId) ipData.parent_port_id = portId;
           } else if (this.resourceType === 'cabinet-position') {
-            if (switchId) {
-              ipData.device_type = 'switch';
-              ipData.switch_id = switchId;
-              if (portId) ipData.switch_port_id = portId;
-            } else {
-              ipData.device_type = 'cabinet_position';
-            }
+            ipData.device_type = 'cabinet_position';
           } else if (this.resourceType === 'workstation') {
             ipData.device_type = 'workstation';
-            if (switchId) ipData.switch_id = switchId;
-            if (portId) ipData.switch_port_id = portId;
           }
           
           if (networkRegionSelect && networkRegionSelect.value) {
@@ -456,17 +440,12 @@ export class IpConfigManager {
       const networkSelect = row.querySelector(`.${this.config.classPrefix}-ip-network-select`);
       const ipAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-address-input`);
       const macAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-mac-address-input`);
-      const switchSelect = row.querySelector(`.${this.config.classPrefix}-switch-select`);
-      const switchPortSelect = row.querySelector(`.${this.config.classPrefix}-switch-port-select`);
-
       const networkId = networkSelect?.value || '';
       const ipAddress = ipAddressInput?.value?.trim() || '';
       const macAddress = macAddressInput?.value?.trim() || null;
-      const switchId = switchSelect?.value || '';
-      const portId = switchPortSelect?.value || '';
       const networkRegionId = networkRegionSelect?.value || '';
 
-      const hasData = networkId || ipAddress || macAddress || switchId || portId;
+      const hasData = networkId || ipAddress || macAddress;
       
       if (!hasData) return;
 
@@ -490,11 +469,8 @@ export class IpConfigManager {
       }
 
       if (this.config.parentSwitchRequired) {
-        if (!switchId) {
-          errors.push(`第${rowNum}行：请选择上级交换机`);
-        }
-        if (!portId) {
-          errors.push(`第${rowNum}行：请选择上级端口`);
+        if (!networkId) {
+          errors.push(`第${rowNum}行：请选择网络`);
         }
       }
 
@@ -506,12 +482,13 @@ export class IpConfigManager {
         };
 
         if (this.resourceType === 'switch') {
-          if (switchId) ipData.parent_switch_id = switchId;
-          if (portId) ipData.parent_port_id = portId;
-        } else {
-          if (switchId) ipData.switch_id = switchId;
-          if (portId) ipData.switch_port_id = portId;
+          ipData.device_type = 'switch';
+        } else if (this.resourceType === 'cabinet-position') {
+          ipData.device_type = 'cabinet_position';
+        } else if (this.resourceType === 'workstation') {
+          ipData.device_type = 'workstation';
         }
+
         if (networkRegionId) {
           ipData.network_region_id = networkRegionId;
         }
@@ -668,20 +645,6 @@ export class IpConfigManager {
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group">
-          <label>${switchLabel} ${requiredMark}</label>
-          <select class="${this.config.classPrefix}-switch-select form-control">
-            <option value="">选择交换机</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>${portLabel} ${requiredMark}</label>
-          <select class="${this.config.classPrefix}-switch-port-select form-control">
-            <option value="">选择端口</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
         <div class="form-group" style="display: flex; align-items: flex-end; gap: 8px;">
           <button type="button" class="btn btn-danger btn-sm remove-ip-btn">删除</button>
           <button type="button" class="btn btn-secondary btn-sm add-ip-btn" data-i18n="ip.add_ip">添加IP地址</button>
@@ -708,8 +671,6 @@ export class IpConfigManager {
     const networkSelect = row.querySelector(`.${this.config.classPrefix}-ip-network-select`);
     const ipInput = row.querySelector(`.${this.config.classPrefix}-ip-address-input`);
     const macInput = row.querySelector(`.${this.config.classPrefix}-ip-mac-address-input`);
-    const switchSelect = row.querySelector(`.${this.config.classPrefix}-switch-select`);
-    const portSelect = row.querySelector(`.${this.config.classPrefix}-switch-port-select`);
 
     if (regionSelect && networkSelect) {
       regionSelect.addEventListener("change", async () => {
@@ -743,8 +704,6 @@ export class IpConfigManager {
         if (filtered.length === 1) {
           networkSelect.value = filtered[0].id;
         }
-
-        this.filterSwitchesByRegion(switchSelect, portSelect, regionId);
         
         if (this.resourceType === 'switch') {
           dispatchNetworkRegionChange(regionId, regionName);
@@ -757,15 +716,12 @@ export class IpConfigManager {
         const networkId = networkSelect.value;
         const network = this.networks.find(n => n.id === networkId);
         if (network) {
-          this.filterSwitchesByRegion(switchSelect, portSelect, network.network_region_id);
           if (this.resourceType === 'switch') {
             dispatchNetworkChange(networkId, network.name, network.network_region_id);
           }
         }
       });
     }
-
-    await this.loadSwitches(switchSelect, portSelect);
 
     if (initialData) {
       let regionId = initialData.network_region_id;
@@ -806,37 +762,6 @@ export class IpConfigManager {
 
       if (initialData.ip_address && ipInput) ipInput.value = initialData.ip_address;
       if (initialData.mac_address && macInput) macInput.value = initialData.mac_address;
-
-      const switchId = initialData.parent_switch_id || initialData.switch_id;
-      const portId = initialData.parent_port_id || initialData.switch_port_id || initialData.port_id;
-
-      if (regionId) {
-        this.filterSwitchesByRegion(switchSelect, portSelect, regionId);
-      }
-
-      if (switchId && switchSelect) {
-        const normalizedSwitchId = typeof switchId === 'string' ? switchId.toLowerCase() : switchId;
-        
-        const switchOptions = switchSelect.querySelectorAll('option');
-        for (const opt of switchOptions) {
-          if (opt.value && opt.value.toLowerCase() === normalizedSwitchId) {
-            switchSelect.value = opt.value;
-            break;
-          }
-        }
-      }
-
-      if (portId && portSelect) {
-        await this.handleSwitchChange(switchSelect, portSelect);
-        const normalizedPortId = typeof portId === 'string' ? portId.toLowerCase() : portId;
-        const portOptions = portSelect.querySelectorAll('option');
-        for (const opt of portOptions) {
-          if (opt.value && opt.value.toLowerCase() === normalizedPortId) {
-            portSelect.value = opt.value;
-            break;
-          }
-        }
-      }
     } else {
       if (regionSelect) {
         regionSelect.dispatchEvent(new Event('change'));

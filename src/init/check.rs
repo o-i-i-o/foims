@@ -10,15 +10,12 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "room_networks",
         "cabinets",
         "workstations",
-        "workstation_ports",
         "positions",
-        "position_ports",
         "switches",
         "switch_ports",
         "switch_macs",
         "switch_lldps",
-        "ip_managers",
-        "mac_history",
+        "ips",
         "operation_logs",
         "task_logs",
         "login_logs",
@@ -27,7 +24,8 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "notifications",
         "system_configs",
         "scheduled_tasks",
-        "svg_layouts",
+        "workstation_layouts",
+        "cabinet_layouts",
     ]
 }
 
@@ -117,16 +115,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "workstation_ports",
-        vec![
-            "id",
-            "workstation_id",
-            "switch_port_id",
-            "created_at",
-            "updated_at",
-        ],
-    );
-    columns.insert(
         "positions",
         vec![
             "id",
@@ -138,16 +126,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "description",
             "device_type",
             "device_id",
-            "created_at",
-            "updated_at",
-        ],
-    );
-    columns.insert(
-        "position_ports",
-        vec![
-            "id",
-            "position_id",
-            "switch_port_id",
             "created_at",
             "updated_at",
         ],
@@ -225,7 +203,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "ip_managers",
+        "ips",
         vec![
             "id",
             "workstation_id",
@@ -242,23 +220,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "last_seen",
             "created_at",
             "updated_at",
-        ],
-    );
-    columns.insert(
-        "mac_history",
-        vec![
-            "id",
-            "mac_address",
-            "ip_address",
-            "ip_manager_id",
-            "device_type",
-            "workstation_id",
-            "position_id",
-            "switch_id",
-            "switch_port_id",
-            "network_id",
-            "change_type",
-            "created_at",
         ],
     );
     columns.insert(
@@ -355,14 +316,24 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "svg_layouts",
+        "workstation_layouts",
         vec![
             "id",
-            "layout_type",
-            "room_id",
-            "network_region_id",
-            "element_id",
-            "element_type",
+            "workstation_id",
+            "x",
+            "y",
+            "width",
+            "height",
+            "rotation",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "cabinet_layouts",
+        vec![
+            "id",
+            "cabinet_id",
             "x",
             "y",
             "width",

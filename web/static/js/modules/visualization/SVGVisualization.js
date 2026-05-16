@@ -31,7 +31,7 @@ export class SVGVisualization {
       this.core.elementsGroup.innerHTML = "";
 
       const workstations = await this.dataManager.fetchWorkstationsByRoom(roomId);
-      const ipManagers = await this.dataManager.fetchIpManager();
+      const ipManagers = await this.dataManager.fetchIps();
       
       const ipMap = new Map();
       if (Array.isArray(ipManagers)) {

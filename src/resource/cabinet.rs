@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::models::{
-    ApiResponse, CabinetPosition, CabinetPositionCreate, CabinetPositionPortWithSwitchPort,
+    ApiResponse, CabinetPosition, CabinetPositionCreate,
     CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
@@ -104,7 +104,7 @@ pub async fn get_positions(
                     &format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                                  p.start_u, p.end_u, p.network_id, p.description, 
+                                  p.start_u, p.end_u, p.description, 
                                   p.device_type, p.device_id,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
@@ -123,7 +123,7 @@ pub async fn get_positions(
                     &format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                                  p.start_u, p.end_u, p.network_id, p.description, 
+                                  p.start_u, p.end_u, p.description, 
                                   p.device_type, p.device_id,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
@@ -144,7 +144,7 @@ pub async fn get_positions(
                 &format!(
                     r"SELECT p.id, p.name, p.cabinet_id, 
                               COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                              p.start_u, p.end_u, p.network_id, p.description, 
+                              p.start_u, p.end_u, p.description, 
                               p.device_type, p.device_id,
                               p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                        FROM positions p 
@@ -169,7 +169,7 @@ pub async fn get_positions(
             &format!(
                 r"SELECT p.id, p.name, p.cabinet_id, 
                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
-                          p.start_u, p.end_u, p.network_id, p.description, 
+                          p.start_u, p.end_u, p.description, 
                           p.device_type, p.device_id,
                           p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                    FROM positions p 
@@ -194,47 +194,20 @@ pub async fn get_positions(
         position_ids.push(id);
     }
 
-    let all_ports = if position_ids.is_empty() {
-        Vec::new()
-    } else {
-        match sqlx::query_as::<_, CabinetPositionPortWithSwitchPort>(
-            r"SELECT cp.id, cp.position_id, cp.switch_port_id, sp.switch_id, s.name as switch_name, sp.port_number, sp.port_name, cp.created_at::TIMESTAMPTZ, cp.updated_at::TIMESTAMPTZ 
-               FROM position_ports cp 
-               JOIN switch_ports sp ON cp.switch_port_id = sp.id 
-               JOIN switches s ON sp.switch_id = s.id
-               WHERE cp.position_id = ANY($1)"
-        ).bind(&position_ids)
-        .fetch_all(pool.get_conn()).await {
-            Ok(ports) => ports,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位端口失败"));
-            }
-        }
-    };
-
-    let mut ports_map: std::collections::HashMap<Uuid, Vec<CabinetPositionPortWithSwitchPort>> =
-        std::collections::HashMap::new();
-    for port in all_ports {
-        ports_map.entry(port.position_id).or_default().push(port);
-    }
-
     let mut positions_with_details = Vec::new();
 
     for row in positions_basic {
         let id: Uuid = row.get("id");
         let name: String = row.get("name");
-        let cabinet_id: Uuid = row.get("cabinet_id");
-        let cabinet_name: String = row.get("cabinet_name");
+        let cabinet_id: Option<Uuid> = row.get("cabinet_id");
+        let cabinet_name: Option<String> = row.get("cabinet_name");
         let start_u: i32 = row.get("start_u");
         let end_u: i32 = row.get("end_u");
-        let network_id: Option<Uuid> = row.get("network_id");
-        let device_type: String = row.get("device_type");
+        let device_type: Option<String> = row.get("device_type");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
         let device_id: Option<Uuid> = row.get("device_id");
-
-        let ports = ports_map.get(&id).cloned().unwrap_or_default();
 
         let position_with_details = CabinetPositionWithDetails {
             id,
@@ -243,11 +216,9 @@ pub async fn get_positions(
             cabinet_name,
             start_u,
             end_u,
-            network_id,
             device_type,
             device_id,
             ips: Vec::new(),
-            ports,
             description,
             created_at,
             updated_at,
@@ -336,7 +307,7 @@ pub async fn create_cabinet_position(
 
             let existing_mapping: Option<Uuid> =
                 match sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
+                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
                 )
                 .bind(&ip.ip_address)
                 .bind(ip.network_id)
@@ -383,13 +354,12 @@ pub async fn create_cabinet_position(
             let ip_version = detect_ip_version(&ip.ip_address);
 
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(ip.workstation_id)
             .bind(Some(id))
-            .bind(ip.switch_id)
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
             .bind(ip.network_id)
@@ -419,12 +389,11 @@ pub async fn create_cabinet_position(
         cabinet_id: req.cabinet_id,
         start_u: req.start_u,
         end_u: req.end_u,
-        network_id: req.network_id,
-        device_type: "cabinet_position".to_string(),
-        device_id: None,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
+        device_type: Some("cabinet_position".to_string()),
+        device_id: None,
     };
 
     let details = serde_json::json!({
@@ -462,7 +431,7 @@ pub async fn get_cabinet_position(
     let id = *id_path;
 
     let position_data = match sqlx::query(
-        r"SELECT id, name, cabinet_id, start_u, end_u, network_id, description, 
+        r"SELECT id, name, cabinet_id, start_u, end_u, description, 
                   device_type, device_id,
                   created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
            FROM positions WHERE id = $1",
@@ -481,23 +450,23 @@ pub async fn get_cabinet_position(
         }
     };
 
-    let device_type: String = position_data.get("device_type");
+    let device_type: Option<String> = position_data.get("device_type");
     let device_id: Option<Uuid> = position_data.get("device_id");
-    let is_switch = device_type == "switch";
+    let is_switch = device_type.as_deref() == Some("switch");
 
     let position_ips = if is_switch {
         match sqlx::query(
             r"SELECT 
-                m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
+                m.id, m.workstation_id, m.position_id, m.switch_port_id,
                 m.device_type, m.network_id, 
                 host(m.ip_address) as ip_address,
                 m.ip_version, m.mac_address, m.hostname,
                 m.status, m.last_seen, m.created_at, m.updated_at,
                 n.network_region_id, nr.name as network_region
-            FROM ip_managers m
+            FROM ips m
             LEFT JOIN network_cidrs n ON m.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-            WHERE m.switch_id = $1
+            WHERE m.position_id = (SELECT p.id FROM positions p WHERE p.device_type = 'switch' AND p.device_id = $1)
             ORDER BY m.ip_address",
         )
         .bind(device_id)
@@ -512,13 +481,13 @@ pub async fn get_cabinet_position(
     } else {
         match sqlx::query(
             r"SELECT 
-                m.id, m.workstation_id, m.position_id, m.switch_id, m.switch_port_id,
+                m.id, m.workstation_id, m.position_id, m.switch_port_id,
                 m.device_type, m.network_id, 
                 host(m.ip_address) as ip_address,
                 m.ip_version, m.mac_address, m.hostname,
                 m.status, m.last_seen, m.created_at, m.updated_at,
                 n.network_region_id, nr.name as network_region
-            FROM ip_managers m
+            FROM ips m
             LEFT JOIN network_cidrs n ON m.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
             WHERE m.position_id = $1
@@ -542,20 +511,19 @@ pub async fn get_cabinet_position(
                 "id": row.get::<Uuid, _>(0),
                 "workstation_id": row.get::<Option<Uuid>, _>(1),
                 "position_id": row.get::<Option<Uuid>, _>(2),
-                "switch_id": row.get::<Option<Uuid>, _>(3),
-                "switch_port_id": row.get::<Option<Uuid>, _>(4),
-                "device_type": row.get::<Option<String>, _>(5),
-                "network_id": row.get::<Uuid, _>(6),
-                "ip_address": row.get::<String, _>(7),
-                "ip_version": row.get::<i16, _>(8),
-                "mac_address": row.get::<Option<String>, _>(9),
-                "hostname": row.get::<Option<String>, _>(10),
-                "status": row.get::<String, _>(11),
-                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(13),
-                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(14),
-                "network_region_id": row.get::<Option<Uuid>, _>(15),
-                "network_region": row.get::<Option<String>, _>(16)
+                "switch_port_id": row.get::<Option<Uuid>, _>(3),
+                "device_type": row.get::<Option<String>, _>(4),
+                "network_id": row.get::<Uuid, _>(5),
+                "ip_address": row.get::<String, _>(6),
+                "ip_version": row.get::<i16, _>(7),
+                "mac_address": row.get::<Option<String>, _>(8),
+                "hostname": row.get::<Option<String>, _>(9),
+                "status": row.get::<String, _>(10),
+                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(11),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
+                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(13),
+                "network_region_id": row.get::<Option<Uuid>, _>(14),
+                "network_region": row.get::<Option<String>, _>(15)
             })
         })
         .collect();
@@ -577,15 +545,13 @@ pub async fn get_cabinet_position(
     let position_with_details = serde_json::json!({
         "id": position_data.get::<Uuid, _>("id"),
         "name": position_data.get::<String, _>("name"),
-        "cabinet_id": position_data.get::<Uuid, _>("cabinet_id"),
+        "cabinet_id": position_data.get::<Option<Uuid>, _>("cabinet_id"),
         "cabinet_name": cabinet_name,
         "start_u": position_data.get::<i32, _>("start_u"),
         "end_u": position_data.get::<i32, _>("end_u"),
-        "network_id": position_data.get::<Option<Uuid>, _>("network_id"),
         "device_type": device_type,
         "device_id": device_id,
         "ips": ips_with_region,
-        "ports": [],
         "description": position_data.get::<Option<String>, _>("description"),
         "created_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "updated_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
@@ -683,7 +649,7 @@ pub async fn update_cabinet_position(
     }
 
     if let Some(ips) = &req.ips {
-        if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
+        if let Err(err) = sqlx::query("DELETE FROM ips WHERE position_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await
@@ -700,8 +666,8 @@ pub async fn update_cabinet_position(
             };
 
             if let Err(err) = sqlx::query(
-                "INSERT INTO ip_managers (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
@@ -711,7 +677,6 @@ pub async fn update_cabinet_position(
             .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
-            .bind(ip.switch_id)
             .bind(ip.switch_port_id)
             .bind("active")
             .bind(now)
@@ -729,7 +694,7 @@ pub async fn update_cabinet_position(
     }
 
     let row = match sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.network_id, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
         FROM positions p 
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
         WHERE p.id = $1"
@@ -742,9 +707,9 @@ pub async fn update_cabinet_position(
     };
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, 
-           host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at
-           FROM ip_managers WHERE position_id = $1"
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, 
+           host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
+           FROM ips WHERE position_id = $1"
     ).bind(id)
     .fetch_all(pool.get_conn()).await.unwrap_or_default();
 
@@ -753,15 +718,12 @@ pub async fn update_cabinet_position(
         name: row.get("name"),
         cabinet_id: row.get("cabinet_id"),
         cabinet_name: row
-            .get::<Option<String>, _>("cabinet_name")
-            .unwrap_or_default(),
+            .get::<Option<String>, _>("cabinet_name"),
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
-        network_id: row.get("network_id"),
         device_type: row.get("device_type"),
         device_id: row.get("device_id"),
         ips,
-        ports: vec![],
         description: row.get("description"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
@@ -855,7 +817,7 @@ pub async fn delete_cabinet_position(
     }
 
     let has_switch: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM ip_managers im WHERE im.position_id = $1 AND im.switch_id IS NOT NULL)"
+        "SELECT EXISTS(SELECT 1 FROM positions p WHERE p.id = $1 AND p.device_type = 'switch')"
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -868,19 +830,20 @@ pub async fn delete_cabinet_position(
         )));
     }
 
-    let device_type: String = sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
+    let device_type: Option<String> = sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
         .bind(id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
-        .unwrap_or_else(|_| "cabinet_position".to_string());
+        .ok()
+        .flatten();
 
-    if device_type == "switch" {
+    if device_type.as_deref() == Some("switch") {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
             "该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机",
         )));
     }
 
-    if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE position_id = $1")
+    if let Err(err) = sqlx::query("DELETE FROM ips WHERE position_id = $1")
         .bind(id)
         .execute(&mut *tx)
         .await

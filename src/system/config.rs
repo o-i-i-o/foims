@@ -224,18 +224,18 @@ pub async fn get_dashboard_stats(pool: web::Data<DbPool>) -> Result<HttpResponse
     let (total_switches, total_ips, active_ips) = tokio::join!(
         sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM switches")
             .fetch_one(pool.get_conn()),
-        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM ip_managers")
+        sqlx::query_scalar::<sqlx::Postgres, i64>("SELECT COUNT(*) FROM ips")
             .fetch_one(pool.get_conn()),
         sqlx::query_scalar::<sqlx::Postgres, i64>(
-            "SELECT COUNT(*) FROM ip_managers WHERE status = 'active'"
+            "SELECT COUNT(*) FROM ips WHERE status = 'active'"
         )
         .fetch_one(pool.get_conn()),
     );
 
     let (ips_by_device_type, ips_by_status, rooms_by_type) = tokio::join!(
-        sqlx::query_as::<_, (String, i64)>("SELECT device_type, COUNT(*) as count FROM ip_managers WHERE device_type IS NOT NULL GROUP BY device_type")
+        sqlx::query_as::<_, (String, i64)>("SELECT device_type, COUNT(*) as count FROM ips WHERE device_type IS NOT NULL GROUP BY device_type")
             .fetch_all(pool.get_conn()),
-        sqlx::query_as::<_, (String, i64)>("SELECT status, COUNT(*) as count FROM ip_managers GROUP BY status")
+        sqlx::query_as::<_, (String, i64)>("SELECT status, COUNT(*) as count FROM ips GROUP BY status")
             .fetch_all(pool.get_conn()),
         sqlx::query_as::<_, (String, i64)>("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
             .fetch_all(pool.get_conn()),

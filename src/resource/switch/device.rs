@@ -146,7 +146,7 @@ pub async fn get_switches(
 
         let data_query = format!(
             r"SELECT 
-                id, name, network_region_id, network_id, model, vendor,
+                id, name, model, vendor,
                 location, snmp_version, 
                 snmp_community,
                 snmp_username, snmp_auth_protocol, 
@@ -156,8 +156,10 @@ pub async fn get_switches(
                 snmp_port,
                 parent_switch_id, parent_switch_name,
                 parent_port_id, parent_port_number,
+                position_id,
                 cabinet_id, cabinet_name,
                 start_u, end_u,
+                position_network_id, network_region_id,
                 description,
                 device_type,
                 ip_address,
@@ -200,7 +202,7 @@ pub async fn get_switches(
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
             r"SELECT 
-                id, name, network_region_id, network_id, model, vendor,
+                id, name, model, vendor,
                 location, snmp_version, 
                 snmp_community,
                 snmp_username, snmp_auth_protocol, 
@@ -210,8 +212,10 @@ pub async fn get_switches(
                 snmp_port,
                 parent_switch_id, parent_switch_name,
                 parent_port_id, parent_port_number,
+                position_id,
                 cabinet_id, cabinet_name,
                 start_u, end_u,
+                position_network_id, network_region_id,
                 description,
                 device_type,
                 ip_address,
@@ -271,7 +275,7 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
 
     let switch = sqlx::query_as::<_, SwitchWithParent>(
         r"SELECT 
-            id, name, network_region_id, network_id, model, vendor,
+            id, name, model, vendor,
             location, snmp_version, 
             snmp_community,
             snmp_username, snmp_auth_protocol, 
@@ -281,8 +285,10 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
             snmp_port,
             parent_switch_id, parent_switch_name,
             parent_port_id, parent_port_number,
+            position_id,
             cabinet_id, cabinet_name,
             start_u, end_u,
+            position_network_id, network_region_id,
             description,
             device_type,
             ip_address,
@@ -315,15 +321,15 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
 
             let ips = sqlx::query(
                 r"SELECT 
-                    m.id, m.switch_id, m.device_type, m.network_id, 
+                    m.id, m.device_type, m.network_id, 
                     host(m.ip_address) as ip_address,
                     m.ip_version, m.mac_address, m.hostname,
                     m.status, m.last_seen, m.created_at, m.updated_at,
                     n.network_region_id, nr.name as network_region
-                FROM ip_managers m
+                FROM ips m
                 LEFT JOIN network_cidrs n ON m.network_id = n.id
                 LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-                WHERE m.switch_id = $1 AND m.device_type = 'switch'
+                WHERE m.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
                 ORDER BY m.ip_address",
             )
             .bind(id)
@@ -336,19 +342,18 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
                 .map(|row| {
                     serde_json::json!({
                         "id": row.get::<Uuid, _>(0),
-                        "switch_id": row.get::<Option<Uuid>, _>(1),
-                        "device_type": row.get::<Option<String>, _>(2),
-                        "network_id": row.get::<Uuid, _>(3),
-                        "ip_address": row.get::<String, _>(4),
-                        "ip_version": row.get::<i16, _>(5),
-                        "mac_address": row.get::<Option<String>, _>(6),
-                        "hostname": row.get::<Option<String>, _>(7),
-                        "status": row.get::<String, _>(8),
-                        "last_seen": row.get::<DateTime<Utc>, _>(9),
-                        "created_at": row.get::<DateTime<Utc>, _>(10),
-                        "updated_at": row.get::<DateTime<Utc>, _>(11),
-                        "network_region_id": row.get::<Option<Uuid>, _>(12),
-                        "network_region": row.get::<Option<String>, _>(13)
+                        "device_type": row.get::<Option<String>, _>(1),
+                        "network_id": row.get::<Uuid, _>(2),
+                        "ip_address": row.get::<String, _>(3),
+                        "ip_version": row.get::<i16, _>(4),
+                        "mac_address": row.get::<Option<String>, _>(5),
+                        "hostname": row.get::<Option<String>, _>(6),
+                        "status": row.get::<String, _>(7),
+                        "last_seen": row.get::<DateTime<Utc>, _>(8),
+                        "created_at": row.get::<DateTime<Utc>, _>(9),
+                        "updated_at": row.get::<DateTime<Utc>, _>(10),
+                        "network_region_id": row.get::<Option<Uuid>, _>(11),
+                        "network_region": row.get::<Option<String>, _>(12)
                     })
                 })
                 .collect();
@@ -398,30 +403,6 @@ pub async fn create_switch(
     }
 
     let ips = req.ips.as_ref().unwrap();
-    let first_ip = &ips[0];
-
-    let network_region_id = if let Some(nrid) = req.network_region_id {
-        Some(nrid)
-    } else if let Some(nrid) = first_ip.network_region_id {
-        Some(nrid)
-    } else {
-        match sqlx::query_scalar::<_, Uuid>(
-            "SELECT network_region_id FROM network_cidrs WHERE id = $1",
-        )
-        .bind(first_ip.network_id)
-        .fetch_optional(pool.get_conn())
-        .await
-        {
-            Ok(Some(id)) => Some(id),
-            _ => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("无法获取网络区域ID"))
-                );
-            }
-        }
-    };
-
-    let network_id = first_ip.network_id;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -442,19 +423,36 @@ pub async fn create_switch(
         .filter(|p| !p.is_empty())
         .and_then(|p| encrypt_password(p));
 
+    let position_id = Uuid::new_v4();
+    if let Err(e) = sqlx::query(
+        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
+    )
+    .bind(position_id)
+    .bind(&req.name)
+    .bind(req.cabinet_id)
+    .bind(req.start_u.unwrap_or(1))
+    .bind(req.end_u.unwrap_or(1))
+    .bind(&req.description)
+    .bind(id)
+    .bind(now)
+    .bind(now)
+    .execute(pool.get_conn())
+    .await
+    {
+        tracing::error!("创建交换机关联机位记录失败: {}", e);
+    }
+
     let result = sqlx::query(
         r"INSERT INTO switches (
-            id, name, network_region_id, network_id, model, vendor,
+            id, name, model, vendor,
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
-            cabinet_id, start_u, end_u, description, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"
+            description, created_at, updated_at, position_id, cabinet_id, start_u, end_u
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)"
     )
     .bind(id)
     .bind(&req.name)
-    .bind(network_region_id)
-    .bind(network_id)
     .bind(&req.model)
     .bind(&req.vendor)
     .bind(&req.location)
@@ -468,46 +466,21 @@ pub async fn create_switch(
     .bind(req.snmp_port.unwrap_or(161))
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)
-    .bind(req.cabinet_id)
-    .bind(req.start_u)
-    .bind(req.end_u)
     .bind(&req.description)
     .bind(now)
     .bind(now)
+    .bind(position_id)
+    .bind(req.cabinet_id)
+    .bind(req.start_u)
+    .bind(req.end_u)
     .execute(pool.get_conn())
     .await;
 
     match result {
         Ok(_) => {
-            let position_id = if req.cabinet_id.is_some() {
-                let pos_id = Uuid::new_v4();
-                if let Err(e) = sqlx::query(
-                    "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, $8, $9)"
-                )
-                .bind(pos_id)
-                .bind(&req.name)
-                .bind(req.cabinet_id)
-                .bind(req.start_u.unwrap_or(1))
-                .bind(req.end_u.unwrap_or(1))
-                .bind(&req.description)
-                .bind(id)
-                .bind(now)
-                .bind(now)
-                .execute(pool.get_conn())
-                .await
-                {
-                    tracing::error!("创建交换机关联机位记录失败: {}", e);
-                    None
-                } else {
-                    Some(pos_id)
-                }
-            } else {
-                None
-            };
-
             for ip in ips {
                 let ip_exists = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
+                    "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
                 )
                 .bind(&ip.ip_address)
                 .fetch_one(pool.get_conn())
@@ -527,11 +500,10 @@ pub async fn create_switch(
 
                 let ip_manager_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                    "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                     VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
                 )
                 .bind(ip_manager_id)
-                .bind(id)
                 .bind(ip.device_type.as_deref().unwrap_or("switch"))
                 .bind(ip.network_id)
                 .bind(&ip.ip_address)
@@ -555,7 +527,7 @@ pub async fn create_switch(
 
             let switch = sqlx::query_as::<_, Switch>(
                 r"SELECT 
-                    id, name, network_region_id, network_id,
+                    id, name,
                     model, vendor, 
                     location, snmp_version, 
                     snmp_community, 
@@ -565,8 +537,8 @@ pub async fn create_switch(
                     snmp_priv_password, 
                     snmp_port, 
                     parent_switch_id, parent_port_id, 
-                    cabinet_id, start_u, end_u, 
-                    description, created_at, updated_at 
+                    description, created_at, updated_at,
+                    position_id, cabinet_id, start_u, end_u
                 FROM switches WHERE id = $1",
             )
             .bind(id)
@@ -685,31 +657,28 @@ pub async fn update_switch(
     let result = sqlx::query(
         r"UPDATE switches SET
             name = COALESCE($1, name),
-            network_region_id = COALESCE($2, network_region_id),
-            network_id = COALESCE($3, network_id),
-            model = COALESCE($4, model),
-            vendor = COALESCE($5, vendor),
-            location = COALESCE($6, location),
-            snmp_version = COALESCE($7, snmp_version),
-            snmp_community = COALESCE($8, snmp_community),
-            snmp_username = COALESCE($9, snmp_username),
-            snmp_auth_protocol = COALESCE($10, snmp_auth_protocol),
-            snmp_auth_password = COALESCE($11, snmp_auth_password),
-            snmp_priv_protocol = COALESCE($12, snmp_priv_protocol),
-            snmp_priv_password = COALESCE($13, snmp_priv_password),
-            snmp_port = COALESCE($14, snmp_port),
-            parent_switch_id = $15,
-            parent_port_id = $16,
-            cabinet_id = $17,
-            start_u = $18,
-            end_u = $19,
-            description = COALESCE($20, description),
-            updated_at = $21
-        WHERE id = $22",
+            model = COALESCE($2, model),
+            vendor = COALESCE($3, vendor),
+            location = COALESCE($4, location),
+            snmp_version = COALESCE($5, snmp_version),
+            snmp_community = COALESCE($6, snmp_community),
+            snmp_username = COALESCE($7, snmp_username),
+            snmp_auth_protocol = COALESCE($8, snmp_auth_protocol),
+            snmp_auth_password = COALESCE($9, snmp_auth_password),
+            snmp_priv_protocol = COALESCE($10, snmp_priv_protocol),
+            snmp_priv_password = COALESCE($11, snmp_priv_password),
+            snmp_port = COALESCE($12, snmp_port),
+            parent_switch_id = $13,
+            parent_port_id = $14,
+            description = COALESCE($15, description),
+            updated_at = $16,
+            position_id = COALESCE($17, position_id),
+            cabinet_id = $18,
+            start_u = $19,
+            end_u = $20
+        WHERE id = $21",
     )
     .bind(&req.name)
-    .bind(req.network_region_id)
-    .bind(req.network_id)
     .bind(&req.model)
     .bind(&req.vendor)
     .bind(&req.location)
@@ -723,11 +692,12 @@ pub async fn update_switch(
     .bind(req.snmp_port)
     .bind(req.parent_switch_id)
     .bind(req.parent_port_id)
+    .bind(&req.description)
+    .bind(now)
+    .bind(req.position_id)
     .bind(req.cabinet_id)
     .bind(req.start_u)
     .bind(req.end_u)
-    .bind(&req.description)
-    .bind(now)
     .bind(id)
     .execute(pool.get_conn())
     .await;
@@ -826,7 +796,7 @@ pub async fn update_switch(
                 .await
                 .unwrap_or(None);
 
-                if let Err(e) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
+                if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
                     .bind(id)
                     .execute(pool.get_conn())
                     .await
@@ -836,7 +806,7 @@ pub async fn update_switch(
 
                 for ip in ips {
                     let ip_exists = sqlx::query_scalar::<_, bool>(
-                        "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND switch_id != $2)",
+                        "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id != (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $2))",
                     )
                     .bind(&ip.ip_address)
                     .bind(id)
@@ -854,11 +824,10 @@ pub async fn update_switch(
 
                     let ip_manager_id = Uuid::new_v4();
                     if let Err(e) = sqlx::query(
-                        "INSERT INTO ip_managers (id, switch_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13, $14)"
+                        "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
+                         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
                     )
                     .bind(ip_manager_id)
-                    .bind(id)
                     .bind(ip.device_type.as_deref().unwrap_or("switch"))
                     .bind(ip.network_id)
                     .bind(&ip.ip_address)
@@ -883,7 +852,7 @@ pub async fn update_switch(
 
             let switch = sqlx::query_as::<_, Switch>(
                 r"SELECT 
-                    id, name, network_region_id, network_id,
+                    id, name,
                     model, vendor, 
                     location, snmp_version, 
                     snmp_community, 
@@ -893,8 +862,8 @@ pub async fn update_switch(
                     snmp_priv_password, 
                     snmp_port, 
                     parent_switch_id, parent_port_id, 
-                    cabinet_id, start_u, end_u, 
-                    description, created_at, updated_at 
+                    description, created_at, updated_at,
+                    position_id, cabinet_id, start_u, end_u
                 FROM switches WHERE id = $1",
             )
             .bind(id)
@@ -960,7 +929,7 @@ pub async fn delete_switch(
             .json(ApiResponse::<()>::error("该交换机存在下级交换机，无法删除")));
     }
 
-    if let Err(e) = sqlx::query("DELETE FROM ip_managers WHERE switch_id = $1")
+    if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
         .bind(id)
         .execute(pool.get_conn())
         .await

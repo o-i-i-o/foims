@@ -10,7 +10,6 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
-// 获取所有IP管理（支持搜索和分页）
 pub async fn get_ip_managers(
     pool: web::Data<DbPool>,
     query: web::Query<std::collections::HashMap<String, String>>,
@@ -97,7 +96,7 @@ pub async fn get_ip_managers(
     };
 
     let count_query = format!(
-        "SELECT COUNT(*) FROM ip_managers_with_details {where_clause}"
+        "SELECT COUNT(*) FROM ip_with_details {where_clause}"
     );
     let mut count_sql = sqlx::query_scalar::<_, i64>(&count_query);
 
@@ -130,7 +129,7 @@ pub async fn get_ip_managers(
     };
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at FROM ip_managers_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, workstation_id, position_id, switch_port_id, device_type, device_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -179,40 +178,52 @@ pub async fn get_ip_managers(
     )))
 }
 
-// 创建IP管理
 pub async fn create_ip_manager(
     pool: web::Data<DbPool>,
     req: web::Json<IpManagerCreate>,
     http_req: HttpRequest,
     config: web::Data<Config>,
 ) -> Result<HttpResponse> {
-    // 验证创建IP管理请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
         );
     }
 
-    // 验证设备类型和对应的设备ID是否匹配
     let device_type = req.device_type.as_deref().unwrap_or("");
     if !((device_type == "workstation"
         && req.workstation_id.is_some()
-        && req.position_id.is_none()
-        && req.switch_id.is_none())
+        && req.position_id.is_none())
         || (device_type == "cabinet_position"
             && req.workstation_id.is_none()
-            && req.position_id.is_some()
-            && req.switch_id.is_none())
-        || (device_type == "switch" && req.workstation_id.is_none() && req.switch_id.is_some()))
+            && req.position_id.is_some())
+        || (device_type == "switch"
+            && req.workstation_id.is_none()
+            && req.position_id.is_some()))
     {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error("设备类型与设备ID不匹配"))
         );
     }
 
-    // 检查IP地址是否已存在于同一网络
+    if device_type == "switch" && req.position_id.is_some() {
+        let pos_device_type: Option<String> = sqlx::query_scalar(
+            "SELECT device_type FROM positions WHERE id = $1",
+        )
+        .bind(req.position_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if pos_device_type.as_deref() != Some("switch") {
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("该位置不是交换机位置")));
+        }
+    }
+
     let existing_mapping = match sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
+        "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
     )
     .bind(&req.ip_address)
     .bind(req.network_id)
@@ -230,7 +241,6 @@ pub async fn create_ip_manager(
             .json(ApiResponse::<IpManager>::error("该网络中IP地址已存在")));
     }
 
-    // 检查IP地址是否在所属网络的CIDR范围内
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(req.network_id)
         .fetch_optional(pool.get_conn())
@@ -251,29 +261,22 @@ pub async fn create_ip_manager(
         }
     };
 
-    // 验证IP地址是否在网络的CIDR范围内
     let ip_in_cidr = {
-        // 首先解析IP地址，检查其有效性
         let Ok(ip_addr) = std::net::IpAddr::from_str(&req.ip_address) else {
             return Ok(HttpResponse::BadRequest()
                 .json(ApiResponse::<IpManager>::error("无效的IP地址格式")))
         };
 
-        // 检查IP地址类型
         let is_ipv4 = matches!(ip_addr, std::net::IpAddr::V4(_));
 
-        // 用于存储验证结果
         let mut is_valid = false;
 
-        // 尝试解析并验证所有可能的CIDR字段
         let cidr_fields = vec![
-            // 如果是IPv4，尝试ipv4_cidr
             if is_ipv4 {
                 network.ipv4_cidr.clone().unwrap_or_default()
             } else {
                 String::new()
             },
-            // 如果是IPv6，尝试ipv6_cidr
             if is_ipv4 {
                 String::new()
             } else {
@@ -281,22 +284,19 @@ pub async fn create_ip_manager(
             },
         ];
 
-        // 尝试所有CIDR字段，只要有一个验证通过就可以
         for cidr_str in cidr_fields {
             if cidr_str.is_empty() {
-                continue; // 跳过空CIDR
+                continue;
             }
 
             match ipnetwork::IpNetwork::from_str(&cidr_str) {
                 Ok(network_cidr) => {
-                    // 检查IP地址是否在网段内
                     if network_cidr.contains(ip_addr) {
                         is_valid = true;
                         break;
                     }
                 }
                 Err(_) => {
-                    // CIDR解析失败，尝试下一个
                     continue;
                 }
             }
@@ -305,7 +305,6 @@ pub async fn create_ip_manager(
         is_valid
     };
 
-    // 如果IP地址不在任何CIDR范围内，返回错误
     if !ip_in_cidr {
         return Ok(HttpResponse::BadRequest()
             .json(ApiResponse::<IpManager>::error("IP地址不在所属网络网段内")));
@@ -317,13 +316,12 @@ pub async fn create_ip_manager(
     let ip_version_num = detect_ip_version(&req.ip_address);
 
     if let Err(err) = sqlx::query(
-        "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
     )
     .bind(id)
     .bind(req.workstation_id)
     .bind(req.position_id)
-    .bind(req.switch_id)
     .bind(req.switch_port_id)
     .bind(&req.device_type)
     .bind(req.network_id)
@@ -343,7 +341,6 @@ pub async fn create_ip_manager(
         id,
         workstation_id: req.workstation_id,
         position_id: req.position_id,
-        switch_id: req.switch_id,
         switch_port_id: req.switch_port_id,
         device_type: req.device_type.clone(),
         network_id: req.network_id,
@@ -353,11 +350,11 @@ pub async fn create_ip_manager(
         hostname: req.hostname.clone(),
         status: "active".to_string(),
         last_seen: now,
+        last_mac: None,
         created_at: now,
         updated_at: now,
     };
 
-    // 记录操作日志
     let details = serde_json::json!({
         "ip_address": mapping.ip_address,
         "mac_address": mapping.mac_address,
@@ -382,7 +379,6 @@ pub async fn create_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理创建成功")))
 }
 
-// 获取单个IP管理
 pub async fn get_ip_manager(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -390,7 +386,7 @@ pub async fn get_ip_manager(
     let id = *id_path;
 
     let mapping = match sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE id = $1"
+        "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
         Ok(Some(mapping)) => mapping,
@@ -405,7 +401,6 @@ pub async fn get_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理获取成功")))
 }
 
-// 获取工位的IP列表
 pub async fn get_workstation_ips(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -414,10 +409,10 @@ pub async fn get_workstation_ips(
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
-            id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
+            id, workstation_id, position_id, switch_port_id, device_type, device_name, 
             network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
-        FROM ip_managers_with_details 
+            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
+        FROM ip_with_details 
         WHERE workstation_id = $1"
     )
     .bind(workstation_id)
@@ -436,21 +431,19 @@ pub async fn get_workstation_ips(
     }
 }
 
-// 获取机位的IP列表
 pub async fn get_cabinet_position_ips(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let position_id = *id_path;
 
-    // 查询 position_id 或 switch_id 匹配的IP地址
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
-            id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
+            id, workstation_id, position_id, switch_port_id, device_type, device_name, 
             network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
-        FROM ip_managers_with_details 
-        WHERE position_id = $1 OR (switch_id = $1 AND device_type = 'cabinet_position')"
+            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
+        FROM ip_with_details 
+        WHERE position_id = $1"
     )
     .bind(position_id)
     .fetch_all(pool.get_conn())
@@ -468,22 +461,43 @@ pub async fn get_cabinet_position_ips(
     }
 }
 
-// 获取交换机的IP列表
 pub async fn get_switch_ips(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let switch_id = *id_path;
 
-    let ips = sqlx::query_as::<_, IpManagerWithNames>(
-        r"SELECT 
-            id, workstation_id, position_id, switch_id, switch_port_id, device_type, device_name, 
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at 
-        FROM ip_managers_with_details 
-        WHERE switch_id = $1"
+    let position_id: Option<Uuid> = match sqlx::query_scalar(
+        "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
     )
     .bind(switch_id)
+    .fetch_optional(pool.get_conn())
+    .await
+    {
+        Ok(Some(id)) => Some(id),
+        Ok(None) => None,
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
+        }
+    };
+
+    let Some(position_id) = position_id else {
+        return Ok(HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
+            vec![],
+            "获取交换机IP列表成功",
+        )));
+    };
+
+    let ips = sqlx::query_as::<_, IpManagerWithNames>(
+        r"SELECT 
+            id, workstation_id, position_id, switch_port_id, device_type, device_name, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, network_name, network_region, 
+            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
+        FROM ip_with_details 
+        WHERE position_id = $1"
+    )
+    .bind(position_id)
     .fetch_all(pool.get_conn())
     .await;
 
@@ -499,7 +513,6 @@ pub async fn get_switch_ips(
     }
 }
 
-// 更新IP管理
 pub async fn update_ip_manager(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -509,7 +522,6 @@ pub async fn update_ip_manager(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 验证更新IP管理请求数据
     if let Err(e) = (*req).validate() {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
@@ -517,7 +529,7 @@ pub async fn update_ip_manager(
     }
 
     let existing_mapping = match sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE id = $1"
+        "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
     .fetch_optional(pool.get_conn()).await {
         Ok(Some(mapping)) => mapping,
@@ -529,18 +541,15 @@ pub async fn update_ip_manager(
         }
     };
 
-    // 确定要使用的网络ID和IP地址
     let network_id = req.network_id.unwrap_or(existing_mapping.network_id);
     let ip_address = req
         .ip_address
         .clone()
         .unwrap_or_else(|| existing_mapping.ip_address.clone());
 
-    // 只有当IP地址被更新或网络ID被更新时，才需要验证IP地址
     if req.ip_address.is_some() || req.network_id.is_some() {
-        // 验证IP地址是否已被同一网络中的其他IP管理使用
         let existing_ip = match sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND network_id = $2 AND id != $3",
+            "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2 AND id != $3",
         )
         .bind(&ip_address)
         .bind(network_id)
@@ -563,7 +572,6 @@ pub async fn update_ip_manager(
                 .json(ApiResponse::<IpManager>::error("该网络中IP地址已存在")));
         }
 
-        // 检查IP地址是否在所属网络的CIDR范围内
         let network =
             match sqlx::query(crate::utils::NETWORK_QUERY)
                 .bind(network_id)
@@ -584,29 +592,22 @@ pub async fn update_ip_manager(
                 }
             };
 
-        // 验证IP地址是否在网络的CIDR范围内
         let ip_in_cidr = {
-            // 首先解析IP地址，检查其有效性
             let Ok(ip_addr) = std::net::IpAddr::from_str(&ip_address) else {
                 return Ok(HttpResponse::BadRequest()
                     .json(ApiResponse::<IpManager>::error("无效的IP地址格式")))
             };
 
-            // 检查IP地址类型
             let is_ipv4 = matches!(ip_addr, std::net::IpAddr::V4(_));
 
-            // 用于存储验证结果
             let mut is_valid = false;
 
-            // 尝试解析并验证所有可能的CIDR字段
             let cidr_fields = vec![
-                // 如果是IPv4，尝试ipv4_cidr
                 if is_ipv4 {
                     network.ipv4_cidr.clone().unwrap_or_default()
                 } else {
                     String::new()
                 },
-                // 如果是IPv6，尝试ipv6_cidr
                 if is_ipv4 {
                     String::new()
                 } else {
@@ -614,22 +615,19 @@ pub async fn update_ip_manager(
                 },
             ];
 
-            // 尝试所有CIDR字段，只要有一个验证通过就可以
             for cidr_str in cidr_fields {
                 if cidr_str.is_empty() {
-                    continue; // 跳过空CIDR
+                    continue;
                 }
 
                 match ipnetwork::IpNetwork::from_str(&cidr_str) {
                     Ok(network_cidr) => {
-                        // 检查IP地址是否在网段内
                         if network_cidr.contains(ip_addr) {
                             is_valid = true;
                             break;
                         }
                     }
                     Err(_) => {
-                        // CIDR解析失败，尝试下一个
                         continue;
                     }
                 }
@@ -638,7 +636,6 @@ pub async fn update_ip_manager(
             is_valid
         };
 
-        // 如果IP地址不在任何CIDR范围内，返回错误
         if !ip_in_cidr {
             return Ok(HttpResponse::BadRequest()
                 .json(ApiResponse::<IpManager>::error("IP地址不在所属网络网段内")));
@@ -647,57 +644,68 @@ pub async fn update_ip_manager(
 
     let now = Utc::now();
 
-    // 自动检测并更新IP版本
     let ip_version_num = if let Some(ip_address) = &req.ip_address {
-        // 根据IP地址自动检测版本
         detect_ip_version(ip_address)
     } else {
-        // 如果没有更新IP地址，使用请求中的ip_version或保持不变
         if let Some(ip_version) = &req.ip_version {
-            // 直接使用字符串
             *ip_version
         } else {
-            // 如果请求中没有ip_version，使用现有映射的ip_version
             detect_ip_version(&existing_mapping.ip_address)
         }
     };
 
-    // 验证设备类型和对应的设备ID是否匹配
     if let Some(device_type) = &req.device_type
         && !((device_type == "workstation"
             && req.workstation_id.is_some()
-            && req.position_id.is_none()
-            && req.switch_id.is_none())
+            && req.position_id.is_none())
             || (device_type == "cabinet_position"
                 && req.workstation_id.is_none()
-                && req.position_id.is_some()
-                && req.switch_id.is_none())
-            || (device_type == "switch" && req.workstation_id.is_none() && req.switch_id.is_some()))
+                && req.position_id.is_some())
+            || (device_type == "switch"
+                && req.workstation_id.is_none()
+                && req.position_id.is_some()))
     {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error("设备类型与设备ID不匹配"))
         );
     }
 
+    if let Some(device_type) = &req.device_type
+        && device_type == "switch"
+        && req.position_id.is_some()
+    {
+        let pos_device_type: Option<String> = sqlx::query_scalar(
+            "SELECT device_type FROM positions WHERE id = $1",
+        )
+        .bind(req.position_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        if pos_device_type.as_deref() != Some("switch") {
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("该位置不是交换机位置")));
+        }
+    }
+
     if let Err(err) = sqlx::query(
-        "UPDATE ip_managers SET 
+        "UPDATE ips SET 
          workstation_id = $1, 
          position_id = $2,
-         switch_id = $3,
-         switch_port_id = $4,
-         device_type = COALESCE($5, device_type),
-         network_id = COALESCE($6, network_id), 
-         ip_address = COALESCE(CAST($7 AS INET), ip_address), 
-         mac_address = COALESCE($8, mac_address), 
-         hostname = COALESCE($9, hostname), 
-         status = COALESCE($10, status), 
-         ip_version = $11, 
-         updated_at = $12 
-         WHERE id = $13",
+         switch_port_id = $3,
+         device_type = COALESCE($4, device_type),
+         network_id = COALESCE($5, network_id), 
+         ip_address = COALESCE(CAST($6 AS INET), ip_address), 
+         mac_address = COALESCE($7, mac_address), 
+         hostname = COALESCE($8, hostname), 
+         status = COALESCE($9, status), 
+         ip_version = $10, 
+         updated_at = $11 
+         WHERE id = $12",
     )
     .bind(req.workstation_id)
     .bind(req.position_id)
-    .bind(req.switch_id)
     .bind(req.switch_port_id)
     .bind(&req.device_type)
     .bind(req.network_id)
@@ -716,7 +724,7 @@ pub async fn update_ip_manager(
     }
 
     let mapping = match sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE id = $1"
+        "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
     ).bind(id)
     .fetch_one(pool.get_conn()).await {
         Ok(mapping) => mapping,
@@ -750,7 +758,6 @@ pub async fn update_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理更新成功")))
 }
 
-// 删除IP管理
 pub async fn delete_ip_manager(
     pool: web::Data<DbPool>,
     id_path: web::Path<Uuid>,
@@ -759,9 +766,8 @@ pub async fn delete_ip_manager(
 ) -> Result<HttpResponse> {
     let id = *id_path;
 
-    // 检查IP管理是否存在
     let existing_mapping =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM ip_managers WHERE id = $1")
+        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE id = $1")
             .bind(id)
             .fetch_optional(pool.get_conn())
             .await
@@ -780,8 +786,7 @@ pub async fn delete_ip_manager(
         return Ok(HttpResponse::NotFound().json(ApiResponse::<IpManager>::error("IP管理未找到")));
     }
 
-    // 删除IP管理
-    if let Err(err) = sqlx::query("DELETE FROM ip_managers WHERE id = $1")
+    if let Err(err) = sqlx::query("DELETE FROM ips WHERE id = $1")
         .bind(id)
         .execute(pool.get_conn())
         .await
@@ -790,7 +795,6 @@ pub async fn delete_ip_manager(
             .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
     }
 
-    // 记录操作日志
     let details = serde_json::json!({
         "ip_manager_id": id.to_string()
     });
@@ -809,7 +813,6 @@ pub async fn delete_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }
 
-// 拉取IP管理数据 - 从switch_macs缓存中匹配已存在的IP记录并更新MAC地址
 #[allow(clippy::type_complexity)]
 pub async fn pull_ip_managers(
     pool: web::Data<DbPool>,
@@ -889,7 +892,7 @@ pub async fn pull_ip_managers(
 
     for (ip, mac) in &filtered_entries {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
+            "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
         )
         .bind(ip)
         .fetch_one(pool.get_conn())
@@ -902,7 +905,7 @@ pub async fn pull_ip_managers(
         }
 
         let old_mac: Option<String> = sqlx::query_scalar(
-            "SELECT mac_address FROM ip_managers WHERE ip_address = CAST($1 AS INET)",
+            "SELECT mac_address FROM ips WHERE ip_address = CAST($1 AS INET)",
         )
         .bind(ip)
         .fetch_optional(pool.get_conn())
@@ -910,8 +913,8 @@ pub async fn pull_ip_managers(
         .ok()
         .flatten();
 
-        let current_device: Option<(String, Option<Uuid>, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
-            "SELECT device_type, workstation_id, position_id, switch_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        let current_device: Option<(String, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+            "SELECT device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
         .fetch_optional(pool.get_conn())
@@ -919,18 +922,17 @@ pub async fn pull_ip_managers(
         .ok()
         .flatten();
 
-        let mac_conflict: Option<String> = if let Some((device_type, ws_id, pos_id, sw_id)) =
+        let mac_conflict: Option<String> = if let Some((device_type, ws_id, pos_id)) =
             current_device
         {
             sqlx::query_scalar(
-                r"SELECT host(ip_address) FROM ip_managers
+                r"SELECT host(ip_address) FROM ips
                    WHERE mac_address = $1 
                    AND ip_address != CAST($2 AS INET)
                    AND (
                        device_type != $3
                        OR workstation_id IS DISTINCT FROM $4
                        OR position_id IS DISTINCT FROM $5
-                       OR switch_id IS DISTINCT FROM $6
                    )
                    LIMIT 1",
             )
@@ -939,14 +941,13 @@ pub async fn pull_ip_managers(
             .bind(&device_type)
             .bind(ws_id)
             .bind(pos_id)
-            .bind(sw_id)
             .fetch_optional(pool.get_conn())
             .await
             .ok()
             .flatten()
         } else {
             sqlx::query_scalar(
-                "SELECT host(ip_address) FROM ip_managers WHERE mac_address = $1 AND ip_address != CAST($2 AS INET) LIMIT 1"
+                "SELECT host(ip_address) FROM ips WHERE mac_address = $1 AND ip_address != CAST($2 AS INET) LIMIT 1"
             )
             .bind(mac)
             .bind(ip)
@@ -966,7 +967,7 @@ pub async fn pull_ip_managers(
         }
 
         let result = sqlx::query(
-            r"UPDATE ip_managers 
+            r"UPDATE ips 
                SET mac_address = $1, last_seen = $2, updated_at = $2
                WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"
         )
@@ -985,7 +986,7 @@ pub async fn pull_ip_managers(
                 let mac_changed = old != mac && !old.is_empty();
                 if mac_changed {
                     let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-                        "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+                        "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
                     )
                     .bind(ip)
                     .fetch_optional(pool.get_conn())
@@ -1015,7 +1016,7 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = match sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ip_managers WHERE network_id = $1"
+        "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE network_id = $1"
     )
     .bind(network_id)
     .fetch_all(pool.get_conn())
@@ -1059,9 +1060,7 @@ pub async fn pull_ip_managers_internal(
             .bind(network_id)
             .fetch_optional(pool)
             .await
-            .map_err(|e| format!("查询网段信息失败: {e}"))
-            .ok()
-            .flatten();
+            .map_err(|e| format!("查询网段信息失败: {e}"))?;
 
     if network_info.is_none() {
         return Err("未找到网段信息".to_string());
@@ -1105,7 +1104,7 @@ pub async fn pull_ip_managers_internal(
     let now = Utc::now();
     for (ip, mac) in &filtered_entries {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ip_managers WHERE ip_address = CAST($1 AS INET))",
+            "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
         )
         .bind(ip)
         .fetch_one(pool)
@@ -1116,8 +1115,8 @@ pub async fn pull_ip_managers_internal(
             continue;
         }
 
-        let Some(current_device) = sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>, Option<Uuid>)>(
-            "SELECT device_type, workstation_id, position_id, switch_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)"
+        let Some(current_device) = sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>)>(
+            "SELECT device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
         .fetch_optional(pool)
@@ -1127,17 +1126,16 @@ pub async fn pull_ip_managers_internal(
             continue
         };
 
-        let (device_type, ws_id, pos_id, sw_id) = current_device;
+        let (device_type, ws_id, pos_id) = current_device;
 
         let mac_conflict: Option<String> = sqlx::query_scalar(
-            r"SELECT host(ip_address) FROM ip_managers
+            r"SELECT host(ip_address) FROM ips
                WHERE mac_address = $1 
                AND ip_address != CAST($2 AS INET)
                AND (
                    device_type != $3
                    OR workstation_id IS DISTINCT FROM $4
                    OR position_id IS DISTINCT FROM $5
-                   OR switch_id IS DISTINCT FROM $6
                )
                LIMIT 1",
         )
@@ -1146,7 +1144,6 @@ pub async fn pull_ip_managers_internal(
         .bind(&device_type)
         .bind(ws_id)
         .bind(pos_id)
-        .bind(sw_id)
         .fetch_optional(pool)
         .await
         .map_err(|e| format!("查询MAC冲突失败: {e}"))?
@@ -1158,7 +1155,7 @@ pub async fn pull_ip_managers_internal(
         }
 
         let old_mac: Option<String> = sqlx::query_scalar(
-            "SELECT mac_address FROM ip_managers WHERE ip_address = CAST($1 AS INET)",
+            "SELECT mac_address FROM ips WHERE ip_address = CAST($1 AS INET)",
         )
         .bind(ip)
         .fetch_optional(pool)
@@ -1167,7 +1164,7 @@ pub async fn pull_ip_managers_internal(
         .flatten();
 
         let result = sqlx::query(
-            r"UPDATE ip_managers 
+            r"UPDATE ips 
                SET mac_address = $1, last_seen = $2, updated_at = $2
                WHERE ip_address = CAST($3 AS INET) AND (mac_address IS NULL OR mac_address = '' OR mac_address != $1)"
         )
@@ -1183,7 +1180,7 @@ pub async fn pull_ip_managers_internal(
         }
 
         let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-            "SELECT workstation_id FROM ip_managers WHERE ip_address = CAST($1 AS INET)",
+            "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)",
         )
         .bind(ip)
         .fetch_optional(pool)
@@ -1268,7 +1265,6 @@ fn ip_belongs_to_cidr(ip: &str, cidr: &str) -> bool {
     }
 }
 
-// 检测IP地址版本
 #[must_use] 
 pub fn detect_ip_version(ip: &str) -> i16 {
     match IpAddr::from_str(ip) {
@@ -1277,7 +1273,6 @@ pub fn detect_ip_version(ip: &str) -> i16 {
     }
 }
 
-// 获取网络中可用的IP地址列表
 pub async fn get_available_ips(
     pool: web::Data<DbPool>,
     network_id_path: web::Path<Uuid>,
@@ -1305,7 +1300,7 @@ pub async fn get_available_ips(
         && let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv4_cidr)
     {
         let used_ips: Vec<String> =
-            sqlx::query_scalar("SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1")
+            sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
                 .fetch_all(pool.get_conn())
                 .await
@@ -1342,7 +1337,7 @@ pub async fn get_available_ips(
         && let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr)
     {
         let used_ips: Vec<String> =
-            sqlx::query_scalar("SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1")
+            sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
                 .fetch_all(pool.get_conn())
                 .await
@@ -1382,7 +1377,6 @@ pub async fn get_available_ips(
     )))
 }
 
-// 自动分配IP地址
 pub async fn auto_assign_ip(
     pool: web::Data<DbPool>,
     req: web::Json<crate::models::AutoAssignIpRequest>,
@@ -1397,20 +1391,30 @@ pub async fn auto_assign_ip(
     let network_id = req.network_id;
     let workstation_id = req.workstation_id;
     let position_id = req.position_id;
-    let switch_id = req.switch_id;
     let switch_port_id = req.switch_port_id;
     let mac_address = req.mac_address.clone();
     let hostname = req.hostname.clone();
 
-    let device_type = match (workstation_id, position_id, switch_id) {
-        (Some(_), None, None) => "workstation",
-        (None, Some(_), None) => "cabinet_position",
-        (None, None, Some(_)) => "switch",
-        _ => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "必须指定一个设备ID（workstation_id、position_id或switch_id）",
-            )));
+    let device_type = if workstation_id.is_some() && position_id.is_none() {
+        "workstation".to_string()
+    } else if workstation_id.is_none() && position_id.is_some() {
+        let pos_device_type: Option<String> = sqlx::query_scalar(
+            "SELECT device_type FROM positions WHERE id = $1",
+        )
+        .bind(position_id)
+        .fetch_optional(pool.get_conn())
+        .await
+        .ok()
+        .flatten();
+
+        match pos_device_type.as_deref() {
+            Some("switch") => "switch".to_string(),
+            _ => "cabinet_position".to_string(),
         }
+    } else {
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "必须指定一个设备ID（workstation_id或position_id）",
+        )));
     };
 
     let network = match sqlx::query(crate::utils::NETWORK_QUERY)
@@ -1432,7 +1436,7 @@ pub async fn auto_assign_ip(
         Some(ipv4_cidr) => {
             if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv4_cidr) {
                 let used_ips: Vec<String> = sqlx::query_scalar(
-                    "SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1",
+                    "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
                 )
                 .bind(network_id)
                 .fetch_all(pool.get_conn())
@@ -1481,7 +1485,7 @@ pub async fn auto_assign_ip(
             if let Some(ipv6_cidr) = &network.ipv6_cidr {
                 if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr) {
                     let used_ips: Vec<String> = sqlx::query_scalar(
-                        "SELECT ip_address::TEXT FROM ip_managers WHERE network_id = $1",
+                        "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
                     )
                     .bind(network_id)
                     .fetch_all(pool.get_conn())
@@ -1531,15 +1535,14 @@ pub async fn auto_assign_ip(
     let ip_version_num = detect_ip_version(&assigned_ip);
 
     if let Err(err) = sqlx::query(
-        "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
     )
     .bind(id)
     .bind(workstation_id)
     .bind(position_id)
-    .bind(switch_id)
     .bind(switch_port_id)
-    .bind(device_type)
+    .bind(&device_type)
     .bind(network_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
@@ -1557,9 +1560,8 @@ pub async fn auto_assign_ip(
         id,
         workstation_id,
         position_id,
-        switch_id,
         switch_port_id,
-        device_type: Some(device_type.to_string()),
+        device_type: Some(device_type),
         network_id,
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
@@ -1567,6 +1569,7 @@ pub async fn auto_assign_ip(
         hostname,
         status: "active".to_string(),
         last_seen: now,
+        last_mac: None,
         created_at: now,
         updated_at: now,
     };
@@ -1593,7 +1596,6 @@ pub async fn auto_assign_ip(
     Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "IP地址自动分配成功")))
 }
 
-// 批量创建IP管理记录
 pub async fn batch_create_ip_managers(
     pool: web::Data<DbPool>,
     req: web::Json<Vec<IpManagerCreate>>,
@@ -1613,15 +1615,13 @@ pub async fn batch_create_ip_managers(
         let device_type = ip_req.device_type.as_deref().unwrap_or("");
         let device_valid = (device_type == "workstation"
             && ip_req.workstation_id.is_some()
-            && ip_req.position_id.is_none()
-            && ip_req.switch_id.is_none())
+            && ip_req.position_id.is_none())
             || (device_type == "cabinet_position"
                 && ip_req.workstation_id.is_none()
-                && ip_req.position_id.is_some()
-                && ip_req.switch_id.is_none())
+                && ip_req.position_id.is_some())
             || (device_type == "switch"
                 && ip_req.workstation_id.is_none()
-                && ip_req.switch_id.is_some());
+                && ip_req.position_id.is_some());
 
         if !device_valid {
             errors.push(format!("第{}条记录: 设备类型与设备ID不匹配", index + 1));
@@ -1655,7 +1655,7 @@ pub async fn batch_create_ip_managers(
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
         let existing: Option<Uuid> = match sqlx::query_scalar(
-            "SELECT id FROM ip_managers WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
+            "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
         )
         .bind(&ip_req.ip_address)
         .bind(ip_req.network_id)
@@ -1679,13 +1679,12 @@ pub async fn batch_create_ip_managers(
         }
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ip_managers (id, workstation_id, position_id, switch_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+            "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
         )
         .bind(*id)
         .bind(ip_req.workstation_id)
         .bind(ip_req.position_id)
-        .bind(ip_req.switch_id)
         .bind(ip_req.switch_port_id)
         .bind(&ip_req.device_type)
         .bind(ip_req.network_id)
@@ -1708,7 +1707,6 @@ pub async fn batch_create_ip_managers(
             id: *id,
             workstation_id: ip_req.workstation_id,
             position_id: ip_req.position_id,
-            switch_id: ip_req.switch_id,
             switch_port_id: ip_req.switch_port_id,
             device_type: ip_req.device_type.clone(),
             network_id: ip_req.network_id,
@@ -1718,6 +1716,7 @@ pub async fn batch_create_ip_managers(
             hostname: ip_req.hostname.clone(),
             status: "active".to_string(),
             last_seen: now,
+            last_mac: None,
             created_at: now,
             updated_at: now,
         });
