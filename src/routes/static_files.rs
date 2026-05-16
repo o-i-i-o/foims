@@ -71,8 +71,8 @@ pub async fn https_redirect_handler(req: HttpRequest) -> HttpResponse {
     let domain = host.split(':').next().unwrap_or("localhost");
 
     let https_port = req
-        .app_data::<actix_web::web::Data<crate::config::Config>>()
-        .and_then(|c| c.server.https_port)
+        .app_data::<actix_web::web::Data<crate::app_state::AppState>>()
+        .and_then(|s| s.config.server.https_port)
         .unwrap_or(443);
 
     let port_suffix = if https_port == 443 {

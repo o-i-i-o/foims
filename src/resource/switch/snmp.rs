@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 use async_snmp::{
     Auth, Client, Error, oid,
     v3::{AuthProtocol, PrivProtocol},
@@ -9,8 +9,9 @@ use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::app_state::AppState;
 use crate::crypto::{decrypt_credential, decrypt_password};
-use crate::db::DbPool;
+use crate::error::AppError;
 use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate, SwitchWithParent};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -43,7 +44,7 @@ pub struct SwitchForSnmpWithNetwork {
 }
 
 impl SwitchForSnmp {
-    #[must_use] 
+    #[must_use]
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_switch_snmp(self);
         SnmpParamsLegacy {
@@ -62,7 +63,7 @@ impl SwitchForSnmp {
 }
 
 impl SwitchForSnmpWithNetwork {
-    #[must_use] 
+    #[must_use]
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_switch_snmp_with_network(self);
         SnmpParamsLegacy {
@@ -88,7 +89,7 @@ pub struct DecryptedSnmpCredentials {
 }
 
 impl DecryptedSnmpCredentials {
-    #[must_use] 
+    #[must_use]
     pub fn from_switch_snmp(switch: &SwitchForSnmp) -> Self {
         Self {
             community: decrypt_credential(switch.snmp_community.as_deref()),
@@ -97,7 +98,7 @@ impl DecryptedSnmpCredentials {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_switch_snmp_with_network(switch: &SwitchForSnmpWithNetwork) -> Self {
         Self {
             community: decrypt_credential(switch.snmp_community.as_deref()),
@@ -187,7 +188,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn format_snmp_error(e: Box<Error>) -> String {
     match *e {
         Error::Timeout {
@@ -425,82 +426,70 @@ pub async fn get_switch_ports_via_snmp(
 }
 
 pub async fn test_snmp_connection_by_id(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     req: web::Json<SnmpTestRequest>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
     let mut test_req = req.into_inner();
     test_req.switch_id = Some(switch_id);
-    test_snmp_connection(pool, web::Json(test_req)).await
+    test_snmp_connection(state, web::Json(test_req)).await
 }
 
 pub async fn test_snmp_connection(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<SnmpTestRequest>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     tracing::info!("[test_snmp] 收到的完整请求: {:?}", req);
 
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(switch_id) = req.switch_id {
             let switch = sqlx::query_as::<_, SwitchForSnmp>(
-                r"SELECT 
-                    id, name, snmp_version, snmp_community, 
-                    snmp_username, snmp_auth_protocol, 
-                    snmp_auth_password, snmp_priv_protocol, 
+                r"SELECT
+                    id, name, snmp_version, snmp_community,
+                    snmp_username, snmp_auth_protocol,
+                    snmp_auth_password, snmp_priv_protocol,
                     snmp_priv_password, snmp_port
                 FROM switches WHERE id = $1",
             )
             .bind(switch_id)
-            .fetch_optional(&pool.get_conn())
-            .await;
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?
+            .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
-            match switch {
-                Ok(Some(s)) => {
-                    let ip_address: Option<String> = sqlx::query_scalar(
-                        r"SELECT host(ip_address) FROM ips 
-                           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-                           ORDER BY created_at LIMIT 1",
-                    )
-                    .bind(switch_id)
-                    .fetch_optional(&pool.get_conn())
-                    .await
-                    .ok()
-                    .flatten();
+            let ip_address: Option<String> = sqlx::query_scalar(
+                r"SELECT host(ip_address) FROM ips
+                   WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+                   ORDER BY created_at LIMIT 1",
+            )
+            .bind(switch_id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await
+            .ok()
+            .flatten();
 
-                    let creds = DecryptedSnmpCredentials::from_switch_snmp(&s);
+            let creds = DecryptedSnmpCredentials::from_switch_snmp(&switch);
 
-                    let version = req.snmp_version.clone().unwrap_or(s.snmp_version);
-                    let community = req.snmp_community.clone().or(creds.community);
-                    let username = req.snmp_username.clone().or(s.snmp_username);
-                    let auth_proto = req.snmp_auth_protocol.clone().or(s.snmp_auth_protocol);
-                    let auth_pass = req.snmp_auth_password.clone().or(creds.auth_password);
-                    let priv_proto = req.snmp_priv_protocol.clone().or(s.snmp_priv_protocol);
-                    let priv_pass = req.snmp_priv_password.clone().or(creds.priv_password);
-                    let port = req.snmp_port.unwrap_or(s.snmp_port);
+            let version = req.snmp_version.clone().unwrap_or(switch.snmp_version);
+            let community = req.snmp_community.clone().or(creds.community);
+            let username = req.snmp_username.clone().or(switch.snmp_username);
+            let auth_proto = req.snmp_auth_protocol.clone().or(switch.snmp_auth_protocol);
+            let auth_pass = req.snmp_auth_password.clone().or(creds.auth_password);
+            let priv_proto = req.snmp_priv_protocol.clone().or(switch.snmp_priv_protocol);
+            let priv_pass = req.snmp_priv_password.clone().or(creds.priv_password);
+            let port = req.snmp_port.unwrap_or(switch.snmp_port);
 
-                    (
-                        req.ip_address.clone().or(ip_address),
-                        version,
-                        community,
-                        username,
-                        auth_proto,
-                        auth_pass,
-                        priv_proto,
-                        priv_pass,
-                        port,
-                    )
-                }
-                Ok(None) => {
-                    return Ok(
-                        HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))
-                    );
-                }
-                Err(e) => {
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
-                }
-            }
+            (
+                req.ip_address.clone().or(ip_address),
+                version,
+                community,
+                username,
+                auth_proto,
+                auth_pass,
+                priv_proto,
+                priv_pass,
+                port,
+            )
         } else {
             (
                 req.ip_address.clone(),
@@ -519,7 +508,7 @@ pub async fn test_snmp_connection(
 
     let ip = match ip {
         Some(ref s) if !s.is_empty() => s.clone(),
-        _ => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("IP地址不能为空"))),
+        _ => return Err(AppError::Validation("IP地址不能为空".to_string())),
     };
 
     let snmp_params = SnmpParamsLegacy {
@@ -551,47 +540,36 @@ pub async fn test_snmp_connection(
             serde_json::json!({ "sysDescr": sys_descr }),
             "SNMP连接测试成功",
         ))),
-        Err(e) => Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("SNMP连接测试失败: {e}")))),
+        Err(e) => Err(AppError::Snmp(format!("SNMP连接测试失败: {e}"))),
     }
 }
 
 pub async fn get_switch_info_snmp(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT 
-            id, name, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, snmp_priv_protocol, 
+        r"SELECT
+            id, name, snmp_version, snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
-    .await;
-
-    let switch = match switch {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
-        }
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
-        }
-    };
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips 
+        r"SELECT host(ip_address) FROM ips
            WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&state.pool()?.get_conn())
     .await
     .ok()
     .flatten();
@@ -599,9 +577,7 @@ pub async fn get_switch_info_snmp(
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
         _ => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
-            );
+            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
         }
     };
 
@@ -612,50 +588,36 @@ pub async fn get_switch_info_snmp(
             serde_json::json!({ "vendor": vendor, "model": model }),
             "获取交换机信息成功",
         ))),
-        Err(e) => Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "获取交换机信息失败: {e}"
-            ))),
-        ),
+        Err(e) => Err(AppError::Snmp(format!("获取交换机信息失败: {e}"))),
     }
 }
 
 pub async fn get_switch_ports_snmp(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT 
-            id, name, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, snmp_priv_protocol, 
+        r"SELECT
+            id, name, snmp_version, snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
-    .await;
-
-    let switch = match switch {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
-        }
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
-        }
-    };
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips 
+        r"SELECT host(ip_address) FROM ips
            WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&state.pool()?.get_conn())
     .await
     .ok()
     .flatten();
@@ -663,9 +625,7 @@ pub async fn get_switch_ports_snmp(
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
         _ => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
-            );
+            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
         }
     };
 
@@ -675,10 +635,6 @@ pub async fn get_switch_ports_snmp(
         Ok(ports) => {
             Ok(HttpResponse::Ok().json(ApiResponse::success(ports, "获取交换机端口信息成功")))
         }
-        Err(e) => Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "获取交换机端口信息失败: {e}"
-            ))),
-        ),
+        Err(e) => Err(AppError::Snmp(format!("获取交换机端口信息失败: {e}"))),
     }
 }

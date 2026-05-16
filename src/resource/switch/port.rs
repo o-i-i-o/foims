@@ -1,12 +1,12 @@
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
 use super::snmp::{SwitchForSnmp, get_switch_ports_via_snmp};
-use crate::config::Config;
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
@@ -14,10 +14,10 @@ use crate::utils::log_system_operation;
 use tracing::warn;
 
 pub async fn get_switch_ports(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
     let page_size: i64 = query
@@ -27,47 +27,36 @@ pub async fn get_switch_ports(
     let offset = (page - 1) * page_size;
 
     let total: i64 =
-        match sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
+        sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
             .bind(switch_id)
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("获取端口数量失败: {e}"))));
-            }
-        };
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
-    let ports = sqlx::query_as::<_, SwitchPort>(
+    let data = sqlx::query_as::<_, SwitchPort>(
         r"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
     )
     .bind(switch_id)
     .bind(page_size)
     .bind(offset)
-    .fetch_all(&pool.get_conn())
-    .await;
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
-    match ports {
-        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(
-            serde_json::json!({
-                "items": data,
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": (total + page_size - 1) / page_size
-            }),
-            "获取端口列表成功",
-        ))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取端口列表失败: {e}")))),
-    }
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "items": data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) / page_size
+        }),
+        "获取端口列表成功",
+    )))
 }
 
 pub async fn get_all_switch_ports(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
     let page_size: i64 = query
         .get("page_size")
@@ -82,31 +71,25 @@ pub async fn get_all_switch_ports(
         Some(format!("%{search}%"))
     };
 
-    let total: i64 = match if let Some(ref pattern) = search_pattern {
+    let total: i64 = if let Some(ref pattern) = search_pattern {
         sqlx::query_scalar(
             "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id WHERE s.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1"
         )
         .bind(pattern)
-        .fetch_one(&pool.get_conn())
-        .await
+        .fetch_one(&state.pool()?.get_conn())
+        .await?
     } else {
         sqlx::query_scalar(
             "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id",
         )
-        .fetch_one(&pool.get_conn())
-        .await
-    } {
-        Ok(t) => t,
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("获取端口数量失败: {e}"))));
-        }
+        .fetch_one(&state.pool()?.get_conn())
+        .await?
     };
 
-    let ports = if let Some(ref pattern) = search_pattern {
+    let data = if let Some(ref pattern) = search_pattern {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
-            r"SELECT 
-                sp.id, sp.switch_id, s.name as switch_name, 
+            r"SELECT
+                sp.id, sp.switch_id, s.name as switch_name,
                 COALESCE(
                     (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                     ''
@@ -122,12 +105,12 @@ pub async fn get_all_switch_ports(
         .bind(pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
     } else {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
-            r"SELECT 
-                sp.id, sp.switch_id, s.name as switch_name, 
+            r"SELECT
+                sp.id, sp.switch_id, s.name as switch_name,
                 COALESCE(
                     (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                     ''
@@ -141,53 +124,41 @@ pub async fn get_all_switch_ports(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
     };
 
-    match ports {
-        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(
-            serde_json::json!({
-                "items": data,
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": (total + page_size - 1) / page_size
-            }),
-            "获取所有端口列表成功",
-        ))),
-        Err(e) => Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "获取所有端口列表失败: {e}"
-            ))),
-        ),
-    }
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "items": data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) / page_size
+        }),
+        "获取所有端口列表成功",
+    )))
 }
 
 pub async fn create_switch_port(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     req: web::Json<SwitchPortCreate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
-        );
-    }
+    req.validate()?;
 
     let switch_exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(switch_id)
-            .fetch_one(&pool.get_conn())
+            .fetch_one(&state.pool()?.get_conn())
             .await
             .unwrap_or(false);
 
     if !switch_exists {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+        return Err(AppError::NotFound("交换机不存在".to_string()));
     }
 
     let port_exists = sqlx::query_scalar::<_, bool>(
@@ -195,18 +166,18 @@ pub async fn create_switch_port(
     )
     .bind(switch_id)
     .bind(&req.port_number)
-    .fetch_one(&pool.get_conn())
+    .fetch_one(&state.pool()?.get_conn())
     .await
     .unwrap_or(false);
 
     if port_exists {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("该端口号已存在")));
+        return Err(AppError::Conflict("该端口号已存在".to_string()));
     }
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    let result = sqlx::query(
+    sqlx::query(
         r"INSERT INTO switch_ports (
             id, switch_id, port_number, port_name, port_type, vlan_id,
             status, speed, description, created_at, updated_at
@@ -223,63 +194,48 @@ pub async fn create_switch_port(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let port = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
-                .bind(id)
-                .fetch_one(&pool.get_conn())
-                .await;
+    let data = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-            match port {
-                Ok(data) => {
-                    let details = serde_json::json!({
-                        "switch_id": switch_id,
-                        "port_number": data.port_number,
-                        "port_name": data.port_name,
-                        "port_type": data.port_type,
-                        "vlan_id": data.vlan_id
-                    });
-                    if let Err(e) = log_system_operation(
-                        &pool.get_conn(),
-                        &http_req,
-                        config.get_ref(),
-                        "create",
-                        "switch_port",
-                        &id,
-                        &details,
-                        true,
-                    )
-                    .await
-                    {
-                        warn!("记录操作日志失败: {}", e);
-                    }
-
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建端口成功")))
-                }
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "创建端口成功但查询失败: {e}"
-                    ))),
-                ),
-            }
-        }
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建端口失败: {e}")))),
+    let details = serde_json::json!({
+        "switch_id": switch_id,
+        "port_number": data.port_number,
+        "port_name": data.port_name,
+        "port_type": data.port_type,
+        "vlan_id": data.vlan_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "create",
+        "switch_port",
+        &id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
     }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建端口成功")))
 }
 
 pub async fn get_switch_port(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let port_id = path.into_inner();
 
-    let port = sqlx::query_as::<_, SwitchPortWithSwitch>(
-        r"SELECT 
-            sp.id, sp.switch_id, s.name as switch_name, 
+    let data = sqlx::query_as::<_, SwitchPortWithSwitch>(
+        r"SELECT
+            sp.id, sp.switch_id, s.name as switch_name,
             COALESCE(
                 (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
                 ''
@@ -291,31 +247,22 @@ pub async fn get_switch_port(
         WHERE sp.id = $1",
     )
     .bind(port_id)
-    .fetch_optional(&pool.get_conn())
-    .await;
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("端口不存在".to_string()))?;
 
-    match port {
-        Ok(Some(data)) => Ok(HttpResponse::Ok().json(ApiResponse::success(data, "获取端口成功"))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取端口失败: {e}")))),
-    }
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "获取端口成功")))
 }
 
 pub async fn update_switch_port(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     req: web::Json<SwitchPortUpdate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let port_id = path.into_inner();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
-        );
-    }
+    req.validate()?;
 
     let now = Utc::now();
 
@@ -340,173 +287,142 @@ pub async fn update_switch_port(
     .bind(&req.description)
     .bind(now)
     .bind(port_id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() > 0 => {
-            let port = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
-                .bind(port_id)
-                .fetch_one(&pool.get_conn())
-                .await;
-
-            match port {
-                Ok(data) => {
-                    let details = serde_json::json!({
-                        "switch_id": data.switch_id,
-                        "port_number": data.port_number,
-                        "port_name": data.port_name,
-                        "port_type": data.port_type,
-                        "vlan_id": data.vlan_id
-                    });
-                    if let Err(e) = log_system_operation(
-                        &pool.get_conn(),
-                        &http_req,
-                        config.get_ref(),
-                        "update",
-                        "switch_port",
-                        &port_id,
-                        &details,
-                        true,
-                    )
-                    .await
-                    {
-                        warn!("记录操作日志失败: {}", e);
-                    }
-
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新端口成功")))
-                }
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "更新端口成功但查询失败: {e}"
-                    ))),
-                ),
-            }
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新端口失败: {e}")))),
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("端口不存在".to_string()));
     }
+
+    let data = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
+        .bind(port_id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let details = serde_json::json!({
+        "switch_id": data.switch_id,
+        "port_number": data.port_number,
+        "port_name": data.port_name,
+        "port_type": data.port_type,
+        "vlan_id": data.vlan_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "update",
+        "switch_port",
+        &port_id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新端口成功")))
 }
 
 pub async fn delete_switch_port(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let port_id = path.into_inner();
 
     let has_child_switch = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_port_id = $1)",
     )
     .bind(port_id)
-    .fetch_one(&pool.get_conn())
+    .fetch_one(&state.pool()?.get_conn())
     .await
     .unwrap_or(false);
 
     if has_child_switch {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error("该端口有下级交换机连接，无法删除")));
+        return Err(AppError::Validation("该端口有下级交换机连接，无法删除".to_string()));
     }
 
     let has_workstation = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND workstation_id IS NOT NULL)",
     )
     .bind(port_id)
-    .fetch_one(&pool.get_conn())
+    .fetch_one(&state.pool()?.get_conn())
     .await
     .unwrap_or(false);
 
     if has_workstation {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error("该端口有工位关联，无法删除"))
-        );
+        return Err(AppError::Validation("该端口有工位关联，无法删除".to_string()));
     }
 
     let has_cabinet_position = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND position_id IS NOT NULL)",
     )
     .bind(port_id)
-    .fetch_one(&pool.get_conn())
+    .fetch_one(&state.pool()?.get_conn())
     .await
     .unwrap_or(false);
 
     if has_cabinet_position {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error("该端口有机位关联，无法删除"))
-        );
+        return Err(AppError::Validation("该端口有机位关联，无法删除".to_string()));
     }
 
     let result = sqlx::query("DELETE FROM switch_ports WHERE id = $1")
         .bind(port_id)
-        .execute(&pool.get_conn())
-        .await;
+        .execute(&state.pool()?.get_conn())
+        .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() > 0 => {
-            let details = serde_json::json!({
-                "port_id": port_id
-            });
-            if let Err(e) = log_system_operation(
-                &pool.get_conn(),
-                &http_req,
-                config.get_ref(),
-                "delete",
-                "switch_port",
-                &port_id,
-                &details,
-                true,
-            )
-            .await
-            {
-                warn!("记录操作日志失败: {}", e);
-            }
-
-            Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除端口成功")))
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("端口不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除端口失败: {e}")))),
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("端口不存在".to_string()));
     }
+
+    let details = serde_json::json!({
+        "port_id": port_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "delete",
+        "switch_port",
+        &port_id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除端口成功")))
 }
 
 pub async fn sync_ports_from_snmp(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
     let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT 
-            id, name, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, snmp_priv_protocol, 
+        r"SELECT
+            id, name, snmp_version, snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
-    .await;
-
-    let switch_data = match switch_data {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
-        }
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
-        }
-    };
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips 
+        r"SELECT host(ip_address) FROM ips
            WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&state.pool()?.get_conn())
     .await
     .ok()
     .flatten();
@@ -514,24 +430,14 @@ pub async fn sync_ports_from_snmp(
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
         _ => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
-            );
+            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
         }
     };
 
     let snmp_params = switch_data.to_snmp_params(ip_address);
 
-    let ports = match get_switch_ports_via_snmp(&snmp_params).await {
-        Ok(p) => p,
-        Err(e) => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                    "获取交换机端口信息失败: {e}"
-                ))),
-            );
-        }
-    };
+    let ports = get_switch_ports_via_snmp(&snmp_params).await
+        .map_err(|e| AppError::Snmp(format!("获取交换机端口信息失败: {e}")))?;
 
     let mut saved_count = 0;
     let mut skipped_count = 0;
@@ -542,7 +448,7 @@ pub async fn sync_ports_from_snmp(
         )
         .bind(switch_id)
         .bind(&port.port_number)
-        .fetch_one(&pool.get_conn())
+        .fetch_one(&state.pool()?.get_conn())
         .await
         .unwrap_or(true);
 
@@ -571,7 +477,7 @@ pub async fn sync_ports_from_snmp(
         .bind(&port.description)
         .bind(now)
         .bind(now)
-        .execute(&pool.get_conn())
+        .execute(&state.pool()?.get_conn())
         .await;
 
         if result.is_ok() {
@@ -583,7 +489,7 @@ pub async fn sync_ports_from_snmp(
         "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number",
     )
     .bind(switch_id)
-    .fetch_all(&pool.get_conn())
+    .fetch_all(&state.pool()?.get_conn())
     .await
     .unwrap_or_default();
 

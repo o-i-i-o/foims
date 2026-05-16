@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::error::AppError;
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
 use futures_util::TryStreamExt;
@@ -31,7 +32,7 @@ pub struct CertInfo {
     pub exists: bool,
 }
 
-pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> HttpResponse {
+pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> Result<HttpResponse, AppError> {
     info!("正在生成自签名证书");
 
     let cert_path = "certs/cert.pem";
@@ -39,55 +40,35 @@ pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> HttpResponse 
 
     if !Path::new("certs").exists()
         && let Err(e) = tokio::fs::create_dir_all("certs").await {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "message": format!("创建证书目录失败: {}", e),
-                "data": null
-            }));
+            return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
         }
 
     use rcgen::generate_simple_self_signed;
 
-    let certified_key = match generate_simple_self_signed(vec![req.common_name.clone()]) {
-        Ok(key) => key,
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "message": format!("证书生成失败: {}", e),
-                "data": null
-            }));
-        }
-    };
+    let certified_key = generate_simple_self_signed(vec![req.common_name.clone()])
+        .map_err(|e| AppError::Internal(format!("证书生成失败: {}", e)))?;
 
     let cert_pem = certified_key.cert.pem();
     let key_pem = certified_key.signing_key.serialize_pem();
 
-    if let Err(e) = tokio::fs::write(cert_path, cert_pem.as_bytes()).await {
-        return HttpResponse::InternalServerError().json(serde_json::json!({
-            "success": false,
-            "message": format!("证书文件写入失败: {}", e),
-            "data": null
-        }));
-    }
+    tokio::fs::write(cert_path, cert_pem.as_bytes())
+        .await
+        .map_err(|e| AppError::Internal(format!("证书文件写入失败: {}", e)))?;
 
-    if let Err(e) = tokio::fs::write(key_path, key_pem.as_bytes()).await {
-        return HttpResponse::InternalServerError().json(serde_json::json!({
-            "success": false,
-            "message": format!("密钥文件写入失败: {}", e),
-            "data": null
-        }));
-    }
+    tokio::fs::write(key_path, key_pem.as_bytes())
+        .await
+        .map_err(|e| AppError::Internal(format!("密钥文件写入失败: {}", e)))?;
 
     info!("自签名证书生成成功");
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "证书生成成功",
         "data": null
-    }))
+    })))
 }
 
-pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
+pub async fn import_cert(mut payload: Multipart) -> Result<HttpResponse, AppError> {
     info!("正在导入证书");
 
     let mut cert_data: Option<Vec<u8>> = None;
@@ -97,11 +78,7 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
         let name = match field.name() {
             Some(n) => n.to_string(),
             None => {
-                return HttpResponse::BadRequest().json(serde_json::json!({
-                    "success": false,
-                    "message": "表单字段名称无效",
-                    "data": null
-                }));
+                return Err(AppError::Validation("表单字段名称无效".to_string()));
             }
         };
         let mut data = Vec::new();
@@ -118,75 +95,43 @@ pub async fn import_cert(mut payload: Multipart) -> HttpResponse {
     }
 
     if cert_data.is_none() || key_data.is_none() {
-        return HttpResponse::BadRequest().json(serde_json::json!({
-            "success": false,
-            "message": "缺少证书或私钥",
-            "data": null
-        }));
+        return Err(AppError::Validation("缺少证书或私钥".to_string()));
     }
 
     if !Path::new("certs").exists()
         && let Err(e) = tokio::fs::create_dir_all("certs").await {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "message": format!("创建证书目录失败: {}", e),
-                "data": null
-            }));
+            return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
         }
 
     let cert_path = "certs/imported_cert.pem";
     let key_path = "certs/imported_key.pem";
 
-    let cert_data = match cert_data {
-        Some(data) => data,
-        None => {
-            return HttpResponse::BadRequest().json(serde_json::json!({
-                "success": false,
-                "message": "证书数据丢失",
-                "data": null
-            }));
-        }
-    };
-    let key_data = match key_data {
-        Some(data) => data,
-        None => {
-            return HttpResponse::BadRequest().json(serde_json::json!({
-                "success": false,
-                "message": "密钥数据丢失",
-                "data": null
-            }));
-        }
-    };
+    let cert_data = cert_data
+        .ok_or_else(|| AppError::Validation("证书数据丢失".to_string()))?;
+    let key_data = key_data
+        .ok_or_else(|| AppError::Validation("密钥数据丢失".to_string()))?;
 
-    if let Err(e) = tokio::fs::write(cert_path, &cert_data).await {
-        return HttpResponse::InternalServerError().json(serde_json::json!({
-            "success": false,
-            "message": format!("证书文件写入失败: {}", e),
-            "data": null
-        }));
-    }
+    tokio::fs::write(cert_path, &cert_data)
+        .await
+        .map_err(|e| AppError::Internal(format!("证书文件写入失败: {}", e)))?;
 
     if let Err(e) = tokio::fs::write(key_path, &key_data).await {
         if let Err(e) = tokio::fs::remove_file(cert_path).await {
             tracing::warn!("删除证书文件失败: {}", e);
         }
-        return HttpResponse::InternalServerError().json(serde_json::json!({
-            "success": false,
-            "message": format!("密钥文件写入失败: {}", e),
-            "data": null
-        }));
+        return Err(AppError::Internal(format!("密钥文件写入失败: {}", e)));
     }
 
     info!("证书导入成功");
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "证书导入成功",
         "data": null
-    }))
+    })))
 }
 
-pub async fn get_cert_info() -> HttpResponse {
+pub async fn get_cert_info() -> Result<HttpResponse, AppError> {
     info!("正在获取证书信息");
 
     let self_signed_cert_path = "certs/cert.pem";
@@ -218,14 +163,14 @@ pub async fn get_cert_info() -> HttpResponse {
         exists: self_signed_exists || imported_exists,
     };
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "证书信息获取成功",
         "data": cert_info
-    }))
+    })))
 }
 
-pub async fn delete_imported_cert() -> HttpResponse {
+pub async fn delete_imported_cert() -> Result<HttpResponse, AppError> {
     info!("正在删除导入的证书");
 
     let imported_cert_path = "certs/imported_cert.pem";
@@ -233,29 +178,21 @@ pub async fn delete_imported_cert() -> HttpResponse {
 
     if tokio::fs::metadata(imported_cert_path).await.is_ok()
         && let Err(e) = tokio::fs::remove_file(imported_cert_path).await {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "message": format!("删除证书文件失败: {}", e),
-                "data": null
-            }));
+            return Err(AppError::Internal(format!("删除证书文件失败: {}", e)));
         }
 
     if tokio::fs::metadata(imported_key_path).await.is_ok()
         && let Err(e) = tokio::fs::remove_file(imported_key_path).await {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "message": format!("删除密钥文件失败: {}", e),
-                "data": null
-            }));
+            return Err(AppError::Internal(format!("删除密钥文件失败: {}", e)));
         }
 
     info!("导入的证书删除成功");
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "导入的证书删除成功",
         "data": null
-    }))
+    })))
 }
 
 #[must_use]

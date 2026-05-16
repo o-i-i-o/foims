@@ -1,30 +1,29 @@
-use actix_web::{HttpResponse, http::StatusCode};
-use std::fmt;
+use actix_web::{HttpResponse, http::StatusCode, ResponseError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("数据库错误: {0}")]
     Database(String),
-    
+
     #[error("资源未找到: {0}")]
     NotFound(String),
-    
+
     #[error("验证失败: {0}")]
     Validation(String),
-    
+
     #[error("认证失败: {0}")]
     Unauthorized(String),
-    
+
     #[error("权限不足: {0}")]
     Forbidden(String),
-    
+
     #[error("冲突: {0}")]
     Conflict(String),
-    
+
     #[error("内部错误: {0}")]
     Internal(String),
-    
+
     #[error("SNMP错误: {0}")]
     Snmp(String),
 }
@@ -42,9 +41,16 @@ impl AppError {
             AppError::Snmp(_) => StatusCode::BAD_REQUEST,
         }
     }
-    
-    pub fn to_response<T>(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(crate::models::ApiResponse::<T>::error(self.to_string()))
+}
+
+impl ResponseError for AppError {
+    fn status_code(&self) -> StatusCode {
+        self.status_code()
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code())
+            .json(crate::models::ApiResponse::<()>::error(self.to_string()))
     }
 }
 
@@ -86,7 +92,7 @@ impl<T: serde::Serialize> IntoResponse for AppResult<T> {
     fn into_response(self) -> HttpResponse {
         match self {
             Ok(data) => HttpResponse::Ok().json(crate::models::ApiResponse::success(data, "操作成功")),
-            Err(e) => e.to_response::<()>(),
+            Err(e) => e.error_response(),
         }
     }
 }

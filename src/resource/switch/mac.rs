@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 use async_snmp::{Client, oid};
 use chrono::Utc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, ArpEntry, SwitchMac};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
@@ -471,10 +472,11 @@ pub async fn get_all_arp_entries(
 }
 
 pub async fn get_switch_mac_table(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
+    let conn = state.pool()?.get_conn();
 
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r"SELECT
@@ -485,19 +487,10 @@ pub async fn get_switch_mac_table(
         FROM switches WHERE id = $1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
-    .await;
-
-    let switch = match switch {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
-        }
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("查询交换机失败: {e}"))));
-        }
-    };
+    .fetch_optional(&conn)
+    .await
+    .map_err(|e| AppError::Database(format!("查询交换机失败: {e}")))?
+    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
@@ -505,29 +498,19 @@ pub async fn get_switch_mac_table(
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)
-    .fetch_optional(&pool.get_conn())
-    .await
-    .ok()
+    .fetch_optional(&conn)
+    .await?
     .flatten();
 
-    let ip_address = match ip_address {
-        Some(ref ip) if !ip.is_empty() => ip,
-        _ => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("交换机没有配置IP地址"))
-            );
-        }
-    };
+    let ip_address = ip_address
+        .filter(|ip| !ip.is_empty())
+        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params(ip_address);
+    let snmp_params = switch.to_snmp_params(&ip_address);
 
-    let entries = match get_arp_table_via_snmp(&snmp_params).await {
-        Ok(e) => e,
-        Err(e) => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error(format!("获取ARP表失败: {e}"))));
-        }
-    };
+    let entries = get_arp_table_via_snmp(&snmp_params)
+        .await
+        .map_err(|e| AppError::Snmp(format!("获取ARP表失败: {e}")))?;
 
     let now = Utc::now();
     let mut upserted_count = 0usize;
@@ -550,7 +533,7 @@ pub async fn get_switch_mac_table(
         .bind(&entry.interface)
         .bind(entry.vlan_id)
         .bind(now)
-        .execute(&pool.get_conn())
+        .execute(&conn)
         .await;
 
         if let Ok(r) = result
@@ -565,9 +548,8 @@ pub async fn get_switch_mac_table(
            FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
-    .fetch_all(&pool.get_conn())
-    .await
-    .unwrap_or_default();
+    .fetch_all(&conn)
+    .await?;
 
     let message = format!("同步 {upserted_count} 条 MAC 记录");
 
@@ -575,37 +557,32 @@ pub async fn get_switch_mac_table(
 }
 
 pub async fn get_switch_macs_from_db(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
+    let conn = state.pool()?.get_conn();
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
         .bind(switch_id)
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(false);
+        .fetch_one(&conn)
+        .await?;
 
     if !exists {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+        return Err(AppError::NotFound("交换机不存在".to_string()));
     }
 
-    let macs_result = sqlx::query_as::<_, SwitchMac>(
+    let macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
         r"SELECT id, switch_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
            FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
     )
     .bind(switch_id)
-    .fetch_all(&pool.get_conn())
-    .await;
-
-    let macs = match macs_result {
-        Ok(m) => m,
-        Err(e) => {
-            error!("查询MAC表失败: {}", e);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<Vec<SwitchMac>>::error("查询MAC表失败")));
-        }
-    };
+    .fetch_all(&conn)
+    .await
+    .map_err(|e| {
+        error!("查询MAC表失败: {}", e);
+        AppError::Database("查询MAC表失败".to_string())
+    })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(macs, "获取MAC表成功")))
 }

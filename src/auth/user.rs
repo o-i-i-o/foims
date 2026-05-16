@@ -1,8 +1,8 @@
-use crate::config::Config;
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use bcrypt::{DEFAULT_COST, hash};
 use chrono::Utc;
 use serde_json::json;
@@ -11,9 +11,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_users(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -26,67 +26,38 @@ pub async fn get_users(
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{search}%");
+    let conn = state.pool()?.get_conn();
 
     let (total, users) = if search.is_empty() {
-        let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+            .fetch_one(&conn)
+            .await?;
 
-        let users = match sqlx::query_as::<_, User>(
+        let users = sqlx::query_as::<_, User>(
             "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(u) => u,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&conn)
+        .await?;
 
         (total, users)
     } else {
-        let total: i64 = match sqlx::query_scalar(
+        let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM users WHERE username ILIKE $1 OR email ILIKE $1",
         )
         .bind(&search_pattern)
-        .fetch_one(&pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
+        .fetch_one(&conn)
+        .await?;
 
-        let users = match sqlx::query_as::<_, User>(
+        let users = sqlx::query_as::<_, User>(
             "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE $1 OR email ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(u) => u,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&conn)
+        .await?;
 
         (total, users)
     };
@@ -104,69 +75,41 @@ pub async fn get_users(
 }
 
 pub async fn create_user(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<AppState>,
     http_req: HttpRequest,
     req: web::Json<UserCreate>,
-) -> Result<HttpResponse> {
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+) -> Result<HttpResponse, AppError> {
+    (*req).validate()?;
+
+    let conn = state.pool()?.get_conn();
 
     let existing_user =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = $1")
             .bind(&req.username)
-            .fetch_optional(&pool.get_conn())
-            .await
-        {
-            Ok(user) => user,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+            .fetch_optional(&conn)
+            .await?;
 
     if existing_user.is_some() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<User>::error("用户名已存在")));
+        return Err(AppError::Conflict("用户名已存在".to_string()));
     }
 
     let existing_email =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
             .bind(&req.email)
-            .fetch_optional(&pool.get_conn())
-            .await
-        {
-            Ok(email) => email,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+            .fetch_optional(&conn)
+            .await?;
 
     if existing_email.is_some() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<User>::error("邮箱已存在")));
+        return Err(AppError::Conflict("邮箱已存在".to_string()));
     }
 
-    let hashed_password = match hash(&req.password, DEFAULT_COST) {
-        Ok(password) => password,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("密码哈希错误: {err}"))));
-        }
-    };
+    let hashed_password = hash(&req.password, DEFAULT_COST)
+        .map_err(|err| AppError::Internal(format!("密码哈希错误: {err}")))?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
+    sqlx::query(
         "INSERT INTO users (id, username, password_hash, email, role, status, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
@@ -178,19 +121,14 @@ pub async fn create_user(
     .bind(true)
     .bind(now)
     .bind(now)
-    .execute(&pool.get_conn())
-    .await
-    {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                format!("数据库插入错误: {err}"),
-            )));
-    }
+    .execute(&conn)
+    .await?;
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &conn,
         &http_req,
-        &config,
+        &state.config,
         "create_user",
         "user",
         &id,
@@ -217,62 +155,48 @@ pub async fn create_user(
     Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户创建成功")))
 }
 
-pub async fn get_user(pool: web::Data<DbPool>, id_path: web::Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_user(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
+    let conn = state.pool()?.get_conn();
 
-    let user = match sqlx::query_as::<_, User>(
+    let user = sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
-    ).bind(id)
-    .fetch_optional(&pool.get_conn()).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("用户未找到")));
-        },
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-        }
-    };
+    )
+    .bind(id)
+    .fetch_optional(&conn)
+    .await?
+    .ok_or_else(|| AppError::NotFound("用户未找到".to_string()))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户获取成功")))
 }
 
 pub async fn update_user(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<AppState>,
     http_req: HttpRequest,
     id_path: web::Path<Uuid>,
     req: web::Json<UserUpdate>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+    (*req).validate()?;
 
-    let existing_user = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
+    let conn = state.pool()?.get_conn();
+
+    let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
         .bind(id)
-        .fetch_optional(&pool.get_conn())
-        .await
-    {
-        Ok(user) => user,
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {err}"
-                ))),
-            );
-        }
-    };
+        .fetch_optional(&conn)
+        .await?;
 
     if existing_user.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<User>::error("用户未找到")));
+        return Err(AppError::NotFound("用户未找到".to_string()));
     }
 
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
+    sqlx::query(
         "UPDATE users SET 
          email = COALESCE($1, email), 
          role = COALESCE($2, role), 
@@ -285,18 +209,14 @@ pub async fn update_user(
     .bind(req.status)
     .bind(now)
     .bind(id)
-    .execute(&pool.get_conn())
-    .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
-    }
+    .execute(&conn)
+    .await?;
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &conn,
         &http_req,
-        &config,
+        &state.config,
         "update_user",
         "user",
         &id,
@@ -308,103 +228,57 @@ pub async fn update_user(
         tracing::warn!("记录操作日志失败: {}", e);
     }
 
-    let user = match sqlx::query_as::<_, User>(
+    let user = sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
-    ).bind(id)
-    .fetch_one(&pool.get_conn()).await {
-        Ok(user) => user,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
-        }
-    };
+    )
+    .bind(id)
+    .fetch_one(&conn)
+    .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户更新成功")))
 }
 
 pub async fn delete_user(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<AppState>,
     http_req: HttpRequest,
     id_path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
+    let conn = state.pool()?.get_conn();
 
-    let existing_user = match sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
+    let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
         .bind(id)
-        .fetch_optional(&pool.get_conn())
-        .await
-    {
-        Ok(user) => user,
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {err}"
-                ))),
-            );
-        }
-    };
+        .fetch_optional(&conn)
+        .await?;
 
     if existing_user.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户未找到")));
+        return Err(AppError::NotFound("用户未找到".to_string()));
     }
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "数据库事务启动失败: {err}"
-                ))),
-            );
-        }
-    };
+    let mut tx = conn.begin().await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM operation_logs WHERE user_id = $1")
+    sqlx::query("DELETE FROM operation_logs WHERE user_id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        if let Err(e) = tx.rollback().await {
-            tracing::warn!("事务回滚失败: {}", e);
-        }
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
-    }
+        .await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM notifications WHERE user_id = $1")
+    sqlx::query("DELETE FROM notifications WHERE user_id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        if let Err(e) = tx.rollback().await {
-            tracing::warn!("事务回滚失败: {}", e);
-        }
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
-    }
+        .await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM users WHERE id = $1")
+    sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        if let Err(e) = tx.rollback().await {
-            tracing::warn!("事务回滚失败: {}", e);
-        }
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库删除错误: {err}"))));
-    }
+        .await?;
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("事务提交失败: {err}"))));
-    }
+    tx.commit().await?;
 
     let details = json!({});
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        &config,
+        &state.config,
         "delete_user",
         "user",
         &id,

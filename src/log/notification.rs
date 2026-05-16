@@ -1,16 +1,16 @@
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, Notification};
 use crate::utils::DEFAULT_PAGE;
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-// 获取通知列表（支持搜索和分页）
 pub async fn get_notifications(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -39,31 +39,19 @@ pub async fn get_notifications(
         format!("WHERE {}", where_conditions.join(" AND "))
     };
 
-    let total: i64 = match sqlx::query_scalar(&format!(
+    let conn = state.pool()?.get_conn();
+
+    let total: i64 = sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM notifications {where_clause}"
     ))
-    .fetch_one(&pool.get_conn())
-    .await
-    {
-        Ok(t) => t,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-        }
-    };
+    .fetch_one(&conn)
+    .await?;
 
-    let notifications = match sqlx::query_as::<_, Notification>(&format!(
+    let notifications = sqlx::query_as::<_, Notification>(&format!(
         "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} ORDER BY created_at DESC LIMIT {page_size} OFFSET {offset}"
     ))
-    .fetch_all(&pool.get_conn())
-    .await
-    {
-        Ok(notifications) => notifications,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-        }
-    };
+    .fetch_all(&conn)
+    .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         json!({
@@ -77,58 +65,41 @@ pub async fn get_notifications(
     )))
 }
 
-// 标记通知为已读
 pub async fn mark_notification_read(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let notification_id = *id;
+    let conn = state.pool()?.get_conn();
 
-    // 检查通知是否存在
     let existing_notification =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM notifications WHERE id = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM notifications WHERE id = $1")
             .bind(notification_id)
-            .fetch_optional(&pool.get_conn())
-            .await
-        {
-            Ok(notification) => notification,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
+            .fetch_optional(&conn)
+            .await?;
 
     if existing_notification.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("通知不存在")));
+        return Err(AppError::NotFound("通知不存在".to_string()));
     }
 
-    // 标记为已读
-    if let Err(err) = sqlx::query("UPDATE notifications SET read = true WHERE id = $1")
+    sqlx::query("UPDATE notifications SET read = true WHERE id = $1")
         .bind(notification_id)
-        .execute(&pool.get_conn())
-        .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
-    }
+        .execute(&conn)
+        .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知已标记为已读")))
 }
 
-// 标记所有通知为已读
-pub async fn mark_all_notifications_read(pool: web::Data<DbPool>) -> Result<HttpResponse> {
-    if let Err(err) = sqlx::query("UPDATE notifications SET read = true")
-        .execute(&pool.get_conn())
-        .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
-    }
+pub async fn mark_all_notifications_read(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
+
+    sqlx::query("UPDATE notifications SET read = true")
+        .execute(&conn)
+        .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "所有通知已标记为已读")))
 }
 
-// 创建新通知
 pub async fn create_notification(
     pool: &sqlx::PgPool,
     title: &str,

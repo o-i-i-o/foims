@@ -1,9 +1,10 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use tracing::info;
 
-use crate::config::Config;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::init::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
 use crate::models::ApiResponse;
 
@@ -70,11 +71,9 @@ pub fn verify_code(provided_code: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn get_verification_code(config: web::Data<Config>) -> Result<HttpResponse> {
-    if !config.init.enabled {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("系统初始化已在配置中禁用"))
-        );
+pub async fn get_verification_code(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    if !state.config.init.enabled {
+        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     let verification_code = generate_and_print_verification_code();

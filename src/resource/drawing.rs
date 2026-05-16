@@ -1,16 +1,16 @@
-use crate::config::Config;
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, LayoutSaveRequest};
 use crate::utils::log_system_operation;
 use tracing::warn;
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use serde_json;
 use uuid::Uuid;
 
 pub fn generate_region_map(
-    _pool: web::Data<DbPool>,
+    _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
         (),
         "Region map generation not implemented yet",
@@ -18,9 +18,9 @@ pub fn generate_region_map(
 }
 
 pub fn generate_room_map(
-    _pool: web::Data<DbPool>,
+    _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
         (),
         "Room map generation not implemented yet",
@@ -28,9 +28,9 @@ pub fn generate_room_map(
 }
 
 pub fn generate_workstation_map(
-    _pool: web::Data<DbPool>,
+    _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
         (),
         "Workstation map generation not implemented yet",
@@ -38,27 +38,19 @@ pub fn generate_workstation_map(
 }
 
 pub async fn save_layout(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<LayoutSaveRequest>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     if req.r#type == "workstation" {
         let Some(room_id) = req.room_id else {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("房间ID不能为空"))
-            )
+            return Err(AppError::Validation("房间ID不能为空".to_string()));
         };
 
-        let mut tx = pool.get_conn().begin().await.map_err(|e| {
-            actix_web::error::InternalError::new(
-                format!("获取数据库连接失败: {e}"),
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            )
-        })?;
+        let mut tx = state.pool()?.get_conn().begin().await?;
 
         for item in &req.layout {
-            if let Err(e) = sqlx::query(
+            sqlx::query(
                 "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation) 
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workstation_id) 
@@ -76,15 +68,10 @@ pub async fn save_layout(
             .bind(item.position.width_i32())
             .bind(item.position.height_i32())
             .bind(item.position.rotation_i32())
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {e}"))));
-            }
+            .execute(&mut *tx).await?;
         }
 
-        if let Err(e) = tx.commit().await {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("提交事务失败: {e}"))));
-        }
+        tx.commit().await?;
 
         let details = serde_json::json!({
             "room_id": room_id,
@@ -92,9 +79,9 @@ pub async fn save_layout(
             "type": req.r#type
         });
         if let Err(e) = log_system_operation(
-            &pool.get_conn(),
+            &state.pool()?.get_conn(),
             &http_req,
-            config.get_ref(),
+            &state.config,
             "update",
             "layout",
             &room_id,
@@ -109,20 +96,13 @@ pub async fn save_layout(
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位布局保存成功")))
     } else if req.r#type == "cabinet" {
         let Some(room_id) = req.room_id else {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("房间ID不能为空"))
-            )
+            return Err(AppError::Validation("房间ID不能为空".to_string()));
         };
 
-        let mut tx = pool.get_conn().begin().await.map_err(|e| {
-            actix_web::error::InternalError::new(
-                format!("获取数据库连接失败: {e}"),
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            )
-        })?;
+        let mut tx = state.pool()?.get_conn().begin().await?;
 
         for item in &req.layout {
-            if let Err(e) = sqlx::query(
+            sqlx::query(
                 "INSERT INTO cabinet_layouts (cabinet_id, x, y, width, height, rotation) 
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (cabinet_id) 
@@ -140,15 +120,10 @@ pub async fn save_layout(
             .bind(item.position.width_i32())
             .bind(item.position.height_i32())
             .bind(item.position.rotation_i32())
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("保存布局失败: {e}"))));
-            }
+            .execute(&mut *tx).await?;
         }
 
-        if let Err(e) = tx.commit().await {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("提交事务失败: {e}"))));
-        }
+        tx.commit().await?;
 
         let details = serde_json::json!({
             "room_id": room_id,
@@ -156,9 +131,9 @@ pub async fn save_layout(
             "type": req.r#type
         });
         if let Err(e) = log_system_operation(
-            &pool.get_conn(),
+            &state.pool()?.get_conn(),
             &http_req,
-            config.get_ref(),
+            &state.config,
             "update",
             "layout",
             &room_id,
@@ -172,35 +147,29 @@ pub async fn save_layout(
 
         Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局保存成功")))
     } else {
-        Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("不支持的布局类型")))
+        Err(AppError::Validation("不支持的布局类型".to_string()))
     }
 }
 
 pub async fn delete_layout(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     room_id: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    if let Err(e) =
-        sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)")
-            .bind(room_id)
-            .execute(&pool.get_conn())
-            .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除布局失败: {e}"))));
-    }
+    sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)")
+        .bind(room_id)
+        .execute(&state.pool()?.get_conn())
+        .await?;
 
     let details = serde_json::json!({
         "room_id": room_id
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "delete",
         "layout",
         &room_id,
@@ -216,47 +185,41 @@ pub async fn delete_layout(
 }
 
 pub async fn delete_positions_layout(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     room_id: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    let result = sqlx::query(
+    sqlx::query(
         "DELETE FROM cabinet_layouts WHERE cabinet_id IN (SELECT id FROM cabinets WHERE room_id = $1)"
     )
     .bind(room_id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let details = serde_json::json!({
-                "room_id": room_id
-            });
-            if let Err(e) = log_system_operation(
-                &pool.get_conn(),
-                &http_req,
-                config.get_ref(),
-                "delete",
-                "layout",
-                &room_id,
-                &details,
-                true,
-            )
-            .await
-            {
-                warn!("记录操作日志失败: {}", e);
-            }
-
-            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
-        }
-        Err(err) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("删除机柜布局失败: {err}")))),
+    let details = serde_json::json!({
+        "room_id": room_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "delete",
+        "layout",
+        &room_id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
     }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
 }
 
-pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_layout(state: web::Data<AppState>, room_id: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
     let layouts = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
@@ -273,14 +236,8 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
            WHERE w.room_id = $1",
     )
     .bind(room_id)
-    .fetch_all(&pool.get_conn())
-    .await
-    .map_err(|e| {
-        actix_web::error::InternalError::new(
-            format!("获取布局失败: {e}"),
-            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-        )
-    })?;
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
     let layout_data: Vec<serde_json::Value> = layouts
         .into_iter()
@@ -305,58 +262,49 @@ pub async fn get_layout(pool: web::Data<DbPool>, room_id: web::Path<Uuid>) -> Re
 }
 
 pub async fn get_positions_layout(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     room_id: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    let layouts = sqlx::query_as::<_, (Uuid, Uuid, i32, i32, i32, i32, i32)>(
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, i32, i32, i32, i32, i32)>(
         r"SELECT cl.id, cl.cabinet_id, cl.x, cl.y, cl.width, cl.height, cl.rotation
           FROM cabinet_layouts cl
           JOIN cabinets c ON cl.cabinet_id = c.id
           WHERE c.room_id = $1",
     )
     .bind(room_id)
-    .fetch_all(&pool.get_conn())
-    .await;
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
-    match layouts {
-        Ok(rows) => {
-            let items: Vec<serde_json::Value> = rows.iter().map(|(id, cabinet_id, x, y, width, height, rotation)| {
-                serde_json::json!({
-                    "id": id,
-                    "cabinet_id": cabinet_id,
-                    "x": x,
-                    "y": y,
-                    "width": width,
-                    "height": height,
-                    "rotation": rotation,
-                    "element_type": "cabinet"
-                })
-            }).collect();
-            Ok(HttpResponse::Ok().json(ApiResponse::success(items, "获取机柜布局成功")))
-        }
-        Err(err) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机柜布局失败: {err}")))),
-    }
+    let items: Vec<serde_json::Value> = rows.iter().map(|(id, cabinet_id, x, y, width, height, rotation)| {
+        serde_json::json!({
+            "id": id,
+            "cabinet_id": cabinet_id,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "rotation": rotation,
+            "element_type": "cabinet"
+        })
+    }).collect();
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(items, "获取机柜布局成功")))
 }
 
 pub async fn get_room_cabinets_with_positions(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     room_id_path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let room_id = *room_id_path;
 
     let cabinets = sqlx::query_as::<_, (Uuid, String, Uuid, i32, Option<String>)>(
         "SELECT id, name, room_id, capacity, description FROM cabinets WHERE room_id = $1 ORDER BY name",
     )
     .bind(room_id)
-    .fetch_all(&pool.get_conn())
-    .await;
-
-    let cabinets = match cabinets {
-        Ok(c) => c,
-        Err(err) => return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机柜失败: {err}")))),
-    };
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
     let mut result = Vec::new();
     for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {
@@ -364,7 +312,7 @@ pub async fn get_room_cabinets_with_positions(
             "SELECT id, name, cabinet_id, start_u, end_u, description, device_type, device_id FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
         )
         .bind(cab_id)
-        .fetch_all(&pool.get_conn())
+        .fetch_all(&state.pool()?.get_conn())
         .await
         .unwrap_or_default();
 
@@ -385,7 +333,7 @@ pub async fn get_room_cabinets_with_positions(
             "SELECT x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = $1",
         )
         .bind(cab_id)
-        .fetch_optional(&pool.get_conn())
+        .fetch_optional(&state.pool()?.get_conn())
         .await
         .ok()
         .flatten();

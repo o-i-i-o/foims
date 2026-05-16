@@ -1,11 +1,12 @@
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, LoginLog};
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 
 pub async fn get_login_logs(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
     let page_size: i64 = query
         .get("page_size")
@@ -15,68 +16,38 @@ pub async fn get_login_logs(
     let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{search}%");
+    let conn = state.pool()?.get_conn();
 
     let (total, logs) = if search.is_empty() {
-        let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
+            .fetch_one(&conn)
+            .await?;
 
-        let logs = match sqlx::query_as::<_, LoginLog>(
+        let logs = sqlx::query_as::<_, LoginLog>(
             "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(l) => l,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&conn)
+        .await?;
 
         (total, logs)
     } else {
-        let total: i64 = match sqlx::query_scalar(
+        let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1"
         )
         .bind(&search_pattern)
-        .fetch_one(&pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_one(&conn)
+        .await?;
 
-        let logs = match sqlx::query_as::<_, LoginLog>(
+        let logs = sqlx::query_as::<_, LoginLog>(
             "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(l) => l,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&conn)
+        .await?;
 
         (total, logs)
     };

@@ -7,6 +7,52 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::crypto::{decrypt_password, encrypt_password};
+use crate::error::AppError;
+
+pub async fn send_email_async(
+    pool: &sqlx::PgPool,
+    to_address: &str,
+    subject: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let smtp_config = get_smtp_config_from_db(pool)
+        .await
+        .ok_or_else(|| AppError::Internal("SMTP未配置".to_string()))?;
+
+    let from_addr: Address = smtp_config
+        .from
+        .parse()
+        .map_err(|e| AppError::Validation(format!("邮件配置错误: {e}")))?;
+    let to_addr: Address = to_address
+        .parse()
+        .map_err(|e| AppError::Validation(format!("邮箱地址无效: {e}")))?;
+
+    let email = Message::builder()
+        .from(from_addr.into())
+        .to(to_addr.into())
+        .subject(subject)
+        .body(body.to_string())
+        .map_err(|e| AppError::Internal(format!("邮件构建失败: {e}")))?;
+
+    let transport = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
+        SmtpTransport::relay(&smtp_config.host)
+            .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
+            .port(smtp_config.port)
+            .credentials(Credentials::new(smtp_config.username, smtp_config.password))
+            .build()
+    } else {
+        SmtpTransport::builder_dangerous(&smtp_config.host)
+            .port(smtp_config.port)
+            .credentials(Credentials::new(smtp_config.username, smtp_config.password))
+            .build()
+    };
+
+    transport
+        .send(&email)
+        .map_err(|e| AppError::Internal(format!("发送邮件失败: {e:?}")))?;
+
+    Ok(())
+}
 
 // SMTP配置结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]

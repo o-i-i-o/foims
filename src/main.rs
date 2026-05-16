@@ -1,15 +1,13 @@
-// IPMA - IP/MAC Address Management System
-// Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
-// SPDX-License-Identifier: MIT
-
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
-use std::net::TcpListener;
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use std::net::{SocketAddr, TcpListener};
 use std::path::Path;
 use tracing::{error, info, warn};
 
+use ipma::app_state::AppState;
 use ipma::log::setup_logging;
 use ipma::routes::static_files::{
     get_web_dir, https_redirect_handler, json_error_handler, serve_json,
@@ -25,67 +23,116 @@ use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
 
 fn build_cors_middleware(config: &Config) -> Cors {
-    let mut cors = Cors::default()
+    let allowed_origins = config.server.cors_allowed_origins.clone();
+
+    Cors::default()
         .allow_any_method()
         .allow_any_header()
         .supports_credentials()
-        .max_age(3600);
-
-    let allowed_origins = config.server.cors_allowed_origins.clone();
-
-    for origin in &allowed_origins {
-        cors = cors.allowed_origin(origin.as_str());
-    }
-
-    cors = cors.allowed_origin_fn(move |origin, _req_head| {
-        if let Ok(origin_str) = origin.to_str() {
-            for allowed in &allowed_origins {
-                if origin_str == allowed {
-                    return true;
+        .max_age(3600)
+        .allowed_origin_fn(move |origin, _req_head| {
+            if let Ok(origin_str) = origin.to_str() {
+                for allowed in &allowed_origins {
+                    if origin_str == allowed {
+                        return true;
+                    }
+                    if origin_str.starts_with(allowed.trim_end_matches('/'))
+                        && (origin_str.ends_with(":80") || origin_str.ends_with(":443"))
+                    {
+                        return true;
+                    }
                 }
-                if origin_str.starts_with(allowed.trim_end_matches('/'))
-                    && (origin_str.ends_with(":80") || origin_str.ends_with(":443"))
-                {
-                    return true;
-                }
+                origin_str.starts_with("http://localhost:")
+                    || origin_str.starts_with("https://localhost:")
+                    || origin_str.starts_with("http://127.0.0.1:")
+                    || origin_str.starts_with("https://127.0.0.1:")
+                    || origin_str.starts_with("http://[::1]:")
+                    || origin_str.starts_with("https://[::1]:")
+            } else {
+                false
             }
-            origin_str.starts_with("http://localhost:")
-                || origin_str.starts_with("https://localhost:")
-                || origin_str.starts_with("http://127.0.0.1:")
-                || origin_str.starts_with("https://127.0.0.1:")
-                || origin_str.starts_with("http://[::1]:")
-                || origin_str.starts_with("https://[::1]:")
-        } else {
-            false
-        }
-    });
-
-    cors
+        })
 }
+
 use std::fs;
 
-fn check_port_available(addr: &str, port: u16) -> std::io::Result<()> {
-    match TcpListener::bind((addr, port)) {
-        Ok(_) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-            warn!("端口 {}:{} 已被占用，等待释放...", addr, port);
-            Err(e)
-        }
-        Err(e) => Err(e),
+fn parse_socket_addr(addr: &str, port: u16) -> std::io::Result<SocketAddr> {
+    if addr.contains(':') {
+        format!("[{addr}]:{port}")
+    } else {
+        format!("{addr}:{port}")
     }
+    .parse()
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
 }
 
-fn wait_for_port(addr: &str, port: u16, max_retries: u32) -> std::io::Result<()> {
-    for i in 0..max_retries {
-        if check_port_available(addr, port).is_ok() {
-            return Ok(());
-        }
-        if i < max_retries - 1 {
-            warn!("等待端口 {}:{} 释放... ({}/{})", addr, port, i + 1, max_retries);
-            std::thread::sleep(std::time::Duration::from_millis(500));
+fn create_tcp_listener(addr: &str, port: u16) -> std::io::Result<TcpListener> {
+    let socket_addr = parse_socket_addr(addr, port)?;
+
+    let domain = match socket_addr {
+        SocketAddr::V6(_) => Domain::IPV6,
+        SocketAddr::V4(_) => Domain::IPV4,
+    };
+
+    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_reuse_address(true)?;
+
+    if socket_addr.is_ipv6() {
+        socket.set_only_v6(false)?;
+    }
+
+    socket.bind(&SockAddr::from(socket_addr))?;
+    socket.listen(2048)?;
+
+    Ok(socket.into())
+}
+
+fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<TcpListener> {
+    let mut delay = std::time::Duration::from_millis(500);
+
+    for attempt in 0..=max_retries {
+        match create_tcp_listener(addr, port) {
+            Ok(listener) => {
+                if attempt > 0 {
+                    info!(
+                        "端口 {}:{} 已成功绑定 (第{}次尝试)",
+                        addr,
+                        port,
+                        attempt + 1
+                    );
+                }
+                return Ok(listener);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                if attempt < max_retries {
+                    warn!(
+                        "端口 {}:{} 已被占用，等待释放... ({}/{})",
+                        addr,
+                        port,
+                        attempt + 1,
+                        max_retries
+                    );
+                    std::thread::sleep(delay);
+                    delay = std::cmp::min(delay * 2, std::time::Duration::from_secs(5));
+                } else {
+                    error!("端口 {}:{} 绑定失败，已重试{}次", addr, port, max_retries);
+                    return Err(e);
+                }
+            }
+            Err(e) => return Err(e),
         }
     }
-    check_port_available(addr, port)
+
+    unreachable!()
+}
+
+async fn serve_html_file(path: &str) -> actix_web::HttpResponse {
+    match tokio::fs::read_to_string(path).await {
+        Ok(content) => actix_web::HttpResponse::Ok()
+            .content_type("text/html")
+            .body(content),
+        Err(_) => actix_web::HttpResponse::NotFound().finish(),
+    }
 }
 
 #[actix_web::main]
@@ -200,47 +247,51 @@ async fn main() -> std::io::Result<()> {
 
     let http_version = config.server.http_version.as_deref().unwrap_or("http2");
 
-    let http_config = config.clone();
-    let http_pool = pool.clone();
+    let http_app_state = Data::new(AppState {
+        config: config.clone(),
+        pool: pool.clone(),
+    });
     let http_rate_limiter = rate_limiter.clone();
     let http_rate_limit_enabled = rate_limit_enabled;
     let create_http_app = move || {
-        let auto_https = http_config.server.auto_https.unwrap_or(false);
+        let auto_https = http_app_state.config.server.auto_https.unwrap_or(false);
         let enable_normal_routes = !auto_https;
 
         let mut app = App::new()
-            .wrap(build_cors_middleware(&http_config))
             .wrap(actix_web::middleware::Logger::default())
+            .wrap(build_cors_middleware(&http_app_state.config))
             .wrap(RateLimitMiddleware::new(
                 http_rate_limiter.clone(),
                 http_rate_limit_enabled,
             ))
             .configure(|cfg| {
-                configure_app_services(cfg, &http_config, &http_pool, enable_normal_routes);
+                configure_app_services(cfg, &http_app_state, enable_normal_routes);
             });
 
-        if !http_config.init.enabled && auto_https {
+        if !http_app_state.config.init.enabled && auto_https {
             app = app.default_service(web::route().to(https_redirect_handler));
         }
 
         app
     };
 
-    let https_config = config.clone();
-    let https_pool = pool.clone();
+    let https_app_state = Data::new(AppState {
+        config: config.clone(),
+        pool: pool.clone(),
+    });
     let https_rate_limiter = rate_limiter.clone();
     let https_rate_limit_enabled = rate_limit_enabled;
     let https_port = config.server.https_port.unwrap_or(443);
     let create_https_app = move || {
         App::new()
-            .wrap(ipma::utils::hsts::hsts_middleware())
-            .wrap(build_cors_middleware(&https_config))
             .wrap(actix_web::middleware::Logger::default())
+            .wrap(ipma::utils::hsts::hsts_middleware())
+            .wrap(build_cors_middleware(&https_app_state.config))
             .wrap(RateLimitMiddleware::new(
                 https_rate_limiter.clone(),
                 https_rate_limit_enabled,
             ))
-            .configure(|cfg| configure_app_services(cfg, &https_config, &https_pool, true))
+            .configure(|cfg| configure_app_services(cfg, &https_app_state, true))
     };
 
     if http_enabled || auto_https {
@@ -248,11 +299,11 @@ async fn main() -> std::io::Result<()> {
         let ipv4_address = server_host.as_str();
 
         if !ipv6_address.is_empty() && ipv6_address == "::" {
-            wait_for_port(ipv6_address, http_port, 10)?;
+            let http_listener = bind_with_retry(ipv6_address, http_port, 20)?;
             let http_server =
                 HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
 
-            let http_server = http_server.bind((ipv6_address, http_port))?;
+            let http_server = http_server.listen(http_listener)?;
 
             info!("HTTP服务器运行在 http://{}:{}", ipv6_address, http_port);
             info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
@@ -265,11 +316,11 @@ async fn main() -> std::io::Result<()> {
             });
         } else {
             if !ipv4_address.is_empty() {
-                wait_for_port(ipv4_address, http_port, 10)?;
+                let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
                 let http_server_ipv4 = HttpServer::new(create_http_app.clone())
                     .workers(std::cmp::max(2, num_cpus::get()));
 
-                let http_server_ipv4 = http_server_ipv4.bind((ipv4_address, http_port))?;
+                let http_server_ipv4 = http_server_ipv4.listen(http_listener_ipv4)?;
 
                 info!(
                     "HTTP IPv4服务器运行在 http://{}:{}",
@@ -285,11 +336,11 @@ async fn main() -> std::io::Result<()> {
             }
 
             if !ipv6_address.is_empty() && ipv6_address != "::" {
-                wait_for_port(ipv6_address, http_port, 10)?;
+                let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
                 let http_server_ipv6 =
                     HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
 
-                let http_server_ipv6 = http_server_ipv6.bind((ipv6_address, http_port))?;
+                let http_server_ipv6 = http_server_ipv6.listen(http_listener_ipv6)?;
 
                 info!(
                     "HTTP IPv6服务器运行在 http://{}:{}",
@@ -316,14 +367,12 @@ async fn main() -> std::io::Result<()> {
         let ipv4_address = server_host.as_str();
 
         if !ipv6_address.is_empty() && ipv6_address == "::" {
-            wait_for_port(ipv6_address, https_port, 10)?;
+            let https_listener = bind_with_retry(ipv6_address, https_port, 20)?;
+            let tls_config = load_rustls_config(&cert_path, &key_path)?;
             let https_server =
                 HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
 
-            let https_server = https_server.bind_rustls_0_23(
-                (ipv6_address, https_port),
-                load_rustls_config(&cert_path, &key_path)?,
-            )?;
+            let https_server = https_server.listen_rustls_0_23(https_listener, tls_config)?;
 
             info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
             info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
@@ -335,43 +384,30 @@ async fn main() -> std::io::Result<()> {
             let mut server_handles = Vec::new();
 
             if !ipv4_address.is_empty() {
-                wait_for_port(ipv4_address, https_port, 10)?;
+                let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
+                let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
                 let create_https_app_ipv4 = create_https_app.clone();
-                let cert_path_ipv4 = cert_path.clone();
-                let key_path_ipv4 = key_path.clone();
-                let ipv4_address_clone = ipv4_address.to_string();
-                let http_version_clone = http_version.to_string();
-                let cert_type_clone = cert_type.to_string();
-                let https_port_clone = https_port;
+
+                info!(
+                    "HTTPS IPv4服务器运行在 https://{}:{}",
+                    ipv4_address, https_port
+                );
+                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                info!("证书类型: {}", cert_type);
 
                 server_handles.push(tokio::spawn(async move {
                     let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv4, &key_path_ipv4) {
-                        Ok(config) => config,
-                        Err(e) => {
-                            error!("加载TLS配置失败: {:?}", e);
-                            return;
-                        }
-                    };
-
                     let https_server_ipv4 = match https_server_ipv4
-                        .bind_rustls_0_23((ipv4_address_clone.as_str(), https_port_clone), tls_config)
+                        .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
                     {
                         Ok(server) => server,
                         Err(e) => {
-                            error!("绑定HTTPS IPv4服务器失败: {:?}", e);
+                            error!("创建HTTPS IPv4服务器失败: {:?}", e);
                             return;
                         }
                     };
-
-                    info!(
-                        "HTTPS IPv4服务器运行在 https://{}:{}",
-                        ipv4_address_clone, https_port_clone
-                    );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                    info!("证书类型: {}", cert_type_clone);
 
                     if let Err(e) = https_server_ipv4.run().await {
                         error!("HTTPS IPv4服务器失败: {:?}", e);
@@ -380,43 +416,30 @@ async fn main() -> std::io::Result<()> {
             }
 
             if !ipv6_address.is_empty() && ipv6_address != "::" {
-                wait_for_port(ipv6_address, https_port, 10)?;
+                let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
+                let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
                 let create_https_app_ipv6 = create_https_app;
-                let cert_path_ipv6 = cert_path;
-                let key_path_ipv6 = key_path;
-                let ipv6_address_clone = ipv6_address.to_string();
-                let http_version_clone = http_version.to_string();
-                let cert_type_clone = cert_type.to_string();
-                let https_port_clone = https_port;
+
+                info!(
+                    "HTTPS IPv6服务器运行在 https://{}:{}",
+                    ipv6_address, https_port
+                );
+                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                info!("证书类型: {}", cert_type);
 
                 server_handles.push(tokio::spawn(async move {
                     let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
                         .workers(std::cmp::max(2, num_cpus::get()));
 
-                    let tls_config = match load_rustls_config(&cert_path_ipv6, &key_path_ipv6) {
-                        Ok(config) => config,
-                        Err(e) => {
-                            error!("加载TLS配置失败: {:?}", e);
-                            return;
-                        }
-                    };
-
                     let https_server_ipv6 = match https_server_ipv6
-                        .bind_rustls_0_23((ipv6_address_clone.as_str(), https_port_clone), tls_config)
+                        .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
                     {
                         Ok(server) => server,
                         Err(e) => {
-                            error!("绑定HTTPS IPv6服务器失败: {:?}", e);
+                            error!("创建HTTPS IPv6服务器失败: {:?}", e);
                             return;
                         }
                     };
-
-                    info!(
-                        "HTTPS IPv6服务器运行在 https://{}:{}",
-                        ipv6_address_clone, https_port_clone
-                    );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version_clone);
-                    info!("证书类型: {}", cert_type_clone);
 
                     if let Err(e) = https_server_ipv6.run().await {
                         error!("HTTPS IPv6服务器失败: {:?}", e);
@@ -444,11 +467,10 @@ async fn main() -> std::io::Result<()> {
 
 fn configure_app_services(
     cfg: &mut web::ServiceConfig,
-    config: &Config,
-    pool: &Option<DbPool>,
+    app_state: &Data<AppState>,
     enable_normal_routes: bool,
 ) {
-    cfg.app_data(Data::new(config.clone()));
+    cfg.app_data(app_state.clone());
     cfg.app_data(
         web::JsonConfig::default()
             .limit(10 * 1024 * 1024)
@@ -457,11 +479,7 @@ fn configure_app_services(
     cfg.app_data(web::FormConfig::default().limit(50 * 1024 * 1024));
     cfg.app_data(web::PayloadConfig::new(50 * 1024 * 1024));
 
-    if let Some(pool) = pool {
-        cfg.app_data(Data::new(pool.clone()));
-    }
-
-    if config.init.enabled {
+    if app_state.config.init.enabled {
         cfg.service(
             web::scope("/api/init")
                 .route("", web::post().to(ipma::init::init_system))
@@ -493,12 +511,7 @@ fn configure_app_services(
             web::get().to(|| async {
                 let web_dir = get_web_dir();
                 let path = format!("{web_dir}/static/init_index.html");
-                actix_web::HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(
-                        std::fs::read_to_string(&path)
-                            .unwrap_or_else(|e| format!("Error reading init_index.html: {e}")),
-                    )
+                serve_html_file(&path).await
             }),
         )
         .service(
@@ -532,12 +545,7 @@ fn configure_app_services(
             web::get().to(|| async {
                 let web_dir = get_web_dir();
                 let path = format!("{web_dir}/static/main.html");
-                actix_web::HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(
-                        std::fs::read_to_string(&path)
-                            .unwrap_or_else(|e| format!("Error reading main.html: {e}")),
-                    )
+                serve_html_file(&path).await
             }),
         )
         .route(

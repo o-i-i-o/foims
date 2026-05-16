@@ -1,5 +1,5 @@
 use actix_web::{
-    HttpMessage, HttpRequest, HttpResponse, Result,
+    HttpMessage, HttpRequest, HttpResponse,
     body::MessageBody,
     cookie::{Cookie, SameSite},
     dev::{ServiceRequest, ServiceResponse},
@@ -7,37 +7,29 @@ use actix_web::{
     web,
 };
 use bcrypt::verify;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use jsonwebtoken::errors::ErrorKind;
-use lettre::message::Message;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use rand::RngExt;
 use serde::Deserialize;
-use tracing::{error, info};
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::auth::utils::{
     JwtUtils, extract_token_from_service_request, get_client_info_from_service_request,
 };
-use crate::config::Config;
 use crate::crypto::{decrypt_password, encrypt_password};
-use crate::db::DbPool;
+use crate::error::AppError;
 use crate::models::{
-    ApiResponse, EmailLoginRequest, SendLoginCodeRequest, SendTwoFactorCodeRequest,
-    TwoFactorLoginRequest, User, UserLogin,
+    ApiResponse, EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest,
+    SendLoginCodeRequest, SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
 };
-use crate::system::smtp::get_smtp_config_from_db;
 use crate::utils::detect_user_language;
-use chrono::DateTime;
 use totp_rs::{Algorithm, Secret, TOTP};
 
-// 认证中间件
 pub async fn auth_middleware(
     req: ServiceRequest,
     next: Next<impl MessageBody + 'static>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
-    // 1. 从请求中提取 Token
     let Some(token) = extract_token_from_service_request(&req) else {
         let user_lang = detect_user_language(req.request());
         return Ok(req.into_response(
@@ -47,7 +39,7 @@ pub async fn auth_middleware(
         ));
     };
 
-    let Some(config) = req.app_data::<web::Data<Config>>() else {
+    let Some(state) = req.app_data::<web::Data<crate::app_state::AppState>>() else {
         let user_lang = detect_user_language(req.request());
         return Ok(req.into_response(
             HttpResponse::InternalServerError()
@@ -58,9 +50,8 @@ pub async fn auth_middleware(
                 .map_into_right_body(),
         ));
     };
-    let jwt_utils = JwtUtils::new(config);
+    let jwt_utils = JwtUtils::new(&state.config);
 
-    // 使用 validate_token 而不是 decode_token
     let claims = match jwt_utils.validate_token(&token) {
         Ok(claims) => claims,
         Err(err) => {
@@ -77,7 +68,6 @@ pub async fn auth_middleware(
         }
     };
 
-    // 3. 验证设备指纹（始终启用）
     let (ip_address, user_agent) = get_client_info_from_service_request(&req);
     let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
@@ -93,49 +83,46 @@ pub async fn auth_middleware(
         ));
     }
 
-    // 4. 将用户信息注入到请求扩展中，以便后续处理程序使用
-    // claims 是 JwtClaims 结构体
     req.extensions_mut().insert(claims);
 
     let res = next.call(req).await?;
     Ok(res.map_into_left_body())
 }
 
-// 登录处理
 pub async fn login(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<crate::app_state::AppState>,
     req: web::Json<UserLogin>,
     http_req: HttpRequest,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let user_lang = detect_user_language(&http_req);
+    let conn = state.pool()?.get_conn();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+    req.validate()?;
 
-    let Ok(user_row) = sqlx::query_as::<
+    let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool),
     >(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled FROM users WHERE username = $1 OR email = $1",
     )
     .bind(&req.username)
-    .fetch_one(&pool.get_conn())
-    .await else {
-        if let Err(e) = log_login(&pool.get_conn(), &req.username, &http_req, false, Some("用户未找到")).await {
-            tracing::warn!("记录登录日志失败: {}", e);
+    .fetch_optional(&conn)
+    .await?
+    {
+        Some(row) => row,
+        None => {
+            if let Err(e) = log_login(&conn, &req.username, &http_req, false, Some("用户未找到")).await {
+                tracing::warn!("记录登录日志失败: {}", e);
+            }
+            return Err(AppError::Unauthorized("登录失败".to_string()));
         }
-        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled) = user_row;
 
     if !status {
         if let Err(e) = log_login(
-            &pool.get_conn(),
+            &conn,
             &username,
             &http_req,
             false,
@@ -145,17 +132,13 @@ pub async fn login(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.account_disabled",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("账户已禁用".to_string()));
     }
 
-    if !verify(&req.password, &password_hash).unwrap_or(false) {
+    let valid = verify(&req.password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+    if !valid {
         if let Err(e) = log_login(
-            &pool.get_conn(),
+            &conn,
             &username,
             &http_req,
             false,
@@ -165,12 +148,7 @@ pub async fn login(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.login_failed",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("登录失败".to_string()));
     }
 
     if two_factor_enabled {
@@ -181,42 +159,17 @@ pub async fn login(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&config);
+    let jwt_utils = JwtUtils::new(&state.config);
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = match jwt_utils.generate_access_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成访问令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
-    let refresh_token = match jwt_utils.generate_refresh_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-        remember_me,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成刷新令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
+    let access_token = jwt_utils
+        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let refresh_token = jwt_utils
+        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
@@ -232,7 +185,7 @@ pub async fn login(
         updated_at: Utc::now(),
     };
 
-    if let Err(e) = log_login(&pool.get_conn(), &username, &http_req, true, None).await {
+    if let Err(e) = log_login(&conn, &username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
 
@@ -260,42 +213,41 @@ pub async fn login(
         )))
 }
 
-// 邮箱验证码登录
 pub async fn login_with_email_code(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<crate::app_state::AppState>,
     req: web::Json<EmailLoginRequest>,
     http_req: HttpRequest,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let user_lang = detect_user_language(&http_req);
+    let conn = state.pool()?.get_conn();
     let email = req.email.trim();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+    req.validate()?;
 
-    let Ok(user_row) = sqlx::query_as::<
+    let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, bool, bool, Option<String>, Option<DateTime<Utc>>),
     >(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_one(&pool.get_conn())
-    .await else {
-        if let Err(e) = log_login(&pool.get_conn(), email, &http_req, false, Some("用户未找到")).await {
-            tracing::warn!("记录登录日志失败: {}", e);
+    .fetch_optional(&conn)
+    .await?
+    {
+        Some(row) => row,
+        None => {
+            if let Err(e) = log_login(&conn, email, &http_req, false, Some("用户未找到")).await {
+                tracing::warn!("记录登录日志失败: {}", e);
+            }
+            return Err(AppError::Unauthorized("邮箱或验证码无效".to_string()));
         }
-        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.invalid_email_or_code", &user_lang)));
     };
 
     let (id, username, email, role, status, two_factor_enabled, code, expiry) = user_row;
 
     if !status {
         if let Err(e) = log_login(
-            &pool.get_conn(),
+            &conn,
             &username,
             &http_req,
             false,
@@ -305,12 +257,7 @@ pub async fn login_with_email_code(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.account_disabled",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("账户已禁用".to_string()));
     }
 
     let mut verified = false;
@@ -320,7 +267,7 @@ pub async fn login_with_email_code(
         if trimmed_db_code == trimmed_input_code && e > Utc::now() {
             verified = true;
             if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
-                .bind(id).execute(&pool.get_conn()).await
+                .bind(id).execute(&conn).await
             {
                 tracing::warn!("清除2FA邮箱验证码失败: {}", e);
             }
@@ -329,7 +276,7 @@ pub async fn login_with_email_code(
 
     if !verified {
         if let Err(e) = log_login(
-            &pool.get_conn(),
+            &conn,
             &username,
             &http_req,
             false,
@@ -339,9 +286,7 @@ pub async fn login_with_email_code(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error("验证码无效或已过期"))
-        );
+        return Err(AppError::Unauthorized("验证码无效或已过期".to_string()));
     }
 
     if two_factor_enabled {
@@ -352,42 +297,17 @@ pub async fn login_with_email_code(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&config);
+    let jwt_utils = JwtUtils::new(&state.config);
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = match jwt_utils.generate_access_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成访问令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
-    let refresh_token = match jwt_utils.generate_refresh_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-        remember_me,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成刷新令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
+    let access_token = jwt_utils
+        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let refresh_token = jwt_utils
+        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
@@ -403,7 +323,7 @@ pub async fn login_with_email_code(
         updated_at: Utc::now(),
     };
 
-    if let Err(e) = log_login(&pool.get_conn(), &username, &http_req, true, None).await {
+    if let Err(e) = log_login(&conn, &username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
 
@@ -431,35 +351,25 @@ pub async fn login_with_email_code(
         )))
 }
 
-// 发送登录验证码
 pub async fn send_login_code(
-    pool: web::Data<DbPool>,
+    state: web::Data<crate::app_state::AppState>,
     req: web::Json<SendLoginCodeRequest>,
-) -> Result<HttpResponse> {
-    use rand::RngExt;
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
     let email = req.email.trim();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+    req.validate()?;
 
     let user_row = match sqlx::query_as::<sqlx::Postgres, (Uuid, String, bool)>(
         "SELECT id, username, status FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_optional(&pool.get_conn())
-    .await
+    .fetch_optional(&conn)
+    .await?
     {
-        Ok(Some(row)) => row,
-        Ok(None) => {
+        Some(row) => row,
+        None => {
             return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "验证码已发送")));
-        }
-        Err(_) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))
-            );
         }
     };
 
@@ -475,197 +385,87 @@ pub async fn send_login_code(
         .collect();
     let expiry = Utc::now() + chrono::Duration::minutes(5);
 
-    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
-        .bind(&code).bind(expiry).bind(id).execute(&pool.get_conn()).await
-    {
-        tracing::error!("保存2FA邮箱验证码失败: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
-    }
+    sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
+        .bind(&code).bind(expiry).bind(id).execute(&conn).await?;
 
-    let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
-    if let Some(smtp_config) = smtp_config {
-        info!(
-            "Sending login code email to {} using host: {}",
-            email, smtp_config.host
-        );
-        let email_body = format!("您的登录验证码是：{code}");
-        let email_msg = match Message::builder()
-            .from(match smtp_config.from.parse() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!("解析发件人地址失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮件配置错误")));
-                }
-            })
-            .to(match email.parse() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!("解析收件人地址失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮箱地址无效")));
-                }
-            })
-            .subject("登录验证码")
-            .body(email_body)
-        {
-            Ok(msg) => msg,
-            Err(e) => {
-                error!("构建邮件失败: {}", e);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("邮件构建失败")));
-            }
-        };
-
-        let mut smtp_builder = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
-            match AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_config.host) {
-                Ok(b) => b,
-                Err(e) => {
-                    error!("创建SMTP连接失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮件服务连接失败")));
-                }
-            }
-        } else {
-            match AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_config.host) {
-                Ok(b) => b,
-                Err(e) => {
-                    error!("创建SMTP连接失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮件服务连接失败")));
-                }
-            }
-        };
-
-        if smtp_config.port != 0 {
-            smtp_builder = smtp_builder.port(smtp_config.port);
-        }
-        let smtp = smtp_builder
-            .credentials(Credentials::new(smtp_config.username, smtp_config.password))
-            .build();
-
-        match smtp.send(email_msg).await {
-            Ok(_) => {
-                info!("Login code email sent successfully");
-            }
-            Err(e) => {
-                error!("Failed to send login code email: {:?}", e);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("发送验证码失败")));
-            }
-        }
-    } else {
-        error!("SMTP configuration not found in database");
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("SMTP未配置")));
-    }
+    let email_body = format!("您的登录验证码是：{code}");
+    crate::system::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "验证码已发送")))
 }
 
-// 2FA 登录
 pub async fn login_with_two_factor(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<crate::app_state::AppState>,
     req: web::Json<TwoFactorLoginRequest>,
     http_req: HttpRequest,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let user_lang = detect_user_language(&http_req);
+    let conn = state.pool()?.get_conn();
 
-    // 验证用户
-    let Ok(user_row) = sqlx::query_as::<
+    let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool, Option<String>),
     >(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret FROM users WHERE username = $1",
     )
     .bind(&req.username)
-    .fetch_one(&pool.get_conn())
-    .await
-    else {
-        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n("api.login_failed", &user_lang)));
+    .fetch_optional(&conn)
+    .await?
+    {
+        Some(row) => row,
+        None => {
+            return Err(AppError::Unauthorized("登录失败".to_string()));
+        }
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
 
-    // 如果密码不为空，验证密码
-    if !req.password.is_empty() && !verify(&req.password, &password_hash).unwrap_or(false) {
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.login_failed",
-                &user_lang,
-            )),
-        );
+    if !req.password.is_empty() {
+        let valid = verify(&req.password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+        if !valid {
+            return Err(AppError::Unauthorized("登录失败".to_string()));
+        }
     }
 
     if !status {
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.account_disabled",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("账户已禁用".to_string()));
     }
 
     if !two_factor_enabled {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("2FA not enabled")));
+        return Err(AppError::Validation("2FA not enabled".to_string()));
     }
 
     let mut verified = false;
-    // 验证 TOTP (RFC 4226: 密钥至少128 bits)
     if let Some(encrypted_secret) = secret {
-        // 解密密钥
         let secret = decrypt_password(&encrypted_secret);
-        // 将 Base32 编码的密钥解码为字节
-        let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
-            // Base32 解码失败，密钥格式错误
-            if let Err(e) = log_login(
-                &pool.get_conn(),
-                &username,
-                &http_req,
-                false,
-                Some("Invalid 2FA secret format"),
-            )
-            .await
-            {
-                tracing::warn!("记录登录日志失败: {}", e);
+        let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                if let Err(e) = log_login(&conn, &username, &http_req, false, Some("Invalid 2FA secret format")).await {
+                    tracing::warn!("记录登录日志失败: {}", e);
+                }
+                return Err(AppError::Internal(format!("2FA密钥格式错误: {e}")));
             }
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("2FA密钥格式错误")));
         };
-        // 使用 TOTP::new 验证密钥长度符合 RFC 4226 规范
-        if let Ok(totp) = TOTP::new(
-            Algorithm::SHA1,
-            6,
-            1,
-            30,
-            secret_bytes,
-            None,
-            String::new(),
-        ) {
-            if totp.check_current(&req.two_factor_code).unwrap_or(false) {
-                verified = true;
+        match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, None, String::new()) {
+            Ok(totp) => {
+                let valid = totp.check_current(&req.two_factor_code).map_err(|e| AppError::Internal(e.to_string()))?;
+                if valid {
+                    verified = true;
+                }
             }
-        } else {
-            // 密钥长度不符合规范（需要至少16字节）
-            if let Err(e) = log_login(
-                &pool.get_conn(),
-                &username,
-                &http_req,
-                false,
-                Some("2FA secret too short"),
-            )
-            .await
-            {
-                tracing::warn!("记录登录日志失败: {}", e);
+            Err(e) => {
+                if let Err(e) = log_login(&conn, &username, &http_req, false, Some("2FA secret too short")).await {
+                    tracing::warn!("记录登录日志失败: {}", e);
+                }
+                return Err(AppError::Internal(format!("2FA密钥长度不足，请重新设置: {e}")));
             }
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("2FA密钥长度不足，请重新设置")));
         }
     }
 
     if !verified {
         if let Err(e) = log_login(
-            &pool.get_conn(),
+            &conn,
             &username,
             &http_req,
             false,
@@ -675,44 +475,19 @@ pub async fn login_with_two_factor(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("验证码无效")));
+        return Err(AppError::Unauthorized("验证码无效".to_string()));
     }
 
-    let jwt_utils = JwtUtils::new(&config);
+    let jwt_utils = JwtUtils::new(&state.config);
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = match jwt_utils.generate_access_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成访问令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
-    let refresh_token = match jwt_utils.generate_refresh_token(
-        &id,
-        &username,
-        &role,
-        Some(&device_fingerprint),
-        Some(&ip_address),
-        remember_me,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成刷新令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
+    let access_token = jwt_utils
+        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let refresh_token = jwt_utils
+        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
@@ -728,7 +503,7 @@ pub async fn login_with_two_factor(
         updated_at: Utc::now(),
     };
 
-    if let Err(e) = log_login(&pool.get_conn(), &user.username, &http_req, true, None).await {
+    if let Err(e) = log_login(&conn, &user.username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
 
@@ -756,98 +531,37 @@ pub async fn login_with_two_factor(
         )))
 }
 
-// 发送 2FA 码
 pub async fn send_two_factor_code(
-    pool: web::Data<DbPool>,
+    state: web::Data<crate::app_state::AppState>,
     req: web::Json<SendTwoFactorCodeRequest>,
-) -> Result<HttpResponse> {
-    // 复用 send_login_code 逻辑，或者简单重写
-    let Ok(Some(user)) = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String)>(
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
+
+    let Some(user) = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String)>(
         "SELECT id, username, email FROM users WHERE username = $1",
     )
     .bind(&req.username)
-    .fetch_optional(&pool.get_conn())
-    .await
+    .fetch_optional(&conn)
+    .await?
     else {
         return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "发送成功")));
     };
 
-    // 生成并发送代码... (简化)
-    use rand::RngExt;
     let mut rng = rand::rng();
     let code: String = (0..6)
         .map(|_| rng.random_range(0..10).to_string())
         .collect();
     let expiry = Utc::now() + chrono::Duration::minutes(5);
-    if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3").bind(&code).bind(expiry).bind(user.0).execute(&pool.get_conn()).await {
-        tracing::error!("保存2FA邮箱验证码失败: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存验证码失败")));
-    }
+    sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
+        .bind(&code).bind(expiry).bind(user.0).execute(&conn).await?;
 
-    let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
-    if let Some(smtp_config) = smtp_config {
-        let email_body = format!("您的两步验证码是：{code}");
-        let email_msg = match Message::builder()
-            .from(match smtp_config.from.parse() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!("解析发件人地址失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮件配置错误")));
-                }
-            })
-            .to(match user.2.parse() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!("解析收件人地址失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("邮箱地址无效")));
-                }
-            })
-            .subject("两步验证码")
-            .body(email_body)
-        {
-            Ok(msg) => msg,
-            Err(e) => {
-                error!("构建邮件失败: {}", e);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("邮件构建失败")));
-            }
-        };
-
-        let smtp_builder = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
-            AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_config.host)
-        } else {
-            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_config.host)
-        };
-
-        match smtp_builder {
-            Ok(builder) => {
-                let smtp = builder
-                    .port(smtp_config.port)
-                    .credentials(Credentials::new(smtp_config.username, smtp_config.password))
-                    .build();
-
-                if let Err(e) = smtp.send(email_msg).await {
-                    error!("发送2FA验证码邮件失败: {:?}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("发送验证码失败")));
-                }
-            }
-            Err(e) => {
-                error!("创建SMTP连接失败: {}", e);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("邮件服务连接失败")));
-            }
-        }
-    }
+    let email_body = format!("您的两步验证码是：{code}");
+    crate::system::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "验证码已发送")))
 }
 
-// 登出
-pub async fn logout(http_req: HttpRequest) -> Result<HttpResponse> {
-    let user_lang = detect_user_language(&http_req);
+pub async fn logout(http_req: HttpRequest) -> Result<HttpResponse, AppError> {
     let secure = is_secure_request(&http_req);
 
     let access_cookie = create_clear_cookie("access_token", secure);
@@ -856,129 +570,69 @@ pub async fn logout(http_req: HttpRequest) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok()
         .cookie(access_cookie)
         .cookie(refresh_cookie)
-        .json(ApiResponse::<()>::success_i18n(
-            (),
-            "api.success",
-            &user_lang,
-        )))
+        .json(ApiResponse::<()>::success((), "Success")))
 }
 
-// 刷新 Token
 pub async fn refresh_token(
-    pool: web::Data<DbPool>,
-    config: web::Data<Config>,
+    state: web::Data<crate::app_state::AppState>,
     http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let user_lang = detect_user_language(&http_req);
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
 
-    // 优先从 Cookie 中获取 refresh_token
     let token = if let Some(cookie) = http_req.cookie("refresh_token") {
         cookie.value().to_string()
     } else {
-        // 回退到 Authorization 头
         match crate::auth::utils::extract_token_from_request(&http_req) {
             Some(t) => t,
             None => {
-                return Ok(HttpResponse::Unauthorized()
-                    .json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang)));
+                return Err(AppError::Unauthorized("认证失败".to_string()));
             }
         }
     };
 
-    let jwt_utils = JwtUtils::new(&config);
+    let jwt_utils = JwtUtils::new(&state.config);
 
-    // 1. 完整验证 token（包括过期检查）
-    let claims = match jwt_utils.validate_token(&token) {
-        Ok(c) => c,
-        Err(err) => {
-            let error_msg = match err.kind() {
-                jsonwebtoken::errors::ErrorKind::ExpiredSignature => "api.token_expired",
-                _ => "api.invalid_token",
-            };
-            return Ok(HttpResponse::Unauthorized()
-                .json(ApiResponse::<()>::error_i18n(error_msg, &user_lang)));
-        }
-    };
+    let claims = jwt_utils.validate_token(&token).map_err(|err| {
+        let msg = match err.kind() {
+            ErrorKind::ExpiredSignature => "令牌已过期",
+            _ => "无效令牌",
+        };
+        AppError::Unauthorized(msg.to_string())
+    })?;
 
-    // 2. 检查 token 是否已被撤销
-    if crate::utils::is_token_revoked(&pool.get_conn(), &token)
+    if crate::utils::is_token_revoked(&conn, &token)
         .await
         .unwrap_or(false)
     {
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.token_revoked",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("令牌已撤销".to_string()));
     }
 
-    // 3. 验证设备指纹
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
     if let Some(ref token_fingerprint) = claims.device_fingerprint
         && token_fingerprint != &current_fingerprint
     {
-        return Ok(
-            HttpResponse::Unauthorized().json(ApiResponse::<()>::error_i18n(
-                "api.device_validation_failed",
-                &user_lang,
-            )),
-        );
+        return Err(AppError::Unauthorized("设备验证失败".to_string()));
     }
 
-    // 4. 将旧的 refresh_token 加入撤销列表
-    let user_id = match Uuid::parse_str(&claims.sub) {
-        Ok(id) => id,
-        Err(e) => {
-            error!("解析用户ID失败: {}", e);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("无效的用户标识")));
-        }
-    };
+    let user_id = Uuid::parse_str(&claims.sub)
+        .map_err(|e| AppError::Internal(format!("无效的用户标识: {e}")))?;
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
-    if let Err(e) = crate::utils::revoke_token(&pool.get_conn(), &token, &user_id, token_expiry).await {
+    if let Err(e) = crate::utils::revoke_token(&conn, &token, &user_id, token_expiry).await {
         tracing::error!("撤销令牌失败: {}", e);
     }
 
-    // 5. 判断是否保持登录（如果 refresh_token 有效期大于 24 小时，说明用户选择了保持登录）
     let token_duration = claims.exp.saturating_sub(claims.iat);
-    let remember_me = token_duration > 86400; // 24小时 = 86400秒
+    let remember_me = token_duration > 86400;
 
-    // 6. 生成新的 token
-    let access_token = match jwt_utils.generate_access_token(
-        &user_id,
-        &claims.username,
-        &claims.role,
-        Some(&current_fingerprint),
-        Some(&ip_address),
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成访问令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
-    let new_refresh_token = match jwt_utils.generate_refresh_token(
-        &user_id,
-        &claims.username,
-        &claims.role,
-        Some(&current_fingerprint),
-        Some(&ip_address),
-        remember_me,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("生成刷新令牌失败: {}", e);
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("令牌生成失败"))
-            );
-        }
-    };
+    let access_token = jwt_utils
+        .generate_access_token(&user_id, &claims.username, &claims.role, Some(&current_fingerprint), Some(&ip_address))
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let new_refresh_token = jwt_utils
+        .generate_refresh_token(&user_id, &claims.username, &claims.role, Some(&current_fingerprint), Some(&ip_address), remember_me)
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
 
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
@@ -1000,276 +654,133 @@ pub async fn refresh_token(
     Ok(HttpResponse::Ok()
         .cookie(access_cookie)
         .cookie(refresh_cookie)
-        .json(ApiResponse::success_i18n(
+        .json(ApiResponse::success(
             serde_json::json!({ "expires_in": access_token_expiry, "remember_me": remember_me }),
-            "api.success",
-            &user_lang,
+            "Success",
         )))
 }
 
-// 获取当前用户
-pub async fn get_current_user(http_req: HttpRequest) -> Result<HttpResponse> {
-    let extensions = http_req.extensions();
-    let Some(claims) = extensions.get::<crate::auth::utils::JwtClaims>() else {
-        return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权访问")));
-    };
-    // 使用 serde_json::Value 作为泛型
-    Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(serde_json::json!({ "id": claims.sub, "username": claims.username, "role": claims.role }), "Success")))
+pub async fn get_current_user(
+    auth: crate::auth::extractor::AuthUser,
+) -> Result<HttpResponse, AppError> {
+    Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(
+        serde_json::json!({ "id": auth.sub, "username": auth.username, "role": auth.role }),
+        "Success",
+    )))
 }
 
-// 忘记密码
 pub async fn forgot_password(
-    pool: web::Data<DbPool>,
-    req: web::Json<serde_json::Value>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let user_lang = detect_user_language(&http_req);
+    state: web::Data<crate::app_state::AppState>,
+    req: web::Json<ForgotPasswordRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
+    let email = req.email.trim();
 
-    let Some(email) = req.get("email").and_then(|v| v.as_str()) else {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                "api.invalid_request",
-                &user_lang,
-            )),
-        );
-    };
+    req.validate()?;
 
     let user_result = sqlx::query_as::<_, (Uuid, String, bool)>(
         "SELECT id, username, two_factor_enabled FROM users WHERE email = $1",
     )
     .bind(email)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&conn)
     .await;
 
-    match user_result {
-        Ok(Some((_user_id, _username, _two_factor_enabled))) => {
-            let smtp_config = get_smtp_config_from_db(&pool.get_conn()).await;
-            if let Some(smtp_config) = smtp_config {
-                let reset_token = Uuid::new_v4().to_string();
-                let expiry = Utc::now() + chrono::Duration::hours(1);
+    let success_msg = "如果该邮箱已注册，重置邮件已发送";
 
-                if let Err(e) = sqlx::query(
-                    "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3",
-                )
-                .bind(&reset_token)
-                .bind(expiry)
-                .bind(email)
-                .execute(&pool.get_conn())
-                .await
-                {
-                    error!("保存重置令牌失败: {}", e);
-                } else {
-                    let reset_link =
-                        format!("{}/reset-password?token={}", smtp_config.host, reset_token);
-                    let email_body = format!("请点击以下链接重置密码：{reset_link}");
-                    let email_msg = Message::builder()
-                        .from(match smtp_config.from.parse() {
-                            Ok(addr) => addr,
-                            Err(e) => {
-                                error!("解析发件人地址失败: {}", e);
-                                return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-                                    (),
-                                    "如果该邮箱已注册，重置邮件已发送",
-                                )));
-                            }
-                        })
-                        .to(match email.parse() {
-                            Ok(addr) => addr,
-                            Err(e) => {
-                                error!("解析收件人地址失败: {}", e);
-                                return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-                                    (),
-                                    "如果该邮箱已注册，重置邮件已发送",
-                                )));
-                            }
-                        })
-                        .subject("密码重置")
-                        .body(email_body);
+    if let Ok(Some((_user_id, _username, _two_factor_enabled))) = user_result {
+        let reset_token = Uuid::new_v4().to_string();
+        let expiry = Utc::now() + chrono::Duration::hours(1);
 
-                    match email_msg {
-                        Ok(msg) => {
-                            let smtp_builder =
-                                if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
-                                    AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_config.host)
-                                } else {
-                                    AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(
-                                        &smtp_config.host,
-                                    )
-                                };
-
-                            match smtp_builder {
-                                Ok(builder) => {
-                                    let smtp = builder
-                                        .port(smtp_config.port)
-                                        .credentials(Credentials::new(
-                                            smtp_config.username,
-                                            smtp_config.password,
-                                        ))
-                                        .build();
-
-                                    if let Err(e) = smtp.send(msg).await {
-                                        error!("发送重置邮件失败: {:?}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("创建SMTP连接失败: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("构建邮件失败: {}", e);
-                        }
-                    }
+        if let Err(e) = sqlx::query(
+            "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3",
+        )
+        .bind(&reset_token)
+        .bind(expiry)
+        .bind(email)
+        .execute(&conn)
+        .await
+        {
+            tracing::error!("保存重置令牌失败: {}", e);
+        } else {
+            let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
+            if let Some(ref config) = smtp_config {
+                let reset_link = format!("{}/reset-password?token={}", config.host, reset_token);
+                let email_body = format!("请点击以下链接重置密码：{reset_link}");
+                if let Err(e) = crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body).await {
+                    tracing::error!("发送重置邮件失败: {}", e);
                 }
             }
-            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-                (),
-                "如果该邮箱已注册，重置邮件已发送",
-            )))
-        }
-        Ok(None) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-            (),
-            "如果该邮箱已注册，重置邮件已发送",
-        ))),
-        Err(e) => {
-            error!("查询用户失败: {}", e);
-            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-                (),
-                "如果该邮箱已注册，重置邮件已发送",
-            )))
         }
     }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), success_msg)))
 }
 
 pub async fn reset_password(
-    pool: web::Data<DbPool>,
-    req: web::Json<serde_json::Value>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let user_lang = detect_user_language(&http_req);
+    state: web::Data<crate::app_state::AppState>,
+    req: web::Json<ResetPasswordRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
 
-    let Some(token) = req.get("token").and_then(|v| v.as_str()) else {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                "api.invalid_request",
-                &user_lang,
-            )),
-        );
-    };
-
-    let Some(new_password) = req.get("new_password").and_then(|v| v.as_str()) else {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error_i18n(
-                "api.invalid_request",
-                &user_lang,
-            )),
-        );
-    };
-
-    if new_password.len() < 8 {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error("密码长度不能少于8个字符"))
-        );
-    }
+    req.validate()?;
 
     let user_result = sqlx::query_as::<_, (Uuid,)>(
         "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()",
     )
-    .bind(token)
-    .fetch_optional(&pool.get_conn())
-    .await;
+    .bind(&req.token)
+    .fetch_optional(&conn)
+    .await?;
 
     match user_result {
-        Ok(Some((user_id,))) => {
-            let hashed_password = match bcrypt::hash(new_password, bcrypt::DEFAULT_COST) {
-                Ok(h) => h,
-                Err(e) => {
-                    error!("密码哈希失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("密码重置失败")));
-                }
-            };
+        Some((user_id,)) => {
+            let hashed_password = bcrypt::hash(&req.new_password, bcrypt::DEFAULT_COST)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
 
-            if let Err(e) = sqlx::query(
+            sqlx::query(
                 "UPDATE users SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2",
             )
             .bind(&hashed_password)
             .bind(user_id)
-            .execute(&pool.get_conn())
-            .await
-            {
-                error!("更新密码失败: {}", e);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("密码重置失败")));
-            }
+            .execute(&conn)
+            .await?;
 
             Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "密码重置成功")))
         }
-        Ok(None) => {
-            Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("重置链接无效或已过期")))
-        }
-        Err(e) => {
-            error!("查询重置令牌失败: {}", e);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("密码重置失败")))
+        None => {
+            Err(AppError::Validation("重置链接无效或已过期".to_string()))
         }
     }
 }
 
-// 初始化2FA - 生成符合RFC 4226规范的TOTP密钥
 pub async fn init_two_factor(
-    pool: web::Data<DbPool>,
+    state: web::Data<crate::app_state::AppState>,
+    auth: crate::auth::extractor::AuthUser,
     req: web::Json<TwoFactorInitRequest>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let (user_sub, user_role) = {
-        let extensions = http_req.extensions();
-        match extensions.get::<crate::auth::utils::JwtClaims>() {
-            Some(c) => (c.sub.clone(), c.role.clone()),
-            None => {
-                return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权")));
-            }
-        }
-    };
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
 
-    // 确定目标用户ID
     let target_user_id = if let Some(user_id) = req.user_id {
-        // 如果指定了user_id，检查权限
-        if user_sub != user_id.to_string() && user_role != "admin" {
-            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                "只有管理员可以为其他用户初始化2FA",
-            )));
+        if auth.sub != user_id.to_string() && auth.role != "admin" {
+            return Err(AppError::Forbidden("只有管理员可以为其他用户初始化2FA".to_string()));
         }
         user_id
     } else {
-        // 默认使用当前用户
-        match Uuid::parse_str(&user_sub) {
-            Ok(id) => id,
-            Err(_) => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))
-                );
-            }
-        }
+        Uuid::parse_str(&auth.sub)
+            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
     };
 
-    // 获取目标用户信息
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.get_conn())
-            .await
+            .fetch_optional(&conn)
+            .await?
         {
-            Ok(Some(name)) => name,
-            Ok(None) => {
-                return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在")));
-            }
-            Err(_) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("数据库错误")));
+            Some(name) => name,
+            None => {
+                return Err(AppError::NotFound("用户不存在".to_string()));
             }
         };
 
-    // 生成32字节（256 bits）的密钥，比RFC 4226推荐的160 bits更安全
     let secret_bytes: Vec<u8> = {
         use rand::Rng;
         let mut bytes = vec![0u8; 32];
@@ -1279,38 +790,26 @@ pub async fn init_two_factor(
     let secret = Secret::Raw(secret_bytes);
     let secret_base32 = secret.to_encoded().to_string();
 
-    // 创建TOTP实例用于生成URL（SHA-1算法保证兼容性）
-    let Ok(totp) = TOTP::new(
+    let secret_bytes_for_totp = secret.to_bytes()
+        .map_err(|e| AppError::Internal(format!("TOTP密钥转换失败: {e}")))?;
+    let totp = TOTP::new(
         Algorithm::SHA1,
         6,
         1,
         30,
-        secret.to_bytes().expect("TOTP密钥转换失败"),
+        secret_bytes_for_totp,
         Some("IPMA".to_string()),
         target_username.clone(),
-    ) else {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("生成TOTP失败"))
-        );
-    };
+    ).map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
 
-    let Some(encrypted_secret) = encrypt_password(&secret_base32) else {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error("2FA密钥加密失败")));
-    };
-    if let Err(e) = sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
+    let encrypted_secret = encrypt_password(&secret_base32)
+        .ok_or_else(|| AppError::Internal("2FA密钥加密失败".to_string()))?;
+    sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
         .bind(target_user_id)
-        .execute(&pool.get_conn())
-        .await
-    {
-        tracing::error!("保存2FA密钥失败: {}", e);
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("保存2FA密钥失败"))
-        );
-    }
+        .execute(&conn)
+        .await?;
 
-    // 返回密钥和otpauth URL
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "secret": secret_base32,
@@ -1321,91 +820,58 @@ pub async fn init_two_factor(
     )))
 }
 
-// 启用2FA - 验证TOTP码并启用
 pub async fn enable_two_factor(
-    pool: web::Data<DbPool>,
+    state: web::Data<crate::app_state::AppState>,
+    auth: crate::auth::extractor::AuthUser,
     req: web::Json<TwoFactorEnableRequest>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let (user_sub, user_role) = {
-        let extensions = http_req.extensions();
-        match extensions.get::<crate::auth::utils::JwtClaims>() {
-            Some(c) => (c.sub.clone(), c.role.clone()),
-            None => {
-                return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权")));
-            }
-        }
-    };
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
 
-    // 确定目标用户ID
     let target_user_id = if let Some(user_id) = req.user_id {
-        // 如果指定了user_id，检查权限
-        if user_sub != user_id.to_string() && user_role != "admin" {
-            return Ok(HttpResponse::Forbidden()
-                .json(ApiResponse::<()>::error("只有管理员可以为其他用户启用2FA")));
+        if auth.sub != user_id.to_string() && auth.role != "admin" {
+            return Err(AppError::Forbidden("只有管理员可以为其他用户启用2FA".to_string()));
         }
         user_id
     } else {
-        // 默认使用当前用户
-        match Uuid::parse_str(&user_sub) {
-            Ok(id) => id,
-            Err(_) => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))
-                );
-            }
-        }
+        Uuid::parse_str(&auth.sub)
+            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
     };
 
-    // 获取存储的密钥
     let secret: Option<String> =
         match sqlx::query_scalar("SELECT two_factor_secret FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.get_conn())
-            .await
+            .fetch_optional(&conn)
+            .await?
         {
-            Ok(Some(s)) => s,
-            Ok(None) => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA"))
-                );
-            }
-            Err(_) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("数据库错误")));
+            Some(s) => s,
+            None => {
+                return Err(AppError::Validation("请先初始化2FA".to_string()));
             }
         };
 
     let Some(encrypted_secret) = secret else {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("请先初始化2FA")));
+        return Err(AppError::Validation("请先初始化2FA".to_string()));
     };
 
-    // 解密密钥
     let secret = decrypt_password(&encrypted_secret);
 
-    // 获取目标用户名
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.get_conn())
-            .await
+            .fetch_optional(&conn)
+            .await?
         {
-            Ok(Some(name)) => name,
-            Ok(None) => {
-                return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在")));
-            }
-            Err(_) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("数据库错误")));
+            Some(name) => name,
+            None => {
+                return Err(AppError::NotFound("用户不存在".to_string()));
             }
         };
 
-    // 验证TOTP码
-    let Ok(secret_bytes) = Secret::Encoded(secret.clone()).to_bytes() else {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("密钥格式错误")));
-    };
+    let secret_bytes = Secret::Encoded(secret.clone())
+        .to_bytes()
+        .map_err(|_| AppError::Validation("密钥格式错误".to_string()))?;
 
-    let Ok(totp) = TOTP::new(
+    let totp = TOTP::new(
         Algorithm::SHA1,
         6,
         1,
@@ -1413,148 +879,101 @@ pub async fn enable_two_factor(
         secret_bytes,
         Some("IPMA".to_string()),
         target_username,
-    ) else {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("TOTP创建失败"))
-        );
-    };
+    ).map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
 
-    if !totp.check_current(&req.code).unwrap_or(false) {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("验证码错误")));
+    let valid = totp.check_current(&req.code)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    if !valid {
+        return Err(AppError::Validation("验证码错误".to_string()));
     }
 
-    // 启用2FA
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1",
     )
     .bind(target_user_id)
-    .execute(&pool.get_conn())
-    .await
-    {
-        tracing::error!("启用2FA失败: {}", e);
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("启用2FA失败"))
-        );
-    }
+    .execute(&conn)
+    .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已启用")))
 }
 
-// 禁用2FA
 pub async fn disable_two_factor(
-    pool: web::Data<DbPool>,
+    state: web::Data<crate::app_state::AppState>,
+    auth: crate::auth::extractor::AuthUser,
     req: web::Json<TwoFactorDisableRequest>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse> {
-    let (user_sub, user_role) = {
-        let extensions = http_req.extensions();
-        match extensions.get::<crate::auth::utils::JwtClaims>() {
-            Some(c) => (c.sub.clone(), c.role.clone()),
-            None => {
-                return Ok(HttpResponse::Unauthorized().json(ApiResponse::<()>::error("未授权")));
-            }
-        }
-    };
+) -> Result<HttpResponse, AppError> {
+    let conn = state.pool()?.get_conn();
 
-    // 确定目标用户ID
     let target_user_id = if let Some(user_id) = req.user_id {
-        // 如果指定了user_id，检查权限
-        if user_sub != user_id.to_string() && user_role != "admin" {
-            return Ok(HttpResponse::Forbidden()
-                .json(ApiResponse::<()>::error("只有管理员可以为其他用户禁用2FA")));
+        if auth.sub != user_id.to_string() && auth.role != "admin" {
+            return Err(AppError::Forbidden("只有管理员可以为其他用户禁用2FA".to_string()));
         }
         user_id
     } else {
-        // 默认使用当前用户
-        match Uuid::parse_str(&user_sub) {
-            Ok(id) => id,
-            Err(_) => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的用户ID"))
-                );
-            }
-        }
+        Uuid::parse_str(&auth.sub)
+            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
     };
 
-    // 获取存储的密钥
-    let (secret, two_factor_enabled): (Option<String>, bool) = match sqlx::query_as(
+    let (secret, two_factor_enabled): (Option<String>, bool) = sqlx::query_as(
         "SELECT two_factor_secret, two_factor_enabled FROM users WHERE id = $1",
     )
     .bind(target_user_id)
-    .fetch_one(&pool.get_conn())
-    .await
-    {
-        Ok(row) => row,
-        Err(_) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error("数据库错误"))
-            );
-        }
-    };
+    .fetch_one(&conn)
+    .await?;
 
     if !two_factor_enabled {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("2FA未启用")));
+        return Err(AppError::Validation("2FA未启用".to_string()));
     }
 
-    // 获取目标用户名
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(target_user_id)
-            .fetch_optional(&pool.get_conn())
-            .await
+            .fetch_optional(&conn)
+            .await?
         {
-            Ok(Some(name)) => name,
-            Ok(None) => {
-                return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("用户不存在")));
-            }
-            Err(_) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error("数据库错误")));
+            Some(name) => name,
+            None => {
+                return Err(AppError::NotFound("用户不存在".to_string()));
             }
         };
 
-    // 验证TOTP码
     let mut verified = false;
 
     if let Some(encrypted_secret) = secret {
-        // 解密密钥
         let secret = decrypt_password(&encrypted_secret);
-        if let Ok(secret_bytes) = Secret::Encoded(secret).to_bytes()
-            && let Ok(totp) = TOTP::new(
-                Algorithm::SHA1,
-                6,
-                1,
-                30,
-                secret_bytes,
-                Some("IPMA".to_string()),
-                target_username,
-            )
-            && totp.check_current(&req.code).unwrap_or(false)
-        {
+        let secret_bytes = Secret::Encoded(secret)
+            .to_bytes()
+            .map_err(|e| AppError::Internal(format!("2FA密钥格式错误: {e}")))?;
+        let totp = TOTP::new(
+            Algorithm::SHA1,
+            6,
+            1,
+            30,
+            secret_bytes,
+            Some("IPMA".to_string()),
+            target_username,
+        ).map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
+        let valid = totp.check_current(&req.code)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        if valid {
             verified = true;
         }
     }
 
     if !verified {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("验证码错误")));
+        return Err(AppError::Validation("验证码错误".to_string()));
     }
 
-    // 禁用2FA并清除密钥
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_verified = false WHERE id = $1"
     )
     .bind(target_user_id)
-    .execute(&pool.get_conn())
-    .await
-    {
-        tracing::error!("禁用2FA失败: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("禁用2FA失败")));
-    }
+    .execute(&conn)
+    .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已禁用")))
 }
 
-// 2FA请求结构体
 #[derive(Debug, Deserialize)]
 pub struct TwoFactorInitRequest {
     pub user_id: Option<Uuid>,
@@ -1572,7 +991,6 @@ pub struct TwoFactorDisableRequest {
     pub user_id: Option<Uuid>,
 }
 
-// 辅助函数：记录登录日志
 async fn log_login(
     pool: &sqlx::PgPool,
     username: &str,
@@ -1598,7 +1016,6 @@ async fn log_login(
     Ok(())
 }
 
-// 辅助函数：创建 HttpOnly Cookie
 fn create_auth_cookie(name: &str, value: &str, max_age: i64, secure: bool) -> Cookie<'static> {
     let mut cookie = Cookie::build(name, value)
         .path("/")
@@ -1615,7 +1032,6 @@ fn create_auth_cookie(name: &str, value: &str, max_age: i64, secure: bool) -> Co
     cookie
 }
 
-// 辅助函数：创建清除 Cookie
 fn create_clear_cookie(name: &str, secure: bool) -> Cookie<'static> {
     let mut cookie = Cookie::build(name, "")
         .path("/")
@@ -1632,7 +1048,6 @@ fn create_clear_cookie(name: &str, secure: bool) -> Cookie<'static> {
     cookie
 }
 
-// 辅助函数：判断是否使用 HTTPS
 fn is_secure_request(req: &HttpRequest) -> bool {
     req.connection_info().scheme() == "https"
 }

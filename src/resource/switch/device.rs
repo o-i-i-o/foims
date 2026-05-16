@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 use std::collections::HashMap;
@@ -6,17 +6,17 @@ use uuid::Uuid;
 use validator::Validate;
 
 use super::snmp::decrypt_snmp_fields;
-use crate::config::Config;
+use crate::app_state::AppState;
 use crate::crypto::encrypt_password;
-use crate::db::DbPool;
+use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::{DEFAULT_PAGE, log_system_operation};
 use tracing::warn;
 
 pub async fn get_switches(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -93,24 +93,11 @@ pub async fn get_switches(
             count_sql = count_sql.bind(pattern);
         }
 
-        match count_sql.fetch_one(&pool.get_conn()).await {
-            Ok(t) => t,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {e}"))));
-            }
-        }
+        count_sql.fetch_one(&state.pool()?.get_conn()).await?
     } else {
-        match sqlx::query_scalar("SELECT COUNT(*) FROM switches_with_details")
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询失败: {e}"))));
-            }
-        }
+        sqlx::query_scalar("SELECT COUNT(*) FROM switches_with_details")
+            .fetch_one(&state.pool()?.get_conn())
+            .await?
     };
 
     let switches_result = if has_filters {
@@ -146,13 +133,13 @@ pub async fn get_switches(
         };
 
         let data_query = format!(
-            r"SELECT 
+            r"SELECT
                 id, name, model, vendor,
-                location, snmp_version, 
+                location, snmp_version,
                 snmp_community,
-                snmp_username, snmp_auth_protocol, 
+                snmp_username, snmp_auth_protocol,
                 snmp_auth_password,
-                snmp_priv_protocol, 
+                snmp_priv_protocol,
                 snmp_priv_password,
                 snmp_port,
                 parent_switch_id, parent_switch_name,
@@ -199,16 +186,16 @@ pub async fn get_switches(
 
         data_sql = data_sql.bind(page_size).bind(offset);
 
-        data_sql.fetch_all(&pool.get_conn()).await
+        data_sql.fetch_all(&state.pool()?.get_conn()).await
     } else {
         sqlx::query_as::<_, SwitchWithParent>(
-            r"SELECT 
+            r"SELECT
                 id, name, model, vendor,
-                location, snmp_version, 
+                location, snmp_version,
                 snmp_community,
-                snmp_username, snmp_auth_protocol, 
+                snmp_username, snmp_auth_protocol,
                 snmp_auth_password,
-                snmp_priv_protocol, 
+                snmp_priv_protocol,
                 snmp_priv_password,
                 snmp_port,
                 parent_switch_id, parent_switch_name,
@@ -228,60 +215,53 @@ pub async fn get_switches(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
+        .fetch_all(&state.pool()?.get_conn())
         .await
     };
 
-    match switches_result {
-        Ok(mut data) => {
-            for switch in &mut data {
-                let has_community = switch.snmp_community.is_some();
-                let has_auth_password = switch.snmp_auth_password.is_some();
-                let has_priv_password = switch.snmp_priv_password.is_some();
+    let mut data = switches_result?;
 
-                decrypt_snmp_fields(switch);
+    for switch in &mut data {
+        let has_community = switch.snmp_community.is_some();
+        let has_auth_password = switch.snmp_auth_password.is_some();
+        let has_priv_password = switch.snmp_priv_password.is_some();
 
-                if has_community {
-                    switch.snmp_community = Some("••••••••".to_string());
-                }
-                if has_auth_password {
-                    switch.snmp_auth_password = Some("••••••••".to_string());
-                }
-                if has_priv_password {
-                    switch.snmp_priv_password = Some("••••••••".to_string());
-                }
-            }
-            let total_pages = (total + page_size - 1) / page_size;
-            Ok(HttpResponse::Ok().json(ApiResponse::success(
-                serde_json::json!({
-                    "items": data,
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": total_pages
-                }),
-                "获取交换机列表成功",
-            )))
+        decrypt_snmp_fields(switch);
+
+        if has_community {
+            switch.snmp_community = Some("••••••••".to_string());
         }
-        Err(e) => Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "获取交换机列表失败: {e}"
-            ))),
-        ),
+        if has_auth_password {
+            switch.snmp_auth_password = Some("••••••••".to_string());
+        }
+        if has_priv_password {
+            switch.snmp_priv_password = Some("••••••••".to_string());
+        }
     }
+    let total_pages = (total + page_size - 1) / page_size;
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "items": data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }),
+        "获取交换机列表成功",
+    )))
 }
 
-pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, SwitchWithParent>(
-        r"SELECT 
+    let mut data = sqlx::query_as::<_, SwitchWithParent>(
+        r"SELECT
             id, name, model, vendor,
-            location, snmp_version, 
+            location, snmp_version,
             snmp_community,
-            snmp_username, snmp_auth_protocol, 
+            snmp_username, snmp_auth_protocol,
             snmp_auth_password,
-            snmp_priv_protocol, 
+            snmp_priv_protocol,
             snmp_priv_password,
             snmp_port,
             parent_switch_id, parent_switch_name,
@@ -299,98 +279,86 @@ pub async fn get_switch(pool: web::Data<DbPool>, path: web::Path<Uuid>) -> Resul
         WHERE id = $1",
     )
     .bind(id)
-    .fetch_optional(&pool.get_conn())
-    .await;
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
-    match switch {
-        Ok(Some(mut data)) => {
-            let has_community = data.snmp_community.is_some();
-            let has_auth_password = data.snmp_auth_password.is_some();
-            let has_priv_password = data.snmp_priv_password.is_some();
+    let has_community = data.snmp_community.is_some();
+    let has_auth_password = data.snmp_auth_password.is_some();
+    let has_priv_password = data.snmp_priv_password.is_some();
 
-            decrypt_snmp_fields(&mut data);
+    decrypt_snmp_fields(&mut data);
 
-            if has_community {
-                data.snmp_community = Some("••••••••".to_string());
-            }
-            if has_auth_password {
-                data.snmp_auth_password = Some("••••••••".to_string());
-            }
-            if has_priv_password {
-                data.snmp_priv_password = Some("••••••••".to_string());
-            }
-
-            let ips = sqlx::query(
-                r"SELECT 
-                    m.id, m.device_type, m.network_id, 
-                    host(m.ip_address) as ip_address,
-                    m.ip_version, m.mac_address, m.hostname,
-                    m.status, m.last_seen, m.created_at, m.updated_at,
-                    n.network_region_id, nr.name as network_region
-                FROM ips m
-                LEFT JOIN network_cidrs n ON m.network_id = n.id
-                LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-                WHERE m.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-                ORDER BY m.ip_address",
-            )
-            .bind(id)
-            .fetch_all(&pool.get_conn())
-            .await
-            .unwrap_or_default();
-
-            let ips_json: Vec<serde_json::Value> = ips
-                .into_iter()
-                .map(|row| {
-                    serde_json::json!({
-                        "id": row.get::<Uuid, _>(0),
-                        "device_type": row.get::<Option<String>, _>(1),
-                        "network_id": row.get::<Uuid, _>(2),
-                        "ip_address": row.get::<String, _>(3),
-                        "ip_version": row.get::<i16, _>(4),
-                        "mac_address": row.get::<Option<String>, _>(5),
-                        "hostname": row.get::<Option<String>, _>(6),
-                        "status": row.get::<String, _>(7),
-                        "last_seen": row.get::<DateTime<Utc>, _>(8),
-                        "created_at": row.get::<DateTime<Utc>, _>(9),
-                        "updated_at": row.get::<DateTime<Utc>, _>(10),
-                        "network_region_id": row.get::<Option<Uuid>, _>(11),
-                        "network_region": row.get::<Option<String>, _>(12)
-                    })
-                })
-                .collect();
-
-            let mut response_data = serde_json::to_value(&data)
-                .unwrap_or_else(|e| {
-                    tracing::error!("JSON序列化失败: {}", e);
-                    serde_json::json!({})
-                });
-            response_data["ips"] = serde_json::to_value(&ips_json).unwrap_or(serde_json::json!([]));
-
-            Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
-        }
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("获取交换机失败: {e}")))),
+    if has_community {
+        data.snmp_community = Some("••••••••".to_string());
     }
+    if has_auth_password {
+        data.snmp_auth_password = Some("••••••••".to_string());
+    }
+    if has_priv_password {
+        data.snmp_priv_password = Some("••••••••".to_string());
+    }
+
+    let ips = sqlx::query(
+        r"SELECT
+            m.id, m.device_type, m.network_id,
+            host(m.ip_address) as ip_address,
+            m.ip_version, m.mac_address, m.hostname,
+            m.status, m.last_seen, m.created_at, m.updated_at,
+            n.network_region_id, nr.name as network_region
+        FROM ips m
+        LEFT JOIN network_cidrs n ON m.network_id = n.id
+        LEFT JOIN network_regions nr ON n.network_region_id = nr.id
+        WHERE m.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+        ORDER BY m.ip_address",
+    )
+    .bind(id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await
+    .unwrap_or_default();
+
+    let ips_json: Vec<serde_json::Value> = ips
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "id": row.get::<Uuid, _>(0),
+                "device_type": row.get::<Option<String>, _>(1),
+                "network_id": row.get::<Uuid, _>(2),
+                "ip_address": row.get::<String, _>(3),
+                "ip_version": row.get::<i16, _>(4),
+                "mac_address": row.get::<Option<String>, _>(5),
+                "hostname": row.get::<Option<String>, _>(6),
+                "status": row.get::<String, _>(7),
+                "last_seen": row.get::<DateTime<Utc>, _>(8),
+                "created_at": row.get::<DateTime<Utc>, _>(9),
+                "updated_at": row.get::<DateTime<Utc>, _>(10),
+                "network_region_id": row.get::<Option<Uuid>, _>(11),
+                "network_region": row.get::<Option<String>, _>(12)
+            })
+        })
+        .collect();
+
+    let mut response_data = serde_json::to_value(&data)
+        .unwrap_or_else(|e| {
+            tracing::error!("JSON序列化失败: {}", e);
+            serde_json::json!({})
+        });
+    response_data["ips"] = serde_json::to_value(&ips_json).unwrap_or(serde_json::json!([]));
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
 }
 
 pub async fn create_switch(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<SwitchCreate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
-        );
-    }
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
 
     let ips = match &req.ips {
         Some(ips) if !ips.is_empty() => ips,
         _ => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("交换机必须至少配置一个IP地址")));
+            return Err(AppError::Validation("交换机必须至少配置一个IP地址".to_string()));
         }
     };
 
@@ -424,13 +392,13 @@ pub async fn create_switch(
         .bind(id)
         .bind(now)
         .bind(now)
-        .execute(&pool.get_conn())
+        .execute(&state.pool()?.get_conn())
         .await
     {
         tracing::error!("创建交换机关联机位记录失败: {}", e);
     }
 
-    let result = sqlx::query(
+    sqlx::query(
         r"INSERT INTO switches (
             id, name, model, vendor,
             location, snmp_version, snmp_community, snmp_username,
@@ -458,176 +426,147 @@ pub async fn create_switch(
     .bind(now)
     .bind(now)
     .bind(position_id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
-    match result {
-        Ok(_) => {
-            for ip in ips {
-                let ip_exists = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
-                )
-                .bind(&ip.ip_address)
-                .fetch_one(&pool.get_conn())
-                .await
-                .unwrap_or(false);
+    for ip in ips {
+        let ip_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
+        )
+        .bind(&ip.ip_address)
+        .fetch_one(&state.pool()?.get_conn())
+        .await
+        .unwrap_or(false);
 
-                if ip_exists {
-                    return Ok(
-                        HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                            "IP地址 {} 已存在",
-                            ip.ip_address
-                        ))),
-                    );
-                }
+        if ip_exists {
+            return Err(AppError::Conflict(format!("IP地址 {} 已存在", ip.ip_address)));
+        }
 
-                let room_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-                )
-                .bind(position_id)
-                .fetch_optional(&pool.get_conn())
-                .await
-                .ok()
-                .flatten();
+        let room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+        )
+        .bind(position_id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await
+        .ok()
+        .flatten();
 
-                if let Some(rid) = room_id {
-                    let network_in_room: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-                    )
-                    .bind(rid)
-                    .bind(ip.network_id)
-                    .fetch_one(&pool.get_conn())
-                    .await
-                    .unwrap_or(false);
-
-                    if !network_in_room {
-                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该交换机所在房间的可用网段")));
-                    }
-                }
-
-                let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
-
-                let ip_manager_id = Uuid::new_v4();
-                if let Err(e) = sqlx::query(
-                    "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                     VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
-                )
-                .bind(ip_manager_id)
-                .bind(ip.device_type.as_deref().unwrap_or("switch"))
-                .bind(ip.network_id)
-                .bind(&ip.ip_address)
-                .bind(ip_version)
-                .bind(&ip.mac_address)
-                .bind(&ip.hostname)
-                .bind(position_id)
-                .bind(ip.switch_port_id)
-                .bind("active")
-                .bind(now)
-                .bind(now)
-                .bind(now)
-                .execute(&pool.get_conn())
-                .await
-                {
-                    tracing::error!("创建交换机IP记录失败: {}", e);
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("创建IP记录失败: {e}"))));
-                }
-            }
-
-            let switch = sqlx::query_as::<_, Switch>(
-                r"SELECT 
-                    id, name,
-                    model, vendor, 
-                    location, snmp_version, 
-                    snmp_community, 
-                    snmp_username, snmp_auth_protocol, 
-                    snmp_auth_password, 
-                    snmp_priv_protocol, 
-                    snmp_priv_password, 
-                    snmp_port, 
-                    parent_switch_id, parent_port_id, 
-                    description, created_at, updated_at,
-                    position_id
-                FROM switches WHERE id = $1",
+        if let Some(rid) = room_id {
+            let network_in_room: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
             )
-            .bind(id)
-            .fetch_one(&pool.get_conn())
-            .await;
+            .bind(rid)
+            .bind(ip.network_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await
+            .unwrap_or(false);
 
-            match switch {
-                Ok(data) => {
-                    let details = serde_json::json!({
-                        "name": data.name,
-                        "model": data.model,
-                        "vendor": data.vendor,
-                        "location": data.location,
-                        "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
-                    });
-                    if let Err(e) = log_system_operation(
-                        &pool.get_conn(),
-                        &http_req,
-                        config.get_ref(),
-                        "create",
-                        "switch",
-                        &id,
-                        &details,
-                        true,
-                    )
-                    .await
-                    {
-                        warn!("记录操作日志失败: {}", e);
-                    }
-
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
-                }
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "创建交换机成功但查询失败: {e}"
-                    ))),
-                ),
+            if !network_in_room {
+                return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
             }
         }
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建交换机失败: {e}")))),
+
+        let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
+
+        let ip_manager_id = Uuid::new_v4();
+        if let Err(e) = sqlx::query(
+            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+        )
+        .bind(ip_manager_id)
+        .bind(ip.device_type.as_deref().unwrap_or("switch"))
+        .bind(ip.network_id)
+        .bind(&ip.ip_address)
+        .bind(ip_version)
+        .bind(&ip.mac_address)
+        .bind(&ip.hostname)
+        .bind(position_id)
+        .bind(ip.switch_port_id)
+        .bind("active")
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool()?.get_conn())
+        .await
+        {
+            tracing::error!("创建交换机IP记录失败: {}", e);
+            return Err(AppError::Internal(format!("创建IP记录失败: {e}")));
+        }
     }
+
+    let data = sqlx::query_as::<_, Switch>(
+        r"SELECT
+            id, name,
+            model, vendor,
+            location, snmp_version,
+            snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password,
+            snmp_priv_protocol,
+            snmp_priv_password,
+            snmp_port,
+            parent_switch_id, parent_port_id,
+            description, created_at, updated_at,
+            position_id
+        FROM switches WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+
+    let details = serde_json::json!({
+        "name": data.name,
+        "model": data.model,
+        "vendor": data.vendor,
+        "location": data.location,
+        "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "create",
+        "switch",
+        &id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
 }
 
 pub async fn update_switch(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     req: web::Json<SwitchUpdate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    if let Err(e) = req.validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证失败: {e}")))
-        );
-    }
+    req.validate()?;
 
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(id)
-            .fetch_one(&pool.get_conn())
+            .fetch_one(&state.pool()?.get_conn())
             .await
             .unwrap_or(false);
 
     if !exists {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+        return Err(AppError::NotFound("交换机不存在".to_string()));
     }
 
     if let Some(parent_switch_id) = req.parent_switch_id {
         if parent_switch_id == id {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("不能将自己设置为上级交换机")));
+            return Err(AppError::Validation("不能将自己设置为上级交换机".to_string()));
         }
 
-        if check_switch_cycle(&pool.get_conn(), id, parent_switch_id).await? {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "检测到交换机层级循环引用，无法设置此上级交换机",
-            )));
+        if check_switch_cycle(&state.pool()?.get_conn(), id, parent_switch_id).await? {
+            return Err(AppError::Validation("检测到交换机层级循环引用，无法设置此上级交换机".to_string()));
         }
     }
 
@@ -649,7 +588,7 @@ pub async fn update_switch(
         .filter(|p| !p.is_empty())
         .and_then(|p| encrypt_password(p));
 
-    let result = sqlx::query(
+    sqlx::query(
         r"UPDATE switches SET
             name = COALESCE($1, name),
             model = COALESCE($2, model),
@@ -688,182 +627,162 @@ pub async fn update_switch(
     .bind(now)
     .bind(req.position_id)
     .bind(id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
-    match result {
-        Ok(_) => {
-            if let Some(ips) = &req.ips {
-                let position_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
+    if let Some(ips) = &req.ips {
+        let position_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await
+        .unwrap_or(None);
+
+        if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
+            .bind(id)
+            .execute(&state.pool()?.get_conn())
+            .await
+        {
+            tracing::error!("删除交换机旧IP记录失败: {}", e);
+        }
+
+        for ip in ips {
+            let ip_exists = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id != (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $2))",
+            )
+            .bind(&ip.ip_address)
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await
+            .unwrap_or(false);
+
+            if ip_exists {
+                return Err(AppError::Conflict(format!("IP地址 {} 已被其他设备使用", ip.ip_address)));
+            }
+
+            if let Some(pos_id) = position_id {
+                let room_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
                 )
-                .bind(id)
-                .fetch_optional(&pool.get_conn())
+                .bind(pos_id)
+                .fetch_optional(&state.pool()?.get_conn())
                 .await
-                .unwrap_or(None);
+                .ok()
+                .flatten();
 
-                if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
-                    .bind(id)
-                    .execute(&pool.get_conn())
-                    .await
-                {
-                    tracing::error!("删除交换机旧IP记录失败: {}", e);
-                }
-
-                for ip in ips {
-                    let ip_exists = sqlx::query_scalar::<_, bool>(
-                        "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id != (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $2))",
+                if let Some(rid) = room_id {
+                    let network_in_room: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
                     )
-                    .bind(&ip.ip_address)
-                    .bind(id)
-                    .fetch_one(&pool.get_conn())
+                    .bind(rid)
+                    .bind(ip.network_id)
+                    .fetch_one(&state.pool()?.get_conn())
                     .await
                     .unwrap_or(false);
 
-                    if ip_exists {
-                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                            format!("IP地址 {} 已被其他设备使用", ip.ip_address),
-                        )));
-                    }
-
-                    if let Some(pos_id) = position_id {
-                        let room_id: Option<Uuid> = sqlx::query_scalar(
-                            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-                        )
-                        .bind(pos_id)
-                        .fetch_optional(&pool.get_conn())
-                        .await
-                        .ok()
-                        .flatten();
-
-                        if let Some(rid) = room_id {
-                            let network_in_room: bool = sqlx::query_scalar(
-                                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-                            )
-                            .bind(rid)
-                            .bind(ip.network_id)
-                            .fetch_one(&pool.get_conn())
-                            .await
-                            .unwrap_or(false);
-
-                            if !network_in_room {
-                                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该交换机所在房间的可用网段")));
-                            }
-                        }
-                    }
-
-                    let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
-
-                    let ip_manager_id = Uuid::new_v4();
-                    if let Err(e) = sqlx::query(
-                        "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at) 
-                         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
-                    )
-                    .bind(ip_manager_id)
-                    .bind(ip.device_type.as_deref().unwrap_or("switch"))
-                    .bind(ip.network_id)
-                    .bind(&ip.ip_address)
-                    .bind(ip_version)
-                    .bind(&ip.mac_address)
-                    .bind(&ip.hostname)
-                    .bind(position_id)
-                    .bind(ip.switch_port_id)
-                    .bind("active")
-                    .bind(now)
-                    .bind(now)
-                    .bind(now)
-                    .execute(&pool.get_conn())
-                    .await
-                    {
-                        tracing::error!("更新交换机IP记录失败: {}", e);
-                        return Ok(HttpResponse::InternalServerError()
-                            .json(ApiResponse::<()>::error(format!("创建IP记录失败: {e}"))));
+                    if !network_in_room {
+                        return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
                     }
                 }
             }
 
-            let switch = sqlx::query_as::<_, Switch>(
-                r"SELECT 
-                    id, name,
-                    model, vendor, 
-                    location, snmp_version, 
-                    snmp_community, 
-                    snmp_username, snmp_auth_protocol, 
-                    snmp_auth_password, 
-                    snmp_priv_protocol, 
-                    snmp_priv_password, 
-                    snmp_port, 
-                    parent_switch_id, parent_port_id, 
-                    description, created_at, updated_at,
-                    position_id
-                FROM switches WHERE id = $1",
+            let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
+
+            let ip_manager_id = Uuid::new_v4();
+            if let Err(e) = sqlx::query(
+                "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
             )
-            .bind(id)
-            .fetch_one(&pool.get_conn())
-            .await;
-
-            match switch {
-                Ok(data) => {
-                    let details = serde_json::json!({
-                        "name": data.name,
-                        "model": data.model,
-                        "vendor": data.vendor,
-                        "location": data.location,
-                        "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
-                    });
-                    if let Err(e) = log_system_operation(
-                        &pool.get_conn(),
-                        &http_req,
-                        config.get_ref(),
-                        "update",
-                        "switch",
-                        &id,
-                        &details,
-                        true,
-                    )
-                    .await
-                    {
-                        warn!("记录操作日志失败: {}", e);
-                    }
-
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
-                }
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "更新交换机成功但查询失败: {e}"
-                    ))),
-                ),
+            .bind(ip_manager_id)
+            .bind(ip.device_type.as_deref().unwrap_or("switch"))
+            .bind(ip.network_id)
+            .bind(&ip.ip_address)
+            .bind(ip_version)
+            .bind(&ip.mac_address)
+            .bind(&ip.hostname)
+            .bind(position_id)
+            .bind(ip.switch_port_id)
+            .bind("active")
+            .bind(now)
+            .bind(now)
+            .bind(now)
+            .execute(&state.pool()?.get_conn())
+            .await
+            {
+                tracing::error!("更新交换机IP记录失败: {}", e);
+                return Err(AppError::Internal(format!("创建IP记录失败: {e}")));
             }
         }
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新交换机失败: {e}")))),
     }
+
+    let data = sqlx::query_as::<_, Switch>(
+        r"SELECT
+            id, name,
+            model, vendor,
+            location, snmp_version,
+            snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password,
+            snmp_priv_protocol,
+            snmp_priv_password,
+            snmp_port,
+            parent_switch_id, parent_port_id,
+            description, created_at, updated_at,
+            position_id
+        FROM switches WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+
+    let details = serde_json::json!({
+        "name": data.name,
+        "model": data.model,
+        "vendor": data.vendor,
+        "location": data.location,
+        "ip_count": req.ips.as_ref().unwrap_or(&vec![]).len()
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "update",
+        "switch",
+        &id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
 }
 
 pub async fn delete_switch(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
     let has_children = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_switch_id = $1)",
     )
     .bind(id)
-    .fetch_one(&pool.get_conn())
+    .fetch_one(&state.pool()?.get_conn())
     .await
     .unwrap_or(false);
 
     if has_children {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error("该交换机存在下级交换机，无法删除")));
+        return Err(AppError::Validation("该交换机存在下级交换机，无法删除".to_string()));
     }
 
     if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
         .bind(id)
-        .execute(&pool.get_conn())
+        .execute(&state.pool()?.get_conn())
         .await
     {
         tracing::error!("删除交换机IP记录失败: {}", e);
@@ -872,7 +791,7 @@ pub async fn delete_switch(
     if let Err(e) =
         sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
             .bind(id)
-            .execute(&pool.get_conn())
+            .execute(&state.pool()?.get_conn())
             .await
     {
         tracing::error!("删除交换机关联机位失败: {}", e);
@@ -880,38 +799,35 @@ pub async fn delete_switch(
 
     let result = sqlx::query("DELETE FROM switches WHERE id = $1")
         .bind(id)
-        .execute(&pool.get_conn())
-        .await;
+        .execute(&state.pool()?.get_conn())
+        .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() > 0 => {
-            let details = serde_json::json!({
-                "switch_id": id.to_string()
-            });
-            if let Err(e) = log_system_operation(
-                &pool.get_conn(),
-                &http_req,
-                config.get_ref(),
-                "delete",
-                "switch",
-                &id,
-                &details,
-                true,
-            )
-            .await
-            {
-                warn!("记录操作日志失败: {}", e);
-            }
-
-            Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除交换机成功")))
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除交换机失败: {e}")))),
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("交换机不存在".to_string()));
     }
+
+    let details = serde_json::json!({
+        "switch_id": id.to_string()
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        &http_req,
+        &state.config,
+        "delete",
+        "switch",
+        &id,
+        &details,
+        true,
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除交换机成功")))
 }
 
-async fn check_switch_cycle(pool: &sqlx::PgPool, switch_id: Uuid, parent_id: Uuid) -> Result<bool> {
+async fn check_switch_cycle(pool: &sqlx::PgPool, switch_id: Uuid, parent_id: Uuid) -> Result<bool, AppError> {
     let mut current = parent_id;
     let mut visited = std::collections::HashSet::new();
 

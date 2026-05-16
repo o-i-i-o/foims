@@ -1,5 +1,5 @@
-use crate::config::Config;
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{
     ApiResponse, IpManager, Workstation, WorkstationCreate,
     WorkstationUpdate, WorkstationWithDetails,
@@ -7,7 +7,7 @@ use crate::models::{
 use crate::resource::ip::detect_ip_version;
 use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
 use tracing::warn;
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
@@ -16,9 +16,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_workstations(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -54,146 +54,84 @@ pub async fn get_workstations(
     };
 
     let (total, workstations_basic) = if search.is_empty() && parsed_room_id.is_none() {
-        let total: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM workstations w")
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-            }
-        };
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workstations w")
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
-        let workstations_basic = match sqlx::query(&format!(
-            "SELECT w.id, w.name, w.room_id, 
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name, 
-                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
+        let workstations_basic = sqlx::query(&format!(
+            "SELECT w.id, w.name, w.room_id,
+                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w {order_clause} LIMIT $1 OFFSET $2"
         ))
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(w) => w,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
         (total, workstations_basic)
     } else if parsed_room_id.is_some() && search.is_empty() {
         let total: i64 =
-            match sqlx::query_scalar("SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1")
                 .bind(parsed_room_id)
-                .fetch_one(&pool.get_conn())
-                .await
-            {
-                Ok(t) => t,
-                Err(err) => {
-                    return Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-                }
-            };
+                .fetch_one(&state.pool()?.get_conn())
+                .await?;
 
-        let workstations_basic = match sqlx::query(&format!(
-            "SELECT w.id, w.name, w.room_id, 
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name, 
-                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
+        let workstations_basic = sqlx::query(&format!(
+            "SELECT w.id, w.name, w.room_id,
+                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"
         ))
         .bind(parsed_room_id)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(w) => w,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
         (total, workstations_basic)
     } else if parsed_room_id.is_some() {
-        let total: i64 = match sqlx::query_scalar(
+        let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM workstations w WHERE w.room_id = $1 AND (w.name ILIKE $2 OR w.manager ILIKE $2 OR w.description ILIKE $2)"
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
-        .fetch_one(&pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-        let workstations_basic = match sqlx::query(&format!(
-            "SELECT w.id, w.name, w.room_id, 
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name, 
-                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
+        let workstations_basic = sqlx::query(&format!(
+            "SELECT w.id, w.name, w.room_id,
+                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 AND (w.name ILIKE $2 OR w.manager ILIKE $2 OR w.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"
         ))
         .bind(parsed_room_id)
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(w) => w,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
         (total, workstations_basic)
     } else {
-        let total: i64 = match sqlx::query_scalar(
+        let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM workstations w WHERE w.name ILIKE $1 OR w.manager ILIKE $1 OR w.description ILIKE $1"
         )
         .bind(&search_pattern)
-        .fetch_one(&pool.get_conn())
-        .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-        let workstations_basic = match sqlx::query(&format!(
-            "SELECT w.id, w.name, w.room_id, 
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name, 
-                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
+        let workstations_basic = sqlx::query(&format!(
+            "SELECT w.id, w.name, w.room_id,
+                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.name ILIKE $1 OR w.manager ILIKE $1 OR w.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         ))
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(w) => w,
-            Err(err) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    format!("数据库查询错误: {err}"),
-                )));
-            }
-        };
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
         (total, workstations_basic)
     };
@@ -248,54 +186,31 @@ pub async fn get_workstations(
 }
 
 pub async fn create_workstation(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<WorkstationCreate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+) -> Result<HttpResponse, AppError> {
+    (*req).validate()?;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("开启事务失败: {err}"))));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing_workstation: Option<Uuid> = match sqlx::query_scalar::<_, Uuid>(
+    let existing_workstation: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM workstations WHERE name = $1 AND room_id = $2",
     )
     .bind(&req.name)
     .bind(req.room_id)
     .fetch_optional(&mut *tx)
-    .await
-    {
-        Ok(workstation) => workstation,
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                    "Database query error: {err}"
-                ))),
-            );
-        }
-    };
+    .await?;
 
     if existing_workstation.is_some() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<Workstation>::error("工位名称已存在"))
-        );
+        return Err(AppError::Conflict("工位名称已存在".to_string()));
     }
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
-        "INSERT INTO workstations (id, name, room_id, manager, description, created_at, updated_at) 
+    sqlx::query(
+        "INSERT INTO workstations (id, name, room_id, manager, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)"
     )
     .bind(id)
@@ -305,68 +220,41 @@ pub async fn create_workstation(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx).await {
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
-    }
+    .execute(&mut *tx).await?;
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
         for ip in ips {
             let device_type = ip.device_type.as_deref().unwrap_or("");
             if device_type != "workstation" || ip.workstation_id.is_some() {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("设备类型与设备ID不匹配")));
+                return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
             }
 
             let existing_mapping: Option<Uuid> =
-                match sqlx::query_scalar::<_, Uuid>(
+                sqlx::query_scalar::<_, Uuid>(
                     "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
                 )
                 .bind(&ip.ip_address)
                 .bind(ip.network_id)
                 .fetch_optional(&mut *tx)
-                .await
-                {
-                    Ok(mapping) => mapping,
-                    Err(err) => {
-                        return Ok(HttpResponse::InternalServerError().json(
-                            ApiResponse::<()>::error(format!("Database query error: {err}")),
-                        ));
-                    }
-                };
+                .await?;
 
             if existing_mapping.is_some() {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("该网络中IP地址已存在")));
+                return Err(AppError::Conflict("该网络中IP地址已存在".to_string()));
             }
 
-            let network =
-                match sqlx::query(crate::utils::NETWORK_QUERY)
-                    .bind(ip.network_id)
-                    .fetch_optional(&mut *tx)
-                    .await
-                {
-                    Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
-                    Ok(None) => {
-                        return Ok(
-                            HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到"))
-                        );
-                    }
-                    Err(err) => {
-                        return Ok(HttpResponse::InternalServerError().json(
-                            ApiResponse::<()>::error(format!("Database query error: {err}")),
-                        ));
-                    }
-                };
+            let network = sqlx::query(crate::utils::NETWORK_QUERY)
+                .bind(ip.network_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .map(|row| crate::utils::parse_network_from_row(&row))
+                .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-            let ip_in_cidr = match validate_ip_in_cidr(&ip.ip_address, &network) {
-                Ok(valid) => valid,
-                Err(response) => return Ok(response),
-            };
+            let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, &network)
+                .map_err(|_| AppError::Validation("无效的IP地址格式".to_string()))?;
 
             if !ip_in_cidr {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("IP地址不在所属网络网段内")));
+                return Err(AppError::Validation("IP地址不在所属网络网段内".to_string()));
             }
 
             let network_in_room: bool = sqlx::query_scalar(
@@ -379,13 +267,13 @@ pub async fn create_workstation(
             .unwrap_or(false);
 
             if !network_in_room {
-                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该工位所在房间的可用网段")));
+                return Err(AppError::Validation("所选网段不属于该工位所在房间的可用网段".to_string()));
             }
 
             let ip_version = detect_ip_version(&ip.ip_address);
 
-            if let Err(err) = sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+            sqlx::query(
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
@@ -402,18 +290,13 @@ pub async fn create_workstation(
             .bind(now)
             .bind(now)
             .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("数据库插入错误: {err}"))));
-            }
+            .execute(&mut *tx).await?;
 
             ip_count += 1;
         }
     }
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("提交事务失败: {err}"))));
-    }
+    tx.commit().await?;
 
     let workstation = Workstation {
         id,
@@ -434,9 +317,9 @@ pub async fn create_workstation(
         "ip_count": ip_count
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "create",
         "workstation",
         &id,
@@ -455,28 +338,21 @@ pub async fn create_workstation(
 }
 
 pub async fn get_workstation(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let workstation = match sqlx::query_as::<_, Workstation>(
+    let workstation = sqlx::query_as::<_, Workstation>(
         "SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ FROM workstations w LEFT JOIN rooms r ON w.room_id = r.id WHERE w.id = $1"
     ).bind(id)
-    .fetch_optional(&pool.get_conn()).await {
-        Ok(Some(workstation)) => workstation,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::<Workstation>::error("工位未找到")));
-        },
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))));
-        }
-    };
+    .fetch_optional(&state.pool()?.get_conn()).await?
+    .ok_or_else(|| AppError::NotFound("工位未找到".to_string()))?;
 
-    let workstation_ips = match sqlx::query_as::<_, IpManager>(
-        r"SELECT 
+    let workstation_ips = sqlx::query_as::<_, IpManager>(
+        r"SELECT
             m.id, m.workstation_id, m.position_id, m.switch_port_id,
-            m.device_type, m.network_id, 
+            m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at, m.last_mac
@@ -485,29 +361,14 @@ pub async fn get_workstation(
         ORDER BY m.ip_address",
     )
     .bind(id)
-    .fetch_all(&pool.get_conn())
-    .await
-    {
-        Ok(ips) => ips,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("数据库查询错误: {err}"))));
-        }
-    };
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
-    let room_name = match sqlx::query_scalar::<_, String>("SELECT COALESCE((SELECT r.name FROM rooms r JOIN workstations w ON r.id = w.room_id WHERE w.id = $1), '未知房间')")
+    let room_name = sqlx::query_scalar::<_, String>("SELECT COALESCE((SELECT r.name FROM rooms r JOIN workstations w ON r.id = w.room_id WHERE w.id = $1), '未知房间')")
         .bind(id)
-        .fetch_optional(&pool.get_conn())
-        .await
-    {
-        Ok(Some(name)) => name,
-        Ok(None) => "未知房间".to_string(),
-        Err(err) => {
-            return Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("Database query error: {err}"))),
-            );
-        }
-    };
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .unwrap_or_else(|| "未知房间".to_string());
 
     let workstation_with_details = WorkstationWithDetails {
         id: workstation.id,
@@ -530,59 +391,36 @@ pub async fn get_workstation(
 }
 
 pub async fn update_workstation(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
     req: web::Json<WorkstationUpdate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Validation error: {e:?}"
-            ))),
-        );
-    }
+    (*req).validate()?;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("开启事务失败: {err}"))));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing_workstation: Option<Uuid> =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM workstations WHERE id = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM workstations WHERE id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
-            .await
-        {
-            Ok(workstation) => workstation,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+            .await?;
 
     if existing_workstation.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<Workstation>::error("工位未找到")));
+        return Err(AppError::NotFound("工位未找到".to_string()));
     }
 
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
-        "UPDATE workstations SET 
-         name = COALESCE($1, name), 
-         room_id = COALESCE($2, room_id), 
-         manager = COALESCE($3, manager), 
-         description = COALESCE($4, description), 
-         updated_at = $5 
+    sqlx::query(
+        "UPDATE workstations SET
+         name = COALESCE($1, name),
+         room_id = COALESCE($2, room_id),
+         manager = COALESCE($3, manager),
+         description = COALESCE($4, description),
+         updated_at = $5
          WHERE id = $6",
     )
     .bind(&req.name)
@@ -592,21 +430,13 @@ pub async fn update_workstation(
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
-    .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
-    }
+    .await?;
 
     if let Some(ips) = &req.ips {
-        if let Err(err) = sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
+        sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
             .bind(id)
             .execute(&mut *tx)
-            .await
-        {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除IP记录失败: {err}"))));
-        }
+            .await?;
 
         for ip in ips {
             let ip_version = if ip.ip_address.contains(':') {
@@ -635,12 +465,12 @@ pub async fn update_workstation(
                 .unwrap_or(false);
 
                 if !network_in_room {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该工位所在房间的可用网段")));
+                    return Err(AppError::Validation("所选网段不属于该工位所在房间的可用网段".to_string()));
                 }
             }
 
-            if let Err(err) = sqlx::query(
-                "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+            sqlx::query(
+                "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
@@ -656,36 +486,26 @@ pub async fn update_workstation(
             .bind(now)
             .bind(now)
             .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {err}"))));
-            }
+            .execute(&mut *tx).await?;
         }
     }
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("提交事务失败: {err}"))));
-    }
+    tx.commit().await?;
 
-    let row = match sqlx::query(
-        r"SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ 
-        FROM workstations w 
-        LEFT JOIN rooms r ON w.room_id = r.id 
+    let row = sqlx::query(
+        r"SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
+        FROM workstations w
+        LEFT JOIN rooms r ON w.room_id = r.id
         WHERE w.id = $1"
     ).bind(id)
-    .fetch_one(&pool.get_conn()).await {
-        Ok(r) => r,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询工位失败: {err}"))));
-        }
-    };
+    .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, 
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id,
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE workstation_id = $1"
     ).bind(id)
-    .fetch_all(&pool.get_conn()).await.unwrap_or_default();
+    .fetch_all(&state.pool()?.get_conn()).await.unwrap_or_default();
 
     let result = WorkstationWithDetails {
         id: row.get("id"),
@@ -708,9 +528,9 @@ pub async fn update_workstation(
         "description": result.description
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "update",
         "workstation",
         &id,
@@ -731,89 +551,48 @@ pub async fn update_workstation(
 }
 
 pub async fn delete_workstation(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("开启事务失败: {err}"))));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing_workstation: Option<Uuid> =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM workstations WHERE id = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM workstations WHERE id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
-            .await
-        {
-            Ok(workstation) => workstation,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+            .await?;
 
     if existing_workstation.is_none() {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<Workstation>::error("工位未找到")));
+        return Err(AppError::NotFound("工位未找到".to_string()));
     }
 
-    if let Err(err) = sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
+    sqlx::query("DELETE FROM ips WHERE workstation_id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "删除IP管理记录失败: {err}"
-            ))),
-        );
-    }
+        .await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+    sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "删除布局数据失败: {err}"
-            ))),
-        );
-    }
+        .await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM workstations WHERE id = $1")
+    sqlx::query("DELETE FROM workstations WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "Database deletion error: {err}"
-            ))),
-        );
-    }
+        .await?;
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("提交事务失败: {err}"))));
-    }
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "workstation_id": id.to_string()
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "delete",
         "workstation",
         &id,

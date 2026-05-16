@@ -2049,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.8.83"
+version = "0.8.90"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2084,6 +2084,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "socket2 0.5.10",
  "sqlx",
  "thiserror",
  "time",

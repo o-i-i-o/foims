@@ -6,7 +6,8 @@ use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Read, Write};
 use zip::{ZipWriter, write::FileOptions};
 
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::ApiResponse;
 use serde::{Deserialize, Serialize};
 
@@ -72,12 +73,10 @@ async fn find_network_id(
 }
 
 pub async fn export_csv(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     type_param: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let mut conn = pool.acquire().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("获取数据库连接失败: {e}"))
-    })?;
+) -> Result<HttpResponse, AppError> {
+    let mut conn = state.pool()?.acquire().await?;
 
     let export_type = type_param.get("type").cloned().unwrap_or_else(|| "all".to_string());
     let mut csv_data: Vec<(&str, Vec<u8>)> = Vec::new();
@@ -123,16 +122,13 @@ pub async fn export_csv(
     {
         let mut zip = ZipWriter::new(&mut buf);
         for (filename, data) in csv_data {
-            zip.start_file(filename, options).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("创建ZIP文件失败: {e}"))
-            })?;
-            zip.write_all(&data).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("写入ZIP文件失败: {e}"))
-            })?;
+            zip.start_file(filename, options)
+                .map_err(|e| AppError::Internal(format!("创建ZIP文件失败: {e}")))?;
+            zip.write_all(&data)
+                .map_err(|e| AppError::Internal(format!("写入ZIP文件失败: {e}")))?;
         }
-        zip.finish().map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("完成ZIP文件失败: {e}"))
-        })?;
+        zip.finish()
+            .map_err(|e| AppError::Internal(format!("完成ZIP文件失败: {e}")))?;
     }
 
     Ok(HttpResponse::Ok()
@@ -151,17 +147,14 @@ pub async fn export_csv(
 async fn export_network_regions(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
     csv.extend_from_slice("名称,描述\n".as_bytes());
 
     let rows = sqlx::query("SELECT name, description FROM network_regions ORDER BY name")
         .fetch_all(&mut *conn)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("查询网络区域失败: {e}"))
-        })?;
+        .await?;
 
     for row in rows {
         let name: String = row.get(0);
@@ -180,7 +173,7 @@ async fn export_network_regions(
 async fn export_networks(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
     csv.extend_from_slice(
@@ -199,8 +192,7 @@ async fn export_networks(
            ORDER BY nr.name, n.name",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询网络失败: {e}")))?;
+    .await?;
 
     for row in rows {
         let name: String = row.get(0);
@@ -234,14 +226,13 @@ async fn export_networks(
 async fn export_rooms(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
 
     let rooms = sqlx::query("SELECT id, name, room_type FROM rooms ORDER BY name")
         .fetch_all(&mut *conn)
-        .await
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询房间失败: {e}")))?;
+        .await?;
 
     let mut room_networks_map: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
     let mut max_networks = 0;
@@ -303,7 +294,7 @@ async fn export_rooms(
 async fn export_workstations(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
     csv.extend_from_slice("名称,房间,IP地址,负责人,描述\n".as_bytes());
@@ -315,8 +306,7 @@ async fn export_workstations(
            ORDER BY r.name, w.name",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询工位失败: {e}")))?;
+    .await?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -350,7 +340,7 @@ async fn export_workstations(
 async fn export_cabinets(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
 
@@ -361,8 +351,7 @@ async fn export_cabinets(
            ORDER BY r.name, c.name",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询机柜失败: {e}")))?;
+    .await?;
 
     let mut cabinet_networks_map: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
     let mut max_networks = 0;
@@ -424,7 +413,7 @@ async fn export_cabinets(
 async fn export_positions(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
     csv.extend_from_slice("名称,机柜,起始U,结束U,IP地址,描述\n".as_bytes());
@@ -436,8 +425,7 @@ async fn export_positions(
            ORDER BY c.name, p.start_u",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询机位失败: {e}")))?;
+    .await?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -473,7 +461,7 @@ async fn export_positions(
 async fn export_switches(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     use crate::crypto::decrypt_password;
 
     let mut csv = Vec::new();
@@ -489,8 +477,7 @@ async fn export_switches(
            ORDER BY s.name",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询交换机失败: {e}")))?;
+    .await?;
 
     for row in rows {
         let id: uuid::Uuid = row.get(0);
@@ -539,7 +526,7 @@ async fn export_switches(
 async fn export_ip_managers(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
-) -> Result<(&'static str, Vec<u8>), actix_web::Error> {
+) -> Result<(&'static str, Vec<u8>), AppError> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
     csv.extend_from_slice("工位,机位,网络,IP地址,MAC地址,主机名,状态\n".as_bytes());
@@ -555,8 +542,7 @@ async fn export_ip_managers(
            ORDER BY im.ip_address",
     )
     .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("查询IP管理失败: {e}")))?;
+    .await?;
 
     for row in rows {
         let workstation: Option<String> = row.get(0);
@@ -584,10 +570,10 @@ async fn export_ip_managers(
 }
 
 pub async fn import_csv(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     mut payload: actix_multipart::Multipart,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> Result<HttpResponse, AppError> {
     let mode = query
         .get("mode")
         .cloned()
@@ -600,7 +586,7 @@ pub async fn import_csv(
     while let Some(mut field) = payload
         .try_next()
         .await
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("读取文件失败: {e}")))?
+        .map_err(|e| AppError::Internal(format!("读取文件失败: {e}")))?
     {
         if field.name() == Some("file") {
             filename = field
@@ -608,7 +594,7 @@ pub async fn import_csv(
                 .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string));
             let mut data = Vec::new();
             while let Some(chunk) = field.try_next().await.map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("读取文件块失败: {e}"))
+                AppError::Internal(format!("读取文件块失败: {e}"))
             })? {
                 data.extend_from_slice(&chunk);
             }
@@ -618,26 +604,22 @@ pub async fn import_csv(
     }
 
     let file_data =
-        file_data.ok_or_else(|| actix_web::error::ErrorBadRequest("请选择要导入的CSV文件"))?;
+        file_data.ok_or_else(|| AppError::Validation("请选择要导入的CSV文件".to_string()))?;
 
-    let mut conn = pool.acquire().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("获取数据库连接失败: {e}"))
-    })?;
+    let mut conn = state.pool()?.acquire().await?;
 
     let mut results = Vec::new();
 
     if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(file_data.clone())) {
         for i in 0..zip.len() {
-            let mut file = zip.by_index(i).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("读取ZIP文件项失败: {e}"))
-            })?;
+            let mut file = zip.by_index(i)
+                .map_err(|e| AppError::Internal(format!("读取ZIP文件项失败: {e}")))?;
 
             let zip_filename = file.name().to_string();
             if zip_filename.ends_with(".csv") {
                 let mut content = String::new();
-                file.read_to_string(&mut content).map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!("读取CSV文件失败: {e}"))
-                })?;
+                file.read_to_string(&mut content)
+                    .map_err(|e| AppError::Internal(format!("读取CSV文件失败: {e}")))?;
 
                 let table_name = zip_filename.trim_end_matches(".csv");
                 if let Err(e) = process_csv_by_filename(
@@ -655,7 +637,7 @@ pub async fn import_csv(
         }
     } else {
         let content = String::from_utf8(file_data).map_err(|e| {
-            actix_web::error::ErrorBadRequest(format!(
+            AppError::Validation(format!(
                 "解析CSV文件失败: 文件编码必须是UTF-8 - {e}"
             ))
         })?;
@@ -2123,7 +2105,7 @@ async fn import_switches(
 
 pub async fn download_template(
     type_param: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> Result<HttpResponse, AppError> {
     let template_type = type_param.get("type").cloned().unwrap_or_else(|| "all".to_string());
     let utf8_bom = &[0xEF, 0xBB, 0xBF];
     let mut csv_data: Vec<(&str, Vec<u8>)> = Vec::new();
@@ -2196,16 +2178,13 @@ pub async fn download_template(
     {
         let mut zip = ZipWriter::new(&mut buf);
         for (filename, data) in csv_data {
-            zip.start_file(filename, options).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("创建ZIP文件失败: {e}"))
-            })?;
-            zip.write_all(&data).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("写入ZIP文件失败: {e}"))
-            })?;
+            zip.start_file(filename, options)
+                .map_err(|e| AppError::Internal(format!("创建ZIP文件失败: {e}")))?;
+            zip.write_all(&data)
+                .map_err(|e| AppError::Internal(format!("写入ZIP文件失败: {e}")))?;
         }
-        zip.finish().map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("完成ZIP文件失败: {e}"))
-        })?;
+        zip.finish()
+            .map_err(|e| AppError::Internal(format!("完成ZIP文件失败: {e}")))?;
     }
 
     Ok(HttpResponse::Ok()
@@ -2221,9 +2200,9 @@ pub async fn download_template(
 }
 
 pub async fn export_database(
-    config: web::Data<crate::config::Config>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let db_config = &config.database;
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
+    let db_config = &state.config.database;
 
     let output = std::process::Command::new("pg_dump")
         .arg("-h")
@@ -2241,23 +2220,19 @@ pub async fn export_database(
         .env("PGPASSWORD", &db_config.password)
         .output()
         .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
+            AppError::Internal(format!(
                 "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
             ))
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(actix_web::error::ErrorInternalServerError(format!(
-            "pg_dump 执行失败: {stderr}"
-        )));
+        return Err(AppError::Internal(format!("pg_dump 执行失败: {stderr}")));
     }
 
     let sql_content = output.stdout;
     if sql_content.is_empty() {
-        return Err(actix_web::error::ErrorInternalServerError(
-            "导出的 SQL 文件为空",
-        ));
+        return Err(AppError::Internal("导出的 SQL 文件为空".to_string()));
     }
 
     Ok(HttpResponse::Ok()
@@ -2278,53 +2253,55 @@ pub struct ClearLogsRequest {
     pub days: Option<i32>,
 }
 
-pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest>) -> HttpResponse {
+pub async fn clear_logs(state: web::Data<AppState>, req: web::Json<ClearLogsRequest>) -> Result<HttpResponse, AppError> {
     let days = req.days.unwrap_or(0);
 
     if days < 0 {
-        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("保留天数不能为负数"));
+        return Err(AppError::Validation("保留天数不能为负数".to_string()));
     }
+
+    let conn = state.pool()?.get_conn();
 
     let result = match req.log_type.as_str() {
         "operation" => {
             if days == 0 {
                 sqlx::query("DELETE FROM operation_logs")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
             }
         }
         "login" => {
             if days == 0 {
                 sqlx::query("DELETE FROM login_logs")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
             }
         }
         "notification" => {
             if days == 0 {
                 sqlx::query("DELETE FROM notifications")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
             } else {
                 sqlx::query(
                     "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
             }
         }
@@ -2333,19 +2310,19 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
 
             if days == 0 {
                 if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
                 {
                     deleted += r.rows_affected();
                 }
                 if let Ok(r) = sqlx::query("DELETE FROM login_logs")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
                 {
                     deleted += r.rows_affected();
                 }
                 if let Ok(r) = sqlx::query("DELETE FROM notifications")
-                    .execute(&pool.get_conn())
+                    .execute(&conn)
                     .await
                 {
                     deleted += r.rows_affected();
@@ -2355,7 +2332,7 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
                 {
                     deleted += r.rows_affected();
@@ -2364,7 +2341,7 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
                 {
                     deleted += r.rows_affected();
@@ -2373,74 +2350,64 @@ pub async fn clear_logs(pool: web::Data<DbPool>, req: web::Json<ClearLogsRequest
                     "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(&pool.get_conn())
+                .execute(&conn)
                 .await
                 {
                     deleted += r.rows_affected();
                 }
             }
 
-            return HttpResponse::Ok().json(ApiResponse::success(
+            return Ok(HttpResponse::Ok().json(ApiResponse::success(
                 serde_json::json!({ "deleted": deleted }),
                 &format!("成功清理 {deleted} 条日志记录"),
-            ));
+            )));
         }
         _ => {
-            return HttpResponse::BadRequest().json(ApiResponse::<()>::error("无效的日志类型"));
+            return Err(AppError::Validation("无效的日志类型".to_string()));
         }
     };
 
-    match result {
-        Ok(r) => {
-            let deleted = r.rows_affected();
-            HttpResponse::Ok().json(ApiResponse::success(
-                serde_json::json!({ "deleted": deleted }),
-                &format!("成功清理 {deleted} 条日志记录"),
-            ))
-        }
-        Err(e) => HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("清理日志失败: {e}"))),
-    }
+    let r = result?;
+    let deleted = r.rows_affected();
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({ "deleted": deleted }),
+        &format!("成功清理 {deleted} 条日志记录"),
+    )))
 }
 
-pub async fn get_logs_stats(pool: web::Data<DbPool>) -> HttpResponse {
+pub async fn get_logs_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let conn = &state.pool()?.get_conn();
+
     let operation_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs")
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(0);
+        .fetch_one(conn)
+        .await?;
 
     let login_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM login_logs")
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(0);
+        .fetch_one(conn)
+        .await?;
 
     let notification_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notifications")
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(0);
+        .fetch_one(conn)
+        .await?;
 
     let operation_oldest: Option<String> = sqlx::query_scalar(
         "SELECT created_at::text FROM operation_logs ORDER BY created_at ASC LIMIT 1",
     )
-    .fetch_optional(&pool.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .fetch_optional(conn)
+    .await?;
 
     let login_oldest: Option<String> = sqlx::query_scalar(
         "SELECT created_at::text FROM login_logs ORDER BY created_at ASC LIMIT 1",
     )
-    .fetch_optional(&pool.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .fetch_optional(conn)
+    .await?;
 
-    HttpResponse::Ok().json(ApiResponse::success(
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "operation_logs": { "count": operation_count, "oldest": operation_oldest },
             "login_logs": { "count": login_count, "oldest": login_oldest },
             "notifications": { "count": notification_count }
         }),
         "日志统计获取成功",
-    ))
+    )))
 }

@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.8.83"
+version = "0.8.90"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -59,6 +59,7 @@ toml = "1.1.2"
 
 # 其他工具
 tokio = { version = "1.51.1", features = ["full"] }
+socket2 = "0.5"
 anyhow = "1.0.102"
 thiserror = "2.0.18"
 chrono = { version = "0.4.44", features = ["serde"] }

@@ -1,18 +1,20 @@
-use actix_web::{HttpResponse, Result, web};
+use crate::app_state::AppState;
+use crate::error::AppError;
+use crate::models::ApiResponse;
+use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::db::DbPool;
-use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
+use crate::models::{ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use crate::system::cron::{calculate_next_run, execute_task_by_type};
 
-pub async fn get_scheduled_tasks(pool: web::Data<DbPool>) -> Result<HttpResponse> {
+pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks ORDER BY created_at DESC"
     )
-    .fetch_all(&pool.get_conn())
+    .fetch_all(&state.pool()?.get_conn())
     .await
     .unwrap_or_default();
 
@@ -20,41 +22,38 @@ pub async fn get_scheduled_tasks(pool: web::Data<DbPool>) -> Result<HttpResponse
 }
 
 pub async fn get_scheduled_task(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
     let task: Option<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&state.pool()?.get_conn())
     .await
     .ok()
     .flatten();
 
     match task {
         Some(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "获取定时任务成功"))),
-        None => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
+        None => Err(AppError::NotFound("定时任务不存在".to_string())),
     }
 }
 
 pub async fn create_scheduled_task(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<ScheduledTaskCreate>,
-) -> Result<HttpResponse> {
-    if let Err(e) = req.validate() {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("参数验证失败: {e:?}"))));
-    }
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
 
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
     let enabled = req.enabled.unwrap_or(true);
 
     let next_run_at = calculate_next_run(&req.cron_expression).ok();
 
-    let task: Result<ScheduledTask, sqlx::Error> = sqlx::query_as(
+    let task: ScheduledTask = sqlx::query_as(
         r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at"
@@ -65,35 +64,29 @@ pub async fn create_scheduled_task(
     .bind(enabled)
     .bind(&config)
     .bind(next_run_at)
-    .fetch_one(&pool.get_conn())
-    .await;
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
 
-    match task {
-        Ok(t) => Ok(HttpResponse::Created().json(ApiResponse::success(t, "创建定时任务成功"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("创建定时任务失败: {e}")))),
-    }
+    Ok(HttpResponse::Created().json(ApiResponse::success(task, "创建定时任务成功")))
 }
 
 pub async fn update_scheduled_task(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
     req: web::Json<ScheduledTaskUpdate>,
-) -> Result<HttpResponse> {
-    if let Err(e) = req.validate() {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<()>::error(format!("参数验证失败: {e:?}"))));
-    }
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
 
     let id = path.into_inner();
     let now = Utc::now();
+    let conn = state.pool()?.get_conn();
 
     if let Some(ref cron_expr) = req.cron_expression
         && let Ok(next_run) = calculate_next_run(cron_expr)
         && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
             .bind(next_run)
             .bind(id)
-            .execute(&pool.get_conn())
+            .execute(&conn)
             .await
     {
         tracing::warn!("更新下次运行时间失败: {}", e);
@@ -116,114 +109,89 @@ pub async fn update_scheduled_task(
     .bind(&req.config)
     .bind(now)
     .bind(id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&conn)
+    .await?;
 
-    match result {
-        Ok(res) if res.rows_affected() > 0 => {
-            let task: Result<ScheduledTask, sqlx::Error> = sqlx::query_as(
-                "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
-            )
-            .bind(id)
-            .fetch_one(&pool.get_conn())
-            .await;
+    if result.rows_affected() > 0 {
+        let task: ScheduledTask = sqlx::query_as(
+            "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_one(&conn)
+        .await?;
 
-            match task {
-                Ok(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "更新定时任务成功"))),
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "查询更新后的任务失败: {e}"
-                    ))),
-                ),
-            }
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("更新定时任务失败: {e}")))),
+        Ok(HttpResponse::Ok().json(ApiResponse::success(task, "更新定时任务成功")))
+    } else {
+        Err(AppError::NotFound("定时任务不存在".to_string()))
     }
 }
 
 pub async fn delete_scheduled_task(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
     let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
         .bind(id)
-        .execute(&pool.get_conn())
-        .await;
+        .execute(&state.pool()?.get_conn())
+        .await?;
 
-    match result {
-        Ok(res) if res.rows_affected() > 0 => {
-            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "删除定时任务成功")))
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("删除定时任务失败: {e}")))),
+    if result.rows_affected() > 0 {
+        Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "删除定时任务成功")))
+    } else {
+        Err(AppError::NotFound("定时任务不存在".to_string()))
     }
 }
 
 pub async fn toggle_scheduled_task(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
+    let conn = state.pool()?.get_conn();
 
     let result = sqlx::query(
         "UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
     )
     .bind(Utc::now())
     .bind(id)
-    .execute(&pool.get_conn())
-    .await;
+    .execute(&conn)
+    .await?;
 
-    match result {
-        Ok(res) if res.rows_affected() > 0 => {
-            let task: Result<ScheduledTask, sqlx::Error> = sqlx::query_as(
-                "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
-            )
-            .bind(id)
-            .fetch_one(&pool.get_conn())
-            .await;
+    if result.rows_affected() > 0 {
+        let task: ScheduledTask = sqlx::query_as(
+            "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_one(&conn)
+        .await?;
 
-            match task {
-                Ok(t) => {
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(t, "切换定时任务状态成功")))
-                }
-                Err(e) => Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "查询切换后的任务失败: {e}"
-                    ))),
-                ),
-            }
-        }
-        Ok(_) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在"))),
-        Err(e) => Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "切换定时任务状态失败: {e}"
-            ))),
-        ),
+        Ok(HttpResponse::Ok().json(ApiResponse::success(task, "切换定时任务状态成功")))
+    } else {
+        Err(AppError::NotFound("定时任务不存在".to_string()))
     }
 }
 
 pub async fn run_scheduled_task_now(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
+    let pool = state.pool()?;
+    let conn = pool.get_conn();
 
     let task: Option<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
-    .fetch_optional(&pool.get_conn())
+    .fetch_optional(&conn)
     .await
     .ok()
     .flatten();
 
     let Some(task) = task else {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("定时任务不存在")))
+        return Err(AppError::NotFound("定时任务不存在".to_string()))
     };
 
     let start_time = Utc::now();
@@ -232,7 +200,7 @@ pub async fn run_scheduled_task_now(
 
     let db_config = pool.db_config.clone();
     let result =
-        execute_task_by_type(&pool.get_conn(), &task.task_type, &task.config, &db_config).await;
+        execute_task_by_type(&conn, &task.task_type, &task.config, &db_config).await;
 
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_milliseconds() as i32;
@@ -259,7 +227,7 @@ pub async fn run_scheduled_task_now(
     .bind(start_time)
     .bind(end_time)
     .bind(duration)
-    .execute(&pool.get_conn())
+    .execute(&conn)
     .await
     {
         tracing::warn!("记录任务日志失败: {}", e);
@@ -284,7 +252,7 @@ pub async fn run_scheduled_task_now(
         .bind(id)
     };
 
-    if let Err(e) = update_query.execute(&pool.get_conn()).await {
+    if let Err(e) = update_query.execute(&conn).await {
         tracing::warn!("更新定时任务执行结果失败: {}", e);
     }
 
@@ -295,14 +263,15 @@ pub async fn run_scheduled_task_now(
 }
 
 pub async fn get_task_logs(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let task_name = query.get("task_name").cloned();
     let limit: i64 = query
         .get("limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(100);
+    let conn = state.pool()?.get_conn();
 
     let logs = if let Some(name) = task_name {
         sqlx::query_as::<_, crate::models::TaskLog>(
@@ -310,7 +279,7 @@ pub async fn get_task_logs(
         )
         .bind(&name)
         .bind(limit)
-        .fetch_all(&pool.get_conn())
+        .fetch_all(&conn)
         .await
         .unwrap_or_default()
     } else {
@@ -318,7 +287,7 @@ pub async fn get_task_logs(
             "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
         )
         .bind(limit)
-        .fetch_all(&pool.get_conn())
+        .fetch_all(&conn)
         .await
         .unwrap_or_default()
     };

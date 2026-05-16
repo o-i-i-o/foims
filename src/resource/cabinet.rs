@@ -1,5 +1,5 @@
-use crate::config::Config;
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{
     ApiResponse, CabinetPosition, CabinetPositionCreate,
     CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
@@ -7,7 +7,7 @@ use crate::models::{
 use crate::resource::ip::detect_ip_version;
 use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
 use tracing::warn;
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
@@ -16,9 +16,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_positions(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -52,14 +52,13 @@ pub async fn get_positions(
         _ => "ORDER BY name ASC",
     };
 
-    // 查询总数（所有机位都在positions表中）
     let total: i64 = if !search.is_empty() || cabinet_id.is_some() {
-        let count_result = if let Some(cid) = cabinet_id {
+        if let Some(cid) = cabinet_id {
             if search.is_empty() {
                 sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
                     .bind(cid)
-                    .fetch_one(&pool.get_conn())
-                    .await
+                    .fetch_one(&state.pool()?.get_conn())
+                    .await?
             } else {
                 let pattern = format!("%{search}%");
                 sqlx::query_scalar(
@@ -67,8 +66,8 @@ pub async fn get_positions(
                 )
                 .bind(cid)
                 .bind(&pattern)
-                .fetch_one(&pool.get_conn())
-                .await
+                .fetch_one(&state.pool()?.get_conn())
+                .await?
             }
         } else {
             let pattern = format!("%{search}%");
@@ -76,30 +75,17 @@ pub async fn get_positions(
                 "SELECT COUNT(*) FROM positions WHERE name ILIKE $1 OR description ILIKE $1",
             )
             .bind(&pattern)
-            .fetch_one(&pool.get_conn())
-            .await
-        };
-        match count_result {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位数量失败"));
-            }
+            .fetch_one(&state.pool()?.get_conn())
+            .await?
         }
     } else {
-        match sqlx::query_scalar("SELECT COUNT(*) FROM positions")
-            .fetch_one(&pool.get_conn())
-            .await
-        {
-            Ok(t) => t,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位数量失败"));
-            }
-        }
+        sqlx::query_scalar("SELECT COUNT(*) FROM positions")
+            .fetch_one(&state.pool()?.get_conn())
+            .await?
     };
 
-    // 查询机位列表（所有机位都在positions表中）
     let positions_basic = if !search.is_empty() || cabinet_id.is_some() {
-        let query_result = if let Some(cid) = cabinet_id {
+        if let Some(cid) = cabinet_id {
             if search.is_empty() {
                 sqlx::query(
                     &format!(
@@ -116,8 +102,8 @@ pub async fn get_positions(
                 .bind(cid)
                 .bind(page_size)
                 .bind(offset)
-                .fetch_all(&pool.get_conn())
-                .await
+                .fetch_all(&state.pool()?.get_conn())
+                .await?
             } else {
                 let pattern = format!("%{search}%");
                 sqlx::query(
@@ -136,8 +122,8 @@ pub async fn get_positions(
                 .bind(&pattern)
                 .bind(page_size)
                 .bind(offset)
-                .fetch_all(&pool.get_conn())
-                .await
+                .fetch_all(&state.pool()?.get_conn())
+                .await?
             }
         } else {
             let pattern = format!("%{search}%");
@@ -156,17 +142,11 @@ pub async fn get_positions(
             .bind(&pattern)
             .bind(page_size)
             .bind(offset)
-            .fetch_all(&pool.get_conn())
-            .await
-        };
-        match query_result {
-            Ok(rows) => rows,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位列表失败"));
-            }
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
         }
     } else {
-        match sqlx::query(
+        sqlx::query(
             &format!(
                 r"SELECT p.id, p.name, p.cabinet_id, 
                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
@@ -179,21 +159,9 @@ pub async fn get_positions(
         )
         .bind(page_size)
         .bind(offset)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(rows) => rows,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位列表失败"));
-            }
-        }
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
     };
-
-    let mut position_ids = Vec::new();
-    for row in &positions_basic {
-        let id: Uuid = row.get("id");
-        position_ids.push(id);
-    }
 
     let mut positions_with_details = Vec::new();
 
@@ -241,47 +209,30 @@ pub async fn get_positions(
 }
 
 pub async fn create_cabinet_position(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     req: web::Json<CabinetPositionCreate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("验证错误: {e:?}")))
-        );
-    }
+) -> Result<HttpResponse, AppError> {
+    (*req).validate()?;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(crate::utils::handle_db_error(err, "开启事务失败"));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing_position: Option<Uuid> = match sqlx::query_scalar::<_, Uuid>(
+    let existing_position: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
     )
     .bind(&req.name)
     .bind(req.cabinet_id)
     .fetch_optional(&mut *tx)
-    .await
-    {
-        Ok(position) => position,
-        Err(err) => {
-            return Ok(crate::utils::handle_db_error(err, "查询机位失败"));
-        }
-    };
+    .await?;
 
     if existing_position.is_some() {
-        return Ok(HttpResponse::BadRequest()
-            .json(ApiResponse::<CabinetPosition>::error("机位名称已存在")));
+        return Err(AppError::Conflict("机位名称已存在".to_string()));
     }
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
+    sqlx::query(
         "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', NULL, $7, $8)"
     )
@@ -293,63 +244,41 @@ pub async fn create_cabinet_position(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx).await {
-        return Ok(crate::utils::handle_db_error(err, "创建机位失败"));
-    }
+    .execute(&mut *tx).await?;
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
         for ip in ips {
             let device_type = ip.device_type.as_deref().unwrap_or("");
             if device_type != "cabinet_position" || ip.position_id.is_some() {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("设备类型与设备ID不匹配")));
+                return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
             }
 
             let existing_mapping: Option<Uuid> =
-                match sqlx::query_scalar::<_, Uuid>(
+                sqlx::query_scalar::<_, Uuid>(
                     "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
                 )
                 .bind(&ip.ip_address)
                 .bind(ip.network_id)
                 .fetch_optional(&mut *tx)
-                .await
-                {
-                    Ok(mapping) => mapping,
-                    Err(err) => {
-                        return Ok(crate::utils::handle_db_error(err, "查询IP地址失败"));
-                    }
-                };
+                .await?;
 
             if existing_mapping.is_some() {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("该网络中IP地址已存在")));
+                return Err(AppError::Conflict("该网络中IP地址已存在".to_string()));
             }
 
-            let network = match sqlx::query(crate::utils::NETWORK_QUERY)
+            let network = sqlx::query(crate::utils::NETWORK_QUERY)
                 .bind(ip.network_id)
                 .fetch_optional(&mut *tx)
-                .await
-            {
-                Ok(Some(row)) => crate::utils::parse_network_from_row(&row),
-                Ok(None) => {
-                    return Ok(
-                        HttpResponse::BadRequest().json(ApiResponse::<()>::error("网络未找到"))
-                    );
-                }
-                Err(err) => {
-                    return Ok(crate::utils::handle_db_error(err, "查询网络失败"));
-                }
-            };
+                .await?
+                .map(|row| crate::utils::parse_network_from_row(&row))
+                .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-            let ip_in_cidr = match validate_ip_in_cidr(&ip.ip_address, &network) {
-                Ok(valid) => valid,
-                Err(response) => return Ok(response),
-            };
+            let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, &network)
+                .map_err(|_| AppError::Validation("无效的IP地址格式".to_string()))?;
 
             if !ip_in_cidr {
-                return Ok(HttpResponse::BadRequest()
-                    .json(ApiResponse::<()>::error("IP地址不在所属网络网段内")));
+                return Err(AppError::Validation("IP地址不在所属网络网段内".to_string()));
             }
 
             let room_id: Option<Uuid> = sqlx::query_scalar(
@@ -357,8 +286,7 @@ pub async fn create_cabinet_position(
             )
             .bind(id)
             .fetch_optional(&mut *tx)
-            .await
-            .ok()
+            .await?
             .flatten();
 
             if let Some(rid) = room_id {
@@ -372,13 +300,13 @@ pub async fn create_cabinet_position(
                 .unwrap_or(false);
 
                 if !network_in_room {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该机位所在房间的可用网段")));
+                    return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
                 }
             }
 
             let ip_version = detect_ip_version(&ip.ip_address);
 
-            if let Err(err) = sqlx::query(
+            sqlx::query(
                 "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
                  VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
@@ -396,17 +324,13 @@ pub async fn create_cabinet_position(
             .bind(now)
             .bind(now)
             .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(crate::utils::handle_db_error(err, "创建IP记录失败"));
-            }
+            .execute(&mut *tx).await?;
 
             ip_count += 1;
         }
     }
 
-    if let Err(err) = tx.commit().await {
-        return Ok(crate::utils::handle_db_error(err, "提交事务失败"));
-    }
+    tx.commit().await?;
 
     let position = CabinetPosition {
         id,
@@ -430,9 +354,9 @@ pub async fn create_cabinet_position(
         "ip_count": ip_count
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "create",
         "cabinet_position",
         &id,
@@ -453,37 +377,28 @@ pub async fn create_cabinet_position(
 }
 
 pub async fn get_cabinet_position(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let position_data = match sqlx::query(
+    let position_data = sqlx::query(
         r"SELECT id, name, cabinet_id, start_u, end_u, description, 
                   device_type, device_id,
                   created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
            FROM positions WHERE id = $1",
     )
     .bind(id)
-    .fetch_optional(&pool.get_conn())
-    .await
-    {
-        Ok(Some(row)) => row,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound()
-                .json(ApiResponse::<serde_json::Value>::error("机位未找到")));
-        }
-        Err(err) => {
-            return Ok(crate::utils::handle_db_error(err, "查询机位失败"));
-        }
-    };
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
 
     let device_type: Option<String> = position_data.get("device_type");
     let device_id: Option<Uuid> = position_data.get("device_id");
     let is_switch = device_type.as_deref() == Some("switch");
 
     let position_ips = if is_switch {
-        match sqlx::query(
+        sqlx::query(
             r"SELECT 
                 m.id, m.workstation_id, m.position_id, m.switch_port_id,
                 m.device_type, m.network_id, 
@@ -498,16 +413,10 @@ pub async fn get_cabinet_position(
             ORDER BY m.ip_address",
         )
         .bind(device_id)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(ips) => ips,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询交换机IP信息失败"));
-            }
-        }
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
     } else {
-        match sqlx::query(
+        sqlx::query(
             r"SELECT 
                 m.id, m.workstation_id, m.position_id, m.switch_port_id,
                 m.device_type, m.network_id, 
@@ -522,14 +431,8 @@ pub async fn get_cabinet_position(
             ORDER BY m.ip_address",
         )
         .bind(id)
-        .fetch_all(&pool.get_conn())
-        .await
-        {
-            Ok(ips) => ips,
-            Err(err) => {
-                return Ok(crate::utils::handle_db_error(err, "查询机位IP信息失败"));
-            }
-        }
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
     };
 
     let ips_with_region: Vec<serde_json::Value> = position_ips
@@ -558,14 +461,11 @@ pub async fn get_cabinet_position(
 
     let cabinet_name: String = if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
         let cabinet_id: Uuid = position_data.get("cabinet_id");
-        match sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
+        sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
             .bind(cabinet_id)
-            .fetch_optional(&pool.get_conn())
-            .await
-        {
-            Ok(Some(name)) => name,
-            _ => "未知机柜".to_string(),
-        }
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?
+            .unwrap_or_else(|| "未知机柜".to_string())
     } else {
         "未知机柜".to_string()
     };
@@ -594,65 +494,38 @@ pub async fn get_cabinet_position(
 }
 
 pub async fn update_cabinet_position(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
     req: web::Json<CabinetPositionUpdate>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    if let Err(e) = (*req).validate() {
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Validation error: {e:?}"
-            ))),
-        );
-    }
+    (*req).validate()?;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("开启事务失败: {err}"))));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let position_info: Option<(Uuid, String, Option<Uuid>)> =
-        match sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
+        sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
             "SELECT id, device_type, device_id FROM positions WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&mut *tx)
-        .await
-        {
-            Ok(pos) => pos,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+        .await?;
 
     let Some((_position_id, device_type, _device_id)) = position_info else {
-        return Ok(
-            HttpResponse::NotFound().json(ApiResponse::<CabinetPosition>::error("机位未找到"))
-        )
+        return Err(AppError::NotFound("机位未找到".to_string()));
     };
 
     let is_switch = device_type == "switch";
 
     if is_switch {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "交换机机位请通过交换机管理页面编辑",
-        )));
+        return Err(AppError::Validation("交换机机位请通过交换机管理页面编辑".to_string()));
     }
 
     let now = Utc::now();
 
-    if let Err(err) = sqlx::query(
+    sqlx::query(
         "UPDATE positions SET 
          name = COALESCE($1, name), 
          cabinet_id = COALESCE($2, cabinet_id),
@@ -670,21 +543,13 @@ pub async fn update_cabinet_position(
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
-    .await
-    {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("数据库更新错误: {err}"))));
-    }
+    .await?;
 
     if let Some(ips) = &req.ips {
-        if let Err(err) = sqlx::query("DELETE FROM ips WHERE position_id = $1")
+        sqlx::query("DELETE FROM ips WHERE position_id = $1")
             .bind(id)
             .execute(&mut *tx)
-            .await
-        {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("删除IP记录失败: {err}"))));
-        }
+            .await?;
 
         for ip in ips {
             let ip_version = if ip.ip_address.contains(':') {
@@ -698,8 +563,7 @@ pub async fn update_cabinet_position(
             )
             .bind(id)
             .fetch_optional(&mut *tx)
-            .await
-            .ok()
+            .await?
             .flatten();
 
             if let Some(rid) = room_id {
@@ -713,11 +577,11 @@ pub async fn update_cabinet_position(
                 .unwrap_or(false);
 
                 if !network_in_room {
-                    return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("所选网段不属于该机位所在房间的可用网段")));
+                    return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
                 }
             }
 
-            if let Err(err) = sqlx::query(
+            sqlx::query(
                 "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
@@ -734,36 +598,26 @@ pub async fn update_cabinet_position(
             .bind(now)
             .bind(now)
             .bind(now)
-            .execute(&mut *tx).await {
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("插入IP记录失败: {err}"))));
-            }
+            .execute(&mut *tx).await?;
         }
     }
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("提交事务失败: {err}"))));
-    }
+    tx.commit().await?;
 
-    let row = match sqlx::query(
+    let row = sqlx::query(
         "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
         FROM positions p 
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
         WHERE p.id = $1"
     ).bind(id)
-    .fetch_one(&pool.get_conn()).await {
-        Ok(r) => r,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!("查询机位失败: {err}"))));
-        }
-    };
+    .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, 
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)
-    .fetch_all(&pool.get_conn()).await.unwrap_or_default();
+    .fetch_all(&state.pool()?.get_conn()).await.unwrap_or_default();
 
     let result = CabinetPositionWithDetails {
         id: row.get("id"),
@@ -789,9 +643,9 @@ pub async fn update_cabinet_position(
         "description": result.description
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "update",
         "cabinet_position",
         &id,
@@ -812,63 +666,32 @@ pub async fn update_cabinet_position(
 }
 
 pub async fn delete_cabinet_position(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
     http_req: HttpRequest,
-    config: web::Data<Config>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let mut tx = match pool.get_conn().begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(format!("开启事务失败: {err}"))));
-        }
-    };
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing_position: Option<Uuid> =
-        match sqlx::query_scalar::<_, Uuid>("SELECT id FROM positions WHERE id = $1")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM positions WHERE id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
-            .await
-        {
-            Ok(position) => position,
-            Err(err) => {
-                return Ok(
-                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                        "Database query error: {err}"
-                    ))),
-                );
-            }
-        };
+            .await?;
 
     if existing_position.is_none() {
         let existing_switch: Option<Uuid> =
-            match sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
                 .bind(id)
                 .fetch_optional(&mut *tx)
-                .await
-            {
-                Ok(switch) => switch,
-                Err(err) => {
-                    return Ok(
-                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                            format!("Database query error: {err}"),
-                        )),
-                    );
-                }
-            };
+                .await?;
 
         if existing_switch.is_some() {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机",
-            )));
+            return Err(AppError::Validation("该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机".to_string()));
         }
 
-        return Ok(
-            HttpResponse::NotFound().json(ApiResponse::<CabinetPosition>::error("机位未找到"))
-        );
+        return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
     let has_switch: bool = sqlx::query_scalar(
@@ -880,60 +703,38 @@ pub async fn delete_cabinet_position(
     .unwrap_or(false);
 
     if has_switch {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "该机位已关联交换机，请通过删除交换机来删除机位",
-        )));
+        return Err(AppError::Validation("该机位已关联交换机，请通过删除交换机来删除机位".to_string()));
     }
 
     let device_type: Option<String> = sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *tx)
-        .await
-        .ok()
+        .await?
         .flatten();
 
     if device_type.as_deref() == Some("switch") {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机",
-        )));
+        return Err(AppError::Validation("该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机".to_string()));
     }
 
-    if let Err(err) = sqlx::query("DELETE FROM ips WHERE position_id = $1")
+    sqlx::query("DELETE FROM ips WHERE position_id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "删除IP管理记录失败: {err}"
-            ))),
-        );
-    }
+        .await?;
 
-    if let Err(err) = sqlx::query("DELETE FROM positions WHERE id = $1")
+    sqlx::query("DELETE FROM positions WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await
-    {
-        return Ok(
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(format!(
-                "Database deletion error: {err}"
-            ))),
-        );
-    }
+        .await?;
 
-    if let Err(err) = tx.commit().await {
-        return Ok(HttpResponse::InternalServerError()
-            .json(ApiResponse::<()>::error(format!("提交事务失败: {err}"))));
-    }
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "position_id": id.to_string()
     });
     if let Err(e) = log_system_operation(
-        &pool.get_conn(),
+        &state.pool()?.get_conn(),
         &http_req,
-        config.get_ref(),
+        &state.config,
         "delete",
         "cabinet_position",
         &id,

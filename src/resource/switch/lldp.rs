@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, web};
 use async_snmp::{Client, VarBind, oid};
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::db::DbPool;
+use crate::app_state::AppState;
+use crate::error::AppError;
 use crate::models::{ApiResponse, LldpNeighbor, SwitchLldp};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
@@ -377,45 +378,41 @@ fn format_mac_address(bytes: &[u8]) -> String {
 }
 
 pub async fn get_switch_lldp_neighbors(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
+    let conn = state.pool()?.get_conn();
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
         .bind(switch_id)
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(false);
+        .fetch_one(&conn)
+        .await?;
 
     if !exists {
-        return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("交换机不存在")));
+        return Err(AppError::NotFound("交换机不存在".to_string()));
     }
 
     let lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
         "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
-    .fetch_all(&pool.get_conn())
-    .await
-    .unwrap_or_default();
+    .fetch_all(&conn)
+    .await?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(lldps, "获取LLDP邻居成功")))
 }
 
 pub async fn sync_lldp_from_snmp(
-    pool: web::Data<DbPool>,
+    state: web::Data<AppState>,
     path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
+    let conn = state.pool()?.get_conn();
 
-    let neighbors = match get_lldp_neighbors(&pool.get_conn(), &switch_id).await {
-        Ok(n) => n,
-        Err(e) => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error(format!("获取LLDP邻居失败: {e}"))));
-        }
-    };
+    let neighbors = get_lldp_neighbors(&conn, &switch_id)
+        .await
+        .map_err(|e| AppError::Snmp(format!("获取LLDP邻居失败: {e}")))?;
 
     let now = chrono::Utc::now();
     let mut saved_count = 0usize;
@@ -427,9 +424,8 @@ pub async fn sync_lldp_from_snmp(
         )
         .bind(switch_id)
         .bind(&neighbor.local_port)
-        .fetch_one(&pool.get_conn())
-        .await
-        .unwrap_or(false);
+        .fetch_one(&conn)
+        .await?;
 
         if exists {
             let result = sqlx::query(
@@ -450,7 +446,7 @@ pub async fn sync_lldp_from_snmp(
             .bind(now)
             .bind(switch_id)
             .bind(&neighbor.local_port)
-            .execute(&pool.get_conn())
+            .execute(&conn)
             .await;
 
             if result.is_ok() {
@@ -471,7 +467,7 @@ pub async fn sync_lldp_from_snmp(
             .bind(&neighbor.neighbor_sys_name)
             .bind(&neighbor.neighbor_sys_desc)
             .bind(now)
-            .execute(&pool.get_conn())
+            .execute(&conn)
             .await;
 
             if result.is_ok() {
@@ -484,9 +480,8 @@ pub async fn sync_lldp_from_snmp(
         "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
     )
     .bind(switch_id)
-    .fetch_all(&pool.get_conn())
-    .await
-    .unwrap_or_default();
+    .fetch_all(&conn)
+    .await?;
 
     let message = if saved_count > 0 && updated_count > 0 {
         format!(
