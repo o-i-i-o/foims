@@ -49,12 +49,18 @@ pub async fn create_scheduled_task(
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
     let enabled = req.enabled.unwrap_or(true);
 
-    let next_run_at = match calculate_next_run(&req.cron_expression) {
-        Ok(time) => Some(time),
-        Err(e) => {
+    let cron_expr = req.cron_expression.clone();
+    let next_run_at = match tokio::task::spawn_blocking(move || {
+        cron_expr.as_ref().map(|e| calculate_next_run(e)).transpose()
+    })
+    .await
+    {
+        Ok(Ok(Some(Ok(time)))) => Some(time),
+        Ok(Ok(Some(Err(e)))) => {
             tracing::warn!("计算下次运行时间失败: {}", e);
             None
         }
+        _ => None,
     };
 
     let task: ScheduledTask = sqlx::query_as(
@@ -85,15 +91,20 @@ pub async fn update_scheduled_task(
     let now = Utc::now();
     let conn = state.pool()?.get_conn();
 
-    if let Some(ref cron_expr) = req.cron_expression
-        && let Ok(next_run) = calculate_next_run(cron_expr)
-        && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
-            .bind(next_run)
-            .bind(id)
-            .execute(&conn)
-            .await
-    {
-        tracing::warn!("更新下次运行时间失败: {}", e);
+    if let Some(ref cron_expr) = req.cron_expression {
+        let cron_expr_clone = cron_expr.clone();
+        if let Ok(Ok(next_run)) = tokio::task::spawn_blocking(move || {
+            calculate_next_run(&cron_expr_clone)
+        }).await {
+            if let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
+                .bind(next_run)
+                .bind(id)
+                .execute(&conn)
+                .await
+            {
+                tracing::warn!("更新下次运行时间失败: {}", e);
+            }
+        }
     }
 
     let result = sqlx::query(

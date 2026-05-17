@@ -122,7 +122,7 @@ fn create_tcp_listener(addr: &str, port: u16) -> std::io::Result<TcpListener> {
     socket.set_reuse_address(true)?;
 
     if socket_addr.is_ipv6() {
-        socket.set_only_v6(false)?;
+        socket.set_only_v6(true)?;
     }
 
     socket.bind(&SockAddr::from(socket_addr))?;
@@ -312,7 +312,11 @@ async fn main() -> std::io::Result<()> {
         );
     }
 
-    let server_host = config.server.host.clone();
+    let server_host = if config.server.host.is_empty() {
+        "0.0.0.0".to_string()
+    } else {
+        config.server.host.clone()
+    };
     let server_host_ipv6 = config.server.host_ipv6.clone();
     let http_enabled = config.server.http_enabled.unwrap_or(true);
     let http_port = config.server.http_port.unwrap_or(80);
@@ -402,59 +406,42 @@ async fn main() -> std::io::Result<()> {
                 let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
                 let ipv4_address = server_host.as_str();
 
-                if !ipv6_address.is_empty() && ipv6_address == "::" {
-                    let http_listener = bind_with_retry(ipv6_address, http_port, 20)?;
-                    let server = HttpServer::new(create_http_app)
+                if !ipv4_address.is_empty() {
+                    let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
+                    let server_ipv4 = HttpServer::new(create_http_app.clone())
                         .workers(std::cmp::max(2, num_cpus::get()))
                         .disable_signals()
-                        .listen(http_listener)?
+                        .listen(http_listener_ipv4)?
                         .run();
-                    let handle = server.handle();
+                    let handle_ipv4 = server_ipv4.handle();
 
-                    info!("HTTP服务器运行在 http://{}:{}", ipv6_address, http_port);
+                    info!(
+                        "HTTP IPv4服务器运行在 http://{}:{}",
+                        ipv4_address, http_port
+                    );
                     info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-                    info!("使用双栈模式 (IPv4 和 IPv6)");
 
-                    all_server_handles.push(handle);
-                    all_server_join_handles.push(tokio::task::spawn_local(server));
-                } else {
-                    if !ipv4_address.is_empty() {
-                        let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
-                        let server_ipv4 = HttpServer::new(create_http_app.clone())
-                            .workers(std::cmp::max(2, num_cpus::get()))
-                            .disable_signals()
-                            .listen(http_listener_ipv4)?
-                            .run();
-                        let handle_ipv4 = server_ipv4.handle();
+                    all_server_handles.push(handle_ipv4);
+                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
+                }
 
-                        info!(
-                            "HTTP IPv4服务器运行在 http://{}:{}",
-                            ipv4_address, http_port
-                        );
-                        info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
+                if !ipv6_address.is_empty() {
+                    let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
+                    let server_ipv6 = HttpServer::new(create_http_app)
+                        .workers(std::cmp::max(2, num_cpus::get()))
+                        .disable_signals()
+                        .listen(http_listener_ipv6)?
+                        .run();
+                    let handle_ipv6 = server_ipv6.handle();
 
-                        all_server_handles.push(handle_ipv4);
-                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
-                    }
+                    info!(
+                        "HTTP IPv6服务器运行在 http://[{}]:{}",
+                        ipv6_address, http_port
+                    );
+                    info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
 
-                    if !ipv6_address.is_empty() && ipv6_address != "::" {
-                        let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
-                        let server_ipv6 = HttpServer::new(create_http_app)
-                            .workers(std::cmp::max(2, num_cpus::get()))
-                            .disable_signals()
-                            .listen(http_listener_ipv6)?
-                            .run();
-                        let handle_ipv6 = server_ipv6.handle();
-
-                        info!(
-                            "HTTP IPv6服务器运行在 http://{}:{}",
-                            ipv6_address, http_port
-                        );
-                        info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-
-                        all_server_handles.push(handle_ipv6);
-                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
-                    }
+                    all_server_handles.push(handle_ipv6);
+                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
                 }
             }
 
@@ -467,77 +454,56 @@ async fn main() -> std::io::Result<()> {
                 let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
                 let ipv4_address = server_host.as_str();
 
-                if !ipv6_address.is_empty() && ipv6_address == "::" {
-                    let https_listener = bind_with_retry(ipv6_address, https_port, 20)?;
-                    let tls_config = load_rustls_config(&cert_path, &key_path)?;
-                    let server = HttpServer::new(create_https_app)
-                        .workers(std::cmp::max(2, num_cpus::get()))
-                        .disable_signals()
-                        .listen_rustls_0_23(https_listener, tls_config)?
-                        .run();
-                    let handle = server.handle();
+                if !ipv4_address.is_empty() {
+                    let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
+                    let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
 
-                    info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
+                    info!(
+                        "HTTPS IPv4服务器运行在 https://{}:{}",
+                        ipv4_address, https_port
+                    );
                     info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
                     info!("证书类型: {}", cert_type);
-                    info!("使用双栈模式 (IPv4 和 IPv6)");
 
-                    all_server_handles.push(handle);
-                    all_server_join_handles.push(tokio::task::spawn_local(server));
-                } else {
-                    if !ipv4_address.is_empty() {
-                        let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
-                        let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
-                        let create_https_app_ipv4 = create_https_app.clone();
+                    let server_ipv4 = HttpServer::new(create_https_app.clone())
+                        .workers(std::cmp::max(2, num_cpus::get()))
+                        .disable_signals()
+                        .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
+                        .map_err(|e| {
+                            error!("创建HTTPS IPv4服务器失败: {:?}", e);
+                            e
+                        })?
+                        .run();
+                    let handle_ipv4 = server_ipv4.handle();
 
-                        info!(
-                            "HTTPS IPv4服务器运行在 https://{}:{}",
-                            ipv4_address, https_port
-                        );
-                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                        info!("证书类型: {}", cert_type);
+                    all_server_handles.push(handle_ipv4);
+                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
+                }
 
-                        let server_ipv4 = HttpServer::new(create_https_app_ipv4)
-                            .workers(std::cmp::max(2, num_cpus::get()))
-                            .disable_signals()
-                            .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
-                            .map_err(|e| {
-                                error!("创建HTTPS IPv4服务器失败: {:?}", e);
-                                e
-                            })?
-                            .run();
-                        let handle_ipv4 = server_ipv4.handle();
+                if !ipv6_address.is_empty() {
+                    let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
+                    let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
 
-                        all_server_handles.push(handle_ipv4);
-                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
-                    }
+                    info!(
+                        "HTTPS IPv6服务器运行在 https://[{}]:{}",
+                        ipv6_address, https_port
+                    );
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                    info!("证书类型: {}", cert_type);
 
-                    if !ipv6_address.is_empty() && ipv6_address != "::" {
-                        let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
-                        let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
-                        let create_https_app_ipv6 = create_https_app;
+                    let server_ipv6 = HttpServer::new(create_https_app)
+                        .workers(std::cmp::max(2, num_cpus::get()))
+                        .disable_signals()
+                        .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
+                        .map_err(|e| {
+                            error!("创建HTTPS IPv6服务器失败: {:?}", e);
+                            e
+                        })?
+                        .run();
+                    let handle_ipv6 = server_ipv6.handle();
 
-                        info!(
-                            "HTTPS IPv6服务器运行在 https://{}:{}",
-                            ipv6_address, https_port
-                        );
-                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                        info!("证书类型: {}", cert_type);
-
-                        let server_ipv6 = HttpServer::new(create_https_app_ipv6)
-                            .workers(std::cmp::max(2, num_cpus::get()))
-                            .disable_signals()
-                            .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
-                            .map_err(|e| {
-                                error!("创建HTTPS IPv6服务器失败: {:?}", e);
-                                e
-                            })?
-                            .run();
-                        let handle_ipv6 = server_ipv6.handle();
-
-                        all_server_handles.push(handle_ipv6);
-                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
-                    }
+                    all_server_handles.push(handle_ipv6);
+                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
                 }
             } else {
                 info!("HTTPS服务器已禁用");

@@ -135,7 +135,12 @@ pub async fn login(
         return Err(AppError::Unauthorized("账户已禁用".to_string()));
     }
 
-    let valid = verify(&req.password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+    let password_for_verify = req.password.clone();
+    let hash_for_verify = password_hash.clone();
+    let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
+        .await
+        .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
+        .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
         if let Err(e) = log_login(
             &conn,
@@ -374,7 +379,12 @@ pub async fn login_with_two_factor(
     let password = req.password.as_deref().ok_or_else(|| {
         AppError::Validation("2FA登录必须提供密码".to_string())
     })?;
-    let valid = verify(password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+    let password_for_verify = password.to_string();
+    let hash_for_verify = password_hash.clone();
+    let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
+        .await
+        .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
+        .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
         return Err(AppError::Unauthorized("登录失败".to_string()));
     }

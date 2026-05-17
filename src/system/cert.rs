@@ -45,8 +45,13 @@ pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> Result<HttpRe
 
     use rcgen::generate_simple_self_signed;
 
-    let certified_key = generate_simple_self_signed(vec![req.common_name.clone()])
-        .map_err(|e| AppError::Internal(format!("证书生成失败: {}", e)))?;
+    let common_name = req.common_name.clone();
+    let certified_key = tokio::task::spawn_blocking(move || {
+        generate_simple_self_signed(vec![common_name])
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("证书生成任务失败: {}", e)))?
+    .map_err(|e| AppError::Internal(format!("证书生成失败: {}", e)))?;
 
     let cert_pem = certified_key.cert.pem();
     let key_pem = certified_key.signing_key.serialize_pem();

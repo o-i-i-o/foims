@@ -282,7 +282,10 @@ async fn sync_user_tasks_from_db(pool: &DbPool) -> Result<(), String> {
 }
 
 async fn update_next_run_at(pool: &DbPool, task: &ScheduledTask) -> Result<(), String> {
-    let next_run = calculate_next_run(&task.cron_expression)?;
+    let cron_expr = task.cron_expression.clone();
+    let next_run = tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr))
+        .await
+        .map_err(|e| format!("计算下次执行时间任务失败: {e}"))??;
 
     sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1, updated_at = $2 WHERE id = $3")
         .bind(next_run)
