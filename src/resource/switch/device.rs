@@ -10,7 +10,8 @@ use crate::app_state::AppState;
 use crate::crypto::encrypt_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
-use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::log_system_operation;
 use tracing::warn;
 
 pub async fn get_switches(
@@ -464,7 +465,7 @@ pub async fn create_switch(
             }
         }
 
-        let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
+        let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address);
 
         let ip_manager_id = Uuid::new_v4();
         if let Err(e) = sqlx::query(
@@ -683,7 +684,7 @@ pub async fn update_switch(
                 }
             }
 
-            let ip_version: i16 = if ip.ip_address.contains(':') { 6 } else { 4 };
+            let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address);
 
             let ip_manager_id = Uuid::new_v4();
             if let Err(e) = sqlx::query(

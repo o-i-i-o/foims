@@ -1,7 +1,8 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
-use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::log_system_operation;
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;

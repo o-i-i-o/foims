@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Notification};
-use crate::utils::DEFAULT_PAGE;
+use crate::utils::pagination::DEFAULT_PAGE;
 use actix_web::{HttpResponse, web};
 use serde_json::json;
 use std::collections::HashMap;

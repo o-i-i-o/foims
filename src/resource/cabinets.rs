@@ -3,7 +3,8 @@ use crate::error::AppError;
 use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
-use crate::utils::{DEFAULT_PAGE, log_system_operation};
+use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::log_system_operation;
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;

@@ -5,7 +5,8 @@ use crate::models::{
     CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
-use crate::utils::{DEFAULT_PAGE, log_system_operation, validate_ip_in_cidr};
+use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::{log_system_operation, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_position};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -274,34 +275,16 @@ pub async fn create_cabinet_position(
                 .map(|row| crate::utils::parse_network_from_row(&row))
                 .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-            let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, &network)
-                .map_err(|_| AppError::Validation("无效的IP地址格式".to_string()))?;
+            let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, &network)?;
 
             if !ip_in_cidr {
                 return Err(AppError::Validation("IP地址不在所属网络网段内".to_string()));
             }
 
-            let room_id: Option<Uuid> = sqlx::query_scalar(
-                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-            )
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten();
+            let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
 
             if let Some(rid) = room_id {
-                let network_in_room: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-                )
-                .bind(rid)
-                .bind(ip.network_id)
-                .fetch_one(&mut *tx)
-                .await
-                ?;
-
-                if !network_in_room {
-                    return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
-                }
+                validate_network_in_room(tx.as_mut(), rid, ip.network_id).await?;
             }
 
             let ip_version = detect_ip_version(&ip.ip_address);
@@ -552,33 +535,12 @@ pub async fn update_cabinet_position(
             .await?;
 
         for ip in ips {
-            let ip_version = if ip.ip_address.contains(':') {
-                6i16
-            } else {
-                4i16
-            };
+            let ip_version = detect_ip_version(&ip.ip_address);
 
-            let room_id: Option<Uuid> = sqlx::query_scalar(
-                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-            )
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten();
+            let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
 
             if let Some(rid) = room_id {
-                let network_in_room: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-                )
-                .bind(rid)
-                .bind(ip.network_id)
-                .fetch_one(&mut *tx)
-                .await
-                ?;
-
-                if !network_in_room {
-                    return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
-                }
+                validate_network_in_room(tx.as_mut(), rid, ip.network_id).await?;
             }
 
             sqlx::query(

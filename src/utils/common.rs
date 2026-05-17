@@ -15,10 +15,6 @@ use actix_web::{HttpMessage, HttpRequest};
 
 // ==================== 常量定义 ====================
 
-pub const DEFAULT_PAGE: i64 = 1;
-pub const DEFAULT_PAGE_SIZE: i64 = 100;
-pub const MAX_PAGE_SIZE: i64 = 1000;
-
 pub const IPV4_CIDR_REGEX: &str = r"^(?:(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])/(?:[0-9]|[12]?[0-9]|3[0-2]))$";
 pub const IPV6_CIDR_REGEX: &str = r"^(?:[0-9a-fA-F:]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))$";
 
@@ -76,10 +72,6 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
 
 #[must_use] 
 pub fn validate_cidr(cidr: &str) -> bool {
-    if !get_ipv4_cidr_pattern().is_match(cidr) && !get_ipv6_cidr_pattern().is_match(cidr) {
-        return false;
-    }
-
     ipnetwork::IpNetwork::from_str(cidr).is_ok()
 }
 
@@ -97,14 +89,12 @@ pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
 pub fn validate_ip_in_cidr(
     ip_address: &str,
     network: &crate::models::Network,
-) -> Result<bool, actix_web::HttpResponse> {
-    let Ok(ip_addr) = std::net::IpAddr::from_str(ip_address) else {
-        return Err(actix_web::HttpResponse::BadRequest()
-            .json(crate::models::ApiResponse::<()>::error("无效的IP地址格式")))
-    };
+) -> Result<bool, crate::error::AppError> {
+    let ip_addr: std::net::IpAddr = ip_address
+        .parse()
+        .map_err(|_| crate::error::AppError::Validation("无效的IP地址格式".to_string()))?;
 
     let is_ipv4 = matches!(ip_addr, std::net::IpAddr::V4(_));
-    let mut is_valid = false;
 
     let cidr_fields = vec![
         if is_ipv4 {
@@ -124,20 +114,65 @@ pub fn validate_ip_in_cidr(
             continue;
         }
 
-        match ipnetwork::IpNetwork::from_str(&cidr_str) {
-            Ok(network_cidr) => {
-                if network_cidr.contains(ip_addr) {
-                    is_valid = true;
-                    break;
-                }
-            }
-            Err(_) => {
-                continue;
-            }
+        if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(&cidr_str)
+            && network_cidr.contains(ip_addr)
+        {
+            return Ok(true);
         }
     }
 
-    Ok(is_valid)
+    Ok(false)
+}
+
+pub async fn validate_network_in_room<'e, E>(executor: E, room_id: Uuid, network_id: Uuid) -> Result<(), crate::error::AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let network_in_room: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+    )
+    .bind(room_id)
+    .bind(network_id)
+    .fetch_one(executor)
+    .await?;
+
+    if !network_in_room {
+        return Err(crate::error::AppError::Validation(
+            "所选网段不属于该房间的可用网段".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+pub async fn get_room_id_by_workstation<'e, E>(executor: E, workstation_id: Uuid) -> Result<Option<Uuid>, crate::error::AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let room_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT room_id FROM workstations WHERE id = $1",
+    )
+    .bind(workstation_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+
+    Ok(room_id)
+}
+
+pub async fn get_room_id_by_position<'e, E>(executor: E, position_id: Uuid) -> Result<Option<Uuid>, crate::error::AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let room_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+    )
+    .bind(position_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+
+    Ok(room_id)
 }
 
 // ==================== Token 管理 ====================
@@ -317,39 +352,23 @@ pub async fn log_system_operation(
         claims_opt.cloned()
     };
 
-    if let Some(claims) = claims {
-        let user_id = Uuid::parse_str(&claims.sub).unwrap_or(Uuid::nil());
-        let ip_address = get_real_ip_from_request(req);
+    let user_id = claims
+        .map_or(Uuid::nil(), |c| Uuid::parse_str(&c.sub).unwrap_or(Uuid::nil()));
+    let ip_address = get_real_ip_from_request(req);
 
-        log_operation(
-            pool,
-            OperationLogParams {
-                user_id: &user_id,
-                action,
-                resource_type,
-                resource_id,
-                details,
-                result,
-                ip_address: &ip_address,
-            },
-        )
-        .await
-    } else {
-        let ip_address = get_real_ip_from_request(req);
-        log_operation(
-            pool,
-            OperationLogParams {
-                user_id: &Uuid::nil(),
-                action,
-                resource_type,
-                resource_id,
-                details,
-                result,
-                ip_address: &ip_address,
-            },
-        )
-        .await
-    }
+    log_operation(
+        pool,
+        OperationLogParams {
+            user_id: &user_id,
+            action,
+            resource_type,
+            resource_id,
+            details,
+            result,
+            ip_address: &ip_address,
+        },
+    )
+    .await
 }
 
 // ==================== HTTP 请求处理 ====================
@@ -393,60 +412,7 @@ pub fn detect_user_language(req: &HttpRequest) -> String {
     "zh".to_string()
 }
 
-// ==================== 错误处理 ====================
 
-pub fn handle_db_error<E: std::fmt::Display>(err: E, message: &str) -> actix_web::HttpResponse {
-    use tracing::error;
-
-    let err_str = err.to_string();
-    error!("数据库错误: {}", err_str);
-
-    if err_str.contains("invalid cidr value") {
-        return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
-            "success": false,
-            "message": "不符合CIDR格式",
-            "data": null
-        }));
-    }
-
-    if err_str.contains("invalid inet value") {
-        return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
-            "success": false,
-            "message": "不符合IP地址格式",
-            "data": null
-        }));
-    }
-
-    if err_str.contains("duplicate key") || err_str.contains("unique constraint") {
-        return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
-            "success": false,
-            "message": "数据已存在，请检查是否有重复记录",
-            "data": null
-        }));
-    }
-
-    if err_str.contains("foreign key") || err_str.contains("violates foreign key constraint") {
-        return actix_web::HttpResponse::BadRequest().json(serde_json::json!({
-            "success": false,
-            "message": "关联数据不存在或无法删除",
-            "data": null
-        }));
-    }
-
-    if err_str.contains("connection") || err_str.contains("timeout") {
-        return actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
-            "success": false,
-            "message": "数据库连接异常，请稍后重试",
-            "data": null
-        }));
-    }
-
-    actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
-        "success": false,
-        "message": message,
-        "data": null
-    }))
-}
 
 // ==================== 通知与告警 ====================
 
@@ -509,26 +475,7 @@ pub async fn send_mac_change_notification(
     Ok(())
 }
 
-pub async fn send_system_alert(
-    pool: &sqlx::PgPool,
-    title: &str,
-    content: &str,
-    alert_type: &str,
-    user_id: Option<&Uuid>,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)")
-        .bind(Uuid::new_v4())
-        .bind(user_id)
-        .bind(title)
-        .bind(content)
-        .bind(alert_type)
-        .bind(false)
-        .bind(chrono::Utc::now())
-        .execute(pool)
-        .await?;
-    Ok(())
-}
+
 
 // ==================== MAC 地址获取 ====================
 
@@ -554,45 +501,40 @@ pub fn get_real_mac_address(ip: &str) -> Option<String> {
     None
 }
 
-fn read_mac_from_arp_cache(ip: &str) -> Option<String> {
-    if ip.contains(':') {
-        let content = match std::fs::read_to_string("/proc/net/ndp") {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("读取 /proc/net/ndp 失败: {}", e);
-                return None;
-            }
-        };
+fn read_arp_cache() -> HashMap<String, String> {
+    let mut cache = HashMap::new();
+
+    if let Ok(content) = std::fs::read_to_string("/proc/net/arp") {
         for line in content.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 && parts[0] == ip {
-                let mac = parts[2].to_uppercase();
+            if parts.len() >= 4 {
+                let ip = parts[0].to_string();
+                let mac = parts[3].to_uppercase();
                 if mac != "00:00:00:00:00:00" && validate_mac_address(&mac) {
-                    return Some(mac);
+                    cache.insert(ip, mac);
                 }
             }
         }
-        return None;
     }
 
-    let content = match std::fs::read_to_string("/proc/net/arp") {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("读取 /proc/net/arp 失败: {}", e);
-            return None;
-        }
-    };
-
-    for line in content.lines().skip(1) {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 4 && parts[0] == ip {
-            let mac = parts[3].to_uppercase();
-            if mac != "00:00:00:00:00:00" && validate_mac_address(&mac) {
-                return Some(mac);
+    if let Ok(content) = std::fs::read_to_string("/proc/net/ndp") {
+        for line in content.lines().skip(1) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let ip = parts[0].to_string();
+                let mac = parts[2].to_uppercase();
+                if mac != "00:00:00:00:00:00" && validate_mac_address(&mac) {
+                    cache.insert(ip, mac);
+                }
             }
         }
     }
-    None
+
+    cache
+}
+
+fn read_mac_from_arp_cache(ip: &str) -> Option<String> {
+    read_arp_cache().remove(ip)
 }
 
 pub async fn batch_get_mac_addresses(ips: &[String]) -> HashMap<String, Option<String>> {
@@ -623,25 +565,6 @@ pub async fn batch_get_mac_addresses(ips: &[String]) -> HashMap<String, Option<S
     }
 
     results
-}
-
-fn read_arp_cache() -> HashMap<String, String> {
-    let mut cache = HashMap::new();
-
-    if let Ok(content) = std::fs::read_to_string("/proc/net/arp") {
-        for line in content.lines().skip(1) {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 4 {
-                let ip = parts[0].to_string();
-                let mac = parts[3].to_uppercase();
-                if mac != "00:00:00:00:00:00" && validate_mac_address(&mac) {
-                    cache.insert(ip, mac);
-                }
-            }
-        }
-    }
-
-    cache
 }
 
 async fn batch_ping(ips: &[&String]) -> Vec<bool> {
