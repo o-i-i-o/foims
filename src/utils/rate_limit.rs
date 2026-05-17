@@ -284,11 +284,18 @@ where
     }
 }
 
-pub fn start_cleanup_task(limiter: RateLimiter) {
+pub fn start_cleanup_task(limiter: RateLimiter, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            limiter.cleanup_expired().await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {
+                    limiter.cleanup_expired().await;
+                }
+                _ = shutdown_rx.recv() => {
+                    tracing::info!("速率限制清理任务收到关闭信号，停止运行");
+                    break;
+                }
+            }
         }
     });
 }

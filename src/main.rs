@@ -18,8 +18,9 @@ use ipma::system::cert::{load_rustls_config, prepare_server_certificate};
 use ipma::config::Config;
 use ipma::db::DbPool;
 use ipma::routes::init_routes;
+use ipma::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use ipma::system::config::init_start_time;
-use ipma::system::cron::start_scheduler;
+use ipma::system::cron::{SchedulerState, start_scheduler};
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
 
@@ -178,7 +179,6 @@ async fn main() -> std::io::Result<()> {
     let _log_file_path = setup_logging();
 
     log_bilingual("log.output_to");
-
     log_bilingual("system.start");
 
     let config = match Config::load() {
@@ -191,6 +191,8 @@ async fn main() -> std::io::Result<()> {
     };
 
     log_bilingual("system.config_loaded");
+
+    let shutdown = ShutdownSignal::new();
 
     let pool = if config.init.enabled {
         log_bilingual("system.init_mode_enabled");
@@ -217,16 +219,22 @@ async fn main() -> std::io::Result<()> {
     info!("[中文] 系统启动时间初始化完成");
     info!("[English] System startup time initialized");
 
+    let mut scheduler_state: Option<SchedulerState> = None;
+
     if let Some(ref db_pool) = pool {
         use std::sync::Arc;
         let pool_for_scheduler = Arc::new(db_pool.clone());
-        tokio::spawn(async move {
-            if let Err(e) = start_scheduler(pool_for_scheduler).await {
+        match start_scheduler(pool_for_scheduler).await {
+            Ok(state) => {
+                scheduler_state = Some(state);
+                info!("调度器启动成功");
+            }
+            Err(e) => {
                 error!("启动cron调度器失败: {:?}", e);
             }
-        });
+        }
 
-        db_pool.start_health_check_task(30);
+        db_pool.start_health_check_task(30, shutdown.subscribe());
         info!("数据库连接池健康检查任务已启动");
     }
 
@@ -239,7 +247,7 @@ async fn main() -> std::io::Result<()> {
     let rate_limit_enabled = config.rate_limit.enabled;
 
     if rate_limit_enabled {
-        start_cleanup_task(rate_limiter.clone());
+        start_cleanup_task(rate_limiter.clone(), shutdown.subscribe());
         info!("速率限制中间件已启用");
         info!(
             "IP限制: {}/{}秒",
@@ -278,7 +286,7 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    let http_version = config.server.http_version.as_deref().unwrap_or("http2");
+    let http_version = config.server.http_version.clone().unwrap_or_else(|| "http2".to_string());
 
     let app_state = Data::new(AppState {
         config: config.clone(),
@@ -328,175 +336,218 @@ async fn main() -> std::io::Result<()> {
             .configure(|cfg| configure_app_services(cfg, &https_app_state, true))
     };
 
-    if http_enabled || auto_https {
-        let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
-        let ipv4_address = server_host.as_str();
+    let local_set = tokio::task::LocalSet::new();
 
-        if !ipv6_address.is_empty() && ipv6_address == "::" {
-            let http_listener = bind_with_retry(ipv6_address, http_port, 20)?;
-            let http_server =
-                HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
+    let shutdown_for_signal = shutdown.clone();
+    let signal_handle = tokio::spawn(async move {
+        wait_for_shutdown_signal(&shutdown_for_signal).await;
+    });
 
-            let http_server = http_server.listen(http_listener)?;
+    let shutdown_clone = shutdown.clone();
+    local_set
+        .run_until(async move {
+            let mut all_server_handles: Vec<actix_web::dev::ServerHandle> = Vec::new();
 
-            info!("HTTP服务器运行在 http://{}:{}", ipv6_address, http_port);
-            info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-            info!("使用双栈模式 (IPv4 和 IPv6)");
+            if http_enabled || auto_https {
+                let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
+                let ipv4_address = server_host.as_str();
 
-            actix_web::rt::spawn(async move {
-                if let Err(e) = http_server.run().await {
-                    error!("HTTP服务器失败: {:?}", e);
+                if !ipv6_address.is_empty() && ipv6_address == "::" {
+                    let http_listener = bind_with_retry(ipv6_address, http_port, 20)?;
+                    let server = HttpServer::new(create_http_app)
+                        .workers(std::cmp::max(2, num_cpus::get()))
+                        .listen(http_listener)?
+                        .run();
+                    let handle = server.handle();
+
+                    info!("HTTP服务器运行在 http://{}:{}", ipv6_address, http_port);
+                    info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
+                    info!("使用双栈模式 (IPv4 和 IPv6)");
+
+                    all_server_handles.push(handle);
+                    tokio::task::spawn_local(server);
+                } else {
+                    if !ipv4_address.is_empty() {
+                        let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
+                        let server_ipv4 = HttpServer::new(create_http_app.clone())
+                            .workers(std::cmp::max(2, num_cpus::get()))
+                            .listen(http_listener_ipv4)?
+                            .run();
+                        let handle_ipv4 = server_ipv4.handle();
+
+                        info!(
+                            "HTTP IPv4服务器运行在 http://{}:{}",
+                            ipv4_address, http_port
+                        );
+                        info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
+
+                        all_server_handles.push(handle_ipv4);
+                        tokio::task::spawn_local(server_ipv4);
+                    }
+
+                    if !ipv6_address.is_empty() && ipv6_address != "::" {
+                        let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
+                        let server_ipv6 = HttpServer::new(create_http_app)
+                            .workers(std::cmp::max(2, num_cpus::get()))
+                            .listen(http_listener_ipv6)?
+                            .run();
+                        let handle_ipv6 = server_ipv6.handle();
+
+                        info!(
+                            "HTTP IPv6服务器运行在 http://{}:{}",
+                            ipv6_address, http_port
+                        );
+                        info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
+
+                        all_server_handles.push(handle_ipv6);
+                        tokio::task::spawn_local(server_ipv6);
+                    }
                 }
+            }
+
+            let https_enabled = config.server.https_enabled.unwrap_or(true);
+
+            if https_enabled {
+                let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
+                let (cert_path, key_path) = prepare_server_certificate(&config)?;
+
+                let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
+                let ipv4_address = server_host.as_str();
+
+                if !ipv6_address.is_empty() && ipv6_address == "::" {
+                    let https_listener = bind_with_retry(ipv6_address, https_port, 20)?;
+                    let tls_config = load_rustls_config(&cert_path, &key_path)?;
+                    let server = HttpServer::new(create_https_app)
+                        .workers(std::cmp::max(2, num_cpus::get()))
+                        .listen_rustls_0_23(https_listener, tls_config)?
+                        .run();
+                    let handle = server.handle();
+
+                    info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
+                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                    info!("证书类型: {}", cert_type);
+                    info!("使用双栈模式 (IPv4 和 IPv6)");
+
+                    all_server_handles.push(handle);
+                    tokio::task::spawn_local(server);
+                } else {
+                    if !ipv4_address.is_empty() {
+                        let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
+                        let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
+                        let create_https_app_ipv4 = create_https_app.clone();
+
+                        info!(
+                            "HTTPS IPv4服务器运行在 https://{}:{}",
+                            ipv4_address, https_port
+                        );
+                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                        info!("证书类型: {}", cert_type);
+
+                        let server_ipv4 = HttpServer::new(create_https_app_ipv4)
+                            .workers(std::cmp::max(2, num_cpus::get()))
+                            .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
+                            .map_err(|e| {
+                                error!("创建HTTPS IPv4服务器失败: {:?}", e);
+                                e
+                            })?
+                            .run();
+                        let handle_ipv4 = server_ipv4.handle();
+
+                        all_server_handles.push(handle_ipv4);
+                        tokio::task::spawn_local(server_ipv4);
+                    }
+
+                    if !ipv6_address.is_empty() && ipv6_address != "::" {
+                        let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
+                        let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
+                        let create_https_app_ipv6 = create_https_app;
+
+                        info!(
+                            "HTTPS IPv6服务器运行在 https://{}:{}",
+                            ipv6_address, https_port
+                        );
+                        info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
+                        info!("证书类型: {}", cert_type);
+
+                        let server_ipv6 = HttpServer::new(create_https_app_ipv6)
+                            .workers(std::cmp::max(2, num_cpus::get()))
+                            .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
+                            .map_err(|e| {
+                                error!("创建HTTPS IPv6服务器失败: {:?}", e);
+                                e
+                            })?
+                            .run();
+                        let handle_ipv6 = server_ipv6.handle();
+
+                        all_server_handles.push(handle_ipv6);
+                        tokio::task::spawn_local(server_ipv6);
+                    }
+                }
+            } else {
+                info!("HTTPS服务器已禁用");
+            }
+
+            info!("系统启动完成，等待请求...");
+
+            let _ = signal_handle.await;
+
+            let force_shutdown_handle = tokio::spawn(async {
+                tokio::signal::ctrl_c().await.ok();
+                warn!("收到第二次中断信号，强制退出！");
+                std::process::exit(1);
             });
-        } else {
-            if !ipv4_address.is_empty() {
-                let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
-                let http_server_ipv4 = HttpServer::new(create_http_app.clone())
-                    .workers(std::cmp::max(2, num_cpus::get()));
 
-                let http_server_ipv4 = http_server_ipv4.listen(http_listener_ipv4)?;
+            let shutdown_timeout = tokio::time::Duration::from_secs(30);
 
-                info!(
-                    "HTTP IPv4服务器运行在 http://{}:{}",
-                    ipv4_address, http_port
-                );
-                info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-
-                actix_web::rt::spawn(async move {
-                    if let Err(e) = http_server_ipv4.run().await {
-                        error!("HTTP IPv4服务器失败: {:?}", e);
-                    }
-                });
-            }
-
-            if !ipv6_address.is_empty() && ipv6_address != "::" {
-                let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
-                let http_server_ipv6 =
-                    HttpServer::new(create_http_app).workers(std::cmp::max(2, num_cpus::get()));
-
-                let http_server_ipv6 = http_server_ipv6.listen(http_listener_ipv6)?;
-
-                info!(
-                    "HTTP IPv6服务器运行在 http://{}:{}",
-                    ipv6_address, http_port
-                );
-                info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-
-                actix_web::rt::spawn(async move {
-                    if let Err(e) = http_server_ipv6.run().await {
-                        error!("HTTP IPv6服务器失败: {:?}", e);
-                    }
-                });
-            }
-        }
-    }
-
-    let https_enabled = config.server.https_enabled.unwrap_or(true);
-
-    if https_enabled {
-        let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
-        let (cert_path, key_path) = prepare_server_certificate(&config)?;
-
-        let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
-        let ipv4_address = server_host.as_str();
-
-        if !ipv6_address.is_empty() && ipv6_address == "::" {
-            let https_listener = bind_with_retry(ipv6_address, https_port, 20)?;
-            let tls_config = load_rustls_config(&cert_path, &key_path)?;
-            let https_server =
-                HttpServer::new(create_https_app).workers(std::cmp::max(2, num_cpus::get()));
-
-            let https_server = https_server.listen_rustls_0_23(https_listener, tls_config)?;
-
-            info!("HTTPS服务器运行在 https://{}:{}", ipv6_address, https_port);
-            info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-            info!("证书类型: {}", cert_type);
-            info!("使用双栈模式 (IPv4 和 IPv6)");
-
-            return https_server.run().await;
-        } else {
-            let mut server_handles = Vec::new();
-
-            if !ipv4_address.is_empty() {
-                let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
-                let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
-                let create_https_app_ipv4 = create_https_app.clone();
-
-                info!(
-                    "HTTPS IPv4服务器运行在 https://{}:{}",
-                    ipv4_address, https_port
-                );
-                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                info!("证书类型: {}", cert_type);
-
-                server_handles.push(tokio::spawn(async move {
-                    let https_server_ipv4 = HttpServer::new(create_https_app_ipv4)
-                        .workers(std::cmp::max(2, num_cpus::get()));
-
-                    let https_server_ipv4 = match https_server_ipv4
-                        .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
-                    {
-                        Ok(server) => server,
-                        Err(e) => {
-                            error!("创建HTTPS IPv4服务器失败: {:?}", e);
-                            return;
+            info!("1. 停止接收新连接...");
+            let all_stops: Vec<_> = all_server_handles
+                .into_iter()
+                .enumerate()
+                .map(|(idx, handle)| {
+                    let stop_future = handle.stop(true);
+                    async move {
+                        if let Err(e) = tokio::time::timeout(shutdown_timeout, stop_future).await {
+                            warn!("服务器 {} 优雅关闭超时: {}", idx, e);
                         }
-                    };
-
-                    if let Err(e) = https_server_ipv4.run().await {
-                        error!("HTTPS IPv4服务器失败: {:?}", e);
                     }
-                }));
+                })
+                .collect();
+            futures_util::future::join_all(all_stops).await;
+            info!("服务器已停止接收新连接");
+
+            info!("2. 关闭后台任务...");
+            shutdown_clone.request_shutdown();
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            info!("后台任务已发送关闭信号");
+
+            info!("3. 关闭调度器...");
+            if let Some(state) = scheduler_state
+                && let Err(e) = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(10),
+                    state.shutdown(),
+                )
+                .await
+            {
+                warn!("调度器关闭超时: {}", e);
             }
 
-            if !ipv6_address.is_empty() && ipv6_address != "::" {
-                let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
-                let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
-                let create_https_app_ipv6 = create_https_app;
-
-                info!(
-                    "HTTPS IPv6服务器运行在 https://{}:{}",
-                    ipv6_address, https_port
-                );
-                info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                info!("证书类型: {}", cert_type);
-
-                server_handles.push(tokio::spawn(async move {
-                    let https_server_ipv6 = HttpServer::new(create_https_app_ipv6)
-                        .workers(std::cmp::max(2, num_cpus::get()));
-
-                    let https_server_ipv6 = match https_server_ipv6
-                        .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
-                    {
-                        Ok(server) => server,
-                        Err(e) => {
-                            error!("创建HTTPS IPv6服务器失败: {:?}", e);
-                            return;
-                        }
-                    };
-
-                    if let Err(e) = https_server_ipv6.run().await {
-                        error!("HTTPS IPv6服务器失败: {:?}", e);
-                    }
-                }));
+            info!("4. 关闭数据库连接池...");
+            if let Some(db_pool) = pool
+                && let Err(e) = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(10),
+                    db_pool.close(),
+                )
+                .await
+            {
+                warn!("数据库连接池关闭超时: {}", e);
             }
 
-            if !server_handles.is_empty() {
-                let (_result, _index, remaining) =
-                    futures_util::future::select_all(server_handles).await;
-                for handle in remaining {
-                    if let Err(e) = handle.await {
-                        tracing::error!("服务器任务异常退出: {:?}", e);
-                    }
-                }
-            }
+            force_shutdown_handle.abort();
 
+            info!("系统已优雅关闭");
             Ok(())
-        }
-    } else {
-        info!("HTTPS服务器已禁用");
-        Ok(())
-    }
+        })
+        .await
 }
 
 fn configure_app_services(

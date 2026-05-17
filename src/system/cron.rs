@@ -13,6 +13,16 @@ pub struct SchedulerState {
     pub scheduler: JobScheduler,
 }
 
+impl SchedulerState {
+    pub async fn shutdown(mut self) {
+        if let Err(e) = self.scheduler.shutdown().await {
+            tracing::error!("关闭调度器失败: {}", e);
+        } else {
+            tracing::info!("调度器已关闭");
+        }
+    }
+}
+
 pub async fn start_scheduler(
     pool: Arc<DbPool>,
 ) -> Result<SchedulerState, Box<dyn std::error::Error>> {

@@ -20,5 +20,6 @@ pub mod log;
 pub mod models;
 pub mod resource;
 pub mod routes;
+pub mod shutdown;
 pub mod system;
 pub mod utils;

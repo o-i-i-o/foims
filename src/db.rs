@@ -464,62 +464,74 @@ impl DbPool {
         }
     }
 
-    pub fn start_health_check_task(&self, interval_seconds: u64) {
+    pub fn start_health_check_task(&self, interval_seconds: u64, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(interval_seconds));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {
+                        match pool_clone.health_check().await {
+                            Ok(_) => debug!("数据库连接池健康检查通过"),
+                            Err(e) => {
+                                let metrics = pool_clone.get_metrics();
+                                let status = pool_clone.get_pool_status();
+                                error!(
+                                    "数据库连接池健康检查失败: {} (活跃: {}, 空闲: {}, 等待: {}, 池大小: {})",
+                                    e, metrics.active_connections, metrics.idle_connections,
+                                    metrics.waiting_requests, status.size
+                                );
+                            }
+                        }
 
-                match pool_clone.health_check().await {
-                    Ok(_) => debug!("数据库连接池健康检查通过"),
-                    Err(e) => {
+                        pool_clone.update_metrics();
+
                         let metrics = pool_clone.get_metrics();
                         let status = pool_clone.get_pool_status();
-                        error!(
-                            "数据库连接池健康检查失败: {} (活跃: {}, 空闲: {}, 等待: {}, 池大小: {})",
-                            e, metrics.active_connections, metrics.idle_connections,
-                            metrics.waiting_requests, status.size
-                        );
+                        if metrics.waiting_requests > 0 || metrics.active_connections as f32 / status.size as f32 > 0.8 {
+                            info!(
+                                "连接池状态 - 活跃: {}, 空闲: {}, 等待: {}, 池大小: {}",
+                                metrics.active_connections, metrics.idle_connections,
+                                metrics.waiting_requests, status.size
+                            );
+                        }
+
+                        pool_clone.check_and_scale().await;
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("数据库连接池健康检查任务收到关闭信号，停止运行");
+                        break;
                     }
                 }
-
-                pool_clone.update_metrics();
-
-                let metrics = pool_clone.get_metrics();
-                let status = pool_clone.get_pool_status();
-                if metrics.waiting_requests > 0 || metrics.active_connections as f32 / status.size as f32 > 0.8 {
-                    info!(
-                        "连接池状态 - 活跃: {}, 空闲: {}, 等待: {}, 池大小: {}",
-                        metrics.active_connections, metrics.idle_connections,
-                        metrics.waiting_requests, status.size
-                    );
-                }
-
-                pool_clone.check_and_scale().await;
             }
         });
     }
 
-    pub fn start_metrics_collection_task(&self, interval_seconds: u64) {
+    pub fn start_metrics_collection_task(&self, interval_seconds: u64, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(interval_seconds));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {
+                        let metrics = pool_clone.get_metrics();
+                        let _status = pool_clone.get_pool_status();
 
-                let metrics = pool_clone.get_metrics();
-                let _status = pool_clone.get_pool_status();
-
-                info!(
-                    "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",
-                    metrics.active_connections,
-                    metrics.idle_connections,
-                    metrics.waiting_requests,
-                    metrics.avg_wait_time_ms,
-                    metrics.total_requests,
-                    metrics.failed_requests
-                );
+                        info!(
+                            "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",
+                            metrics.active_connections,
+                            metrics.idle_connections,
+                            metrics.waiting_requests,
+                            metrics.avg_wait_time_ms,
+                            metrics.total_requests,
+                            metrics.failed_requests
+                        );
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("数据库连接池指标收集任务收到关闭信号，停止运行");
+                        break;
+                    }
+                }
             }
         });
     }
