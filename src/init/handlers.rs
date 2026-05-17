@@ -1,15 +1,14 @@
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
-use bcrypt::hash;
 use futures_util::TryStreamExt;
 use sqlx::PgPool;
-use std::io::Write;
 use std::path::PathBuf;
 use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
+use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::init::check::{check_has_data, check_required_tables_exist, validate_table_columns};
 use crate::init::config::update_config_enabled;
@@ -17,7 +16,7 @@ use crate::init::connection::ensure_database_and_schema;
 use crate::init::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::init::schema::create_tables;
 use crate::init::types::{
-    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest,
+    CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest,
 };
 use crate::init::verification::verify_code;
 use crate::models::ApiResponse;
@@ -291,7 +290,7 @@ pub async fn import_database_from_file(
     let mut verification_code: Option<String> = None;
     let mut sql_file_path: Option<PathBuf> = None;
 
-    std::fs::create_dir_all("/tmp/ipma_import").map_err(|e| {
+    tokio::fs::create_dir_all("/tmp/ipma_import").await.map_err(|e| {
         AppError::Internal(format!("创建临时目录失败: {e}"))
     })?;
 
@@ -317,16 +316,13 @@ pub async fn import_database_from_file(
                 .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string))
                 .unwrap_or_else(|| "import.sql".to_string());
             let filepath = PathBuf::from(format!("/tmp/ipma_import/{filename}"));
-            let mut f = std::fs::File::create(&filepath).map_err(|e| {
-                AppError::Internal(format!("创建文件失败: {e}"))
-            })?;
 
             let data = field
                 .bytes(100 * 1024 * 1024)
                 .await
                 .map_err(|e| AppError::Validation(e.to_string()))?
                 .map_err(|e| AppError::Validation(e.to_string()))?;
-            f.write_all(&data).map_err(|e| {
+            tokio::fs::write(&filepath, &data).await.map_err(|e| {
                 AppError::Internal(format!("写入文件失败: {e}"))
             })?;
             sql_file_path = Some(filepath);
@@ -415,20 +411,26 @@ pub async fn import_database_from_file(
         return Err(AppError::Internal(format!("创建数据库失败: {e}")));
     }
 
-    let output = std::process::Command::new("psql")
-        .arg("-h")
-        .arg(&state.config.database.host)
-        .arg("-p")
-        .arg(state.config.database.port.to_string())
-        .arg("-U")
-        .arg(&state.config.database.username)
-        .arg("-d")
-        .arg(&state.config.database.database)
-        .arg("-f")
-        .arg(&sql_path)
-        .env("PGPASSWORD", &state.config.database.password)
-        .output()
-        .map_err(|e| AppError::Internal(format!("执行psql失败: {e}")))?;
+    let db_config = state.config.database.clone();
+    let sql_path_clone = sql_path.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("psql")
+            .arg("-h")
+            .arg(&db_config.host)
+            .arg("-p")
+            .arg(db_config.port.to_string())
+            .arg("-U")
+            .arg(&db_config.username)
+            .arg("-d")
+            .arg(&db_config.database)
+            .arg("-f")
+            .arg(&sql_path_clone)
+            .env("PGPASSWORD", &db_config.password)
+            .output()
+            .map_err(|e| AppError::Internal(format!("执行psql失败: {e}")))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("psql任务失败: {e}")))??;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -450,7 +452,7 @@ pub async fn import_database_from_file(
         )));
     }
 
-    if let Err(e) = std::fs::remove_file(&sql_path) {
+    if let Err(e) = tokio::fs::remove_file(&sql_path).await {
         warn!("删除SQL临时文件失败: {}", e);
     }
 
@@ -513,8 +515,7 @@ pub async fn init_system(
         return Err(AppError::Internal(format!("创建表失败: {e}")));
     }
 
-    let password_hash = hash(&req.password, BCRYPT_COST)
-        .map_err(|e| AppError::Internal(format!("密码哈希错误: {e}")))?;
+    let password_hash = hash_password(&req.password).await?;
 
     let user_id = Uuid::new_v4();
 
@@ -543,7 +544,7 @@ pub async fn init_system(
         return Err(AppError::Database(format!("创建管理员用户失败: {e}")));
     }
 
-    if let Err(e) = update_config_enabled(false) {
+    if let Err(e) = update_config_enabled(false).await {
         return Err(AppError::Internal(format!("更新配置失败: {e}")));
     }
 
@@ -634,13 +635,14 @@ pub async fn check_init_status(state: web::Data<AppState>) -> Result<HttpRespons
 
 pub async fn restart_program() -> Result<HttpResponse, AppError> {
     info!("收到重启程序请求，正在准备重启...");
-    crate::system::config::trigger_service_restart()
+    crate::system::config::trigger_service_restart().await
 }
 
 pub async fn check_pgsql(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let installed = match std::process::Command::new("which")
+    let installed = match tokio::process::Command::new("which")
         .arg("psql")
         .status()
+        .await
     {
         Ok(s) => s.success(),
         Err(e) => {

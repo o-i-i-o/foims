@@ -31,11 +31,11 @@ use crate::resource::{
     update_workstation,
 };
 use crate::system::config::{
-    backup_config, check_service_status, disable_init_mode, download_certificate,
-    generate_certificate, get_certificate_status, get_dashboard_stats, get_notification_settings,
+    backup_config, disable_init_mode, download_certificate,
+    generate_certificate, get_certificate_status, get_notification_settings,
     get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages,
-    get_system_info, import_certificate, register_service, restart_application, restart_os,
-    restore_config, send_email, test_smtp_connection as test_smtp, update_language_setting,
+    get_system_info, import_certificate, restart_application, restart_os,
+    restore_config, send_system_email, test_smtp_connection as test_smtp, update_language_setting,
     update_notification_settings, update_page_timeout_config, update_session_timeout_config,
     update_smtp_config, update_system_config,
 };
@@ -247,23 +247,17 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                     web::scope("/system")
                         // 系统信息
                         .route("/info", web::get().to(get_system_info))
-                        // 仪表盘统计
-                        .route("/dashboard-stats", web::get().to(get_dashboard_stats))
-                        // 服务状态
-                        .route("/service-status", web::get().to(check_service_status))
                         // 重启应用系统
                         .route("/restart-application", web::post().to(restart_application))
                         // 重启操作系统
                         .route("/restart-os", web::post().to(restart_os))
-                        // 注册为服务
-                        .route("/register-service", web::post().to(register_service))
                         // 关闭初始化模式
                         .route("/disable-init", web::post().to(disable_init_mode))
                         // SMTP配置
                         .route("/smtp/config", web::get().to(get_smtp_config))
                         .route("/smtp/config", web::put().to(update_smtp_config))
                         .route("/smtp/test", web::post().to(test_smtp))
-                        .route("/smtp/send", web::post().to(send_email))
+                        .route("/smtp/send", web::post().to(send_system_email))
                         // 证书管理
                         .route("/certificate/status", web::get().to(get_certificate_status))
                         .route(

@@ -16,6 +16,7 @@ use validator::Validate;
 
 use crate::auth::utils::{
     JwtUtils, extract_token_from_service_request, get_client_info_from_service_request,
+    hash_password,
 };
 use crate::crypto::{decrypt_password, encrypt_password};
 use crate::error::AppError;
@@ -733,8 +734,7 @@ pub async fn reset_password(
 
     match user_result {
         Some((user_id,)) => {
-            let hashed_password = bcrypt::hash(&req.new_password, bcrypt::DEFAULT_COST)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
+            let hashed_password = hash_password(&req.new_password).await?;
 
             sqlx::query(
                 "UPDATE users SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2",

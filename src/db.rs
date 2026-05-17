@@ -471,7 +471,8 @@ impl DbPool {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        match pool_clone.health_check().await {
+                        let check_result = pool_clone.health_check().await;
+                        match check_result {
                             Ok(_) => debug!("数据库连接池健康检查通过"),
                             Err(e) => {
                                 let metrics = pool_clone.get_metrics();
@@ -488,7 +489,7 @@ impl DbPool {
 
                         let metrics = pool_clone.get_metrics();
                         let status = pool_clone.get_pool_status();
-                        if metrics.waiting_requests > 0 || metrics.active_connections as f32 / status.size as f32 > 0.8 {
+                        if metrics.waiting_requests > 0 || (status.size > 0 && metrics.active_connections as f32 / status.size as f32 > 0.8) {
                             info!(
                                 "连接池状态 - 活跃: {}, 空闲: {}, 等待: {}, 池大小: {}",
                                 metrics.active_connections, metrics.idle_connections,

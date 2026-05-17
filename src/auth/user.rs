@@ -1,10 +1,10 @@
 use crate::app_state::AppState;
+use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
 use crate::utils::pagination::DEFAULT_PAGE;
 use crate::utils::log_system_operation;
 use actix_web::{HttpRequest, HttpResponse, web};
-use bcrypt::{DEFAULT_COST, hash};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
@@ -104,8 +104,7 @@ pub async fn create_user(
         return Err(AppError::Conflict("邮箱已存在".to_string()));
     }
 
-    let hashed_password = hash(&req.password, DEFAULT_COST)
-        .map_err(|err| AppError::Internal(format!("密码哈希错误: {err}")))?;
+    let hashed_password = hash_password(&req.password).await?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();

@@ -6,6 +6,7 @@ use actix_web::{App, HttpServer, web};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
+use std::panic;
 use tracing::{error, info, warn};
 
 use ipma::app_state::AppState;
@@ -23,6 +24,40 @@ use ipma::system::config::init_start_time;
 use ipma::system::cron::{SchedulerState, start_scheduler};
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
+
+fn setup_panic_handler() {
+    panic::set_hook(Box::new(|panic_info| {
+        let backtrace = std::backtrace::Backtrace::capture();
+        let msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+
+        let location = panic_info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+
+        error!(
+            "程序发生严重panic!\n\
+             位置: {}\n\
+             消息: {}\n\
+             堆栈追踪:\n{}",
+            location, msg, backtrace
+        );
+
+        eprintln!(
+            "程序发生严重panic!\n\
+             位置: {}\n\
+             消息: {}\n\
+             堆栈追踪:\n{}",
+            location, msg, backtrace
+        );
+    }));
+}
 
 fn build_cors_middleware(config: &Config) -> Cors {
     let allowed_origins = config.server.cors_allowed_origins.clone();
@@ -171,6 +206,8 @@ async fn serve_html_file(path: &str) -> actix_web::HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    setup_panic_handler();
+
     if let Err(e) = rustls::crypto::ring::default_provider().install_default() {
         tracing::error!("初始化TLS密码学提供者失败: {:?}", e);
         std::process::exit(1);
@@ -191,6 +228,10 @@ async fn main() -> std::io::Result<()> {
     };
 
     log_bilingual("system.config_loaded");
+
+    if let Err(e) = ipma::crypto::check_key_integrity() {
+        error!("加密密钥完整性检查失败: {}", e);
+    }
 
     let shutdown = ShutdownSignal::new();
 

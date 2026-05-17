@@ -5,13 +5,12 @@ use crate::models::ApiResponse;
 use crate::system::smtp::SmtpConfig;
 use crate::system::smtp::{
     get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
-    test_smtp_connection as test_smtp_connection_impl,
 };
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::process::Command;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -29,118 +28,51 @@ pub struct SendEmailRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct UpdateSmtpConfigRequest {
-    #[validate(length(min = 1, message = "SMTP服务器地址不能为空"))]
-    pub host: String,
-    pub port: u16,
-    #[validate(length(min = 1, message = "SMTP用户名不能为空"))]
-    pub username: String,
-    #[validate(length(min = 1, message = "SMTP密码不能为空"))]
-    pub password: String,
-    #[validate(email(message = "请输入有效的发件人邮箱地址"))]
-    pub from: String,
-    pub secure: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SystemInfo {
-    pub name: String,
-    pub version: String,
-    pub uptime: u64,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub database_status: String,
-    pub config: SafeConfig,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SafeDatabaseConfig {
-    pub host: String,
-    pub port: u16,
-    pub database: String,
-    pub username: String,
-    pub max_connections: u32,
-    pub query_timeout_secs: u64,
-    pub slow_query_threshold_ms: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SafeJwtConfig {
-    pub access_token_expiry: String,
-    pub refresh_token_expiry: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SafeConfig {
-    pub database: SafeDatabaseConfig,
-    pub server: ServerConfig,
-    pub jwt: SafeJwtConfig,
-    pub init: crate::config::InitConfig,
-    pub i18n: Option<I18nConfig>,
-    pub rate_limit: crate::config::RateLimitConfig,
-}
-
-impl From<Config> for SafeConfig {
-    fn from(config: Config) -> Self {
-        Self {
-            database: SafeDatabaseConfig {
-                host: config.database.host,
-                port: config.database.port,
-                database: config.database.database,
-                username: config.database.username,
-                max_connections: config.database.max_connections,
-                query_timeout_secs: config.database.query_timeout_secs,
-                slow_query_threshold_ms: config.database.slow_query_threshold_ms,
-            },
-            server: config.server,
-            jwt: SafeJwtConfig {
-                access_token_expiry: config.jwt.access_token_expiry,
-                refresh_token_expiry: config.jwt.refresh_token_expiry,
-            },
-            init: config.init,
-            i18n: config.i18n,
-            rate_limit: config.rate_limit,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSystemConfigRequest {
-    #[serde(default)]
     pub database: Option<crate::config::DatabaseConfig>,
-    #[serde(default)]
-    pub server: Option<crate::config::ServerConfig>,
-    #[serde(default)]
+    pub server: Option<ServerConfig>,
     pub jwt: Option<crate::config::JwtConfig>,
-    #[serde(default)]
     pub init: Option<crate::config::InitConfig>,
-    #[serde(default)]
     pub rate_limit: Option<crate::config::RateLimitConfig>,
-    #[serde(default)]
     pub snmp: Option<crate::config::SnmpConfig>,
 }
 
-pub fn init_start_time() {
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct GenerateCertRequest {
+    #[validate(length(min = 1, message = "通用名称不能为空"))]
+    pub common_name: String,
+    pub organization: Option<String>,
+    pub organizational_unit: Option<String>,
+    pub country: Option<String>,
+    pub state: Option<String>,
+    pub locality: Option<String>,
+    pub validity: Option<i32>,
+    pub subject_alt_names: Option<Vec<String>>,
+}
+
+pub fn record_start_time() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_else(|e| {
-            tracing::warn!("初始化系统启动时间失败: {}", e);
-            0
-        });
+        .unwrap_or_default()
+        .as_secs();
     START_TIME.store(now, Ordering::SeqCst);
 }
 
-fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_start_time() {
+    record_start_time();
+}
+
+async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = crate::config::get_config_file_path();
     tracing::info!("[save_config] 开始保存配置到: {}", config_path);
 
     let toml_str = toml::to_string_pretty(config)?;
     tracing::info!("[save_config] TOML 内容长度: {}", toml_str.len());
 
-    std::fs::write(&config_path, &toml_str)?;
+    tokio::fs::write(&config_path, &toml_str).await?;
     tracing::info!("[save_config] 配置已写入文件");
 
-    let verify_content = std::fs::read_to_string(&config_path)?;
+    let verify_content = tokio::fs::read_to_string(&config_path).await?;
     tracing::info!(
         "[save_config] 验证读取成功，内容长度: {}",
         verify_content.len()
@@ -160,180 +92,77 @@ pub async fn get_system_info(
         }
     };
 
-    let now = SystemTime::now()
+    let uptime = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_else(|e| {
-            tracing::warn!("系统时间异常: {}", e);
-            0
-        });
-    let start_time = START_TIME.load(Ordering::SeqCst);
-    let uptime = if start_time == 0 {
-        init_start_time();
-        0
-    } else if start_time > now {
-        tracing::warn!("系统启动时间晚于当前时间，时间可能已被调整");
-        0
-    } else {
-        now - start_time
-    };
+        .unwrap_or_default()
+        .as_secs()
+        - START_TIME.load(Ordering::SeqCst);
 
-    let latest_config = Config::load().map_err(|e| AppError::Internal(format!("Failed to load latest config: {e}")))?;
+    let pool_metrics = state.pool()?.get_metrics();
 
-    let system_info = SystemInfo {
-        name: "IPMA".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime,
-        timestamp: chrono::Utc::now(),
-        database_status: database_status.to_string(),
-        config: SafeConfig::from(latest_config),
-    };
+    let system_info = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "database_status": database_status,
+        "uptime_seconds": uptime,
+        "pool_metrics": {
+            "active_connections": pool_metrics.active_connections,
+            "idle_connections": pool_metrics.idle_connections,
+            "waiting_requests": pool_metrics.waiting_requests,
+        }
+    });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<SystemInfo>::success(
-        system_info,
-        "系统信息获取成功",
-    )))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(system_info, "系统信息获取成功")))
 }
 
-type CountStats = (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64);
-
-pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let conn = state.pool()?.get_conn();
-
-    let stats_row1: CountStats =
-        sqlx::query_as(
-            r"SELECT
-                (SELECT COUNT(*) FROM users) AS total_users,
-                (SELECT COUNT(*) FROM users WHERE status = true) AS active_users,
-                (SELECT COUNT(*) FROM network_regions) AS total_network_regions,
-                (SELECT COUNT(*) FROM network_cidrs) AS total_networks,
-                (SELECT COUNT(*) FROM rooms) AS total_rooms,
-                (SELECT COUNT(*) FROM cabinets) AS total_cabinets,
-                (SELECT COUNT(*) FROM workstations) AS total_workstations,
-                (SELECT COUNT(*) FROM positions) AS total_positions,
-                (SELECT COUNT(*) FROM switches) AS total_switches,
-                (SELECT COUNT(*) FROM ips) AS total_ips
-            ",
-        )
-        .fetch_one(&conn)
-        .await?;
-
-    let stats_row2: (i64, i64, i64) = sqlx::query_as(
-        r"SELECT
-            (SELECT COUNT(*) FROM ips WHERE status = 'active') AS active_ips,
-            (SELECT COUNT(*) FROM operation_logs WHERE created_at > NOW() - INTERVAL '24 hours') AS recent_logs,
-            (SELECT COUNT(*) FROM login_logs WHERE created_at > NOW() - INTERVAL '24 hours') AS login_logs_today
-        ",
-    )
-    .fetch_one(&conn)
-    .await?;
-
-    let (ips_by_device_type, ips_by_status, rooms_by_type) = tokio::join!(
-        sqlx::query_as::<_, (String, i64)>(
-            "SELECT device_type, COUNT(*) as count FROM ips WHERE device_type IS NOT NULL GROUP BY device_type"
-        )
-        .fetch_all(&conn),
-        sqlx::query_as::<_, (String, i64)>(
-            "SELECT status, COUNT(*) as count FROM ips GROUP BY status"
-        )
-        .fetch_all(&conn),
-        sqlx::query_as::<_, (String, i64)>(
-            "SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type"
-        )
-        .fetch_all(&conn),
-    );
-
-    let ips_by_device_type = ips_by_device_type?;
-    let ips_by_status = ips_by_status?;
-    let rooms_by_type = rooms_by_type?;
-
-    let (
-        total_users,
-        active_users,
-        total_network_regions,
-        total_networks,
-        total_rooms,
-        total_cabinets,
-        total_workstations,
-        total_positions,
-        total_switches,
-        total_ips,
-    ) = stats_row1;
-
-    let (active_ips, recent_logs, login_logs_today) = stats_row2;
-
+pub async fn get_system_config(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(
-        serde_json::json!({
-            "users": {
-                "total": total_users,
-                "active": active_users
-            },
-            "networks": {
-                "regions": total_network_regions,
-                "networks": total_networks
-            },
-            "locations": {
-                "rooms": total_rooms,
-                "cabinets": total_cabinets,
-                "workstations": total_workstations,
-                "positions": total_positions
-            },
-            "switches": total_switches,
-            "ips": {
-                "total": total_ips,
-                "active": active_ips,
-                "by_device_type": ips_by_device_type.into_iter().collect::<std::collections::HashMap<_, _>>(),
-                "by_status": ips_by_status.into_iter().collect::<std::collections::HashMap<_, _>>()
-            },
-            "rooms_by_type": rooms_by_type.into_iter().collect::<std::collections::HashMap<_, _>>(),
-            "activity": {
-                "operations_24h": recent_logs,
-                "logins_24h": login_logs_today
-            }
-        }),
-        "统计数据获取成功",
+        state.config.clone(),
+        "系统配置获取成功",
     )))
 }
 
 pub async fn update_system_config(
-    req: web::Json<UpdateSystemConfigRequest>,
     state: web::Data<AppState>,
+    req: web::Json<UpdateSystemConfigRequest>,
 ) -> Result<HttpResponse, AppError> {
-    req.validate()?;
+    let mut new_config = state.config.clone();
 
-    tracing::info!("[update_config] 请求数据: {:?}", req);
+    if let Some(database) = &req.database {
+        new_config.database = database.clone();
+    }
 
-    let new_config = Config {
-        database: req
-            .database
-            .clone()
-            .unwrap_or_else(|| state.config.database.clone()),
-        server: req.server.clone().unwrap_or_else(|| state.config.server.clone()),
-        jwt: req.jwt.clone().unwrap_or_else(|| state.config.jwt.clone()),
-        init: req.init.clone().unwrap_or_else(|| state.config.init.clone()),
-        i18n: state.config.i18n.clone(),
-        rate_limit: req
-            .rate_limit
-            .clone()
-            .unwrap_or_else(|| state.config.rate_limit.clone()),
-        snmp: req.snmp.clone().unwrap_or_else(|| state.config.snmp.clone()),
-    };
+    if let Some(server) = &req.server {
+        new_config.server = server.clone();
+    }
 
-    tracing::info!(
-        "[update_config] 新的 rate_limit: {:?}",
-        new_config.rate_limit
-    );
+    if let Some(jwt) = &req.jwt {
+        new_config.jwt = jwt.clone();
+    }
+
+    if let Some(init) = &req.init {
+        new_config.init = init.clone();
+    }
+
+    if let Some(rate_limit) = &req.rate_limit {
+        new_config.rate_limit = rate_limit.clone();
+    }
+
+    if let Some(snmp) = &req.snmp {
+        new_config.snmp = snmp.clone();
+    }
 
     let config_path = crate::config::get_config_file_path();
     tracing::info!("[update_config] 准备保存配置到: {}", config_path);
 
-    save_config_to_file(&new_config).map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
+    save_config_to_file(&new_config).await.map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
     tracing::info!("配置已保存到: {}", config_path);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(new_config, "配置更新成功")))
 }
 
-pub fn trigger_service_restart() -> Result<HttpResponse, AppError> {
+pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
     let service_name = "ipma.service";
 
     let is_running_as_service = check_if_running_as_service();
@@ -346,7 +175,8 @@ pub fn trigger_service_restart() -> Result<HttpResponse, AppError> {
     if is_running_as_service {
         let check_output = Command::new("systemctl")
             .args(["show", "ipma.service", "--property=ActiveState"])
-            .output();
+            .output()
+            .await;
 
         let is_active = match check_output {
             Ok(output) => {
@@ -361,7 +191,8 @@ pub fn trigger_service_restart() -> Result<HttpResponse, AppError> {
         let output = Command::new("systemctl")
             .arg("restart")
             .arg(service_name)
-            .output();
+            .output()
+            .await;
 
         match output {
             Ok(output) => {
@@ -407,20 +238,20 @@ pub fn trigger_service_restart() -> Result<HttpResponse, AppError> {
         }
     } else {
         tracing::info!("非服务模式运行，使用独立进程重启");
-        restart_standalone_process()
+        restart_standalone_process().await
     }
 }
 
 pub async fn restart_application() -> Result<HttpResponse, AppError> {
     tracing::info!("收到重启应用请求");
-    trigger_service_restart()
+    trigger_service_restart().await
 }
 
 fn restart_by_exit() -> Result<HttpResponse, AppError> {
     tracing::info!("使用进程退出方式触发重启（systemd Restart=always 会自动重启）");
 
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_millis(500));
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         tracing::info!("程序即将退出，等待 systemd 自动重启...");
         std::process::exit(0);
     });
@@ -442,7 +273,7 @@ fn check_if_running_as_service() -> bool {
     std::path::Path::new("/etc/systemd/system/ipma.service").exists()
 }
 
-fn restart_standalone_process() -> Result<HttpResponse, AppError> {
+async fn restart_standalone_process() -> Result<HttpResponse, AppError> {
     let exe_path = std::env::current_exe().map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
 
     let exe_path_str = exe_path.to_str().ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
@@ -460,12 +291,13 @@ exec "{exe_path_str}"
     );
 
     let script_path = "/tmp/ipma_restart.sh";
-    std::fs::write(script_path, restart_script).map_err(|e| AppError::Internal(format!("创建重启脚本失败: {e}")))?;
+    tokio::fs::write(script_path, restart_script).await.map_err(|e| AppError::Internal(format!("创建重启脚本失败: {e}")))?;
 
     let output = Command::new("chmod")
         .arg("+x")
         .arg(script_path)
         .output()
+        .await
         .map_err(|e| AppError::Internal(format!("设置脚本权限失败: {e}")))?;
 
     if !output.status.success() {
@@ -476,8 +308,8 @@ exec "{exe_path_str}"
         tracing::warn!("启动重启脚本失败: {}", e);
     }
 
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_secs(2));
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         std::process::exit(0);
     });
 
@@ -492,6 +324,7 @@ pub async fn restart_os() -> Result<HttpResponse, AppError> {
         .arg("-c")
         .arg("sleep 2 && sudo reboot")
         .output()
+        .await
         .map_err(|e| AppError::Internal(format!("执行重启命令失败: {e}")))?;
 
     if !output.status.success() {
@@ -507,487 +340,6 @@ pub async fn restart_os() -> Result<HttpResponse, AppError> {
     )))
 }
 
-pub async fn check_service_status() -> Result<HttpResponse, AppError> {
-    let service_paths = [
-        "/usr/lib/systemd/system/ipma.service",
-        "/etc/systemd/system/ipma.service",
-    ];
-
-    let mut service_file_exists = false;
-    let mut service_file_path = String::new();
-
-    for path in &service_paths {
-        if std::path::Path::new(path).exists() {
-            service_file_exists = true;
-            service_file_path = path.to_string();
-            break;
-        }
-    }
-
-    let mut is_enabled = false;
-    let mut is_active = false;
-    let mut status_text = "未安装".to_string();
-    let mut uptime_seconds: Option<u64> = None;
-
-    if service_file_exists {
-        match Command::new("systemctl")
-            .arg("is-enabled")
-            .arg("ipma.service")
-            .output()
-        {
-            Ok(output) => {
-                is_enabled = output.status.success();
-            }
-            Err(e) => {
-                tracing::warn!("检查服务启用状态失败: {}", e);
-            }
-        }
-
-        match Command::new("systemctl")
-            .arg("is-active")
-            .arg("ipma.service")
-            .output()
-        {
-            Ok(output) => {
-                is_active = output.status.success();
-                status_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            }
-            Err(e) => {
-                tracing::warn!("检查服务活跃状态失败: {}", e);
-            }
-        }
-
-        if is_active {
-            match Command::new("systemctl")
-                .args(["show", "ipma.service", "--property=ExecMainStartTimestamp"])
-                .output()
-            {
-                Ok(output) => {
-                    let prop = String::from_utf8_lossy(&output.stdout);
-                    if let Some(timestamp_str) = prop.strip_prefix("ExecMainStartTimestamp=") {
-                        let timestamp_str = timestamp_str.trim();
-                        if !timestamp_str.is_empty()
-                            && timestamp_str != "n/a"
-                            && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str)
-                        {
-                            let now = chrono::Utc::now();
-                            uptime_seconds = Some(
-                                (now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64,
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("获取服务启动时间失败: {}", e);
-                }
-            }
-        }
-    }
-
-    let running_as_service = check_if_running_as_service();
-
-    let status_data = serde_json::json!({
-        "registered": service_file_exists && is_enabled,
-        "service_file_exists": service_file_exists,
-        "service_file_path": service_file_path,
-        "enabled": is_enabled,
-        "active": is_active,
-        "status": status_text,
-        "running_as_service": running_as_service,
-        "uptime_seconds": uptime_seconds
-    });
-
-    tracing::info!(
-        "服务状态: registered={}, enabled={}, active={}, running_as_service={}",
-        service_file_exists && is_enabled,
-        is_enabled,
-        is_active,
-        running_as_service
-    );
-
-    Ok(HttpResponse::Ok().json(ApiResponse::success(status_data, "服务状态检查成功")))
-}
-
-pub async fn register_service() -> Result<HttpResponse, AppError> {
-    tracing::info!("收到注册服务请求");
-
-    let service_paths = [
-        "/usr/lib/systemd/system/ipma.service",
-        "/etc/systemd/system/ipma.service",
-    ];
-
-    for path in &service_paths {
-        if std::path::Path::new(path).exists() {
-            let is_enabled = match Command::new("systemctl")
-                .args(["is-enabled", "ipma.service"])
-                .output()
-            {
-                Ok(output) => output.status.success(),
-                Err(e) => {
-                    tracing::warn!("检查服务启用状态失败: {}", e);
-                    false
-                }
-            };
-
-            tracing::info!("服务文件已存在: {}, 已启用: {}", path, is_enabled);
-
-            return Ok(HttpResponse::Ok().json(ApiResponse::success(
-                serde_json::json!({
-                    "registered": true,
-                    "service_file": path,
-                    "enabled": is_enabled,
-                    "message": "服务已注册"
-                }),
-                "服务已注册",
-            )));
-        }
-    }
-
-    tracing::info!("服务文件不存在，尝试创建服务文件");
-
-    let exe_path = std::env::current_exe().map_err(|e| AppError::Internal(format!("获取当前可执行文件路径失败: {e}")))?;
-    let exe_path_str = exe_path.to_str().ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
-
-    let config_path = crate::config::get_config_file_path();
-    let config_dir = std::path::Path::new(&config_path)
-        .parent().map_or_else(|| "/etc/ipma".to_string(), |p| p.to_string_lossy().to_string());
-
-    let service_content = format!(
-        r"[Unit]
-Description=IP Management Application
-Documentation=man:ipma(1)
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=ipma
-Group=ipma
-WorkingDirectory=/opt/ipma
-ExecStart={exe_path_str}
-Restart=always
-RestartSec=5s
-
-KillSignal=SIGTERM
-TimeoutStopSec=30s
-KillMode=mixed
-
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/ipma /var/log/ipma {config_dir}
-PrivateTmp=true
-
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-"
-    );
-
-    let write_result = Command::new("pkexec")
-        .args(["--user", "root", "tee", "/etc/systemd/system/ipma.service"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn();
-
-    let result = match write_result {
-        Ok(mut child) => {
-            use std::io::Write;
-            if let Some(mut stdin) = child.stdin.take()
-                && let Err(e) = stdin.write_all(service_content.as_bytes())
-            {
-                tracing::warn!("写入服务文件内容失败: {}", e);
-            }
-            child.wait_with_output()
-        }
-        Err(_) => {
-            Command::new("sudo")
-                .args(["tee", "/etc/systemd/system/ipma.service"])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    use std::io::Write;
-                    if let Some(mut stdin) = child.stdin.take()
-                        && let Err(e) = stdin.write_all(service_content.as_bytes())
-                    {
-                        tracing::warn!("写入服务文件内容失败: {}", e);
-                    }
-                    child.wait_with_output()
-                })
-        }
-    };
-
-    match result {
-        Ok(output) if output.status.success() => {
-            tracing::info!("服务文件创建成功");
-
-            let commands = vec![vec!["daemon-reload"], vec!["enable", "ipma.service"]];
-
-            for args in commands {
-                let cmd_result = execute_systemctl_with_privilege(&args);
-                if let Err(e) = cmd_result {
-                    tracing::warn!("执行 systemctl {:?} 失败: {}", args, e);
-                }
-            }
-
-            Ok(HttpResponse::Ok().json(ApiResponse::success(
-                serde_json::json!({
-                    "registered": true,
-                    "service_file": "/etc/systemd/system/ipma.service",
-                    "enabled": true,
-                    "message": "服务注册成功"
-                }),
-                "系统服务注册成功，IPMA服务已设置为开机自启",
-            )))
-        }
-        Ok(output) => {
-            let error = String::from_utf8_lossy(&output.stderr);
-            tracing::error!("创建服务文件失败: {}", error);
-            Err(AppError::Internal(format!(
-                "创建服务文件失败，需要管理员权限: {error}"
-            )))
-        }
-        Err(e) => {
-            tracing::error!("执行命令失败: {}", e);
-            Err(AppError::Internal(format!(
-                "需要管理员权限来注册服务。请手动执行以下命令：\nsudo tee /etc/systemd/system/ipma.service <<< '{}'\nsudo systemctl daemon-reload\nsudo systemctl enable ipma.service",
-                service_content.replace('\'', "'\\''")
-            )))
-        }
-    }
-}
-
-fn execute_systemctl_with_privilege(args: &[&str]) -> Result<(), String> {
-    let direct_result = Command::new("systemctl").args(args).output();
-
-    match direct_result {
-        Ok(output) if output.status.success() => {
-            return Ok(());
-        }
-        Ok(_) | Err(_) => {}
-    }
-
-    let pkexec_result = Command::new("pkexec")
-        .args(["--user", "root", "systemctl"])
-        .args(args)
-        .output();
-
-    match pkexec_result {
-        Ok(output) if output.status.success() => {
-            return Ok(());
-        }
-        Ok(_) | Err(_) => {}
-    }
-
-    let sudo_result = Command::new("sudo").args(["systemctl"]).args(args).output();
-
-    match sudo_result {
-        Ok(output) if output.status.success() => Ok(()),
-        Ok(output) => {
-            let error = String::from_utf8_lossy(&output.stderr);
-            Err(format!("systemctl {args:?} 失败: {error}"))
-        }
-        Err(e) => Err(format!("执行命令失败: {e}")),
-    }
-}
-
-pub async fn get_smtp_config(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
-    let smtp_config = get_smtp_config_from_db(&state.pool()?.get_conn()).await;
-
-    Ok(HttpResponse::Ok().json(ApiResponse::success(smtp_config, "SMTP配置获取成功")))
-}
-
-pub async fn update_smtp_config(
-    state: web::Data<AppState>,
-    req: web::Json<UpdateSmtpConfigRequest>,
-) -> Result<HttpResponse, AppError> {
-    req.validate()?;
-
-    let smtp_config = SmtpConfig {
-        host: req.host.clone(),
-        port: req.port,
-        username: req.username.clone(),
-        password: req.password.clone(),
-        from: req.from.clone(),
-        secure: req.secure,
-    };
-
-    save_smtp_config_to_db(&state.pool()?.get_conn(), &smtp_config).await
-        .map_err(|e| AppError::Internal(format!("保存SMTP配置失败: {e:?}")))?;
-
-    let conn = state.pool()?.get_conn();
-    if let Err(e) = sqlx::query(
-        "INSERT INTO task_logs (id, task_name, status, details, start_time, end_time) 
-         VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(uuid::Uuid::new_v4())
-    .bind("update_smtp_config")
-    .bind("success")
-    .bind(sqlx::types::Json(serde_json::json!({
-        "host": req.host,
-        "port": req.port,
-        "username": req.username,
-        "from": req.from,
-        "secure": req.secure
-    })))
-    .bind(chrono::Utc::now())
-    .bind(chrono::Utc::now())
-    .execute(&conn)
-    .await {
-        tracing::warn!("记录操作日志失败: {}", e);
-    }
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
-}
-
-pub async fn test_smtp_connection(
-    state: web::Data<AppState>,
-    req: web::Json<UpdateSmtpConfigRequest>,
-) -> Result<HttpResponse, AppError> {
-    req.validate()?;
-
-    let task_id = Uuid::new_v4();
-    let start_time = chrono::Utc::now();
-    let conn = state.pool()?.get_conn();
-
-    if let Err(e) = sqlx::query(
-        "INSERT INTO task_logs (id, task_name, status, details, start_time) 
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(task_id)
-    .bind("test_smtp_connection")
-    .bind("running")
-    .bind(sqlx::types::Json(serde_json::json!({
-        "host": req.host,
-        "port": req.port,
-        "username": req.username,
-        "from": req.from,
-        "secure": req.secure
-    })))
-    .bind(start_time)
-    .execute(&conn)
-    .await {
-        tracing::warn!("记录操作日志失败: {}", e);
-    }
-
-    let smtp_config = SmtpConfig {
-        host: req.host.clone(),
-        port: req.port,
-        username: req.username.clone(),
-        password: req.password.clone(),
-        from: req.from.clone(),
-        secure: req.secure,
-    };
-
-    let test_result = test_smtp_connection_impl(&smtp_config).await;
-
-    let end_time = chrono::Utc::now();
-    let duration = end_time.timestamp() - start_time.timestamp();
-
-    let (status, details) = if let Err(e) = &test_result {
-        ("failed", serde_json::json!({ "error": e.to_string() }))
-    } else {
-        (
-            "success",
-            serde_json::json!({ "message": "SMTP连接测试成功" }),
-        )
-    };
-
-    if let Err(e) = sqlx::query("UPDATE task_logs SET status = $1, end_time = $2, duration = $3, details = $4 WHERE id = $5")
-        .bind(status)
-        .bind(end_time)
-        .bind(duration as i32)
-        .bind(sqlx::types::Json(details))
-        .bind(task_id)
-        .execute(&conn)
-        .await
-    {
-        tracing::warn!("更新SMTP测试日志失败: {}", e);
-    }
-
-    match test_result {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功"))),
-        Err(e) => Err(AppError::Internal(format!("SMTP连接测试失败: {e}"))),
-    }
-}
-
-pub async fn send_email(
-    state: web::Data<AppState>,
-    req: web::Json<SendEmailRequest>,
-) -> Result<HttpResponse, AppError> {
-    req.validate()?;
-
-    let conn = state.pool()?.get_conn();
-    let send_result: anyhow::Result<()> =
-        send_email_to_users(&conn, &req.user_ids, &req.subject, &req.body).await;
-
-    let end_time = chrono::Utc::now();
-    let result = send_result.is_ok();
-    let details = serde_json::json!({
-        "user_ids": req.user_ids,
-        "subject": req.subject,
-        "error": send_result.as_ref().err().map(|e: &anyhow::Error| e.to_string())
-    });
-
-    if let Err(e) = sqlx::query(
-        "INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
-    )
-    .bind(Uuid::new_v4())
-    .bind(Uuid::nil())
-    .bind("send_email")
-    .bind("email")
-    .bind(Uuid::nil())
-    .bind(sqlx::types::Json(details))
-    .bind(result)
-    .bind("system")
-    .bind(end_time)
-    .execute(&conn)
-    .await {
-        tracing::warn!("记录操作日志失败: {}", e);
-    }
-
-    match send_result {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功"))),
-        Err(e) => Err(AppError::Internal(format!("邮件发送失败: {e}"))),
-    }
-}
-
-pub async fn update_config(
-    _state: web::Data<AppState>,
-    req: web::Json<serde_json::Value>,
-) -> Result<HttpResponse, AppError> {
-    let mut current_config = Config::load().map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
-
-    if let Some(server_value) = req.get("server")
-        && let Ok(server_config) = serde_json::from_value::<ServerConfig>(server_value.clone())
-    {
-        let http_enabled = server_config.http_enabled.unwrap_or(false);
-        let https_enabled = server_config.https_enabled.unwrap_or(false);
-
-        if !http_enabled && !https_enabled {
-            return Err(AppError::Validation("至少需要开启一个端口（HTTP或HTTPS）".to_string()));
-        }
-
-        current_config.server = server_config;
-    }
-
-    let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
-
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置更新成功")))
-}
-
 #[derive(Debug, Serialize)]
 pub struct CertificateStatus {
     pub has_imported_cert: bool,
@@ -995,9 +347,9 @@ pub struct CertificateStatus {
     pub cert_type: String,
 }
 
-fn check_certificate_exists(dir: &str, cert_type: &str) -> bool {
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
+async fn check_certificate_exists(dir: &str, cert_type: &str) -> bool {
+    if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             if let Some(filename_os) = path.file_name()
                 && let Some(filename) = filename_os.to_str()
@@ -1015,9 +367,9 @@ pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
-    let has_imported_cert = check_certificate_exists(&certs_dir, "import");
+    let has_imported_cert = check_certificate_exists(&certs_dir, "import").await;
 
-    let has_self_signed_cert = check_certificate_exists(&certs_dir, "create");
+    let has_self_signed_cert = check_certificate_exists(&certs_dir, "create").await;
 
     let cert_type = match Config::load() {
         Ok(config) => config
@@ -1027,25 +379,14 @@ pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
         Err(_) => "self_signed".to_string(),
     };
 
-    let status = CertificateStatus {
-        has_imported_cert,
-        has_self_signed_cert,
-        cert_type,
-    };
-
-    Ok(HttpResponse::Ok().json(ApiResponse::success(status, "证书状态获取成功")))
-}
-
-#[derive(Debug, Deserialize, validator::Validate)]
-pub struct GenerateCertRequest {
-    #[validate(length(min = 1))]
-    pub common_name: String,
-    pub organization: Option<String>,
-    pub organizational_unit: Option<String>,
-    pub country: Option<String>,
-    pub state: Option<String>,
-    pub locality: Option<String>,
-    pub validity: Option<u32>,
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        CertificateStatus {
+            has_imported_cert,
+            has_self_signed_cert,
+            cert_type,
+        },
+        "证书状态获取成功",
+    )))
 }
 
 pub async fn generate_certificate(
@@ -1057,8 +398,8 @@ pub async fn generate_certificate(
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
-    if !std::path::Path::new(&certs_dir).exists() {
-        std::fs::create_dir_all(&certs_dir).map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
+    if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
+        tokio::fs::create_dir_all(&certs_dir).await.map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
     }
 
     let timestamp = chrono::Utc::now().timestamp();
@@ -1066,8 +407,16 @@ pub async fn generate_certificate(
     let cert_path = format!("{certs_dir}/{base_name}.pem");
     let key_path = format!("{certs_dir}/{base_name}.key");
 
-    generate_self_signed_cert(&cert_path, &key_path, &req, &state.config)
-        .map_err(|e| AppError::Internal(format!("生成证书失败: {e:?}")))?;
+    let cert_path_clone = cert_path.clone();
+    let key_path_clone = key_path.clone();
+    let req_clone = req.into_inner();
+    let config = state.config.clone();
+    tokio::task::spawn_blocking(move || {
+        generate_self_signed_cert(&cert_path_clone, &key_path_clone, &req_clone, &config)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("生成证书任务失败: {e}")))?
+    .map_err(|e| AppError::Internal(format!("生成证书失败: {e:?}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书生成成功")))
 }
@@ -1106,8 +455,8 @@ pub async fn import_certificate(
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
-    if !std::path::Path::new(&certs_dir).exists() {
-        std::fs::create_dir_all(&certs_dir).map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
+    if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
+        tokio::fs::create_dir_all(&certs_dir).await.map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
     }
 
     let timestamp = chrono::Utc::now().timestamp();
@@ -1115,9 +464,9 @@ pub async fn import_certificate(
     let cert_path = format!("{certs_dir}/{base_name}.pem");
     let key_path = format!("{certs_dir}/{base_name}.key");
 
-    std::fs::write(&cert_path, cert_data).map_err(|e| AppError::Internal(format!("保存证书文件失败: {e}")))?;
+    tokio::fs::write(&cert_path, cert_data).await.map_err(|e| AppError::Internal(format!("保存证书文件失败: {e}")))?;
 
-    std::fs::write(&key_path, key_data).map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
+    tokio::fs::write(&key_path, key_data).await.map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
 }
@@ -1142,13 +491,13 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
 
     let mut latest_cert: Option<(String, SystemTime)> = None;
 
-    if let Ok(entries) = std::fs::read_dir(&certs_dir) {
-        for entry in entries.flatten() {
+    if let Ok(mut entries) = tokio::fs::read_dir(&certs_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             if let Some(filename) = path.file_name().and_then(|f| f.to_str())
                 && filename.starts_with(prefix)
                 && filename.ends_with(".pem")
-                && let Ok(metadata) = entry.metadata()
+                && let Ok(metadata) = entry.metadata().await
                 && let Ok(modified) = metadata.modified()
             {
                 if let Some((_, latest_time)) = latest_cert {
@@ -1163,7 +512,7 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
     }
 
     if let Some((path, _)) = latest_cert {
-        let content = std::fs::read(&path).map_err(|e| AppError::Internal(e.to_string()))?;
+        let content = tokio::fs::read(&path).await.map_err(|e| AppError::Internal(e.to_string()))?;
         let filename = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())
@@ -1177,7 +526,7 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
             ))
             .body(content))
     } else {
-        Err(AppError::NotFound("Certificate not found".to_string()))
+        Err(AppError::Validation("未找到证书文件".to_string()))
     }
 }
 
@@ -1186,7 +535,7 @@ fn generate_self_signed_cert(
     key_path: &str,
     req: &GenerateCertRequest,
     config: &Config,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use rcgen::{
         CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, KeyPair,
         KeyUsagePurpose, SanType,
@@ -1277,11 +626,11 @@ pub async fn disable_init_mode(
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     tracing::info!("初始化模式已关闭，配置已保存，正在触发服务重启");
 
-    trigger_service_restart()
+    trigger_service_restart().await
 }
 
 pub async fn backup_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
@@ -1312,7 +661,7 @@ pub async fn restore_config(payload: web::Json<Config>) -> Result<HttpResponse, 
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置恢复成功")))
 }
@@ -1353,7 +702,7 @@ pub async fn update_session_timeout_config(
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "会话超时配置更新成功")))
 }
@@ -1399,7 +748,7 @@ pub async fn update_language_setting(
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "语言设置更新成功")))
 }
@@ -1424,7 +773,7 @@ pub async fn update_page_timeout_config(
     let config_path = crate::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    std::fs::write(&config_path, config_str).map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "页面超时配置更新成功")))
 }
@@ -1441,22 +790,14 @@ pub async fn get_notification_settings(state: web::Data<AppState>) -> Result<Htt
     .fetch_optional(&state.pool()?.get_conn())
     .await
     {
-        Ok(Some(recips)) => {
-            recips.split(',')
-                .filter_map(|id| Uuid::parse_str(id.trim()).ok())
-                .collect::<Vec<Uuid>>()
+        Ok(Some(value)) => {
+            serde_json::from_str(&value).unwrap_or_default()
         }
-        Ok(None) => Vec::new(),
-        Err(e) => {
-            tracing::warn!("查询通知收件人设置失败: {}", e);
-            Vec::new()
-        }
+        _ => Vec::new(),
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
-        NotificationSettings {
-            email_recipients: recipients,
-        },
+        NotificationSettings { email_recipients: recipients },
         "通知设置获取成功",
     )))
 }
@@ -1465,22 +806,106 @@ pub async fn update_notification_settings(
     state: web::Data<AppState>,
     req: web::Json<NotificationSettings>,
 ) -> Result<HttpResponse, AppError> {
-    let recipients_str = req
-        .email_recipients
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect::<Vec<String>>()
-        .join(",");
+    let value = serde_json::to_string(&req.email_recipients)
+        .map_err(|e| AppError::Internal(format!("序列化失败: {e}")))?;
 
     sqlx::query(
-        "INSERT INTO system_configs (config_type, key, value) 
-         VALUES ('notification', 'email_recipients', $1) 
-         ON CONFLICT (config_type, key) 
-         DO UPDATE SET value = $1, updated_at = NOW()",
+        "INSERT INTO system_configs (config_type, key, value) VALUES ('notification', 'email_recipients', $1)
+         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
     )
-    .bind(&recipients_str)
+    .bind(&value)
     .execute(&state.pool()?.get_conn())
-    .await?;
+    .await
+    .map_err(|e| AppError::Internal(format!("数据库操作失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
+}
+
+pub async fn get_smtp_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
+        Some(c) => c,
+        None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(config, "SMTP配置获取成功")))
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UpdateSmtpConfigRequest {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub from: String,
+    pub secure: bool,
+}
+
+pub async fn update_smtp_config(
+    state: web::Data<AppState>,
+    req: web::Json<UpdateSmtpConfigRequest>,
+) -> Result<HttpResponse, AppError> {
+    let config = SmtpConfig {
+        host: req.host.clone(),
+        port: req.port,
+        username: req.username.clone(),
+        password: req.password.clone(),
+        from: req.from.clone(),
+        secure: req.secure,
+    };
+
+    save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await
+        .map_err(|e| AppError::Internal(format!("保存SMTP配置失败: {e}")))?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct TestSmtpRequest {
+    #[validate(email(message = "邮箱格式不正确"))]
+    pub to: String,
+}
+
+pub async fn test_smtp_connection(
+    state: web::Data<AppState>,
+    req: web::Json<TestSmtpRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
+
+    let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
+        Some(c) => c,
+        None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
+    };
+
+    crate::system::smtp::test_smtp_connection(&config).await
+        .map_err(|e| AppError::Internal(format!("SMTP测试失败: {e}")))?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功")))
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SendSystemEmailRequest {
+    #[validate(length(min = 1, message = "收件人不能为空"))]
+    pub user_ids: Vec<Uuid>,
+    #[validate(length(min = 1, max = 255, message = "主题长度必须在1到255个字符之间"))]
+    pub subject: String,
+    #[validate(length(min = 1, message = "邮件内容不能为空"))]
+    pub body: String,
+}
+
+pub async fn send_system_email(
+    state: web::Data<AppState>,
+    req: web::Json<SendSystemEmailRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
+
+    send_email_to_users(
+        &state.pool()?.get_conn(),
+        &req.user_ids,
+        &req.subject,
+        &req.body,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("发送邮件失败: {e}")))?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功")))
 }

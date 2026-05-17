@@ -7,9 +7,9 @@ pub fn get_backup_dir() -> String {
     }
 }
 
-pub fn update_config_enabled(enabled: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn update_config_enabled(enabled: bool) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = crate::config::get_config_file_path();
-    let content = std::fs::read_to_string(&config_path)?;
+    let content = tokio::fs::read_to_string(&config_path).await?;
     let mut value: toml::Value = toml::from_str(&content)?;
     if let Some(init) = value.get_mut("init")
         && let Some(table) = init.as_table_mut()
@@ -17,6 +17,6 @@ pub fn update_config_enabled(enabled: bool) -> Result<(), Box<dyn std::error::Er
         table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
     }
     let new_content = toml::to_string(&value)?;
-    std::fs::write(&config_path, new_content)?;
+    tokio::fs::write(&config_path, new_content).await?;
     Ok(())
 }

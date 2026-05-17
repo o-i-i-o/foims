@@ -110,22 +110,28 @@ pub async fn export_csv(
         csv_data.push(export_ip_managers(&mut conn, utf8_bom).await?);
     }
 
-    let mut buf = Cursor::new(Vec::new());
-    let options = FileOptions::<'_, ()>::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+    let buf = tokio::task::spawn_blocking(move || {
+        let mut buf = Cursor::new(Vec::new());
+        let options = FileOptions::<'_, ()>::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o644);
 
-    {
-        let mut zip = ZipWriter::new(&mut buf);
-        for (filename, data) in csv_data {
-            zip.start_file(filename, options)
-                .map_err(|e| AppError::Internal(format!("创建ZIP文件失败: {e}")))?;
-            zip.write_all(&data)
-                .map_err(|e| AppError::Internal(format!("写入ZIP文件失败: {e}")))?;
+        {
+            let mut zip = ZipWriter::new(&mut buf);
+            for (filename, data) in csv_data {
+                zip.start_file(filename, options)
+                    .map_err(|e| AppError::Internal(format!("创建ZIP文件失败: {e}")))?;
+                zip.write_all(&data)
+                    .map_err(|e| AppError::Internal(format!("写入ZIP文件失败: {e}")))?;
+            }
+            zip.finish()
+                .map_err(|e| AppError::Internal(format!("完成ZIP文件失败: {e}")))?;
         }
-        zip.finish()
-            .map_err(|e| AppError::Internal(format!("完成ZIP文件失败: {e}")))?;
-    }
+
+        Ok::<Vec<u8>, AppError>(buf.into_inner())
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("ZIP压缩任务失败: {e}")))??;
 
     Ok(HttpResponse::Ok()
         .content_type("application/zip")
@@ -137,7 +143,7 @@ pub async fn export_csv(
                 chrono::Utc::now().format("%Y%m%d_%H%M%S")
             ),
         ))
-        .body(buf.into_inner()))
+        .body(buf))
 }
 
 async fn export_network_regions(
@@ -603,48 +609,53 @@ pub async fn import_csv(
     let mut conn = state.pool()?.acquire().await?;
 
     let mut results = Vec::new();
+    let file_data_clone = file_data.clone();
+    let filename_clone = filename.clone();
 
-    if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(file_data.clone())) {
-        for i in 0..zip.len() {
-            let mut file = zip.by_index(i)
-                .map_err(|e| AppError::Internal(format!("读取ZIP文件项失败: {e}")))?;
+    let csv_entries = tokio::task::spawn_blocking(move || {
+        let mut entries = Vec::new();
+        if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(file_data_clone.clone())) {
+            for i in 0..zip.len() {
+                let mut file = zip.by_index(i)
+                    .map_err(|e| AppError::Internal(format!("读取ZIP文件项失败: {e}")))?;
 
-            let zip_filename = file.name().to_string();
-            if zip_filename.ends_with(".csv") {
-                let mut content = String::new();
-                file.read_to_string(&mut content)
-                    .map_err(|e| AppError::Internal(format!("读取CSV文件失败: {e}")))?;
-
-                let table_name = zip_filename.trim_end_matches(".csv");
-                if let Err(e) = process_csv_by_filename(
-                    &mut conn,
-                    table_name,
-                    &content,
-                    overwrite,
-                    &mut results,
-                )
-                .await
-                {
-                    results.push(format!("导入 {zip_filename} 失败: {e}"));
+                let zip_filename = file.name().to_string();
+                if zip_filename.ends_with(".csv") {
+                    let mut content = String::new();
+                    file.read_to_string(&mut content)
+                        .map_err(|e| AppError::Internal(format!("读取CSV文件失败: {e}")))?;
+                    entries.push((zip_filename.trim_end_matches(".csv").to_string(), content));
                 }
             }
+        } else {
+            let content = String::from_utf8(file_data_clone).map_err(|e| {
+                AppError::Validation(format!(
+                    "解析CSV文件失败: 文件编码必须是UTF-8 - {e}"
+                ))
+            })?;
+            let table_name = filename_clone
+                .as_ref()
+                .and_then(|f| f.trim_end_matches(".csv").split('.').next())
+                .unwrap_or("unknown")
+                .to_string();
+            entries.push((table_name, content));
         }
-    } else {
-        let content = String::from_utf8(file_data).map_err(|e| {
-            AppError::Validation(format!(
-                "解析CSV文件失败: 文件编码必须是UTF-8 - {e}"
-            ))
-        })?;
+        Ok::<Vec<(String, String)>, AppError>(entries)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("ZIP解压任务失败: {e}")))??;
 
-        let table_name = filename
-            .as_ref()
-            .and_then(|f| f.trim_end_matches(".csv").split('.').next())
-            .unwrap_or("unknown");
-
-        if let Err(e) =
-            process_csv_by_filename(&mut conn, table_name, &content, overwrite, &mut results).await
+    for (table_name, content) in csv_entries {
+        if let Err(e) = process_csv_by_filename(
+            &mut conn,
+            &table_name,
+            &content,
+            overwrite,
+            &mut results,
+        )
+        .await
         {
-            results.push(format!("导入失败: {e}"));
+            results.push(format!("导入 {table_name}.csv 失败: {e}"));
         }
     }
 
@@ -2218,28 +2229,32 @@ pub async fn download_template(
 pub async fn export_database(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
-    let db_config = &state.config.database;
+    let db_config = state.config.database.clone();
 
-    let output = std::process::Command::new("pg_dump")
-        .arg("-h")
-        .arg(&db_config.host)
-        .arg("-p")
-        .arg(db_config.port.to_string())
-        .arg("-U")
-        .arg(&db_config.username)
-        .arg("-d")
-        .arg(&db_config.database)
-        .arg("--no-owner")
-        .arg("--no-acl")
-        .arg("--clean")
-        .arg("--if-exists")
-        .env("PGPASSWORD", &db_config.password)
-        .output()
-        .map_err(|e| {
-            AppError::Internal(format!(
-                "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
-            ))
-        })?;
+    let output = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("pg_dump")
+            .arg("-h")
+            .arg(&db_config.host)
+            .arg("-p")
+            .arg(db_config.port.to_string())
+            .arg("-U")
+            .arg(&db_config.username)
+            .arg("-d")
+            .arg(&db_config.database)
+            .arg("--no-owner")
+            .arg("--no-acl")
+            .arg("--clean")
+            .arg("--if-exists")
+            .env("PGPASSWORD", &db_config.password)
+            .output()
+            .map_err(|e| {
+                AppError::Internal(format!(
+                    "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
+                ))
+            })
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("pg_dump 任务失败: {e}")))??;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

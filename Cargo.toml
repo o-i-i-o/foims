@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.8.96"
+version = "0.8.99"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -13,11 +13,11 @@ actix-multipart = "0.7.2"
 actix-files = "0.6.10"
 actix-cors = "0.7.1"
 
-rustls = { version = "0.23.38", features = ["ring"] }
-rustls-pki-types = "1.14.0"
+rustls = { version = "0.23.40", features = ["ring"] }
+rustls-pki-types = "1.14.1"
 pem = "3.0.6"
 tokio-rustls = "0.26.4"
-rcgen = "0.14.7"
+rcgen = "0.14.8"
 
 # SQLx PostgreSQL驱动
 sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json", "macros"] }
@@ -29,8 +29,8 @@ serde_json = "1.0.149"
 regex = "1.12.3"
 
 # 密码加密
-bcrypt = "0.19.0"
-jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+bcrypt = "0.19.1"
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
 rand = "0.10.1"
 
@@ -54,32 +54,32 @@ async-snmp = "0.12.0"
 tokio-cron-scheduler = "0.15.1"
 
 # 配置管理
-config = { version = "0.15.22", features = ["toml"] }
+config = { version = "0.15.23", features = ["toml"] }
 toml = "1.1.2"
 
 # 其他工具
-tokio = { version = "1.51.1", features = ["full"] }
-socket2 = "0.5"
+tokio = { version = "1.52.3", features = ["full"] }
+socket2 = "0.6"
 anyhow = "1.0.102"
 thiserror = "2.0.18"
 chrono = { version = "0.4.44", features = ["serde"] }
-uuid = { version = "1.23.0", features = ["v4", "serde"] }
+uuid = { version = "1.23.1", features = ["v4", "serde"] }
 futures-util = "0.3.32"
 num_cpus = "1.17.0"
 csv = "1.4.0"
 dashmap = "6.1.0"
 base64 = "0.22.1"
-lettre = { version = "0.11.21", features = ["tokio1", "tokio1-native-tls"] }
+lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "5.7.1", features = ["qr", "gen_secret"] }
 flate2 = "1.1.9"
-zip = { version = "8.5.1", default-features = false, features = ["deflate"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # 国际化支持
 rust-i18n = "4.0.0"
 time = "0.3.47"
 
 [dev-dependencies]
 actix-rt = "2.11.0"
-tokio = { version = "1.51.1", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 
 [features]
 default = []

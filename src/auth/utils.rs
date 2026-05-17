@@ -383,3 +383,14 @@ pub fn get_client_info_from_service_request(
 ) -> (String, String) {
     get_client_info(req.request())
 }
+
+// 异步密码哈希函数，使用 spawn_blocking 避免阻塞 tokio 线程
+pub async fn hash_password(password: &str) -> Result<String, crate::error::AppError> {
+    let password = password.to_string();
+    tokio::task::spawn_blocking(move || {
+        bcrypt::hash(&password, bcrypt::DEFAULT_COST)
+    })
+    .await
+    .map_err(|e| crate::error::AppError::Internal(format!("密码哈希任务失败: {e}")))?
+    .map_err(|err| crate::error::AppError::Internal(format!("密码哈希错误: {err}")))
+}

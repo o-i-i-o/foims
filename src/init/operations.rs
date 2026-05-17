@@ -5,25 +5,31 @@ use crate::init::config::get_backup_dir;
 
 pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<String, String> {
     let backup_dir = get_backup_dir();
-    std::fs::create_dir_all(&backup_dir).map_err(|e| format!("创建备份目录失败: {e}"))?;
+    tokio::fs::create_dir_all(&backup_dir).await.map_err(|e| format!("创建备份目录失败: {e}"))?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
 
-    let output = std::process::Command::new("pg_dump")
-        .arg("-h")
-        .arg(&config.host)
-        .arg("-p")
-        .arg(config.port.to_string())
-        .arg("-U")
-        .arg(&config.username)
-        .arg("-d")
-        .arg(&config.database)
-        .arg("-f")
-        .arg(&backup_file)
-        .env("PGPASSWORD", &config.password)
-        .output()
-        .map_err(|e| format!("执行pg_dump失败: {e}"))?;
+    let config = config.clone();
+    let backup_file_clone = backup_file.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("pg_dump")
+            .arg("-h")
+            .arg(&config.host)
+            .arg("-p")
+            .arg(config.port.to_string())
+            .arg("-U")
+            .arg(&config.username)
+            .arg("-d")
+            .arg(&config.database)
+            .arg("-f")
+            .arg(&backup_file_clone)
+            .env("PGPASSWORD", &config.password)
+            .output()
+            .map_err(|e| format!("执行pg_dump失败: {e}"))
+    })
+    .await
+    .map_err(|e| format!("pg_dump任务失败: {e}"))??;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
