@@ -602,7 +602,7 @@ pub async fn refresh_token(
 
     if crate::utils::is_token_revoked(&conn, &token)
         .await
-        .unwrap_or(false)
+        .map_err(|e| { tracing::error!("检查令牌撤销状态失败: {}", e); AppError::Database(e.to_string()) })?
     {
         return Err(AppError::Unauthorized("令牌已撤销".to_string()));
     }

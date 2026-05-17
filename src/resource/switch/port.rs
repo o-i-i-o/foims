@@ -155,7 +155,7 @@ pub async fn create_switch_port(
             .bind(switch_id)
             .fetch_one(&state.pool()?.get_conn())
             .await
-            .unwrap_or(false);
+            ?;
 
     if !switch_exists {
         return Err(AppError::NotFound("交换机不存在".to_string()));
@@ -168,7 +168,7 @@ pub async fn create_switch_port(
     .bind(&req.port_number)
     .fetch_one(&state.pool()?.get_conn())
     .await
-    .unwrap_or(false);
+    ?;
 
     if port_exists {
         return Err(AppError::Conflict("该端口号已存在".to_string()));
@@ -337,7 +337,7 @@ pub async fn delete_switch_port(
     .bind(port_id)
     .fetch_one(&state.pool()?.get_conn())
     .await
-    .unwrap_or(false);
+    ?;
 
     if has_child_switch {
         return Err(AppError::Validation("该端口有下级交换机连接，无法删除".to_string()));
@@ -349,7 +349,7 @@ pub async fn delete_switch_port(
     .bind(port_id)
     .fetch_one(&state.pool()?.get_conn())
     .await
-    .unwrap_or(false);
+    ?;
 
     if has_workstation {
         return Err(AppError::Validation("该端口有工位关联，无法删除".to_string()));
@@ -361,7 +361,7 @@ pub async fn delete_switch_port(
     .bind(port_id)
     .fetch_one(&state.pool()?.get_conn())
     .await
-    .unwrap_or(false);
+    ?;
 
     if has_cabinet_position {
         return Err(AppError::Validation("该端口有机位关联，无法删除".to_string()));
@@ -491,7 +491,7 @@ pub async fn sync_ports_from_snmp(
     .bind(switch_id)
     .fetch_all(&state.pool()?.get_conn())
     .await
-    .unwrap_or_default();
+    ?;
 
     let message = if saved_count > 0 && skipped_count > 0 {
         format!(

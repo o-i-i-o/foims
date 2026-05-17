@@ -197,8 +197,7 @@ pub async fn create_ip_manager(
         )
         .bind(req.position_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
+        .await?
         .flatten();
 
         if pos_device_type.as_deref() != Some("switch") {
@@ -213,8 +212,7 @@ pub async fn create_ip_manager(
             )
             .bind(ws_id)
             .fetch_optional(&state.pool()?.get_conn())
-            .await
-            .ok()
+            .await?
             .flatten();
 
             if let Some(rid) = room_id {
@@ -224,8 +222,7 @@ pub async fn create_ip_manager(
                 .bind(rid)
                 .bind(req.network_id)
                 .fetch_one(&state.pool()?.get_conn())
-                .await
-                .unwrap_or(false);
+                .await?;
 
                 if !network_in_room {
                     return Err(AppError::Validation("所选网段不属于该工位所在房间的可用网段".to_string()));
@@ -238,8 +235,7 @@ pub async fn create_ip_manager(
         )
         .bind(pos_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
+        .await?
         .flatten();
 
         if let Some(rid) = room_id {
@@ -249,8 +245,7 @@ pub async fn create_ip_manager(
             .bind(rid)
             .bind(req.network_id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(false);
+            .await?;
 
             if !network_in_room {
                 return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
@@ -627,8 +622,7 @@ pub async fn update_ip_manager(
         )
         .bind(req.position_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
+        .await?
         .flatten();
 
         if pos_device_type.as_deref() != Some("switch") {
@@ -647,8 +641,7 @@ pub async fn update_ip_manager(
             )
             .bind(ws_id)
             .fetch_optional(&state.pool()?.get_conn())
-            .await
-            .ok()
+            .await?
             .flatten();
 
             if let Some(rid) = room_id {
@@ -658,8 +651,7 @@ pub async fn update_ip_manager(
                 .bind(rid)
                 .bind(network_id)
                 .fetch_one(&state.pool()?.get_conn())
-                .await
-                .unwrap_or(false);
+                .await?;
 
                 if !network_in_room {
                     return Err(AppError::Validation("所选网段不属于该工位所在房间的可用网段".to_string()));
@@ -672,8 +664,7 @@ pub async fn update_ip_manager(
         )
         .bind(pos_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
+        .await?
         .flatten();
 
         if let Some(rid) = room_id {
@@ -683,8 +674,7 @@ pub async fn update_ip_manager(
             .bind(rid)
             .bind(network_id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(false);
+            .await?;
 
             if !network_in_room {
                 return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
@@ -812,8 +802,7 @@ pub async fn pull_ip_managers(
     )
     .bind(network_id)
     .fetch_one(&state.pool()?.get_conn())
-    .await
-    .unwrap_or(false);
+    .await?;
 
     if !network_exists {
         return Err(AppError::Validation("未找到网段信息".to_string()));
@@ -825,8 +814,7 @@ pub async fn pull_ip_managers(
     .bind(switch_id)
     .bind(network_id)
     .fetch_all(&state.pool()?.get_conn())
-    .await
-    .unwrap_or_default();
+    .await?;
 
     if switch_macs.is_empty() {
         let total_macs: i64 = sqlx::query_scalar(
@@ -834,8 +822,7 @@ pub async fn pull_ip_managers(
         )
         .bind(switch_id)
         .fetch_one(&state.pool()?.get_conn())
-        .await
-        .unwrap_or(0);
+        .await?;
 
         if total_macs == 0 {
             return Ok(
@@ -864,8 +851,10 @@ pub async fn pull_ip_managers(
         .bind(ip)
         .fetch_optional(&state.pool()?.get_conn())
         .await
-        .ok()
-        .flatten();
+        .map_err(|e| {
+            error!("查询IP {} 当前信息失败: {}", ip, e);
+            e
+        })?;
 
         let Some((old_mac, device_type, ws_id, pos_id)) = current else {
             continue;
@@ -889,7 +878,10 @@ pub async fn pull_ip_managers(
         .bind(pos_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await
-        .ok()
+        .map_err(|e| {
+            error!("查询MAC冲突检测失败 (IP: {}): {}", ip, e);
+            e
+        })?
         .flatten();
 
         if let Some(conflict_ip) = mac_conflict {
@@ -956,9 +948,7 @@ pub async fn pull_ip_managers(
                 )
                 .bind(ip)
                 .fetch_optional(&state.pool()?.get_conn())
-                .await
-                .ok()
-                .flatten()
+                .await?
                 .flatten();
 
                 if let Some(ws_id) = workstation_id {
@@ -1031,7 +1021,7 @@ pub async fn pull_ip_managers_internal(
     .bind(network_id)
     .fetch_all(pool)
     .await
-    .unwrap_or_default();
+    .map_err(|e| format!("查询交换机MAC地址失败: {e}"))?;
 
     if switch_macs.is_empty() {
         return Err("未发现属于该网段的已管理IP地址".to_string());
@@ -1122,8 +1112,7 @@ pub async fn pull_ip_managers_internal(
                 .bind(ip)
                 .fetch_optional(pool)
                 .await
-                .ok()
-                .flatten()
+                .map_err(|e| format!("查询工位ID失败: {e}"))?
                 .flatten();
 
                 if let Some(ws_id) = workstation_id {
@@ -1170,8 +1159,7 @@ pub async fn get_available_ips(
             sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
                 .fetch_all(&state.pool()?.get_conn())
-                .await
-                .unwrap_or_default();
+                .await?;
 
         let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
@@ -1207,8 +1195,7 @@ pub async fn get_available_ips(
             sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
                 .bind(network_id)
                 .fetch_all(&state.pool()?.get_conn())
-                .await
-                .unwrap_or_default();
+                .await?;
 
         let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
@@ -1266,9 +1253,7 @@ pub async fn auto_assign_ip(
         )
         .bind(position_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
-        .flatten();
+        .await?;
 
         match pos_device_type.as_deref() {
             Some("switch") => "switch".to_string(),
@@ -1285,9 +1270,7 @@ pub async fn auto_assign_ip(
             )
             .bind(ws_id)
             .fetch_optional(&state.pool()?.get_conn())
-            .await
-            .ok()
-            .flatten();
+            .await?;
 
             if let Some(rid) = room_id {
                 let network_in_room: bool = sqlx::query_scalar(
@@ -1296,8 +1279,7 @@ pub async fn auto_assign_ip(
                 .bind(rid)
                 .bind(network_id)
                 .fetch_one(&state.pool()?.get_conn())
-                .await
-                .unwrap_or(false);
+                .await?;
 
                 if !network_in_room {
                     return Err(AppError::Validation("所选网段不属于该工位所在房间的可用网段".to_string()));
@@ -1310,9 +1292,7 @@ pub async fn auto_assign_ip(
         )
         .bind(pos_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
-        .flatten();
+        .await?;
 
         if let Some(rid) = room_id {
             let network_in_room: bool = sqlx::query_scalar(
@@ -1321,8 +1301,7 @@ pub async fn auto_assign_ip(
             .bind(rid)
             .bind(network_id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(false);
+            .await?;
 
             if !network_in_room {
                 return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
@@ -1345,8 +1324,7 @@ pub async fn auto_assign_ip(
                 )
                 .bind(network_id)
                 .fetch_all(&state.pool()?.get_conn())
-                .await
-                .unwrap_or_default();
+                .await?;
 
                 let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
                 let gateway_ip = network.ipv4_gateway.clone();
@@ -1394,8 +1372,7 @@ pub async fn auto_assign_ip(
                     )
                     .bind(network_id)
                     .fetch_all(&state.pool()?.get_conn())
-                    .await
-                    .unwrap_or_default();
+                    .await?;
 
                     let used_set: std::collections::HashSet<String> =
                         used_ips.into_iter().collect();
@@ -1582,9 +1559,7 @@ pub async fn batch_create_ip_managers(
                 )
                 .bind(ws_id)
                 .fetch_optional(tx.as_mut())
-                .await
-                .ok()
-                .flatten();
+                .await?;
 
                 if let Some(rid) = room_id {
                     let network_in_room: bool = sqlx::query_scalar(
@@ -1593,8 +1568,7 @@ pub async fn batch_create_ip_managers(
                     .bind(rid)
                     .bind(ip_req.network_id)
                     .fetch_one(tx.as_mut())
-                    .await
-                    .unwrap_or(false);
+                    .await?;
 
                     if !network_in_room {
                         duplicate_errors.push(format!("第{}条记录: 所选网段不属于该工位所在房间的可用网段", index + 1));
@@ -1608,9 +1582,7 @@ pub async fn batch_create_ip_managers(
             )
             .bind(pos_id)
             .fetch_optional(tx.as_mut())
-            .await
-            .ok()
-            .flatten();
+            .await?;
 
             if let Some(rid) = room_id {
                 let network_in_room: bool = sqlx::query_scalar(
@@ -1619,8 +1591,7 @@ pub async fn batch_create_ip_managers(
                 .bind(rid)
                 .bind(ip_req.network_id)
                 .fetch_one(tx.as_mut())
-                .await
-                .unwrap_or(false);
+                .await?;
 
                 if !network_in_room {
                     duplicate_errors.push(format!("第{}条记录: 所选网段不属于该机位所在房间的可用网段", index + 1));

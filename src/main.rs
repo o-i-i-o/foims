@@ -1,10 +1,11 @@
 use actix_cors::Cors;
 use actix_files::Files;
+use actix_web::middleware::Compress;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{SocketAddr, TcpListener};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 
 use ipma::app_state::AppState;
@@ -26,7 +27,14 @@ fn build_cors_middleware(config: &Config) -> Cors {
     let allowed_origins = config.server.cors_allowed_origins.clone();
 
     Cors::default()
-        .allow_any_method()
+        .allowed_methods(vec![
+            actix_web::http::Method::GET,
+            actix_web::http::Method::POST,
+            actix_web::http::Method::PUT,
+            actix_web::http::Method::DELETE,
+            actix_web::http::Method::PATCH,
+            actix_web::http::Method::OPTIONS,
+        ])
         .allow_any_header()
         .supports_credentials()
         .max_age(3600)
@@ -126,8 +134,33 @@ fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<T
     unreachable!()
 }
 
+fn validate_html_path(path: &str) -> Option<PathBuf> {
+    let resolved = PathBuf::from(path);
+    let canonical = match resolved.canonicalize() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+
+    let web_dir = PathBuf::from(get_web_dir());
+    let canonical_web_dir = match web_dir.canonicalize() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+
+    if canonical.starts_with(&canonical_web_dir) {
+        Some(canonical)
+    } else {
+        None
+    }
+}
+
 async fn serve_html_file(path: &str) -> actix_web::HttpResponse {
-    match tokio::fs::read_to_string(path).await {
+    let validated_path = match validate_html_path(path) {
+        Some(p) => p,
+        None => return actix_web::HttpResponse::NotFound().finish(),
+    };
+
+    match tokio::fs::read_to_string(&validated_path).await {
         Ok(content) => actix_web::HttpResponse::Ok()
             .content_type("text/html")
             .body(content),
@@ -247,17 +280,20 @@ async fn main() -> std::io::Result<()> {
 
     let http_version = config.server.http_version.as_deref().unwrap_or("http2");
 
-    let http_app_state = Data::new(AppState {
+    let app_state = Data::new(AppState {
         config: config.clone(),
         pool: pool.clone(),
     });
+
     let http_rate_limiter = rate_limiter.clone();
     let http_rate_limit_enabled = rate_limit_enabled;
+    let http_app_state = app_state.clone();
     let create_http_app = move || {
         let auto_https = http_app_state.config.server.auto_https.unwrap_or(false);
         let enable_normal_routes = !auto_https;
 
         let mut app = App::new()
+            .wrap(Compress::default())
             .wrap(actix_web::middleware::Logger::default())
             .wrap(build_cors_middleware(&http_app_state.config))
             .wrap(RateLimitMiddleware::new(
@@ -275,15 +311,13 @@ async fn main() -> std::io::Result<()> {
         app
     };
 
-    let https_app_state = Data::new(AppState {
-        config: config.clone(),
-        pool: pool.clone(),
-    });
     let https_rate_limiter = rate_limiter.clone();
     let https_rate_limit_enabled = rate_limit_enabled;
+    let https_app_state = app_state.clone();
     let https_port = config.server.https_port.unwrap_or(443);
     let create_https_app = move || {
         App::new()
+            .wrap(Compress::default())
             .wrap(actix_web::middleware::Logger::default())
             .wrap(ipma::utils::hsts::hsts_middleware())
             .wrap(build_cors_middleware(&https_app_state.config))
@@ -517,7 +551,8 @@ fn configure_app_services(
         .service(
             Files::new("/static", format!("{}/static", get_web_dir()))
                 .prefer_utf8(true)
-                .use_etag(true),
+                .use_etag(true)
+                .use_last_modified(true),
         )
         .route(
             "/",
@@ -532,7 +567,8 @@ fn configure_app_services(
         cfg.service(
             Files::new("/static", &static_path)
                 .prefer_utf8(true)
-                .use_etag(true),
+                .use_etag(true)
+                .use_last_modified(true),
         )
         .route(
             "/static/locales/{lang}/{file:.*\\.json}",

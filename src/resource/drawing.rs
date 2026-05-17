@@ -313,8 +313,8 @@ pub async fn get_room_cabinets_with_positions(
         )
         .bind(cab_id)
         .fetch_all(&state.pool()?.get_conn())
-        .await
-        .unwrap_or_default();
+    .await
+    ?;
 
         let pos_items: Vec<serde_json::Value> = positions.iter().map(|(id, name, pos_cab_id, start_u, end_u, desc, dt, did)| {
             serde_json::json!({

@@ -315,7 +315,7 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
     .await
-    .unwrap_or_default();
+    ?;
 
     let ips_json: Vec<serde_json::Value> = ips
         .into_iter()
@@ -436,7 +436,7 @@ pub async fn create_switch(
         .bind(&ip.ip_address)
         .fetch_one(&state.pool()?.get_conn())
         .await
-        .unwrap_or(false);
+        ?;
 
         if ip_exists {
             return Err(AppError::Conflict(format!("IP地址 {} 已存在", ip.ip_address)));
@@ -459,7 +459,7 @@ pub async fn create_switch(
             .bind(ip.network_id)
             .fetch_one(&state.pool()?.get_conn())
             .await
-            .unwrap_or(false);
+            ?;
 
             if !network_in_room {
                 return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
@@ -554,7 +554,7 @@ pub async fn update_switch(
             .bind(id)
             .fetch_one(&state.pool()?.get_conn())
             .await
-            .unwrap_or(false);
+            ?;
 
     if !exists {
         return Err(AppError::NotFound("交换机不存在".to_string()));
@@ -655,7 +655,7 @@ pub async fn update_switch(
             .bind(id)
             .fetch_one(&state.pool()?.get_conn())
             .await
-            .unwrap_or(false);
+            ?;
 
             if ip_exists {
                 return Err(AppError::Conflict(format!("IP地址 {} 已被其他设备使用", ip.ip_address)));
@@ -679,7 +679,7 @@ pub async fn update_switch(
                     .bind(ip.network_id)
                     .fetch_one(&state.pool()?.get_conn())
                     .await
-                    .unwrap_or(false);
+                    ?;
 
                     if !network_in_room {
                         return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
@@ -774,7 +774,7 @@ pub async fn delete_switch(
     .bind(id)
     .fetch_one(&state.pool()?.get_conn())
     .await
-    .unwrap_or(false);
+    ?;
 
     if has_children {
         return Err(AppError::Validation("该交换机存在下级交换机，无法删除".to_string()));

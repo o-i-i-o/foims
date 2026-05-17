@@ -16,7 +16,7 @@ pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpRespo
     )
     .fetch_all(&state.pool()?.get_conn())
     .await
-    .unwrap_or_default();
+    ?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(tasks, "获取定时任务列表成功")))
 }
@@ -281,7 +281,7 @@ pub async fn get_task_logs(
         .bind(limit)
         .fetch_all(&conn)
         .await
-        .unwrap_or_default()
+        ?
     } else {
         sqlx::query_as::<_, crate::models::TaskLog>(
             "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
@@ -289,7 +289,7 @@ pub async fn get_task_logs(
         .bind(limit)
         .fetch_all(&conn)
         .await
-        .unwrap_or_default()
+        ?
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(logs, "获取任务日志成功")))

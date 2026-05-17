@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::RwLock as SyncRwLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time;
 use tracing::{debug, error, info, warn};
@@ -46,24 +47,36 @@ impl PoolMetrics {
             self.failed_requests.fetch_add(1, Ordering::Relaxed);
         }
 
-        let current_avg = self.avg_wait_time_ms.load(Ordering::Relaxed);
-        let new_avg = if current_avg == 0 {
-            wait_time_ms
-        } else {
-            (current_avg * 9 + wait_time_ms) / 10
-        };
-        self.avg_wait_time_ms.store(new_avg, Ordering::Relaxed);
+        self.update_avg_wait_time(wait_time_ms);
 
-        self.last_updated.store(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or_else(|e| {
-                    tracing::warn!("系统时间异常: {}, 使用0作为时间戳", e);
-                    0
-                }),
-            Ordering::Relaxed,
-        );
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_else(|e| {
+                tracing::warn!("系统时间异常: {}, 使用0作为时间戳", e);
+                0
+            });
+        self.last_updated.store(now, Ordering::Relaxed);
+    }
+
+    fn update_avg_wait_time(&self, wait_time_ms: u64) {
+        let mut current = self.avg_wait_time_ms.load(Ordering::Relaxed);
+        loop {
+            let new_avg = if current == 0 {
+                wait_time_ms
+            } else {
+                (current * 9 + wait_time_ms) / 10
+            };
+            match self.avg_wait_time_ms.compare_exchange_weak(
+                current,
+                new_avg,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(actual) => current = actual,
+            }
+        }
     }
 
     pub fn update_connection_counts(&self, active: u32, idle: u32) {
@@ -110,16 +123,20 @@ pub struct PoolConfig {
     pub scaling_cooldown_secs: u64,
     pub query_timeout_secs: u64,
     pub slow_query_threshold_ms: u64,
+    pub statement_timeout_ms: u64,
+    pub lock_timeout_ms: u64,
+    pub retry_max_attempts: u32,
+    pub retry_base_delay_ms: u64,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            max_connections: 10,
-            min_connections: 5,
-            acquire_timeout_secs: 15,
-            idle_timeout_secs: 60,
-            max_lifetime_secs: 1800,
+            max_connections: 20,
+            min_connections: 10,
+            acquire_timeout_secs: 5,
+            idle_timeout_secs: 300,
+            max_lifetime_secs: 3600,
             test_before_acquire: true,
             health_check_interval_secs: 30,
             auto_scaling_enabled: true,
@@ -128,6 +145,10 @@ impl Default for PoolConfig {
             scaling_cooldown_secs: 60,
             query_timeout_secs: 30,
             slow_query_threshold_ms: 1000,
+            statement_timeout_ms: 30000,
+            lock_timeout_ms: 5000,
+            retry_max_attempts: 3,
+            retry_base_delay_ms: 100,
         }
     }
 }
@@ -148,6 +169,10 @@ impl From<&DatabaseConfig> for PoolConfig {
             scaling_cooldown_secs: 60,
             query_timeout_secs: config.query_timeout_secs,
             slow_query_threshold_ms: config.slow_query_threshold_ms,
+            statement_timeout_ms: 30000,
+            lock_timeout_ms: 5000,
+            retry_max_attempts: 3,
+            retry_base_delay_ms: 100,
         }
     }
 }
@@ -172,8 +197,14 @@ impl DbPool {
         pool_config: PoolConfig,
     ) -> Result<Self, sqlx::Error> {
         let url = format!(
-            "postgres://{}:{}@{}:{}/{}",
-            config.username, config.password, config.host, config.port, config.database
+            "postgres://{}:{}@{}:{}/{}?statement_timeout={}&lock_timeout={}",
+            config.username,
+            config.password,
+            config.host,
+            config.port,
+            config.database,
+            pool_config.statement_timeout_ms,
+            pool_config.lock_timeout_ms
         );
 
         let pool = Self::create_pool(&url, &pool_config).await?;
@@ -187,17 +218,31 @@ impl DbPool {
         })
     }
 
+    fn mask_password(password: &str) -> String {
+        if password.len() <= 2 {
+            "*".repeat(password.len().max(1))
+        } else {
+            format!("{}{}{}", &password[..1], "*".repeat(password.len() - 2), &password[password.len()-1..])
+        }
+    }
+
+    fn read_pool(&self) -> PgPool {
+        self.pool
+            .read()
+            .unwrap_or_else(|e| {
+                warn!("数据库连接池读锁中毒，自动恢复: {}", e);
+                e.into_inner()
+            })
+            .clone()
+    }
+
     async fn create_pool(url: &str, config: &PoolConfig) -> Result<PgPool, sqlx::Error> {
         sqlx::postgres::PgPoolOptions::new()
             .max_connections(config.max_connections)
             .min_connections(config.min_connections)
-            .acquire_timeout(std::time::Duration::from_secs(config.acquire_timeout_secs))
-            .idle_timeout(Some(std::time::Duration::from_secs(
-                config.idle_timeout_secs,
-            )))
-            .max_lifetime(Some(std::time::Duration::from_secs(
-                config.max_lifetime_secs,
-            )))
+            .acquire_timeout(Duration::from_secs(config.acquire_timeout_secs))
+            .idle_timeout(Some(Duration::from_secs(config.idle_timeout_secs)))
+            .max_lifetime(Some(Duration::from_secs(config.max_lifetime_secs)))
             .test_before_acquire(config.test_before_acquire)
             .connect(url)
             .await
@@ -217,7 +262,7 @@ impl DbPool {
     pub async fn acquire(
         &self,
     ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
         self.metrics.record_request_start();
 
         let pool = self.read_pool();
@@ -245,20 +290,15 @@ impl DbPool {
         self.read_pool()
     }
 
-    fn read_pool(&self) -> PgPool {
-        self.pool
-            .read()
-            .unwrap_or_else(|e| {
-                warn!("数据库连接池读锁中毒，自动恢复: {}", e);
-                e.into_inner()
-            })
-            .clone()
+    pub async fn begin(&self) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, sqlx::Error> {
+        let pool = self.read_pool();
+        pool.begin().await
     }
 
     pub async fn health_check(&self) -> Result<bool, sqlx::Error> {
         let pool = self.read_pool();
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+        let result = time::timeout(
+            Duration::from_secs(5),
             sqlx::query("SELECT 1").execute(&pool),
         )
         .await;
@@ -327,10 +367,18 @@ impl DbPool {
         }
 
         let url = self.build_database_url();
+        let masked_url = format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.db_config.username,
+            Self::mask_password(&self.db_config.password),
+            self.db_config.host,
+            self.db_config.port,
+            self.db_config.database
+        );
         let new_pool = match Self::create_pool(&url, &new_config).await {
             Ok(p) => p,
             Err(e) => {
-                error!("创建新连接池失败: {}", e);
+                error!("创建新连接池失败 ({}): {}", masked_url, e);
                 let mut config = self.config.write().await;
                 config.max_connections = old_max;
                 return Err(e);
@@ -346,7 +394,7 @@ impl DbPool {
         };
 
         tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             old_pool.close().await;
         });
 
@@ -419,7 +467,7 @@ impl DbPool {
     pub fn start_health_check_task(&self, interval_seconds: u64) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
-            let mut interval = time::interval(time::Duration::from_secs(interval_seconds));
+            let mut interval = time::interval(Duration::from_secs(interval_seconds));
             loop {
                 interval.tick().await;
 
@@ -456,7 +504,7 @@ impl DbPool {
     pub fn start_metrics_collection_task(&self, interval_seconds: u64) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
-            let mut interval = time::interval(time::Duration::from_secs(interval_seconds));
+            let mut interval = time::interval(Duration::from_secs(interval_seconds));
             loop {
                 interval.tick().await;
 
@@ -483,13 +531,11 @@ impl DbPool {
     }
 
     #[must_use]
-    pub fn get_query_timeout(&self) -> std::time::Duration {
-        let config = self
-            .config
+    pub fn get_query_timeout(&self) -> Duration {
+        self.config
             .try_read()
-            .map(|c| c.query_timeout_secs)
-            .unwrap_or(30);
-        std::time::Duration::from_secs(config)
+            .map(|c| Duration::from_secs(c.query_timeout_secs))
+            .unwrap_or(Duration::from_secs(30))
     }
 
     #[must_use]
@@ -510,11 +556,11 @@ impl DbPool {
     {
         let timeout = self.get_query_timeout();
         let slow_threshold = self.get_slow_query_threshold_ms();
-        let start = std::time::Instant::now();
+        let start = Instant::now();
 
         self.metrics.record_request_start();
 
-        let result = tokio::time::timeout(timeout, future).await;
+        let result = time::timeout(timeout, future).await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
@@ -544,12 +590,68 @@ impl DbPool {
         }
     }
 
+    pub async fn execute_with_retry<F, T>(
+        &self,
+        query_name: &str,
+        operation: impl Fn() -> F,
+    ) -> Result<T, sqlx::Error>
+    where
+        F: std::future::Future<Output = Result<T, sqlx::Error>>,
+    {
+        let config = self.config.read().await;
+        let max_retries = config.retry_max_attempts;
+        let base_delay_ms = config.retry_base_delay_ms;
+        drop(config);
+
+        let mut last_error = None;
+
+        for attempt in 0..max_retries {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    if !Self::is_retriable_error(&e) || attempt == max_retries - 1 {
+                        return Err(e);
+                    }
+
+                    last_error = Some(e);
+                    let backoff_ms = base_delay_ms * 2u64.pow(attempt);
+                    let jitter_ms = rand::random::<u64>() % 50;
+
+                    warn!(
+                        "数据库操作 {} 失败 (尝试 {}/{}): {}, {}ms后重试",
+                        query_name,
+                        attempt + 1,
+                        max_retries,
+                        last_error.as_ref().unwrap(),
+                        backoff_ms + jitter_ms
+                    );
+
+                    time::sleep(Duration::from_millis(backoff_ms + jitter_ms)).await;
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or(sqlx::Error::WorkerCrashed))
+    }
+
+    fn is_retriable_error(e: &sqlx::Error) -> bool {
+        match e {
+            sqlx::Error::PoolTimedOut
+            | sqlx::Error::PoolClosed
+            | sqlx::Error::Io(_) => true,
+            sqlx::Error::Database(db_err) => {
+                matches!(db_err.code().as_deref(), Some("08006") | Some("08001") | Some("08004") | Some("57P03"))
+            }
+            _ => false,
+        }
+    }
+
     pub async fn query<F, T>(&self, query_name: &str, future: F) -> Result<T, sqlx::Error>
     where
         F: std::future::Future<Output = Result<T, sqlx::Error>>,
     {
         let slow_threshold = self.get_slow_query_threshold_ms();
-        let start = std::time::Instant::now();
+        let start = Instant::now();
 
         self.metrics.record_request_start();
 
@@ -576,6 +678,122 @@ impl DbPool {
                 Err(e)
             }
         }
+    }
+
+    pub async fn transaction<F, Fut, T, E>(&self, operation: F) -> Result<T, E>
+    where
+        F: FnOnce(&mut sqlx::Transaction<'_, sqlx::Postgres>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, E>>,
+        E: From<sqlx::Error> + std::fmt::Display,
+    {
+        let mut tx = self.begin().await.map_err(E::from)?;
+
+        match operation(&mut tx).await {
+            Ok(result) => {
+                tx.commit().await.map_err(E::from)?;
+                Ok(result)
+            }
+            Err(e) => {
+                if let Err(rollback_err) = tx.rollback().await {
+                    error!("事务回滚失败: {}", rollback_err);
+                }
+                Err(e)
+            }
+        }
+    }
+
+    pub async fn transaction_with_retry<F, Fut, T, E>(
+        &self,
+        operation: F,
+    ) -> Result<T, E>
+    where
+        F: Fn(&mut sqlx::Transaction<'_, sqlx::Postgres>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, E>>,
+        E: From<sqlx::Error> + std::fmt::Display + std::fmt::Debug,
+    {
+        let config = self.config.read().await;
+        let max_retries = config.retry_max_attempts;
+        let base_delay_ms = config.retry_base_delay_ms;
+        drop(config);
+
+        let mut last_error: Option<E> = None;
+        let operation = operation;
+
+        for attempt in 0..max_retries {
+            let mut tx = match self.begin().await {
+                Ok(t) => t,
+                Err(e) => {
+                    let should_retry = Self::is_retriable_error(&e);
+                    let err = E::from(e);
+                    if !should_retry || attempt == max_retries - 1 {
+                        return Err(err);
+                    }
+                    last_error = Some(err);
+                    let backoff_ms = base_delay_ms * 2u64.pow(attempt);
+                    warn!(
+                        "事务开始失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                        attempt + 1,
+                        max_retries,
+                        last_error.as_ref().unwrap(),
+                        backoff_ms
+                    );
+                    time::sleep(Duration::from_millis(backoff_ms)).await;
+                    continue;
+                }
+            };
+
+            match operation(&mut tx).await {
+                Ok(result) => {
+                    if let Err(e) = tx.commit().await {
+                        error!("事务提交失败: {}", e);
+                        let should_retry = Self::is_retriable_error(&e);
+                        let err = E::from(e);
+                        if !should_retry || attempt == max_retries - 1 {
+                            return Err(err);
+                        }
+                        last_error = Some(err);
+                        let backoff_ms = base_delay_ms * 2u64.pow(attempt);
+                        warn!(
+                            "事务提交失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                            attempt + 1,
+                            max_retries,
+                            last_error.as_ref().unwrap(),
+                            backoff_ms
+                        );
+                        time::sleep(Duration::from_millis(backoff_ms)).await;
+                        continue;
+                    }
+                    return Ok(result);
+                }
+                Err(e) => {
+                    if let Err(rollback_err) = tx.rollback().await {
+                        error!("事务回滚失败: {}", rollback_err);
+                    }
+
+                    let err_display = format!("{}", e);
+                    let should_retry = err_display.contains("connection")
+                        || err_display.contains("timeout")
+                        || err_display.contains("PoolTimedOut");
+
+                    if !should_retry || attempt == max_retries - 1 {
+                        return Err(e);
+                    }
+
+                    last_error = Some(e);
+                    let backoff_ms = base_delay_ms * 2u64.pow(attempt);
+                    warn!(
+                        "事务执行失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                        attempt + 1,
+                        max_retries,
+                        last_error.as_ref().unwrap(),
+                        backoff_ms
+                    );
+                    time::sleep(Duration::from_millis(backoff_ms)).await;
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| E::from(sqlx::Error::WorkerCrashed)))
     }
 }
 
@@ -610,9 +828,9 @@ mod tests {
     #[test]
     fn test_pool_config_default() {
         let config = PoolConfig::default();
-        assert_eq!(config.max_connections, 10);
-        assert_eq!(config.min_connections, 5);
-        assert_eq!(config.acquire_timeout_secs, 15);
+        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.min_connections, 10);
+        assert_eq!(config.acquire_timeout_secs, 5);
         assert!(config.auto_scaling_enabled);
     }
 
@@ -636,5 +854,21 @@ mod tests {
         let pool_config = PoolConfig::from(&db_config);
         assert_eq!(pool_config.min_connections, 1);
         assert!(pool_config.min_connections <= pool_config.max_connections);
+    }
+
+    #[test]
+    fn test_mask_password() {
+        assert_eq!(DbPool::mask_password("secret"), "s***t");
+        assert_eq!(DbPool::mask_password("ab"), "ab");
+        assert_eq!(DbPool::mask_password("a"), "*");
+        assert_eq!(DbPool::mask_password(""), "*");
+    }
+
+    #[test]
+    fn test_is_retriable_error() {
+        assert!(DbPool::is_retriable_error(&sqlx::Error::PoolTimedOut));
+        assert!(DbPool::is_retriable_error(&sqlx::Error::PoolClosed));
+        assert!(!DbPool::is_retriable_error(&sqlx::Error::RowNotFound));
+        assert!(!DbPool::is_retriable_error(&sqlx::Error::ColumnNotFound("test".to_string())));
     }
 }

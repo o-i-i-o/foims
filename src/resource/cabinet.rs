@@ -297,7 +297,7 @@ pub async fn create_cabinet_position(
                 .bind(ip.network_id)
                 .fetch_one(&mut *tx)
                 .await
-                .unwrap_or(false);
+                ?;
 
                 if !network_in_room {
                     return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
@@ -574,7 +574,7 @@ pub async fn update_cabinet_position(
                 .bind(ip.network_id)
                 .fetch_one(&mut *tx)
                 .await
-                .unwrap_or(false);
+                ?;
 
                 if !network_in_room {
                     return Err(AppError::Validation("所选网段不属于该机位所在房间的可用网段".to_string()));
@@ -617,7 +617,7 @@ pub async fn update_cabinet_position(
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)
-    .fetch_all(&state.pool()?.get_conn()).await.unwrap_or_default();
+    .fetch_all(&state.pool()?.get_conn()).await?;
 
     let result = CabinetPositionWithDetails {
         id: row.get("id"),
@@ -700,7 +700,7 @@ pub async fn delete_cabinet_position(
     .bind(id)
     .fetch_one(&mut *tx)
     .await
-    .unwrap_or(false);
+    ?;
 
     if has_switch {
         return Err(AppError::Validation("该机位已关联交换机，请通过删除交换机来删除机位".to_string()));
