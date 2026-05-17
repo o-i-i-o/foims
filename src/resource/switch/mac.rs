@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::Write;
 
 use actix_web::{HttpResponse, web};
 use async_snmp::{Client, oid};
@@ -11,7 +10,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, ArpEntry, SwitchMac};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
+use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error, get_switch_ip_address, get_switch_snmp_config};
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {
     let iface_lower = iface.to_lowercase();
@@ -246,52 +245,10 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
     Ok(entries)
 }
 
-fn simplify_ipv6(ipv6: &str) -> String {
-    let parts: Vec<&str> = ipv6.split(':').collect();
-    let mut result = String::new();
-    let mut zero_start = None;
-    let mut zero_len = 0;
-    let mut current_zero_len = 0;
-    let mut current_zero_start = None;
-
-    for (i, part) in parts.iter().enumerate() {
-        if *part == "0000" || *part == "0" {
-            if current_zero_start.is_none() {
-                current_zero_start = Some(i);
-            }
-            current_zero_len += 1;
-        } else {
-            if current_zero_len > zero_len {
-                zero_start = current_zero_start;
-                zero_len = current_zero_len;
-            }
-            current_zero_start = None;
-            current_zero_len = 0;
-        }
-    }
-    if current_zero_len > zero_len {
-        zero_start = current_zero_start;
-        zero_len = current_zero_len;
-    }
-
-    for (i, part) in parts.iter().enumerate() {
-        if let Some(start) = zero_start {
-            if i == start && zero_len > 1 {
-                result.push_str("::");
-                continue;
-            }
-            if i > start && i < start + zero_len {
-                continue;
-            }
-        }
-        if !result.is_empty() && !result.ends_with(':') {
-            result.push(':');
-        }
-        let val = u16::from_str_radix(part, 16).unwrap_or(0);
-        write!(result, "{val:x}").ok();
-    }
-
-    result
+fn simplify_ipv6(ip: &str) -> String {
+    ip.parse::<std::net::Ipv6Addr>()
+        .map(|addr| addr.to_string())
+        .unwrap_or_else(|_| ip.to_string())
 }
 
 pub async fn batch_get_mac_via_snmp(
@@ -351,23 +308,14 @@ async fn fetch_switch_arp(
     switch: &SwitchForSnmp,
     arp_entries: &mut HashMap<String, String>,
 ) -> Result<(), SnmpError> {
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch.id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .flatten();
+    let ip_address = get_switch_ip_address(pool, &switch.id).await?;
 
     let ip_address = match ip_address {
-        Some(ref ip) if !ip.is_empty() => ip,
-        _ => return Ok(()),
+        Some(ip) => ip,
+        None => return Ok(()),
     };
 
-    let params = switch.to_snmp_params(ip_address);
+    let params = switch.to_snmp_params(&ip_address);
 
     match get_arp_table_via_snmp(&params).await {
         Ok(entries) => {
@@ -385,33 +333,9 @@ pub async fn get_mac_from_switch(
     switch_id: &uuid::Uuid,
     ips: &[String],
 ) -> Result<HashMap<String, Option<String>>, SnmpError> {
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
-
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .flatten();
+    let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
 
     let ip_address = ip_address
-        .filter(|ip| !ip.is_empty())
         .ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
@@ -440,33 +364,9 @@ pub async fn get_all_arp_entries(
     pool: &sqlx::PgPool,
     switch_id: &uuid::Uuid,
 ) -> Result<Vec<ArpEntry>, SnmpError> {
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
-
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .flatten();
+    let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
 
     let ip_address = ip_address
-        .filter(|ip| !ip.is_empty())
         .ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
@@ -486,32 +386,9 @@ pub async fn get_switch_mac_table(
     let switch_id = path.into_inner();
     let conn = state.pool()?.get_conn();
 
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&conn)
-    .await
-    .map_err(|e| AppError::Database(format!("查询交换机失败: {e}")))?
-    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
-
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&conn)
-    .await?
-    .flatten();
+    let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
 
     let ip_address = ip_address
-        .filter(|ip| !ip.is_empty())
         .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
     let snmp_params = switch.to_snmp_params(&ip_address);

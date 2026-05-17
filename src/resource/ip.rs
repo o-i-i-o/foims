@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerUpdate, IpManagerWithNames};
 use crate::utils::pagination::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
-use crate::utils::{log_system_operation, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_workstation, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_workstation, get_room_id_by_position};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use std::net::IpAddr;
@@ -248,7 +248,7 @@ pub async fn create_ip_manager(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    let ip_version_num = detect_ip_version(&req.ip_address);
+    let ip_version_num = detect_ip_version(&req.ip_address)?;
 
     sqlx::query(
         "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
@@ -299,13 +299,14 @@ pub async fn create_ip_manager(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "ip_manager",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "ip_manager",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -476,12 +477,12 @@ pub async fn update_ip_manager(
     let now = Utc::now();
 
     let ip_version_num = if let Some(ip_address) = &req.ip_address {
-        detect_ip_version(ip_address)
+        detect_ip_version(ip_address)?
     } else {
         if let Some(ip_version) = &req.ip_version {
             *ip_version
         } else {
-            detect_ip_version(&existing_mapping.ip_address)
+            detect_ip_version(&existing_mapping.ip_address)?
         }
     };
 
@@ -581,13 +582,14 @@ pub async fn update_ip_manager(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "ip_manager",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "ip_manager",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -624,13 +626,14 @@ pub async fn delete_ip_manager(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "ip_manager",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "ip_manager",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -870,15 +873,11 @@ pub async fn pull_ip_managers_internal(
     Ok(())
 }
 
-#[must_use]
-pub fn detect_ip_version(ip: &str) -> i16 {
+pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     match IpAddr::from_str(ip) {
-        Ok(IpAddr::V6(_)) => 6,
-        Ok(IpAddr::V4(_)) => 4,
-        Err(e) => {
-            tracing::warn!("IP地址格式无效 '{}': {}", ip, e);
-            4
-        }
+        Ok(IpAddr::V6(_)) => Ok(6),
+        Ok(IpAddr::V4(_)) => Ok(4),
+        Err(e) => Err(AppError::Validation(format!("IP地址格式无效 '{}': {}", ip, e))),
     }
 }
 
@@ -950,7 +949,7 @@ pub async fn get_available_ips(
             ipv4_cidr,
             network.ipv4_gateway.as_ref(),
             &used_set,
-            None,
+            Some(256),
         ));
     }
 
@@ -1046,7 +1045,7 @@ pub async fn auto_assign_ip(
 
     let id = Uuid::new_v4();
     let now = Utc::now();
-    let ip_version_num = detect_ip_version(&assigned_ip);
+    let ip_version_num = detect_ip_version(&assigned_ip)?;
 
     sqlx::query(
         "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
@@ -1095,13 +1094,14 @@ pub async fn auto_assign_ip(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "auto_assign_ip",
-        "ip_manager",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "auto_assign_ip",
+            resource_type: "ip_manager",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -1143,7 +1143,13 @@ pub async fn batch_create_ip_managers(
         }
 
         let id = Uuid::new_v4();
-        let ip_version_num = detect_ip_version(&ip_req.ip_address);
+        let ip_version_num = match detect_ip_version(&ip_req.ip_address) {
+            Ok(v) => v,
+            Err(e) => {
+                errors.push(format!("第{}条记录: {}", index + 1, e));
+                continue;
+            }
+        };
         valid_requests.push((index, ip_req, id, ip_version_num));
     }
 
@@ -1189,9 +1195,9 @@ pub async fn batch_create_ip_managers(
         let device_type_str = ip_req.device_type.as_deref().unwrap_or("");
         if device_type_str == "workstation" {
             if let Some(ws_id) = ip_req.workstation_id {
-                let room_id = get_room_id_by_workstation(&state.pool()?.get_conn(), ws_id).await?;
+                let room_id = get_room_id_by_workstation(tx.as_mut(), ws_id).await?;
                 if let Some(rid) = room_id {
-                    match validate_network_in_room(&state.pool()?.get_conn(), rid, ip_req.network_id).await {
+                    match validate_network_in_room(tx.as_mut(), rid, ip_req.network_id).await {
                         Err(AppError::Validation(_)) => {
                             duplicate_errors.push(format!("第{}条记录: 所选网段不属于该工位所在房间的可用网段", index + 1));
                             continue;
@@ -1202,9 +1208,9 @@ pub async fn batch_create_ip_managers(
                 }
             }
         } else if let Some(pos_id) = ip_req.position_id {
-            let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
+            let room_id = get_room_id_by_position(tx.as_mut(), pos_id).await?;
             if let Some(rid) = room_id {
-                match validate_network_in_room(&state.pool()?.get_conn(), rid, ip_req.network_id).await {
+                match validate_network_in_room(tx.as_mut(), rid, ip_req.network_id).await {
                     Err(AppError::Validation(_)) => {
                         duplicate_errors.push(format!("第{}条记录: 所选网段不属于该机位所在房间的可用网段", index + 1));
                         continue;
@@ -1270,13 +1276,14 @@ pub async fn batch_create_ip_managers(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "batch_create",
-        "ip_manager",
-        &Uuid::nil(),
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "batch_create",
+            resource_type: "ip_manager",
+            resource_id: &Uuid::nil(),
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

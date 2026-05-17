@@ -3,7 +3,7 @@ use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, OperationLogParams};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
@@ -127,13 +127,14 @@ pub async fn create_user(
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     if let Err(e) = log_system_operation(
         &conn,
-        &http_req,
-        &state.config,
-        "create_user",
-        "user",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create_user",
+            resource_type: "user",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -216,13 +217,14 @@ pub async fn update_user(
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
     if let Err(e) = log_system_operation(
         &conn,
-        &http_req,
-        &state.config,
-        "update_user",
-        "user",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update_user",
+            resource_type: "user",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -279,13 +281,14 @@ pub async fn delete_user(
     let details = json!({});
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete_user",
-        "user",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete_user",
+            resource_type: "user",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

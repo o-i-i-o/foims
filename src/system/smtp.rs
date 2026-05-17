@@ -93,7 +93,7 @@ pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
                             "host" => host = value,
                             "port" => port = value.parse().unwrap_or(0),
                             "username" => username = value,
-                            "password" => password = decrypt_password(&value),
+                            "password" => password = decrypt_password(&value).unwrap_or_default(),
                             "from" => from = value,
                             "secure" => secure = value.parse().unwrap_or(false),
                             _ => {}

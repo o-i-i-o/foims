@@ -6,7 +6,6 @@ use uuid::Uuid;
 
 use hex::encode;
 
-use crate::config::Config;
 use actix_web::{HttpMessage, HttpRequest};
 
 // ==================== IP/MAC 地址验证与格式化 ====================
@@ -280,48 +279,20 @@ pub async fn cleanup_old_token_usage(
 // ==================== 操作日志 ====================
 
 pub struct OperationLogParams<'a> {
-    pub user_id: &'a Uuid,
+    pub req: &'a HttpRequest,
     pub action: &'a str,
     pub resource_type: &'a str,
     pub resource_id: &'a Uuid,
     pub details: &'a serde_json::Value,
     pub result: bool,
-    pub ip_address: &'a str,
 }
 
-pub async fn log_operation(
+pub async fn log_system_operation(
     pool: &sqlx::PgPool,
     params: OperationLogParams<'_>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
-        .bind(Uuid::new_v4())
-        .bind(params.user_id)
-        .bind(params.action)
-        .bind(params.resource_type)
-        .bind(params.resource_id)
-        .bind(params.details)
-        .bind(params.result)
-        .bind(params.ip_address)
-        .bind(chrono::Utc::now())
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn log_system_operation(
-    pool: &sqlx::PgPool,
-    req: &HttpRequest,
-    _config: &Config,
-    action: &str,
-    resource_type: &str,
-    resource_id: &Uuid,
-    details: &serde_json::Value,
-    result: bool,
-) -> Result<(), sqlx::Error> {
     let claims = {
-        let extensions = req.extensions();
+        let extensions = params.req.extensions();
         let claims_opt = extensions.get::<crate::auth::utils::JwtClaims>();
         claims_opt.cloned()
     };
@@ -332,21 +303,22 @@ pub async fn log_system_operation(
             Uuid::nil()
         })
     });
-    let ip_address = get_real_ip_from_request(req);
+    let ip_address = get_real_ip_from_request(params.req);
 
-    log_operation(
-        pool,
-        OperationLogParams {
-            user_id: &user_id,
-            action,
-            resource_type,
-            resource_id,
-            details,
-            result,
-            ip_address: &ip_address,
-        },
-    )
-    .await
+    sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+        .bind(Uuid::new_v4())
+        .bind(user_id)
+        .bind(params.action)
+        .bind(params.resource_type)
+        .bind(params.resource_id)
+        .bind(params.details)
+        .bind(params.result)
+        .bind(&ip_address)
+        .bind(chrono::Utc::now())
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 // ==================== HTTP 请求处理 ====================
@@ -454,11 +426,8 @@ pub async fn send_mac_change_notification(
 
 
 pub fn log_bilingual(message_key: &str) {
-    rust_i18n::set_locale("zh");
-    let zh_message = rust_i18n::t!(message_key);
-
-    rust_i18n::set_locale("en");
-    let en_message = rust_i18n::t!(message_key);
+    let zh_message = rust_i18n::t!(message_key, locale = "zh");
+    let en_message = rust_i18n::t!(message_key, locale = "en");
 
     info!("[中文] {}", zh_message);
     info!("[English] {}", en_message);

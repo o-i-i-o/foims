@@ -4,7 +4,7 @@ use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, OperationLogParams};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -262,13 +262,14 @@ pub async fn create_cabinet(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "cabinet",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "cabinet",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -376,13 +377,14 @@ pub async fn update_cabinet(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "cabinet",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "cabinet",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -429,13 +431,14 @@ pub async fn delete_cabinet(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "cabinet",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "cabinet",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

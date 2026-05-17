@@ -502,7 +502,7 @@ async fn export_switches(
         let decrypted_community = snmp_community
             .as_ref()
             .filter(|c| !c.is_empty())
-            .map(|c| decrypt_password(c));
+            .map(|c| decrypt_password(c).unwrap_or_default());
 
         let line = format!(
             "{},{},{},{},{},{},{},{},{},{}\n",
@@ -2232,6 +2232,14 @@ pub async fn export_database(
     let db_config = state.config.database.clone();
 
     let output = tokio::task::spawn_blocking(move || {
+        let pgpass = crate::db::PgPassFile::create(
+            &db_config.host,
+            db_config.port,
+            &db_config.database,
+            &db_config.username,
+            &db_config.password,
+        ).map_err(AppError::Internal)?;
+
         std::process::Command::new("pg_dump")
             .arg("-h")
             .arg(&db_config.host)
@@ -2245,7 +2253,7 @@ pub async fn export_database(
             .arg("--no-acl")
             .arg("--clean")
             .arg("--if-exists")
-            .env("PGPASSWORD", &db_config.password)
+            .env("PGPASSFILE", pgpass.path())
             .output()
             .map_err(|e| {
                 AppError::Internal(format!(

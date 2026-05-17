@@ -24,13 +24,11 @@ fn load_encryption_key() -> Vec<u8> {
     let (key_path, key_backup_path) = get_key_paths();
 
     let Some(key_dir) = Path::new(&key_path).parent() else {
-        error!("无法获取加密密钥目录的父目录: {}", key_path);
-        return Vec::new();
+        panic!("无法获取加密密钥目录的父目录: {}", key_path);
     };
     if !key_dir.exists()
         && let Err(e) = fs::create_dir_all(key_dir) {
-            error!("创建加密密钥目录失败: {}", e);
-            return Vec::new();
+            panic!("创建加密密钥目录失败: {}", e);
         }
 
     if Path::new(&key_path).exists() {
@@ -44,11 +42,10 @@ fn load_encryption_key() -> Vec<u8> {
                 return key;
             }
             Ok(key) => {
-                error!(
+                panic!(
                     "加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥",
                     key.len()
                 );
-                return Vec::new();
             }
             Err(e) => {
                 error!("读取加密密钥文件失败: {}", e);
@@ -63,17 +60,14 @@ fn load_encryption_key() -> Vec<u8> {
                             return key;
                         }
                         Ok(key) => {
-                            error!("备份密钥长度也不正确（期望32字节，实际{}字节）", key.len());
-                            return Vec::new();
+                            panic!("备份密钥长度也不正确（期望32字节，实际{}字节）", key.len());
                         }
                         Err(e) => {
-                            error!("读取备份密钥也失败: {}", e);
-                            return Vec::new();
+                            panic!("读取备份密钥也失败: {}", e);
                         }
                     }
                 }
-                error!("读取加密密钥文件失败，请检查文件权限");
-                return Vec::new();
+                panic!("读取加密密钥文件失败，请检查文件权限");
             }
         }
     }
@@ -102,8 +96,7 @@ fn load_encryption_key() -> Vec<u8> {
     rand::rng().fill(&mut key);
 
     if let Err(e) = fs::write(&key_path, &key) {
-        error!("保存加密密钥失败: {}", e);
-        return Vec::new();
+        panic!("保存加密密钥失败: {}", e);
     }
 
     info!("加密密钥已生成并保存到: {}", key_path);
@@ -147,8 +140,7 @@ pub fn check_key_integrity() -> Result<(), String> {
 }
 
 pub fn verify_key_with_sample(encrypted_sample: &str) -> bool {
-    let decrypted = decrypt_password(encrypted_sample);
-    !decrypted.is_empty()
+    decrypt_password(encrypted_sample).is_ok()
 }
 
 #[must_use]
@@ -180,58 +172,49 @@ pub fn encrypt_password(password: &str) -> Option<String> {
     Some(BASE64.encode(&result))
 }
 
-#[must_use]
-pub fn decrypt_password(encrypted_password: &str) -> String {
+pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     let key = get_encryption_key();
-    let Ok(cipher) = Aes256Gcm::new_from_slice(&key) else {
-        error!("解密失败: 加密密钥长度不正确");
-        return String::new();
-    };
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| format!("解密失败: 加密密钥长度不正确: {e}"))?;
 
-    let Ok(decoded) = BASE64.decode(encrypted_password) else {
-        error!("解密失败: Base64解码错误");
-        return String::new();
-    };
+    let decoded = BASE64
+        .decode(encrypted_password)
+        .map_err(|e| format!("解密失败: Base64解码错误: {e}"))?;
 
     if decoded.len() < NONCE_SIZE {
-        error!("解密失败: 密文长度不足 (期望>{}字节, 实际{}字节)", NONCE_SIZE, decoded.len());
-        return String::new();
+        return Err(format!(
+            "解密失败: 密文长度不足 (期望>{}字节, 实际{}字节)",
+            NONCE_SIZE,
+            decoded.len()
+        ));
     }
 
     let (nonce_bytes, ciphertext) = decoded.split_at(NONCE_SIZE);
     let nonce = Nonce::from_slice(nonce_bytes);
 
-    let Ok(plaintext) = cipher.decrypt(nonce, ciphertext) else {
-        warn!("解密失败: AES-GCM解密错误");
-        warn!("可能原因:");
-        warn!("1. 数据库中的加密数据使用了旧密钥");
-        warn!("2. 密钥文件(/etc/ipma/encryption.key)在程序运行后被修改或删除");
-        warn!("3. 系统重启或容器重建导致密钥丢失");
-        warn!("解决方案:");
-        warn!("- 检查/etc/ipma/encryption.key.backup是否有旧密钥备份");
-        warn!("- 如果有备份，尝试恢复到encryption.key");
-        warn!("- 如果没有备份，受影响的加密数据(如SNMP密码、SMTP密码、2FA密钥)需要重新设置");
-        warn!("密钥长度: {}字节", key.len());
-        warn!("Nonce长度: {}字节", nonce_bytes.len());
-        warn!("密文长度: {}字节", ciphertext.len());
-        return String::new();
-    };
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| {
+            warn!("解密失败: AES-GCM解密错误");
+            warn!("可能原因:");
+            warn!("1. 数据库中的加密数据使用了旧密钥");
+            warn!("2. 密钥文件(/etc/ipma/encryption.key)在程序运行后被修改或删除");
+            warn!("3. 系统重启或容器重建导致密钥丢失");
+            warn!("解决方案:");
+            warn!("- 检查/etc/ipma/encryption.key.backup是否有旧密钥备份");
+            warn!("- 如果有备份，尝试恢复到encryption.key");
+            warn!("- 如果没有备份，受影响的加密数据(如SNMP密码、SMTP密码、2FA密钥)需要重新设置");
+            warn!("密钥长度: {}字节", key.len());
+            warn!("Nonce长度: {}字节", nonce_bytes.len());
+            warn!("密文长度: {}字节", ciphertext.len());
+            "解密失败: AES-GCM解密错误".to_string()
+        })?;
 
-    match String::from_utf8(plaintext.clone()) {
-        Ok(s) => s,
-        Err(_) => String::from_utf8_lossy(&plaintext).to_string()
-    }
+    String::from_utf8(plaintext).map_err(|e| format!("解密失败: UTF-8解码错误: {e}"))
 }
 
 pub fn decrypt_credential(value: Option<&str>) -> Option<String> {
-    value.and_then(|v| {
-        let decrypted = decrypt_password(v);
-        if decrypted.is_empty() {
-            None
-        } else {
-            Some(decrypted)
-        }
-    })
+    value.and_then(|v| decrypt_password(v).ok())
 }
 
 #[cfg(test)]
@@ -242,7 +225,7 @@ mod tests {
     fn test_encrypt_decrypt() {
         let password = "test_password_123";
         let encrypted = encrypt_password(password).unwrap();
-        let decrypted = decrypt_password(&encrypted);
+        let decrypted = decrypt_password(&encrypted).unwrap();
         assert_eq!(password, decrypted);
     }
 
@@ -253,7 +236,7 @@ mod tests {
         let encrypted2 = encrypt_password(password).unwrap();
         assert_ne!(encrypted1, encrypted2);
 
-        assert_eq!(password, decrypt_password(&encrypted1));
-        assert_eq!(password, decrypt_password(&encrypted2));
+        assert_eq!(password, decrypt_password(&encrypted1).unwrap());
+        assert_eq!(password, decrypt_password(&encrypted2).unwrap());
     }
 }

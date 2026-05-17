@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, OperationLogParams};
 use tracing::warn;
 
 pub async fn get_switch_ports(
@@ -211,13 +211,14 @@ pub async fn create_switch_port(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "switch_port",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "switch_port",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -308,13 +309,14 @@ pub async fn update_switch_port(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "switch_port",
-        &port_id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "switch_port",
+            resource_id: &port_id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -381,13 +383,14 @@ pub async fn delete_switch_port(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "switch_port",
-        &port_id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "switch_port",
+            resource_id: &port_id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

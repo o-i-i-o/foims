@@ -6,7 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_workstation};
+use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_workstation};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -259,7 +259,7 @@ pub async fn create_workstation(
 
             validate_network_in_room(tx.as_mut(), req.room_id, ip.network_id).await?;
 
-            let ip_version = detect_ip_version(&ip.ip_address);
+            let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
                 "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
@@ -307,13 +307,14 @@ pub async fn create_workstation(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "workstation",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "workstation",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -428,7 +429,7 @@ pub async fn update_workstation(
             .await?;
 
         for ip in ips {
-            let ip_version = detect_ip_version(&ip.ip_address);
+            let ip_version = detect_ip_version(&ip.ip_address)?;
 
             let ws_room_id = get_room_id_by_workstation(tx.as_mut(), id).await?;
 
@@ -496,13 +497,14 @@ pub async fn update_workstation(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "workstation",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "workstation",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -558,13 +560,14 @@ pub async fn delete_workstation(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "workstation",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "workstation",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

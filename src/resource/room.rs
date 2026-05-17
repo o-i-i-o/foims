@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, OperationLogParams};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -189,13 +189,14 @@ pub async fn create_room(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "room",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "room",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -321,13 +322,14 @@ pub async fn update_room(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "room",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "room",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -383,13 +385,14 @@ pub async fn delete_room(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "room",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "room",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

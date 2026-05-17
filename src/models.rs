@@ -26,6 +26,13 @@ pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
     Ok(())
 }
 
+fn validate_ip_address(ip: &str) -> Result<(), ValidationError> {
+    if ip.parse::<std::net::IpAddr>().is_err() {
+        return Err(ValidationError::new("invalid_ip_address"));
+    }
+    Ok(())
+}
+
 // ==================== API 响应模型 ====================
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -196,7 +203,7 @@ pub struct UserUpdate {
 pub struct UserLogin {
     #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
     pub username: String,
-    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "登录密码长度必须至少8个字符"))]
     pub password: String,
     pub remember_me: Option<bool>,
 }
@@ -229,7 +236,7 @@ pub struct TwoFactorLoginRequest {
     #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
     pub username: String,
     #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
-    pub password: String,
+    pub password: Option<String>,
     #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
     pub two_factor_code: String,
     pub remember_me: Option<bool>,
@@ -639,6 +646,7 @@ pub struct IpManagerCreate {
     pub device_type: Option<String>,
     pub network_id: Uuid,
     pub network_region_id: Option<Uuid>,
+    #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
     pub ip_address: String,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
     pub mac_address: Option<String>,

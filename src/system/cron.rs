@@ -163,6 +163,14 @@ fn execute_database_backup(
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
 
+    let pgpass = crate::db::PgPassFile::create(
+        &config.host,
+        config.port,
+        &config.database,
+        &config.username,
+        &config.password,
+    )?;
+
     let output = Command::new("pg_dump")
         .arg("-h")
         .arg(&config.host)
@@ -176,7 +184,7 @@ fn execute_database_backup(
         .arg("--no-acl")
         .arg("--clean")
         .arg("--if-exists")
-        .env("PGPASSWORD", &config.password)
+        .env("PGPASSFILE", pgpass.path())
         .output()
         .map_err(|e| {
             format!(
@@ -443,6 +451,14 @@ fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Result<Stri
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{backup_dir}/ipma_manual_backup_{timestamp}.sql");
 
+    let pgpass = crate::db::PgPassFile::create(
+        &db_config.host,
+        db_config.port,
+        &db_config.database,
+        &db_config.username,
+        &db_config.password,
+    )?;
+
     let output = Command::new("pg_dump")
         .arg("-h")
         .arg(&db_config.host)
@@ -456,7 +472,7 @@ fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Result<Stri
         .arg("--no-acl")
         .arg("--clean")
         .arg("--if-exists")
-        .env("PGPASSWORD", &db_config.password)
+        .env("PGPASSFILE", pgpass.path())
         .output()
         .map_err(|e| format!("执行 pg_dump 失败: {e}"))?;
 

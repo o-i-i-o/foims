@@ -6,7 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_position};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -287,7 +287,7 @@ pub async fn create_cabinet_position(
                 validate_network_in_room(tx.as_mut(), rid, ip.network_id).await?;
             }
 
-            let ip_version = detect_ip_version(&ip.ip_address);
+            let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
                 "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
@@ -338,13 +338,14 @@ pub async fn create_cabinet_position(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "cabinet_position",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "cabinet_position",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -535,7 +536,7 @@ pub async fn update_cabinet_position(
             .await?;
 
         for ip in ips {
-            let ip_version = detect_ip_version(&ip.ip_address);
+            let ip_version = detect_ip_version(&ip.ip_address)?;
 
             let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
 
@@ -606,13 +607,14 @@ pub async fn update_cabinet_position(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "cabinet_position",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "cabinet_position",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -695,13 +697,14 @@ pub async fn delete_cabinet_position(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "cabinet_position",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "cabinet_position",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

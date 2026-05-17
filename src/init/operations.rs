@@ -13,6 +13,14 @@ pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<S
     let config = config.clone();
     let backup_file_clone = backup_file.clone();
     let output = tokio::task::spawn_blocking(move || {
+        let pgpass = crate::db::PgPassFile::create(
+            &config.host,
+            config.port,
+            &config.database,
+            &config.username,
+            &config.password,
+        )?;
+
         std::process::Command::new("pg_dump")
             .arg("-h")
             .arg(&config.host)
@@ -24,7 +32,7 @@ pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<S
             .arg(&config.database)
             .arg("-f")
             .arg(&backup_file_clone)
-            .env("PGPASSWORD", &config.password)
+            .env("PGPASSFILE", pgpass.path())
             .output()
             .map_err(|e| format!("执行pg_dump失败: {e}"))
     })

@@ -414,6 +414,14 @@ pub async fn import_database_from_file(
     let db_config = state.config.database.clone();
     let sql_path_clone = sql_path.clone();
     let output = tokio::task::spawn_blocking(move || {
+        let pgpass = crate::db::PgPassFile::create(
+            &db_config.host,
+            db_config.port,
+            &db_config.database,
+            &db_config.username,
+            &db_config.password,
+        ).map_err(AppError::Internal)?;
+
         std::process::Command::new("psql")
             .arg("-h")
             .arg(&db_config.host)
@@ -425,7 +433,7 @@ pub async fn import_database_from_file(
             .arg(&db_config.database)
             .arg("-f")
             .arg(&sql_path_clone)
-            .env("PGPASSWORD", &db_config.password)
+            .env("PGPASSFILE", pgpass.path())
             .output()
             .map_err(|e| AppError::Internal(format!("执行psql失败: {e}")))
     })

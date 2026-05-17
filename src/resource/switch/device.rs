@@ -11,7 +11,7 @@ use crate::crypto::encrypt_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, validate_network_in_room, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams, validate_network_in_room, get_room_id_by_position};
 use tracing::warn;
 
 const SWITCHES_DETAIL_COLUMNS: &str = r"
@@ -404,7 +404,7 @@ pub async fn create_switch(
             validate_network_in_room(&state.pool()?.get_conn(), rid, ip.network_id).await?;
         }
 
-        let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address);
+        let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
         let ip_manager_id = Uuid::new_v4();
         if let Err(e) = sqlx::query(
@@ -447,13 +447,14 @@ pub async fn create_switch(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "create",
-        "switch",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "switch",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -594,7 +595,7 @@ pub async fn update_switch(
                 }
             }
 
-            let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address);
+            let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
             let ip_manager_id = Uuid::new_v4();
             if let Err(e) = sqlx::query(
@@ -638,13 +639,14 @@ pub async fn update_switch(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "update",
-        "switch",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "switch",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -705,13 +707,14 @@ pub async fn delete_switch(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "switch",
-        &id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "switch",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

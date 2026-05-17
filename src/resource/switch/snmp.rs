@@ -114,6 +114,70 @@ pub enum SnmpError {
     Message(String),
 }
 
+#[derive(Error, Debug)]
+pub enum SwitchConfigError {
+    #[error("{0}")]
+    NotFound(String),
+    #[error("{0}")]
+    Database(String),
+}
+
+impl From<SwitchConfigError> for AppError {
+    fn from(e: SwitchConfigError) -> Self {
+        match e {
+            SwitchConfigError::NotFound(msg) => AppError::NotFound(msg),
+            SwitchConfigError::Database(msg) => AppError::Database(msg),
+        }
+    }
+}
+
+impl From<SwitchConfigError> for SnmpError {
+    fn from(e: SwitchConfigError) -> Self {
+        SnmpError::Message(e.to_string())
+    }
+}
+
+pub async fn get_switch_snmp_config(
+    pool: &sqlx::PgPool,
+    switch_id: &Uuid,
+) -> Result<(SwitchForSnmp, Option<String>), SwitchConfigError> {
+    let switch = sqlx::query_as::<_, SwitchForSnmp>(
+        r"SELECT
+            id, name, snmp_version, snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password, snmp_priv_protocol,
+            snmp_priv_password, snmp_port
+        FROM switches WHERE id = $1",
+    )
+    .bind(switch_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| SwitchConfigError::Database(e.to_string()))?
+    .ok_or_else(|| SwitchConfigError::NotFound("交换机不存在".to_string()))?;
+
+    let ip_address = get_switch_ip_address(pool, switch_id).await?;
+
+    Ok((switch, ip_address))
+}
+
+pub async fn get_switch_ip_address(
+    pool: &sqlx::PgPool,
+    switch_id: &Uuid,
+) -> Result<Option<String>, SwitchConfigError> {
+    let ip_address: Option<String> = sqlx::query_scalar(
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+           ORDER BY created_at LIMIT 1",
+    )
+    .bind(switch_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| SwitchConfigError::Database(e.to_string()))?
+    .flatten();
+
+    Ok(ip_address.filter(|ip| !ip.is_empty()))
+}
+
 #[derive(Debug, Clone)]
 pub struct SnmpParamsLegacy {
     pub ip: String,
@@ -129,15 +193,15 @@ pub struct SnmpParamsLegacy {
 }
 
 pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
-    data.snmp_community = data.snmp_community.as_ref().map(|v| decrypt_password(v));
+    data.snmp_community = data.snmp_community.as_ref().map(|v| decrypt_password(v).unwrap_or_default());
     data.snmp_auth_password = data
         .snmp_auth_password
         .as_ref()
-        .map(|v| decrypt_password(v));
+        .map(|v| decrypt_password(v).unwrap_or_default());
     data.snmp_priv_password = data
         .snmp_priv_password
         .as_ref()
-        .map(|v| decrypt_password(v));
+        .map(|v| decrypt_password(v).unwrap_or_default());
 }
 
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
@@ -444,27 +508,8 @@ pub async fn test_snmp_connection(
 
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(switch_id) = req.switch_id {
-            let switch = sqlx::query_as::<_, SwitchForSnmp>(
-                r"SELECT
-                    id, name, snmp_version, snmp_community,
-                    snmp_username, snmp_auth_protocol,
-                    snmp_auth_password, snmp_priv_protocol,
-                    snmp_priv_password, snmp_port
-                FROM switches WHERE id = $1",
-            )
-            .bind(switch_id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
-            .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
-
-            let ip_address: Option<String> = sqlx::query_scalar(
-                r"SELECT host(ip_address) FROM ips
-                   WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-                   ORDER BY created_at LIMIT 1",
-            )
-            .bind(switch_id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
+            let conn = state.pool()?.get_conn();
+            let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
 
             let creds = DecryptedSnmpCredentials::from_switch_snmp(&switch);
 
@@ -523,14 +568,12 @@ pub async fn test_snmp_connection(
     };
 
     tracing::info!(
-        "[test_snmp] 接收到的参数: ip={}, port={}, version={}, community={:?}, username={:?}, auth_pass={:?}, priv_pass={:?}",
+        "[test_snmp] 接收到的参数: ip={}, port={}, version={}, community={}, username={:?}, auth_pass=***, priv_pass=***",
         ip,
         port,
         version,
-        community,
-        username,
-        auth_pass,
-        priv_pass
+        community.as_ref().map(|_| "***").unwrap_or("None"),
+        username
     );
 
     match test_snmp(&snmp_params, 5).await {
@@ -548,36 +591,12 @@ pub async fn get_switch_info_snmp(
 ) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
+    let (switch, ip_address) = get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
 
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
+    let ip_address = ip_address
+        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let ip_address = match ip_address {
-        Some(ref ip) if !ip.is_empty() => ip,
-        _ => {
-            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
-        }
-    };
-
-    let snmp_params = switch.to_snmp_params(ip_address);
+    let snmp_params = switch.to_snmp_params(&ip_address);
 
     match get_switch_info_via_snmp(&snmp_params).await {
         Ok((vendor, model)) => Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -594,36 +613,12 @@ pub async fn get_switch_ports_snmp(
 ) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
+    let (switch, ip_address) = get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
 
-    let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
-           ORDER BY created_at LIMIT 1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
+    let ip_address = ip_address
+        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let ip_address = match ip_address {
-        Some(ref ip) if !ip.is_empty() => ip,
-        _ => {
-            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
-        }
-    };
-
-    let snmp_params = switch.to_snmp_params(ip_address);
+    let snmp_params = switch.to_snmp_params(&ip_address);
 
     match get_switch_ports_via_snmp(&snmp_params).await {
         Ok(ports) => {

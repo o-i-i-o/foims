@@ -51,7 +51,7 @@ pub struct JwtUtils {
 }
 
 impl JwtUtils {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Result<Self, String> {
         let access_token_expiry = parse_duration(&config.jwt.access_token_expiry).unwrap_or(3600);
 
         let refresh_token_expiry =
@@ -61,9 +61,12 @@ impl JwtUtils {
 
         let secret = Self::get_jwt_secret(&config.jwt.secret);
 
-        Self::validate_secret_strength(&secret);
+        Self::validate_secret_strength(&secret).map_err(|e| {
+            error!("{}", e);
+            e
+        })?;
 
-        Self {
+        Ok(Self {
             config: JwtConfig {
                 secret: secret.clone(),
                 access_token_expiry,
@@ -76,7 +79,7 @@ impl JwtUtils {
             decoding_key: DecodingKey::from_secret(secret.as_bytes()),
             encoding_key: EncodingKey::from_secret(secret.as_bytes()),
             token_cache: GLOBAL_TOKEN_CACHE.clone(),
-        }
+        })
     }
 
     // 从环境变量或配置文件获取JWT密钥
@@ -101,13 +104,14 @@ impl JwtUtils {
     }
 
     // 验证密钥强度
-    fn validate_secret_strength(secret: &str) {
-        assert!(secret.len() >= 22, 
-            "JWT密钥长度不足22个字符，请配置更强的密钥。当前长度: {}",
-            secret.len()
-        );
+    fn validate_secret_strength(secret: &str) -> Result<(), String> {
+        if secret.len() < 32 {
+            return Err(format!(
+                "JWT密钥长度不足32个字符，请配置更强的密钥。当前长度: {}",
+                secret.len()
+            ));
+        }
 
-        // 检查密钥复杂度
         let has_uppercase = secret.chars().any(char::is_uppercase);
         let has_lowercase = secret.chars().any(char::is_lowercase);
         let has_digit = secret.chars().any(|c| c.is_ascii_digit());
@@ -116,6 +120,8 @@ impl JwtUtils {
         if !has_uppercase || !has_lowercase || !has_digit || !has_special {
             warn!("JWT密钥复杂度不足，建议包含大小写字母、数字和特殊字符");
         }
+
+        Ok(())
     }
 
     // 生成安全的随机密钥（用于HMAC算法）

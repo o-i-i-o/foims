@@ -167,7 +167,10 @@ fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<T
         }
     }
 
-    unreachable!()
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AddrInUse,
+        format!("绑定端口 {}:{} 失败: 重试次数耗尽", addr, port),
+    ))
 }
 
 fn validate_html_path(path: &str) -> Option<PathBuf> {
@@ -612,8 +615,8 @@ async fn main() -> std::io::Result<()> {
         .await?;
 
     std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_secs(10));
-        tracing::warn!("进程未能在超时内自然退出，强制退出");
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        tracing::error!("进程未能在30秒超时内自然退出，强制退出 (code 0)");
         std::process::exit(0);
     });
 

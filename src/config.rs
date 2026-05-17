@@ -1,6 +1,10 @@
 use config::Config as ConfigBuilder;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::LazyLock;
+
+static DURATION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)([smhd])$").expect("failed to compile duration regex"));
 
 // 配置文件搜索路径（按优先级）
 pub const CONFIG_PATHS: [&str; 3] = [
@@ -276,9 +280,7 @@ impl Config {
 
 // 解析带单位的时间字符串为秒数
 pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
-    let re = regex::Regex::new(r"^(\d+)([smhd])$")
-        .map_err(|e| format!("无法编译持续时间解析正则表达式: {e}"))?;
-    if let Some(captures) = re.captures(duration_str) {
+    if let Some(captures) = DURATION_RE.captures(duration_str) {
         let value: u64 = captures[1].parse().map_err(|_| "Invalid duration value")?;
         let unit = &captures[2];
 

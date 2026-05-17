@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, LayoutSaveRequest};
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, OperationLogParams};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde_json;
@@ -71,13 +71,14 @@ pub async fn save_layout(
         });
         if let Err(e) = log_system_operation(
             &state.pool()?.get_conn(),
-            &http_req,
-            &state.config,
-            "update",
-            "layout",
-            &room_id,
-            &details,
-            true,
+            OperationLogParams {
+                req: &http_req,
+                action: "update",
+                resource_type: "layout",
+                resource_id: &room_id,
+                details: &details,
+                result: true,
+            },
         )
         .await
         {
@@ -123,13 +124,14 @@ pub async fn save_layout(
         });
         if let Err(e) = log_system_operation(
             &state.pool()?.get_conn(),
-            &http_req,
-            &state.config,
-            "update",
-            "layout",
-            &room_id,
-            &details,
-            true,
+            OperationLogParams {
+                req: &http_req,
+                action: "update",
+                resource_type: "layout",
+                resource_id: &room_id,
+                details: &details,
+                result: true,
+            },
         )
         .await
         {
@@ -159,13 +161,14 @@ pub async fn delete_layout(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "layout",
-        &room_id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "layout",
+            resource_id: &room_id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {
@@ -194,13 +197,14 @@ pub async fn delete_positions_layout(
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
-        &http_req,
-        &state.config,
-        "delete",
-        "layout",
-        &room_id,
-        &details,
-        true,
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "layout",
+            resource_id: &room_id,
+            details: &details,
+            result: true,
+        },
     )
     .await
     {

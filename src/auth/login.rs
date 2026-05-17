@@ -51,7 +51,7 @@ pub async fn auth_middleware(
                 .map_into_right_body(),
         ));
     };
-    let jwt_utils = JwtUtils::new(&state.config);
+    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
 
     let claims = match jwt_utils.validate_token(&token) {
         Ok(claims) => claims,
@@ -160,19 +160,14 @@ pub async fn login(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config);
+    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = jwt_utils
-        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let refresh_token = jwt_utils
-        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let access_token_expiry = jwt_utils.get_access_token_expiry();
-    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
+    let login_tokens = generate_login_tokens(
+        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+    )?;
 
     let user = User {
         id,
@@ -192,27 +187,7 @@ pub async fn login(
     tracing::info!("用户 {} 登录成功", username);
 
     let secure = is_secure_request(&http_req);
-    let access_cookie = create_auth_cookie(
-        "access_token",
-        &access_token,
-        access_token_expiry as i64,
-        secure,
-    );
-    let refresh_cookie = create_auth_cookie(
-        "refresh_token",
-        &refresh_token,
-        refresh_token_expiry as i64,
-        secure,
-    );
-
-    Ok(HttpResponse::Ok()
-        .cookie(access_cookie)
-        .cookie(refresh_cookie)
-        .json(ApiResponse::success_i18n(
-            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
-            "api.success",
-            &user_lang,
-        )))
+    Ok(build_login_response(user, login_tokens, &user_lang, secure))
 }
 
 pub async fn login_with_email_code(
@@ -266,7 +241,7 @@ pub async fn login_with_email_code(
     if let (Some(c), Some(e)) = (code, expiry) {
         let trimmed_input_code = req.code.trim();
         let trimmed_db_code = c.trim();
-        if trimmed_db_code == trimmed_input_code && e > Utc::now() {
+        if constant_time_eq(trimmed_db_code, trimmed_input_code) && e > Utc::now() {
             verified = true;
             if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
                 .bind(id).execute(&conn).await
@@ -299,19 +274,14 @@ pub async fn login_with_email_code(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config);
+    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = jwt_utils
-        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let refresh_token = jwt_utils
-        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let access_token_expiry = jwt_utils.get_access_token_expiry();
-    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
+    let login_tokens = generate_login_tokens(
+        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+    )?;
 
     let user = User {
         id,
@@ -330,27 +300,7 @@ pub async fn login_with_email_code(
     }
 
     let secure = is_secure_request(&http_req);
-    let access_cookie = create_auth_cookie(
-        "access_token",
-        &access_token,
-        access_token_expiry as i64,
-        secure,
-    );
-    let refresh_cookie = create_auth_cookie(
-        "refresh_token",
-        &refresh_token,
-        refresh_token_expiry as i64,
-        secure,
-    );
-
-    Ok(HttpResponse::Ok()
-        .cookie(access_cookie)
-        .cookie(refresh_cookie)
-        .json(ApiResponse::success_i18n(
-            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
-            "api.success",
-            &user_lang,
-        )))
+    Ok(build_login_response(user, login_tokens, &user_lang, secure))
 }
 
 pub async fn send_login_code(
@@ -422,8 +372,8 @@ pub async fn login_with_two_factor(
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
 
-    if !req.password.is_empty() {
-        let valid = verify(&req.password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+    if let Some(ref password) = req.password {
+        let valid = verify(password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
         if !valid {
             return Err(AppError::Unauthorized("登录失败".to_string()));
         }
@@ -439,7 +389,7 @@ pub async fn login_with_two_factor(
 
     let mut verified = false;
     if let Some(encrypted_secret) = secret {
-        let secret = decrypt_password(&encrypted_secret);
+        let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
         let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -480,18 +430,13 @@ pub async fn login_with_two_factor(
         return Err(AppError::Unauthorized("验证码无效".to_string()));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config);
+    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
     let remember_me = req.remember_me.unwrap_or(false);
-    let access_token = jwt_utils
-        .generate_access_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address))
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let refresh_token = jwt_utils
-        .generate_refresh_token(&id, &username, &role, Some(&device_fingerprint), Some(&ip_address), remember_me)
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
-    let access_token_expiry = jwt_utils.get_access_token_expiry();
-    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
+    let login_tokens = generate_login_tokens(
+        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+    )?;
 
     let user = User {
         id,
@@ -511,27 +456,7 @@ pub async fn login_with_two_factor(
     tracing::info!("用户 {} 2FA验证登录成功", user.username);
 
     let secure = is_secure_request(&http_req);
-    let access_cookie = create_auth_cookie(
-        "access_token",
-        &access_token,
-        access_token_expiry as i64,
-        secure,
-    );
-    let refresh_cookie = create_auth_cookie(
-        "refresh_token",
-        &refresh_token,
-        refresh_token_expiry as i64,
-        secure,
-    );
-
-    Ok(HttpResponse::Ok()
-        .cookie(access_cookie)
-        .cookie(refresh_cookie)
-        .json(ApiResponse::success_i18n(
-            serde_json::json!({ "user": user, "expires_in": access_token_expiry }),
-            "api.success",
-            &user_lang,
-        )))
+    Ok(build_login_response(user, login_tokens, &user_lang, secure))
 }
 
 pub async fn send_two_factor_code(
@@ -593,7 +518,7 @@ pub async fn refresh_token(
         }
     };
 
-    let jwt_utils = JwtUtils::new(&state.config);
+    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
 
     let claims = jwt_utils.validate_token(&token).map_err(|err| {
         let msg = match err.kind() {
@@ -763,6 +688,8 @@ pub async fn init_two_factor(
 ) -> Result<HttpResponse, AppError> {
     let conn = state.pool()?.get_conn();
 
+    req.validate()?;
+
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
             return Err(AppError::Forbidden("只有管理员可以为其他用户初始化2FA".to_string()));
@@ -831,6 +758,8 @@ pub async fn enable_two_factor(
 ) -> Result<HttpResponse, AppError> {
     let conn = state.pool()?.get_conn();
 
+    req.validate()?;
+
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
             return Err(AppError::Forbidden("只有管理员可以为其他用户启用2FA".to_string()));
@@ -857,7 +786,7 @@ pub async fn enable_two_factor(
         return Err(AppError::Validation("请先初始化2FA".to_string()));
     };
 
-    let secret = decrypt_password(&encrypted_secret);
+    let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
 
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
@@ -908,6 +837,8 @@ pub async fn disable_two_factor(
 ) -> Result<HttpResponse, AppError> {
     let conn = state.pool()?.get_conn();
 
+    req.validate()?;
+
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
             return Err(AppError::Forbidden("只有管理员可以为其他用户禁用2FA".to_string()));
@@ -944,7 +875,7 @@ pub async fn disable_two_factor(
     let mut verified = false;
 
     if let Some(encrypted_secret) = secret {
-        let secret = decrypt_password(&encrypted_secret);
+        let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
         let secret_bytes = Secret::Encoded(secret)
             .to_bytes()
             .map_err(|e| AppError::Internal(format!("2FA密钥格式错误: {e}")))?;
@@ -978,21 +909,96 @@ pub async fn disable_two_factor(
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "2FA已禁用")))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct TwoFactorInitRequest {
     pub user_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct TwoFactorEnableRequest {
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
     pub code: String,
     pub user_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct TwoFactorDisableRequest {
+    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
     pub code: String,
     pub user_id: Option<Uuid>,
+}
+
+struct LoginTokens {
+    access_token: String,
+    refresh_token: String,
+    access_token_expiry: u64,
+    refresh_token_expiry: u64,
+}
+
+fn build_login_response(
+    user: User,
+    login_tokens: LoginTokens,
+    user_lang: &str,
+    secure: bool,
+) -> HttpResponse {
+    let access_cookie = create_auth_cookie(
+        "access_token",
+        &login_tokens.access_token,
+        login_tokens.access_token_expiry as i64,
+        secure,
+    );
+    let refresh_cookie = create_auth_cookie(
+        "refresh_token",
+        &login_tokens.refresh_token,
+        login_tokens.refresh_token_expiry as i64,
+        secure,
+    );
+
+    HttpResponse::Ok()
+        .cookie(access_cookie)
+        .cookie(refresh_cookie)
+        .json(ApiResponse::success_i18n(
+            serde_json::json!({ "user": user, "expires_in": login_tokens.access_token_expiry }),
+            "api.success",
+            user_lang,
+        ))
+}
+
+fn generate_login_tokens(
+    jwt_utils: &JwtUtils,
+    id: &Uuid,
+    username: &str,
+    role: &str,
+    device_fingerprint: &str,
+    ip_address: &str,
+    remember_me: bool,
+) -> Result<LoginTokens, AppError> {
+    let access_token = jwt_utils
+        .generate_access_token(id, username, role, Some(device_fingerprint), Some(ip_address))
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let refresh_token = jwt_utils
+        .generate_refresh_token(id, username, role, Some(device_fingerprint), Some(ip_address), remember_me)
+        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+    let access_token_expiry = jwt_utils.get_access_token_expiry();
+    let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
+
+    Ok(LoginTokens {
+        access_token,
+        refresh_token,
+        access_token_expiry,
+        refresh_token_expiry,
+    })
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.bytes().zip(b.bytes()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 async fn log_login(
