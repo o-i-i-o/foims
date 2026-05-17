@@ -52,9 +52,10 @@ fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
     claims.get("sub")?.as_str().map(std::string::ToString::to_string)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RateLimitError {
     pub message: String,
+    pub retry_after: u64,
 }
 
 impl std::fmt::Display for RateLimitError {
@@ -65,11 +66,14 @@ impl std::fmt::Display for RateLimitError {
 
 impl ResponseError for RateLimitError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::TooManyRequests().json(json!({
-            "success": false,
-            "message": &self.message,
-            "error_type": "rate_limit_exceeded"
-        }))
+        HttpResponse::TooManyRequests()
+            .insert_header(("Retry-After", self.retry_after.to_string()))
+            .json(json!({
+                "success": false,
+                "message": &self.message,
+                "error_type": "rate_limit_exceeded",
+                "retry_after": self.retry_after
+            }))
     }
 }
 
@@ -77,6 +81,8 @@ impl ResponseError for RateLimitError {
 struct RateLimitEntry {
     count: u32,
     window_start: Instant,
+    previous_count: u32,
+    previous_window_start: Option<Instant>,
 }
 
 impl RateLimitEntry {
@@ -84,16 +90,42 @@ impl RateLimitEntry {
         Self {
             count: 1,
             window_start: Instant::now(),
+            previous_count: 0,
+            previous_window_start: None,
         }
     }
 
-    const fn increment(&mut self) -> u32 {
+    fn increment(&mut self) -> u32 {
         self.count += 1;
         self.count
     }
 
     fn is_expired(&self, window_secs: u64) -> bool {
         self.window_start.elapsed() > Duration::from_secs(window_secs)
+    }
+
+    fn weighted_count(&self, window_secs: u64) -> u32 {
+        let current_elapsed = self.window_start.elapsed().as_secs_f64();
+        let window_f64 = window_secs as f64;
+
+        let previous_weight = if let Some(prev_start) = self.previous_window_start {
+            let prev_age = prev_start.elapsed().as_secs_f64();
+            let overlap = (prev_age - window_f64).max(0.0);
+            (1.0 - overlap / window_f64).max(0.0)
+        } else {
+            0.0
+        };
+
+        let current_weight = 1.0 - (current_elapsed / window_f64).min(1.0);
+
+        (self.previous_count as f64 * previous_weight + self.count as f64 * current_weight) as u32
+    }
+
+    fn reset_window(&mut self) {
+        self.previous_count = self.count;
+        self.previous_window_start = Some(self.window_start);
+        self.count = 1;
+        self.window_start = Instant::now();
     }
 }
 
@@ -105,10 +137,11 @@ pub struct RateLimiter {
     user_limit: u32,
     login_limit: u32,
     window_secs: u64,
+    trusted_proxies: Vec<String>,
 }
 
 impl RateLimiter {
-    #[must_use] 
+    #[must_use]
     pub fn new(ip_limit: u32, user_limit: u32, login_limit: u32, window_secs: u64) -> Self {
         Self {
             ip_limits: Arc::new(RwLock::new(HashMap::new())),
@@ -117,10 +150,11 @@ impl RateLimiter {
             user_limit,
             login_limit,
             window_secs,
+            trusted_proxies: Vec::new(),
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_limiter() -> Self {
         Self::new(
             DEFAULT_IP_LIMIT,
@@ -130,22 +164,19 @@ impl RateLimiter {
         )
     }
 
+    pub fn with_trusted_proxies(mut self, proxies: Vec<String>) -> Self {
+        self.trusted_proxies = proxies;
+        self
+    }
+
     pub async fn check_rate_limit(
         &self,
         ip: &str,
         user_id: Option<&str>,
         is_login: bool,
     ) -> Result<(), RateLimitError> {
-        let limit = if is_login {
-            self.login_limit
-        } else if user_id.is_some() {
-            self.user_limit
-        } else {
-            self.ip_limit
-        };
-
         if let Some(uid) = user_id {
-            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), limit)
+            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), self.user_limit)
                 .await?;
         }
 
@@ -175,15 +206,21 @@ impl RateLimiter {
 
         if let Some(entry) = limits.get_mut(key) {
             if entry.is_expired(self.window_secs) {
-                limits.insert(key.to_string(), RateLimitEntry::new());
+                entry.reset_window();
             } else {
-                let count = entry.increment();
-                if count > limit {
+                let weighted = entry.weighted_count(self.window_secs);
+                if weighted >= limit {
                     let retry_after = self.window_secs - entry.window_start.elapsed().as_secs();
+                    tracing::warn!(
+                        "速率限制触发: key={}, 当前计数={}, 加权计数={}, 限制={}, 重试等待={}s",
+                        key, entry.count, weighted, limit, retry_after
+                    );
                     return Err(RateLimitError {
                         message: format!("请求过于频繁，请在 {retry_after} 秒后重试"),
+                        retry_after: retry_after.max(1),
                     });
                 }
+                entry.increment();
             }
         } else {
             limits.insert(key.to_string(), RateLimitEntry::new());
@@ -199,6 +236,10 @@ impl RateLimiter {
         ip_limits.retain(|_, entry| !entry.is_expired(self.window_secs));
         user_limits.retain(|_, entry| !entry.is_expired(self.window_secs));
     }
+
+    fn is_trusted_proxy(&self, ip: &str) -> bool {
+        self.trusted_proxies.iter().any(|p| p == ip)
+    }
 }
 
 pub struct RateLimitMiddleware {
@@ -207,7 +248,7 @@ pub struct RateLimitMiddleware {
 }
 
 impl RateLimitMiddleware {
-    #[must_use] 
+    #[must_use]
     pub const fn new(limiter: RateLimiter, enabled: bool) -> Self {
         Self { limiter, enabled }
     }
@@ -250,10 +291,12 @@ impl<S> RateLimitMiddlewareService<S> {
             "/api/auth/login",
             "/api/auth/login/email",
             "/api/auth/login/two-factor",
+            "/api/auth/login/send-code",
+            "/api/auth/login/send-2fa-code",
             "/api/auth/forgot-password",
             "/api/auth/reset-password",
         ];
-        strict_paths.iter().any(|p| path.starts_with(p))
+        strict_paths.contains(&path)
     }
 }
 
@@ -273,10 +316,27 @@ where
         let limiter = self.limiter.clone();
         let enabled = self.enabled;
         let is_strict = Self::is_strict_path(req.path());
-        let ip = get_real_ip_from_request(req.request());
 
-        let user_id = extract_user_id_from_token(&req);
+        let direct_ip = req
+            .connection_info()
+            .realip_remote_addr()
+            .unwrap_or("unknown")
+            .to_string();
 
+        let ip = if limiter.is_trusted_proxy(&direct_ip) {
+            get_real_ip_from_request(req.request())
+        } else {
+            crate::utils::normalize_ipv4_address(&direct_ip)
+        };
+
+        let user_id = if is_strict {
+            None
+        } else {
+            extract_user_id_from_token(&req)
+        };
+
+        let path = req.path().to_string();
+        let method = req.method().to_string();
         let fut = self.service.call(req);
 
         Box::pin(async move {
@@ -285,6 +345,10 @@ where
                     .check_rate_limit(&ip, user_id.as_deref(), is_strict)
                     .await
             {
+                tracing::warn!(
+                    "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, retry_after={}s",
+                    method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, e.retry_after
+                );
                 return Err(e.into());
             }
 
