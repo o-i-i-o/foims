@@ -287,7 +287,8 @@ async fn main() -> std::io::Result<()> {
         config.rate_limit.user_limit,
         config.rate_limit.login_limit,
         config.rate_limit.window_secs,
-    );
+    )
+    .with_email_limit(config.rate_limit.email_limit, config.rate_limit.email_window_secs);
     let rate_limit_enabled = config.rate_limit.enabled;
 
     if rate_limit_enabled {
@@ -304,6 +305,10 @@ async fn main() -> std::io::Result<()> {
         info!(
             "登录限制: {}/{}秒",
             config.rate_limit.login_limit, config.rate_limit.window_secs
+        );
+        info!(
+            "邮件发送限制: {}/{}秒",
+            config.rate_limit.email_limit, config.rate_limit.email_window_secs
         );
     }
 
@@ -332,10 +337,10 @@ async fn main() -> std::io::Result<()> {
 
     let http_version = config.server.http_version.clone().unwrap_or_else(|| "http2".to_string());
 
-    let app_state = Data::new(AppState {
-        config: config.clone(),
-        pool: pool.clone(),
-    });
+    let app_state = Data::new(
+        AppState::new(config.clone(), pool.clone())
+            .map_err(|e| std::io::Error::other(e))?,
+    );
 
     let http_rate_limiter = rate_limiter.clone();
     let http_rate_limit_enabled = rate_limit_enabled;
@@ -613,12 +618,6 @@ async fn main() -> std::io::Result<()> {
             Ok::<(), std::io::Error>(())
         })
         .await?;
-
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_secs(30));
-        tracing::error!("进程未能在30秒超时内自然退出，强制退出 (code 0)");
-        std::process::exit(0);
-    });
 
     Ok(())
 }

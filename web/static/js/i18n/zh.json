@@ -322,7 +322,11 @@
     "rate_limit_login": "登录限制(次/分钟)",
     "rate_limit_login_desc": "每个IP每分钟最大登录尝试次数",
     "rate_limit_window": "时间窗口(秒)",
-    "rate_limit_window_desc": "速率限制的时间窗口"
+    "rate_limit_window_desc": "速率限制的时间窗口",
+    "rate_limit_email": "邮件发送限制(次/小时)",
+    "rate_limit_email_desc": "每个IP每小时最大邮件发送次数(登录验证码、找回密码)",
+    "rate_limit_email_window": "邮件限制窗口(秒)",
+    "rate_limit_email_window_desc": "邮件发送速率限制的时间窗口"
   },
   "smtp": {
     "host": "SMTP服务器",

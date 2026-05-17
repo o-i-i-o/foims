@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -7,9 +6,9 @@ use actix_web::{
     body::EitherBody,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
+use dashmap::DashMap;
 use futures_util::future::LocalBoxFuture;
 use serde_json::json;
-use tokio::sync::RwLock;
 
 use crate::utils::get_real_ip_from_request;
 use actix_web::http::header::AUTHORIZATION;
@@ -18,6 +17,8 @@ const DEFAULT_IP_LIMIT: u32 = 100;
 const DEFAULT_USER_LIMIT: u32 = 200;
 const DEFAULT_LOGIN_LIMIT: u32 = 5;
 const DEFAULT_WINDOW_SECS: u64 = 60;
+const DEFAULT_EMAIL_LIMIT: u32 = 5;
+const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
 
 fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
     let auth_header = req.headers().get(AUTHORIZATION)?.to_str().ok()?;
@@ -131,12 +132,15 @@ impl RateLimitEntry {
 
 #[derive(Clone)]
 pub struct RateLimiter {
-    ip_limits: Arc<RwLock<HashMap<String, RateLimitEntry>>>,
-    user_limits: Arc<RwLock<HashMap<String, RateLimitEntry>>>,
+    ip_limits: Arc<DashMap<String, RateLimitEntry>>,
+    user_limits: Arc<DashMap<String, RateLimitEntry>>,
+    email_limits: Arc<DashMap<String, RateLimitEntry>>,
     ip_limit: u32,
     user_limit: u32,
     login_limit: u32,
     window_secs: u64,
+    email_limit: u32,
+    email_window_secs: u64,
     trusted_proxies: Vec<String>,
 }
 
@@ -144,14 +148,24 @@ impl RateLimiter {
     #[must_use]
     pub fn new(ip_limit: u32, user_limit: u32, login_limit: u32, window_secs: u64) -> Self {
         Self {
-            ip_limits: Arc::new(RwLock::new(HashMap::new())),
-            user_limits: Arc::new(RwLock::new(HashMap::new())),
+            ip_limits: Arc::new(DashMap::new()),
+            user_limits: Arc::new(DashMap::new()),
+            email_limits: Arc::new(DashMap::new()),
             ip_limit,
             user_limit,
             login_limit,
             window_secs,
+            email_limit: DEFAULT_EMAIL_LIMIT,
+            email_window_secs: DEFAULT_EMAIL_WINDOW_SECS,
             trusted_proxies: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_email_limit(mut self, limit: u32, window_secs: u64) -> Self {
+        self.email_limit = limit;
+        self.email_window_secs = window_secs;
+        self
     }
 
     #[must_use]
@@ -169,15 +183,25 @@ impl RateLimiter {
         self
     }
 
-    pub async fn check_rate_limit(
+    pub fn check_rate_limit(
         &self,
         ip: &str,
         user_id: Option<&str>,
         is_login: bool,
+        is_email: bool,
     ) -> Result<(), RateLimitError> {
+        if is_email {
+            let email_key = format!("email:{ip}");
+            self.check_and_increment_with_window(
+                &self.email_limits,
+                &email_key,
+                self.email_limit,
+                self.email_window_secs,
+            )?;
+        }
+
         if let Some(uid) = user_id {
-            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), self.user_limit)
-                .await?;
+            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), self.user_limit)?;
         }
 
         let ip_key = if is_login {
@@ -190,30 +214,37 @@ impl RateLimiter {
         } else {
             self.ip_limit
         };
-        self.check_and_increment(&self.ip_limits, &ip_key, ip_limit)
-            .await?;
+        self.check_and_increment(&self.ip_limits, &ip_key, ip_limit)?;
 
         Ok(())
     }
 
-    async fn check_and_increment(
+    fn check_and_increment(
         &self,
-        limits: &Arc<RwLock<HashMap<String, RateLimitEntry>>>,
+        limits: &DashMap<String, RateLimitEntry>,
         key: &str,
         limit: u32,
     ) -> Result<(), RateLimitError> {
-        let mut limits = limits.write().await;
+        self.check_and_increment_with_window(limits, key, limit, self.window_secs)
+    }
 
-        if let Some(entry) = limits.get_mut(key) {
-            if entry.is_expired(self.window_secs) {
+    fn check_and_increment_with_window(
+        &self,
+        limits: &DashMap<String, RateLimitEntry>,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> Result<(), RateLimitError> {
+        if let Some(mut entry) = limits.get_mut(key) {
+            if entry.is_expired(window_secs) {
                 entry.reset_window();
             } else {
-                let weighted = entry.weighted_count(self.window_secs);
+                let weighted = entry.weighted_count(window_secs);
                 if weighted >= limit {
-                    let retry_after = self.window_secs - entry.window_start.elapsed().as_secs();
+                    let retry_after = window_secs - entry.window_start.elapsed().as_secs();
                     tracing::warn!(
-                        "速率限制触发: key={}, 当前计数={}, 加权计数={}, 限制={}, 重试等待={}s",
-                        key, entry.count, weighted, limit, retry_after
+                        "速率限制触发: key={}, 当前计数={}, 加权计数={}, 限制={}, 窗口={}s, 重试等待={}s",
+                        key, entry.count, weighted, limit, window_secs, retry_after
                     );
                     return Err(RateLimitError {
                         message: format!("请求过于频繁，请在 {retry_after} 秒后重试"),
@@ -229,12 +260,14 @@ impl RateLimiter {
         Ok(())
     }
 
-    pub async fn cleanup_expired(&self) {
-        let mut ip_limits = self.ip_limits.write().await;
-        let mut user_limits = self.user_limits.write().await;
+    pub fn cleanup_expired(&self) {
+        let window_secs = self.window_secs;
+        self.ip_limits.retain(|_, entry| !entry.is_expired(window_secs));
 
-        ip_limits.retain(|_, entry| !entry.is_expired(self.window_secs));
-        user_limits.retain(|_, entry| !entry.is_expired(self.window_secs));
+        self.user_limits.retain(|_, entry| !entry.is_expired(window_secs));
+
+        let email_window_secs = self.email_window_secs;
+        self.email_limits.retain(|_, entry| !entry.is_expired(email_window_secs));
     }
 
     fn is_trusted_proxy(&self, ip: &str) -> bool {
@@ -298,6 +331,15 @@ impl<S> RateLimitMiddlewareService<S> {
         ];
         strict_paths.contains(&path)
     }
+
+    fn is_email_path(path: &str) -> bool {
+        let email_paths = [
+            "/api/auth/login/send-code",
+            "/api/auth/login/send-2fa-code",
+            "/api/auth/forgot-password",
+        ];
+        email_paths.contains(&path)
+    }
 }
 
 impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
@@ -316,6 +358,7 @@ where
         let limiter = self.limiter.clone();
         let enabled = self.enabled;
         let is_strict = Self::is_strict_path(req.path());
+        let is_email = Self::is_email_path(req.path());
 
         let direct_ip = req
             .connection_info()
@@ -337,21 +380,20 @@ where
 
         let path = req.path().to_string();
         let method = req.method().to_string();
+
+        if enabled {
+            if let Err(e) = limiter.check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email) {
+                tracing::warn!(
+                    "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
+                    method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, is_email, e.retry_after
+                );
+                return Box::pin(async move { Err(e.into()) });
+            }
+        }
+
         let fut = self.service.call(req);
 
         Box::pin(async move {
-            if enabled
-                && let Err(e) = limiter
-                    .check_rate_limit(&ip, user_id.as_deref(), is_strict)
-                    .await
-            {
-                tracing::warn!(
-                    "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, retry_after={}s",
-                    method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, e.retry_after
-                );
-                return Err(e.into());
-            }
-
             let res = fut.await?;
             Ok(res.map_into_left_body())
         })
@@ -363,7 +405,7 @@ pub fn start_cleanup_task(limiter: RateLimiter, mut shutdown_rx: tokio::sync::br
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                    limiter.cleanup_expired().await;
+                    limiter.cleanup_expired();
                 }
                 _ = shutdown_rx.recv() => {
                     tracing::info!("速率限制清理任务收到关闭信号，停止运行");

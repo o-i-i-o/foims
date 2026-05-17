@@ -211,7 +211,9 @@ async function saveSystemConfig() {
       ip_limit: parseInt(elementCache.getValue("rate-limit-ip")) || 100,
       user_limit: parseInt(elementCache.getValue("rate-limit-user")) || 200,
       login_limit: parseInt(elementCache.getValue("rate-limit-login")) || 5,
-      window_secs: parseInt(elementCache.getValue("rate-limit-window")) || 60
+      window_secs: parseInt(elementCache.getValue("rate-limit-window")) || 60,
+      email_limit: parseInt(elementCache.getValue("rate-limit-email")) || 5,
+      email_window_secs: parseInt(elementCache.getValue("rate-limit-email-window")) || 3600
     };
 
     const config = { 
@@ -281,6 +283,8 @@ export async function loadSystemConfig() {
         elementCache.setValue("rate-limit-user", config.rate_limit.user_limit || 200);
         elementCache.setValue("rate-limit-login", config.rate_limit.login_limit || 5);
         elementCache.setValue("rate-limit-window", config.rate_limit.window_secs || 60);
+        elementCache.setValue("rate-limit-email", config.rate_limit.email_limit || 5);
+        elementCache.setValue("rate-limit-email-window", config.rate_limit.email_window_secs || 3600);
       }
       
       handleCertTypeChange();

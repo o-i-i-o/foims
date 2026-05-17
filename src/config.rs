@@ -134,6 +134,10 @@ pub struct RateLimitConfig {
     pub login_limit: u32,
     #[serde(default = "default_window_secs")]
     pub window_secs: u64,
+    #[serde(default = "default_email_limit")]
+    pub email_limit: u32,
+    #[serde(default = "default_email_window_secs")]
+    pub email_window_secs: u64,
     #[serde(default = "default_rate_limit_enabled")]
     pub enabled: bool,
 }
@@ -150,6 +154,12 @@ const fn default_login_limit() -> u32 {
 const fn default_window_secs() -> u64 {
     60
 }
+const fn default_email_limit() -> u32 {
+    5
+}
+const fn default_email_window_secs() -> u64 {
+    3600
+}
 const fn default_rate_limit_enabled() -> bool {
     true
 }
@@ -161,6 +171,8 @@ impl Default for RateLimitConfig {
             user_limit: default_user_limit(),
             login_limit: default_login_limit(),
             window_secs: default_window_secs(),
+            email_limit: default_email_limit(),
+            email_window_secs: default_email_window_secs(),
             enabled: default_rate_limit_enabled(),
         }
     }

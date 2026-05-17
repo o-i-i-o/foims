@@ -51,9 +51,8 @@ pub async fn auth_middleware(
                 .map_into_right_body(),
         ));
     };
-    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
 
-    let claims = match jwt_utils.validate_token(&token) {
+    let claims = match state.jwt_utils.validate_token(&token) {
         Ok(claims) => claims,
         Err(err) => {
             let user_lang = detect_user_language(req.request());
@@ -160,7 +159,7 @@ pub async fn login(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
+    let jwt_utils = &state.jwt_utils;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
@@ -274,7 +273,7 @@ pub async fn login_with_email_code(
         )));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
+    let jwt_utils = &state.jwt_utils;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
@@ -431,7 +430,7 @@ pub async fn login_with_two_factor(
         return Err(AppError::Unauthorized("验证码无效".to_string()));
     }
 
-    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
+    let jwt_utils = &state.jwt_utils;
     let (ip_address, user_agent) = crate::auth::utils::get_client_info(&http_req);
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
     let remember_me = req.remember_me.unwrap_or(false);
@@ -519,7 +518,7 @@ pub async fn refresh_token(
         }
     };
 
-    let jwt_utils = JwtUtils::new(&state.config).map_err(AppError::Internal)?;
+    let jwt_utils = &state.jwt_utils;
 
     let claims = jwt_utils.validate_token(&token).map_err(|err| {
         let msg = match err.kind() {

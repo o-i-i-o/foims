@@ -1,49 +1,53 @@
 [database]
-acquire_timeout_secs = 15
-database = "ipma"
-health_check_interval_secs = 30
 host = "localhost"
-idle_timeout_secs = 60
-max_connections = 20
-max_lifetime_secs = 1800
-min_connections = 5
-password = "admin123"
 port = 5432
+database = "ipma"
+username = "postgres"
+password = "admin123"
+max_connections = 20
+min_connections = 5
+acquire_timeout_secs = 15
+idle_timeout_secs = 60
+max_lifetime_secs = 1800
 query_timeout_secs = 30
 slow_query_threshold_ms = 1000
-username = "postgres"
+health_check_interval_secs = 30
 
-[i18n]
-default_language = "zh"
-supported_languages = ["zh", "en"]
+[server]
+host = ""
+http_enabled = true
+http_port = 80
+https_enabled = true
+https_port = 443
+auto_https = true
+http_version = "http2"
+cert_type = "self_signed"
+public_url = ""
+page_timeout = 30
+cors_allowed_origins = []
+
+[jwt]
+secret = "451#*jdhjhdfskdsHASDGJSAD256dgdfgs4dfs45werr2x"
+access_token_expiry = "15m"
+refresh_token_expiry = "7d"
 
 [init]
 enabled = false
 
-[jwt]
-access_token_expiry = "15m"
-refresh_token_expiry = "7d"
-secret = "451#*jdhjhdfskdsHASDGJSAD256dgdfgs4dfs45werr2x"
-
-[server]
-auto_https = true
-cert_type = "self_signed"
-cors_allowed_origins = ["http://localhost", "http://localhost:80", "https://localhost", "https://localhost:443"]
-host = ""
-host_ipv6 = "::"
-http_enabled = true
-http_port = 80
-http_version = "http2"
-https_enabled = true
-https_port = 443
-page_timeout = 60
-public_url = "https://192.168.6.102"
+[i18n]
+default_language = "zh"
+supported_languages = [
+    "zh",
+    "en",
+]
 
 [rate_limit]
-ip_limit = 1000
-user_limit = 2000
+ip_limit = 100
+user_limit = 200
 login_limit = 5
-window_secs = 600
+window_secs = 60
+email_limit = 5
+email_window_secs = 3600
 enabled = true
 
 [snmp]

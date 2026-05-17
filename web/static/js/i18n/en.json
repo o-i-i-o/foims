@@ -320,7 +320,11 @@
     "rate_limit_login": "Login Limit (attempts/minute)",
     "rate_limit_login_desc": "Max login attempts per IP per minute",
     "rate_limit_window": "Time Window (seconds)",
-    "rate_limit_window_desc": "Time window for rate limiting"
+    "rate_limit_window_desc": "Time window for rate limiting",
+    "rate_limit_email": "Email Limit (per hour)",
+    "rate_limit_email_desc": "Max email sends per IP per hour (login codes, password reset)",
+    "rate_limit_email_window": "Email Window (seconds)",
+    "rate_limit_email_window_desc": "Time window for email rate limiting"
   },
   "smtp": {
     "host": "SMTP Server",

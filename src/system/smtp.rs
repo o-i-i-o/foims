@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
@@ -8,6 +10,24 @@ use uuid::Uuid;
 
 use crate::crypto::{decrypt_password, encrypt_password};
 use crate::error::AppError;
+
+const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
+const SPAWN_BLOCKING_TIMEOUT: Duration = Duration::from_secs(60);
+
+async fn send_with_timeout(
+    transport: SmtpTransport,
+    email: Message,
+) -> Result<(), AppError> {
+    tokio::time::timeout(
+        SPAWN_BLOCKING_TIMEOUT,
+        tokio::task::spawn_blocking(move || transport.send(&email)),
+    )
+    .await
+    .map_err(|_| AppError::Internal("邮件发送超时".to_string()))?
+    .map_err(|e| AppError::Internal(format!("邮件发送任务失败: {e}")))?
+    .map_err(|e| AppError::Internal(format!("发送邮件失败: {e:?}")))?;
+    Ok(())
+}
 
 pub async fn send_email_async(
     pool: &sqlx::PgPool,
@@ -36,12 +56,7 @@ pub async fn send_email_async(
 
     let transport = build_smtp_transport(&smtp_config)?;
 
-    tokio::task::spawn_blocking(move || transport.send(&email))
-        .await
-        .map_err(|e| AppError::Internal(format!("邮件发送任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(format!("发送邮件失败: {e:?}")))?;
-
-    Ok(())
+    send_with_timeout(transport, email).await
 }
 
 fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> {
@@ -50,6 +65,7 @@ fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> 
             .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
             .port(config.port)
             .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .timeout(Some(SMTP_TIMEOUT))
             .build();
         Ok(transport)
     } else {
@@ -57,6 +73,7 @@ fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> 
         Ok(SmtpTransport::builder_dangerous(&config.host)
             .port(config.port)
             .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .timeout(Some(SMTP_TIMEOUT))
             .build())
     }
 }
@@ -183,29 +200,16 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
         .subject("SMTP连接测试")
         .body("这是一封SMTP连接测试邮件，无需回复".to_string())?;
 
-    let transport = if config.secure {
-        SmtpTransport::relay(&config.host)?
-            .port(config.port)
-            .credentials(Credentials::new(
-                config.username.clone(),
-                config.password.clone(),
-            ))
-            .build()
-    } else {
-        warn!("使用非加密SMTP连接进行测试 (host: {})", config.host);
-        SmtpTransport::builder_dangerous(&config.host)
-            .port(config.port)
-            .credentials(Credentials::new(
-                config.username.clone(),
-                config.password.clone(),
-            ))
-            .build()
-    };
+    let transport = build_smtp_transport(config)?;
 
-    tokio::task::spawn_blocking(move || transport.send(&email))
-        .await
-        .map_err(|e| anyhow::anyhow!("SMTP测试任务失败: {e}"))?
-        .map_err(|e| anyhow::anyhow!("SMTP连接测试失败: {e:?}"))?;
+    tokio::time::timeout(
+        SPAWN_BLOCKING_TIMEOUT,
+        tokio::task::spawn_blocking(move || transport.send(&email)),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("SMTP测试超时"))?
+    .map_err(|e| anyhow::anyhow!("SMTP测试任务失败: {e}"))?
+    .map_err(|e| anyhow::anyhow!("SMTP连接测试失败: {e:?}"))?;
 
     Ok(())
 }
@@ -253,10 +257,14 @@ pub async fn send_email_to_users(
 
     let transport = build_smtp_transport(&smtp_config)?;
 
-    tokio::task::spawn_blocking(move || transport.send(&email))
-        .await
-        .map_err(|e| anyhow::anyhow!("邮件发送任务失败: {e}"))?
-        .map_err(|e| anyhow::anyhow!("发送邮件失败: {e:?}"))?;
+    tokio::time::timeout(
+        SPAWN_BLOCKING_TIMEOUT,
+        tokio::task::spawn_blocking(move || transport.send(&email)),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("邮件发送超时"))?
+    .map_err(|e| anyhow::anyhow!("邮件发送任务失败: {e}"))?
+    .map_err(|e| anyhow::anyhow!("发送邮件失败: {e:?}"))?;
 
     Ok(())
 }
