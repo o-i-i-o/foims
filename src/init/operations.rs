@@ -1,7 +1,22 @@
 use sqlx::PgPool;
 use tracing::info;
 
+use crate::db::url_encode_component;
 use crate::init::config::get_backup_dir;
+
+pub fn validate_identifier(name: &str, label: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err(format!("{label}不能为空"));
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(format!("{label}包含非法字符，只允许字母、数字和下划线"));
+    }
+    Ok(())
+}
+
+pub fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
 
 pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<String, String> {
     let backup_dir = get_backup_dir();
@@ -49,43 +64,52 @@ pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<S
 }
 
 pub async fn drop_database(config: &crate::config::DatabaseConfig) -> Result<(), String> {
+    validate_identifier(&config.database, "数据库名")?;
+
     let postgres_url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        config.username, config.password, config.host, config.port
+        url_encode_component(&config.username),
+        url_encode_component(&config.password),
+        config.host,
+        config.port
     );
 
     let postgres_pool = PgPool::connect(&postgres_url)
         .await
         .map_err(|e| format!("连接PostgreSQL失败: {e}"))?;
 
-    let terminate_query = format!(
-        r"SELECT pg_terminate_backend(pg_stat_activity.pid)
+    let terminate_query = r"SELECT pg_terminate_backend(pg_stat_activity.pid)
            FROM pg_stat_activity
-           WHERE pg_stat_activity.datname = '{}'
-           AND pid <> pg_backend_pid()",
-        config.database
-    );
+           WHERE pg_stat_activity.datname = $1
+           AND pid <> pg_backend_pid()";
 
-    sqlx::query(&terminate_query)
+    sqlx::query(terminate_query)
+        .bind(&config.database)
         .execute(&postgres_pool)
         .await
         .map_err(|e| format!("断开数据库连接失败: {e}"))?;
 
     info!("已断开所有到数据库 {} 的连接", config.database);
 
-    sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\"", config.database))
+    sqlx::query(&format!("DROP DATABASE IF EXISTS {}", quote_ident(&config.database)))
         .execute(&postgres_pool)
         .await
         .map_err(|e| format!("删除数据库失败: {e}"))?;
 
+    postgres_pool.close().await;
     info!("数据库 {} 已删除", config.database);
     Ok(())
 }
 
 pub async fn create_database(config: &crate::config::DatabaseConfig) -> Result<(), String> {
+    validate_identifier(&config.database, "数据库名")?;
+
     let postgres_url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        config.username, config.password, config.host, config.port
+        url_encode_component(&config.username),
+        url_encode_component(&config.password),
+        config.host,
+        config.port
     );
 
     let postgres_pool = PgPool::connect(&postgres_url)
@@ -101,17 +125,19 @@ pub async fn create_database(config: &crate::config::DatabaseConfig) -> Result<(
 
     if db_exists {
         info!("数据库 {} 已存在，跳过创建", config.database);
+        postgres_pool.close().await;
         return Ok(());
     }
 
     sqlx::query(&format!(
-        "CREATE DATABASE \"{}\" CONNECTION LIMIT = -1",
-        config.database
+        "CREATE DATABASE {} CONNECTION LIMIT = -1",
+        quote_ident(&config.database)
     ))
     .execute(&postgres_pool)
     .await
     .map_err(|e| format!("创建数据库失败: {e}"))?;
 
+    postgres_pool.close().await;
     info!("数据库 {} 创建成功", config.database);
     Ok(())
 }
@@ -131,8 +157,8 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             .execute(pool)
             .await?;
 
-        for table in tables {
-            sqlx::query(&format!("DROP TABLE IF EXISTS {table} CASCADE"))
+        for table in &tables {
+            sqlx::query(&format!("DROP TABLE IF EXISTS {} CASCADE", quote_ident(table)))
                 .execute(pool)
                 .await?;
         }

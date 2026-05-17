@@ -103,7 +103,7 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
 
 pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<ArpEntry>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
-    let timeout = std::time::Duration::from_secs(10);
+    let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
@@ -287,14 +287,36 @@ pub async fn batch_get_mac_via_snmp(
         return results;
     }
 
-    let mut all_arp_entries: HashMap<String, String> = HashMap::new();
+    let all_arp_entries = std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, String>::new()));
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
 
+    let mut handles = Vec::new();
     for switch in &switches {
-        if let Err(e) = fetch_switch_arp(pool, switch, &mut all_arp_entries).await {
-            warn!("从交换机 {} 获取ARP表失败: {}", switch.name, e);
+        let pool_clone = pool.clone();
+        let switch = switch.clone();
+        let all_arp_entries = all_arp_entries.clone();
+        let permit = semaphore.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = permit.acquire().await;
+            let mut local_entries = HashMap::new();
+            if let Err(e) = fetch_switch_arp(&pool_clone, &switch, &mut local_entries).await {
+                warn!("从交换机 {} 获取ARP表失败: {}", switch.name, e);
+            }
+            let mut map = all_arp_entries.lock().await;
+            for (ip, mac) in local_entries {
+                map.insert(ip, mac);
+            }
+        }));
+    }
+
+    for handle in handles {
+        if let Err(e) = handle.await {
+            error!("SNMP扫描任务失败: {}", e);
         }
     }
 
+    let all_arp_entries = all_arp_entries.lock().await;
     for ip in ips {
         let mac = all_arp_entries.get(ip).cloned();
         results.insert(ip.clone(), mac);

@@ -11,6 +11,21 @@ use tracing::{debug, error, info, warn};
 
 use crate::config::DatabaseConfig;
 
+pub fn url_encode_component(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    result
+}
+
 #[derive(Debug, Default)]
 pub struct PoolMetrics {
     pub active_connections: AtomicU32,
@@ -142,10 +157,10 @@ pub struct PoolConfig {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            max_connections: 20,
+            max_connections: 10,
             min_connections: 5,
             acquire_timeout_secs: 15,
-            idle_timeout_secs: 300,
+            idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
             test_before_acquire: true,
             health_check_interval_secs: 30,
@@ -261,11 +276,11 @@ impl DbPool {
 
         let url = format!(
             "postgres://{}:{}@{}:{}/{}?statement_timeout={}&lock_timeout={}",
-            config.username,
-            config.password,
+            url_encode_component(&config.username),
+            url_encode_component(&config.password),
             config.host,
             config.port,
-            config.database,
+            url_encode_component(&config.database),
             pool_config.statement_timeout_ms,
             pool_config.lock_timeout_ms
         );
@@ -333,6 +348,7 @@ impl DbPool {
 
     #[must_use]
     pub fn get_conn(&self) -> PgPool {
+        self.update_metrics();
         (*self.get_pool()).clone()
     }
 
@@ -545,7 +561,7 @@ impl DbPool {
             Err(_) => {
                 self.metrics.record_request_complete(elapsed_ms, false);
                 self.update_metrics();
-                Err(sqlx::Error::WorkerCrashed)
+                Err(sqlx::Error::PoolTimedOut)
             }
         }
     }
@@ -569,7 +585,7 @@ impl DbPool {
             match operation().await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    if !Self::is_retriable_error(&e) || attempt == max_retries - 1 {
+                    if !is_retriable_error(&e) || attempt == max_retries - 1 {
                         return Err(e);
                     }
 
@@ -594,18 +610,6 @@ impl DbPool {
         }
 
         Err(last_error.unwrap_or(sqlx::Error::WorkerCrashed))
-    }
-
-    fn is_retriable_error(e: &sqlx::Error) -> bool {
-        match e {
-            sqlx::Error::PoolTimedOut
-            | sqlx::Error::PoolClosed
-            | sqlx::Error::Io(_) => true,
-            sqlx::Error::Database(db_err) => {
-                matches!(db_err.code().as_deref(), Some("08006") | Some("08001") | Some("08004") | Some("57P03"))
-            }
-            _ => false,
-        }
     }
 
     pub async fn query<F, T>(&self, query_name: &str, future: F) -> Result<T, sqlx::Error>
@@ -671,7 +675,7 @@ impl DbPool {
     where
         F: Fn(&mut sqlx::Transaction<'_, sqlx::Postgres>) -> Fut,
         Fut: std::future::Future<Output = Result<T, E>>,
-        E: From<sqlx::Error> + std::fmt::Display + std::fmt::Debug,
+        E: From<sqlx::Error> + std::fmt::Display + std::fmt::Debug + 'static,
     {
         let config = self.config.read().await;
         let max_retries = config.retry_max_attempts;
@@ -685,7 +689,7 @@ impl DbPool {
             let mut tx = match self.begin().await {
                 Ok(t) => t,
                 Err(e) => {
-                    let should_retry = Self::is_retriable_error(&e);
+                    let should_retry = is_retriable_error(&e);
                     let err = E::from(e);
                     if !should_retry || attempt == max_retries - 1 {
                         return Err(err);
@@ -710,7 +714,7 @@ impl DbPool {
                 Ok(result) => {
                     if let Err(e) = tx.commit().await {
                         error!("事务提交失败: {}", e);
-                        let should_retry = Self::is_retriable_error(&e);
+                        let should_retry = is_retriable_error(&e);
                         let err = E::from(e);
                         if !should_retry || attempt == max_retries - 1 {
                             return Err(err);
@@ -736,10 +740,12 @@ impl DbPool {
                         error!("事务回滚失败: {}", rollback_err);
                     }
 
-                    let err_display = format!("{}", e);
-                    let should_retry = err_display.contains("connection")
-                        || err_display.contains("timeout")
-                        || err_display.contains("PoolTimedOut");
+                    let should_retry = (&e as &dyn std::any::Any)
+                        .downcast_ref::<crate::error::AppError>()
+                        .is_some_and(is_app_error_retriable)
+                        || (&e as &dyn std::any::Any)
+                            .downcast_ref::<sqlx::Error>()
+                            .is_some_and(is_retriable_error);
 
                     if !should_retry || attempt == max_retries - 1 {
                         return Err(e);
@@ -762,6 +768,27 @@ impl DbPool {
         }
 
         Err(last_error.unwrap_or_else(|| E::from(sqlx::Error::WorkerCrashed)))
+    }
+}
+
+pub fn is_retriable_error(e: &sqlx::Error) -> bool {
+    match e {
+        sqlx::Error::PoolTimedOut
+        | sqlx::Error::PoolClosed
+        | sqlx::Error::Io(_) => true,
+        sqlx::Error::Database(db_err) => {
+            matches!(db_err.code().as_deref(), Some("08006") | Some("08001") | Some("08004") | Some("57P03"))
+        }
+        _ => false,
+    }
+}
+
+pub fn is_app_error_retriable(e: &crate::error::AppError) -> bool {
+    match e {
+        crate::error::AppError::Database(msg) => {
+            msg.contains("连接异常") || msg.contains("超时")
+        }
+        _ => false,
     }
 }
 
@@ -830,7 +857,7 @@ mod tests {
     #[test]
     fn test_pool_config_default() {
         let config = PoolConfig::default();
-        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.max_connections, 10);
         assert_eq!(config.min_connections, 5);
         assert_eq!(config.acquire_timeout_secs, 15);
         assert!(!config.auto_scaling_enabled);
@@ -876,9 +903,9 @@ mod tests {
 
     #[test]
     fn test_is_retriable_error() {
-        assert!(DbPool::is_retriable_error(&sqlx::Error::PoolTimedOut));
-        assert!(DbPool::is_retriable_error(&sqlx::Error::PoolClosed));
-        assert!(!DbPool::is_retriable_error(&sqlx::Error::RowNotFound));
-        assert!(!DbPool::is_retriable_error(&sqlx::Error::ColumnNotFound("test".to_string())));
+        assert!(is_retriable_error(&sqlx::Error::PoolTimedOut));
+        assert!(is_retriable_error(&sqlx::Error::PoolClosed));
+        assert!(!is_retriable_error(&sqlx::Error::RowNotFound));
+        assert!(!is_retriable_error(&sqlx::Error::ColumnNotFound("test".to_string())));
     }
 }

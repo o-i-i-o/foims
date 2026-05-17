@@ -34,27 +34,33 @@ pub async fn send_email_async(
         .body(body.to_string())
         .map_err(|e| AppError::Internal(format!("邮件构建失败: {e}")))?;
 
-    let transport = if smtp_config.secure || smtp_config.host == "smtp.qq.com" {
-        SmtpTransport::relay(&smtp_config.host)
-            .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
-            .port(smtp_config.port)
-            .credentials(Credentials::new(smtp_config.username, smtp_config.password))
-            .build()
-    } else {
-        SmtpTransport::builder_dangerous(&smtp_config.host)
-            .port(smtp_config.port)
-            .credentials(Credentials::new(smtp_config.username, smtp_config.password))
-            .build()
-    };
+    let transport = build_smtp_transport(&smtp_config)?;
 
-    transport
-        .send(&email)
+    tokio::task::spawn_blocking(move || transport.send(&email))
+        .await
+        .map_err(|e| AppError::Internal(format!("邮件发送任务失败: {e}")))?
         .map_err(|e| AppError::Internal(format!("发送邮件失败: {e:?}")))?;
 
     Ok(())
 }
 
-// SMTP配置结构体
+fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> {
+    if config.secure || config.host == "smtp.qq.com" {
+        let transport = SmtpTransport::relay(&config.host)
+            .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
+            .port(config.port)
+            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .build();
+        Ok(transport)
+    } else {
+        warn!("使用非加密SMTP连接发送邮件，凭据可能以明文传输 (host: {})", config.host);
+        Ok(SmtpTransport::builder_dangerous(&config.host)
+            .port(config.port)
+            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .build())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmtpConfig {
     pub host: String,
@@ -65,64 +71,76 @@ pub struct SmtpConfig {
     pub secure: bool,
 }
 
-// 从数据库获取SMTP配置
+pub enum SmtpConfigError {
+    NotConfigured,
+    QueryFailed(String),
+    Incomplete,
+}
+
 pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
-    let smtp_config_result = sqlx::query(
-        "SELECT key, value FROM system_configs WHERE config_type = 'smtp' ORDER BY key",
-    )
-    .fetch_all(pool)
-    .await;
-
-    match smtp_config_result {
-        Ok(rows) => {
-            if rows.is_empty() {
-                None
-            } else {
-                let mut host = String::new();
-                let mut port = 0;
-                let mut username = String::new();
-                let mut password = String::new();
-                let mut from = String::new();
-                let mut secure = false;
-
-                for row in rows {
-                    let key: String = row.get("key");
-                    let value: Option<String> = row.get("value");
-                    if let Some(value) = value {
-                        match key.as_str() {
-                            "host" => host = value,
-                            "port" => port = value.parse().unwrap_or(0),
-                            "username" => username = value,
-                            "password" => password = decrypt_password(&value).unwrap_or_default(),
-                            "from" => from = value,
-                            "secure" => secure = value.parse().unwrap_or(false),
-                            _ => {}
-                        }
-                    }
-                }
-
-                if !host.is_empty() && port > 0 && !username.is_empty() && !from.is_empty() {
-                    Some(SmtpConfig {
-                        host,
-                        port,
-                        username,
-                        password,
-                        from,
-                        secure,
-                    })
-                } else {
-                    None
-                }
-            }
+    match get_smtp_config_from_db_inner(pool).await {
+        Ok(config) => config,
+        Err(SmtpConfigError::NotConfigured) => None,
+        Err(SmtpConfigError::QueryFailed(e)) => {
+            error!("查询SMTP配置失败: {}", e);
+            None
         }
-        Err(e) => {
-            tracing::error!("查询SMTP配置失败: {}", e);
+        Err(SmtpConfigError::Incomplete) => {
+            warn!("SMTP配置不完整，缺少必要字段");
             None
         }
     }
 }
 
-// 保存SMTP配置到数据库
+async fn get_smtp_config_from_db_inner(pool: &PgPool) -> Result<Option<SmtpConfig>, SmtpConfigError> {
+    let rows = sqlx::query(
+        "SELECT key, value FROM system_configs WHERE config_type = 'smtp' ORDER BY key",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| SmtpConfigError::QueryFailed(e.to_string()))?;
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let mut host = String::new();
+    let mut port = 0u16;
+    let mut username = String::new();
+    let mut password = String::new();
+    let mut from = String::new();
+    let mut secure = false;
+
+    for row in rows {
+        let key: String = row.get("key");
+        let value: Option<String> = row.get("value");
+        if let Some(value) = value {
+            match key.as_str() {
+                "host" => host = value,
+                "port" => port = value.parse().unwrap_or(0),
+                "username" => username = value,
+                "password" => password = decrypt_password(&value).unwrap_or_default(),
+                "from" => from = value,
+                "secure" => secure = value.parse().unwrap_or(false),
+                _ => {}
+            }
+        }
+    }
+
+    if !host.is_empty() && port > 0 && !username.is_empty() && !from.is_empty() {
+        Ok(Some(SmtpConfig {
+            host,
+            port,
+            username,
+            password,
+            from,
+            secure,
+        }))
+    } else {
+        Err(SmtpConfigError::Incomplete)
+    }
+}
+
 pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Result<()> {
     let mut tx = pool.begin().await?;
 
@@ -133,7 +151,7 @@ pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Resul
         (
             "password",
             encrypt_password(&config.password).unwrap_or_else(|| {
-                tracing::error!("SMTP密码加密失败");
+                error!("SMTP密码加密失败");
                 config.password.clone()
             }),
         ),
@@ -158,18 +176,14 @@ pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Resul
     Ok(())
 }
 
-// 测试SMTP连接
 pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
-    // 构建测试邮件
     let email = Message::builder()
         .from(config.from.parse::<Address>()?.into())
-        .to(config.from.parse::<Address>()?.into()) // 发送给自己作为测试
+        .to(config.from.parse::<Address>()?.into())
         .subject("SMTP连接测试")
         .body("这是一封SMTP连接测试邮件，无需回复".to_string())?;
 
-    // 创建SMTP传输
     let transport = if config.secure {
-        // 对于需要安全连接的情况，使用SSL配置
         SmtpTransport::relay(&config.host)?
             .port(config.port)
             .credentials(Credentials::new(
@@ -178,7 +192,7 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
             ))
             .build()
     } else {
-        // 非安全连接
+        warn!("使用非加密SMTP连接进行测试 (host: {})", config.host);
         SmtpTransport::builder_dangerous(&config.host)
             .port(config.port)
             .credentials(Credentials::new(
@@ -188,24 +202,24 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<()> {
             .build()
     };
 
-    // 发送测试邮件
-    transport.send(&email)?;
+    tokio::task::spawn_blocking(move || transport.send(&email))
+        .await
+        .map_err(|e| anyhow::anyhow!("SMTP测试任务失败: {e}"))?
+        .map_err(|e| anyhow::anyhow!("SMTP连接测试失败: {e:?}"))?;
+
     Ok(())
 }
 
-// 发送邮件给指定用户
 pub async fn send_email_to_users(
     pool: &PgPool,
     user_ids: &[Uuid],
     subject: &str,
     body: &str,
 ) -> Result<()> {
-    // 获取SMTP配置
     let smtp_config = get_smtp_config_from_db(pool)
         .await
         .ok_or_else(|| anyhow::anyhow!("SMTP配置未设置"))?;
 
-    // 根据user_ids查询用户邮箱
     let users = sqlx::query("SELECT email FROM users WHERE id = ANY($1)")
         .bind(user_ids)
         .fetch_all(pool)
@@ -215,7 +229,6 @@ pub async fn send_email_to_users(
         return Err(anyhow::anyhow!("未找到指定用户"));
     }
 
-    // 构建收件人列表
     let mut recipients: Vec<String> = Vec::new();
     for row in users {
         let email: Option<String> = row.get("email");
@@ -228,44 +241,26 @@ pub async fn send_email_to_users(
         return Err(anyhow::anyhow!("指定用户没有有效的邮箱地址"));
     }
 
-    // 构建邮件
     let mut email_builder = Message::builder()
         .from(smtp_config.from.parse::<Address>()?.into())
         .subject(subject);
 
-    // 添加收件人
     for recipient in &recipients {
         email_builder = email_builder.to(recipient.parse::<Address>()?.into());
     }
 
-    // 设置邮件内容
     let email = email_builder.body(body.to_string())?;
 
-    // 创建SMTP传输
-    let transport = if smtp_config.secure {
-        SmtpTransport::relay(&smtp_config.host)?
-            .port(smtp_config.port)
-            .credentials(Credentials::new(
-                smtp_config.username.clone(),
-                smtp_config.password.clone(),
-            ))
-            .build()
-    } else {
-        SmtpTransport::builder_dangerous(&smtp_config.host)
-            .port(smtp_config.port)
-            .credentials(Credentials::new(
-                smtp_config.username.clone(),
-                smtp_config.password.clone(),
-            ))
-            .build()
-    };
+    let transport = build_smtp_transport(&smtp_config)?;
 
-    // 发送邮件
-    transport.send(&email)?;
+    tokio::task::spawn_blocking(move || transport.send(&email))
+        .await
+        .map_err(|e| anyhow::anyhow!("邮件发送任务失败: {e}"))?
+        .map_err(|e| anyhow::anyhow!("发送邮件失败: {e:?}"))?;
+
     Ok(())
 }
 
-// 发送MAC地址变更邮件通知
 pub async fn send_mac_change_email(
     pool: &PgPool,
     workstation_name: &str,

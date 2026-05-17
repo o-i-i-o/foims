@@ -86,7 +86,7 @@ pub async fn get_lldp_neighbors_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<crate::models::LldpNeighbor>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
-    let timeout = std::time::Duration::from_secs(30);
+    let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
