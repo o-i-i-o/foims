@@ -381,14 +381,14 @@ where
         let path = req.path().to_string();
         let method = req.method().to_string();
 
-        if enabled {
-            if let Err(e) = limiter.check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email) {
-                tracing::warn!(
-                    "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
-                    method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, is_email, e.retry_after
-                );
-                return Box::pin(async move { Err(e.into()) });
-            }
+        if enabled
+            && let Err(e) = limiter.check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email)
+        {
+            tracing::warn!(
+                "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
+                method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, is_email, e.retry_after
+            );
+            return Box::pin(async move { Err(e.into()) });
         }
 
         let fut = self.service.call(req);

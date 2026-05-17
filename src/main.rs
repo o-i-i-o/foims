@@ -339,7 +339,7 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = Data::new(
         AppState::new(config.clone(), pool.clone())
-            .map_err(|e| std::io::Error::other(e))?,
+            .map_err(std::io::Error::other)?,
     );
 
     let http_rate_limiter = rate_limiter.clone();

@@ -165,7 +165,7 @@ pub async fn login(
 
     let remember_me = req.remember_me.unwrap_or(false);
     let login_tokens = generate_login_tokens(
-        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+        jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
     )?;
 
     let user = User {
@@ -279,7 +279,7 @@ pub async fn login_with_email_code(
 
     let remember_me = req.remember_me.unwrap_or(false);
     let login_tokens = generate_login_tokens(
-        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+        jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
     )?;
 
     let user = User {
@@ -435,7 +435,7 @@ pub async fn login_with_two_factor(
     let device_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
     let remember_me = req.remember_me.unwrap_or(false);
     let login_tokens = generate_login_tokens(
-        &jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
+        jwt_utils, &id, &username, &role, &device_fingerprint, &ip_address, remember_me,
     )?;
 
     let user = User {
