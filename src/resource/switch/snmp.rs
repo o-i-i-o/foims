@@ -10,7 +10,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::crypto::{decrypt_credential, decrypt_password};
+use crate::crypto::{decrypt_credential, decrypt_credential_async, decrypt_password};
 use crate::error::AppError;
 use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate, SwitchWithParent};
 
@@ -60,12 +60,44 @@ impl SwitchForSnmp {
             timeout_secs: 10,
         }
     }
+
+    pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
+        let creds = DecryptedSnmpCredentials::from_switch_snmp_async(self).await;
+        SnmpParamsLegacy {
+            ip: ip_address.to_string(),
+            port: self.snmp_port,
+            version: self.snmp_version.clone(),
+            community: creds.community,
+            username: self.snmp_username.clone(),
+            auth_proto: self.snmp_auth_protocol.clone(),
+            auth_pass: creds.auth_password,
+            priv_proto: self.snmp_priv_protocol.clone(),
+            priv_pass: creds.priv_password,
+            timeout_secs: 10,
+        }
+    }
 }
 
 impl SwitchForSnmpWithNetwork {
     #[must_use]
     pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_switch_snmp_with_network(self);
+        SnmpParamsLegacy {
+            ip: ip_address.to_string(),
+            port: self.snmp_port,
+            version: self.snmp_version.clone(),
+            community: creds.community,
+            username: self.snmp_username.clone(),
+            auth_proto: self.snmp_auth_protocol.clone(),
+            auth_pass: creds.auth_password,
+            priv_proto: self.snmp_priv_protocol.clone(),
+            priv_pass: creds.priv_password,
+            timeout_secs: 10,
+        }
+    }
+
+    pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
+        let creds = DecryptedSnmpCredentials::from_switch_snmp_with_network_async(self).await;
         SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port,
@@ -104,6 +136,28 @@ impl DecryptedSnmpCredentials {
             community: decrypt_credential(switch.snmp_community.as_deref()),
             auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
             priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
+        }
+    }
+
+    pub async fn from_switch_snmp_async(switch: &SwitchForSnmp) -> Self {
+        let community = decrypt_credential_async(switch.snmp_community.clone()).await;
+        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await;
+        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await;
+        Self {
+            community,
+            auth_password,
+            priv_password,
+        }
+    }
+
+    pub async fn from_switch_snmp_with_network_async(switch: &SwitchForSnmpWithNetwork) -> Self {
+        let community = decrypt_credential_async(switch.snmp_community.clone()).await;
+        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await;
+        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await;
+        Self {
+            community,
+            auth_password,
+            priv_password,
         }
     }
 }
@@ -202,6 +256,28 @@ pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
         .snmp_priv_password
         .as_ref()
         .map(|v| decrypt_password(v).unwrap_or_default());
+}
+
+pub async fn decrypt_snmp_fields_async(data: &mut SwitchWithParent) {
+    let community = data.snmp_community.take();
+    let auth_password = data.snmp_auth_password.take();
+    let priv_password = data.snmp_priv_password.take();
+
+    data.snmp_community = if let Some(v) = community {
+        crate::crypto::decrypt_password_async(v).await.ok()
+    } else {
+        None
+    };
+    data.snmp_auth_password = if let Some(v) = auth_password {
+        crate::crypto::decrypt_password_async(v).await.ok()
+    } else {
+        None
+    };
+    data.snmp_priv_password = if let Some(v) = priv_password {
+        crate::crypto::decrypt_password_async(v).await.ok()
+    } else {
+        None
+    };
 }
 
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
@@ -511,7 +587,7 @@ pub async fn test_snmp_connection(
             let conn = state.pool()?.get_conn();
             let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
 
-            let creds = DecryptedSnmpCredentials::from_switch_snmp(&switch);
+            let creds = DecryptedSnmpCredentials::from_switch_snmp_async(&switch).await;
 
             let version = req.snmp_version.clone().unwrap_or(switch.snmp_version);
             let community = req.snmp_community.clone().or(creds.community);
@@ -596,7 +672,7 @@ pub async fn get_switch_info_snmp(
     let ip_address = ip_address
         .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params(&ip_address);
+    let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 
     match get_switch_info_via_snmp(&snmp_params).await {
         Ok((vendor, model)) => Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -618,7 +694,7 @@ pub async fn get_switch_ports_snmp(
     let ip_address = ip_address
         .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params(&ip_address);
+    let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 
     match get_switch_ports_via_snmp(&snmp_params).await {
         Ok(ports) => {

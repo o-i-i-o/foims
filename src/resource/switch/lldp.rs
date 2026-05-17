@@ -48,7 +48,7 @@ pub async fn get_lldp_neighbors(
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
     }
 
-    let params = switch.to_snmp_params(&ip_address);
+    let params = switch.to_snmp_params_async(&ip_address).await;
     get_lldp_neighbors_via_snmp(&params).await
 }
 

@@ -217,6 +217,27 @@ pub fn decrypt_credential(value: Option<&str>) -> Option<String> {
     value.and_then(|v| decrypt_password(v).ok())
 }
 
+pub async fn encrypt_password_async(password: String) -> Option<String> {
+    tokio::task::spawn_blocking(move || encrypt_password(&password))
+        .await
+        .ok()
+        .flatten()
+}
+
+pub async fn decrypt_password_async(encrypted: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || decrypt_password(&encrypted))
+        .await
+        .map_err(|e| format!("解密任务失败: {e}"))?
+}
+
+pub async fn decrypt_credential_async(value: Option<String>) -> Option<String> {
+    if let Some(v) = value {
+        decrypt_password_async(v).await.ok()
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

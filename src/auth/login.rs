@@ -18,7 +18,7 @@ use crate::auth::utils::{
     JwtUtils, extract_token_from_service_request, get_client_info_from_service_request,
     hash_password,
 };
-use crate::crypto::{decrypt_password, encrypt_password};
+use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::error::AppError;
 use crate::models::{
     ApiResponse, EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest,
@@ -399,7 +399,7 @@ pub async fn login_with_two_factor(
 
     let mut verified = false;
     if let Some(encrypted_secret) = secret {
-        let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
+        let secret = decrypt_password_async(encrypted_secret).await.map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
         let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -411,7 +411,11 @@ pub async fn login_with_two_factor(
         };
         match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, None, String::new()) {
             Ok(totp) => {
-                let valid = totp.check_current(&req.two_factor_code).map_err(|e| AppError::Internal(e.to_string()))?;
+                let code = req.two_factor_code.clone();
+                let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+                    .await
+                    .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
                 if valid {
                     verified = true;
                 }
@@ -745,7 +749,8 @@ pub async fn init_two_factor(
         target_username.clone(),
     ).map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
 
-    let encrypted_secret = encrypt_password(&secret_base32)
+    let encrypted_secret = encrypt_password_async(secret_base32)
+        .await
         .ok_or_else(|| AppError::Internal("2FA密钥加密失败".to_string()))?;
     sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
@@ -753,10 +758,16 @@ pub async fn init_two_factor(
         .execute(&conn)
         .await?;
 
+    let otpauth_url = totp.get_url();
+    let totp_for_qr = totp;
+    let qr_code_base64 = tokio::task::spawn_blocking(move || totp_for_qr.get_qr_base64().unwrap_or_default())
+        .await
+        .map_err(|e| AppError::Internal(format!("QR码生成任务失败: {e}")))?;
+
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
-            "otpauth_url": totp.get_url(),
-            "qr_code_base64": totp.get_qr_base64().unwrap_or_default(),
+            "otpauth_url": otpauth_url,
+            "qr_code_base64": qr_code_base64,
         }),
         "2FA初始化成功，请使用认证器应用扫描二维码",
     )))
@@ -797,7 +808,7 @@ pub async fn enable_two_factor(
         return Err(AppError::Validation("请先初始化2FA".to_string()));
     };
 
-    let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
+    let secret = decrypt_password_async(encrypted_secret).await.map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
 
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
@@ -825,7 +836,10 @@ pub async fn enable_two_factor(
         target_username,
     ).map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
 
-    let valid = totp.check_current(&req.code)
+    let code = req.code.clone();
+    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+        .await
+        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
         .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
         return Err(AppError::Validation("验证码错误".to_string()));
@@ -886,7 +900,7 @@ pub async fn disable_two_factor(
     let mut verified = false;
 
     if let Some(encrypted_secret) = secret {
-        let secret = decrypt_password(&encrypted_secret).map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
+        let secret = decrypt_password_async(encrypted_secret).await.map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
         let secret_bytes = Secret::Encoded(secret)
             .to_bytes()
             .map_err(|e| AppError::Internal(format!("2FA密钥格式错误: {e}")))?;
@@ -899,7 +913,10 @@ pub async fn disable_two_factor(
             Some("IPMA".to_string()),
             target_username,
         ).map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
-        let valid = totp.check_current(&req.code)
+        let code = req.code.clone();
+        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+            .await
+            .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
             .map_err(|e| AppError::Internal(e.to_string()))?;
         if valid {
             verified = true;

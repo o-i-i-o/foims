@@ -435,7 +435,7 @@ pub async fn sync_ports_from_snmp(
         }
     };
 
-    let snmp_params = switch_data.to_snmp_params(ip_address);
+    let snmp_params = switch_data.to_snmp_params_async(ip_address).await;
 
     let ports = get_switch_ports_via_snmp(&snmp_params).await
         .map_err(|e| AppError::Snmp(format!("获取交换机端口信息失败: {e}")))?;

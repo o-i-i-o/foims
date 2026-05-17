@@ -8,7 +8,7 @@ use sqlx::{PgPool, Row};
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::crypto::{decrypt_password, encrypt_password};
+use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::error::AppError;
 
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -136,7 +136,7 @@ async fn get_smtp_config_from_db_inner(pool: &PgPool) -> Result<Option<SmtpConfi
                 "host" => host = value,
                 "port" => port = value.parse().unwrap_or(0),
                 "username" => username = value,
-                "password" => password = decrypt_password(&value).unwrap_or_default(),
+                "password" => password = decrypt_password_async(value).await.unwrap_or_default(),
                 "from" => from = value,
                 "secure" => secure = value.parse().unwrap_or(false),
                 _ => {}
@@ -161,17 +161,18 @@ async fn get_smtp_config_from_db_inner(pool: &PgPool) -> Result<Option<SmtpConfi
 pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Result<()> {
     let mut tx = pool.begin().await?;
 
+    let encrypted_password = encrypt_password_async(config.password.clone())
+        .await
+        .unwrap_or_else(|| {
+            error!("SMTP密码加密失败");
+            config.password.clone()
+        });
+
     let smtp_configs = vec![
         ("host", config.host.clone()),
         ("port", config.port.to_string()),
         ("username", config.username.clone()),
-        (
-            "password",
-            encrypt_password(&config.password).unwrap_or_else(|| {
-                error!("SMTP密码加密失败");
-                config.password.clone()
-            }),
-        ),
+        ("password", encrypted_password),
         ("from", config.from.clone()),
         ("secure", config.secure.to_string()),
     ];

@@ -50,17 +50,18 @@ pub async fn create_scheduled_task(
     let enabled = req.enabled.unwrap_or(true);
 
     let cron_expr = req.cron_expression.clone();
-    let next_run_at = match tokio::task::spawn_blocking(move || {
-        cron_expr.as_ref().map(|e| calculate_next_run(e)).transpose()
-    })
-    .await
+    let next_run_at = match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr))
+        .await
     {
-        Ok(Ok(Some(Ok(time)))) => Some(time),
-        Ok(Ok(Some(Err(e)))) => {
+        Ok(Ok(time)) => Some(time),
+        Ok(Err(e)) => {
             tracing::warn!("计算下次运行时间失败: {}", e);
             None
         }
-        _ => None,
+        Err(e) => {
+            tracing::warn!("计算下次运行时间任务失败: {}", e);
+            None
+        }
     };
 
     let task: ScheduledTask = sqlx::query_as(
@@ -246,10 +247,17 @@ pub async fn run_scheduled_task_now(
         tracing::warn!("记录任务日志失败: {}", e);
     }
 
-    let next_run_at = match calculate_next_run(&task.cron_expression) {
-        Ok(time) => Some(time),
-        Err(e) => {
+    let cron_expr = task.cron_expression.clone();
+    let next_run_at = match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr))
+        .await
+    {
+        Ok(Ok(time)) => Some(time),
+        Ok(Err(e)) => {
             tracing::warn!("计算下次运行时间失败: {}", e);
+            None
+        }
+        Err(e) => {
+            tracing::warn!("计算下次运行时间任务失败: {}", e);
             None
         }
     };

@@ -463,7 +463,7 @@ async fn export_switches(
     conn: &mut sqlx::PgConnection,
     utf8_bom: &[u8],
 ) -> Result<(&'static str, Vec<u8>), AppError> {
-    use crate::crypto::decrypt_password;
+    use crate::crypto::decrypt_password_async;
 
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
@@ -500,10 +500,11 @@ async fn export_switches(
         .await
         .unwrap_or(None);
 
-        let decrypted_community = snmp_community
-            .as_ref()
-            .filter(|c| !c.is_empty())
-            .map(|c| decrypt_password(c).unwrap_or_default());
+        let decrypted_community = if let Some(c) = snmp_community.filter(|c| !c.is_empty()) {
+            Some(decrypt_password_async(c).await.unwrap_or_default())
+        } else {
+            None
+        };
 
         let line = format!(
             "{},{},{},{},{},{},{},{},{},{}\n",

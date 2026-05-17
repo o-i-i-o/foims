@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use super::snmp::decrypt_snmp_fields;
+use super::snmp::decrypt_snmp_fields_async;
 use crate::app_state::AppState;
-use crate::crypto::encrypt_password;
+use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
@@ -49,12 +49,12 @@ const SWITCH_COLUMNS: &str = r"
     description, created_at, updated_at,
     position_id";
 
-fn mask_snmp_fields(switch: &mut SwitchWithParent) {
+async fn mask_snmp_fields(switch: &mut SwitchWithParent) {
     let has_community = switch.snmp_community.is_some();
     let has_auth_password = switch.snmp_auth_password.is_some();
     let has_priv_password = switch.snmp_priv_password.is_some();
 
-    decrypt_snmp_fields(switch);
+    decrypt_snmp_fields_async(switch).await;
 
     if has_community {
         switch.snmp_community = Some("••••••••".to_string());
@@ -228,7 +228,7 @@ pub async fn get_switches(
     let mut data = switches_result?;
 
     for switch in &mut data {
-        mask_snmp_fields(switch);
+        mask_snmp_fields(switch).await;
     }
     let total_pages = (total + page_size - 1) / page_size;
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -253,7 +253,7 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
         .await?
         .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
-    mask_snmp_fields(&mut data);
+    mask_snmp_fields(&mut data).await;
 
     let ips = sqlx::query(
         r"SELECT
@@ -325,17 +325,33 @@ pub async fn create_switch(
         .snmp_community
         .as_ref()
         .filter(|c| !c.is_empty())
-        .and_then(|c| encrypt_password(c));
+        .cloned();
     let encrypted_snmp_auth_password = req
         .snmp_auth_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .and_then(|p| encrypt_password(p));
+        .cloned();
     let encrypted_snmp_priv_password = req
         .snmp_priv_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .and_then(|p| encrypt_password(p));
+        .cloned();
+
+    let encrypted_snmp_community = if let Some(c) = encrypted_snmp_community {
+        encrypt_password_async(c).await
+    } else {
+        None
+    };
+    let encrypted_snmp_auth_password = if let Some(p) = encrypted_snmp_auth_password {
+        encrypt_password_async(p).await
+    } else {
+        None
+    };
+    let encrypted_snmp_priv_password = if let Some(p) = encrypted_snmp_priv_password {
+        encrypt_password_async(p).await
+    } else {
+        None
+    };
 
     let position_id = req.position_id.unwrap_or_else(Uuid::new_v4);
 
@@ -502,17 +518,33 @@ pub async fn update_switch(
         .snmp_community
         .as_ref()
         .filter(|c| !c.is_empty())
-        .and_then(|c| encrypt_password(c));
+        .cloned();
     let encrypted_snmp_auth_password = req
         .snmp_auth_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .and_then(|p| encrypt_password(p));
+        .cloned();
     let encrypted_snmp_priv_password = req
         .snmp_priv_password
         .as_ref()
         .filter(|p| !p.is_empty())
-        .and_then(|p| encrypt_password(p));
+        .cloned();
+
+    let encrypted_snmp_community = if let Some(c) = encrypted_snmp_community {
+        encrypt_password_async(c).await
+    } else {
+        None
+    };
+    let encrypted_snmp_auth_password = if let Some(p) = encrypted_snmp_auth_password {
+        encrypt_password_async(p).await
+    } else {
+        None
+    };
+    let encrypted_snmp_priv_password = if let Some(p) = encrypted_snmp_priv_password {
+        encrypt_password_async(p).await
+    } else {
+        None
+    };
 
     sqlx::query(
         r"UPDATE switches SET
