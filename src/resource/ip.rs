@@ -874,7 +874,11 @@ pub async fn pull_ip_managers_internal(
 pub fn detect_ip_version(ip: &str) -> i16 {
     match IpAddr::from_str(ip) {
         Ok(IpAddr::V6(_)) => 6,
-        Ok(IpAddr::V4(_)) | Err(_) => 4,
+        Ok(IpAddr::V4(_)) => 4,
+        Err(e) => {
+            tracing::warn!("IP地址格式无效 '{}': {}", ip, e);
+            4
+        }
     }
 }
 
@@ -885,6 +889,7 @@ fn find_available_ips_in_cidr(
     max_count: Option<usize>,
 ) -> Vec<String> {
     let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(cidr_str) else {
+        tracing::warn!("CIDR格式无效，无法查找可用IP: '{}'", cidr_str);
         return Vec::new();
     };
 

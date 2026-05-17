@@ -49,8 +49,15 @@ pub async fn serve_json(req: HttpRequest) -> Result<HttpResponse, Error> {
     let web_dir = get_web_dir();
     let full_path = format!("{web_dir}/static/{file_path}");
 
-    let Ok(content) = tokio::fs::read_to_string(&full_path).await else {
-        return Ok(HttpResponse::NotFound().finish())
+    let content = match tokio::fs::read_to_string(&full_path).await {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(HttpResponse::NotFound().finish());
+        }
+        Err(e) => {
+            tracing::error!("读取静态文件失败: {} - {}", full_path, e);
+            return Err(actix_web::error::ErrorInternalServerError("无法读取文件"));
+        }
     };
 
     Ok(HttpResponse::Ok()

@@ -439,6 +439,7 @@ pub async fn sync_ports_from_snmp(
 
     let mut saved_count = 0;
     let mut skipped_count = 0;
+    let mut error_count = 0;
 
     for port in &ports {
         let exists: bool = sqlx::query_scalar(
@@ -448,7 +449,10 @@ pub async fn sync_ports_from_snmp(
         .bind(&port.port_number)
         .fetch_one(&state.pool()?.get_conn())
         .await
-        .unwrap_or(true);
+        .map_err(|e| {
+            tracing::error!("检查端口是否存在时数据库查询失败: {}", e);
+            AppError::Database(format!("检查端口是否存在失败: {e}"))
+        })?;
 
         if exists {
             skipped_count += 1;
@@ -478,7 +482,10 @@ pub async fn sync_ports_from_snmp(
         .execute(&state.pool()?.get_conn())
         .await;
 
-        if result.is_ok() {
+        if let Err(e) = result {
+            tracing::error!("插入端口 {} 失败: {}", port.port_number, e);
+            error_count += 1;
+        } else {
             saved_count += 1;
         }
     }
@@ -491,7 +498,9 @@ pub async fn sync_ports_from_snmp(
     .await
     ?;
 
-    let message = if saved_count > 0 && skipped_count > 0 {
+    let message = if error_count > 0 {
+        format!("保存 {saved_count} 个端口，跳过 {skipped_count} 个，失败 {error_count} 个")
+    } else if saved_count > 0 && skipped_count > 0 {
         format!(
             "成功保存 {saved_count} 个端口，跳过 {skipped_count} 个已存在的端口"
         )

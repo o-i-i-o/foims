@@ -11,30 +11,21 @@ pub fn generate_region_map(
     _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-        (),
-        "Region map generation not implemented yet",
-    )))
+    Err(AppError::NotFound("区域地图生成功能尚未实现".to_string()))
 }
 
 pub fn generate_room_map(
     _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-        (),
-        "Room map generation not implemented yet",
-    )))
+    Err(AppError::NotFound("房间地图生成功能尚未实现".to_string()))
 }
 
 pub fn generate_workstation_map(
     _state: web::Data<AppState>,
     _id: web::Path<uuid::Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-        (),
-        "Workstation map generation not implemented yet",
-    )))
+    Err(AppError::NotFound("工位地图生成功能尚未实现".to_string()))
 }
 
 pub async fn save_layout(

@@ -314,7 +314,10 @@ pub async fn create_network(
                 .bind(ipv4)
                 .fetch_optional(&state.pool()?.get_conn())
                 .await
-                .unwrap_or(None);
+                .map_err(|e| {
+                    tracing::error!("检查IPv4网段重复时数据库查询失败: {}", e);
+                    AppError::Database(format!("检查IPv4网段重复失败: {e}"))
+                })?;
 
         if existing_ipv4.is_some() {
             return Err(AppError::Conflict("IPv4网段已存在，网段不能重复".to_string()));
@@ -327,7 +330,10 @@ pub async fn create_network(
                 .bind(ipv6)
                 .fetch_optional(&state.pool()?.get_conn())
                 .await
-                .unwrap_or(None);
+                .map_err(|e| {
+                    tracing::error!("检查IPv6网段重复时数据库查询失败: {}", e);
+                    AppError::Database(format!("检查IPv6网段重复失败: {e}"))
+                })?;
 
         if existing_ipv6.is_some() {
             return Err(AppError::Conflict("IPv6网段已存在，网段不能重复".to_string()));
@@ -501,7 +507,10 @@ pub async fn update_network(
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await
-        .unwrap_or(None);
+        .map_err(|e| {
+            tracing::error!("检查IPv4网段重复时数据库查询失败: {}", e);
+            AppError::Database(format!("检查IPv4网段重复失败: {e}"))
+        })?;
 
         if existing_ipv4.is_some() {
             return Err(AppError::Conflict("IPv4网段已被其他网段使用，网段不能重复".to_string()));
@@ -516,7 +525,10 @@ pub async fn update_network(
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await
-        .unwrap_or(None);
+        .map_err(|e| {
+            tracing::error!("检查IPv6网段重复时数据库查询失败: {}", e);
+            AppError::Database(format!("检查IPv6网段重复失败: {e}"))
+        })?;
 
         if existing_ipv6.is_some() {
             return Err(AppError::Conflict("IPv6网段已被其他网段使用，网段不能重复".to_string()));

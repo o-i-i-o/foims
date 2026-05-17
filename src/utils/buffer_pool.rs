@@ -18,6 +18,7 @@ impl BufferPool {
 
     pub fn get(&self) -> Vec<u8> {
         let Ok(mut buffers) = self.buffers.lock() else {
+            tracing::error!("BufferPool Mutex中毒，另一个线程可能已panic");
             return Vec::with_capacity(8192);
         };
         buffers.pop().unwrap_or_else(|| Vec::with_capacity(8192))
@@ -25,6 +26,7 @@ impl BufferPool {
 
     pub fn put(&self, mut buffer: Vec<u8>) {
         let Ok(mut buffers) = self.buffers.lock() else {
+            tracing::error!("BufferPool Mutex中毒，buffer被丢弃");
             return;
         };
         if buffers.len() < self.max_size {

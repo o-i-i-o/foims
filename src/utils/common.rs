@@ -89,6 +89,10 @@ pub fn validate_ip_in_cidr(
         {
             return Ok(true);
         }
+
+        if let Err(e) = ipnetwork::IpNetwork::from_str(&cidr_str) {
+            tracing::warn!("CIDR格式无效 '{}': {}", cidr_str, e);
+        }
     }
 
     Ok(false)
@@ -322,8 +326,12 @@ pub async fn log_system_operation(
         claims_opt.cloned()
     };
 
-    let user_id = claims
-        .map_or(Uuid::nil(), |c| Uuid::parse_str(&c.sub).unwrap_or(Uuid::nil()));
+    let user_id = claims.map_or(Uuid::nil(), |c| {
+        Uuid::parse_str(&c.sub).unwrap_or_else(|_| {
+            tracing::warn!("JWT subject 不是有效的UUID: {}", c.sub);
+            Uuid::nil()
+        })
+    });
     let ip_address = get_real_ip_from_request(req);
 
     log_operation(
@@ -484,10 +492,16 @@ pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Net
         ipv6_gateway: row.get(7),
         ipv4_dns: row
             .get::<Option<serde_json::Value>, _>(8)
-            .and_then(|v| serde_json::from_value(v).ok()),
+            .and_then(|v| serde_json::from_value(v).map_err(|e| {
+                tracing::warn!("IPv4 DNS反序列化失败: {}", e);
+                e
+            }).ok()),
         ipv6_dns: row
             .get::<Option<serde_json::Value>, _>(9)
-            .and_then(|v| serde_json::from_value(v).ok()),
+            .and_then(|v| serde_json::from_value(v).map_err(|e| {
+                tracing::warn!("IPv6 DNS反序列化失败: {}", e);
+                e
+            }).ok()),
         description: row.get(10),
         created_at: row.get(11),
         updated_at: row.get(12),

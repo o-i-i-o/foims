@@ -451,6 +451,8 @@ pub async fn sync_lldp_from_snmp(
 
             if result.is_ok() {
                 updated_count += 1;
+            } else if let Err(e) = result {
+                tracing::error!("LLDP记录更新失败 (local_port={}): {}", neighbor.local_port, e);
             }
         } else {
             let id = Uuid::new_v4();
@@ -472,6 +474,8 @@ pub async fn sync_lldp_from_snmp(
 
             if result.is_ok() {
                 saved_count += 1;
+            } else if let Err(e) = result {
+                tracing::error!("LLDP记录插入失败 (local_port={}): {}", neighbor.local_port, e);
             }
         }
     }

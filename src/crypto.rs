@@ -223,7 +223,14 @@ pub fn decrypt_password(encrypted_password: &str) -> String {
 }
 
 pub fn decrypt_credential(value: Option<&str>) -> Option<String> {
-    value.map(decrypt_password)
+    value.and_then(|v| {
+        let decrypted = decrypt_password(v);
+        if decrypted.is_empty() {
+            None
+        } else {
+            Some(decrypted)
+        }
+    })
 }
 
 #[cfg(test)]

@@ -31,11 +31,15 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
     let mut map = HashMap::new();
 
     let Ok(mut walk) = client.walk(if_name_oid) else {
+        tracing::warn!("SNMP walk 接口名称映射失败");
         return map;
     };
 
     while let Some(result) = walk.next().await {
-        let Ok(vb) = result else { continue };
+        let Ok(vb) = result else {
+            tracing::debug!("SNMP walk 接口名称迭代错误，跳过");
+            continue;
+        };
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
                 break;
@@ -60,11 +64,15 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
     let mut map = HashMap::new();
 
     let Ok(mut walk) = client.walk(dot1q_tp_fdb_port_oid) else {
+        tracing::warn!("SNMP walk VLAN映射失败");
         return map;
     };
 
     while let Some(result) = walk.next().await {
-        let Ok(vb) = result else { continue };
+        let Ok(vb) = result else {
+            tracing::debug!("SNMP walk VLAN映射迭代错误，跳过");
+            continue;
+        };
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
                 break;
@@ -536,10 +544,14 @@ pub async fn get_switch_mac_table(
         .execute(&conn)
         .await;
 
-        if let Ok(r) = result
-            && r.rows_affected() > 0
-        {
-            upserted_count += 1;
+        match result {
+            Ok(r) if r.rows_affected() > 0 => {
+                upserted_count += 1;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                tracing::error!("MAC记录写入失败 (ip={}, mac={}): {}", entry.ip_address, entry.mac_address, e);
+            }
         }
     }
 
