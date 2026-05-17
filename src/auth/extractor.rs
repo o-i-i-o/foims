@@ -31,3 +31,25 @@ impl FromRequest for AuthUser {
         }
     }
 }
+
+pub struct AdminUser {
+    pub sub: String,
+    pub username: String,
+}
+
+impl FromRequest for AdminUser {
+    type Error = AppError;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let extensions = req.extensions();
+        match extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" => std::future::ready(Ok(AdminUser {
+                sub: c.sub.clone(),
+                username: c.username.clone(),
+            })),
+            Some(_) => std::future::ready(Err(AppError::Forbidden("需要管理员权限".to_string()))),
+            None => std::future::ready(Err(AppError::Unauthorized("未授权访问".to_string()))),
+        }
+    }
+}

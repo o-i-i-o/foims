@@ -197,9 +197,9 @@ pub async fn login_with_email_code(
 ) -> Result<HttpResponse, AppError> {
     let user_lang = detect_user_language(&http_req);
     let conn = state.pool()?.get_conn();
-    let email = req.email.trim();
 
     req.validate()?;
+    let email = req.email.trim();
 
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
@@ -372,11 +372,12 @@ pub async fn login_with_two_factor(
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
 
-    if let Some(ref password) = req.password {
-        let valid = verify(password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
-        if !valid {
-            return Err(AppError::Unauthorized("登录失败".to_string()));
-        }
+    let password = req.password.as_deref().ok_or_else(|| {
+        AppError::Validation("2FA登录必须提供密码".to_string())
+    })?;
+    let valid = verify(password, &password_hash).map_err(|e| AppError::Internal(e.to_string()))?;
+    if !valid {
+        return Err(AppError::Unauthorized("登录失败".to_string()));
     }
 
     if !status {
@@ -604,9 +605,9 @@ pub async fn forgot_password(
     req: web::Json<ForgotPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
     let conn = state.pool()?.get_conn();
-    let email = req.email.trim();
 
     req.validate()?;
+    let email = req.email.trim();
 
     let user_result = sqlx::query_as::<_, (Uuid, String, bool)>(
         "SELECT id, username, two_factor_enabled FROM users WHERE email = $1",
@@ -650,15 +651,15 @@ pub async fn reset_password(
     state: web::Data<crate::app_state::AppState>,
     req: web::Json<ResetPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let conn = state.pool()?.get_conn();
+    let mut tx = state.pool()?.begin().await?;
 
     req.validate()?;
 
     let user_result = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()",
+        "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW() FOR UPDATE",
     )
     .bind(&req.token)
-    .fetch_optional(&conn)
+    .fetch_optional(&mut *tx)
     .await?;
 
     match user_result {
@@ -670,8 +671,10 @@ pub async fn reset_password(
             )
             .bind(&hashed_password)
             .bind(user_id)
-            .execute(&conn)
+            .execute(&mut *tx)
             .await?;
+
+            tx.commit().await?;
 
             Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "密码重置成功")))
         }
@@ -743,7 +746,6 @@ pub async fn init_two_factor(
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
-            "secret": secret_base32,
             "otpauth_url": totp.get_url(),
             "qr_code_base64": totp.get_qr_base64().unwrap_or_default(),
         }),

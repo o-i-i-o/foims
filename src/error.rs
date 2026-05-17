@@ -1,5 +1,6 @@
 use actix_web::{HttpResponse, http::StatusCode, ResponseError};
 use thiserror::Error;
+use tracing::error;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -71,7 +72,8 @@ impl From<sqlx::Error> for AppError {
         } else if err_str.contains("invalid inet") {
             AppError::Validation("不符合IP地址格式".to_string())
         } else {
-            AppError::Database(err_str)
+            error!("数据库错误: {}", err_str);
+            AppError::Database("数据库操作失败，请稍后重试".to_string())
         }
     }
 }

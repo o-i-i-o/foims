@@ -22,13 +22,37 @@ pub fn get_static_path(sub_path: &str) -> String {
     format!("{web_dir}/static/{sub_path}")
 }
 
+fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::path::PathBuf> {
+    let resolved = std::path::PathBuf::from(file_path);
+    let canonical = match resolved.canonicalize() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+    let canonical_base = match std::path::PathBuf::from(base_dir).canonicalize() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+    if canonical.starts_with(&canonical_base) {
+        Some(canonical)
+    } else {
+        None
+    }
+}
+
 #[get("/static/js/i18n/{file}")]
 pub async fn serve_i18n_file(path: web::Path<String>) -> Result<HttpResponse, Error> {
     let file = path.into_inner();
+    if file.contains("..") || file.contains('/') || file.contains('\\') {
+        return Ok(HttpResponse::NotFound().finish());
+    }
     let web_dir = get_web_dir();
     let file_path = format!("{web_dir}/static/js/i18n/{file}");
+    let validated = match validate_static_path(&file_path, web_dir) {
+        Some(p) => p,
+        None => return Ok(HttpResponse::NotFound().finish()),
+    };
 
-    let content = match tokio::fs::read_to_string(&file_path).await {
+    let content = match tokio::fs::read_to_string(&validated).await {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Ok(HttpResponse::NotFound().finish());
@@ -46,10 +70,17 @@ pub async fn serve_i18n_file(path: web::Path<String>) -> Result<HttpResponse, Er
 pub async fn serve_json(req: HttpRequest) -> Result<HttpResponse, Error> {
     let path = req.path();
     let file_path = path.trim_start_matches("/static/");
+    if file_path.contains("..") {
+        return Ok(HttpResponse::NotFound().finish());
+    }
     let web_dir = get_web_dir();
     let full_path = format!("{web_dir}/static/{file_path}");
+    let validated = match validate_static_path(&full_path, web_dir) {
+        Some(p) => p,
+        None => return Ok(HttpResponse::NotFound().finish()),
+    };
 
-    let content = match tokio::fs::read_to_string(&full_path).await {
+    let content = match tokio::fs::read_to_string(&validated).await {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Ok(HttpResponse::NotFound().finish());
@@ -76,6 +107,9 @@ pub async fn https_redirect_handler(req: HttpRequest) -> HttpResponse {
         .unwrap_or_default();
 
     let domain = host.split(':').next().unwrap_or("localhost");
+    if domain.contains('/') || domain.contains('@') {
+        return HttpResponse::BadRequest().finish();
+    }
 
     let https_port = req
         .app_data::<actix_web::web::Data<crate::app_state::AppState>>()

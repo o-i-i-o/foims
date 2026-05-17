@@ -1,4 +1,5 @@
 use actix_web::{HttpResponse, web};
+use rand::RngExt;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use tracing::info;
@@ -16,20 +17,13 @@ fn get_verification_code_storage() -> &'static Mutex<VerificationCode> {
 }
 
 fn generate_verification_code() -> String {
-    use rand::RngExt;
-    let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
     let mut code = String::with_capacity(16);
     let mut rng = rand::rng();
-
     for _ in 0..16 {
         let idx = rng.random_range(0..chars.len());
-        if let Some(ch) = chars.chars().nth(idx) {
-            code.push(ch);
-        } else {
-            tracing::warn!("验证码生成警告：无法获取字符索引 {}", idx);
-        }
+        code.push(chars[idx]);
     }
-
     code
 }
 
@@ -45,6 +39,17 @@ fn generate_and_print_verification_code() -> VerificationCode {
     info!("======================================================================\n");
 
     VerificationCode::new(code)
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.bytes().zip(b.bytes()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 pub fn verify_code(provided_code: &str) -> Result<(), String> {
@@ -64,7 +69,7 @@ pub fn verify_code(provided_code: &str) -> Result<(), String> {
         return Err("验证码已过期，请重新生成验证码".to_string());
     }
 
-    if stored_code.code != provided_code {
+    if !constant_time_eq(&stored_code.code, provided_code) {
         return Err("验证码无效".to_string());
     }
 

@@ -10,6 +10,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::ApiResponse;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 #[derive(Debug, Deserialize)]
 pub struct ImportRequest {
@@ -582,6 +583,7 @@ pub async fn import_csv(
 
     let mut file_data: Option<Vec<u8>> = None;
     let mut filename: Option<String> = None;
+    const MAX_UPLOAD_SIZE: usize = 50 * 1024 * 1024;
 
     while let Some(mut field) = payload
         .try_next()
@@ -597,6 +599,9 @@ pub async fn import_csv(
                 AppError::Internal(format!("读取文件块失败: {e}"))
             })? {
                 data.extend_from_slice(&chunk);
+                if data.len() > MAX_UPLOAD_SIZE {
+                    return Err(AppError::Validation("文件大小超过50MB限制".to_string()));
+                }
             }
             file_data = Some(data);
             break;
@@ -605,6 +610,7 @@ pub async fn import_csv(
 
     let file_data =
         file_data.ok_or_else(|| AppError::Validation("请选择要导入的CSV文件".to_string()))?;
+    let file_data = std::sync::Arc::new(file_data);
 
     let mut conn = state.pool()?.acquire().await?;
 
@@ -614,12 +620,15 @@ pub async fn import_csv(
 
     let csv_entries = tokio::task::spawn_blocking(move || {
         let mut entries = Vec::new();
-        if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(file_data_clone.clone())) {
+        if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new((*file_data_clone).clone())) {
             for i in 0..zip.len() {
                 let mut file = zip.by_index(i)
                     .map_err(|e| AppError::Internal(format!("读取ZIP文件项失败: {e}")))?;
 
                 let zip_filename = file.name().to_string();
+                if zip_filename.contains("..") || zip_filename.contains('/') || zip_filename.contains('\\') {
+                    continue;
+                }
                 if zip_filename.ends_with(".csv") {
                     let mut content = String::new();
                     file.read_to_string(&mut content)
@@ -628,7 +637,7 @@ pub async fn import_csv(
                 }
             }
         } else {
-            let content = String::from_utf8(file_data_clone).map_err(|e| {
+            let content = String::from_utf8(file_data_clone.as_ref().clone()).map_err(|e| {
                 AppError::Validation(format!(
                     "解析CSV文件失败: 文件编码必须是UTF-8 - {e}"
                 ))
@@ -2286,13 +2295,16 @@ pub async fn export_database(
         .body(sql_content))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct ClearLogsRequest {
+    #[validate(length(min = 1, max = 20, message = "日志类型长度必须在1到20个字符之间"))]
     pub log_type: String,
     pub days: Option<i32>,
 }
 
 pub async fn clear_logs(state: web::Data<AppState>, req: web::Json<ClearLogsRequest>) -> Result<HttpResponse, AppError> {
+    let req = req.into_inner();
+    req.validate()?;
     let days = req.days.unwrap_or(0);
 
     if days < 0 {
