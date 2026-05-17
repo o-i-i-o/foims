@@ -29,7 +29,7 @@ impl ShutdownSignal {
             .is_ok()
         {
             info!("收到关闭信号，开始优雅关闭...");
-            let _ = self.sender.send(());
+            self.sender.send(())?;
         }
     }
 

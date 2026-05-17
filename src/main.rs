@@ -176,7 +176,7 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     }
 
-    let _log_file_path = setup_logging();
+    setup_logging();
 
     log_bilingual("log.output_to");
     log_bilingual("system.start");
@@ -347,6 +347,7 @@ async fn main() -> std::io::Result<()> {
     local_set
         .run_until(async move {
             let mut all_server_handles: Vec<actix_web::dev::ServerHandle> = Vec::new();
+            let mut all_server_join_handles: Vec<tokio::task::JoinHandle<std::io::Result<()>>> = Vec::new();
 
             if http_enabled || auto_https {
                 let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
@@ -356,6 +357,7 @@ async fn main() -> std::io::Result<()> {
                     let http_listener = bind_with_retry(ipv6_address, http_port, 20)?;
                     let server = HttpServer::new(create_http_app)
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .disable_signals()
                         .listen(http_listener)?
                         .run();
                     let handle = server.handle();
@@ -365,12 +367,13 @@ async fn main() -> std::io::Result<()> {
                     info!("使用双栈模式 (IPv4 和 IPv6)");
 
                     all_server_handles.push(handle);
-                    tokio::task::spawn_local(server);
+                    all_server_join_handles.push(tokio::task::spawn_local(server));
                 } else {
                     if !ipv4_address.is_empty() {
                         let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
                         let server_ipv4 = HttpServer::new(create_http_app.clone())
                             .workers(std::cmp::max(2, num_cpus::get()))
+                            .disable_signals()
                             .listen(http_listener_ipv4)?
                             .run();
                         let handle_ipv4 = server_ipv4.handle();
@@ -382,13 +385,14 @@ async fn main() -> std::io::Result<()> {
                         info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
 
                         all_server_handles.push(handle_ipv4);
-                        tokio::task::spawn_local(server_ipv4);
+                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
                     }
 
                     if !ipv6_address.is_empty() && ipv6_address != "::" {
                         let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
                         let server_ipv6 = HttpServer::new(create_http_app)
                             .workers(std::cmp::max(2, num_cpus::get()))
+                            .disable_signals()
                             .listen(http_listener_ipv6)?
                             .run();
                         let handle_ipv6 = server_ipv6.handle();
@@ -400,7 +404,7 @@ async fn main() -> std::io::Result<()> {
                         info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
 
                         all_server_handles.push(handle_ipv6);
-                        tokio::task::spawn_local(server_ipv6);
+                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
                     }
                 }
             }
@@ -419,6 +423,7 @@ async fn main() -> std::io::Result<()> {
                     let tls_config = load_rustls_config(&cert_path, &key_path)?;
                     let server = HttpServer::new(create_https_app)
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .disable_signals()
                         .listen_rustls_0_23(https_listener, tls_config)?
                         .run();
                     let handle = server.handle();
@@ -429,7 +434,7 @@ async fn main() -> std::io::Result<()> {
                     info!("使用双栈模式 (IPv4 和 IPv6)");
 
                     all_server_handles.push(handle);
-                    tokio::task::spawn_local(server);
+                    all_server_join_handles.push(tokio::task::spawn_local(server));
                 } else {
                     if !ipv4_address.is_empty() {
                         let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
@@ -445,6 +450,7 @@ async fn main() -> std::io::Result<()> {
 
                         let server_ipv4 = HttpServer::new(create_https_app_ipv4)
                             .workers(std::cmp::max(2, num_cpus::get()))
+                            .disable_signals()
                             .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
                             .map_err(|e| {
                                 error!("创建HTTPS IPv4服务器失败: {:?}", e);
@@ -454,7 +460,7 @@ async fn main() -> std::io::Result<()> {
                         let handle_ipv4 = server_ipv4.handle();
 
                         all_server_handles.push(handle_ipv4);
-                        tokio::task::spawn_local(server_ipv4);
+                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
                     }
 
                     if !ipv6_address.is_empty() && ipv6_address != "::" {
@@ -471,6 +477,7 @@ async fn main() -> std::io::Result<()> {
 
                         let server_ipv6 = HttpServer::new(create_https_app_ipv6)
                             .workers(std::cmp::max(2, num_cpus::get()))
+                            .disable_signals()
                             .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
                             .map_err(|e| {
                                 error!("创建HTTPS IPv6服务器失败: {:?}", e);
@@ -480,7 +487,7 @@ async fn main() -> std::io::Result<()> {
                         let handle_ipv6 = server_ipv6.handle();
 
                         all_server_handles.push(handle_ipv6);
-                        tokio::task::spawn_local(server_ipv6);
+                        all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
                     }
                 }
             } else {
@@ -489,7 +496,7 @@ async fn main() -> std::io::Result<()> {
 
             info!("系统启动完成，等待请求...");
 
-            let _ = signal_handle.await;
+            signal_handle.await?;
 
             let force_shutdown_handle = tokio::spawn(async {
                 tokio::signal::ctrl_c().await.ok();
@@ -514,6 +521,18 @@ async fn main() -> std::io::Result<()> {
                 .collect();
             futures_util::future::join_all(all_stops).await;
             info!("服务器已停止接收新连接");
+
+            for (idx, join_handle) in all_server_join_handles.into_iter().enumerate() {
+                if let Err(e) = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(10),
+                    join_handle,
+                )
+                .await
+                {
+                    warn!("服务器任务 {} 等待超时: {}", idx, e);
+                }
+            }
+            info!("所有服务器任务已结束");
 
             info!("2. 关闭后台任务...");
             shutdown_clone.request_shutdown();
@@ -545,9 +564,17 @@ async fn main() -> std::io::Result<()> {
             force_shutdown_handle.abort();
 
             info!("系统已优雅关闭");
-            Ok(())
+            Ok::<(), std::io::Error>(())
         })
-        .await
+        .await?;
+
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(10));
+        tracing::warn!("进程未能在超时内自然退出，强制退出");
+        std::process::exit(0);
+    });
+
+    Ok(())
 }
 
 fn configure_app_services(

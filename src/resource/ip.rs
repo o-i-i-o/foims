@@ -638,21 +638,24 @@ pub async fn delete_ip_manager(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }
 
-#[allow(clippy::type_complexity)]
-pub async fn pull_ip_managers(
-    state: web::Data<AppState>,
-    req: web::Json<crate::models::PullIpManagersRequest>,
-) -> Result<HttpResponse, AppError> {
-    req.validate()?;
+struct MacSyncResult {
+    updated_count: usize,
+    unchanged_count: usize,
+    skipped_count: usize,
+    switch_macs_empty: bool,
+    total_macs_on_switch: i64,
+}
 
-    let switch_id = req.switch_id;
-    let network_id = req.network_id;
-
+async fn sync_switch_macs(
+    pool: &sqlx::PgPool,
+    switch_id: Uuid,
+    network_id: Uuid,
+) -> Result<MacSyncResult, AppError> {
     let network_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
     )
     .bind(network_id)
-    .fetch_one(&state.pool()?.get_conn())
+    .fetch_one(pool)
     .await?;
 
     if !network_exists {
@@ -664,7 +667,7 @@ pub async fn pull_ip_managers(
     )
     .bind(switch_id)
     .bind(network_id)
-    .fetch_all(&state.pool()?.get_conn())
+    .fetch_all(pool)
     .await?;
 
     if switch_macs.is_empty() {
@@ -672,22 +675,16 @@ pub async fn pull_ip_managers(
             "SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1",
         )
         .bind(switch_id)
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(pool)
         .await?;
 
-        if total_macs == 0 {
-            return Ok(
-                HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
-                    "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
-                )),
-            );
-        }
-        return Ok(
-            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
-                vec![],
-                "未发现属于该网段的已管理IP地址",
-            )),
-        );
+        return Ok(MacSyncResult {
+            updated_count: 0,
+            unchanged_count: 0,
+            skipped_count: 0,
+            switch_macs_empty: true,
+            total_macs_on_switch: total_macs,
+        });
     }
 
     let now = Utc::now();
@@ -700,12 +697,8 @@ pub async fn pull_ip_managers(
             "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .map_err(|e| {
-            error!("查询IP {} 当前信息失败: {}", ip, e);
-            e
-        })?;
+        .fetch_optional(pool)
+        .await?;
 
         let Some((old_mac, device_type, ws_id, pos_id)) = current else {
             continue;
@@ -727,12 +720,8 @@ pub async fn pull_ip_managers(
         .bind(&device_type)
         .bind(ws_id)
         .bind(pos_id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .map_err(|e| {
-            error!("查询MAC冲突检测失败 (IP: {}): {}", ip, e);
-            e
-        })?
+        .fetch_optional(pool)
+        .await?
         .flatten();
 
         if let Some(conflict_ip) = mac_conflict {
@@ -746,7 +735,7 @@ pub async fn pull_ip_managers(
 
         match old_mac.as_deref() {
             None | Some("") => {
-                if let Err(err) = sqlx::query(
+                sqlx::query(
                     r"UPDATE ips 
                        SET mac_address = $1, last_seen = $2, updated_at = $2
                        WHERE ip_address = CAST($3 AS INET)"
@@ -754,30 +743,23 @@ pub async fn pull_ip_managers(
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(&state.pool()?.get_conn())
-                .await
-                {
-                    error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
-                    continue;
-                }
+                .execute(pool)
+                .await?;
                 updated_count += 1;
                 info!("MAC地址写入: IP={}, MAC={}", ip, mac);
             }
             Some(old) if old == mac => {
-                if let Err(err) = sqlx::query(
+                sqlx::query(
                     r"UPDATE ips SET last_seen = $1, updated_at = $1 WHERE ip_address = CAST($2 AS INET)"
                 )
                 .bind(now)
                 .bind(ip)
-                .execute(&state.pool()?.get_conn())
-                .await
-                {
-                    error!("更新last_seen失败: IP={}, 错误: {}", ip, err);
-                }
+                .execute(pool)
+                .await?;
                 unchanged_count += 1;
             }
             Some(old) => {
-                if let Err(err) = sqlx::query(
+                sqlx::query(
                     r"UPDATE ips 
                        SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
                        WHERE ip_address = CAST($4 AS INET)"
@@ -786,33 +768,21 @@ pub async fn pull_ip_managers(
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(&state.pool()?.get_conn())
-                .await
-                {
-                    error!("更新MAC地址失败: IP={}, 错误: {}", ip, err);
-                    continue;
-                }
+                .execute(pool)
+                .await?;
                 updated_count += 1;
 
                 let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
                     "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
                 )
                 .bind(ip)
-                .fetch_optional(&state.pool()?.get_conn())
+                .fetch_optional(pool)
                 .await?
                 .flatten();
 
                 if let Some(ws_id) = workstation_id {
                     info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                    match crate::utils::send_mac_change_notification(
-                        &state.pool()?.get_conn(),
-                        &ws_id,
-                        ip,
-                        old,
-                        mac,
-                    )
-                    .await
-                    {
+                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac).await {
                         Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
                         Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
                     }
@@ -821,22 +791,55 @@ pub async fn pull_ip_managers(
         }
     }
 
+    Ok(MacSyncResult {
+        updated_count,
+        unchanged_count,
+        skipped_count,
+        switch_macs_empty: false,
+        total_macs_on_switch: 0,
+    })
+}
+
+pub async fn pull_ip_managers(
+    state: web::Data<AppState>,
+    req: web::Json<crate::models::PullIpManagersRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
+
+    let result = sync_switch_macs(&state.pool()?.get_conn(), req.switch_id, req.network_id).await?;
+
+    if result.switch_macs_empty {
+        if result.total_macs_on_switch == 0 {
+            return Ok(
+                HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
+                    "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
+                )),
+            );
+        }
+        return Ok(
+            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
+                vec![],
+                "未发现属于该网段的已管理IP地址",
+            )),
+        );
+    }
+
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
         "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE network_id = $1"
     )
-    .bind(network_id)
+    .bind(req.network_id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
     let mut message_parts = Vec::new();
-    if updated_count > 0 {
-        message_parts.push(format!("更新 {updated_count} 条MAC地址"));
+    if result.updated_count > 0 {
+        message_parts.push(format!("更新 {} 条MAC地址", result.updated_count));
     }
-    if unchanged_count > 0 {
-        message_parts.push(format!("{unchanged_count} 条MAC无变化"));
+    if result.unchanged_count > 0 {
+        message_parts.push(format!("{} 条MAC无变化", result.unchanged_count));
     }
-    if skipped_count > 0 {
-        message_parts.push(format!("{skipped_count} 条MAC冲突跳过"));
+    if result.skipped_count > 0 {
+        message_parts.push(format!("{} 条MAC冲突跳过", result.skipped_count));
     }
 
     let message = if message_parts.is_empty() {
@@ -853,128 +856,12 @@ pub async fn pull_ip_managers_internal(
     switch_id: Uuid,
     network_id: Uuid,
 ) -> Result<(), String> {
-    let network_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
-    )
-    .bind(network_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| format!("查询网段失败: {e}"))?;
+    let result = sync_switch_macs(pool, switch_id, network_id)
+        .await
+        .map_err(|e| format!("MAC同步失败: {e}"))?;
 
-    if !network_exists {
-        return Err("未找到网段信息".to_string());
-    }
-
-    let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm INNER JOIN ips i ON sm.ip_address = i.ip_address WHERE sm.switch_id = $1 AND i.network_id = $2",
-    )
-    .bind(switch_id)
-    .bind(network_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| format!("查询交换机MAC地址失败: {e}"))?;
-
-    if switch_macs.is_empty() {
+    if result.switch_macs_empty {
         return Err("未发现属于该网段的已管理IP地址".to_string());
-    }
-
-    let now = Utc::now();
-    for (ip, mac) in &switch_macs {
-        let current: Option<IpMacCurrentInfo> = sqlx::query_as(
-            "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
-        )
-        .bind(ip)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| format!("查询IP信息失败: {e}"))?;
-
-        let Some((old_mac, device_type, ws_id, pos_id)) = current else {
-            continue;
-        };
-
-        let mac_conflict: Option<String> = sqlx::query_scalar(
-            r"SELECT host(ip_address) FROM ips
-               WHERE mac_address = $1 
-               AND ip_address != CAST($2 AS INET)
-               AND (
-                   device_type != $3
-                   OR workstation_id IS DISTINCT FROM $4
-                   OR position_id IS DISTINCT FROM $5
-               )
-               LIMIT 1",
-        )
-        .bind(mac)
-        .bind(ip)
-        .bind(&device_type)
-        .bind(ws_id)
-        .bind(pos_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| format!("查询MAC冲突失败: {e}"))?
-        .flatten();
-
-        if mac_conflict.is_some() {
-            warn!("MAC地址 {} 存在冲突，跳过IP {}", mac, ip);
-            continue;
-        }
-
-        match old_mac.as_deref() {
-            None | Some("") => {
-                sqlx::query(
-                    r"UPDATE ips 
-                       SET mac_address = $1, last_seen = $2, updated_at = $2
-                       WHERE ip_address = CAST($3 AS INET)"
-                )
-                .bind(mac)
-                .bind(now)
-                .bind(ip)
-                .execute(pool)
-                .await
-                .map_err(|e| format!("更新MAC地址失败: {e}"))?;
-                info!("MAC地址写入: IP={}, MAC={}", ip, mac);
-            }
-            Some(old) if old == mac => {
-                sqlx::query(
-                    r"UPDATE ips SET last_seen = $1, updated_at = $1 WHERE ip_address = CAST($2 AS INET)"
-                )
-                .bind(now)
-                .bind(ip)
-                .execute(pool)
-                .await
-                .map_err(|e| format!("更新last_seen失败: {e}"))?;
-            }
-            Some(old) => {
-                sqlx::query(
-                    r"UPDATE ips 
-                       SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
-                       WHERE ip_address = CAST($4 AS INET)"
-                )
-                .bind(old)
-                .bind(mac)
-                .bind(now)
-                .bind(ip)
-                .execute(pool)
-                .await
-                .map_err(|e| format!("更新MAC地址失败: {e}"))?;
-
-                let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-                    "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)",
-                )
-                .bind(ip)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| format!("查询工位ID失败: {e}"))?
-                .flatten();
-
-                if let Some(ws_id) = workstation_id {
-                    info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac).await {
-                        Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
-                        Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
-                    }
-                }
-            }
-        }
     }
 
     Ok(())
@@ -986,6 +873,45 @@ pub fn detect_ip_version(ip: &str) -> i16 {
         Ok(IpAddr::V6(_)) => 6,
         Ok(IpAddr::V4(_)) | Err(_) => 4,
     }
+}
+
+fn find_available_ips_in_cidr(
+    cidr_str: &str,
+    gateway: Option<&String>,
+    used_ips: &std::collections::HashSet<String>,
+    max_count: Option<usize>,
+) -> Vec<String> {
+    let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(cidr_str) else {
+        return Vec::new();
+    };
+
+    let network_addr = network_cidr.network();
+    let broadcast_addr = match network_cidr {
+        ipnetwork::IpNetwork::V4(v4) => Some(v4.broadcast().to_string()),
+        ipnetwork::IpNetwork::V6(_) => None,
+    };
+
+    let mut available = Vec::new();
+    for ip in &network_cidr {
+        let ip_str = ip.to_string();
+        if used_ips.contains(&ip_str) {
+            continue;
+        }
+        if gateway.is_some_and(|g| g == &ip_str) {
+            continue;
+        }
+        if ip.to_string() == network_addr.to_string() {
+            continue;
+        }
+        if broadcast_addr.as_ref() == Some(&ip_str) {
+            continue;
+        }
+        available.push(ip_str);
+        if max_count.is_some_and(|max| available.len() >= max) {
+            break;
+        }
+    }
+    available
 }
 
 pub async fn get_available_ips(
@@ -1001,74 +927,32 @@ pub async fn get_available_ips(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
+    let used_ips: Vec<String> =
+        sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
+            .bind(network_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
+
+    let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
+
     let mut available_ips = Vec::new();
 
-    if let Some(ipv4_cidr) = &network.ipv4_cidr
-        && let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv4_cidr)
-    {
-        let used_ips: Vec<String> =
-            sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
-                .bind(network_id)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?;
-
-        let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
-
-        let gateway_ip = network.ipv4_gateway.clone();
-        let network_addr = network_cidr.network();
-        let broadcast_addr = match network_cidr {
-            ipnetwork::IpNetwork::V4(v4_network) => Some(v4_network.broadcast().to_string()),
-            ipnetwork::IpNetwork::V6(_) => None,
-        };
-
-        for ip in &network_cidr {
-            let ip_str = ip.to_string();
-            if used_set.contains(&ip_str) {
-                continue;
-            }
-            if Some(&ip_str) == gateway_ip.as_ref() {
-                continue;
-            }
-            if ip.to_string() == network_addr.to_string() {
-                continue;
-            }
-            if broadcast_addr.as_ref() == Some(&ip_str) {
-                continue;
-            }
-            available_ips.push(ip_str);
-        }
+    if let Some(ipv4_cidr) = &network.ipv4_cidr {
+        available_ips.extend(find_available_ips_in_cidr(
+            ipv4_cidr,
+            network.ipv4_gateway.as_ref(),
+            &used_set,
+            None,
+        ));
     }
 
-    if let Some(ipv6_cidr) = &network.ipv6_cidr
-        && let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr)
-    {
-        let used_ips: Vec<String> =
-            sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
-                .bind(network_id)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?;
-
-        let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
-
-        let gateway_ip = network.ipv6_gateway.clone();
-        let network_addr = network_cidr.network();
-
-        for ip in &network_cidr {
-            let ip_str = ip.to_string();
-            if used_set.contains(&ip_str) {
-                continue;
-            }
-            if Some(&ip_str) == gateway_ip.as_ref() {
-                continue;
-            }
-            if ip.to_string() == network_addr.to_string() {
-                continue;
-            }
-            available_ips.push(ip_str);
-            if available_ips.len() >= 256 {
-                break;
-            }
-        }
+    if let Some(ipv6_cidr) = &network.ipv6_cidr {
+        available_ips.extend(find_available_ips_in_cidr(
+            ipv6_cidr,
+            network.ipv6_gateway.as_ref(),
+            &used_set,
+            Some(256),
+        ));
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -1135,98 +1019,22 @@ pub async fn auto_assign_ip(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let assigned_ip = match &network.ipv4_cidr {
-        Some(ipv4_cidr) => {
-            if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv4_cidr) {
-                let used_ips: Vec<String> = sqlx::query_scalar(
-                    "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
-                )
-                .bind(network_id)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?;
+    let used_ips: Vec<String> = sqlx::query_scalar(
+        "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
+    )
+    .bind(network_id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
-                let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
-                let gateway_ip = network.ipv4_gateway.clone();
-                let network_addr = network_cidr.network();
-                let broadcast_addr = match network_cidr {
-                    ipnetwork::IpNetwork::V4(v4_network) => {
-                        Some(v4_network.broadcast().to_string())
-                    }
-                    ipnetwork::IpNetwork::V6(_) => None,
-                };
+    let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
-                let mut found_ip = None;
-                for ip in &network_cidr {
-                    let ip_str = ip.to_string();
-                    if used_set.contains(&ip_str) {
-                        continue;
-                    }
-                    if Some(&ip_str) == gateway_ip.as_ref() {
-                        continue;
-                    }
-                    if ip.to_string() == network_addr.to_string() {
-                        continue;
-                    }
-                    if broadcast_addr.as_ref() == Some(&ip_str) {
-                        continue;
-                    }
-                    found_ip = Some(ip_str);
-                    break;
-                }
-                found_ip
-            } else {
-                None
-            }
-        }
-        None => None,
-    };
-
-    let assigned_ip = match assigned_ip {
-        Some(ip) => ip,
-        None => {
-            if let Some(ipv6_cidr) = &network.ipv6_cidr {
-                if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(ipv6_cidr) {
-                    let used_ips: Vec<String> = sqlx::query_scalar(
-                        "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
-                    )
-                    .bind(network_id)
-                    .fetch_all(&state.pool()?.get_conn())
-                    .await?;
-
-                    let used_set: std::collections::HashSet<String> =
-                        used_ips.into_iter().collect();
-                    let gateway_ip = network.ipv6_gateway.clone();
-                    let network_addr = network_cidr.network();
-
-                    let mut found_ip = None;
-                    for ip in &network_cidr {
-                        let ip_str = ip.to_string();
-                        if used_set.contains(&ip_str) {
-                            continue;
-                        }
-                        if Some(&ip_str) == gateway_ip.as_ref() {
-                            continue;
-                        }
-                        if ip.to_string() == network_addr.to_string() {
-                            continue;
-                        }
-                        found_ip = Some(ip_str);
-                        break;
-                    }
-                    match found_ip {
-                        Some(ip) => ip,
-                        None => {
-                            return Err(AppError::Validation("该网络没有可用的IP地址".to_string()));
-                        }
-                    }
-                } else {
-                    return Err(AppError::Validation("该网络没有可用的IP地址".to_string()));
-                }
-            } else {
-                return Err(AppError::Validation("该网络没有可用的IP地址".to_string()));
-            }
-        }
-    };
+    let assigned_ip = network.ipv4_cidr.as_ref()
+        .and_then(|cidr| find_available_ips_in_cidr(cidr, network.ipv4_gateway.as_ref(), &used_set, Some(1)).into_iter().next())
+        .or_else(|| {
+            network.ipv6_cidr.as_ref()
+                .and_then(|cidr| find_available_ips_in_cidr(cidr, network.ipv6_gateway.as_ref(), &used_set, Some(1)).into_iter().next())
+        })
+        .ok_or_else(|| AppError::Validation("该网络没有可用的IP地址".to_string()))?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();

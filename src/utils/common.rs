@@ -1,6 +1,5 @@
 use ipnetwork::IpNetwork;
 use macaddr::MacAddr;
-use regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -13,29 +12,11 @@ use hex::encode;
 use crate::config::Config;
 use actix_web::{HttpMessage, HttpRequest};
 
-// ==================== 常量定义 ====================
-
-pub const IPV4_CIDR_REGEX: &str = r"^(?:(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])/(?:[0-9]|[12]?[0-9]|3[0-2]))$";
-pub const IPV6_CIDR_REGEX: &str = r"^(?:[0-9a-fA-F:]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))$";
-
-use std::sync::OnceLock;
-
-static IPV4_CIDR_PATTERN: OnceLock<regex::Regex> = OnceLock::new();
-static IPV6_CIDR_PATTERN: OnceLock<regex::Regex> = OnceLock::new();
-
-fn get_ipv4_cidr_pattern() -> &'static regex::Regex {
-    IPV4_CIDR_PATTERN.get_or_init(|| regex::Regex::new(IPV4_CIDR_REGEX).unwrap())
-}
-
-fn get_ipv6_cidr_pattern() -> &'static regex::Regex {
-    IPV6_CIDR_PATTERN.get_or_init(|| regex::Regex::new(IPV6_CIDR_REGEX).unwrap())
-}
-
 // ==================== IP/MAC 地址验证与格式化 ====================
 
 #[must_use] 
 pub fn validate_ip_address(ip: &str) -> bool {
-    ip.parse::<IpNetwork>().is_ok() || ip.parse::<std::net::IpAddr>().is_ok()
+    ip.parse::<IpNetwork>().is_ok()
 }
 
 #[must_use] 
@@ -45,13 +26,7 @@ pub fn validate_mac_address(mac: &str) -> bool {
 
 #[must_use] 
 pub fn format_ip_address(ip: &str) -> Option<String> {
-    if let Ok(ip_net) = ip.parse::<IpNetwork>() {
-        Some(ip_net.to_string())
-    } else if let Ok(ip_addr) = ip.parse::<std::net::IpAddr>() {
-        Some(ip_addr.to_string())
-    } else {
-        None
-    }
+    ip.parse::<IpNetwork>().ok().map(|n| n.to_string())
 }
 
 #[must_use] 
@@ -77,12 +52,10 @@ pub fn validate_cidr(cidr: &str) -> bool {
 
 #[must_use] 
 pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
-    if get_ipv4_cidr_pattern().is_match(cidr) {
-        Some("ipv4")
-    } else if get_ipv6_cidr_pattern().is_match(cidr) {
-        Some("ipv6")
-    } else {
-        None
+    match ipnetwork::IpNetwork::from_str(cidr) {
+        Ok(ipnetwork::IpNetwork::V4(_)) => Some("ipv4"),
+        Ok(ipnetwork::IpNetwork::V6(_)) => Some("ipv6"),
+        Err(_) => None,
     }
 }
 
@@ -412,8 +385,6 @@ pub fn detect_user_language(req: &HttpRequest) -> String {
     "zh".to_string()
 }
 
-
-
 // ==================== 通知与告警 ====================
 
 pub async fn send_mac_change_notification(
@@ -474,8 +445,6 @@ pub async fn send_mac_change_notification(
 
     Ok(())
 }
-
-
 
 // ==================== MAC 地址获取 ====================
 

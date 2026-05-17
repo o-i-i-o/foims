@@ -11,8 +11,61 @@ use crate::crypto::encrypt_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::log_system_operation;
+use crate::utils::{log_system_operation, validate_network_in_room, get_room_id_by_position};
 use tracing::warn;
+
+const SWITCHES_DETAIL_COLUMNS: &str = r"
+    id, name, model, vendor,
+    location, snmp_version,
+    snmp_community,
+    snmp_username, snmp_auth_protocol,
+    snmp_auth_password,
+    snmp_priv_protocol,
+    snmp_priv_password,
+    snmp_port,
+    parent_switch_id, parent_switch_name,
+    parent_port_id, parent_port_number,
+    position_id,
+    cabinet_id, cabinet_name,
+    start_u, end_u,
+    position_network_id, network_region_id,
+    description,
+    device_type,
+    ip_address,
+    mac_address,
+    created_at, updated_at";
+
+const SWITCH_COLUMNS: &str = r"
+    id, name,
+    model, vendor,
+    location, snmp_version,
+    snmp_community,
+    snmp_username, snmp_auth_protocol,
+    snmp_auth_password,
+    snmp_priv_protocol,
+    snmp_priv_password,
+    snmp_port,
+    parent_switch_id, parent_port_id,
+    description, created_at, updated_at,
+    position_id";
+
+fn mask_snmp_fields(switch: &mut SwitchWithParent) {
+    let has_community = switch.snmp_community.is_some();
+    let has_auth_password = switch.snmp_auth_password.is_some();
+    let has_priv_password = switch.snmp_priv_password.is_some();
+
+    decrypt_snmp_fields(switch);
+
+    if has_community {
+        switch.snmp_community = Some("••••••••".to_string());
+    }
+    if has_auth_password {
+        switch.snmp_auth_password = Some("••••••••".to_string());
+    }
+    if has_priv_password {
+        switch.snmp_priv_password = Some("••••••••".to_string());
+    }
+}
 
 pub async fn get_switches(
     state: web::Data<AppState>,
@@ -134,33 +187,8 @@ pub async fn get_switches(
         };
 
         let data_query = format!(
-            r"SELECT
-                id, name, model, vendor,
-                location, snmp_version,
-                snmp_community,
-                snmp_username, snmp_auth_protocol,
-                snmp_auth_password,
-                snmp_priv_protocol,
-                snmp_priv_password,
-                snmp_port,
-                parent_switch_id, parent_switch_name,
-                parent_port_id, parent_port_number,
-                position_id,
-                cabinet_id, cabinet_name,
-                start_u, end_u,
-                position_network_id, network_region_id,
-                description,
-                device_type,
-                ip_address,
-                mac_address,
-                created_at, updated_at
-            FROM switches_with_details
-            {}
-            ORDER BY created_at DESC
-            LIMIT ${} OFFSET ${}",
-            where_clause,
-            param_count,
-            param_count + 1
+            "SELECT {} FROM switches_with_details {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+            SWITCHES_DETAIL_COLUMNS, where_clause, param_count, param_count + 1
         );
 
         let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
@@ -189,55 +217,18 @@ pub async fn get_switches(
 
         data_sql.fetch_all(&state.pool()?.get_conn()).await
     } else {
-        sqlx::query_as::<_, SwitchWithParent>(
-            r"SELECT
-                id, name, model, vendor,
-                location, snmp_version,
-                snmp_community,
-                snmp_username, snmp_auth_protocol,
-                snmp_auth_password,
-                snmp_priv_protocol,
-                snmp_priv_password,
-                snmp_port,
-                parent_switch_id, parent_switch_name,
-                parent_port_id, parent_port_number,
-                position_id,
-                cabinet_id, cabinet_name,
-                start_u, end_u,
-                position_network_id, network_region_id,
-                description,
-                device_type,
-                ip_address,
-                mac_address,
-                created_at, updated_at
-            FROM switches_with_details
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await
+        let query = format!("SELECT {} FROM switches_with_details ORDER BY created_at DESC LIMIT $1 OFFSET $2", SWITCHES_DETAIL_COLUMNS);
+        sqlx::query_as::<_, SwitchWithParent>(&query)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.pool()?.get_conn())
+            .await
     };
 
     let mut data = switches_result?;
 
     for switch in &mut data {
-        let has_community = switch.snmp_community.is_some();
-        let has_auth_password = switch.snmp_auth_password.is_some();
-        let has_priv_password = switch.snmp_priv_password.is_some();
-
-        decrypt_snmp_fields(switch);
-
-        if has_community {
-            switch.snmp_community = Some("••••••••".to_string());
-        }
-        if has_auth_password {
-            switch.snmp_auth_password = Some("••••••••".to_string());
-        }
-        if has_priv_password {
-            switch.snmp_priv_password = Some("••••••••".to_string());
-        }
+        mask_snmp_fields(switch);
     }
     let total_pages = (total + page_size - 1) / page_size;
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -255,50 +246,14 @@ pub async fn get_switches(
 pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    let mut data = sqlx::query_as::<_, SwitchWithParent>(
-        r"SELECT
-            id, name, model, vendor,
-            location, snmp_version,
-            snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password,
-            snmp_priv_protocol,
-            snmp_priv_password,
-            snmp_port,
-            parent_switch_id, parent_switch_name,
-            parent_port_id, parent_port_number,
-            position_id,
-            cabinet_id, cabinet_name,
-            start_u, end_u,
-            position_network_id, network_region_id,
-            description,
-            device_type,
-            ip_address,
-            mac_address,
-            created_at, updated_at
-        FROM switches_with_details
-        WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
+    let query = format!("SELECT {} FROM switches_with_details WHERE id = $1", SWITCHES_DETAIL_COLUMNS);
+    let mut data = sqlx::query_as::<_, SwitchWithParent>(&query)
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
 
-    let has_community = data.snmp_community.is_some();
-    let has_auth_password = data.snmp_auth_password.is_some();
-    let has_priv_password = data.snmp_priv_password.is_some();
-
-    decrypt_snmp_fields(&mut data);
-
-    if has_community {
-        data.snmp_community = Some("••••••••".to_string());
-    }
-    if has_auth_password {
-        data.snmp_auth_password = Some("••••••••".to_string());
-    }
-    if has_priv_password {
-        data.snmp_priv_password = Some("••••••••".to_string());
-    }
+    mask_snmp_fields(&mut data);
 
     let ips = sqlx::query(
         r"SELECT
@@ -443,26 +398,10 @@ pub async fn create_switch(
             return Err(AppError::Conflict(format!("IP地址 {} 已存在", ip.ip_address)));
         }
 
-        let room_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-        )
-        .bind(position_id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+        let room_id = get_room_id_by_position(&state.pool()?.get_conn(), position_id).await?;
 
         if let Some(rid) = room_id {
-            let network_in_room: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-            )
-            .bind(rid)
-            .bind(ip.network_id)
-            .fetch_one(&state.pool()?.get_conn())
-            .await
-            ?;
-
-            if !network_in_room {
-                return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
-            }
+            validate_network_in_room(&state.pool()?.get_conn(), rid, ip.network_id).await?;
         }
 
         let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address);
@@ -493,25 +432,11 @@ pub async fn create_switch(
         }
     }
 
-    let data = sqlx::query_as::<_, Switch>(
-        r"SELECT
-            id, name,
-            model, vendor,
-            location, snmp_version,
-            snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password,
-            snmp_priv_protocol,
-            snmp_priv_password,
-            snmp_port,
-            parent_switch_id, parent_port_id,
-            description, created_at, updated_at,
-            position_id
-        FROM switches WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let query = format!("SELECT {} FROM switches WHERE id = $1", SWITCH_COLUMNS);
+    let data = sqlx::query_as::<_, Switch>(&query)
+        .bind(id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
     let details = serde_json::json!({
         "name": data.name,
@@ -661,26 +586,10 @@ pub async fn update_switch(
             }
 
             if let Some(pos_id) = position_id {
-                let room_id: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-                )
-                .bind(pos_id)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
+                let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
 
                 if let Some(rid) = room_id {
-                    let network_in_room: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
-                    )
-                    .bind(rid)
-                    .bind(ip.network_id)
-                    .fetch_one(&state.pool()?.get_conn())
-                    .await
-                    ?;
-
-                    if !network_in_room {
-                        return Err(AppError::Validation("所选网段不属于该交换机所在房间的可用网段".to_string()));
-                    }
+                    validate_network_in_room(&state.pool()?.get_conn(), rid, ip.network_id).await?;
                 }
             }
 
@@ -713,25 +622,11 @@ pub async fn update_switch(
         }
     }
 
-    let data = sqlx::query_as::<_, Switch>(
-        r"SELECT
-            id, name,
-            model, vendor,
-            location, snmp_version,
-            snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password,
-            snmp_priv_protocol,
-            snmp_priv_password,
-            snmp_port,
-            parent_switch_id, parent_port_id,
-            description, created_at, updated_at,
-            position_id
-        FROM switches WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let query = format!("SELECT {} FROM switches WHERE id = $1", SWITCH_COLUMNS);
+    let data = sqlx::query_as::<_, Switch>(&query)
+        .bind(id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
     let details = serde_json::json!({
         "name": data.name,

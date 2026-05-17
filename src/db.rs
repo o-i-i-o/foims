@@ -515,7 +515,6 @@ impl DbPool {
                 tokio::select! {
                     _ = interval.tick() => {
                         let metrics = pool_clone.get_metrics();
-                        let _status = pool_clone.get_pool_status();
 
                         info!(
                             "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",

@@ -6,11 +6,11 @@ use crate::models::{
 };
 use crate::utils::pagination::DEFAULT_PAGE;
 use crate::utils::log_system_operation;
+use crate::utils::parse_network_from_row;
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
-use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
@@ -171,7 +171,7 @@ pub async fn get_networks(
             r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-               NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
+               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
                FROM network_cidrs n 
                JOIN network_regions nt ON n.network_region_id = nt.id 
                {}
@@ -217,32 +217,14 @@ pub async fn get_networks(
 
         data_sql.fetch_all(&state.pool()?.get_conn()).await?
             .into_iter()
-            .map(|row| Network {
-                id: row.get(0),
-                name: row.get(1),
-                network_region_id: row.get(2),
-                network_region: row.get(3),
-                ipv4_cidr: row.get(4),
-                ipv6_cidr: row.get(5),
-                ipv4_gateway: row.get(6),
-                ipv6_gateway: row.get(7),
-                ipv4_dns: row
-                    .get::<Option<serde_json::Value>, _>(8)
-                    .and_then(|v| serde_json::from_value(v).ok()),
-                ipv6_dns: row
-                    .get::<Option<serde_json::Value>, _>(9)
-                    .and_then(|v| serde_json::from_value(v).ok()),
-                description: row.get(12),
-                created_at: row.get(13),
-                updated_at: row.get(14),
-            })
+            .map(|row| parse_network_from_row(&row))
             .collect()
     } else {
         sqlx::query(
             r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-               NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
+               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
                FROM network_cidrs n 
                JOIN network_regions nt ON n.network_region_id = nt.id 
                ORDER BY n.created_at DESC
@@ -253,21 +235,7 @@ pub async fn get_networks(
         .fetch_all(&state.pool()?.get_conn())
         .await?
         .into_iter()
-        .map(|row| Network {
-            id: row.get(0),
-            name: row.get(1),
-            network_region_id: row.get(2),
-            network_region: row.get(3),
-            ipv4_cidr: row.get(4),
-            ipv6_cidr: row.get(5),
-            ipv4_gateway: row.get(6),
-            ipv6_gateway: row.get(7),
-            ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-            ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
-            description: row.get(12),
-            created_at: row.get(13),
-            updated_at: row.get(14),
-        })
+        .map(|row| parse_network_from_row(&row))
         .collect()
     };
 
@@ -442,7 +410,6 @@ pub async fn get_network(
                   n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
                   (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                   (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-                  NULL as gateway, NULL as dns, 
                   n.description, 
                   n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
            FROM network_cidrs n 
@@ -454,25 +421,7 @@ pub async fn get_network(
     .await?
     .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let network = Network {
-        id: row.get(0),
-        name: row.get(1),
-        network_region_id: row.get(2),
-        network_region: row.get(3),
-        ipv4_cidr: row.get(4),
-        ipv6_cidr: row.get(5),
-        ipv4_gateway: row.get(6),
-        ipv6_gateway: row.get(7),
-        ipv4_dns: row
-            .get::<Option<serde_json::Value>, _>(8)
-            .and_then(|v| serde_json::from_value(v).ok()),
-        ipv6_dns: row
-            .get::<Option<serde_json::Value>, _>(9)
-            .and_then(|v| serde_json::from_value(v).ok()),
-        description: row.get(12),
-        created_at: row.get(13),
-        updated_at: row.get(14),
-    };
+    let network = parse_network_from_row(&row);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络获取成功")))
 }
@@ -518,21 +467,7 @@ pub async fn update_network(
            JOIN network_regions nt ON n.network_region_id = nt.id 
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(&state.pool()?.get_conn()).await.map(|row| Network {
-        id: row.get(0),
-        name: row.get(1),
-        network_region_id: row.get(2),
-        network_region: row.get(3),
-        ipv4_cidr: row.get(4),
-        ipv6_cidr: row.get(5),
-        ipv4_gateway: row.get(6),
-        ipv6_gateway: row.get(7),
-        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
-        description: row.get(10),
-        created_at: row.get(11),
-        updated_at: row.get(12),
-    })?;
+    .fetch_one(&state.pool()?.get_conn()).await.map(|row| parse_network_from_row(&row))?;
 
     let full_network_name = match &req.name {
         Some(new_name) => new_name.clone(),
@@ -622,28 +557,14 @@ pub async fn update_network(
         r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-           NULL as gateway, NULL as dns, n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
+           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
            FROM network_cidrs n 
            JOIN network_regions nt ON n.network_region_id = nt.id 
            WHERE n.id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 
-    let network = Network {
-        id: row.get(0),
-        name: row.get(1),
-        network_region_id: row.get(2),
-        network_region: row.get(3),
-        ipv4_cidr: row.get(4),
-        ipv6_cidr: row.get(5),
-        ipv4_gateway: row.get(6),
-        ipv6_gateway: row.get(7),
-        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| serde_json::from_value(v).ok()),
-        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| serde_json::from_value(v).ok()),
-        description: row.get(12),
-        created_at: row.get(13),
-        updated_at: row.get(14),
-    };
+    let network = parse_network_from_row(&row);
 
     let details = serde_json::json!({
         "name": network.name,
