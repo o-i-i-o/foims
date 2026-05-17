@@ -1,7 +1,7 @@
+use arc_swap::ArcSwap;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
-use std::sync::RwLock as SyncRwLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -19,6 +19,7 @@ pub struct PoolMetrics {
     pub failed_requests: AtomicU64,
     pub avg_wait_time_ms: AtomicU64,
     pub last_updated: AtomicU64,
+    pub leak_warning_count: AtomicU32,
 }
 
 impl PoolMetrics {
@@ -32,6 +33,7 @@ impl PoolMetrics {
             failed_requests: AtomicU64::new(0),
             avg_wait_time_ms: AtomicU64::new(0),
             last_updated: AtomicU64::new(0),
+            leak_warning_count: AtomicU32::new(0),
         }
     }
 
@@ -84,6 +86,10 @@ impl PoolMetrics {
         self.idle_connections.store(idle, Ordering::Relaxed);
     }
 
+    pub fn record_leak_warning(&self) {
+        self.leak_warning_count.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn snapshot(&self) -> PoolMetricsSnapshot {
         PoolMetricsSnapshot {
             active_connections: self.active_connections.load(Ordering::Relaxed),
@@ -93,6 +99,7 @@ impl PoolMetrics {
             failed_requests: self.failed_requests.load(Ordering::Relaxed),
             avg_wait_time_ms: self.avg_wait_time_ms.load(Ordering::Relaxed),
             last_updated: self.last_updated.load(Ordering::Relaxed),
+            leak_warning_count: self.leak_warning_count.load(Ordering::Relaxed),
         }
     }
 }
@@ -106,6 +113,7 @@ pub struct PoolMetricsSnapshot {
     pub failed_requests: u64,
     pub avg_wait_time_ms: u64,
     pub last_updated: u64,
+    pub leak_warning_count: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -127,19 +135,20 @@ pub struct PoolConfig {
     pub lock_timeout_ms: u64,
     pub retry_max_attempts: u32,
     pub retry_base_delay_ms: u64,
+    pub leak_detection_threshold: f32,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
             max_connections: 20,
-            min_connections: 10,
-            acquire_timeout_secs: 5,
+            min_connections: 5,
+            acquire_timeout_secs: 15,
             idle_timeout_secs: 300,
-            max_lifetime_secs: 3600,
+            max_lifetime_secs: 1800,
             test_before_acquire: true,
             health_check_interval_secs: 30,
-            auto_scaling_enabled: true,
+            auto_scaling_enabled: false,
             low_load_threshold: 0.3,
             high_load_threshold: 0.8,
             scaling_cooldown_secs: 60,
@@ -149,7 +158,56 @@ impl Default for PoolConfig {
             lock_timeout_ms: 5000,
             retry_max_attempts: 3,
             retry_base_delay_ms: 100,
+            leak_detection_threshold: 0.9,
         }
+    }
+}
+
+impl PoolConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_connections == 0 {
+            return Err("max_connections must be greater than 0".to_string());
+        }
+        if self.min_connections > self.max_connections {
+            return Err(format!(
+                "min_connections ({}) must be less than or equal to max_connections ({})",
+                self.min_connections, self.max_connections
+            ));
+        }
+        if self.acquire_timeout_secs == 0 {
+            return Err("acquire_timeout_secs must be greater than 0".to_string());
+        }
+        if self.idle_timeout_secs == 0 {
+            return Err("idle_timeout_secs must be greater than 0".to_string());
+        }
+        if self.max_lifetime_secs == 0 {
+            return Err("max_lifetime_secs must be greater than 0".to_string());
+        }
+        if self.max_lifetime_secs < self.idle_timeout_secs {
+            return Err(format!(
+                "max_lifetime_secs ({}) should be greater than or equal to idle_timeout_secs ({})",
+                self.max_lifetime_secs, self.idle_timeout_secs
+            ));
+        }
+        if self.query_timeout_secs == 0 {
+            return Err("query_timeout_secs must be greater than 0".to_string());
+        }
+        if self.retry_max_attempts == 0 {
+            return Err("retry_max_attempts must be greater than 0".to_string());
+        }
+        if self.low_load_threshold >= self.high_load_threshold {
+            return Err(format!(
+                "low_load_threshold ({}) must be less than high_load_threshold ({})",
+                self.low_load_threshold, self.high_load_threshold
+            ));
+        }
+        if self.leak_detection_threshold <= 0.0 || self.leak_detection_threshold > 1.0 {
+            return Err(format!(
+                "leak_detection_threshold ({}) must be in range (0.0, 1.0]",
+                self.leak_detection_threshold
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -163,7 +221,7 @@ impl From<&DatabaseConfig> for PoolConfig {
             max_lifetime_secs: config.max_lifetime_secs,
             test_before_acquire: true,
             health_check_interval_secs: config.health_check_interval_secs,
-            auto_scaling_enabled: true,
+            auto_scaling_enabled: false,
             low_load_threshold: 0.3,
             high_load_threshold: 0.8,
             scaling_cooldown_secs: 60,
@@ -173,17 +231,17 @@ impl From<&DatabaseConfig> for PoolConfig {
             lock_timeout_ms: 5000,
             retry_max_attempts: 3,
             retry_base_delay_ms: 100,
+            leak_detection_threshold: 0.9,
         }
     }
 }
 
 #[derive(Clone)]
 pub struct DbPool {
-    pool: Arc<SyncRwLock<PgPool>>,
+    pool: Arc<ArcSwap<PgPool>>,
     pub metrics: Arc<PoolMetrics>,
     pub config: Arc<RwLock<PoolConfig>>,
     pub db_config: DatabaseConfig,
-    last_scaling_time: Arc<AtomicU64>,
 }
 
 impl DbPool {
@@ -196,6 +254,10 @@ impl DbPool {
         config: &DatabaseConfig,
         pool_config: PoolConfig,
     ) -> Result<Self, sqlx::Error> {
+        if let Err(e) = pool_config.validate() {
+            return Err(sqlx::Error::Configuration(e.into()));
+        }
+
         let url = format!(
             "postgres://{}:{}@{}:{}/{}?statement_timeout={}&lock_timeout={}",
             config.username,
@@ -209,31 +271,25 @@ impl DbPool {
 
         let pool = Self::create_pool(&url, &pool_config).await?;
 
+        info!(
+            "数据库连接池创建成功: max={}, min={}, acquire_timeout={}s, idle_timeout={}s, max_lifetime={}s",
+            pool_config.max_connections,
+            pool_config.min_connections,
+            pool_config.acquire_timeout_secs,
+            pool_config.idle_timeout_secs,
+            pool_config.max_lifetime_secs
+        );
+
         Ok(Self {
-            pool: Arc::new(SyncRwLock::new(pool)),
+            pool: Arc::new(ArcSwap::from(Arc::new(pool))),
             metrics: Arc::new(PoolMetrics::new()),
             config: Arc::new(RwLock::new(pool_config)),
             db_config: config.clone(),
-            last_scaling_time: Arc::new(AtomicU64::new(0)),
         })
     }
 
-    fn mask_password(password: &str) -> String {
-        if password.len() <= 2 {
-            "*".repeat(password.len().max(1))
-        } else {
-            format!("{}{}{}", &password[..1], "*".repeat(password.len() - 2), &password[password.len()-1..])
-        }
-    }
-
-    fn read_pool(&self) -> PgPool {
-        self.pool
-            .read()
-            .unwrap_or_else(|e| {
-                warn!("数据库连接池读锁中毒，自动恢复: {}", e);
-                e.into_inner()
-            })
-            .clone()
+    fn get_pool(&self) -> Arc<PgPool> {
+        self.pool.load_full()
     }
 
     async fn create_pool(url: &str, config: &PoolConfig) -> Result<PgPool, sqlx::Error> {
@@ -248,24 +304,13 @@ impl DbPool {
             .await
     }
 
-    fn build_database_url(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.db_config.username,
-            self.db_config.password,
-            self.db_config.host,
-            self.db_config.port,
-            self.db_config.database
-        )
-    }
-
     pub async fn acquire(
         &self,
     ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
         let start_time = Instant::now();
         self.metrics.record_request_start();
 
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         let result = pool.acquire().await;
         let wait_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -287,19 +332,19 @@ impl DbPool {
 
     #[must_use]
     pub fn get_conn(&self) -> PgPool {
-        self.read_pool()
+        (*self.get_pool()).clone()
     }
 
     pub async fn begin(&self) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, sqlx::Error> {
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         pool.begin().await
     }
 
     pub async fn health_check(&self) -> Result<bool, sqlx::Error> {
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         let result = time::timeout(
             Duration::from_secs(5),
-            sqlx::query("SELECT 1").execute(&pool),
+            sqlx::query("SELECT 1").execute(&*pool),
         )
         .await;
         match result {
@@ -310,11 +355,45 @@ impl DbPool {
     }
 
     fn update_metrics(&self) {
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         let total = pool.size();
         let idle = pool.num_idle() as u32;
         let active = total.saturating_sub(idle);
         self.metrics.update_connection_counts(active, idle);
+    }
+
+    fn check_connection_leak(&self) {
+        let pool = self.get_pool();
+        let total = pool.size();
+        let idle = pool.num_idle() as u32;
+        let active = total.saturating_sub(idle);
+
+        if total == 0 {
+            return;
+        }
+
+        let utilization = active as f32 / total as f32;
+        let config = self.config.try_read();
+        let threshold = config
+            .as_ref()
+            .map(|c| c.leak_detection_threshold)
+            .unwrap_or(0.9);
+
+        if utilization >= threshold {
+            self.metrics.record_leak_warning();
+            warn!(
+                "连接池接近耗尽，可能存在连接泄漏! 活跃: {}/{}, 利用率: {:.1}%, 阈值: {:.1}%",
+                active, total, utilization * 100.0, threshold * 100.0
+            );
+        }
+
+        if active == total && total > 0 {
+            error!(
+                "连接池已完全耗尽! 所有 {} 个连接都在使用中，等待队列: {}",
+                total,
+                self.metrics.waiting_requests.load(Ordering::Relaxed)
+            );
+        }
     }
 
     #[must_use]
@@ -324,143 +403,11 @@ impl DbPool {
 
     #[must_use]
     pub fn get_pool_status(&self) -> PoolStatus {
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         PoolStatus {
             size: pool.size(),
             num_idle: pool.num_idle() as u32,
             is_closed: pool.is_closed(),
-        }
-    }
-
-    pub async fn resize_pool(&self, new_max_connections: u32) -> Result<(), sqlx::Error> {
-        let current_time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let mut config = self.config.write().await;
-
-        if current_time - self.last_scaling_time.load(Ordering::Relaxed)
-            < config.scaling_cooldown_secs
-        {
-            return Ok(());
-        }
-
-        let old_max = config.max_connections;
-        config.max_connections = new_max_connections;
-        config.min_connections = config.min_connections.min(new_max_connections);
-        let new_config = config.clone();
-        drop(config);
-
-        let metrics = self.get_metrics();
-        let status = self.get_pool_status();
-        if metrics.waiting_requests > 0 {
-            warn!(
-                "连接池存在等待请求({}), 跳过重建 (当前: {}, 目标: {})",
-                metrics.waiting_requests, old_max, new_max_connections
-            );
-            return Ok(());
-        }
-
-        if status.size == 0 {
-            return Ok(());
-        }
-
-        let url = self.build_database_url();
-        let masked_url = format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.db_config.username,
-            Self::mask_password(&self.db_config.password),
-            self.db_config.host,
-            self.db_config.port,
-            self.db_config.database
-        );
-        let new_pool = match Self::create_pool(&url, &new_config).await {
-            Ok(p) => p,
-            Err(e) => {
-                error!("创建新连接池失败 ({}): {}", masked_url, e);
-                let mut config = self.config.write().await;
-                config.max_connections = old_max;
-                return Err(e);
-            }
-        };
-
-        let old_pool = {
-            let mut pool_lock = self.pool.write().unwrap_or_else(|e| {
-                warn!("数据库连接池写锁中毒，自动恢复: {}", e);
-                e.into_inner()
-            });
-            std::mem::replace(&mut *pool_lock, new_pool)
-        };
-
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            old_pool.close().await;
-        });
-
-        self.last_scaling_time
-            .store(current_time, Ordering::Relaxed);
-
-        self.update_metrics();
-
-        if old_max != new_max_connections {
-            warn!(
-                "连接池已重建: 最大连接数 {} -> {}",
-                old_max, new_max_connections
-            );
-        }
-
-        Ok(())
-    }
-
-    pub async fn check_and_scale(&self) {
-        let config = self.config.read().await;
-
-        if !config.auto_scaling_enabled {
-            return;
-        }
-
-        let metrics = self.metrics.snapshot();
-        let pool = self.read_pool();
-        let pool_size = pool.size();
-
-        if pool_size == 0 {
-            return;
-        }
-
-        let utilization_rate = metrics.active_connections as f32 / pool_size as f32;
-        let current_max = config.max_connections;
-        let min_connections = config.min_connections;
-        let high_load_threshold = config.high_load_threshold;
-        let low_load_threshold = config.low_load_threshold;
-        drop(config);
-
-        if utilization_rate > high_load_threshold {
-            let load_factor = utilization_rate / high_load_threshold;
-            let growth_factor = (load_factor - 1.0).mul_add(0.3, 1.0);
-            let new_max = (current_max as f32 * growth_factor)
-                .min(100.0)
-                .round()
-                .clamp(0.0, u32::MAX as f32) as u32;
-
-            if new_max > current_max + 1
-                && let Err(e) = self.resize_pool(new_max).await
-            {
-                error!("连接池扩容失败: {}", e);
-            }
-        } else if utilization_rate < low_load_threshold {
-            let load_factor = utilization_rate / low_load_threshold;
-            let reduction_factor = load_factor.mul_add(0.2, 0.8);
-            let new_max = (current_max as f32 * reduction_factor)
-                .max(min_connections as f32)
-                .round()
-                .clamp(0.0, u32::MAX as f32) as u32;
-
-            if new_max < current_max - 1
-                && let Err(e) = self.resize_pool(new_max).await
-            {
-                error!("连接池缩容失败: {}", e);
-            }
         }
     }
 
@@ -486,6 +433,7 @@ impl DbPool {
                         }
 
                         pool_clone.update_metrics();
+                        pool_clone.check_connection_leak();
 
                         let metrics = pool_clone.get_metrics();
                         let status = pool_clone.get_pool_status();
@@ -496,8 +444,6 @@ impl DbPool {
                                 metrics.waiting_requests, status.size
                             );
                         }
-
-                        pool_clone.check_and_scale().await;
                     }
                     _ = shutdown_rx.recv() => {
                         info!("数据库连接池健康检查任务收到关闭信号，停止运行");
@@ -518,13 +464,14 @@ impl DbPool {
                         let metrics = pool_clone.get_metrics();
 
                         info!(
-                            "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}",
+                            "连接池指标 - 活跃: {}, 空闲: {}, 等待: {}, 平均等待: {}ms, 总请求: {}, 失败: {}, 泄漏警告: {}",
                             metrics.active_connections,
                             metrics.idle_connections,
                             metrics.waiting_requests,
                             metrics.avg_wait_time_ms,
                             metrics.total_requests,
-                            metrics.failed_requests
+                            metrics.failed_requests,
+                            metrics.leak_warning_count
                         );
                     }
                     _ = shutdown_rx.recv() => {
@@ -537,7 +484,7 @@ impl DbPool {
     }
 
     pub async fn close(&self) {
-        let pool = self.read_pool();
+        let pool = self.get_pool();
         pool.close().await;
         info!("数据库连接池已关闭");
     }
@@ -841,9 +788,29 @@ mod tests {
     fn test_pool_config_default() {
         let config = PoolConfig::default();
         assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 10);
-        assert_eq!(config.acquire_timeout_secs, 5);
-        assert!(config.auto_scaling_enabled);
+        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.acquire_timeout_secs, 15);
+        assert!(!config.auto_scaling_enabled);
+    }
+
+    #[test]
+    fn test_pool_config_validation() {
+        let valid_config = PoolConfig::default();
+        assert!(valid_config.validate().is_ok());
+
+        let mut invalid_config = PoolConfig::default();
+        invalid_config.max_connections = 0;
+        assert!(invalid_config.validate().is_err());
+
+        let mut invalid_config2 = PoolConfig::default();
+        invalid_config2.min_connections = 100;
+        invalid_config2.max_connections = 10;
+        assert!(invalid_config2.validate().is_err());
+
+        let mut invalid_config3 = PoolConfig::default();
+        invalid_config3.max_lifetime_secs = 60;
+        invalid_config3.idle_timeout_secs = 120;
+        assert!(invalid_config3.validate().is_err());
     }
 
     #[test]
@@ -854,8 +821,8 @@ mod tests {
             database: "test".to_string(),
             username: "user".to_string(),
             password: "pass".to_string(),
-            max_connections: 1,
-            min_connections: 1,
+            max_connections: 10,
+            min_connections: 5,
             acquire_timeout_secs: 15,
             idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
@@ -864,16 +831,9 @@ mod tests {
             health_check_interval_secs: 30,
         };
         let pool_config = PoolConfig::from(&db_config);
-        assert_eq!(pool_config.min_connections, 1);
+        assert_eq!(pool_config.min_connections, 5);
         assert!(pool_config.min_connections <= pool_config.max_connections);
-    }
-
-    #[test]
-    fn test_mask_password() {
-        assert_eq!(DbPool::mask_password("secret"), "s***t");
-        assert_eq!(DbPool::mask_password("ab"), "ab");
-        assert_eq!(DbPool::mask_password("a"), "*");
-        assert_eq!(DbPool::mask_password(""), "*");
+        assert!(!pool_config.auto_scaling_enabled);
     }
 
     #[test]

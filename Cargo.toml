@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.8.99"
+version = "0.9.0"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -68,6 +68,7 @@ futures-util = "0.3.32"
 num_cpus = "1.17.0"
 csv = "1.4.0"
 dashmap = "6.1.0"
+arc-swap = "1.7.1"
 base64 = "0.22.1"
 lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "5.7.1", features = ["qr", "gen_secret"] }
