@@ -139,6 +139,7 @@ pub async fn create_user(
     {
         tracing::warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("用户 {} 创建成功, ID: {}", req.username, id);
 
     let user = User {
         id,
@@ -227,6 +228,7 @@ pub async fn update_user(
     {
         tracing::warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("用户更新成功, ID: {}", id);
 
     let user = sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
@@ -289,6 +291,7 @@ pub async fn delete_user(
     {
         tracing::warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("用户删除成功, ID: {}", id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "用户删除成功")))
 }

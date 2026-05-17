@@ -459,6 +459,7 @@ pub async fn create_switch(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("交换机 {} 创建成功, ID: {}", data.name, id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建交换机成功")))
 }
@@ -649,6 +650,7 @@ pub async fn update_switch(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("交换机 {} 更新成功, ID: {}", data.name, id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新交换机成功")))
 }
@@ -715,6 +717,7 @@ pub async fn delete_switch(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("交换机删除成功, ID: {}", id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除交换机成功")))
 }

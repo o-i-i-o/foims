@@ -311,6 +311,7 @@ pub async fn create_ip_manager(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("IP地址 {} 创建成功, ID: {}", mapping.ip_address, id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理创建成功")))
 }
@@ -592,6 +593,7 @@ pub async fn update_ip_manager(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("IP地址 {} 更新成功, ID: {}", mapping.ip_address, id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<IpManager>::success(mapping, "IP管理更新成功")))
 }
@@ -634,6 +636,7 @@ pub async fn delete_ip_manager(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("IP地址删除成功, ID: {}", id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "IP管理删除成功")))
 }

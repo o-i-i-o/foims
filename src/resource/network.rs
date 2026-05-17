@@ -378,6 +378,7 @@ pub async fn create_network(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("网络 {} 创建成功, ID: {}", full_network_name, id);
 
     let network = Network {
         id,
@@ -586,6 +587,7 @@ pub async fn update_network(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("网络 {} 更新成功, ID: {}", network.name, id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络更新成功")))
 }
@@ -661,6 +663,7 @@ pub async fn delete_network(
     {
         warn!("记录操作日志失败: {}", e);
     }
+    tracing::info!("网络删除成功, ID: {}", id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络删除成功")))
 }

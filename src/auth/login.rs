@@ -189,6 +189,7 @@ pub async fn login(
     if let Err(e) = log_login(&conn, &username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
+    tracing::info!("用户 {} 登录成功", username);
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -507,6 +508,7 @@ pub async fn login_with_two_factor(
     if let Err(e) = log_login(&conn, &user.username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
+    tracing::info!("用户 {} 2FA验证登录成功", user.username);
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
@@ -637,6 +639,8 @@ pub async fn refresh_token(
 
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
+
+    tracing::info!("用户 {} 令牌刷新成功", claims.username);
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
