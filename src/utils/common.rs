@@ -539,9 +539,12 @@ pub fn get_real_mac_address(ip: &str) -> Option<String> {
     }
 
     if ip.parse::<IpAddr>().is_ok() {
-        let _ = std::process::Command::new("ping")
+        if let Err(e) = std::process::Command::new("ping")
             .args(["-c", "1", "-W", "1", ip])
-            .output();
+            .output()
+        {
+            warn!("ping {} 失败: {}", ip, e);
+        }
 
         if let Some(mac) = read_mac_from_arp_cache(ip) {
             return Some(mac);
@@ -553,7 +556,13 @@ pub fn get_real_mac_address(ip: &str) -> Option<String> {
 
 fn read_mac_from_arp_cache(ip: &str) -> Option<String> {
     if ip.contains(':') {
-        let content = std::fs::read_to_string("/proc/net/ndp").ok()?;
+        let content = match std::fs::read_to_string("/proc/net/ndp") {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("读取 /proc/net/ndp 失败: {}", e);
+                return None;
+            }
+        };
         for line in content.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 && parts[0] == ip {
@@ -566,7 +575,13 @@ fn read_mac_from_arp_cache(ip: &str) -> Option<String> {
         return None;
     }
 
-    let content = std::fs::read_to_string("/proc/net/arp").ok()?;
+    let content = match std::fs::read_to_string("/proc/net/arp") {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("读取 /proc/net/arp 失败: {}", e);
+            return None;
+        }
+    };
 
     for line in content.lines().skip(1) {
         let parts: Vec<&str> = line.split_whitespace().collect();

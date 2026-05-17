@@ -334,9 +334,7 @@ pub async fn get_room_cabinets_with_positions(
         )
         .bind(cab_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
-        .flatten();
+        .await?;
 
         let layout_json = layout.map(|(x, y, w, h, r)| serde_json::json!({"x": x, "y": y, "width": w, "height": h, "rotation": r}));
 

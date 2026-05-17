@@ -464,9 +464,7 @@ pub async fn test_snmp_connection(
             )
             .bind(switch_id)
             .fetch_optional(&state.pool()?.get_conn())
-            .await
-            .ok()
-            .flatten();
+            .await?;
 
             let creds = DecryptedSnmpCredentials::from_switch_snmp(&switch);
 
@@ -570,9 +568,7 @@ pub async fn get_switch_info_snmp(
     )
     .bind(switch_id)
     .fetch_optional(&state.pool()?.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .await?;
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
@@ -618,9 +614,7 @@ pub async fn get_switch_ports_snmp(
     )
     .bind(switch_id)
     .fetch_optional(&state.pool()?.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .await?;
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,

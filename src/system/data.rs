@@ -42,7 +42,7 @@ fn empty_to_none(s: &str) -> Option<String> {
 async fn find_network_id(
     conn: &mut sqlx::PgConnection,
     network_identifier: &str,
-) -> Option<uuid::Uuid> {
+) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     if network_identifier.contains('/') {
         let parts: Vec<&str> = network_identifier.splitn(2, '/').collect();
         if parts.len() == 2 {
@@ -57,18 +57,14 @@ async fn find_network_id(
             .bind(network_name)
             .fetch_optional(&mut *conn)
             .await
-            .ok()
-            .flatten()
         } else {
-            None
+            Ok(None)
         }
     } else {
         sqlx::query_scalar("SELECT id FROM network_cidrs WHERE name = $1")
             .bind(network_identifier.trim())
             .fetch_optional(&mut *conn)
             .await
-            .ok()
-            .flatten()
     }
 }
 
@@ -248,8 +244,7 @@ async fn export_rooms(
         )
         .bind(room_id)
         .fetch_all(&mut *conn)
-        .await
-        .unwrap_or_default();
+        .await?;
 
         if networks.len() > max_networks {
             max_networks = networks.len();
@@ -369,8 +364,7 @@ async fn export_cabinets(
         )
         .bind(cabinet_id)
         .fetch_all(&mut *conn)
-        .await
-        .unwrap_or_default();
+        .await?;
 
         if networks.len() > max_networks {
             max_networks = networks.len();
@@ -1019,19 +1013,23 @@ async fn import_rooms(
 
                         let mut linked_networks = Vec::new();
                         for network_name in &network_names {
-                            if let Some(network_id) =
-                                find_network_id(&mut *conn, network_name).await
-                            {
-                                let insert_result = sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
-                                    .bind(uuid::Uuid::new_v4())
-                                    .bind(id)
-                                    .bind(network_id)
-                                    .execute(&mut *conn)
-                                    .await;
-                                if let Err(e) = insert_result {
-                                    tracing::warn!("操作失败: {}", e);
+                            match find_network_id(&mut *conn, network_name).await {
+                                Ok(Some(network_id)) => {
+                                    let insert_result = sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
+                                        .bind(uuid::Uuid::new_v4())
+                                        .bind(id)
+                                        .bind(network_id)
+                                        .execute(&mut *conn)
+                                        .await;
+                                    if let Err(e) = insert_result {
+                                        tracing::warn!("操作失败: {}", e);
+                                    }
+                                    linked_networks.push(*network_name);
                                 }
-                                linked_networks.push(*network_name);
+                                Ok(None) => {}
+                                Err(e) => {
+                                    tracing::warn!("查找网络失败: {}", e);
+                                }
                             }
                         }
                         results.push(format!(
@@ -1067,17 +1065,26 @@ async fn import_rooms(
                     let mut linked_networks = Vec::new();
                     let mut missing_networks = Vec::new();
                     for network_name in &network_names {
-                        if let Some(network_id) = find_network_id(&mut *conn, network_name).await {
-                            sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
-                                .bind(uuid::Uuid::new_v4())
-                                .bind(id)
-                                .bind(network_id)
-                                .execute(&mut *conn)
-                                .await
-                                .ok();
-                            linked_networks.push(*network_name);
-                        } else {
-                            missing_networks.push(*network_name);
+                        match find_network_id(&mut *conn, network_name).await {
+                            Ok(Some(network_id)) => {
+                                if let Err(e) = sqlx::query("INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())")
+                                    .bind(uuid::Uuid::new_v4())
+                                    .bind(id)
+                                    .bind(network_id)
+                                    .execute(&mut *conn)
+                                    .await
+                                {
+                                    tracing::warn!("关联房间网络失败: {}", e);
+                                }
+                                linked_networks.push(*network_name);
+                            }
+                            Ok(None) => {
+                                missing_networks.push(*network_name);
+                            }
+                            Err(e) => {
+                                tracing::warn!("查找网络失败: {}", e);
+                                missing_networks.push(*network_name);
+                            }
                         }
                     }
 
@@ -1220,23 +1227,25 @@ async fn import_workstations(
                         if ip_address.is_empty() {
                             results.push(format!("更新工位: {name} (房间: {room_name})"));
                         } else {
-                            let existing_ip: Option<uuid::Uuid> = sqlx::query_scalar(
+                            let existing_ip: Option<uuid::Uuid> = match sqlx::query_scalar(
                                 "SELECT id FROM ips WHERE workstation_id = $1 AND device_type = 'workstation' LIMIT 1"
                             )
                             .bind(id)
                             .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
+                            .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询现有IP失败: {}", e); None }
+                            };
 
-                            let room_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                            let room_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                                 "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
                             )
                             .bind(room_id)
                             .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
+                            .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询房间网络失败: {}", e); None }
+                            };
 
                             let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
 
@@ -1313,14 +1322,15 @@ async fn import_workstations(
                     if ip_address.is_empty() {
                         results.push(format!("导入工位: {name} (房间: {room_name})"));
                     } else {
-                        let room_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                        let room_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
                         )
                         .bind(room_id)
                         .fetch_optional(&mut *conn)
-                        .await
-                        .ok()
-                        .flatten();
+                        .await {
+                            Ok(v) => v,
+                            Err(e) => { tracing::warn!("查询房间网络失败: {}", e); None }
+                        };
 
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
@@ -1649,23 +1659,25 @@ async fn import_positions(
                                 "更新机位: {name} (机柜: {cabinet_name}, U{start_u}-U{end_u})"
                             ));
                         } else {
-                            let existing_ip: Option<uuid::Uuid> = sqlx::query_scalar(
+                            let existing_ip: Option<uuid::Uuid> = match sqlx::query_scalar(
                                 "SELECT id FROM ips WHERE position_id = $1 AND device_type = 'cabinet_position' LIMIT 1"
                             )
                             .bind(id)
                             .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
+                            .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询现有IP失败: {}", e); None }
+                            };
 
-                            let cabinet_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                            let cabinet_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                                 "SELECT rn.network_id FROM room_networks rn JOIN cabinets c ON c.room_id = rn.room_id WHERE c.id = $1 LIMIT 1"
                             )
                             .bind(cabinet_id)
                             .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
+                            .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询机柜网络失败: {}", e); None }
+                            };
 
                             let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
 
@@ -1745,14 +1757,15 @@ async fn import_positions(
                             "导入机位: {name} (机柜: {cabinet_name}, U{start_u}-U{end_u})"
                         ));
                     } else {
-                        let cabinet_network_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                        let cabinet_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT rn.network_id FROM room_networks rn JOIN cabinets c ON c.room_id = rn.room_id WHERE c.id = $1 LIMIT 1",
                         )
                         .bind(cabinet_id)
                         .fetch_optional(&mut *conn)
-                        .await
-                        .ok()
-                        .flatten();
+                        .await {
+                            Ok(v) => v,
+                            Err(e) => { tracing::warn!("查询机柜网络失败: {}", e); None }
+                        };
 
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
@@ -1944,22 +1957,24 @@ async fn import_switches(
                         if ip_address.is_empty() {
                             results.push(format!("更新交换机: {name}"));
                         } else {
-                            let existing_ip: Option<uuid::Uuid> = sqlx::query_scalar(
+                            let existing_ip: Option<uuid::Uuid> = match sqlx::query_scalar(
                                 "SELECT id FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1) LIMIT 1"
                             )
                             .bind(id)
                             .fetch_optional(&mut *conn)
-                            .await
-                            .ok()
-                            .flatten();
+                            .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询现有IP失败: {}", e); None }
+                            };
 
-                            let network_id: Option<uuid::Uuid> =
+                            let network_id: Option<uuid::Uuid> = match
                                 sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = (SELECT room_id FROM cabinets WHERE id = (SELECT cabinet_id FROM positions WHERE device_type = 'switch' AND device_id = $1)) LIMIT 1")
                                     .bind(id)
                                     .fetch_optional(&mut *conn)
-                                    .await
-                                    .ok()
-                                    .flatten();
+                                    .await {
+                                Ok(v) => v,
+                                Err(e) => { tracing::warn!("查询交换机网络失败: {}", e); None }
+                            };
 
                             let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
 
@@ -2055,13 +2070,14 @@ async fn import_switches(
                     if ip_address.is_empty() {
                         results.push(format!("导入交换机: {name}"));
                     } else {
-                        let network_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                        let network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT network_id FROM room_networks LIMIT 1"
                         )
                         .fetch_optional(&mut *conn)
-                        .await
-                        .ok()
-                        .flatten();
+                        .await {
+                            Ok(v) => v,
+                            Err(e) => { tracing::warn!("查询网络失败: {}", e); None }
+                        };
 
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();

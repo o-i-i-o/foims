@@ -447,9 +447,7 @@ pub async fn create_switch(
         )
         .bind(position_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .ok()
-        .flatten();
+        .await?;
 
         if let Some(rid) = room_id {
             let network_in_room: bool = sqlx::query_scalar(
@@ -667,9 +665,7 @@ pub async fn update_switch(
                 )
                 .bind(pos_id)
                 .fetch_optional(&state.pool()?.get_conn())
-                .await
-                .ok()
-                .flatten();
+                .await?;
 
                 if let Some(rid) = room_id {
                     let network_in_room: bool = sqlx::query_scalar(

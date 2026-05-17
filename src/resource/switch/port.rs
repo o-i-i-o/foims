@@ -423,9 +423,7 @@ pub async fn sync_ports_from_snmp(
     )
     .bind(switch_id)
     .fetch_optional(&state.pool()?.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .await?;
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,

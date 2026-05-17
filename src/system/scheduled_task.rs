@@ -32,9 +32,7 @@ pub async fn get_scheduled_task(
     )
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
-    .await
-    .ok()
-    .flatten();
+    .await?;
 
     match task {
         Some(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "获取定时任务成功"))),
@@ -186,9 +184,7 @@ pub async fn run_scheduled_task_now(
     )
     .bind(id)
     .fetch_optional(&conn)
-    .await
-    .ok()
-    .flatten();
+    .await?;
 
     let Some(task) = task else {
         return Err(AppError::NotFound("定时任务不存在".to_string()))

@@ -530,46 +530,55 @@ pub async fn check_service_status() -> Result<HttpResponse, AppError> {
     let mut uptime_seconds: Option<u64> = None;
 
     if service_file_exists {
-        let enable_output = Command::new("systemctl")
+        match Command::new("systemctl")
             .arg("is-enabled")
             .arg("ipma.service")
             .output()
-            .ok();
-
-        if let Some(output) = enable_output {
-            is_enabled = output.status.success();
+        {
+            Ok(output) => {
+                is_enabled = output.status.success();
+            }
+            Err(e) => {
+                tracing::warn!("检查服务启用状态失败: {}", e);
+            }
         }
 
-        let active_output = Command::new("systemctl")
+        match Command::new("systemctl")
             .arg("is-active")
             .arg("ipma.service")
             .output()
-            .ok();
-
-        if let Some(output) = active_output {
-            is_active = output.status.success();
-            status_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        {
+            Ok(output) => {
+                is_active = output.status.success();
+                status_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            }
+            Err(e) => {
+                tracing::warn!("检查服务活跃状态失败: {}", e);
+            }
         }
 
         if is_active {
-            let show_output = Command::new("systemctl")
+            match Command::new("systemctl")
                 .args(["show", "ipma.service", "--property=ExecMainStartTimestamp"])
                 .output()
-                .ok();
-
-            if let Some(output) = show_output {
-                let prop = String::from_utf8_lossy(&output.stdout);
-                if let Some(timestamp_str) = prop.strip_prefix("ExecMainStartTimestamp=") {
-                    let timestamp_str = timestamp_str.trim();
-                    if !timestamp_str.is_empty()
-                        && timestamp_str != "n/a"
-                        && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str)
-                    {
-                        let now = chrono::Utc::now();
-                        uptime_seconds = Some(
-                            (now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64,
-                        );
+            {
+                Ok(output) => {
+                    let prop = String::from_utf8_lossy(&output.stdout);
+                    if let Some(timestamp_str) = prop.strip_prefix("ExecMainStartTimestamp=") {
+                        let timestamp_str = timestamp_str.trim();
+                        if !timestamp_str.is_empty()
+                            && timestamp_str != "n/a"
+                            && let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(timestamp_str)
+                        {
+                            let now = chrono::Utc::now();
+                            uptime_seconds = Some(
+                                (now - start_time.with_timezone(&chrono::Utc)).num_seconds() as u64,
+                            );
+                        }
                     }
+                }
+                Err(e) => {
+                    tracing::warn!("获取服务启动时间失败: {}", e);
                 }
             }
         }
@@ -609,11 +618,16 @@ pub async fn register_service() -> Result<HttpResponse, AppError> {
 
     for path in &service_paths {
         if std::path::Path::new(path).exists() {
-            let is_enabled = Command::new("systemctl")
+            let is_enabled = match Command::new("systemctl")
                 .args(["is-enabled", "ipma.service"])
                 .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
+            {
+                Ok(output) => output.status.success(),
+                Err(e) => {
+                    tracing::warn!("检查服务启用状态失败: {}", e);
+                    false
+                }
+            };
 
             tracing::info!("服务文件已存在: {}, 已启用: {}", path, is_enabled);
 
@@ -1432,7 +1446,11 @@ pub async fn get_notification_settings(state: web::Data<AppState>) -> Result<Htt
                 .filter_map(|id| Uuid::parse_str(id.trim()).ok())
                 .collect::<Vec<Uuid>>()
         }
-        Ok(None) | Err(_) => Vec::new(),
+        Ok(None) => Vec::new(),
+        Err(e) => {
+            tracing::warn!("查询通知收件人设置失败: {}", e);
+            Vec::new()
+        }
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(

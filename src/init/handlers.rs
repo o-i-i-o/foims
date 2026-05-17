@@ -638,11 +638,16 @@ pub async fn restart_program() -> Result<HttpResponse, AppError> {
 }
 
 pub async fn check_pgsql(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let installed = std::process::Command::new("which")
+    let installed = match std::process::Command::new("which")
         .arg("psql")
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    {
+        Ok(s) => s.success(),
+        Err(e) => {
+            tracing::warn!("检查 psql 安装状态失败: {}", e);
+            false
+        }
+    };
 
     if !installed {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
