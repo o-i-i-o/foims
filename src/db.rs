@@ -798,18 +798,13 @@ mod tests {
         let valid_config = PoolConfig::default();
         assert!(valid_config.validate().is_ok());
 
-        let mut invalid_config = PoolConfig::default();
-        invalid_config.max_connections = 0;
+        let invalid_config = PoolConfig { max_connections: 0, ..Default::default() };
         assert!(invalid_config.validate().is_err());
 
-        let mut invalid_config2 = PoolConfig::default();
-        invalid_config2.min_connections = 100;
-        invalid_config2.max_connections = 10;
+        let invalid_config2 = PoolConfig { min_connections: 100, max_connections: 10, ..Default::default() };
         assert!(invalid_config2.validate().is_err());
 
-        let mut invalid_config3 = PoolConfig::default();
-        invalid_config3.max_lifetime_secs = 60;
-        invalid_config3.idle_timeout_secs = 120;
+        let invalid_config3 = PoolConfig { max_lifetime_secs: 60, idle_timeout_secs: 120, ..Default::default() };
         assert!(invalid_config3.validate().is_err());
     }
 

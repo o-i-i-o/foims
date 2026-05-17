@@ -34,10 +34,20 @@ fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
     }
 
     use base64::Engine;
-    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[1])
-        .ok()?;
-    let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    let payload = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::trace!("Base64解码JWT payload失败: {}", e);
+            return None;
+        }
+    };
+    let claims: serde_json::Value = match serde_json::from_slice(&payload) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::trace!("解析JWT claims失败: {}", e);
+            return None;
+        }
+    };
 
     claims.get("sub")?.as_str().map(std::string::ToString::to_string)
 }

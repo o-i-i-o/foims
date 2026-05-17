@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn ensure_database_and_schema(
     config: &crate::config::DatabaseConfig,
@@ -53,14 +53,18 @@ pub async fn ensure_database_and_schema(
             .execute(&pool)
             .await
             .map_err(|e| format!("创建schema失败: {e}"))?;
-        sqlx::query("GRANT ALL ON SCHEMA public TO postgres")
+        if let Err(e) = sqlx::query("GRANT ALL ON SCHEMA public TO postgres")
             .execute(&pool)
             .await
-            .ok();
-        sqlx::query("GRANT ALL ON SCHEMA public TO public")
+        {
+            warn!("设置postgres权限失败: {}", e);
+        }
+        if let Err(e) = sqlx::query("GRANT ALL ON SCHEMA public TO public")
             .execute(&pool)
             .await
-            .ok();
+        {
+            warn!("设置public权限失败: {}", e);
+        }
         info!("public schema 创建成功");
     }
 

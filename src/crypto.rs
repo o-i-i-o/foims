@@ -153,13 +153,25 @@ pub fn verify_key_with_sample(encrypted_sample: &str) -> bool {
 #[must_use]
 pub fn encrypt_password(password: &str) -> Option<String> {
     let key = get_encryption_key();
-    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
+    let cipher = match Aes256Gcm::new_from_slice(&key) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("创建加密器失败: {}", e);
+            return None;
+        }
+    };
 
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     rand::rng().fill(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ciphertext = cipher.encrypt(nonce, password.as_bytes()).ok()?;
+    let ciphertext = match cipher.encrypt(nonce, password.as_bytes()) {
+        Ok(ct) => ct,
+        Err(e) => {
+            error!("加密失败: {}", e);
+            return None;
+        }
+    };
 
     let mut result = nonce_bytes.to_vec();
     result.extend(ciphertext);

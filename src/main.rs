@@ -540,7 +540,9 @@ async fn main() -> std::io::Result<()> {
             signal_handle.await?;
 
             let force_shutdown_handle = tokio::spawn(async {
-                tokio::signal::ctrl_c().await.ok();
+                if let Err(e) = tokio::signal::ctrl_c().await {
+                    warn!("注册强制退出信号处理失败: {}", e);
+                }
                 warn!("收到第二次中断信号，强制退出！");
                 std::process::exit(1);
             });

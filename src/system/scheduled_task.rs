@@ -49,7 +49,13 @@ pub async fn create_scheduled_task(
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
     let enabled = req.enabled.unwrap_or(true);
 
-    let next_run_at = calculate_next_run(&req.cron_expression).ok();
+    let next_run_at = match calculate_next_run(&req.cron_expression) {
+        Ok(time) => Some(time),
+        Err(e) => {
+            tracing::warn!("计算下次运行时间失败: {}", e);
+            None
+        }
+    };
 
     let task: ScheduledTask = sqlx::query_as(
         r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
@@ -229,7 +235,13 @@ pub async fn run_scheduled_task_now(
         tracing::warn!("记录任务日志失败: {}", e);
     }
 
-    let next_run_at = calculate_next_run(&task.cron_expression).ok();
+    let next_run_at = match calculate_next_run(&task.cron_expression) {
+        Ok(time) => Some(time),
+        Err(e) => {
+            tracing::warn!("计算下次运行时间失败: {}", e);
+            None
+        }
+    };
 
     let update_query = if let Some(next_run) = next_run_at {
         sqlx::query(
