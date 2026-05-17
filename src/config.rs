@@ -277,7 +277,7 @@ impl Config {
 // 解析带单位的时间字符串为秒数
 pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
     let re = regex::Regex::new(r"^(\d+)([smhd])$")
-        .expect("无法编译持续时间解析正则表达式");
+        .map_err(|e| format!("无法编译持续时间解析正则表达式: {e}"))?;
     if let Some(captures) = re.captures(duration_str) {
         let value: u64 = captures[1].parse().map_err(|_| "Invalid duration value")?;
         let unit = &captures[2];

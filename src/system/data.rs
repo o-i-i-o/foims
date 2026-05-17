@@ -260,7 +260,7 @@ async fn export_rooms(
 
     let mut header = String::from("名称,类型");
     for i in 1..=max_networks {
-        write!(header, ",网络{i}").expect("CSV头部写入失败");
+        write!(header, ",网络{i}").ok();
     }
     header.push('\n');
     csv.extend_from_slice(header.as_bytes());
@@ -280,7 +280,7 @@ async fn export_rooms(
         let mut line = format!("{},{}", escape_csv_field(&name), room_type_display);
         for i in 0..max_networks {
             if i < networks.len() {
-                write!(line, ",{}", escape_csv_field(&networks[i])).expect("CSV行写入失败");
+                write!(line, ",{}", escape_csv_field(&networks[i])).ok();
             } else {
                 line.push(',');
             }
@@ -380,7 +380,7 @@ async fn export_cabinets(
 
     let mut header = String::from("名称,房间");
     for i in 1..=max_networks {
-        write!(header, ",网络{i}").expect("CSV头部写入失败");
+        write!(header, ",网络{i}").ok();
     }
     header.push_str(",描述\n");
     csv.extend_from_slice(header.as_bytes());
@@ -398,12 +398,12 @@ async fn export_cabinets(
         let mut line = format!("{},{}", escape_csv_field(&name), escape_csv_field(&room));
         for i in 0..max_networks {
             if i < networks.len() {
-                write!(line, ",{}", escape_csv_field(&networks[i])).expect("CSV行写入失败");
+                write!(line, ",{}", escape_csv_field(&networks[i])).ok();
             } else {
                 line.push(',');
             }
         }
-        writeln!(line, ",{}", escape_csv_field(&description.unwrap_or_default())).expect("CSV行写入失败");
+        writeln!(line, ",{}", escape_csv_field(&description.unwrap_or_default())).ok();
         csv.extend_from_slice(line.as_bytes());
     }
 

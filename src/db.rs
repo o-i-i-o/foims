@@ -576,14 +576,16 @@ impl DbPool {
                     let backoff_ms = base_delay_ms * 2u64.pow(attempt);
                     let jitter_ms = rand::random::<u64>() % 50;
 
-                    warn!(
-                        "数据库操作 {} 失败 (尝试 {}/{}): {}, {}ms后重试",
-                        query_name,
-                        attempt + 1,
-                        max_retries,
-                        last_error.as_ref().unwrap(),
-                        backoff_ms + jitter_ms
-                    );
+                    if let Some(ref err) = last_error {
+                        warn!(
+                            "数据库操作 {} 失败 (尝试 {}/{}): {}, {}ms后重试",
+                            query_name,
+                            attempt + 1,
+                            max_retries,
+                            err,
+                            backoff_ms + jitter_ms
+                        );
+                    }
 
                     time::sleep(Duration::from_millis(backoff_ms + jitter_ms)).await;
                 }
@@ -689,13 +691,15 @@ impl DbPool {
                     }
                     last_error = Some(err);
                     let backoff_ms = base_delay_ms * 2u64.pow(attempt);
-                    warn!(
-                        "事务开始失败 (尝试 {}/{}): {:?}, {}ms后重试",
-                        attempt + 1,
-                        max_retries,
-                        last_error.as_ref().unwrap(),
-                        backoff_ms
-                    );
+                    if let Some(ref err) = last_error {
+                        warn!(
+                            "事务开始失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                            attempt + 1,
+                            max_retries,
+                            err,
+                            backoff_ms
+                        );
+                    }
                     time::sleep(Duration::from_millis(backoff_ms)).await;
                     continue;
                 }
@@ -712,13 +716,15 @@ impl DbPool {
                         }
                         last_error = Some(err);
                         let backoff_ms = base_delay_ms * 2u64.pow(attempt);
-                        warn!(
-                            "事务提交失败 (尝试 {}/{}): {:?}, {}ms后重试",
-                            attempt + 1,
-                            max_retries,
-                            last_error.as_ref().unwrap(),
-                            backoff_ms
-                        );
+                        if let Some(ref err) = last_error {
+                            warn!(
+                                "事务提交失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                                attempt + 1,
+                                max_retries,
+                                err,
+                                backoff_ms
+                            );
+                        }
                         time::sleep(Duration::from_millis(backoff_ms)).await;
                         continue;
                     }
@@ -740,13 +746,15 @@ impl DbPool {
 
                     last_error = Some(e);
                     let backoff_ms = base_delay_ms * 2u64.pow(attempt);
-                    warn!(
-                        "事务执行失败 (尝试 {}/{}): {:?}, {}ms后重试",
-                        attempt + 1,
-                        max_retries,
-                        last_error.as_ref().unwrap(),
-                        backoff_ms
-                    );
+                    if let Some(ref err) = last_error {
+                        warn!(
+                            "事务执行失败 (尝试 {}/{}): {:?}, {}ms后重试",
+                            attempt + 1,
+                            max_retries,
+                            err,
+                            backoff_ms
+                        );
+                    }
                     time::sleep(Duration::from_millis(backoff_ms)).await;
                 }
             }

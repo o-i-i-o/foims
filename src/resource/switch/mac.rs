@@ -288,7 +288,7 @@ fn simplify_ipv6(ipv6: &str) -> String {
             result.push(':');
         }
         let val = u16::from_str_radix(part, 16).unwrap_or(0);
-        write!(result, "{val:x}").expect("MAC地址格式化失败");
+        write!(result, "{val:x}").ok();
     }
 
     result

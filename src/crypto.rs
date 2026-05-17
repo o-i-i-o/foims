@@ -23,11 +23,14 @@ fn get_key_paths() -> (String, String) {
 fn load_encryption_key() -> Vec<u8> {
     let (key_path, key_backup_path) = get_key_paths();
 
-    let key_dir = Path::new(&key_path).parent().expect("无法获取加密密钥目录的父目录");
+    let Some(key_dir) = Path::new(&key_path).parent() else {
+        error!("无法获取加密密钥目录的父目录: {}", key_path);
+        return Vec::new();
+    };
     if !key_dir.exists()
         && let Err(e) = fs::create_dir_all(key_dir) {
             error!("创建加密密钥目录失败: {}", e);
-            panic!("创建加密密钥目录失败: {e}");
+            return Vec::new();
         }
 
     if Path::new(&key_path).exists() {
@@ -45,10 +48,7 @@ fn load_encryption_key() -> Vec<u8> {
                     "加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥",
                     key.len()
                 );
-                panic!(
-                    "加密密钥文件长度不正确（期望32字节，实际{}字节）",
-                    key.len()
-                );
+                return Vec::new();
             }
             Err(e) => {
                 error!("读取加密密钥文件失败: {}", e);
@@ -64,15 +64,16 @@ fn load_encryption_key() -> Vec<u8> {
                         }
                         Ok(key) => {
                             error!("备份密钥长度也不正确（期望32字节，实际{}字节）", key.len());
-                            panic!("无法从备份恢复密钥");
+                            return Vec::new();
                         }
                         Err(e) => {
                             error!("读取备份密钥也失败: {}", e);
-                            panic!("加密密钥文件读取失败且无有效备份");
+                            return Vec::new();
                         }
                     }
                 }
-                panic!("读取加密密钥文件失败，请检查文件权限");
+                error!("读取加密密钥文件失败，请检查文件权限");
+                return Vec::new();
             }
         }
     }
@@ -102,7 +103,7 @@ fn load_encryption_key() -> Vec<u8> {
 
     if let Err(e) = fs::write(&key_path, &key) {
         error!("保存加密密钥失败: {}", e);
-        panic!("保存加密密钥失败: {e}");
+        return Vec::new();
     }
 
     info!("加密密钥已生成并保存到: {}", key_path);
