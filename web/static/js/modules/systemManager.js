@@ -254,9 +254,9 @@ function clearConfigUpdateFlag() {
 // 加载系统配置
 export async function loadSystemConfig() {
   try {
-    const result = await apiGet("/api/system/info");
+    const result = await apiGet("/api/system/config");
     if (result.success) {
-      const config = result.data.config;
+      const config = result.data;
       
       currentServerConfig = config.server;
       

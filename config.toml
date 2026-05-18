@@ -14,7 +14,8 @@ slow_query_threshold_ms = 1000
 health_check_interval_secs = 30
 
 [server]
-host = ""
+host = "0.0.0.0"
+ipv6host = "::"
 http_enabled = true
 http_port = 80
 https_enabled = true

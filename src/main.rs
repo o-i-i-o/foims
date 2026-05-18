@@ -312,12 +312,34 @@ async fn main() -> std::io::Result<()> {
         );
     }
 
-    let server_host = if config.server.host.is_empty() {
-        "0.0.0.0".to_string()
+    let server_host_raw = config.server.host.trim().to_string();
+    let server_host_ipv6_raw = config.server.host_ipv6.as_ref()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    fn validate_ip_address(addr: &str) -> Result<String, String> {
+        if addr.is_empty() {
+            return Ok(String::new());
+        }
+        if addr.parse::<std::net::IpAddr>().is_ok() {
+            Ok(addr.to_string())
+        } else {
+            Err(format!("无效的IP地址格式: {}", addr))
+        }
+    }
+
+    let validated_ipv4 = validate_ip_address(&server_host_raw)
+        .map_err(|e| std::io::Error::other(e))?;
+    let validated_ipv6 = validate_ip_address(&server_host_ipv6_raw)
+        .map_err(|e| std::io::Error::other(e))?;
+
+    let (server_host, server_host_ipv6) = if validated_ipv4.is_empty() && validated_ipv6.is_empty() {
+        info!("IPv4和IPv6地址均为空，默认监听 0.0.0.0");
+        ("0.0.0.0".to_string(), None)
     } else {
-        config.server.host.clone()
+        (validated_ipv4, if validated_ipv6.is_empty() { None } else { Some(validated_ipv6) })
     };
-    let server_host_ipv6 = config.server.host_ipv6.clone();
+
     let http_enabled = config.server.http_enabled.unwrap_or(true);
     let http_port = config.server.http_port.unwrap_or(80);
 

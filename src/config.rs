@@ -143,7 +143,7 @@ pub struct RateLimitConfig {
 }
 
 const fn default_ip_limit() -> u32 {
-    100
+    1000
 }
 const fn default_user_limit() -> u32 {
     200
