@@ -1006,11 +1006,6 @@ pub async fn get_service_status() -> Result<HttpResponse, AppError> {
             Err(_) => false,
         };
 
-        let uptime_output = Command::new("systemctl")
-            .args(["show", "ipma.service", "--property=ExecMainStartMonotonic"])
-            .output()
-            .await;
-
         let uptime_seconds = if active {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
