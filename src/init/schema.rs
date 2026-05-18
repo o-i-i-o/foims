@@ -125,7 +125,7 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS room_networks (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-            network_id UUID NOT NULL REFERENCES network_cidrs(id),
+            network_id UUID REFERENCES network_cidrs(id),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(room_id, network_id)
@@ -328,7 +328,6 @@ async fn create_ips_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
             switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
             device_type VARCHAR(20) NOT NULL,
-            network_id UUID NOT NULL REFERENCES network_cidrs(id),
             ip_address INET NOT NULL,
             ip_version SMALLINT NOT NULL DEFAULT 4,
             mac_address VARCHAR(20),
@@ -338,12 +337,10 @@ async fn create_ips_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             last_mac VARCHAR(20),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'unknown')),
+            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position')),
             CONSTRAINT chk_device_consistency CHECK (
-                (device_type = 'switch' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL) OR
-                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
-                (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_port_id IS NULL)
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL)
             )
         )",
     )
@@ -488,11 +485,10 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_ips_workstation_id ON ips(workstation_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_position_id ON ips(position_id)",
-        "CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_switch_port_id ON ips(switch_port_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_ip_address ON ips(ip_address)",
         "CREATE INDEX IF NOT EXISTS idx_ips_mac_address ON ips(mac_address)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_ip_network_unique ON ips(ip_address, network_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_ip_unique ON ips(ip_address)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_mac_unique ON ips(mac_address) WHERE mac_address IS NOT NULL AND mac_address != ''",
         "CREATE INDEX IF NOT EXISTS idx_ip_last_mac ON ips(last_mac)",
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_user_id ON operation_logs(user_id)",
@@ -556,13 +552,15 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_switch_position_constraint(pool).await?;
     migrate_position_device_type(pool).await?;
     migrate_drop_switch_cabinet_columns(pool).await?;
+    migrate_ips_network_indirect(pool).await?;
+    migrate_ips_drop_network_id(pool).await?;
+    migrate_ips_device_type_cleanup(pool).await?;
     Ok(())
 }
 
 async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM information_schema.columns 
-         WHERE table_name = 'switches' AND column_name = 'cabinet_id'",
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'switch_position_fields'",
     )
     .fetch_one(pool)
     .await?;
@@ -570,33 +568,11 @@ async fn migrate_switch_position_fields(pool: &sqlx::PgPool) -> Result<(), sqlx:
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches 
-             ADD COLUMN cabinet_id UUID REFERENCES cabinets(id) ON DELETE SET NULL,
-             ADD COLUMN start_u INTEGER,
-             ADD COLUMN end_u INTEGER",
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('switch_position_fields', 'switches表通过position_id关联positions获取位置信息，不再使用cabinet_id/start_u/end_u字段')"
         )
         .execute(pool)
-        .await
-        {
-            warn!("switches添加cabinet_id列失败: {}", e);
-        }
-
-        if let Err(e) = sqlx::query(
-            r"UPDATE switches s 
-               SET cabinet_id = p.cabinet_id, 
-                   start_u = p.start_u, 
-                   end_u = p.end_u
-               FROM positions p
-               JOIN ips im ON im.position_id = p.id 
-               WHERE im.switch_id = s.id
-               AND s.cabinet_id IS NULL",
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("迁移交换机位置数据失败: {}", e);
-        }
+        .await?;
     }
 
     Ok(())
@@ -674,7 +650,7 @@ async fn migrate_drop_switch_cabinet_fields(pool: &sqlx::PgPool) -> Result<(), s
             LEFT JOIN LATERAL (
                 SELECT ip_address, mac_address
                 FROM ips 
-                WHERE position_id = p.id AND device_type = 'switch' 
+                WHERE position_id = p.id
                 LIMIT 1
             ) im ON true",
         )
@@ -822,7 +798,7 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
                FROM switches s
                WHERE s.cabinet_id IS NOT NULL
                AND NOT EXISTS (
-                   SELECT 1 FROM ips im WHERE im.position_id IN (SELECT p.id FROM positions p WHERE p.device_id = s.id) AND im.device_type = 'switch'
+                   SELECT 1 FROM ips im WHERE im.position_id IN (SELECT p.id FROM positions p WHERE p.device_id = s.id)
                )"
         )
         .fetch_all(pool)
@@ -865,7 +841,7 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             };
 
             if let Err(e) = sqlx::query(
-                "UPDATE ips SET position_id = $1 WHERE position_id IS NULL AND device_type = 'switch' AND position_id IN (SELECT p.id FROM positions p WHERE p.device_id = $2)"
+                "UPDATE ips SET position_id = $1 WHERE position_id IS NULL AND position_id IN (SELECT p.id FROM positions p WHERE p.device_id = $2)"
             )
             .bind(pos_id)
             .bind(switch_id)
@@ -902,10 +878,8 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
 
         sqlx::query(
             r"ALTER TABLE ips ADD CONSTRAINT chk_device_consistency CHECK (
-                (device_type = 'switch' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
                 (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL) OR
-                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
-                (device_type = 'unknown' AND workstation_id IS NULL AND position_id IS NULL AND switch_port_id IS NULL)
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL)
             )"
         )
         .execute(pool)
@@ -959,7 +933,7 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
             };
 
             if let Err(e) = sqlx::query(
-                "UPDATE ips SET position_id = $1 WHERE device_type = 'switch' AND position_id IN (SELECT p.id FROM positions p WHERE p.device_id = $2)"
+                "UPDATE ips SET position_id = $1 WHERE position_id IN (SELECT p.id FROM positions p WHERE p.device_id = $2)"
             )
             .bind(pos_id)
             .bind(switch_id)
@@ -1162,7 +1136,7 @@ async fn migrate_drop_switch_cabinet_columns(pool: &sqlx::PgPool) -> Result<(), 
             LEFT JOIN LATERAL (
                 SELECT ip_address, mac_address, network_id
                 FROM ips 
-                WHERE position_id = p.id AND device_type = 'switch' 
+                WHERE position_id = p.id
                 LIMIT 1
             ) im ON true
             LEFT JOIN network_cidrs n ON im.network_id = n.id",
@@ -1175,6 +1149,216 @@ async fn migrate_drop_switch_cabinet_columns(pool: &sqlx::PgPool) -> Result<(), 
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) VALUES ('drop_switch_cabinet_columns', '从switches表删除cabinet_id/start_u/end_u列，通过positions表关联获取')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_ips_network_indirect(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_network_indirect'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_ips_ip_network_unique"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_ips_ip_network_unique 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_ip_unique ON ips(ip_address)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 idx_ips_ip_unique 索引失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('ips_network_indirect', 'ips表network_id已删除，通过room_networks间接关联')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_drop_network_id'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP COLUMN IF EXISTS network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.network_id 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_ips_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_ips_network_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"
+            CREATE OR REPLACE VIEW ip_with_details AS
+            SELECT 
+                imm.id,
+                imm.workstation_id,
+                imm.position_id,
+                imm.switch_port_id,
+                imm.device_type,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE 'unknown device'
+                END AS device_name,
+                rn.network_id AS network_id,
+                CASE
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    ELSE NULL
+                END AS workstation_name,
+                CASE
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE NULL
+                END AS cabinet_position_name,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    ELSE NULL
+                END AS switch_name,
+                sp.port_number::text AS switch_port_number,
+                CASE
+                    WHEN r.id IS NOT NULL THEN r.name::text
+                    ELSE NULL
+                END AS room_name,
+                CASE
+                    WHEN c.id IS NOT NULL THEN c.name::text
+                    ELSE NULL
+                END AS cabinet_name,
+                COALESCE(n_room.name, 'unknown')::text AS network_name,
+                COALESCE(nt_room.name, 'unknown')::text AS network_region,
+                host(imm.ip_address) as ip_address,
+                imm.ip_version,
+                imm.mac_address,
+                imm.last_mac,
+                imm.hostname,
+                imm.status,
+                imm.last_seen,
+                imm.created_at,
+                imm.updated_at
+            FROM ips imm
+            LEFT JOIN workstations w ON imm.workstation_id = w.id
+            LEFT JOIN rooms r ON w.room_id = r.id
+            LEFT JOIN positions cp ON imm.position_id = cp.id
+            LEFT JOIN cabinets c ON cp.cabinet_id = c.id
+            LEFT JOIN rooms r2 ON c.room_id = r2.id
+            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+            LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
+            LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
+            LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
+            "
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("更新 ip_with_details 视图失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('ips_drop_network_id', '删除ips表network_id列，完全通过room_networks间接关联')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_ips_device_type_cleanup(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_device_type_cleanup'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "UPDATE ips SET device_type = 'cabinet_position' WHERE device_type = 'switch'"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("更新 ips.device_type = 'switch' 为 'cabinet_position' 失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DELETE FROM ips WHERE device_type = 'unknown'"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.device_type = 'unknown' 的记录失败: {}", e);
+        }
+
+        sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS chk_device_type")
+            .execute(pool)
+            .await?;
+
+        sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS chk_device_consistency")
+            .execute(pool)
+            .await?;
+
+        if let Err(e) = sqlx::query(
+            r"ALTER TABLE ips ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position'))"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 ips.device_type 约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"ALTER TABLE ips ADD CONSTRAINT chk_device_consistency CHECK (
+                (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL) OR
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL)
+            )"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 ips.device_consistency 约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('ips_device_type_cleanup', '清理ips表device_type字段，将switch改为cabinet_position，删除unknown类型')"
         )
         .execute(pool)
         .await?;
@@ -1203,7 +1387,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE 'unknown device'
             END AS device_name,
-            imm.network_id,
+            rn.network_id AS network_id,
             CASE
                 WHEN w.id IS NOT NULL THEN w.name::text
                 ELSE NULL
@@ -1225,8 +1409,8 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN c.id IS NOT NULL THEN c.name::text
                 ELSE NULL
             END AS cabinet_name,
-            COALESCE(n.name, 'unknown')::text AS network_name,
-            COALESCE(nt.name, 'unknown')::text AS network_region,
+            COALESCE(n_room.name, 'unknown')::text AS network_name,
+            COALESCE(nt_room.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
             imm.mac_address,
@@ -1241,10 +1425,12 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
+        LEFT JOIN rooms r2 ON c.room_id = r2.id
         LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
-        LEFT JOIN network_cidrs n ON imm.network_id = n.id
-        LEFT JOIN network_regions nt ON n.network_region_id = nt.id
+        LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
+        LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
+        LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
     ",
     )
     .execute(pool)

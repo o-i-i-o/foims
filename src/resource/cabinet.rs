@@ -6,7 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, get_room_id_by_position};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -249,6 +249,30 @@ pub async fn create_cabinet_position(
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
+        let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
+
+        let network_id = if let Some(rid) = room_id {
+            let room_network: Option<Uuid> = sqlx::query_scalar(
+                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+            )
+            .bind(rid)
+            .fetch_optional(&mut *tx)
+            .await?;
+            room_network
+        } else {
+            None
+        };
+
+        let network = if let Some(nid) = network_id {
+            sqlx::query(crate::utils::NETWORK_QUERY)
+                .bind(nid)
+                .fetch_optional(&mut *tx)
+                .await?
+                .map(|row| crate::utils::parse_network_from_row(&row))
+        } else {
+            None
+        };
+
         for ip in ips {
             let device_type = ip.device_type.as_deref().unwrap_or("");
             if device_type != "cabinet_position" || ip.position_id.is_some() {
@@ -257,34 +281,21 @@ pub async fn create_cabinet_position(
 
             let existing_mapping: Option<Uuid> =
                 sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET) AND network_id = $2",
+                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
                 )
                 .bind(&ip.ip_address)
-                .bind(ip.network_id)
                 .fetch_optional(&mut *tx)
                 .await?;
 
             if existing_mapping.is_some() {
-                return Err(AppError::Conflict("该网络中IP地址已存在".to_string()));
+                return Err(AppError::Conflict("IP地址已存在".to_string()));
             }
 
-            let network = sqlx::query(crate::utils::NETWORK_QUERY)
-                .bind(ip.network_id)
-                .fetch_optional(&mut *tx)
-                .await?
-                .map(|row| crate::utils::parse_network_from_row(&row))
-                .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
-
-            let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, &network)?;
-
-            if !ip_in_cidr {
-                return Err(AppError::Validation("IP地址不在所属网络网段内".to_string()));
-            }
-
-            let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
-
-            if let Some(rid) = room_id {
-                validate_network_in_room(tx.as_mut(), rid, ip.network_id).await?;
+            if let Some(ref net) = network {
+                let ip_in_cidr = validate_ip_in_cidr(&ip.ip_address, net)?;
+                if !ip_in_cidr {
+                    return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
+                }
             }
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
@@ -298,7 +309,7 @@ pub async fn create_cabinet_position(
             .bind(Some(id))
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
-            .bind(ip.network_id)
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -535,14 +546,22 @@ pub async fn update_cabinet_position(
             .execute(&mut *tx)
             .await?;
 
+        let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
+
+        let network_id = if let Some(rid) = room_id {
+            let room_network: Option<Uuid> = sqlx::query_scalar(
+                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+            )
+            .bind(rid)
+            .fetch_optional(&mut *tx)
+            .await?;
+            room_network
+        } else {
+            None
+        };
+
         for ip in ips {
             let ip_version = detect_ip_version(&ip.ip_address)?;
-
-            let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
-
-            if let Some(rid) = room_id {
-                validate_network_in_room(tx.as_mut(), rid, ip.network_id).await?;
-            }
 
             sqlx::query(
                 "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
@@ -551,7 +570,7 @@ pub async fn update_cabinet_position(
             .bind(Uuid::new_v4())
             .bind(id)
             .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
-            .bind(ip.network_id)
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)

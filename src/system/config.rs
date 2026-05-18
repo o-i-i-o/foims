@@ -373,7 +373,7 @@ pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
 
     let has_self_signed_cert = check_certificate_exists(&certs_dir, "create").await;
 
-    let cert_type = match tokio::task::spawn_blocking(|| Config::load())
+    let cert_type = match tokio::task::spawn_blocking(Config::load)
         .await
         .unwrap_or(Err(config::ConfigError::Message("spawn_blocking failed".into())))
     {
@@ -480,7 +480,7 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
-    let cert_type = match tokio::task::spawn_blocking(|| Config::load())
+    let cert_type = match tokio::task::spawn_blocking(Config::load)
         .await
         .unwrap_or(Err(config::ConfigError::Message("spawn_blocking failed".into())))
     {
@@ -703,7 +703,7 @@ pub async fn update_session_timeout_config(
     req: web::Json<UpdateSessionTimeoutRequest>,
     _state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
-    let mut current_config = tokio::task::spawn_blocking(|| Config::load())
+    let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
         .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
@@ -749,7 +749,7 @@ pub async fn update_language_setting(
         return Err(AppError::Validation("不支持的语言代码，请使用 'en' 或 'zh'".to_string()));
     }
 
-    let mut current_config = tokio::task::spawn_blocking(|| Config::load())
+    let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
         .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
@@ -780,7 +780,7 @@ pub async fn update_page_timeout_config(
     req: web::Json<UpdatePageTimeoutRequest>,
     _state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
-    let mut current_config = tokio::task::spawn_blocking(|| Config::load())
+    let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
         .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;

@@ -598,7 +598,6 @@ pub struct IpManager {
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
-    pub network_id: Uuid,
     pub ip_address: String,
     pub ip_version: i16,
     pub mac_address: Option<String>,
@@ -618,7 +617,7 @@ pub struct IpManagerWithNames {
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
-    pub network_id: Uuid,
+    pub network_id: Option<Uuid>,
     pub workstation_name: Option<String>,
     pub cabinet_position_name: Option<String>,
     pub switch_name: Option<String>,
@@ -644,7 +643,6 @@ pub struct IpManagerCreate {
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
-    pub network_id: Uuid,
     pub network_region_id: Option<Uuid>,
     #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
     pub ip_address: String,
@@ -678,7 +676,6 @@ pub struct IpManagerUpdate {
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
-    pub network_id: Option<Uuid>,
     pub ip_address: Option<String>,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
     pub mac_address: Option<String>,

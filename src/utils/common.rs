@@ -97,15 +97,19 @@ pub fn validate_ip_in_cidr(
     Ok(false)
 }
 
-pub async fn validate_network_in_room<'e, E>(executor: E, room_id: Uuid, network_id: Uuid) -> Result<(), crate::error::AppError>
+pub async fn validate_network_in_room<'e, E>(executor: E, room_id: Uuid, network_id: Option<Uuid>) -> Result<(), crate::error::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
+    let Some(nid) = network_id else {
+        return Ok(());
+    };
+
     let network_in_room: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
     )
     .bind(room_id)
-    .bind(network_id)
+    .bind(nid)
     .fetch_one(executor)
     .await?;
 

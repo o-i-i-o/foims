@@ -11,7 +11,7 @@ use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, validate_network_in_room, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams, get_room_id_by_position};
 use tracing::warn;
 
 const SWITCHES_DETAIL_COLUMNS: &str = r"
@@ -401,6 +401,20 @@ pub async fn create_switch(
     .execute(&state.pool()?.get_conn())
     .await?;
 
+    let room_id = get_room_id_by_position(&state.pool()?.get_conn(), position_id).await?;
+
+    let network_id = if let Some(rid) = room_id {
+        let room_network: Option<Uuid> = sqlx::query_scalar(
+            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+        )
+        .bind(rid)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+        room_network
+    } else {
+        None
+    };
+
     for ip in ips {
         let ip_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
@@ -414,12 +428,6 @@ pub async fn create_switch(
             return Err(AppError::Conflict(format!("IP地址 {} 已存在", ip.ip_address)));
         }
 
-        let room_id = get_room_id_by_position(&state.pool()?.get_conn(), position_id).await?;
-
-        if let Some(rid) = room_id {
-            validate_network_in_room(&state.pool()?.get_conn(), rid, ip.network_id).await?;
-        }
-
         let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
         let ip_manager_id = Uuid::new_v4();
@@ -428,8 +436,8 @@ pub async fn create_switch(
              VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
         )
         .bind(ip_manager_id)
-        .bind(ip.device_type.as_deref().unwrap_or("switch"))
-        .bind(ip.network_id)
+        .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+        .bind(network_id)
         .bind(&ip.ip_address)
         .bind(ip_version)
         .bind(&ip.mac_address)
@@ -605,6 +613,23 @@ pub async fn update_switch(
             tracing::error!("删除交换机旧IP记录失败: {}", e);
         }
 
+        let network_id = if let Some(pos_id) = position_id {
+            let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
+            if let Some(rid) = room_id {
+                let room_network: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                )
+                .bind(rid)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
+                room_network
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         for ip in ips {
             let ip_exists = sqlx::query_scalar::<_, bool>(
                 "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id != (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $2))",
@@ -619,14 +644,6 @@ pub async fn update_switch(
                 return Err(AppError::Conflict(format!("IP地址 {} 已被其他设备使用", ip.ip_address)));
             }
 
-            if let Some(pos_id) = position_id {
-                let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
-
-                if let Some(rid) = room_id {
-                    validate_network_in_room(&state.pool()?.get_conn(), rid, ip.network_id).await?;
-                }
-            }
-
             let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
             let ip_manager_id = Uuid::new_v4();
@@ -635,8 +652,8 @@ pub async fn update_switch(
                  VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(ip_manager_id)
-            .bind(ip.device_type.as_deref().unwrap_or("switch"))
-            .bind(ip.network_id)
+            .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)

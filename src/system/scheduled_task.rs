@@ -96,15 +96,14 @@ pub async fn update_scheduled_task(
         let cron_expr_clone = cron_expr.clone();
         if let Ok(Ok(next_run)) = tokio::task::spawn_blocking(move || {
             calculate_next_run(&cron_expr_clone)
-        }).await {
-            if let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
+        }).await
+            && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
                 .bind(next_run)
                 .bind(id)
                 .execute(&conn)
                 .await
-            {
-                tracing::warn!("更新下次运行时间失败: {}", e);
-            }
+        {
+            tracing::warn!("更新下次运行时间失败: {}", e);
         }
     }
 

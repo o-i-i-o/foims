@@ -2019,7 +2019,7 @@ async fn import_switches(
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
                                 let ip_insert_result = sqlx::query(
-                                    "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'switch', $2, CAST($3 AS INET), $4, (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $5), 'active', NOW(), NOW())"
+                                    "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $5), 'active', NOW(), NOW())"
                                 )
                                 .bind(ip_manager_id)
                                 .bind(network_id)
@@ -2103,7 +2103,7 @@ async fn import_switches(
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
-                            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'switch', $2, CAST($3 AS INET), $4, $5, 'active', NOW(), NOW())"
+                            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, $5, 'active', NOW(), NOW())"
                         )
                         .bind(ip_manager_id)
                         .bind(network_id)
