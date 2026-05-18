@@ -99,11 +99,14 @@ pub async fn get_system_info(
         - START_TIME.load(Ordering::SeqCst);
 
     let pool_metrics = state.pool()?.get_metrics();
+    let system_time = chrono::Utc::now();
 
     let system_info = serde_json::json!({
+        "name": "IPMA",
         "version": env!("CARGO_PKG_VERSION"),
         "database_status": database_status,
         "uptime_seconds": uptime,
+        "timestamp": system_time.to_rfc3339(),
         "pool_metrics": {
             "active_connections": pool_metrics.active_connections,
             "idle_connections": pool_metrics.idle_connections,

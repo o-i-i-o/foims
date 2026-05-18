@@ -1901,37 +1901,98 @@ async fn migrate_workstation_layouts_structure(pool: &sqlx::PgPool) -> Result<()
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        // 检查旧表结构是否存在 workstation_id 字段
-        let column_exists = sqlx::query(
-            "SELECT COUNT(*) as count FROM information_schema.columns 
-             WHERE table_name = 'workstation_layouts' AND column_name = 'workstation_id'",
+        // 检查表是否存在
+        let table_exists = sqlx::query(
+            "SELECT COUNT(*) as count FROM information_schema.tables 
+             WHERE table_schema = 'public' AND table_name = 'workstation_layouts'",
         )
         .fetch_one(pool)
         .await?;
 
-        let col_count: i64 = column_exists.try_get("count").unwrap_or(0);
+        let table_count: i64 = table_exists.try_get("count").unwrap_or(0);
+        let needs_recreate = if table_count > 0 {
+            // 检查是否是旧表结构（存在 workstation_id 字段）
+            let column_exists = sqlx::query(
+                "SELECT COUNT(*) as count FROM information_schema.columns 
+                 WHERE table_name = 'workstation_layouts' AND column_name = 'workstation_id'",
+            )
+            .fetch_one(pool)
+            .await?;
 
-        if col_count > 0 {
-            // 备份旧数据
+            let col_count: i64 = column_exists.try_get("count").unwrap_or(0);
+
+            if col_count > 0 {
+                // 备份旧数据
+                if let Err(e) = sqlx::query(
+                    "CREATE TABLE IF NOT EXISTS workstation_layouts_backup AS SELECT * FROM workstation_layouts",
+                )
+                .execute(pool)
+                .await
+                {
+                    warn!("创建 workstation_layouts 备份表失败: {}", e);
+                }
+
+                // 删除旧表
+                if let Err(e) = sqlx::query("DROP TABLE IF EXISTS workstation_layouts CASCADE")
+                    .execute(pool)
+                    .await
+                {
+                    warn!("删除旧 workstation_layouts 表失败: {}", e);
+                }
+
+                info!("workstation_layouts 旧表已删除，将重新创建新表结构");
+                true
+            } else {
+                // 表已存在且是新结构，无需操作
+                false
+            }
+        } else {
+            // 表不存在，需要创建
+            info!("workstation_layouts 表不存在，将创建新表结构");
+            true
+        };
+
+        // 如果需要重新创建表，执行创建逻辑
+        if needs_recreate {
+            sqlx::query(
+                r"CREATE TABLE IF NOT EXISTS workstation_layouts (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    element_id UUID NOT NULL,
+                    element_type VARCHAR(20) NOT NULL DEFAULT 'workstation',
+                    x INTEGER NOT NULL DEFAULT 0,
+                    y INTEGER NOT NULL DEFAULT 0,
+                    width INTEGER NOT NULL DEFAULT 160,
+                    height INTEGER NOT NULL DEFAULT 160,
+                    rotation INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                    UNIQUE(room_id, element_id)
+                )",
+            )
+            .execute(pool)
+            .await?;
+
+            // 创建索引
             if let Err(e) = sqlx::query(
-                "CREATE TABLE IF NOT EXISTS workstation_layouts_backup AS SELECT * FROM workstation_layouts",
+                "CREATE INDEX IF NOT EXISTS idx_workstation_layouts_room_id ON workstation_layouts(room_id)",
             )
             .execute(pool)
             .await
             {
-                warn!("创建 workstation_layouts 备份表失败: {}", e);
+                warn!("创建 idx_workstation_layouts_room_id 索引失败: {}", e);
             }
 
-            // 删除旧表
-            if let Err(e) = sqlx::query("DROP TABLE IF EXISTS workstation_layouts CASCADE")
-                .execute(pool)
-                .await
+            if let Err(e) = sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_workstation_layouts_element_type ON workstation_layouts(element_type)",
+            )
+            .execute(pool)
+            .await
             {
-                warn!("删除旧 workstation_layouts 表失败: {}", e);
+                warn!("创建 idx_workstation_layouts_element_type 索引失败: {}", e);
             }
 
-            // 重新创建新表结构（会在 create_workstation_layouts_table 中执行）
-            info!("workstation_layouts 表结构已更新，支持门元素保存");
+            info!("workstation_layouts 新表结构创建成功");
         }
 
         // 记录迁移版本

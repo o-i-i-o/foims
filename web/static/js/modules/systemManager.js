@@ -842,12 +842,13 @@ export async function loadSystemInfo() {
     if (result.success) {
       const systemInfo = result.data;
 
-      // 更新系统信息
-      elementCache.get("system-name").textContent = systemInfo.name;
-      elementCache.get("system-version").textContent = systemInfo.version;
-      elementCache.get("database-status").textContent = systemInfo.database_status;
-      elementCache.get("system-time").textContent = new Date(systemInfo.timestamp).toLocaleString();
-      elementCache.get("system-uptime").textContent = formatUptime(systemInfo.uptime);
+      elementCache.get("system-name").textContent = systemInfo.name || "IPMA";
+      elementCache.get("system-version").textContent = systemInfo.version || "-";
+      elementCache.get("database-status").textContent = systemInfo.database_status || "-";
+      elementCache.get("system-time").textContent = systemInfo.timestamp 
+        ? new Date(systemInfo.timestamp).toLocaleString() 
+        : new Date().toLocaleString();
+      elementCache.get("system-uptime").textContent = formatUptime(systemInfo.uptime_seconds || 0);
     }
   } catch (error) {
     console.error("加载系统信息失败:", error);

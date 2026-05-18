@@ -235,6 +235,52 @@ columns.insert(
 4. **删除测试：** 删除房间布局，验证门元素和工位布局都被清除
 5. **工位删除测试：** 删除工位，验证只删除该工位的布局，不影响门元素
 
+## 常见问题
+
+### 问题1: 保存工位时提示 "relation 'workstation_layouts' does not exist"
+
+**原因：** 数据库迁移未执行或表被删除。
+
+**解决方案：**
+
+1. **重启应用**（推荐）：应用启动时会自动执行迁移创建表
+   ```bash
+   cargo run --release
+   ```
+
+2. **手动修复**：如果重启后仍有问题，运行修复脚本
+   ```bash
+   ./fix_workstation_layouts_table.sh
+   ```
+
+3. **手动SQL**：直接执行以下SQL创建表
+   ```sql
+   CREATE TABLE IF NOT EXISTS workstation_layouts (
+       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+       room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+       element_id UUID NOT NULL,
+       element_type VARCHAR(20) NOT NULL DEFAULT 'workstation',
+       x INTEGER NOT NULL DEFAULT 0,
+       y INTEGER NOT NULL DEFAULT 0,
+       width INTEGER NOT NULL DEFAULT 160,
+       height INTEGER NOT NULL DEFAULT 160,
+       rotation INTEGER NOT NULL DEFAULT 0,
+       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+       updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+       UNIQUE(room_id, element_id)
+   );
+
+   CREATE INDEX IF NOT EXISTS idx_workstation_layouts_room_id ON workstation_layouts(room_id);
+   CREATE INDEX IF NOT EXISTS idx_workstation_layouts_element_type ON workstation_layouts(element_type);
+   ```
+
+### 问题2: 迁移后备份数据在哪里？
+
+如果从旧版本升级，旧数据会备份到 `workstation_layouts_backup` 表中。可以查询：
+```sql
+SELECT * FROM workstation_layouts_backup;
+```
+
 ## 注意事项
 
 1. 门的静态UUID必须使用标准格式：`00000000-0000-0000-0000-000000000001`
