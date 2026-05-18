@@ -295,7 +295,7 @@
   "config": {
     "server_ipv4": "服务器地址(IPv4)",
     "server_ipv6": "服务器地址(IPv6)",
-    "ipv4_placeholder": "IPv4地址，留空则禁用IPv4(::双栈除外)",
+    "ipv4_placeholder": "IPv4地址，留空则禁用IPv4",
     "ipv6_placeholder": "IPv6地址，留空则禁用IPv6",
     "http_version": "HTTP协议版本",
     "auto_https": "自动HTTPS",

@@ -293,7 +293,7 @@
   "config": {
     "server_ipv4": "Server Address (IPv4)",
     "server_ipv6": "Server Address (IPv6)",
-    "ipv4_placeholder": "IPv4 address, leave empty to disable IPv4，without ipv6 ::",
+    "ipv4_placeholder": "IPv4 address, leave empty to disable IPv4",
     "ipv6_placeholder": "IPv6 address, leave empty to disable IPv6",
     "http_version": "HTTP Protocol Version",
     "auto_https": "Auto HTTPS",
