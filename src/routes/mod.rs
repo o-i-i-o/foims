@@ -32,12 +32,13 @@ use crate::resource::{
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate,
-    generate_certificate, get_certificate_status, get_notification_settings,
-    get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages,
-    get_system_config, get_system_info, import_certificate, restart_application, restart_os,
-    restore_config, send_system_email, test_smtp_connection as test_smtp, update_language_setting,
-    update_notification_settings, update_page_timeout_config, update_session_timeout_config,
-    update_smtp_config, update_system_config,
+    generate_certificate, get_certificate_status, get_dashboard_stats, get_notification_settings,
+    get_page_timeout_config, get_service_status, get_session_timeout_config, get_smtp_config,
+    get_supported_languages, get_system_config, get_system_info, import_certificate,
+    register_service, restart_application, restart_os, restore_config, send_system_email,
+    test_smtp_connection as test_smtp, update_language_setting, update_notification_settings,
+    update_page_timeout_config, update_session_timeout_config, update_smtp_config,
+    update_system_config,
 };
 use crate::system::data::{
     clear_logs, download_template, export_csv, export_database, get_logs_stats, import_csv,
@@ -247,6 +248,11 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                     web::scope("/system")
                         // 系统信息
                         .route("/info", web::get().to(get_system_info))
+                        // 服务状态
+                        .route("/service-status", web::get().to(get_service_status))
+                        .route("/register-service", web::post().to(register_service))
+                        // 仪表盘统计
+                        .route("/dashboard-stats", web::get().to(get_dashboard_stats))
                         // 重启应用系统
                         .route("/restart-application", web::post().to(restart_application))
                         // 重启操作系统

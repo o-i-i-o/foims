@@ -949,3 +949,226 @@ pub async fn send_system_email(
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功")))
 }
+
+#[derive(Debug, Serialize)]
+pub struct ServiceStatus {
+    pub registered: bool,
+    pub running_as_service: bool,
+    pub service_file_exists: bool,
+    pub active: bool,
+    pub status: Option<String>,
+    pub enabled: bool,
+    pub uptime_seconds: Option<u64>,
+}
+
+pub async fn get_service_status() -> Result<HttpResponse, AppError> {
+    let running_as_service = check_if_running_as_service();
+    let service_file_exists = std::path::Path::new("/etc/systemd/system/ipma.service").exists();
+
+    let (active, status, enabled, uptime_seconds) = if running_as_service {
+        let active_output = Command::new("systemctl")
+            .args(["show", "ipma.service", "--property=ActiveState"])
+            .output()
+            .await;
+
+        let active = match active_output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout.contains("ActiveState=active")
+            }
+            Err(_) => false,
+        };
+
+        let status_output = Command::new("systemctl")
+            .args(["show", "ipma.service", "--property=StatusText"])
+            .output()
+            .await;
+
+        let status = match status_output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let status_text = stdout.trim().strip_prefix("StatusText=");
+                status_text.map(|s| s.to_string())
+            }
+            Err(_) => None,
+        };
+
+        let enabled_output = Command::new("systemctl")
+            .args(["is-enabled", "ipma.service"])
+            .output()
+            .await;
+
+        let enabled = match enabled_output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout.trim() == "enabled"
+            }
+            Err(_) => false,
+        };
+
+        let uptime_output = Command::new("systemctl")
+            .args(["show", "ipma.service", "--property=ExecMainStartMonotonic"])
+            .output()
+            .await;
+
+        let uptime_seconds = if active {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let start_time = START_TIME.load(Ordering::SeqCst);
+            Some(now.saturating_sub(start_time))
+        } else {
+            None
+        };
+
+        (active, status, enabled, uptime_seconds)
+    } else {
+        (false, None, false, None)
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        ServiceStatus {
+            registered: service_file_exists,
+            running_as_service,
+            service_file_exists,
+            active,
+            status,
+            enabled,
+            uptime_seconds,
+        },
+        "服务状态获取成功",
+    )))
+}
+
+pub async fn register_service() -> Result<HttpResponse, AppError> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
+    let exe_path_str = exe_path.to_str()
+        .ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
+
+    let working_dir = std::env::current_dir()
+        .map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
+    let working_dir_str = working_dir.to_str()
+        .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
+
+    let service_content = format!(
+        r#"[Unit]
+Description=IPMA - IP/MAC Address Management System
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory={}
+ExecStart={}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"#,
+        working_dir_str, exe_path_str
+    );
+
+    let service_path = "/etc/systemd/system/ipma.service";
+    tokio::fs::write(service_path, service_content)
+        .await
+        .map_err(|e| AppError::Internal(format!("写入服务文件失败: {e}")))?;
+
+    let daemon_reload = Command::new("systemctl")
+        .arg("daemon-reload")
+        .output()
+        .await;
+
+    if let Err(e) = daemon_reload {
+        tracing::warn!("daemon-reload 执行失败: {}", e);
+    }
+
+    let enable_output = Command::new("systemctl")
+        .args(["enable", "ipma.service"])
+        .output()
+        .await;
+
+    if let Err(e) = enable_output {
+        tracing::warn!("enable 服务失败: {}", e);
+    }
+
+    let start_output = Command::new("systemctl")
+        .args(["start", "ipma.service"])
+        .output()
+        .await;
+
+    match start_output {
+        Ok(output) if output.status.success() => {
+            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "服务注册并启动成功")))
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(AppError::Internal(format!("启动服务失败: {}", stderr.trim())))
+        }
+        Err(e) => Err(AppError::Internal(format!("启动服务失败: {e}"))),
+    }
+}
+
+pub async fn get_dashboard_stats(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
+    let networks_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let regions_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let ips_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let ips_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE status = 'active'")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let rooms_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let cabinets_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cabinets")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let workstations_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workstations")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let switches_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switches")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let users_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let stats = serde_json::json!({
+        "networks": {
+            "networks": networks_count,
+            "regions": regions_count
+        },
+        "ips": {
+            "total": ips_total,
+            "active": ips_active,
+            "inactive": ips_total - ips_active
+        },
+        "resources": {
+            "rooms": rooms_count,
+            "cabinets": cabinets_count,
+            "workstations": workstations_count,
+            "switches": switches_count
+        },
+        "users": {
+            "total": users_count
+        }
+    });
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(stats, "仪表盘统计获取成功")))
+}
