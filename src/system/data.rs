@@ -539,8 +539,12 @@ async fn export_ip_managers(
            im.mac_address, im.hostname, im.status
            FROM ips im 
            LEFT JOIN workstations w ON im.workstation_id = w.id 
+           LEFT JOIN rooms rw ON w.room_id = rw.id
            LEFT JOIN positions p ON im.position_id = p.id 
-           LEFT JOIN network_cidrs n ON im.network_id = n.id 
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           LEFT JOIN rooms rc ON c.room_id = rc.id
+           LEFT JOIN room_networks rn ON rn.room_id = COALESCE(rw.id, rc.id)
+           LEFT JOIN network_cidrs n ON rn.network_id = n.id
            ORDER BY im.ip_address",
     )
     .fetch_all(&mut *conn)
@@ -1292,11 +1296,10 @@ async fn import_workstations(
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
                                 let ip_insert_result = sqlx::query(
-                                    "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'workstation', $3, CAST($4 AS INET), $5, 'active', NOW(), NOW())"
+                                    "INSERT INTO ips (id, workstation_id, device_type, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'workstation', CAST($3 AS INET), $4, 'active', NOW(), NOW())"
                                 )
                                 .bind(ip_manager_id)
                                 .bind(id)
-                                .bind(room_network_id)
                                 .bind(ip_address)
                                 .bind(ip_version)
                                 .execute(&mut *conn)
@@ -1343,7 +1346,7 @@ async fn import_workstations(
                     if ip_address.is_empty() {
                         results.push(format!("导入工位: {name} (房间: {room_name})"));
                     } else {
-                        let room_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
+                        let _room_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
                         )
                         .bind(room_id)
@@ -1356,11 +1359,10 @@ async fn import_workstations(
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
-                            "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'workstation', $3, CAST($4 AS INET), $5, 'active', NOW(), NOW())"
+                            "INSERT INTO ips (id, workstation_id, device_type, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'workstation', CAST($3 AS INET), $4, 'active', NOW(), NOW())"
                         )
                         .bind(ip_manager_id)
                         .bind(new_id)
-                        .bind(room_network_id)
                         .bind(ip_address)
                         .bind(ip_version)
                         .execute(&mut *conn)
@@ -1724,11 +1726,10 @@ async fn import_positions(
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
                                 let ip_insert_result = sqlx::query(
-                                    "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'cabinet_position', $3, CAST($4 AS INET), $5, 'active', NOW(), NOW())"
+                                    "INSERT INTO ips (id, position_id, device_type, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'cabinet_position', CAST($3 AS INET), $4, 'active', NOW(), NOW())"
                                 )
                                 .bind(ip_manager_id)
                                 .bind(id)
-                                .bind(cabinet_network_id)
                                 .bind(ip_address)
                                 .bind(ip_version)
                                 .execute(&mut *conn)
@@ -1778,7 +1779,7 @@ async fn import_positions(
                             "导入机位: {name} (机柜: {cabinet_name}, U{start_u}-U{end_u})"
                         ));
                     } else {
-                        let cabinet_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
+                        let _cabinet_network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT rn.network_id FROM room_networks rn JOIN cabinets c ON c.room_id = rn.room_id WHERE c.id = $1 LIMIT 1",
                         )
                         .bind(cabinet_id)
@@ -1791,11 +1792,10 @@ async fn import_positions(
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
-                            "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'cabinet_position', $3, CAST($4 AS INET), $5, 'active', NOW(), NOW())"
+                            "INSERT INTO ips (id, position_id, device_type, ip_address, ip_version, status, created_at, updated_at) VALUES ($1, $2, 'cabinet_position', CAST($3 AS INET), $4, 'active', NOW(), NOW())"
                         )
                         .bind(ip_manager_id)
                         .bind(new_id)
-                        .bind(cabinet_network_id)
                         .bind(ip_address)
                         .bind(ip_version)
                         .execute(&mut *conn)
@@ -2019,10 +2019,9 @@ async fn import_switches(
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
                                 let ip_insert_result = sqlx::query(
-                                    "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $5), 'active', NOW(), NOW())"
+                                    "INSERT INTO ips (id, device_type, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', CAST($2 AS INET), $3, (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $4), 'active', NOW(), NOW())"
                                 )
                                 .bind(ip_manager_id)
-                                .bind(network_id)
                                 .bind(ip_address)
                                 .bind(ip_version)
                                 .bind(id)
@@ -2091,7 +2090,7 @@ async fn import_switches(
                     if ip_address.is_empty() {
                         results.push(format!("导入交换机: {name}"));
                     } else {
-                        let network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
+                        let _network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
                             "SELECT network_id FROM room_networks LIMIT 1"
                         )
                         .fetch_optional(&mut *conn)
@@ -2103,10 +2102,9 @@ async fn import_switches(
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
                         let ip_manager_id = uuid::Uuid::new_v4();
                         let ip_insert_result = sqlx::query(
-                            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, $5, 'active', NOW(), NOW())"
+                            "INSERT INTO ips (id, device_type, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', CAST($2 AS INET), $3, $4, 'active', NOW(), NOW())"
                         )
                         .bind(ip_manager_id)
-                        .bind(network_id)
                         .bind(ip_address)
                         .bind(ip_version)
                         .bind(position_id)

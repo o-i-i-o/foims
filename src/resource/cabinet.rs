@@ -301,15 +301,14 @@ pub async fn create_cabinet_position(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
             .bind(ip.workstation_id)
             .bind(Some(id))
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
-            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -396,13 +395,17 @@ pub async fn get_cabinet_position(
         sqlx::query(
             r"SELECT 
                 m.id, m.workstation_id, m.position_id, m.switch_port_id,
-                m.device_type, m.network_id, 
+                m.device_type, rn.network_id, 
                 host(m.ip_address) as ip_address,
                 m.ip_version, m.mac_address, m.hostname,
                 m.status, m.last_seen, m.created_at, m.updated_at,
                 n.network_region_id, nr.name as network_region
             FROM ips m
-            LEFT JOIN network_cidrs n ON m.network_id = n.id
+            LEFT JOIN positions p ON m.position_id = p.id
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN rooms r ON c.room_id = r.id
+            LEFT JOIN room_networks rn ON r.id = rn.room_id
+            LEFT JOIN network_cidrs n ON rn.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
             WHERE m.position_id = (SELECT p.id FROM positions p WHERE p.device_type = 'switch' AND p.device_id = $1)
             ORDER BY m.ip_address",
@@ -414,13 +417,17 @@ pub async fn get_cabinet_position(
         sqlx::query(
             r"SELECT 
                 m.id, m.workstation_id, m.position_id, m.switch_port_id,
-                m.device_type, m.network_id, 
+                m.device_type, rn.network_id, 
                 host(m.ip_address) as ip_address,
                 m.ip_version, m.mac_address, m.hostname,
                 m.status, m.last_seen, m.created_at, m.updated_at,
                 n.network_region_id, nr.name as network_region
             FROM ips m
-            LEFT JOIN network_cidrs n ON m.network_id = n.id
+            LEFT JOIN positions p ON m.position_id = p.id
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN rooms r ON c.room_id = r.id
+            LEFT JOIN room_networks rn ON r.id = rn.room_id
+            LEFT JOIN network_cidrs n ON rn.network_id = n.id
             LEFT JOIN network_regions nr ON n.network_region_id = nr.id
             WHERE m.position_id = $1
             ORDER BY m.ip_address",
@@ -548,7 +555,7 @@ pub async fn update_cabinet_position(
 
         let room_id = get_room_id_by_position(tx.as_mut(), id).await?;
 
-        let network_id = if let Some(rid) = room_id {
+        let _network_id = if let Some(rid) = room_id {
             let room_network: Option<Uuid> = sqlx::query_scalar(
                 "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
             )
@@ -564,13 +571,12 @@ pub async fn update_cabinet_position(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
+                "INSERT INTO ips (id, position_id, device_type, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
             .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
-            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -595,7 +601,7 @@ pub async fn update_cabinet_position(
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, 
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type,
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)

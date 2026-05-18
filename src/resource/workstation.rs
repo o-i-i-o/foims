@@ -273,15 +273,14 @@ pub async fn create_workstation(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
             .bind(Some(id))
             .bind(ip.position_id)
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
-            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -353,7 +352,7 @@ pub async fn get_workstation(
     let workstation_ips = sqlx::query_as::<_, IpManager>(
         r"SELECT
             m.id, m.workstation_id, m.position_id, m.switch_port_id,
-            m.device_type, m.network_id,
+            m.device_type,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at, m.last_mac
@@ -441,7 +440,7 @@ pub async fn update_workstation(
 
         let ws_room_id = get_room_id_by_workstation(tx.as_mut(), id).await?;
 
-        let network_id = if let Some(rid) = ws_room_id {
+        let _network_id = if let Some(rid) = ws_room_id {
             let room_network: Option<Uuid> = sqlx::query_scalar(
                 "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
             )
@@ -457,13 +456,12 @@ pub async fn update_workstation(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
+                "INSERT INTO ips (id, workstation_id, device_type, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
             .bind(ip.device_type.as_deref().unwrap_or("workstation"))
-            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -488,7 +486,7 @@ pub async fn update_workstation(
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id,
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type,
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE workstation_id = $1"
     ).bind(id)

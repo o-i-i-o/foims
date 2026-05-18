@@ -257,13 +257,17 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
 
     let ips = sqlx::query(
         r"SELECT
-            m.id, m.device_type, m.network_id,
+            m.id, m.device_type, rn.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at,
             n.network_region_id, nr.name as network_region
         FROM ips m
-        LEFT JOIN network_cidrs n ON m.network_id = n.id
+        LEFT JOIN positions p ON m.position_id = p.id
+        LEFT JOIN cabinets c ON p.cabinet_id = c.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN room_networks rn ON r.id = rn.room_id
+        LEFT JOIN network_cidrs n ON rn.network_id = n.id
         LEFT JOIN network_regions nr ON n.network_region_id = nr.id
         WHERE m.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
         ORDER BY m.ip_address",
@@ -403,7 +407,7 @@ pub async fn create_switch(
 
     let room_id = get_room_id_by_position(&state.pool()?.get_conn(), position_id).await?;
 
-    let network_id = if let Some(rid) = room_id {
+    let _network_id = if let Some(rid) = room_id {
         let room_network: Option<Uuid> = sqlx::query_scalar(
             "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
         )
@@ -432,12 +436,11 @@ pub async fn create_switch(
 
         let ip_manager_id = Uuid::new_v4();
         if let Err(e) = sqlx::query(
-            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
-             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+            "INSERT INTO ips (id, device_type, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $8, $9, $10, $11, $12)"
         )
         .bind(ip_manager_id)
         .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
-        .bind(network_id)
         .bind(&ip.ip_address)
         .bind(ip_version)
         .bind(&ip.mac_address)
@@ -613,7 +616,7 @@ pub async fn update_switch(
             tracing::error!("删除交换机旧IP记录失败: {}", e);
         }
 
-        let network_id = if let Some(pos_id) = position_id {
+        let _network_id = if let Some(pos_id) = position_id {
             let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
             if let Some(rid) = room_id {
                 let room_network: Option<Uuid> = sqlx::query_scalar(
@@ -648,12 +651,11 @@ pub async fn update_switch(
 
             let ip_manager_id = Uuid::new_v4();
             if let Err(e) = sqlx::query(
-                "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+                "INSERT INTO ips (id, device_type, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $8, $9, $10, $11, $12)"
             )
             .bind(ip_manager_id)
             .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
-            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)

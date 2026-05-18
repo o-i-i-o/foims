@@ -555,6 +555,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_ips_network_indirect(pool).await?;
     migrate_ips_drop_network_id(pool).await?;
     migrate_ips_device_type_cleanup(pool).await?;
+    migrate_ips_drop_network_id_v2(pool).await?;
     Ok(())
 }
 
@@ -1121,7 +1122,7 @@ async fn migrate_drop_switch_cabinet_columns(pool: &sqlx::PgPool) -> Result<(), 
                 s.parent_port_id, pp.port_number as parent_port_number,
                 p.cabinet_id, c.name as cabinet_name,
                 p.start_u, p.end_u,
-                im.network_id as position_network_id,
+                rn.network_id as position_network_id,
                 n.network_region_id,
                 s.description,
                 'switch' as device_type,
@@ -1133,13 +1134,15 @@ async fn migrate_drop_switch_cabinet_columns(pool: &sqlx::PgPool) -> Result<(), 
             LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
             LEFT JOIN positions p ON s.position_id = p.id
             LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN rooms r ON c.room_id = r.id
+            LEFT JOIN room_networks rn ON r.id = rn.room_id
+            LEFT JOIN network_cidrs n ON rn.network_id = n.id
             LEFT JOIN LATERAL (
-                SELECT ip_address, mac_address, network_id
+                SELECT ip_address, mac_address
                 FROM ips 
                 WHERE position_id = p.id
                 LIMIT 1
-            ) im ON true
-            LEFT JOIN network_cidrs n ON im.network_id = n.id",
+            ) im ON true",
         )
         .execute(pool)
         .await
@@ -1206,6 +1209,42 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
 
     if count == 0 {
         if let Err(e) = sqlx::query(
+            "DROP VIEW IF EXISTS switches_with_details CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP VIEW IF EXISTS ip_with_details CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ip_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.network_id 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips_network_id_fkey 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
             "ALTER TABLE ips DROP COLUMN IF EXISTS network_id"
         )
         .execute(pool)
@@ -1221,6 +1260,15 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
         .await
         {
             warn!("删除 idx_ips_network_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_ip_managers_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_ip_managers_network_id 索引失败: {}", e);
         }
 
         if let Err(e) = sqlx::query(
@@ -1359,6 +1407,199 @@ async fn migrate_ips_device_type_cleanup(pool: &sqlx::PgPool) -> Result<(), sqlx
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) VALUES ('ips_device_type_cleanup', '清理ips表device_type字段，将switch改为cabinet_position，删除unknown类型')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_drop_network_id_v2'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "DROP VIEW IF EXISTS switches_with_details CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP VIEW IF EXISTS ip_with_details CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ip_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.network_id 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips_network_id_fkey 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips DROP COLUMN IF EXISTS network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.network_id 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_ips_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_ips_network_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_ip_managers_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_ip_managers_network_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"
+            CREATE VIEW ip_with_details AS
+            SELECT 
+                imm.id,
+                imm.workstation_id,
+                imm.position_id,
+                imm.switch_port_id,
+                imm.device_type,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE 'unknown device'
+                END AS device_name,
+                rn.network_id AS network_id,
+                CASE
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    ELSE NULL
+                END AS workstation_name,
+                CASE
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE NULL
+                END AS cabinet_position_name,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    ELSE NULL
+                END AS switch_name,
+                sp.port_number::text AS switch_port_number,
+                CASE
+                    WHEN r.id IS NOT NULL THEN r.name::text
+                    ELSE NULL
+                END AS room_name,
+                CASE
+                    WHEN c.id IS NOT NULL THEN c.name::text
+                    ELSE NULL
+                END AS cabinet_name,
+                COALESCE(n_room.name, 'unknown')::text AS network_name,
+                COALESCE(nt_room.name, 'unknown')::text AS network_region,
+                host(imm.ip_address) as ip_address,
+                imm.ip_version,
+                imm.mac_address,
+                imm.last_mac,
+                imm.hostname,
+                imm.status,
+                imm.last_seen,
+                imm.created_at,
+                imm.updated_at
+            FROM ips imm
+            LEFT JOIN workstations w ON imm.workstation_id = w.id
+            LEFT JOIN rooms r ON w.room_id = r.id
+            LEFT JOIN positions cp ON imm.position_id = cp.id
+            LEFT JOIN cabinets c ON cp.cabinet_id = c.id
+            LEFT JOIN rooms r2 ON c.room_id = r2.id
+            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+            LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
+            LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
+            LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
+            "
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 ip_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE VIEW switches_with_details AS
+            SELECT 
+                s.id, s.name, s.position_id, s.model, s.vendor,
+                s.location, s.snmp_version, 
+                s.snmp_community,
+                s.snmp_username, s.snmp_auth_protocol, 
+                s.snmp_auth_password,
+                s.snmp_priv_protocol, 
+                s.snmp_priv_password,
+                s.snmp_port,
+                s.parent_switch_id, ps.name as parent_switch_name,
+                s.parent_port_id, pp.port_number as parent_port_number,
+                p.cabinet_id, c.name as cabinet_name,
+                p.start_u, p.end_u,
+                rn.network_id as position_network_id,
+                n.network_region_id,
+                s.description,
+                'switch' as device_type,
+                host(im.ip_address) as ip_address,
+                im.mac_address,
+                s.created_at, s.updated_at
+            FROM switches s
+            LEFT JOIN switches ps ON s.parent_switch_id = ps.id
+            LEFT JOIN switch_ports pp ON s.parent_port_id = pp.id
+            LEFT JOIN positions p ON s.position_id = p.id
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN rooms r ON c.room_id = r.id
+            LEFT JOIN room_networks rn ON r.id = rn.room_id
+            LEFT JOIN network_cidrs n ON rn.network_id = n.id
+            LEFT JOIN LATERAL (
+                SELECT ip_address, mac_address
+                FROM ips 
+                WHERE position_id = p.id
+                LIMIT 1
+            ) im ON true"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 switches_with_details 视图失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('ips_drop_network_id_v2', '强制删除ips表network_id列和外键约束，完全通过room_networks间接关联')"
         )
         .execute(pool)
         .await?;
