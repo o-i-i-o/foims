@@ -545,16 +545,15 @@ async fn main() -> std::io::Result<()> {
                 std::process::exit(1);
             });
 
-            let shutdown_timeout = tokio::time::Duration::from_secs(30);
-
             info!("1. 停止接收新连接...");
+            let server_stop_timeout = tokio::time::Duration::from_secs(5);
             let all_stops: Vec<_> = all_server_handles
                 .into_iter()
                 .enumerate()
                 .map(|(idx, handle)| {
                     let stop_future = handle.stop(true);
                     async move {
-                        if let Err(e) = tokio::time::timeout(shutdown_timeout, stop_future).await {
+                        if let Err(e) = tokio::time::timeout(server_stop_timeout, stop_future).await {
                             warn!("服务器 {} 优雅关闭超时: {}", idx, e);
                         }
                     }
@@ -563,27 +562,24 @@ async fn main() -> std::io::Result<()> {
             futures_util::future::join_all(all_stops).await;
             info!("服务器已停止接收新连接");
 
+            info!("2. 等待服务器任务结束...");
+            let task_wait_timeout = tokio::time::Duration::from_secs(5);
             for (idx, join_handle) in all_server_join_handles.into_iter().enumerate() {
-                if let Err(e) = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(10),
-                    join_handle,
-                )
-                .await
-                {
+                if let Err(e) = tokio::time::timeout(task_wait_timeout, join_handle).await {
                     warn!("服务器任务 {} 等待超时: {}", idx, e);
                 }
             }
             info!("所有服务器任务已结束");
 
-            info!("2. 关闭后台任务...");
+            info!("3. 关闭后台任务...");
             shutdown_clone.request_shutdown();
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             info!("后台任务已发送关闭信号");
 
-            info!("3. 关闭调度器...");
+            info!("4. 关闭调度器...");
             if let Some(state) = scheduler_state
                 && let Err(e) = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(10),
+                    tokio::time::Duration::from_secs(5),
                     state.shutdown(),
                 )
                 .await
@@ -591,10 +587,10 @@ async fn main() -> std::io::Result<()> {
                 warn!("调度器关闭超时: {}", e);
             }
 
-            info!("4. 关闭数据库连接池...");
+            info!("5. 关闭数据库连接池...");
             if let Some(db_pool) = pool
                 && let Err(e) = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(10),
+                    tokio::time::Duration::from_secs(5),
                     db_pool.close(),
                 )
                 .await
