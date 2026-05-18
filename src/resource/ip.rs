@@ -269,6 +269,7 @@ pub async fn create_ip_manager(
         position_id: req.position_id,
         switch_port_id: req.switch_port_id,
         device_type: req.device_type.clone(),
+        network_id: None,
         ip_address: req.ip_address.clone(),
         ip_version: ip_version_num,
         mac_address: req.mac_address.clone(),
@@ -315,7 +316,16 @@ pub async fn get_ip_manager(
     let id = *id_path;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
+           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
+           FROM ips m
+           LEFT JOIN workstations w ON m.workstation_id = w.id
+           LEFT JOIN rooms r ON w.room_id = r.id
+           LEFT JOIN LATERAL (
+               SELECT network_id FROM room_networks WHERE room_id = r.id LIMIT 1
+           ) rn ON true
+           WHERE m.id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound("IP管理未找到".to_string()))?;
@@ -426,7 +436,19 @@ pub async fn update_ip_manager(
     (*req).validate()?;
 
     let existing_mapping = sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
+           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
+           FROM ips m
+           LEFT JOIN workstations w ON m.workstation_id = w.id
+           LEFT JOIN rooms rw ON w.room_id = rw.id
+           LEFT JOIN positions p ON m.position_id = p.id
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           LEFT JOIN rooms rc ON c.room_id = rc.id
+           LEFT JOIN LATERAL (
+               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
+           ) rn ON true
+           WHERE m.id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound("IP管理未找到".to_string()))?;
@@ -549,7 +571,19 @@ pub async fn update_ip_manager(
     .await?;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE id = $1"
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
+           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
+           FROM ips m
+           LEFT JOIN workstations w ON m.workstation_id = w.id
+           LEFT JOIN rooms rw ON w.room_id = rw.id
+           LEFT JOIN positions p ON m.position_id = p.id
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           LEFT JOIN rooms rc ON c.room_id = rc.id
+           LEFT JOIN LATERAL (
+               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
+           ) rn ON true
+           WHERE m.id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 
@@ -813,7 +847,19 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id, host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen::TIMESTAMPTZ, last_mac, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM ips WHERE network_id = $1"
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
+           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
+           FROM ips m
+           LEFT JOIN workstations w ON m.workstation_id = w.id
+           LEFT JOIN rooms rw ON w.room_id = rw.id
+           LEFT JOIN positions p ON m.position_id = p.id
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           LEFT JOIN rooms rc ON c.room_id = rc.id
+           LEFT JOIN LATERAL (
+               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
+           ) rn ON true
+           WHERE rn.network_id = $1"
     )
     .bind(req.network_id)
     .fetch_all(&state.pool()?.get_conn())
@@ -1068,6 +1114,7 @@ pub async fn auto_assign_ip(
         position_id,
         switch_port_id,
         device_type: Some(device_type),
+        network_id: None,
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
         mac_address,
@@ -1249,6 +1296,7 @@ pub async fn batch_create_ip_managers(
             position_id: ip_req.position_id,
             switch_port_id: ip_req.switch_port_id,
             device_type: ip_req.device_type.clone(),
+            network_id: None,
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,
             mac_address: ip_req.mac_address.clone(),

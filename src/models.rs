@@ -598,6 +598,7 @@ pub struct IpManager {
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub device_type: Option<String>,
+    pub network_id: Option<Uuid>,
     pub ip_address: String,
     pub ip_version: i16,
     pub mac_address: Option<String>,

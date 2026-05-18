@@ -164,7 +164,7 @@ export async function openWorkstationModal(workstation = null) {
   const form = elementCache.get("workstation-form");
 
   // 加载房间选项（只加载办公室）
-  await loadRoomsForSelect(true);
+  await loadRoomsForSelect("workstation-room", { onlyOffice: true });
 
   // 使用单例manager
   const ipManager = getManager('workstation');
