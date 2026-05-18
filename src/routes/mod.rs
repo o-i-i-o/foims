@@ -34,7 +34,7 @@ use crate::system::config::{
     backup_config, disable_init_mode, download_certificate,
     generate_certificate, get_certificate_status, get_notification_settings,
     get_page_timeout_config, get_session_timeout_config, get_smtp_config, get_supported_languages,
-    get_system_info, import_certificate, restart_application, restart_os,
+    get_system_config, get_system_info, import_certificate, restart_application, restart_os,
     restore_config, send_system_email, test_smtp_connection as test_smtp, update_language_setting,
     update_notification_settings, update_page_timeout_config, update_session_timeout_config,
     update_smtp_config, update_system_config,
@@ -267,6 +267,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .route("/certificate/import", web::post().to(import_certificate))
                         .route("/certificate/download", web::get().to(download_certificate))
                         // 配置管理
+                        .route("/config", web::get().to(get_system_config))
                         .route("/config", web::put().to(update_system_config))
                         .route("/config/backup", web::get().to(backup_config))
                         .route("/config/restore", web::post().to(restore_config))
