@@ -424,7 +424,7 @@ export class IpConfigManager {
           };
 
           if (this.resourceType === 'switch') {
-            ipData.device_type = 'switch';
+            ipData.device_type = 'cabinet_position';
           } else if (this.resourceType === 'cabinet-position') {
             ipData.device_type = 'cabinet_position';
           } else if (this.resourceType === 'workstation') {
@@ -499,7 +499,7 @@ export class IpConfigManager {
         };
 
         if (this.resourceType === 'switch') {
-          ipData.device_type = 'switch';
+          ipData.device_type = 'cabinet_position';
         } else if (this.resourceType === 'cabinet-position') {
           ipData.device_type = 'cabinet_position';
         } else if (this.resourceType === 'workstation') {
