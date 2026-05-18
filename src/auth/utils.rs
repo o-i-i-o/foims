@@ -275,7 +275,6 @@ impl JwtUtils {
                     return Ok(claims.clone());
                 }
             }
-            self.token_cache.remove(token);
         }
 
         let mut validation = Validation::new(self.config.algorithm);
@@ -291,6 +290,36 @@ impl JwtUtils {
             .insert(token.to_string(), (decoded.claims.clone(), Utc::now()));
 
         Ok(decoded.claims)
+    }
+
+    pub fn cleanup_expired_cache(&self) {
+        let now = Utc::now();
+        self.token_cache.retain(|_, (claims, cached_at)| {
+            let cache_expiry = *cached_at + Duration::seconds(120);
+            now < cache_expiry && claims.exp > now.timestamp() as usize
+        });
+    }
+
+    pub fn start_cache_cleanup_task(&self, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
+        let cache = self.token_cache.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        let now = Utc::now();
+                        cache.retain(|_, (claims, cached_at)| {
+                            let cache_expiry = *cached_at + Duration::seconds(120);
+                            now < cache_expiry && claims.exp > now.timestamp() as usize
+                        });
+                    }
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("JWT缓存清理任务收到关闭信号，停止运行");
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     // 解码令牌但不验证过期时间（用于刷新令牌等场景）

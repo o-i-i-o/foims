@@ -346,6 +346,8 @@ async fn main() -> std::io::Result<()> {
             .map_err(std::io::Error::other)?,
     );
 
+    app_state.jwt_utils.start_cache_cleanup_task(shutdown.subscribe());
+
     let http_rate_limiter = rate_limiter.clone();
     let http_rate_limit_enabled = rate_limit_enabled;
     let http_app_state = app_state.clone();
