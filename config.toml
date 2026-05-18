@@ -42,7 +42,7 @@ supported_languages = [
 ]
 
 [rate_limit]
-ip_limit = 100
+ip_limit = 1000
 user_limit = 200
 login_limit = 5
 window_secs = 60
