@@ -1,5 +1,5 @@
 use sqlx::Row;
-use tracing::warn;
+use tracing::{warn, info};
 use uuid::Uuid;
 
 pub async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
@@ -137,7 +137,9 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS workstation_layouts (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            workstation_id UUID NOT NULL REFERENCES workstations(id) ON DELETE CASCADE,
+            room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+            element_id UUID NOT NULL,
+            element_type VARCHAR(20) NOT NULL DEFAULT 'workstation',
             x INTEGER NOT NULL DEFAULT 0,
             y INTEGER NOT NULL DEFAULT 0,
             width INTEGER NOT NULL DEFAULT 160,
@@ -145,7 +147,7 @@ async fn create_room_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             rotation INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            UNIQUE(workstation_id)
+            UNIQUE(room_id, element_id)
         )",
     )
     .execute(pool)
@@ -518,7 +520,8 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_workstations_room_id ON workstations(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_room_id ON room_networks(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_network_id ON room_networks(network_id)",
-        "CREATE INDEX IF NOT EXISTS idx_workstation_layouts_workstation_id ON workstation_layouts(workstation_id)",
+        "CREATE INDEX IF NOT EXISTS idx_workstation_layouts_room_id ON workstation_layouts(room_id)",
+        "CREATE INDEX IF NOT EXISTS idx_workstation_layouts_element_type ON workstation_layouts(element_type)",
         "CREATE INDEX IF NOT EXISTS idx_cabinet_layouts_cabinet_id ON cabinet_layouts(cabinet_id)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_name ON scheduled_tasks(name)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
@@ -556,6 +559,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_ips_drop_network_id(pool).await?;
     migrate_ips_device_type_cleanup(pool).await?;
     migrate_ips_drop_network_id_v2(pool).await?;
+    migrate_workstation_layouts_structure(pool).await?;
     Ok(())
 }
 
@@ -1883,6 +1887,60 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+async fn migrate_workstation_layouts_structure(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'workstation_layouts_structure'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        // 检查旧表结构是否存在 workstation_id 字段
+        let column_exists = sqlx::query(
+            "SELECT COUNT(*) as count FROM information_schema.columns 
+             WHERE table_name = 'workstation_layouts' AND column_name = 'workstation_id'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let col_count: i64 = column_exists.try_get("count").unwrap_or(0);
+
+        if col_count > 0 {
+            // 备份旧数据
+            if let Err(e) = sqlx::query(
+                "CREATE TABLE IF NOT EXISTS workstation_layouts_backup AS SELECT * FROM workstation_layouts",
+            )
+            .execute(pool)
+            .await
+            {
+                warn!("创建 workstation_layouts 备份表失败: {}", e);
+            }
+
+            // 删除旧表
+            if let Err(e) = sqlx::query("DROP TABLE IF EXISTS workstation_layouts CASCADE")
+                .execute(pool)
+                .await
+            {
+                warn!("删除旧 workstation_layouts 表失败: {}", e);
+            }
+
+            // 重新创建新表结构（会在 create_workstation_layouts_table 中执行）
+            info!("workstation_layouts 表结构已更新，支持门元素保存");
+        }
+
+        // 记录迁移版本
+        sqlx::query(
+            "INSERT INTO schema_migrations (version, description) VALUES ('workstation_layouts_structure', '重构 workstation_layouts 表结构，支持门元素和多种元素类型')",
+        )
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }

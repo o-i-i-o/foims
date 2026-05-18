@@ -41,23 +41,28 @@ pub async fn save_layout(
         let mut tx = state.pool()?.get_conn().begin().await?;
 
         for item in &req.layout {
-            if item.element_type == "door" {
-                continue;
-            }
+            let element_type = if item.element_type == "door" {
+                "door"
+            } else {
+                "workstation"
+            };
 
             sqlx::query(
-                "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation) 
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (workstation_id) 
+                "INSERT INTO workstation_layouts (room_id, element_id, element_type, x, y, width, height, rotation) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (room_id, element_id) 
                  DO UPDATE SET 
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
                      width = EXCLUDED.width,
                      height = EXCLUDED.height,
                      rotation = EXCLUDED.rotation,
+                     element_type = EXCLUDED.element_type,
                      updated_at = NOW()"
             )
+            .bind(room_id)
             .bind(item.id)
+            .bind(element_type)
             .bind(item.position.x_i32())
             .bind(item.position.y_i32())
             .bind(item.position.width_i32())
@@ -155,7 +160,7 @@ pub async fn delete_layout(
 ) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)")
+    sqlx::query("DELETE FROM workstation_layouts WHERE room_id = $1")
         .bind(room_id)
         .execute(&state.pool()?.get_conn())
         .await?;
@@ -221,18 +226,17 @@ pub async fn delete_positions_layout(
 pub async fn get_layout(state: web::Data<AppState>, room_id: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    let layouts = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
-        r"SELECT wl.workstation_id, 
+    let layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
+        r"SELECT element_id, element_type,
                   json_build_object(
-                      'x', wl.x, 
-                      'y', wl.y, 
-                      'width', wl.width, 
-                      'height', wl.height, 
-                      'rotation', wl.rotation
+                      'x', x, 
+                      'y', y, 
+                      'width', width, 
+                      'height', height, 
+                      'rotation', rotation
                   ) as position
-           FROM workstation_layouts wl
-           JOIN workstations w ON wl.workstation_id = w.id
-           WHERE w.room_id = $1",
+           FROM workstation_layouts
+           WHERE room_id = $1",
     )
     .bind(room_id)
     .fetch_all(&state.pool()?.get_conn())
@@ -240,12 +244,12 @@ pub async fn get_layout(state: web::Data<AppState>, room_id: web::Path<Uuid>) ->
 
     let layout_data: Vec<serde_json::Value> = layouts
         .into_iter()
-        .map(|(id, position)| {
+        .map(|(id, element_type, position)| {
             let mut obj = serde_json::Map::new();
             obj.insert("id".to_string(), serde_json::Value::String(id.to_string()));
             obj.insert(
                 "element_type".to_string(),
-                serde_json::Value::String("workstation".to_string()),
+                serde_json::Value::String(element_type),
             );
             obj.insert("position".to_string(), position);
             serde_json::Value::Object(obj)

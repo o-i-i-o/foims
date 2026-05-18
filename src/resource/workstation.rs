@@ -553,7 +553,7 @@ pub async fn delete_workstation(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+    sqlx::query("DELETE FROM workstation_layouts WHERE element_id = $1 AND element_type = 'workstation'")
         .bind(id)
         .execute(&mut *tx)
         .await?;
