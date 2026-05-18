@@ -331,17 +331,34 @@ export class IpConfigManager {
           }
         }
       } else if (this.config.idSelector) {
-        const id = document.getElementById(this.config.idSelector)?.value;
-        if (!id) {
+        let id = document.getElementById(this.config.idSelector)?.value;
+        
+        if (!id && ips && ips.length > 0 && ips[0].network_id) {
+          const networkIds = [...new Set(ips.filter(ip => ip.network_id).map(ip => ip.network_id))];
+          if (networkIds.length > 0) {
+            const networkPromises = networkIds.map(nid => 
+              apiGet(`/api/resources/networks/${nid}`).catch(() => null)
+            );
+            const networkResults = await Promise.all(networkPromises);
+            for (const result of networkResults) {
+              if (result?.success && result.data) {
+                allNetworks.push(result.data);
+              }
+            }
+          }
+        } else if (!id) {
           throw new Error(`请先选择${this.config.idName}`);
         }
-        const url = this.config.networksApi(id);
-        if (url) {
-          const result = await apiGet(url);
-          if (!result.success) {
-            throw new Error('加载网络数据失败');
+        
+        if (id && allNetworks.length === 0) {
+          const url = this.config.networksApi(id);
+          if (url) {
+            const result = await apiGet(url);
+            if (!result.success) {
+              throw new Error('加载网络数据失败');
+            }
+            allNetworks = result.data?.items || result.data || [];
           }
-          allNetworks = result.data?.items || result.data || [];
         }
         
         const regionMap = new Map();

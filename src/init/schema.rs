@@ -1308,8 +1308,8 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
                     WHEN c.id IS NOT NULL THEN c.name::text
                     ELSE NULL
                 END AS cabinet_name,
-                COALESCE(n_room.name, 'unknown')::text AS network_name,
-                COALESCE(nt_room.name, 'unknown')::text AS network_region,
+                COALESCE(rn.name, 'unknown')::text AS network_name,
+                COALESCE(rn.region_name, 'unknown')::text AS network_region,
                 host(imm.ip_address) as ip_address,
                 imm.ip_version,
                 imm.mac_address,
@@ -1327,9 +1327,14 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
             LEFT JOIN rooms r2 ON c.room_id = r2.id
             LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
-            LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
-            LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
-            LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
+            LEFT JOIN LATERAL (
+                SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
+                FROM room_networks rn_l
+                JOIN network_cidrs nc ON rn_l.network_id = nc.id
+                JOIN network_regions nr ON nc.network_region_id = nr.id
+                WHERE rn_l.room_id = COALESCE(r.id, r2.id)
+                LIMIT 1
+            ) rn ON true
             "
         )
         .execute(pool)
@@ -1571,7 +1576,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                 p.cabinet_id, c.name as cabinet_name,
                 p.start_u, p.end_u,
                 rn.network_id as position_network_id,
-                n.network_region_id,
+                rn.network_region_id,
                 s.description,
                 'switch' as device_type,
                 host(im.ip_address) as ip_address,
@@ -1583,8 +1588,13 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
             LEFT JOIN positions p ON s.position_id = p.id
             LEFT JOIN cabinets c ON p.cabinet_id = c.id
             LEFT JOIN rooms r ON c.room_id = r.id
-            LEFT JOIN room_networks rn ON r.id = rn.room_id
-            LEFT JOIN network_cidrs n ON rn.network_id = n.id
+            LEFT JOIN LATERAL (
+                SELECT rn_l.network_id, nc.network_region_id
+                FROM room_networks rn_l
+                JOIN network_cidrs nc ON rn_l.network_id = nc.id
+                WHERE rn_l.room_id = r.id
+                LIMIT 1
+            ) rn ON true
             LEFT JOIN LATERAL (
                 SELECT ip_address, mac_address
                 FROM ips 
@@ -1650,8 +1660,8 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN c.id IS NOT NULL THEN c.name::text
                 ELSE NULL
             END AS cabinet_name,
-            COALESCE(n_room.name, 'unknown')::text AS network_name,
-            COALESCE(nt_room.name, 'unknown')::text AS network_region,
+            COALESCE(rn.name, 'unknown')::text AS network_name,
+            COALESCE(rn.region_name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
             imm.mac_address,
@@ -1669,9 +1679,14 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN rooms r2 ON c.room_id = r2.id
         LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
-        LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
-        LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
-        LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
+        LEFT JOIN LATERAL (
+            SELECT rn.network_id, nc.name, nr.name as region_name, nc.network_region_id
+            FROM room_networks rn
+            JOIN network_cidrs nc ON rn.network_id = nc.id
+            JOIN network_regions nr ON nc.network_region_id = nr.id
+            WHERE rn.room_id = COALESCE(r.id, r2.id)
+            LIMIT 1
+        ) rn ON true
     ",
     )
     .execute(pool)
