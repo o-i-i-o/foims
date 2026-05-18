@@ -202,16 +202,21 @@ export class SVGDataManager {
           for (let index = 0; index < cabinets.length; index++) {
             const cabinet = cabinets[index];
             const savedItem = layoutData.find(item => item.id.toLowerCase() === cabinet.id.toLowerCase());
+            
+            cabinet.capacity = cabinet.capacity || 45;
+            const uHeight = 20;
+            const cabinetHeight = cabinet.capacity * uHeight + 40;
+            
             if (savedItem && savedItem.position) {
               cabinet.position = savedItem.position;
             } else {
               const cabinetWidth = 150;
               const gap = 50;
               const startX = 50;
-              const bottomY = 600;
-              cabinet.capacity = cabinet.capacity || 45;
-              const uHeight = 20;
-              const cabinetHeight = cabinet.capacity * uHeight + 40;
+              const bottomPadding = 10
+              const baseSvgHeight = 800;
+              const svgHeight = Math.max(baseSvgHeight, cabinetHeight + 100);
+              const bottomY = svgHeight - bottomPadding;
               
               cabinet.position = {
                 x: startX + index * (cabinetWidth + gap),
@@ -232,7 +237,7 @@ export class SVGDataManager {
           
           if (maxX > 0 || maxY > 0) {
             const padding = 50;
-            this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(600, maxY + padding)}`);
+            this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(800, maxY + 100)}`);
           }
         }
         

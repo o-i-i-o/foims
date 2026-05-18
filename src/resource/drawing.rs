@@ -41,6 +41,10 @@ pub async fn save_layout(
         let mut tx = state.pool()?.get_conn().begin().await?;
 
         for item in &req.layout {
+            if item.element_type == "door" {
+                continue;
+            }
+
             sqlx::query(
                 "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation) 
                  VALUES ($1, $2, $3, $4, $5, $6)
@@ -262,8 +266,8 @@ pub async fn get_positions_layout(
 ) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, i32, i32, i32, i32, i32)>(
-        r"SELECT cl.id, cl.cabinet_id, cl.x, cl.y, cl.width, cl.height, cl.rotation
+    let rows = sqlx::query_as::<_, (Uuid, i32, i32, i32, i32, i32)>(
+        r"SELECT cl.cabinet_id, cl.x, cl.y, cl.width, cl.height, cl.rotation
           FROM cabinet_layouts cl
           JOIN cabinets c ON cl.cabinet_id = c.id
           WHERE c.room_id = $1",
@@ -272,15 +276,16 @@ pub async fn get_positions_layout(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let items: Vec<serde_json::Value> = rows.iter().map(|(id, cabinet_id, x, y, width, height, rotation)| {
+    let items: Vec<serde_json::Value> = rows.iter().map(|(cabinet_id, x, y, width, height, rotation)| {
         serde_json::json!({
-            "id": id,
-            "cabinet_id": cabinet_id,
-            "x": x,
-            "y": y,
-            "width": width,
-            "height": height,
-            "rotation": rotation,
+            "id": cabinet_id,
+            "position": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "rotation": rotation
+            },
             "element_type": "cabinet"
         })
     }).collect();

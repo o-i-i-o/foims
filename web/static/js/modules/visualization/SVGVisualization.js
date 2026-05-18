@@ -114,13 +114,18 @@ export class SVGVisualization {
       const cabinetWidth = 150;
       const gap = 50;
       const startX = 50;
+      const bottomPadding = 30;
+      const baseSvgHeight = 800;
       
-      const containerHeight = this.core.container.clientHeight || 800;
-      const topPadding = 20;
-      const bottomPadding = 20;
-      const availableHeight = containerHeight - topPadding - bottomPadding;
+      let maxCabinetHeight = 0;
+      cabinets.forEach(cabinet => {
+        cabinet.capacity = cabinet.capacity || 45;
+        const uHeight = 20;
+        const cabinetHeight = cabinet.capacity * uHeight + 40;
+        maxCabinetHeight = Math.max(maxCabinetHeight, cabinetHeight);
+      });
       
-      const svgHeight = Math.max(availableHeight + topPadding + bottomPadding, 1000);
+      const svgHeight = Math.max(baseSvgHeight, maxCabinetHeight + 100);
       const bottomY = svgHeight - bottomPadding;
 
       cabinets.forEach((cabinet, index) => {
