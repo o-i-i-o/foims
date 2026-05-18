@@ -6,7 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, get_room_id_by_workstation};
+use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr};
 use tracing::warn;
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -444,20 +444,6 @@ pub async fn update_workstation(
             .bind(id)
             .execute(&mut *tx)
             .await?;
-
-        let ws_room_id = get_room_id_by_workstation(tx.as_mut(), id).await?;
-
-        let _network_id = if let Some(rid) = ws_room_id {
-            let room_network: Option<Uuid> = sqlx::query_scalar(
-                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-            )
-            .bind(rid)
-            .fetch_optional(&mut *tx)
-            .await?;
-            room_network
-        } else {
-            None
-        };
 
         for ip in ips {
             let ip_version = detect_ip_version(&ip.ip_address)?;

@@ -191,10 +191,31 @@ async function saveSystemConfig() {
       return;
     }
 
+    const hostIpv4 = elementCache.getValue("server-host").trim();
+    const hostIpv6 = elementCache.getValue("server-host-ipv6").trim();
+    
+    if (!hostIpv4 && !hostIpv6) {
+      showToast("至少需要配置一个监听地址（IPv4或IPv6）", "warning");
+      return;
+    }
+
+    const ipv4Regex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|::|(::[0-9a-fA-F]{1,4}){1,7}|([0-9a-fA-F]{1,4}::){1,7}|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(:[0-9a-fA-F]{1,4}){1,6}|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
+    
+    if (hostIpv4 && !ipv4Regex.test(hostIpv4)) {
+      showToast("IPv4地址格式无效", "warning");
+      return;
+    }
+    
+    if (hostIpv6 && !ipv6Regex.test(hostIpv6)) {
+      showToast("IPv6地址格式无效", "warning");
+      return;
+    }
+
     const serverConfig = {
       ...currentServerConfig,
-      host: elementCache.getValue("server-host"),
-      host_ipv6: elementCache.getValue("server-host-ipv6") || null,
+      host: hostIpv4,
+      host_ipv6: hostIpv6 || null,
       http_enabled: httpEnabled,
       http_port: parseInt(elementCache.getValue("http-port")) || 80,
       https_enabled: httpsEnabled,

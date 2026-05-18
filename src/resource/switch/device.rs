@@ -11,7 +11,7 @@ use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, get_room_id_by_position};
+use crate::utils::{log_system_operation, OperationLogParams};
 use tracing::warn;
 
 const SWITCHES_DETAIL_COLUMNS: &str = r"
@@ -405,20 +405,6 @@ pub async fn create_switch(
     .execute(&state.pool()?.get_conn())
     .await?;
 
-    let room_id = get_room_id_by_position(&state.pool()?.get_conn(), position_id).await?;
-
-    let _network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> = sqlx::query_scalar(
-            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-        )
-        .bind(rid)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
-        room_network
-    } else {
-        None
-    };
-
     for ip in ips {
         let ip_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET))",
@@ -615,23 +601,6 @@ pub async fn update_switch(
         {
             tracing::error!("删除交换机旧IP记录失败: {}", e);
         }
-
-        let _network_id = if let Some(pos_id) = position_id {
-            let room_id = get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?;
-            if let Some(rid) = room_id {
-                let room_network: Option<Uuid> = sqlx::query_scalar(
-                    "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-                )
-                .bind(rid)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
-                room_network
-            } else {
-                None
-            }
-        } else {
-            None
-        };
 
         for ip in ips {
             let ip_exists = sqlx::query_scalar::<_, bool>(

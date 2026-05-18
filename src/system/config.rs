@@ -134,6 +134,29 @@ pub async fn update_system_config(
     }
 
     if let Some(server) = &req.server {
+        let host = server.host.trim();
+        let host_ipv6 = server.host_ipv6.as_ref()
+            .map(|s| s.trim())
+            .unwrap_or("");
+
+        fn validate_ip(addr: &str) -> Result<(), String> {
+            if addr.is_empty() {
+                return Ok(());
+            }
+            if addr.parse::<std::net::IpAddr>().is_ok() {
+                Ok(())
+            } else {
+                Err(format!("无效的IP地址格式: {}", addr))
+            }
+        }
+
+        validate_ip(host).map_err(AppError::Validation)?;
+        validate_ip(host_ipv6).map_err(AppError::Validation)?;
+
+        if host.is_empty() && host_ipv6.is_empty() {
+            return Err(AppError::Validation("至少需要配置一个监听地址（IPv4或IPv6）".to_string()));
+        }
+
         new_config.server = server.clone();
     }
 

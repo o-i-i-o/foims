@@ -1241,7 +1241,7 @@ pub async fn batch_create_ip_managers(
             None
         };
 
-        let _network_id = if let Some(rid) = room_id {
+        if let Some(rid) = room_id {
             let room_network: Option<Uuid> = match sqlx::query_scalar(
                 "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
             )
@@ -1255,16 +1255,11 @@ pub async fn batch_create_ip_managers(
                     continue;
                 }
             };
-            match room_network {
-                Some(nid) => Some(nid),
-                None => {
-                    duplicate_errors.push(format!("第{}条记录: 该房间未配置网络", index + 1));
-                    continue;
-                }
+            if room_network.is_none() {
+                duplicate_errors.push(format!("第{}条记录: 该房间未配置网络", index + 1));
+                continue;
             }
-        } else {
-            None
-        };
+        }
 
         if let Err(err) = sqlx::query(
             "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 

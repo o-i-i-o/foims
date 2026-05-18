@@ -329,13 +329,13 @@ async fn main() -> std::io::Result<()> {
     }
 
     let validated_ipv4 = validate_ip_address(&server_host_raw)
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
     let validated_ipv6 = validate_ip_address(&server_host_ipv6_raw)
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
 
     let (server_host, server_host_ipv6) = if validated_ipv4.is_empty() && validated_ipv6.is_empty() {
-        info!("IPv4和IPv6地址均为空，默认监听 0.0.0.0");
-        ("0.0.0.0".to_string(), None)
+        error!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
+        panic!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
     } else {
         (validated_ipv4, if validated_ipv6.is_empty() { None } else { Some(validated_ipv6) })
     };

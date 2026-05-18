@@ -15,7 +15,7 @@ health_check_interval_secs = 30
 
 [server]
 host = "0.0.0.0"
-ipv6host = "::"
+host_ipv6 = "::"
 http_enabled = true
 http_port = 80
 https_enabled = true
