@@ -1,5 +1,9 @@
 #visualization {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 2 * var(--space-xl));
+    max-height: calc(100vh - 2 * var(--space-xl));
 }
 
 #visualization > .tabs {
@@ -19,11 +23,23 @@
 #visualization .toolbar {
     justify-content: flex-end;
     padding-left: 200px;
+    flex-shrink: 0;
+}
+
+#visualization .tab-content {
+    flex: 1;
+    min-height: 0;
+}
+
+#visualization .tab-content.active {
+    display: flex;
+    flex-direction: column;
 }
 
 #workstation-visualization-container,
 #cabinet-visualization-container {
-    height: 600px;
+    flex: 1;
+    min-height: 0;
     border: 1px solid var(--color-border-light);
     border-radius: var(--radius-md);
     overflow: auto;
