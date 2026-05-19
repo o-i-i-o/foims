@@ -559,6 +559,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_ips_drop_network_id(pool).await?;
     migrate_ips_device_type_cleanup(pool).await?;
     migrate_ips_drop_network_id_v2(pool).await?;
+    migrate_ip_with_details_network_match(pool).await?;
     migrate_workstation_layouts_structure(pool).await?;
     Ok(())
 }
@@ -1337,6 +1338,10 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
                 JOIN network_cidrs nc ON rn_l.network_id = nc.id
                 JOIN network_regions nr ON nc.network_region_id = nr.id
                 WHERE rn_l.room_id = COALESCE(r.id, r2.id)
+                AND (
+                    (nc.ipv4_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv4_cidr::inet)
+                    OR (nc.ipv6_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv6_cidr::inet)
+                )
                 LIMIT 1
             ) rn ON true
             "
@@ -1534,8 +1539,8 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                     WHEN c.id IS NOT NULL THEN c.name::text
                     ELSE NULL
                 END AS cabinet_name,
-                COALESCE(n_room.name, 'unknown')::text AS network_name,
-                COALESCE(nt_room.name, 'unknown')::text AS network_region,
+                COALESCE(rn.name, 'unknown')::text AS network_name,
+                COALESCE(rn.region_name, 'unknown')::text AS network_region,
                 host(imm.ip_address) as ip_address,
                 imm.ip_version,
                 imm.mac_address,
@@ -1553,9 +1558,18 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
             LEFT JOIN rooms r2 ON c.room_id = r2.id
             LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
-            LEFT JOIN room_networks rn ON rn.room_id = COALESCE(r.id, r2.id)
-            LEFT JOIN network_cidrs n_room ON rn.network_id = n_room.id
-            LEFT JOIN network_regions nt_room ON n_room.network_region_id = nt_room.id
+            LEFT JOIN LATERAL (
+                SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
+                FROM room_networks rn_l
+                JOIN network_cidrs nc ON rn_l.network_id = nc.id
+                JOIN network_regions nr ON nc.network_region_id = nr.id
+                WHERE rn_l.room_id = COALESCE(r.id, r2.id)
+                AND (
+                    (nc.ipv4_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv4_cidr::inet)
+                    OR (nc.ipv6_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv6_cidr::inet)
+                )
+                LIMIT 1
+            ) rn ON true
             "
         )
         .execute(pool)
@@ -1998,6 +2012,111 @@ async fn migrate_workstation_layouts_structure(pool: &sqlx::PgPool) -> Result<()
         // 记录迁移版本
         sqlx::query(
             "INSERT INTO schema_migrations (version, description) VALUES ('workstation_layouts_structure', '重构 workstation_layouts 表结构，支持门元素和多种元素类型')",
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ip_with_details_network_match'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "DROP VIEW IF EXISTS ip_with_details CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ip_with_details 视图失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"
+            CREATE VIEW ip_with_details AS
+            SELECT 
+                imm.id,
+                imm.workstation_id,
+                imm.position_id,
+                imm.switch_port_id,
+                imm.device_type,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE 'unknown device'
+                END AS device_name,
+                rn.network_id AS network_id,
+                CASE
+                    WHEN w.id IS NOT NULL THEN w.name::text
+                    ELSE NULL
+                END AS workstation_name,
+                CASE
+                    WHEN cp.id IS NOT NULL THEN cp.name::text
+                    ELSE NULL
+                END AS cabinet_position_name,
+                CASE
+                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    ELSE NULL
+                END AS switch_name,
+                sp.port_number::text AS switch_port_number,
+                CASE
+                    WHEN r.id IS NOT NULL THEN r.name::text
+                    ELSE NULL
+                END AS room_name,
+                CASE
+                    WHEN c.id IS NOT NULL THEN c.name::text
+                    ELSE NULL
+                END AS cabinet_name,
+                COALESCE(rn.name, 'unknown')::text AS network_name,
+                COALESCE(rn.region_name, 'unknown')::text AS network_region,
+                host(imm.ip_address) as ip_address,
+                imm.ip_version,
+                imm.mac_address,
+                imm.last_mac,
+                imm.hostname,
+                imm.status,
+                imm.last_seen,
+                imm.created_at,
+                imm.updated_at
+            FROM ips imm
+            LEFT JOIN workstations w ON imm.workstation_id = w.id
+            LEFT JOIN rooms r ON w.room_id = r.id
+            LEFT JOIN positions cp ON imm.position_id = cp.id
+            LEFT JOIN cabinets c ON cp.cabinet_id = c.id
+            LEFT JOIN rooms r2 ON c.room_id = r2.id
+            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+            LEFT JOIN LATERAL (
+                SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
+                FROM room_networks rn_l
+                JOIN network_cidrs nc ON rn_l.network_id = nc.id
+                JOIN network_regions nr ON nc.network_region_id = nr.id
+                WHERE rn_l.room_id = COALESCE(r.id, r2.id)
+                AND (
+                    (nc.ipv4_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv4_cidr::inet)
+                    OR (nc.ipv6_cidr IS NOT NULL AND imm.ip_address <<= nc.ipv6_cidr::inet)
+                )
+                LIMIT 1
+            ) rn ON true
+            "
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 ip_with_details 视图失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('ip_with_details_network_match', '更新ip_with_details视图，根据IP地址匹配正确的网络CIDR')"
         )
         .execute(pool)
         .await?;

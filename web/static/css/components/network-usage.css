@@ -49,6 +49,26 @@
     border-radius: var(--radius-lg);
 }
 
+.stat-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.stat-label {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+
+.stat-value {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--color-text-light);
+}
+
 .usage-stat-item {
     display: flex;
     flex-direction: column;
@@ -130,6 +150,36 @@
 
 .usage-ips {
     margin-top: 1.25rem;
+}
+
+.usage-ips h5 {
+    margin-bottom: 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-text-light);
+}
+
+.usage-ips .table-responsive {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.usage-ips .table {
+    margin-bottom: 0;
+    font-size: 0.8125rem;
+}
+
+.usage-ips .table th {
+    background-color: var(--color-bg-secondary);
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.usage-ips .table td {
+    vertical-align: middle;
 }
 
 .usage-status-badge {

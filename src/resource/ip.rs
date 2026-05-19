@@ -23,6 +23,7 @@ pub async fn get_ip_managers(
     let device_name = query.get("device_name").map_or("", std::string::String::as_str);
     let network = query.get("network").map_or("", std::string::String::as_str);
     let ip_address = query.get("ip_address").map_or("", std::string::String::as_str);
+    let network_id = query.get("network_id").and_then(|s| uuid::Uuid::parse_str(s).ok());
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -92,6 +93,14 @@ pub async fn get_ip_managers(
         Some(pattern)
     };
 
+    let network_id_param = if let Some(nid) = network_id {
+        conditions.push(format!("network_id = ${param_index}"));
+        param_index += 1;
+        Some(nid)
+    } else {
+        None
+    };
+
     let where_clause = if conditions.is_empty() {
         String::new()
     } else {
@@ -122,6 +131,9 @@ pub async fn get_ip_managers(
     }
     if let Some(ref pattern) = ip_address_param {
         count_sql = count_sql.bind(pattern);
+    }
+    if let Some(ref nid) = network_id_param {
+        count_sql = count_sql.bind(nid);
     }
 
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
@@ -154,6 +166,9 @@ pub async fn get_ip_managers(
     }
     if let Some(ref pattern) = ip_address_param {
         data_sql = data_sql.bind(pattern);
+    }
+    if let Some(ref nid) = network_id_param {
+        data_sql = data_sql.bind(nid);
     }
     data_sql = data_sql.bind(page_size as i32).bind(offset as i32);
 
@@ -546,20 +561,18 @@ pub async fn update_ip_manager(
          position_id = $2,
          switch_port_id = $3,
          device_type = COALESCE($4, device_type),
-         network_id = $5, 
-         ip_address = COALESCE(CAST($6 AS INET), ip_address), 
-         mac_address = COALESCE($7, mac_address), 
-         hostname = COALESCE($8, hostname), 
-         status = COALESCE($9, status), 
-         ip_version = $10, 
-         updated_at = $11 
-         WHERE id = $12",
+         ip_address = COALESCE(CAST($5 AS INET), ip_address), 
+         mac_address = COALESCE($6, mac_address), 
+         hostname = COALESCE($7, hostname), 
+         status = COALESCE($8, status), 
+         ip_version = $9, 
+         updated_at = $10 
+         WHERE id = $11",
     )
     .bind(req.workstation_id)
     .bind(req.position_id)
     .bind(req.switch_port_id)
     .bind(&req.device_type)
-    .bind(network_id)
     .bind(&req.ip_address)
     .bind(&req.mac_address)
     .bind(&req.hostname)
@@ -963,7 +976,21 @@ pub async fn get_available_ips(
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
+        sqlx::query_scalar(
+            r"SELECT host(i.ip_address)::TEXT 
+              FROM ips i
+              WHERE i.id IN (
+                  SELECT i2.id FROM ips i2
+                  LEFT JOIN workstations w ON i2.workstation_id = w.id
+                  LEFT JOIN positions p ON i2.position_id = p.id
+                  LEFT JOIN cabinets c ON p.cabinet_id = c.id
+                  WHERE EXISTS (
+                      SELECT 1 FROM room_networks rn 
+                      WHERE rn.network_id = $1 
+                      AND rn.room_id = COALESCE(w.room_id, c.room_id)
+                  )
+              )"
+        )
             .bind(network_id)
             .fetch_all(&state.pool()?.get_conn())
             .await?;
