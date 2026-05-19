@@ -102,6 +102,19 @@ pub async fn save_layout(
 
         let mut tx = state.pool()?.get_conn().begin().await?;
 
+        let cabinet_ids: Vec<Uuid> = req.layout.iter().map(|item| item.id).collect();
+        let existing_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM cabinets WHERE id = ANY($1) AND room_id = $2"
+        )
+        .bind(&cabinet_ids)
+        .bind(room_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if existing_count as usize != cabinet_ids.len() {
+            return Err(AppError::Validation("部分机柜ID不存在或不属于该房间".to_string()));
+        }
+
         for item in &req.layout {
             sqlx::query(
                 "INSERT INTO cabinet_layouts (cabinet_id, x, y, width, height, rotation) 

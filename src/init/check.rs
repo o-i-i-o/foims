@@ -146,8 +146,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "snmp_priv_protocol",
             "snmp_priv_password",
             "snmp_port",
-            "parent_switch_id",
-            "parent_port_id",
             "description",
             "created_at",
             "updated_at",

@@ -339,12 +339,24 @@
         <input type="hidden" id="cabinet-position-id" />
         <div class="form-row">
           <div class="form-group">
-            <label for="cabinet-position-cabinet"><span data-i18n="cabinet_position.cabinet">Cabinet</span><span class="required">*</span></label>
-            <select id="cabinet-position-cabinet" name="cabinet_id" required></select>
-          </div>
-          <div class="form-group">
             <label for="cabinet-position-name"><span data-i18n="cabinet_position.name">Position Name</span><span class="required">*</span></label>
             <input type="text" id="cabinet-position-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="cabinet-position-room"><span data-i18n="cabinet_position.room">Room</span><span class="required">*</span></label>
+            <select id="cabinet-position-room" name="room_id" required>
+              <option value="">请选择房间</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-cabinet"><span data-i18n="cabinet_position.cabinet">Cabinet</span><span class="required">*</span></label>
+            <select id="cabinet-position-cabinet" name="cabinet_id" required>
+              <option value="">请先选择房间</option>
+            </select>
+          </div>
+          <div class="form-group">
           </div>
         </div>
         <div class="form-row">

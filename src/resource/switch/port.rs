@@ -333,18 +333,6 @@ pub async fn delete_switch_port(
 ) -> Result<HttpResponse, AppError> {
     let port_id = path.into_inner();
 
-    let has_child_switch = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_port_id = $1)",
-    )
-    .bind(port_id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await
-    ?;
-
-    if has_child_switch {
-        return Err(AppError::Validation("该端口有下级交换机连接，无法删除".to_string()));
-    }
-
     let has_workstation = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM ips WHERE switch_port_id = $1 AND workstation_id IS NOT NULL)",
     )

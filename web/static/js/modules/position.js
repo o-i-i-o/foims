@@ -108,8 +108,8 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         const row = document.createElement("tr");
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${cabinetName}</td>
                     <td>${positionName}</td>
+                    <td>${cabinetName}</td>
                     <td>${deviceTypeHtml}</td>
                     <td>${ipsHtml}</td>
                     <td>${position.start_u} - ${position.end_u} U</td>
@@ -258,17 +258,90 @@ export async function openCabinetPositionModal(position = null) {
   const title = elementCache.get('cabinet-position-modal-title');
   const form = elementCache.get('cabinet-position-form');
 
-  // 加载机柜选项
-  await loadCabinetsForModalSelect();
+  const roomSelect = elementCache.get('cabinet-position-room');
+  const cabinetSelect = elementCache.get('cabinet-position-cabinet');
 
   // 使用单例manager
   const ipManager = getManager('cabinet-position');
   ipManager.clear();
-
-  const cabinetSelect = elementCache.get('cabinet-position-cabinet');
   
   const { handleCabinetPositionCabinetChange } = await import("../utils/ipconfig.js");
   
+  // 从 cabinets 数据源只读加载房间选项（去重）
+  const loadRoomsFromCabinets = async () => {
+    roomSelect.innerHTML = '<option value="">请选择房间</option>';
+    
+    try {
+      const result = await apiGet('/api/resources/cabinets');
+      if (result.success && result.data) {
+        const cabinets = result.data.items || result.data;
+        const roomMap = new Map();
+        
+        cabinets.forEach(cabinet => {
+          if (cabinet.room_id && cabinet.room_name && !roomMap.has(cabinet.room_id)) {
+            roomMap.set(cabinet.room_id, cabinet.room_name);
+          }
+        });
+        
+        roomMap.forEach((roomName, roomId) => {
+          const option = document.createElement('option');
+          option.value = roomId;
+          option.textContent = roomName;
+          roomSelect.appendChild(option);
+        });
+      }
+    } catch (error) {
+      console.error('从机柜数据加载房间失败:', error);
+    }
+  };
+
+  // 房间选择变化时加载机柜（只读）
+  const handleRoomChange = async () => {
+    const roomId = roomSelect.value;
+    cabinetSelect.innerHTML = '<option value="">请选择机柜</option>';
+    
+    if (roomId) {
+      try {
+        const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}`);
+        if (result.success && result.data) {
+          const cabinets = result.data.items || result.data;
+          cabinets.forEach(cabinet => {
+            const option = document.createElement('option');
+            option.value = cabinet.id;
+            option.textContent = cabinet.name;
+            cabinetSelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('加载机柜失败:', error);
+      }
+    }
+  };
+
+  // 通过 cabinet_id 从 cabinets 数据源只读获取房间信息
+  const loadRoomByCabinetId = async (cabinetId) => {
+    try {
+      const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
+      if (result.success && result.data) {
+        return {
+          roomId: result.data.room_id,
+          roomName: result.data.room_name
+        };
+      }
+    } catch (error) {
+      console.error('从机柜数据获取房间信息失败:', error);
+    }
+    return null;
+  };
+
+  // 加载房间选项（从 cabinets 数据源只读）
+  await loadRoomsFromCabinets();
+
+  if (roomSelect) {
+    roomSelect.removeEventListener('change', handleRoomChange);
+    roomSelect.addEventListener('change', handleRoomChange);
+  }
+
   if (cabinetSelect) {
     cabinetSelect.removeEventListener("change", handleCabinetPositionCabinetChange);
     cabinetSelect.addEventListener("change", handleCabinetPositionCabinetChange);
@@ -279,10 +352,19 @@ export async function openCabinetPositionModal(position = null) {
     title.textContent = "编辑机位";
     elementCache.setValue('cabinet-position-id', position.id);
     elementCache.setValue('cabinet-position-name', position.name);
-    elementCache.setValue('cabinet-position-cabinet', position.cabinet_id);
     elementCache.setValue('cabinet-position-start-u', position.start_u || 1);
     elementCache.setValue('cabinet-position-end-u', position.end_u || 1);
     elementCache.setValue('cabinet-position-description', position.description || "");
+
+    // 通过 cabinet_id 从 cabinets 数据源只读获取房间信息
+    if (position.cabinet_id) {
+      const roomInfo = await loadRoomByCabinetId(position.cabinet_id);
+      if (roomInfo && roomInfo.roomId) {
+        elementCache.setValue('cabinet-position-room', roomInfo.roomId);
+        await handleRoomChange();
+        elementCache.setValue('cabinet-position-cabinet', position.cabinet_id);
+      }
+    }
 
     // 编辑模式下加载IP配置
     if (position.ips && position.ips.length > 0) {
@@ -297,5 +379,6 @@ export async function openCabinetPositionModal(position = null) {
     title.textContent = "添加机位";
     form.reset();
     elementCache.setValue('cabinet-position-id', '');
+    cabinetSelect.innerHTML = '<option value="">请先选择房间</option>';
   }
 }

@@ -412,6 +412,9 @@ export class IpConfigManager {
       const networkSelect = row.querySelector(`.${this.config.classPrefix}-ip-network-select`);
       const ipAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-address-input`);
       const macAddressInput = row.querySelector(`.${this.config.classPrefix}-ip-mac-address-input`);
+      const switchSelect = row.querySelector(`.${this.config.classPrefix}-ip-switch-select`);
+      const portSelect = row.querySelector(`.${this.config.classPrefix}-ip-port-select`);
+      
       if (networkSelect && ipAddressInput) {
         const networkId = networkSelect.value;
         const ipAddress = ipAddressInput.value ? ipAddressInput.value.trim() : '';
@@ -433,6 +436,14 @@ export class IpConfigManager {
           
           if (networkRegionSelect && networkRegionSelect.value) {
             ipData.network_region_id = networkRegionSelect.value;
+          }
+
+          if (switchSelect && switchSelect.value) {
+            ipData.switch_id = switchSelect.value;
+          }
+
+          if (portSelect && portSelect.value) {
+            ipData.switch_port_id = portSelect.value;
           }
 
           ips.push(ipData);
@@ -630,9 +641,8 @@ export class IpConfigManager {
       return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
     }).join('');
 
-    const switchLabel = this.config.switchLabel || '上级交换机';
-    const portLabel = this.config.portLabel || '上级端口';
-    const requiredMark = this.config.parentSwitchRequired ? '<span class="required">*</span>' : '';
+    const switchLabel = this.config.switchLabel || '交换机';
+    const portLabel = this.config.portLabel || '端口';
 
     div.innerHTML = `
       <div class="form-row">
@@ -662,6 +672,20 @@ export class IpConfigManager {
         </div>
       </div>
       <div class="form-row">
+        <div class="form-group">
+          <label>${switchLabel}</label>
+          <select class="${this.config.classPrefix}-ip-switch-select form-control">
+            <option value="">请选择交换机</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>${portLabel}</label>
+          <select class="${this.config.classPrefix}-ip-port-select form-control">
+            <option value="">请选择端口</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group" style="display: flex; align-items: flex-end; gap: 8px;">
           <button type="button" class="btn btn-danger btn-sm remove-ip-btn">删除</button>
           <button type="button" class="btn btn-secondary btn-sm add-ip-btn" data-i18n="ip.add_ip">添加IP地址</button>
@@ -688,6 +712,8 @@ export class IpConfigManager {
     const networkSelect = row.querySelector(`.${this.config.classPrefix}-ip-network-select`);
     const ipInput = row.querySelector(`.${this.config.classPrefix}-ip-address-input`);
     const macInput = row.querySelector(`.${this.config.classPrefix}-ip-mac-address-input`);
+    const switchSelect = row.querySelector(`.${this.config.classPrefix}-ip-switch-select`);
+    const portSelect = row.querySelector(`.${this.config.classPrefix}-ip-port-select`);
 
     if (regionSelect && networkSelect) {
       regionSelect.addEventListener("change", async () => {
@@ -779,9 +805,24 @@ export class IpConfigManager {
 
       if (initialData.ip_address && ipInput) ipInput.value = initialData.ip_address;
       if (initialData.mac_address && macInput) macInput.value = initialData.mac_address;
+      
+      if (switchSelect && portSelect) {
+        await this.loadSwitches(switchSelect, portSelect);
+        
+        if (initialData.switch_id && switchSelect) {
+          switchSelect.value = initialData.switch_id;
+          await this.handleSwitchChange(switchSelect, portSelect);
+          if (initialData.switch_port_id && portSelect) {
+            portSelect.value = initialData.switch_port_id;
+          }
+        }
+      }
     } else {
       if (regionSelect) {
         regionSelect.dispatchEvent(new Event('change'));
+      }
+      if (switchSelect && portSelect) {
+        await this.loadSwitches(switchSelect, portSelect);
       }
     }
   }

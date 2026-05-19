@@ -704,8 +704,6 @@ pub struct Switch {
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
     pub snmp_port: i32,
-    pub parent_switch_id: Option<Uuid>,
-    pub parent_port_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -727,10 +725,6 @@ pub struct SwitchWithParent {
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
     pub snmp_port: i32,
-    pub parent_switch_id: Option<Uuid>,
-    pub parent_switch_name: Option<String>,
-    pub parent_port_id: Option<Uuid>,
-    pub parent_port_number: Option<String>,
     pub position_id: Option<Uuid>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
@@ -777,8 +771,6 @@ pub struct SwitchCreate {
     #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
-    pub parent_switch_id: Option<Uuid>,
-    pub parent_port_id: Option<Uuid>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -807,8 +799,6 @@ pub struct SwitchUpdate {
     #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
-    pub parent_switch_id: Option<Uuid>,
-    pub parent_port_id: Option<Uuid>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,

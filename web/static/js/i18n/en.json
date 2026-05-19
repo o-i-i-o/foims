@@ -238,6 +238,7 @@
   "cabinet_position": {
     "name": "Position Name",
     "cabinet": "Cabinet",
+    "room": "Room",
     "u_position": "U Position",
     "start_u": "Start U",
     "end_u": "End U",

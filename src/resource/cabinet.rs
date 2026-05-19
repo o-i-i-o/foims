@@ -377,10 +377,13 @@ pub async fn get_cabinet_position(
     let id = *id_path;
 
     let position_data = sqlx::query(
-        r"SELECT id, name, cabinet_id, start_u, end_u, description, 
-                  device_type, device_id,
-                  created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ 
-           FROM positions WHERE id = $1",
+        r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description, 
+                  p.device_type, p.device_id,
+                  p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ,
+                  c.room_id
+           FROM positions p
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           WHERE p.id = $1",
     )
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
@@ -477,6 +480,7 @@ pub async fn get_cabinet_position(
         "name": position_data.get::<String, _>("name"),
         "cabinet_id": position_data.get::<Option<Uuid>, _>("cabinet_id"),
         "cabinet_name": cabinet_name,
+        "room_id": position_data.get::<Option<Uuid>, _>("room_id"),
         "start_u": position_data.get::<i32, _>("start_u"),
         "end_u": position_data.get::<i32, _>("end_u"),
         "device_type": device_type,
@@ -669,26 +673,31 @@ pub async fn delete_cabinet_position(
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
-    let has_switch: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM positions p WHERE p.id = $1 AND p.device_type = 'switch')"
+    let device_info: Option<(String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT device_type, device_id FROM positions WHERE id = $1"
     )
     .bind(id)
-    .fetch_one(&mut *tx)
-    .await
-    ?;
+    .fetch_optional(&mut *tx)
+    .await?;
 
-    if has_switch {
-        return Err(AppError::Validation("该机位已关联交换机，请通过删除交换机来删除机位".to_string()));
-    }
+    if let Some((device_type, device_id)) = device_info
+        && device_type == "switch"
+        && let Some(switch_id) = device_id
+    {
+        sqlx::query("DELETE FROM ips WHERE position_id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
 
-    let device_type: Option<String> = sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .flatten();
+        sqlx::query("DELETE FROM switch_ports WHERE switch_id = $1")
+            .bind(switch_id)
+            .execute(&mut *tx)
+            .await?;
 
-    if device_type.as_deref() == Some("switch") {
-        return Err(AppError::Validation("该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机".to_string()));
+        sqlx::query("DELETE FROM switches WHERE id = $1")
+            .bind(switch_id)
+            .execute(&mut *tx)
+            .await?;
     }
 
     sqlx::query("DELETE FROM ips WHERE position_id = $1")

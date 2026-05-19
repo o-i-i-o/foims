@@ -27,16 +27,11 @@ export function getSwitchFormValues() {
   const manager = getManager('switch');
   const rawIps = manager ? manager.getIps() : [];
 
-  let parentSwitchId = null;
-  let parentPortId = null;
   let networkRegionId = null;
 
   const ips = rawIps.map(ip => {
-    if (ip.parent_switch_id) parentSwitchId = ip.parent_switch_id;
-    if (ip.parent_port_id) parentPortId = ip.parent_port_id;
     if (ip.network_region_id) networkRegionId = ip.network_region_id;
-    const { parent_switch_id, parent_port_id, ...rest } = ip;
-    return rest;
+    return ip;
   });
 
   return {
@@ -54,8 +49,6 @@ export function getSwitchFormValues() {
     snmp_auth_password: maskToNull(elementCache.getValue('switch-snmp-auth-password')),
     snmp_priv_protocol: elementCache.getValue('switch-snmp-priv-protocol') || null,
     snmp_priv_password: maskToNull(elementCache.getValue('switch-snmp-priv-password')),
-    parent_switch_id: parentSwitchId,
-    parent_port_id: parentPortId,
     ips: ips,
     network_region_id: networkRegionId || positionData.networkRegionId,
     position_id: positionData.positionId || null
@@ -107,12 +100,7 @@ export async function setSwitchFormValues(sw) {
   const manager = getManager('switch');
   if (manager) {
     manager.setExcludeSwitchId(sw.id || null);
-    const ipsWithParent = (sw.ips || []).map(ip => ({
-      ...ip,
-      parent_switch_id: sw.parent_switch_id,
-      parent_port_id: sw.parent_port_id
-    }));
-    await manager.loadIps(ipsWithParent);
+    await manager.loadIps(sw.ips || []);
   }
 }
 

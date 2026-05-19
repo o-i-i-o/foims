@@ -240,6 +240,7 @@
   "cabinet_position": {
     "name": "机位名称",
     "cabinet": "机柜",
+    "room": "房间",
     "u_position": "U位",
     "start_u": "起始U位",
     "end_u": "结束U位",

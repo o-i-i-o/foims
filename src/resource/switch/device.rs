@@ -23,8 +23,6 @@ const SWITCHES_DETAIL_COLUMNS: &str = r"
     snmp_priv_protocol,
     snmp_priv_password,
     snmp_port,
-    parent_switch_id, parent_switch_name,
-    parent_port_id, parent_port_number,
     position_id,
     cabinet_id, cabinet_name,
     start_u, end_u,
@@ -45,7 +43,6 @@ const SWITCH_COLUMNS: &str = r"
     snmp_priv_protocol,
     snmp_priv_password,
     snmp_port,
-    parent_switch_id, parent_port_id,
     description, created_at, updated_at,
     position_id";
 
@@ -379,9 +376,9 @@ pub async fn create_switch(
             id, name, model, vendor,
             location, snmp_version, snmp_community, snmp_username,
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port, parent_switch_id, parent_port_id,
+            snmp_priv_password, snmp_port,
             description, created_at, updated_at, position_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)"
     )
     .bind(id)
     .bind(&req.name)
@@ -396,8 +393,6 @@ pub async fn create_switch(
     .bind(&req.snmp_priv_protocol)
     .bind(&encrypted_snmp_priv_password)
     .bind(req.snmp_port.unwrap_or(161))
-    .bind(req.parent_switch_id)
-    .bind(req.parent_port_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -499,16 +494,6 @@ pub async fn update_switch(
         return Err(AppError::NotFound("交换机不存在".to_string()));
     }
 
-    if let Some(parent_switch_id) = req.parent_switch_id {
-        if parent_switch_id == id {
-            return Err(AppError::Validation("不能将自己设置为上级交换机".to_string()));
-        }
-
-        if check_switch_cycle(&state.pool()?.get_conn(), id, parent_switch_id).await? {
-            return Err(AppError::Validation("检测到交换机层级循环引用，无法设置此上级交换机".to_string()));
-        }
-    }
-
     let now = Utc::now();
 
     let encrypted_snmp_community = req
@@ -557,12 +542,10 @@ pub async fn update_switch(
             snmp_priv_protocol = COALESCE($10, snmp_priv_protocol),
             snmp_priv_password = COALESCE($11, snmp_priv_password),
             snmp_port = COALESCE($12, snmp_port),
-            parent_switch_id = $13,
-            parent_port_id = $14,
-            description = COALESCE($15, description),
-            updated_at = $16,
-            position_id = COALESCE($17, position_id)
-        WHERE id = $18",
+            description = COALESCE($13, description),
+            updated_at = $14,
+            position_id = COALESCE($15, position_id)
+        WHERE id = $16",
     )
     .bind(&req.name)
     .bind(&req.model)
@@ -576,8 +559,6 @@ pub async fn update_switch(
     .bind(&req.snmp_priv_protocol)
     .bind(&encrypted_snmp_priv_password)
     .bind(req.snmp_port)
-    .bind(req.parent_switch_id)
-    .bind(req.parent_port_id)
     .bind(&req.description)
     .bind(now)
     .bind(req.position_id)
@@ -684,18 +665,6 @@ pub async fn delete_switch(
 ) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    let has_children = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM switches WHERE parent_switch_id = $1)",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await
-    ?;
-
-    if has_children {
-        return Err(AppError::Validation("该交换机存在下级交换机，无法删除".to_string()));
-    }
-
     if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
         .bind(id)
         .execute(&state.pool()?.get_conn())
@@ -743,33 +712,4 @@ pub async fn delete_switch(
     tracing::info!("交换机删除成功, ID: {}", id);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除交换机成功")))
-}
-
-async fn check_switch_cycle(pool: &sqlx::PgPool, switch_id: Uuid, parent_id: Uuid) -> Result<bool, AppError> {
-    let mut current = parent_id;
-    let mut visited = std::collections::HashSet::new();
-
-    while !visited.contains(&current) {
-        if current == switch_id {
-            return Ok(true);
-        }
-        visited.insert(current);
-
-        let next_parent: Option<Uuid> =
-            match sqlx::query_scalar("SELECT parent_switch_id FROM switches WHERE id = $1")
-                .bind(current)
-                .fetch_optional(pool)
-                .await
-            {
-                Ok(Some(id)) => id,
-                Ok(None) | Err(_) => break,
-            };
-
-        match next_parent {
-            Some(id) => current = id,
-            None => break,
-        }
-    }
-
-    Ok(false)
 }

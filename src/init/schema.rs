@@ -250,8 +250,6 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             snmp_priv_protocol VARCHAR(10),
             snmp_priv_password VARCHAR(100),
             snmp_port INTEGER DEFAULT 161,
-            parent_switch_id UUID REFERENCES switches(id) ON DELETE SET NULL,
-            parent_port_id UUID,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -259,12 +257,6 @@ async fn create_switch_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-
-    if let Err(e) = sqlx::query(
-        "ALTER TABLE switches ADD CONSTRAINT fk_parent_port_id FOREIGN KEY (parent_port_id) REFERENCES switch_ports(id) ON DELETE SET NULL"
-    ).execute(pool).await {
-        warn!("switches.fk_parent_port_id约束可能已存在: {}", e);
-    }
 
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS switch_ports (
@@ -561,6 +553,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_ips_drop_network_id_v2(pool).await?;
     migrate_ip_with_details_network_match(pool).await?;
     migrate_workstation_layouts_structure(pool).await?;
+    migrate_switch_parent_columns_removal(pool).await?;
     Ok(())
 }
 
@@ -2117,6 +2110,101 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) VALUES ('ip_with_details_network_match', '更新ip_with_details视图，根据IP地址匹配正确的网络CIDR')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_switch_parent_columns_removal(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'switch_parent_columns_removal'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE switches DROP CONSTRAINT IF EXISTS fk_parent_port_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches.fk_parent_port_id 约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE switches DROP CONSTRAINT IF EXISTS switches_parent_switch_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches.parent_switch_id 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_switch_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches.parent_switch_id 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_port_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 switches.parent_port_id 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE VIEW switches_with_details AS
+            SELECT 
+                s.id, s.name, s.position_id, s.model, s.vendor,
+                s.location, s.snmp_version, 
+                s.snmp_community,
+                s.snmp_username, s.snmp_auth_protocol, 
+                s.snmp_auth_password,
+                s.snmp_priv_protocol, 
+                s.snmp_priv_password,
+                s.snmp_port,
+                p.cabinet_id, c.name as cabinet_name,
+                p.start_u, p.end_u,
+                rn.network_id as position_network_id,
+                n.network_region_id,
+                s.description,
+                'switch' as device_type,
+                host(im.ip_address) as ip_address,
+                im.mac_address,
+                s.created_at, s.updated_at
+            FROM switches s
+            LEFT JOIN positions p ON s.position_id = p.id
+            LEFT JOIN cabinets c ON p.cabinet_id = c.id
+            LEFT JOIN rooms r ON c.room_id = r.id
+            LEFT JOIN room_networks rn ON r.id = rn.room_id
+            LEFT JOIN network_cidrs n ON rn.network_id = n.id
+            LEFT JOIN LATERAL (
+                SELECT ip_address, mac_address
+                FROM ips 
+                WHERE position_id = p.id
+                LIMIT 1
+            ) im ON true",
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("更新 switches_with_details 视图失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('switch_parent_columns_removal', '删除 switches 表的 parent_switch_id 和 parent_port_id 列，交换机端口完全由 switch_ports 表管理')"
         )
         .execute(pool)
         .await?;

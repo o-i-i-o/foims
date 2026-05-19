@@ -59,7 +59,6 @@ async function loadSwitchesData(filters = currentFilters) {
         { field: 'vendor', render: (v) => v || '-' },
         { field: 'location', render: (v) => v || '-' },
         { field: 'snmp_version', render: (v, row) => `<span class="status-badge ${row.snmp_community || row.snmp_username ? 'status-active' : 'status-inactive'}">${v || '-'}</span>` },
-        { field: 'parent_switch_name', render: (v) => v || '-' },
         { field: 'id', render: (v, row) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
           <button class="btn btn-sm btn-secondary btn-switch-ports" data-switch-id="${v}" data-switch-name="${escapeHtml(row.name)}">端口</button>
