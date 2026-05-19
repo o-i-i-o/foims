@@ -64,7 +64,7 @@ async function loadTemplatesFromExternal() {
     return templatesPromise;
 }
 
-export function registerModalTemplate(modalId, templateId) {
+function registerModalTemplate(modalId, templateId) {
     modalTemplates.set(modalId, templateId);
 }
 
@@ -154,34 +154,10 @@ export function closeModal(id) {
     document.body.style.overflow = '';
 }
 
-export function unloadModal(id) {
-    const modal = document.getElementById(id);
-    if (modal) {
-        modal.remove();
-        loadedModals.delete(id);
-    }
-}
-
 export function initModalTemplates() {
     Object.entries(MODAL_REGISTRY).forEach(([modalId, templateId]) => {
         registerModalTemplate(modalId, templateId);
     });
-}
-
-export function isModalLoaded(id) {
-    return loadedModals.has(id);
-}
-
-export function preloadModals(modalIds) {
-    const preload = async () => {
-        await loadTemplatesFromExternal();
-    };
-    
-    if (document.readyState === 'complete') {
-        preload();
-    } else {
-        window.addEventListener('load', preload);
-    }
 }
 
 export function preloadModalsOnIdle() {
@@ -195,25 +171,3 @@ export function preloadModalsOnIdle() {
         }, 1000);
     }
 }
-
-export function getLoadedModalIds() {
-    return Array.from(loadedModals);
-}
-
-export function getAvailableModalIds() {
-    return Object.keys(MODAL_REGISTRY);
-}
-
-export default {
-    registerModalTemplate,
-    loadModal,
-    openModal,
-    closeModal,
-    unloadModal,
-    initModalTemplates,
-    isModalLoaded,
-    preloadModals,
-    preloadModalsOnIdle,
-    getLoadedModalIds,
-    getAvailableModalIds
-};

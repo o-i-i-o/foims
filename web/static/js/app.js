@@ -20,6 +20,11 @@ import {
   initLogout,
   checkLoginStatus
 } from "./modules/authManager.js";
+import { 
+  prefetchModules,
+  schedulePreload,
+  lazyLoad
+} from "./utils/resourceLoader.js";
 
 // ==========================================
 // 应用初始化
@@ -45,7 +50,7 @@ async function initApp() {
     initAutoRefresh();
     await initPageTimeout();
     
-    preloadModalsOnIdle();
+    initResourcePreloading();
     
   } catch (error) {
     console.error("应用程序初始化失败:", error);
@@ -87,6 +92,30 @@ function getResourceCallbacks() {
     submitSwitchPortForm: createCallback('switch/switchDevice', 'submitSwitchPortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
   };
+}
+
+function initResourcePreloading() {
+  prefetchModules([
+    'apiClient',
+    'toast',
+    'confirm',
+    'formatter',
+    'ui'
+  ]);
+  
+  schedulePreload([
+    'networks',
+    'room',
+    'workstation',
+    'cabinet',
+    'position',
+    'switchDevice',
+    'visualizationManager'
+  ], { delay: 2000, priority: 'low' });
+  
+  lazyLoad('dashboard', { when: 'idle' });
+  
+  preloadModalsOnIdle();
 }
 
 // 启动应用

@@ -10,11 +10,7 @@ const PAGE_STYLES = {
   system: ['/static/css/pages/dashboard.css']
 };
 
-export function isStyleLoaded(href) {
-  return loadedStyles.has(href);
-}
-
-export async function loadStyle(href) {
+async function loadStyle(href) {
   if (loadedStyles.has(href)) {
     return true;
   }
@@ -73,22 +69,3 @@ export function preloadPageStyles(pageId) {
     }
   });
 }
-
-export function unloadStyle(href) {
-  const links = document.querySelectorAll(`link[rel="stylesheet"][href="${href}"]`);
-  links.forEach(link => link.remove());
-  loadedStyles.delete(href);
-}
-
-export function getLoadedStyles() {
-  return new Set(loadedStyles);
-}
-
-export default {
-  loadStyle,
-  loadPageStyles,
-  preloadPageStyles,
-  unloadStyle,
-  isStyleLoaded,
-  getLoadedStyles
-};
