@@ -47,7 +47,7 @@ async function initApp() {
     
     displayCurrentUser();
     initLogout();
-    initAutoRefresh();
+    await initAutoRefresh();
     await initPageTimeout();
     
     initResourcePreloading();

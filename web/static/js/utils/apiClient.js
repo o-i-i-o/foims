@@ -30,6 +30,14 @@ export class ApiClient {
   static #isRedirecting = false;
   
   static #refreshPromise = null;
+  
+  static #lastRefreshTime = 0;
+  
+  static #refreshThresholdMs = 5 * 60 * 1000;
+  
+  static setRefreshThreshold(thresholdMs) {
+    this.#refreshThresholdMs = thresholdMs;
+  }
 
   static async request(url, options = {}, retryCount = 0) {
     const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : '';
@@ -40,6 +48,11 @@ export class ApiClient {
     }
 
     const now = Date.now();
+    
+    if (!this.isPublicAuthEndpoint(url) && now - this.#lastRefreshTime > this.#refreshThresholdMs) {
+      await this.refreshToken();
+    }
+
     const lastRequestTime = this.#requestTimestamps.get(requestKey) || 0;
     if (now - lastRequestTime < this.THROTTLE_INTERVAL) {
       await new Promise(resolve => setTimeout(resolve, this.THROTTLE_INTERVAL - (now - lastRequestTime)));
@@ -369,6 +382,9 @@ export class ApiClient {
 
         if (response.ok) {
           const result = await response.json();
+          if (result.success) {
+            this.#lastRefreshTime = Date.now();
+          }
           return result.success;
         }
         return false;

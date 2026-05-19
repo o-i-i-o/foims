@@ -3,6 +3,7 @@ import {
   apiGet,
   redirectToLogin,
   refreshToken,
+  ApiClient,
 } from "../utils/apiClient.js";
 
 import {
@@ -16,6 +17,22 @@ import {
   hasSession,
   isRememberMe,
 } from "../utils/sessionManager.js";
+
+const parseDuration = (durationStr) => {
+  const match = durationStr.match(/^(\d+)([smhd])$/);
+  if (!match) return 15 * 60;
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  
+  switch (unit) {
+    case 's': return value;
+    case 'm': return value * 60;
+    case 'h': return value * 60 * 60;
+    case 'd': return value * 24 * 60 * 60;
+    default: return 15 * 60;
+  }
+};
 
 export const loginUser = (data, rememberMe) => {
   const { user } = data;
@@ -86,23 +103,39 @@ export const initLogout = () => {
 
 let autoRefreshInterval = null;
 
-export const initAutoRefresh = () => {
+export const initAutoRefresh = async () => {
   if (autoRefreshInterval) {
     clearInterval(autoRefreshInterval);
   }
   
-  if (isRememberMe()) {
-    autoRefreshInterval = setInterval(async () => {
-      try {
-        const refreshed = await refreshToken();
-        if (!refreshed) {
-          console.warn("Token 自动刷新失败");
-        }
-      } catch (error) {
-        console.error("Token 自动刷新错误:", error);
-      }
-    }, 10 * 60 * 1000);
+  let refreshIntervalSeconds = 7 * 60;
+  let refreshThresholdSeconds = 5 * 60;
+  
+  try {
+    const result = await apiGet("/api/system/config");
+    if (result.success && result.data?.jwt?.access_token_expiry) {
+      const accessTokenExpirySeconds = parseDuration(result.data.jwt.access_token_expiry);
+      refreshIntervalSeconds = Math.floor(accessTokenExpirySeconds * 0.45);
+      refreshThresholdSeconds = Math.floor(accessTokenExpirySeconds * 0.3);
+      refreshIntervalSeconds = Math.max(refreshIntervalSeconds, 60);
+      refreshThresholdSeconds = Math.max(refreshThresholdSeconds, 30);
+    }
+  } catch (error) {
+    console.warn("获取JWT配置失败，使用默认刷新间隔:", error);
   }
+  
+  ApiClient.setRefreshThreshold(refreshThresholdSeconds * 1000);
+  
+  autoRefreshInterval = setInterval(async () => {
+    try {
+      const refreshed = await refreshToken();
+      if (!refreshed) {
+        console.warn("Token 自动刷新失败");
+      }
+    } catch (error) {
+      console.error("Token 自动刷新错误:", error);
+    }
+  }, refreshIntervalSeconds * 1000);
 };
 
 const handlePageTimeout = async () => {
