@@ -60,7 +60,11 @@ fn setup_panic_handler() {
 }
 
 fn build_cors_middleware(config: &Config) -> Cors {
-    let allowed_origins = config.server.cors_allowed_origins.clone();
+    let mut allowed_origins = config.server.cors_allowed_origins.clone();
+    
+    let public_url = config.server.public_url.trim_end_matches('/').trim_start_matches("http://").trim_start_matches("https://");
+    allowed_origins.push(format!("http://{}", public_url));
+    allowed_origins.push(format!("https://{}", public_url));
 
     Cors::default()
         .allowed_methods(vec![

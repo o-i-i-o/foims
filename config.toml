@@ -23,7 +23,7 @@ https_port = 443
 auto_https = true
 http_version = "http2"
 cert_type = "self_signed"
-public_url = ""
+public_url = "192.168.6.102"
 page_timeout = 30
 cors_allowed_origins = []
 
