@@ -199,8 +199,10 @@ function initSwitches() {
 export {
   initSwitchSearch,
   loadSwitchesData,
+  openSwitchModal,
   editSwitch,
   deleteSwitch,
+  saveSwitch as submitSwitchForm,
   toggleSnmpConfig,
   testSnmpConnection,
   getSwitchInfoFromSnmp,
@@ -208,6 +210,7 @@ export {
   manageSwitchPorts,
   editSwitchPort,
   deleteSwitchPort,
+  submitSwitchPortForm,
   viewArpTable,
   viewLldpNeighbors,
   setCurrentSwitchId,
