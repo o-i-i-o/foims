@@ -1,4 +1,4 @@
-#visualization {
+#visualization.content-section.active {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -27,13 +27,14 @@
 }
 
 #visualization .tab-content {
-    flex: 1;
-    min-height: 0;
+    display: none;
 }
 
 #visualization .tab-content.active {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 #workstation-visualization-container,
