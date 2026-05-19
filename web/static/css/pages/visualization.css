@@ -1,3 +1,26 @@
+#visualization {
+    position: relative;
+}
+
+#visualization > .tabs {
+    position: absolute;
+    top: var(--space-xl);
+    left: var(--space-xl);
+    z-index: 10;
+    margin-bottom: 0;
+    box-shadow: var(--shadow-md);
+}
+
+#visualization > .tabs .tab-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+#visualization .toolbar {
+    justify-content: flex-end;
+    padding-left: 200px;
+}
+
 #workstation-visualization-container,
 #cabinet-visualization-container {
     height: 600px;
