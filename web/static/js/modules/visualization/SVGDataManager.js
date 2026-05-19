@@ -196,7 +196,16 @@ export class SVGDataManager {
         }
         
         if (hasSavedLayout && cabinets.length > 0) {
-          const containerHeight = this.core.container.clientHeight || 600;
+          let containerHeight = this.core.container.clientHeight;
+          if (!containerHeight || containerHeight < 100) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            containerHeight = this.core.container.clientHeight;
+          }
+          if (!containerHeight || containerHeight < 100) {
+            containerHeight = 600;
+          }
+          
           const padding = 5;
           const availableHeight = containerHeight - padding * 2;
           const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
@@ -211,20 +220,22 @@ export class SVGDataManager {
             
             cabinet.capacity = cabinet.capacity || 45;
             const cabinetHeight = cabinet.capacity * uHeight + 40;
+            const cabinetWidth = 150;
             
             if (savedItem && savedItem.position) {
-              cabinet.position = savedItem.position;
-              cabinet.position.height = cabinetHeight;
+              cabinet.position = {
+                x: savedItem.position.x,
+                y: containerHeight - padding - cabinetHeight,
+                width: savedItem.position.width || cabinetWidth,
+                height: cabinetHeight,
+              };
             } else {
-              const cabinetWidth = 150;
               const gap = 50;
               const startX = 50;
-              const svgHeight = containerHeight;
-              const bottomY = svgHeight - padding;
               
               cabinet.position = {
                 x: startX + index * (cabinetWidth + gap),
-                y: bottomY - cabinetHeight,
+                y: containerHeight - padding - cabinetHeight,
                 width: cabinetWidth,
                 height: cabinetHeight,
               };

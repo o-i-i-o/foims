@@ -527,22 +527,14 @@ pub async fn update_cabinet_position(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let position_info: Option<(Uuid, String, Option<Uuid>)> =
-        sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
-            "SELECT id, device_type, device_id FROM positions WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    let position_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM positions WHERE id = $1)")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
 
-    let Some((_position_id, device_type, _device_id)) = position_info else {
+    if !position_exists {
         return Err(AppError::NotFound("机位未找到".to_string()));
-    };
-
-    let is_switch = device_type == "switch";
-
-    if is_switch {
-        return Err(AppError::Validation("交换机机位请通过交换机管理页面编辑".to_string()));
     }
 
     let now = Utc::now();
@@ -679,30 +671,18 @@ pub async fn delete_cabinet_position(
             .await?;
 
     if existing_position.is_none() {
-        let existing_switch: Option<Uuid> =
-            sqlx::query_scalar::<_, Uuid>("SELECT id FROM switches WHERE id = $1")
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await?;
-
-        if existing_switch.is_some() {
-            return Err(AppError::Validation("该机位是交换机占用的位置，请通过交换机管理页面删除对应的交换机".to_string()));
-        }
-
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
-    let device_info: Option<(String, Option<Uuid>)> = sqlx::query_as(
-        "SELECT device_type, device_id FROM positions WHERE id = $1"
+    let switch_using_position: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM switches WHERE position_id = $1"
     )
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?;
 
-    if let Some((device_type, _device_id)) = &device_info
-        && device_type == "switch"
-    {
-        return Err(AppError::Validation("该机位由交换机创建，请先通过交换机管理删除对应的交换机".to_string()));
+    if switch_using_position.is_some() {
+        return Err(AppError::Validation("该机位被交换机占用，请通过交换机管理页面删除对应的交换机".to_string()));
     }
 
     sqlx::query("DELETE FROM ips WHERE position_id = $1")

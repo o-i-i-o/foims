@@ -111,27 +111,30 @@ function bindLayoutEvents() {
   });
 }
 
-function loadInitialData() {
-  loadRoomsForSelect();
-  loadDataCenterRoomsForSelect("cabinet-room-select");
+async function loadInitialData() {
+  await Promise.all([
+    loadRoomsForSelect(),
+    loadDataCenterRoomsForSelect("cabinet-room-select")
+  ]);
 
-  setTimeout(() => {
-    const visualizationSelect = elementCache.get("room-select");
-    if (visualizationSelect && visualizationSelect.options.length > 0) {
-      const firstRoomId = visualizationSelect.options[0].value;
-      if (firstRoomId) {
-        workstationVisualization.loadSavedLayout(firstRoomId);
-      }
-    }
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  await new Promise(resolve => requestAnimationFrame(resolve));
 
-    const cabinetRoomSelect = elementCache.get("cabinet-room-select");
-    if (cabinetRoomSelect && cabinetRoomSelect.options.length > 1) {
-      const firstRoomId = cabinetRoomSelect.options[1].value;
-      if (firstRoomId) {
-        cabinetVisualization.loadSavedLayout(firstRoomId);
-      }
+  const visualizationSelect = elementCache.get("room-select");
+  if (visualizationSelect && visualizationSelect.options.length > 0) {
+    const firstRoomId = visualizationSelect.options[0].value;
+    if (firstRoomId) {
+      workstationVisualization.loadSavedLayout(firstRoomId);
     }
-  }, 500);
+  }
+
+  const cabinetRoomSelect = elementCache.get("cabinet-room-select");
+  if (cabinetRoomSelect && cabinetRoomSelect.options.length > 1) {
+    const firstRoomId = cabinetRoomSelect.options[1].value;
+    if (firstRoomId) {
+      cabinetVisualization.loadSavedLayout(firstRoomId);
+    }
+  }
 }
 
 export async function initVisualization() {

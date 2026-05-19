@@ -730,6 +730,8 @@ pub struct SwitchWithParent {
     pub position_id: Option<Uuid>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
+    pub room_id: Option<Uuid>,
+    pub room_name: Option<String>,
     pub start_u: Option<i32>,
     pub end_u: Option<i32>,
     pub position_network_id: Option<Uuid>,

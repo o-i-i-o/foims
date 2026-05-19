@@ -25,6 +25,7 @@ const SWITCHES_DETAIL_COLUMNS: &str = r"
     snmp_port,
     position_id,
     cabinet_id, cabinet_name,
+    room_id, room_name,
     start_u, end_u,
     position_network_id, network_region_id,
     description,
@@ -266,7 +267,7 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
         LEFT JOIN room_networks rn ON r.id = rn.room_id
         LEFT JOIN network_cidrs n ON rn.network_id = n.id
         LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-        WHERE m.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+        WHERE m.position_id = (SELECT position_id FROM switches WHERE id = $1)
         ORDER BY m.ip_address",
     )
     .bind(id)
@@ -388,6 +389,19 @@ pub async fn create_switch(
 
         if let Err(e) = position_result {
             tracing::error!("创建交换机关联机位记录失败: {}", e);
+        }
+    } else {
+        if let Err(e) = sqlx::query(
+            "UPDATE positions SET device_type = 'switch', device_id = $1, name = COALESCE(name, $2), updated_at = $3 WHERE id = $4"
+        )
+        .bind(id)
+        .bind(&req.name)
+        .bind(now)
+        .bind(position_id)
+        .execute(&state.pool()?.get_conn())
+        .await
+        {
+            tracing::error!("更新交换机关联机位记录失败: {}", e);
         }
     }
 
@@ -586,16 +600,29 @@ pub async fn update_switch(
     .execute(&state.pool()?.get_conn())
     .await?;
 
+    if let Some(new_position_id) = req.position_id
+        && let Err(e) = sqlx::query(
+            "UPDATE positions SET device_type = 'switch', device_id = $1, updated_at = $2 WHERE id = $3"
+        )
+        .bind(id)
+        .bind(now)
+        .bind(new_position_id)
+        .execute(&state.pool()?.get_conn())
+        .await
+    {
+        tracing::error!("更新新机位关联失败: {}", e);
+    }
+
     if let Some(ips) = &req.ips {
         let position_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
+            "SELECT position_id FROM switches WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await
         .unwrap_or(None);
 
-        if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
+        if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)")
             .bind(id)
             .execute(&state.pool()?.get_conn())
             .await
@@ -605,7 +632,7 @@ pub async fn update_switch(
 
         for ip in ips {
             let ip_exists = sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id != (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $2))",
+                "SELECT EXISTS(SELECT 1 FROM ips WHERE ip_address = CAST($1 AS INET) AND position_id IS DISTINCT FROM (SELECT position_id FROM switches WHERE id = $2))",
             )
             .bind(&ip.ip_address)
             .bind(id)
@@ -685,7 +712,7 @@ pub async fn delete_switch(
 ) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)")
+    if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)")
         .bind(id)
         .execute(&state.pool()?.get_conn())
         .await
@@ -694,7 +721,7 @@ pub async fn delete_switch(
     }
 
     if let Err(e) =
-        sqlx::query("DELETE FROM positions WHERE device_type = 'switch' AND device_id = $1")
+        sqlx::query("DELETE FROM positions WHERE id = (SELECT position_id FROM switches WHERE id = $1)")
             .bind(id)
             .execute(&state.pool()?.get_conn())
             .await

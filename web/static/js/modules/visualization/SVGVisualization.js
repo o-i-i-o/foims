@@ -121,25 +121,28 @@ export class SVGVisualization {
       const startX = 50;
       const padding = 5;
       
-      const containerHeight = this.core.container.clientHeight || 600;
+      let containerHeight = this.core.container.clientHeight;
+      if (!containerHeight || containerHeight < 100) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        containerHeight = this.core.container.clientHeight;
+      }
+      if (!containerHeight || containerHeight < 100) {
+        containerHeight = 600;
+      }
+      
       const availableHeight = containerHeight - padding * 2;
       
       const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
       const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
-      const svgHeight = containerHeight;
-      const bottomY = svgHeight - padding;
 
       cabinets.forEach((cabinet, index) => {
-        const x = startX + index * (cabinetWidth + gap);
-        
         cabinet.capacity = cabinet.capacity || 45;
         const cabinetHeight = cabinet.capacity * uHeight + 40;
 
-        const y = bottomY - cabinetHeight;
-
         cabinet.position = {
-          x: x,
-          y: y,
+          x: startX + index * (cabinetWidth + gap),
+          y: containerHeight - padding - cabinetHeight,
           width: cabinetWidth,
           height: cabinetHeight,
         };
@@ -149,7 +152,7 @@ export class SVGVisualization {
       });
 
       const totalWidth = startX + cabinets.length * (cabinetWidth + gap) + 50;
-      this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${svgHeight}`);
+      this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${containerHeight}`);
       this.core.svg.setAttribute("height", "100%");
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
