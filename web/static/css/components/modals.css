@@ -61,6 +61,11 @@
     max-width: 90vw;
 }
 
+.modal-content.modal-md-custom {
+    max-width: 500px;
+    width: 90%;
+}
+
 .modal.modal-flex {
     display: flex;
 }

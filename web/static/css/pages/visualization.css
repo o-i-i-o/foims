@@ -287,12 +287,6 @@
     border-color: var(--color-text) transparent transparent transparent;
 }
 
-/* 二级模态框样式 */
-.modal-md-custom {
-    max-width: 500px;
-    width: 90%;
-}
-
 /* 二级模态框覆盖层 */
 .modal + .modal {
     z-index: var(--z-modal-secondary);
