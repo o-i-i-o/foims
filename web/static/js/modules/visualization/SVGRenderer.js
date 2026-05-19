@@ -121,6 +121,7 @@ export class SVGRenderer {
     const width = cabinet.position.width || 150;
     const capacity = cabinet.capacity || 45;
     const height = cabinet.position.height || (capacity * 20 + 40);
+    const uHeight = (height - 40) / capacity;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     rect.setAttribute("x", x);
@@ -136,15 +137,14 @@ export class SVGRenderer {
     group.dataset.tooltip = `机柜: ${cabinet.name}\n容量: ${cabinet.capacity || 42}U`;
 
     group.appendChild(rect);
-    this.drawUMarks(cabinet, group, x, y, width, capacity);
+    this.drawUMarks(cabinet, group, x, y, width, capacity, uHeight);
     group.appendChild(text);
     this.elementsGroup.appendChild(group);
 
     return group;
   }
 
-  drawUMarks(cabinet, group, baseX, baseY, width, capacity) {
-    const uHeight = 20;
+  drawUMarks(cabinet, group, baseX, baseY, width, capacity, uHeight) {
     const startY = baseY + 40;
 
     for (let i = 1; i <= capacity; i++) {
@@ -182,14 +182,16 @@ export class SVGRenderer {
     group.dataset.id = position.id;
     group.dataset.cabinetId = cabinet.id;
 
-    const uHeight = 20;
+    const cabinetHeight = cabinet.position?.height || ((cabinet.capacity || 45) * 20 + 40);
+    const capacity = cabinet.capacity || 45;
+    const uHeight = (cabinetHeight - 40) / capacity;
+    
     const startU = position.start_u || 1;
     const endU = position.end_u || startU;
     const height = Math.max((endU - startU + 1) * uHeight, uHeight);
 
     const cabinetY = cabinet.position?.y || 50;
     const cabinetX = cabinet.position?.x || 50;
-    const capacity = cabinet.capacity || 45;
 
     const startY = cabinetY + 40;
     const y = startY + (capacity - endU) * uHeight;

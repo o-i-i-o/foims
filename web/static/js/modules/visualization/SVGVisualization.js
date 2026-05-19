@@ -114,25 +114,20 @@ export class SVGVisualization {
       const cabinetWidth = 150;
       const gap = 50;
       const startX = 50;
-      const bottomPadding = 30;
-      const baseSvgHeight = 800;
+      const padding = 5;
       
-      let maxCabinetHeight = 0;
-      cabinets.forEach(cabinet => {
-        cabinet.capacity = cabinet.capacity || 45;
-        const uHeight = 20;
-        const cabinetHeight = cabinet.capacity * uHeight + 40;
-        maxCabinetHeight = Math.max(maxCabinetHeight, cabinetHeight);
-      });
+      const containerHeight = this.core.container.clientHeight || 600;
+      const availableHeight = containerHeight - padding * 2;
       
-      const svgHeight = Math.max(baseSvgHeight, maxCabinetHeight + 100);
-      const bottomY = svgHeight - bottomPadding;
+      const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
+      const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
+      const svgHeight = containerHeight;
+      const bottomY = svgHeight - padding;
 
       cabinets.forEach((cabinet, index) => {
         const x = startX + index * (cabinetWidth + gap);
         
         cabinet.capacity = cabinet.capacity || 45;
-        const uHeight = 20;
         const cabinetHeight = cabinet.capacity * uHeight + 40;
 
         const y = bottomY - cabinetHeight;
@@ -150,7 +145,7 @@ export class SVGVisualization {
 
       const totalWidth = startX + cabinets.length * (cabinetWidth + gap) + 50;
       this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${svgHeight}`);
-      this.core.svg.setAttribute("height", svgHeight);
+      this.core.svg.setAttribute("height", "100%");
 
       this.currentRoomId = roomId;
     } catch (error) {

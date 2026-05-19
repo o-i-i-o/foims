@@ -196,6 +196,12 @@ export class SVGDataManager {
         }
         
         if (hasSavedLayout && cabinets.length > 0) {
+          const containerHeight = this.core.container.clientHeight || 600;
+          const padding = 5;
+          const availableHeight = containerHeight - padding * 2;
+          const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
+          const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
+          
           let maxX = 0;
           let maxY = 0;
           
@@ -204,19 +210,17 @@ export class SVGDataManager {
             const savedItem = layoutData.find(item => item.id.toLowerCase() === cabinet.id.toLowerCase());
             
             cabinet.capacity = cabinet.capacity || 45;
-            const uHeight = 20;
             const cabinetHeight = cabinet.capacity * uHeight + 40;
             
             if (savedItem && savedItem.position) {
               cabinet.position = savedItem.position;
+              cabinet.position.height = cabinetHeight;
             } else {
               const cabinetWidth = 150;
               const gap = 50;
               const startX = 50;
-              const bottomPadding = 10
-              const baseSvgHeight = 800;
-              const svgHeight = Math.max(baseSvgHeight, cabinetHeight + 100);
-              const bottomY = svgHeight - bottomPadding;
+              const svgHeight = containerHeight;
+              const bottomY = svgHeight - padding;
               
               cabinet.position = {
                 x: startX + index * (cabinetWidth + gap),
@@ -237,7 +241,8 @@ export class SVGDataManager {
           
           if (maxX > 0 || maxY > 0) {
             const padding = 50;
-            this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(800, maxY + 100)}`);
+            this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${containerHeight}`);
+            this.core.svg.setAttribute("height", "100%");
           }
         }
         
