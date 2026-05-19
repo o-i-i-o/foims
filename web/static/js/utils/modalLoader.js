@@ -2,6 +2,9 @@ import { updatePageTranslations } from './i18n.js';
 
 const modalTemplates = new Map();
 const loadedModals = new Set();
+let templatesLoaded = false;
+let templatesLoading = false;
+let templatesPromise = null;
 
 const MODAL_REGISTRY = {
     'network-type-modal': 'network-type-modal-template',
@@ -18,15 +21,60 @@ const MODAL_REGISTRY = {
     'cert-generate-modal': 'cert-generate-modal-template',
     'import-result-modal': 'import-result-modal-template',
     'cert-import-modal': 'cert-import-modal-template',
+    'scheduled-task-modal': 'scheduled-task-modal-template',
+    'task-logs-modal': 'task-logs-modal-template',
 };
+
+async function loadTemplatesFromExternal() {
+    if (templatesLoaded) return true;
+    if (templatesLoading) return templatesPromise;
+    
+    templatesLoading = true;
+    templatesPromise = (async () => {
+        try {
+            const response = await fetch('/static/modals/modals.html');
+            if (!response.ok) {
+                throw new Error(`Failed to load modal templates: ${response.status}`);
+            }
+            
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            const templates = doc.querySelectorAll('template');
+            templates.forEach(template => {
+                const id = template.id;
+                if (id) {
+                    document.body.appendChild(template.cloneNode(true));
+                    const modalId = id.replace('-template', '');
+                    modalTemplates.set(modalId, id);
+                }
+            });
+            
+            templatesLoaded = true;
+            templatesLoading = false;
+            return true;
+        } catch (error) {
+            console.error('加载模态框模板失败:', error);
+            templatesLoading = false;
+            return false;
+        }
+    })();
+    
+    return templatesPromise;
+}
 
 export function registerModalTemplate(modalId, templateId) {
     modalTemplates.set(modalId, templateId);
 }
 
-export function loadModal(id) {
+export async function loadModal(id) {
     if (loadedModals.has(id)) {
         return document.getElementById(id);
+    }
+    
+    if (!templatesLoaded) {
+        await loadTemplatesFromExternal();
     }
     
     const templateId = modalTemplates.get(id) || MODAL_REGISTRY[id];
@@ -59,11 +107,11 @@ export function loadModal(id) {
     return modal;
 }
 
-export function openModal(id, title = '') {
+export async function openModal(id, title = '') {
     let modal = document.getElementById(id);
     
     if (!modal) {
-        modal = loadModal(id);
+        modal = await loadModal(id);
     }
     
     if (!modal) return;
@@ -124,6 +172,20 @@ export function isModalLoaded(id) {
     return loadedModals.has(id);
 }
 
+export function preloadModals(modalIds) {
+    if (!Array.isArray(modalIds)) return;
+    
+    const preload = async () => {
+        await loadTemplatesFromExternal();
+    };
+    
+    if (document.readyState === 'complete') {
+        preload();
+    } else {
+        window.addEventListener('load', preload);
+    }
+}
+
 export default {
     registerModalTemplate,
     loadModal,
@@ -131,5 +193,6 @@ export default {
     closeModal,
     unloadModal,
     initModalTemplates,
-    isModalLoaded
+    isModalLoaded,
+    preloadModals
 };

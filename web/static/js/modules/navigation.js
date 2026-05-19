@@ -7,12 +7,9 @@ import { loadDashboardData } from "./dashboard.js";
 import { initResourceTabs } from "./resourceTabs.js";
 import { loadSwitchesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
 import { loadModule } from "../utils/moduleLoader.js";
+import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { initVisualization } from "./visualization/visualizationManager.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
-
-// ==========================================
-// 常量定义
-// ==========================================
 
 const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {
@@ -121,8 +118,14 @@ function bindNavClickHandlers(navLinks) {
       e.preventDefault();
       
       const targetId = link.getAttribute("href").substring(1);
+      preloadPageStyles(targetId);
       window.location.hash = targetId;
     });
+    
+    link.addEventListener("mouseenter", () => {
+      const targetId = link.getAttribute("href").substring(1);
+      preloadPageStyles(targetId);
+    }, { once: false });
   });
 }
 
@@ -158,6 +161,7 @@ function loadInitialPage() {
  * @param {string} targetId - 目标页面 ID
  */
 async function loadPageContent(targetId) {
+  await loadPageStyles(targetId);
   updateNavActiveState(targetId);
   updateContentVisibility(targetId);
   await executePageLoader(targetId);

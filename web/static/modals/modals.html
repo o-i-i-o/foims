@@ -1,0 +1,790 @@
+<template id="scheduled-task-modal-template">
+<div id="scheduled-task-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduled-task-modal-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="scheduled-task-modal-title" data-i18n="scheduled_tasks.create_task">Create Scheduled Task</h3>
+      <button type="button" class="close" onclick="closeScheduledTaskModal()" aria-label="Close">&times;</button>
+    </header>
+    <form id="scheduled-task-form">
+      <div class="modal-body">
+        <input type="hidden" id="scheduled-task-id">
+        <div class="form-group">
+          <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
+          <input type="text" id="scheduled-task-name" required>
+        </div>
+        <div class="form-group">
+          <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
+          <select id="scheduled-task-type" required>
+            <option value="mac_sync" data-i18n="scheduled_tasks.task_types.mac_sync">MAC Address Sync</option>
+            <option value="token_cleanup" data-i18n="scheduled_tasks.task_types.token_cleanup">Token Cleanup</option>
+            <option value="backup" data-i18n="scheduled_tasks.task_types.backup">Database Backup</option>
+            <option value="log_cleanup" data-i18n="scheduled_tasks.task_types.log_cleanup">Log Cleanup</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
+          <input type="text" id="scheduled-task-cron" value="0 */6 * * *" required>
+          <small class="form-hint" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
+        </div>
+        <div id="scheduled-task-config-section">
+          <div class="form-group" id="mac-sync-config" style="display:none;">
+            <label><span data-i18n="scheduled_tasks.config_fields.switch">Switch</span><span class="required">*</span></label>
+            <select id="scheduled-task-switch-id">
+              <option value="" data-i18n="scheduled_tasks.config_fields.select_switch">Select Switch</option>
+            </select>
+            <label style="margin-top:10px;"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
+            <select id="scheduled-task-network-id">
+              <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
+            </select>
+          </div>
+          <div class="form-group" id="log-cleanup-config" style="display:none;">
+            <label><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
+            <input type="number" id="scheduled-task-keep-days" value="30" min="0">
+            <small class="form-hint" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="scheduled-task-enabled" checked>
+            <span data-i18n="scheduled_tasks.enabled">Enabled</span>
+          </label>
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="scheduled-task-cancel-btn" data-i18n="common.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="common.save">Save</button>
+      </footer>
+    </form>
+  </div>
+</div>
+</template>
+
+<template id="task-logs-modal-template">
+<div id="task-logs-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="task-logs-modal-title">
+  <div class="modal-content" style="max-width: 900px;">
+    <header class="modal-header">
+      <h3 class="modal-title" id="task-logs-modal-title" data-i18n="scheduled_tasks.logs_title">Task Execution Logs</h3>
+      <button type="button" class="close" onclick="closeTaskLogsModal()" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th data-i18n="scheduled_tasks.task_name">Task Name</th>
+            <th data-i18n="common.status">Status</th>
+            <th data-i18n="scheduled_tasks.execution_time">Execution Time</th>
+            <th data-i18n="scheduled_tasks.duration">Duration(ms)</th>
+            <th data-i18n="scheduled_tasks.details">Details</th>
+          </tr>
+        </thead>
+        <tbody id="task-logs-tbody"></tbody>
+      </table>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeTaskLogsModal()" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="network-type-modal-template">
+<div id="network-type-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="network-type-modal-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="network-type-modal-title" data-i18n="network.add_region">Add Network Region</h3>
+      <button type="button" class="close" data-modal-id="network-type-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <form id="network-type-form">
+        <input type="hidden" id="network-type-id" />
+        <div class="form-group">
+          <label for="network-type-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
+          <input type="text" id="network-type-name" name="name" autocomplete="off" required aria-required="true" />
+        </div>
+        <div class="form-group">
+          <label for="network-type-description" data-i18n="network.network_list">Network List</label>
+          <textarea id="network-type-description" name="description" rows="3" data-i18n-placeholder="network.network_list_placeholder" placeholder="Enter networks, one per line"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="network-type-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" form="network-type-form" class="btn btn-primary" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="network-modal-template">
+<div id="network-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="network-modal-title" data-i18n="network.add_network">Add Network</h3>
+      <span class="close" data-modal-id="network-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="network-form">
+        <input type="hidden" id="network-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-name"><span data-i18n="network.name">Network Name</span><span class="required">*</span></label>
+            <input type="text" id="network-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="network-type"><span data-i18n="network.region">Network Region</span><span class="required">*</span></label>
+            <select id="network-type" name="network_type" required></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-cidr">IPv4 CIDR</label>
+            <input type="text" id="network-ipv4-cidr" name="ipv4_cidr" placeholder="e.g., 192.168.1.0/24" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-cidr">IPv6 CIDR</label>
+            <input type="text" id="network-ipv6-cidr" name="ipv6_cidr" placeholder="e.g., 2001:db8::/32" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-gateway" data-i18n="network.ipv4_gateway">IPv4 Gateway</label>
+            <input type="text" id="network-ipv4-gateway" name="ipv4_gateway" placeholder="e.g., 192.168.1.1" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-gateway" data-i18n="network.ipv6_gateway">IPv6 Gateway</label>
+            <input type="text" id="network-ipv6-gateway" name="ipv6_gateway" placeholder="e.g., 2001:db8::1" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-dns">IPv4 DNS</label>
+            <input type="text" id="network-ipv4-dns" name="ipv4_dns" placeholder="e.g., 8.8.8.8, 8.8.4.4" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-dns">IPv6 DNS</label>
+            <input type="text" id="network-ipv6-dns" name="ipv6_dns" placeholder="e.g., 2001:4860:4860::8888, 2001:4860:4860::8844" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="network-description" data-i18n="common.description">Description</label>
+          <textarea id="network-description" name="description" rows="3" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="network-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="network-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="room-modal-template">
+<div id="room-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="room-modal-title" data-i18n="room.add_room">Add Room</h3>
+      <span class="close" data-modal-id="room-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="room-form">
+        <input type="hidden" id="room-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
+            <select id="room-type" name="room_type" required>
+              <option value="office" data-i18n="room.type_office">Office</option>
+              <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
+            <input type="text" id="room-name" name="name" autocomplete="off" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group network-config-wrapper">
+            <div id="network-configs-container">
+              <div class="network-config-item">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label><span data-i18n="network.region">Network Region</span><span class="required">*</span></label>
+                    <select class="network-region-select" required>
+                      <option value="" data-i18n="network.select_region">Select Network Region</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label><span data-i18n="network.select_network">Network</span><span class="required">*</span></label>
+                    <select class="network-select" required>
+                      <option value="" data-i18n="network.select_network">Select Network</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <button type="button" class="btn btn-danger btn-sm remove-network-config-btn" data-i18n="common.delete">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div class="network-config-actions">
+                <button type="button" id="add-network-config-btn" class="btn btn-secondary btn-sm" data-i18n="network.add_network_config">Add Network Config</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="room-description" data-i18n="common.description">Description</label>
+          <textarea id="room-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="room-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="room-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="workstation-modal-template">
+<div id="workstation-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="workstation-modal-title" data-i18n="workstation.add_workstation">Add Workstation</h3>
+      <span class="close" data-modal-id="workstation-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="workstation-form">
+        <input type="hidden" id="workstation-id" />
+        <div class="form-group">
+          <label for="workstation-room"><span data-i18n="workstation.room">Room</span><span class="required">*</span></label>
+          <select id="workstation-room" name="room_id" required></select>
+          <label for="workstation-name"><span data-i18n="workstation.name">Workstation Name</span><span class="required">*</span></label>
+          <input type="text" id="workstation-name" name="name" autocomplete="off" required />
+          <label for="workstation-manager" data-i18n="workstation.manager">Manager</label>
+          <input type="text" id="workstation-manager" name="manager" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <div id="workstation-ips-container"></div>
+        </div>
+        <div class="form-group">
+          <label for="workstation-description" data-i18n="common.description">Description</label>
+          <textarea id="workstation-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="workstation-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="workstation-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="cabinet-modal-template">
+<div id="cabinet-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="cabinet-modal-title" data-i18n="cabinet.add_cabinet">Add Cabinet</h3>
+      <span class="close" data-modal-id="cabinet-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cabinet-form">
+        <input type="hidden" id="cabinet-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-room"><span data-i18n="cabinet.room">Room</span><span class="required">*</span></label>
+            <select id="cabinet-room" name="room_id" required>
+              <option value="" data-i18n="cabinet.select_room">Select Room</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cabinet-name"><span data-i18n="cabinet.name">Cabinet Name</span><span class="required">*</span></label>
+            <input type="text" id="cabinet-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="cabinet-capacity"><span data-i18n="cabinet.capacity">Capacity (U)</span><span class="required">*</span></label>
+            <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="cabinet.inherited_networks">Inherited Networks</label>
+            <div id="cabinet-inherited-networks">
+              <p class="text-muted" data-i18n="cabinet.inherited_networks_hint">Select a room to inherit its network configuration</p>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="cabinet-description" data-i18n="common.description">Description</label>
+          <textarea id="cabinet-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cabinet-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cabinet-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="cabinet-position-modal-template">
+<div id="cabinet-position-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="cabinet-position-modal-title" data-i18n="cabinet_position.add_position">Add Cabinet Position</h3>
+      <span class="close" data-modal-id="cabinet-position-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cabinet-position-form">
+        <input type="hidden" id="cabinet-position-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-cabinet"><span data-i18n="cabinet_position.cabinet">Cabinet</span><span class="required">*</span></label>
+            <select id="cabinet-position-cabinet" name="cabinet_id" required></select>
+          </div>
+          <div class="form-group">
+            <label for="cabinet-position-name"><span data-i18n="cabinet_position.name">Position Name</span><span class="required">*</span></label>
+            <input type="text" id="cabinet-position-name" name="name" autocomplete="off" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-start-u"><span data-i18n="cabinet_position.start_u">Start U</span><span class="required">*</span></label>
+            <input type="number" id="cabinet-position-start-u" name="start_u" min="1" max="48" required value="1" />
+          </div>
+          <div class="form-group">
+            <label for="cabinet-position-end-u"><span data-i18n="cabinet_position.end_u">End U</span><span class="required">*</span></label>
+            <input type="number" id="cabinet-position-end-u" name="end_u" min="1" max="48" required value="1" />
+          </div>
+        </div>
+        <div class="form-group">
+          <div id="cabinet-position-ips-container"></div>
+        </div>
+        <div class="form-group">
+          <label for="cabinet-position-description" data-i18n="common.description">Description</label>
+          <textarea id="cabinet-position-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cabinet-position-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cabinet-position-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="switch-modal-template">
+<div id="switch-modal" class="modal">
+  <div class="modal-content modal-lg">
+    <header class="modal-header">
+      <h3 class="modal-title" id="switch-modal-title" data-i18n="switch.add_switch">Add Switch</h3>
+      <span class="close" data-modal-id="switch-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="switch-form">
+        <input type="hidden" id="switch-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-name"><span data-i18n="switch.name">Switch Name</span><span class="required">*</span></label>
+            <input type="text" id="switch-name" name="name" required autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-model" data-i18n="switch.model">Model</label>
+            <input type="text" id="switch-model" name="model" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="switch-vendor" data-i18n="switch.vendor">Vendor</label>
+            <input type="text" id="switch-vendor" name="vendor" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-description" data-i18n="common.description">Description</label>
+            <input type="text" id="switch-description" name="description" autocomplete="off" />
+          </div>
+        </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.position_config">机位配置</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-cabinet-select" data-i18n="switch.cabinet">机柜</label>
+            <select id="switch-cabinet-select">
+              <option value="" data-i18n="switch.select_cabinet">请选择机柜</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-start-u" data-i18n="switch.start_u">起始U位</label>
+            <input type="number" id="switch-start-u" name="start_u" min="1" max="48" placeholder="1" />
+          </div>
+          <div class="form-group">
+            <label for="switch-end-u" data-i18n="switch.end_u">结束U位</label>
+            <input type="number" id="switch-end-u" name="end_u" min="1" max="48" placeholder="1" />
+          </div>
+        </div>
+        <input type="hidden" id="switch-location" name="location" />
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.ip_config">IP配置</h4>
+        <div class="form-group">
+          <div id="switch-ips-container"></div>
+        </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.snmp_config">SNMP Configuration</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-snmp-version" data-i18n="switch.snmp_version">SNMP Version</label>
+            <select id="switch-snmp-version" name="snmp_version">
+              <option value="v2c">SNMPv1/v2c</option>
+              <option value="v3">SNMPv3</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-snmp-port" data-i18n="switch.snmp_port">SNMP Port</label>
+            <input type="number" id="switch-snmp-port" name="snmp_port" value="161" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row" id="snmp-v2c-config">
+          <div class="form-group flex-1">
+            <label for="switch-snmp-community" data-i18n="switch.snmp_community">Community String</label>
+            <input type="text" id="switch-snmp-community" name="snmp_community" placeholder="public" autocomplete="off" />
+          </div>
+        </div>
+        <div id="snmp-v3-config" class="hidden">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-username" data-i18n="switch.snmp_username">Username</label>
+              <input type="text" id="switch-snmp-username" name="snmp_username" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="switch-snmp-auth-protocol" data-i18n="switch.snmp_auth_protocol">Auth Protocol</label>
+              <select id="switch-snmp-auth-protocol" name="snmp_auth_protocol">
+                <option value="" data-i18n="switch.snmp_no_auth">No Auth</option>
+                <option value="MD5">MD5</option>
+                <option value="SHA">SHA</option>
+                <option value="SHA-224">SHA-224</option>
+                <option value="SHA-256">SHA-256</option>
+                <option value="SHA-384">SHA-384</option>
+                <option value="SHA-512">SHA-512</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-auth-password" data-i18n="switch.snmp_auth_password">Auth Password</label>
+              <input type="password" id="switch-snmp-auth-password" name="snmp_auth_password" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="switch-snmp-priv-protocol" data-i18n="switch.snmp_priv_protocol">Privacy Protocol</label>
+              <select id="switch-snmp-priv-protocol" name="snmp_priv_protocol">
+                <option value="" data-i18n="switch.snmp_no_priv">No Privacy</option>
+                <option value="DES">DES</option>
+                <option value="AES">AES</option>
+                <option value="AES-128">AES-128</option>
+                <option value="AES-192">AES-192</option>
+                <option value="AES-256">AES-256</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-priv-password" data-i18n="switch.snmp_priv_password">Privacy Password</label>
+              <input type="password" id="switch-snmp-priv-password" name="snmp_priv_password" autocomplete="off" />
+            </div>
+            <div class="form-group"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" id="test-snmp-btn" class="btn btn-secondary" data-i18n="switch.test_snmp">Test SNMP</button>
+      <button type="button" id="get-snmp-info-btn" class="btn btn-primary" data-i18n="switch.get_snmp_info">Get Info from SNMP</button>
+      <button type="button" class="btn btn-secondary" data-modal-id="switch-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="switch-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="switch-ports-group-modal-template">
+<div id="switch-ports-group-modal" class="modal">
+  <div class="modal-content modal-lg-custom">
+    <header class="modal-header">
+      <h3 class="modal-title" id="switch-ports-group-modal-title" data-i18n="switch.port_groups">Port Groups</h3>
+      <span class="close" data-modal-id="switch-ports-group-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <div class="port-groups-container"></div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-primary" id="add-port-btn" data-i18n="switch.add_port">Add Port</button>
+      <button type="button" class="btn btn-secondary" id="get-snmp-ports-btn" data-i18n="switch.get_snmp_ports">Get Ports from SNMP</button>
+      <button type="button" class="btn btn-secondary" data-modal-id="switch-ports-group-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="switch-port-detail-modal-template">
+<div id="switch-port-detail-modal" class="modal">
+  <div class="modal-content modal-md-custom">
+    <header class="modal-header">
+      <h3 class="modal-title" id="switch-port-detail-modal-title" data-i18n="switch.port_detail">Port Detail</h3>
+      <span class="close" data-modal-id="switch-port-detail-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="switch-port-form-expanded">
+        <input type="hidden" id="switch-port-id-expanded" />
+        <input type="hidden" id="switch-port-switch-id-expanded" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-port-number-expanded"><span data-i18n="switch.port_number">Port Number</span><span class="required">*</span></label>
+            <input type="text" id="switch-port-number-expanded" name="port_number" required autocomplete="off" placeholder="e.g., Gi0/1, Fa1/0/1" />
+          </div>
+          <div class="form-group">
+            <label for="switch-port-name-expanded" data-i18n="switch.port_name">Port Name</label>
+            <input type="text" id="switch-port-name-expanded" name="port_name" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-port-type-expanded" data-i18n="switch.port_type">Port Type</label>
+            <select id="switch-port-type-expanded" name="port_type">
+              <option value="access">Access</option>
+              <option value="trunk">Trunk</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="uplink">Uplink</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-port-vlan-expanded">VLAN ID</label>
+            <input type="number" id="switch-port-vlan-expanded" name="vlan_id" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-port-status-expanded" data-i18n="ip.status">Status</label>
+            <select id="switch-port-status-expanded" name="status">
+              <option value="up">Up</option>
+              <option value="down">Down</option>
+              <option value="admin-down">Admin Down</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-port-speed-expanded" data-i18n="switch.speed">Speed</label>
+            <input type="text" id="switch-port-speed-expanded" name="speed" autocomplete="off" placeholder="e.g., 1000Mbps" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="switch-port-description-expanded" data-i18n="common.description">Description</label>
+          <textarea id="switch-port-description-expanded" name="description" rows="2"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="switch-port-detail-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="delete-port-btn" data-i18n="common.delete">Delete</button>
+      <button type="button" class="btn btn-primary" id="save-port-btn" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="user-modal-template">
+<div id="user-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="user-modal-title" data-i18n="user.add_user">Add User</h3>
+      <span class="close" data-modal-id="user-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="user-form">
+        <input type="hidden" id="user-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-username"><span data-i18n="auth.username">Username</span><span class="required">*</span></label>
+            <input type="text" id="user-username" name="username" autocomplete="username" required data-i18n-placeholder="user.username_placeholder" placeholder="Enter username" />
+          </div>
+          <div class="form-group">
+            <label for="user-email"><span data-i18n="user.email">Email</span><span class="required">*</span></label>
+            <input type="email" id="user-email" name="email" autocomplete="email" required data-i18n-placeholder="user.email_placeholder" placeholder="Enter email" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-password" data-i18n="auth.password">Password</label>
+            <input type="password" id="user-password" name="password" autocomplete="new-password" data-i18n-placeholder="user.password_placeholder" placeholder="Enter password (required for new users)" />
+          </div>
+          <div class="form-group">
+            <label for="user-password-confirm" data-i18n="auth.confirm_password">Confirm Password</label>
+            <input type="password" id="user-password-confirm" name="password_confirm" autocomplete="new-password" data-i18n-placeholder="user.password_confirm_placeholder" placeholder="Enter password again" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-role"><span data-i18n="user.role">Role</span><span class="required">*</span></label>
+            <select id="user-role" name="role" required>
+              <option value="admin" data-i18n="user.role_admin">Administrator</option>
+              <option value="user" data-i18n="user.role_user">User</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="user-status"><span data-i18n="user.status">Status</span><span class="required">*</span></label>
+            <select id="user-status" name="status" required>
+              <option value="true" data-i18n="user.status_enabled">Enabled</option>
+              <option value="false" data-i18n="user.status_disabled">Disabled</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="user-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="user-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="two-factor-modal-template">
+<div id="two-factor-modal" class="modal">
+  <div class="modal-content modal-lg">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="two_factor.title">Two-Factor Authentication Setup</h3>
+      <span class="close" data-modal-id="two-factor-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <div id="two-factor-setup-step">
+        <div class="form-group">
+          <p class="hint-text" data-i18n="two_factor.scan_hint">Scan the QR code below with your authenticator app, or enter the key manually:</p>
+        </div>
+        <div class="qr-code-container">
+          <img id="two-factor-qr-code" src="" alt="2FA QR Code" />
+        </div>
+        <div class="form-group">
+          <label for="two-factor-secret" data-i18n="two_factor.secret_key">Secret Key</label>
+          <input type="text" id="two-factor-secret" readonly value="" aria-label="2FA secret key" />
+          <input type="hidden" id="two-factor-uri" value="" />
+        </div>
+        <div class="form-group">
+          <label for="two-factor-verify-code" data-i18n="two_factor.verify_code">Verification Code</label>
+          <input type="text" id="two-factor-verify-code" maxlength="6" data-i18n-placeholder="two_factor.verify_code_placeholder" placeholder="Enter 6-digit code" aria-label="2FA verification code" />
+        </div>
+        <div id="two-factor-error" class="error-message" role="alert" aria-live="polite"></div>
+        <div id="two-factor-success" class="success-message" role="status" aria-live="polite"></div>
+      </div>
+      <div id="two-factor-manage-step" class="hidden">
+        <div class="form-group">
+          <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
+        </div>
+        <div class="form-group">
+          <label for="two-factor-disable-code" data-i18n="two_factor.verify_code">Verification Code</label>
+          <input type="text" id="two-factor-disable-code" maxlength="6" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code" />
+        </div>
+        <div id="two-factor-disable-error" class="error-message" role="alert" aria-live="polite"></div>
+      </div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="two-factor-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="button" id="two-factor-enable-btn" class="btn btn-primary" data-i18n="two_factor.enable">Enable 2FA</button>
+      <button type="button" id="two-factor-disable-btn" class="btn btn-danger hidden" data-i18n="two_factor.disable">Disable 2FA</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="cert-generate-modal-template">
+<div id="cert-generate-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cert.generate_title">Generate Self-signed Certificate</h3>
+      <span class="close" data-modal-id="cert-generate-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cert-generate-form">
+        <div class="form-group">
+          <label for="cert-common-name" data-i18n="cert.common_name">Common Name (CN)</label>
+          <input type="text" id="cert-common-name" name="common_name" placeholder="e.g., example.com" required />
+        </div>
+        <div class="form-group">
+          <label for="cert-organization" data-i18n="cert.organization">Organization (O)</label>
+          <input type="text" id="cert-organization" name="organization" data-i18n-placeholder="cert.organization_placeholder" placeholder="Organization name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-organizational-unit" data-i18n="cert.organizational_unit">Organizational Unit (OU)</label>
+          <input type="text" id="cert-organizational-unit" name="organizational_unit" data-i18n-placeholder="cert.ou_placeholder" placeholder="Organizational unit" />
+        </div>
+        <div class="form-group">
+          <label for="cert-country" data-i18n="cert.country">Country (C)</label>
+          <input type="text" id="cert-country" name="country" data-i18n-placeholder="cert.country_placeholder" placeholder="Country code, e.g., CN" maxlength="2" />
+        </div>
+        <div class="form-group">
+          <label for="cert-state" data-i18n="cert.state">State (ST)</label>
+          <input type="text" id="cert-state" name="state" data-i18n-placeholder="cert.state_placeholder" placeholder="State name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-locality" data-i18n="cert.locality">Locality (L)</label>
+          <input type="text" id="cert-locality" name="locality" data-i18n-placeholder="cert.locality_placeholder" placeholder="City name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-validity" data-i18n="cert.validity">Validity (days)</label>
+          <input type="number" id="cert-validity" name="validity" placeholder="Validity days" min="1" value="365" />
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cert-generate-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cert-generate-form" data-i18n="cert.generate">Generate Certificate</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="import-result-modal-template">
+<div id="import-result-modal" class="modal">
+  <div class="modal-content modal-lg">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="import_export.import_result">Import Result</h3>
+      <span class="close" data-modal-id="import-result-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <div id="import-result-content" class="import-result-list"></div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-primary" data-modal-id="import-result-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>
+
+<template id="cert-import-modal-template">
+<div id="cert-import-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cert.import_title">Import Certificate</h3>
+      <span class="close" data-modal-id="cert-import-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cert-import-form">
+        <div class="form-group">
+          <label for="cert-file" data-i18n="cert.cert_file">Certificate File (PEM format)</label>
+          <input type="file" id="cert-file" name="cert_file" accept=".pem,.crt" required />
+        </div>
+        <div class="form-group">
+          <label for="key-file" data-i18n="cert.key_file">Private Key File (PEM format)</label>
+          <input type="file" id="key-file" name="key_file" accept=".pem,.key" required />
+        </div>
+        <div class="form-group">
+          <label for="key-password" data-i18n="cert.key_password">Private Key Password (optional)</label>
+          <input type="password" id="key-password" name="key_password" data-i18n-placeholder="cert.key_password_placeholder" placeholder="Private key password" autocomplete="new-password" />
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cert-import-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cert-import-form" data-i18n="cert.import">Import Certificate</button>
+    </footer>
+  </div>
+</div>
+</template>
