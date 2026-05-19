@@ -10,7 +10,7 @@
 import { initI18n } from "./utils/i18n.js";
 import { initNavigation } from "./modules/navigation.js";
 import { initModals } from "./utils/modal.js";
-import { initModalTemplates } from "./utils/modalLoader.js";
+import { initModalTemplates, preloadModalsOnIdle } from "./utils/modalLoader.js";
 import { initEventListeners } from "./modules/eventManager.js";
 import { initUserEvents } from "./modules/userManager.js";
 import { 
@@ -44,6 +44,8 @@ async function initApp() {
     initLogout();
     initAutoRefresh();
     await initPageTimeout();
+    
+    preloadModalsOnIdle();
     
   } catch (error) {
     console.error("应用程序初始化失败:", error);

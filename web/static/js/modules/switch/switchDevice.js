@@ -109,7 +109,6 @@ async function openSwitchModal(sw = null) {
 
 async function editSwitch(id) {
   const sw = await fetchSwitchById(id);
-  console.log('editSwitch - fetched switch data:', sw);
   if (sw) {
     await openSwitchModal(sw);
   }
@@ -117,7 +116,6 @@ async function editSwitch(id) {
 
 async function saveSwitch() {
   const formData = getSwitchFormValues();
-  console.log('saveSwitch - form data:', formData);
   const success = await submitSwitchForm(formData);
   if (success) {
     closeModal("switch-modal");

@@ -173,8 +173,6 @@ export function isModalLoaded(id) {
 }
 
 export function preloadModals(modalIds) {
-    if (!Array.isArray(modalIds)) return;
-    
     const preload = async () => {
         await loadTemplatesFromExternal();
     };
@@ -186,6 +184,26 @@ export function preloadModals(modalIds) {
     }
 }
 
+export function preloadModalsOnIdle() {
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+            loadTemplatesFromExternal();
+        }, { timeout: 2000 });
+    } else {
+        setTimeout(() => {
+            loadTemplatesFromExternal();
+        }, 1000);
+    }
+}
+
+export function getLoadedModalIds() {
+    return Array.from(loadedModals);
+}
+
+export function getAvailableModalIds() {
+    return Object.keys(MODAL_REGISTRY);
+}
+
 export default {
     registerModalTemplate,
     loadModal,
@@ -194,5 +212,8 @@ export default {
     unloadModal,
     initModalTemplates,
     isModalLoaded,
-    preloadModals
+    preloadModals,
+    preloadModalsOnIdle,
+    getLoadedModalIds,
+    getAvailableModalIds
 };
