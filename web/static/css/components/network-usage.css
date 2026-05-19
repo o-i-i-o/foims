@@ -160,13 +160,25 @@
 }
 
 .usage-ips .table-responsive {
+    width: 100%;
+    overflow-x: auto;
     border-radius: var(--radius-md);
-    overflow: hidden;
+    background: var(--color-bg);
+    box-shadow: var(--shadow-sm);
 }
 
 .usage-ips .table {
+    width: 100%;
     margin-bottom: 0;
+    border-collapse: collapse;
     font-size: 0.8125rem;
+}
+
+.usage-ips .table th,
+.usage-ips .table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border-light);
 }
 
 .usage-ips .table th {
@@ -176,10 +188,20 @@
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.025em;
+    white-space: nowrap;
 }
 
 .usage-ips .table td {
     vertical-align: middle;
+    color: var(--color-text-light);
+}
+
+.usage-ips .table tbody tr:hover {
+    background-color: var(--color-bg-secondary);
+}
+
+.usage-ips .table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .usage-status-badge {
