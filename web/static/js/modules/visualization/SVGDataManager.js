@@ -294,6 +294,10 @@ export class SVGDataManager {
     const layoutData = [];
 
     elements.forEach((el) => {
+      if (this.core.type === "cabinet" && el.classList.contains("cabinet-position-element")) {
+        return;
+      }
+      
       const id = el.dataset.id;
       const rect = el.querySelector("rect");
       if (!rect) return;
