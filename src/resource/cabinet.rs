@@ -699,24 +699,10 @@ pub async fn delete_cabinet_position(
     .fetch_optional(&mut *tx)
     .await?;
 
-    if let Some((device_type, device_id)) = device_info
+    if let Some((device_type, _device_id)) = &device_info
         && device_type == "switch"
-        && let Some(switch_id) = device_id
     {
-        sqlx::query("DELETE FROM ips WHERE position_id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-
-        sqlx::query("DELETE FROM switch_ports WHERE switch_id = $1")
-            .bind(switch_id)
-            .execute(&mut *tx)
-            .await?;
-
-        sqlx::query("DELETE FROM switches WHERE id = $1")
-            .bind(switch_id)
-            .execute(&mut *tx)
-            .await?;
+        return Err(AppError::Validation("该机位由交换机创建，请先通过交换机管理删除对应的交换机".to_string()));
     }
 
     sqlx::query("DELETE FROM ips WHERE position_id = $1")

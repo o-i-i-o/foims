@@ -23,6 +23,16 @@ async function loadAllCabinets() {
   }
 }
 
+async function loadRoomsFromCabinets(cabinets) {
+  const roomMap = new Map();
+  cabinets.forEach(cabinet => {
+    if (cabinet.room_id && cabinet.room_name && !roomMap.has(cabinet.room_id)) {
+      roomMap.set(cabinet.room_id, cabinet.room_name);
+    }
+  });
+  return roomMap;
+}
+
 export class PositionSelector {
   constructor(onRegionChange) {
     this.onRegionChange = onRegionChange;
@@ -45,10 +55,18 @@ export class PositionSelector {
     const cabinets = await loadAllCabinets();
     this.cabinetsCache = cabinets;
 
+    const roomMap = await loadRoomsFromCabinets(cabinets);
+    const roomSelect = elementCache.get('switch-room-select');
+    if (roomSelect) {
+      roomSelect.innerHTML = '<option value="">请选择机房</option>' +
+        Array.from(roomMap.entries()).map(([id, name]) => 
+          `<option value="${id}">${name}</option>`
+        ).join('');
+    }
+
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     if (cabinetSelect) {
-      cabinetSelect.innerHTML = '<option value="">请选择机柜</option>' +
-        cabinets.map(c => `<option value="${c.id}" data-name="${c.name}" data-region-id="${c.network_region_id || ''}">${c.name}</option>`).join('');
+      cabinetSelect.innerHTML = '<option value="">请先选择机房</option>';
     }
 
     if (sw) {
@@ -57,9 +75,34 @@ export class PositionSelector {
   }
 
   bindEvents(signal) {
+    const roomSelect = elementCache.get('switch-room-select');
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     const startUInput = elementCache.get('switch-start-u');
     const endUInput = elementCache.get('switch-end-u');
+
+    if (roomSelect) {
+      roomSelect.addEventListener('change', (e) => {
+        const roomId = e.target.value;
+        positionData.roomId = roomId || null;
+        
+        cabinetSelect.innerHTML = '<option value="">请选择机柜</option>';
+        
+        if (roomId) {
+          const filteredCabinets = this.cabinetsCache.filter(c => c.room_id === roomId);
+          filteredCabinets.forEach(cabinet => {
+            const option = document.createElement('option');
+            option.value = cabinet.id;
+            option.dataset.name = cabinet.name;
+            option.dataset.regionId = cabinet.network_region_id || '';
+            option.textContent = cabinet.name;
+            cabinetSelect.appendChild(option);
+          });
+        }
+        
+        positionData.cabinetId = null;
+        positionData.cabinetName = null;
+      }, { signal });
+    }
 
     if (cabinetSelect) {
       cabinetSelect.addEventListener('change', (e) => {
@@ -90,12 +133,14 @@ export class PositionSelector {
   }
 
   async loadFromSwitch(sw) {
+    const roomSelect = elementCache.get('switch-room-select');
     const cabinetSelect = elementCache.get('switch-cabinet-select');
     const startUInput = elementCache.get('switch-start-u');
     const endUInput = elementCache.get('switch-end-u');
 
     let cabinetId = null;
     let cabinetName = null;
+    let roomId = null;
     let startU = null;
     let endU = null;
 
@@ -105,13 +150,31 @@ export class PositionSelector {
       const pos = sw.position;
       cabinetId = pos.cabinet_id;
       cabinetName = pos.cabinet_name;
+      roomId = pos.room_id;
       startU = pos.start_u;
       endU = pos.end_u;
     } else if (sw.cabinet_id) {
       cabinetId = sw.cabinet_id;
       cabinetName = sw.cabinet_name;
+      roomId = sw.room_id;
       startU = sw.start_u;
       endU = sw.end_u;
+    }
+
+    if (roomId && roomSelect) {
+      positionData.roomId = roomId;
+      roomSelect.value = roomId;
+      
+      cabinetSelect.innerHTML = '<option value="">请选择机柜</option>';
+      const filteredCabinets = this.cabinetsCache.filter(c => c.room_id === roomId);
+      filteredCabinets.forEach(cabinet => {
+        const option = document.createElement('option');
+        option.value = cabinet.id;
+        option.dataset.name = cabinet.name;
+        option.dataset.regionId = cabinet.network_region_id || '';
+        option.textContent = cabinet.name;
+        cabinetSelect.appendChild(option);
+      });
     }
 
     if (cabinetId) {
@@ -124,26 +187,12 @@ export class PositionSelector {
       if (endUInput && endU) endUInput.value = endU;
 
       if (cabinetSelect && cabinetId) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const option = cabinetSelect.querySelector(`option[value="${cabinetId}"]`);
-        if (option) {
-          cabinetSelect.value = cabinetId;
-          const regionId = option.dataset.regionId;
-          if (regionId) {
-            updateNetworkRegion(regionId, '');
-            positionData.networkRegionId = regionId;
-          }
-        } else if (this.cabinetsCache.length > 0) {
-          const cabinet = this.cabinetsCache.find(c => c.id === cabinetId);
-          if (cabinet) {
-            const newOption = document.createElement('option');
-            newOption.value = cabinet.id;
-            newOption.dataset.name = cabinet.name;
-            newOption.dataset.regionId = cabinet.network_region_id || '';
-            newOption.textContent = cabinet.name;
-            cabinetSelect.appendChild(newOption);
-            cabinetSelect.value = cabinetId;
-          }
+        cabinetSelect.value = cabinetId;
+        const selectedOption = cabinetSelect.options[cabinetSelect.selectedIndex];
+        const regionId = selectedOption?.dataset?.regionId;
+        if (regionId) {
+          updateNetworkRegion(regionId, '');
+          positionData.networkRegionId = regionId;
         }
       }
     }

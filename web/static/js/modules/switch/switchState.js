@@ -8,6 +8,7 @@ const listState = {
 };
 
 const positionData = {
+  roomId: null,
   cabinetId: null,
   cabinetName: null,
   startU: null,
@@ -59,6 +60,7 @@ export function getSwitchPositionData() {
 
 export function resetSwitchPositionData() {
   Object.assign(positionData, {
+    roomId: null,
     cabinetId: null,
     cabinetName: null,
     startU: null,

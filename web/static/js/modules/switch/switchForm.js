@@ -51,7 +51,10 @@ export function getSwitchFormValues() {
     snmp_priv_password: maskToNull(elementCache.getValue('switch-snmp-priv-password')),
     ips: ips,
     network_region_id: networkRegionId || positionData.networkRegionId,
-    position_id: positionData.positionId || null
+    position_id: positionData.positionId || null,
+    cabinet_id: positionData.cabinetId || null,
+    start_u: positionData.startU || null,
+    end_u: positionData.endU || null
   };
 }
 

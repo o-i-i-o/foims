@@ -107,6 +107,11 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
 
         const row = document.createElement("tr");
         const roomName = escapeHtml(position.room_name) || "-";
+        const isSwitchPosition = position.device_type === 'switch';
+        const deleteBtnHtml = isSwitchPosition 
+          ? `<button class="btn btn-sm btn-delete disabled" data-id="${position.id}" disabled title="该机位由交换机创建，请通过交换机管理删除">删除</button>`
+          : `<button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>`;
+        
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
                     <td>${roomName}</td>
@@ -120,7 +125,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
                     <td>${new Date(position.created_at).toLocaleString()}</td>
                     <td>
                         <button class="btn btn-sm btn-edit" data-id="${position.id}">编辑</button>
-                        <button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>
+                        ${deleteBtnHtml}
                     </td>
                 `;
         tbody.appendChild(row);

@@ -777,6 +777,9 @@ pub struct SwitchCreate {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub position_id: Option<Uuid>,
+    pub cabinet_id: Option<Uuid>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -805,6 +808,9 @@ pub struct SwitchUpdate {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub position_id: Option<Uuid>,
+    pub cabinet_id: Option<Uuid>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
 }
 
 // ==================== 交换机端口模型 ====================

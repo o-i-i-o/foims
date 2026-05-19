@@ -187,6 +187,8 @@
     "location": "位置",
     "position": "机位",
     "select_position": "选择机位",
+    "room": "机房",
+    "select_room": "选择机房",
     "cabinet": "机柜",
     "select_cabinet": "选择机柜",
     "start_u": "起始U位",

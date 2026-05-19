@@ -422,11 +422,19 @@
         <h4 class="section-subtitle" data-i18n="switch.position_config">机位配置</h4>
         <div class="form-row">
           <div class="form-group">
-            <label for="switch-cabinet-select" data-i18n="switch.cabinet">机柜</label>
-            <select id="switch-cabinet-select">
-              <option value="" data-i18n="switch.select_cabinet">请选择机柜</option>
+            <label for="switch-room-select" data-i18n="switch.room">机房</label>
+            <select id="switch-room-select">
+              <option value="" data-i18n="switch.select_room">请选择机房</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="switch-cabinet-select" data-i18n="switch.cabinet">机柜</label>
+            <select id="switch-cabinet-select">
+              <option value="" data-i18n="switch.select_cabinet">请先选择机房</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="switch-start-u" data-i18n="switch.start_u">起始U位</label>
             <input type="number" id="switch-start-u" name="start_u" min="1" max="48" placeholder="1" />

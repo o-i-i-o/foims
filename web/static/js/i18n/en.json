@@ -185,6 +185,8 @@
     "location": "Location",
     "position": "Position",
     "select_position": "Select Position",
+    "room": "Room",
+    "select_room": "Select Room",
     "cabinet": "Cabinet",
     "select_cabinet": "Select Cabinet",
     "start_u": "Start U",

@@ -356,19 +356,39 @@ pub async fn create_switch(
 
     let position_id = req.position_id.unwrap_or_else(Uuid::new_v4);
 
-    if req.position_id.is_none()
-        && let Err(e) = sqlx::query(
-            "INSERT INTO positions (id, name, device_type, device_id, created_at, updated_at) VALUES ($1, $2, 'switch', $3, $4, $5)"
-        )
-        .bind(position_id)
-        .bind(&req.name)
-        .bind(id)
-        .bind(now)
-        .bind(now)
-        .execute(&state.pool()?.get_conn())
-        .await
-    {
-        tracing::error!("创建交换机关联机位记录失败: {}", e);
+    if req.position_id.is_none() {
+        let position_result = if let Some(cabinet_id) = req.cabinet_id {
+            sqlx::query(
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, device_type, device_id, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 'switch', $6, $7, $8, $9)"
+            )
+            .bind(position_id)
+            .bind(&req.name)
+            .bind(cabinet_id)
+            .bind(req.start_u)
+            .bind(req.end_u)
+            .bind(id)
+            .bind(&req.description)
+            .bind(now)
+            .bind(now)
+            .execute(&state.pool()?.get_conn())
+            .await
+        } else {
+            sqlx::query(
+                "INSERT INTO positions (id, name, device_type, device_id, description, created_at, updated_at) VALUES ($1, $2, 'switch', $3, $4, $5, $6)"
+            )
+            .bind(position_id)
+            .bind(&req.name)
+            .bind(id)
+            .bind(&req.description)
+            .bind(now)
+            .bind(now)
+            .execute(&state.pool()?.get_conn())
+            .await
+        };
+
+        if let Err(e) = position_result {
+            tracing::error!("创建交换机关联机位记录失败: {}", e);
+        }
     }
 
     sqlx::query(
