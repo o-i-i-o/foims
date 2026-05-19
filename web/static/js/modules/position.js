@@ -106,10 +106,12 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
         }
 
         const row = document.createElement("tr");
+        const roomName = escapeHtml(position.room_name) || "-";
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${positionName}</td>
+                    <td>${roomName}</td>
                     <td>${cabinetName}</td>
+                    <td>${positionName}</td>
                     <td>${deviceTypeHtml}</td>
                     <td>${ipsHtml}</td>
                     <td>${position.start_u} - ${position.end_u} U</td>

@@ -92,10 +92,13 @@ pub async fn get_positions(
                     &format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                  c.room_id,
+                                  COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                                   p.start_u, p.end_u, p.description, 
                                   p.device_type, p.device_id,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
+                           LEFT JOIN cabinets c ON p.cabinet_id = c.id
                            WHERE p.cabinet_id = $1
                            {order_clause} LIMIT $2 OFFSET $3"
                     )
@@ -111,10 +114,13 @@ pub async fn get_positions(
                     &format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                  c.room_id,
+                                  COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                                   p.start_u, p.end_u, p.description, 
                                   p.device_type, p.device_id,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
+                           LEFT JOIN cabinets c ON p.cabinet_id = c.id
                            WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2)
                            {order_clause} LIMIT $3 OFFSET $4"
                     )
@@ -132,10 +138,13 @@ pub async fn get_positions(
                 &format!(
                     r"SELECT p.id, p.name, p.cabinet_id, 
                               COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                              c.room_id,
+                              COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                               p.start_u, p.end_u, p.description, 
                               p.device_type, p.device_id,
                               p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                        FROM positions p 
+                       LEFT JOIN cabinets c ON p.cabinet_id = c.id
                        WHERE p.name ILIKE $1 OR p.description ILIKE $1
                        {order_clause} LIMIT $2 OFFSET $3"
                 )
@@ -151,10 +160,13 @@ pub async fn get_positions(
             &format!(
                 r"SELECT p.id, p.name, p.cabinet_id, 
                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                          c.room_id,
+                          COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                           p.start_u, p.end_u, p.description, 
                           p.device_type, p.device_id,
                           p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                    FROM positions p 
+                   LEFT JOIN cabinets c ON p.cabinet_id = c.id
                    {order_clause} LIMIT $1 OFFSET $2"
             )
         )
@@ -171,6 +183,8 @@ pub async fn get_positions(
         let name: String = row.get("name");
         let cabinet_id: Option<Uuid> = row.get("cabinet_id");
         let cabinet_name: Option<String> = row.get("cabinet_name");
+        let room_id: Option<Uuid> = row.get("room_id");
+        let room_name: Option<String> = row.get("room_name");
         let start_u: i32 = row.get("start_u");
         let end_u: i32 = row.get("end_u");
         let device_type: Option<String> = row.get("device_type");
@@ -184,6 +198,8 @@ pub async fn get_positions(
             name,
             cabinet_id,
             cabinet_name,
+            room_id,
+            room_name,
             start_u,
             end_u,
             device_type,
@@ -583,9 +599,10 @@ pub async fn update_cabinet_position(
     tx.commit().await?;
 
     let row = sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, p.start_u, p.end_u, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
         FROM positions p 
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
+        LEFT JOIN rooms r ON c.room_id = r.id 
         WHERE p.id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
@@ -603,6 +620,8 @@ pub async fn update_cabinet_position(
         cabinet_id: row.get("cabinet_id"),
         cabinet_name: row
             .get::<Option<String>, _>("cabinet_name"),
+        room_id: row.get("room_id"),
+        room_name: row.get("room_name"),
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
         device_type: row.get("device_type"),

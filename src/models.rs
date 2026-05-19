@@ -501,6 +501,8 @@ pub struct CabinetPositionWithDetails {
     pub name: String,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
+    pub room_id: Option<Uuid>,
+    pub room_name: Option<String>,
     pub start_u: i32,
     pub end_u: i32,
     pub device_type: Option<String>,
