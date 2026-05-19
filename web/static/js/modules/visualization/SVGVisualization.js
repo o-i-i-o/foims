@@ -23,10 +23,12 @@ export class SVGVisualization {
       
       if (hasSavedLayout) {
         this.currentRoomId = roomId;
+        this.core.currentRoomId = roomId;
         return;
       }
 
       this.currentRoomId = roomId;
+      this.core.currentRoomId = roomId;
       this.core.elementsGroup.innerHTML = "";
 
       const workstations = await this.dataManager.fetchWorkstationsByRoom(roomId);
@@ -101,6 +103,9 @@ export class SVGVisualization {
       return;
     }
 
+    this.currentRoomId = roomId;
+    this.core.currentRoomId = roomId;
+
     try {
       const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
       
@@ -146,8 +151,6 @@ export class SVGVisualization {
       const totalWidth = startX + cabinets.length * (cabinetWidth + gap) + 50;
       this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${svgHeight}`);
       this.core.svg.setAttribute("height", "100%");
-
-      this.currentRoomId = roomId;
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
       this.core.showToast("绘制机位图失败: " + error.message, "error");

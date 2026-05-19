@@ -71,9 +71,10 @@ export class SVGDataManager {
   }
 
   async loadSavedLayout(id) {
+    this.core.currentRoomId = id;
+    
     try {
       if (this.core.type === "workstation") {
-        this.core.currentRoomId = id;
         this.core.elementsGroup.innerHTML = "";
         
         const [layoutResult, workstations, ipManagers] = await Promise.all([
@@ -177,7 +178,6 @@ export class SVGDataManager {
         
         return hasSavedLayout;
       } else if (this.core.type === "cabinet") {
-        this.core.currentRoomId = id;
         this.core.elementsGroup.innerHTML = "";
         
         const [layoutResult, cabinets] = await Promise.all([
