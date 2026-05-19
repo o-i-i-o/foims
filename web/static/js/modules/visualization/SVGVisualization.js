@@ -189,19 +189,4 @@ export class SVGVisualization {
       this.saveLayout();
     }
   }
-
-  setGridSize(size) {
-    this.core.setGridSize(size);
-    this.gridSize = size;
-  }
-
-  toggleSnapToGrid(enabled) {
-    this.core.toggleSnapToGrid(enabled);
-    this.snapToGrid = enabled;
-  }
-
-  toggleAlignmentLines(enabled) {
-    this.core.toggleAlignmentLines(enabled);
-    this.showAlignmentLines = enabled;
-  }
 }

@@ -220,7 +220,7 @@ pub async fn get_switch_ip_address(
 ) -> Result<Option<String>, SwitchConfigError> {
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+           WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)

@@ -22,14 +22,6 @@ const networkRegion = {
   name: ''
 };
 
-export function createPositionState() {
-  return positionData;
-}
-
-export function createNetworkRegionState() {
-  return networkRegion;
-}
-
 export function setCurrentSwitchPage(page) {
   listState.currentPage = page;
 }
@@ -54,29 +46,9 @@ export function getCurrentSwitchName() {
   return listState.currentSwitchName;
 }
 
-export function getSwitchPositionData() {
-  return positionData;
-}
-
-export function resetSwitchPositionData() {
-  Object.assign(positionData, {
-    roomId: null,
-    cabinetId: null,
-    cabinetName: null,
-    startU: null,
-    endU: null,
-    positionId: null,
-    networkRegionId: null
-  });
-}
-
 export function updateNetworkRegion(id, name = '') {
   networkRegion.id = id;
   networkRegion.name = name;
-}
-
-export function getNetworkRegion() {
-  return networkRegion;
 }
 
 export { listState, positionData, networkRegion };

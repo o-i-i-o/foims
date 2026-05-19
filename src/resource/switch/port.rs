@@ -91,7 +91,7 @@ pub async fn get_all_switch_ports(
             r"SELECT
                 sp.id, sp.switch_id, s.name as switch_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
                     ''
                 ) as switch_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -112,7 +112,7 @@ pub async fn get_all_switch_ports(
             r"SELECT
                 sp.id, sp.switch_id, s.name as switch_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
                     ''
                 ) as switch_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -238,7 +238,7 @@ pub async fn get_switch_port(
         r"SELECT
             sp.id, sp.switch_id, s.name as switch_name,
             COALESCE(
-                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = s.id) LIMIT 1),
+                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
                 ''
             ) as switch_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -409,7 +409,7 @@ pub async fn sync_ports_from_snmp(
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1)
+           WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)
            ORDER BY created_at LIMIT 1",
     )
     .bind(switch_id)

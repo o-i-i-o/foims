@@ -564,7 +564,5 @@ export {
   submitSwitchPortForm,
   groupPorts,
   showPortGroupsModal,
-  extractPortNumber,
-  extractPortLastNumber,
   SWITCH_PORT_PAGE_SIZE
 };

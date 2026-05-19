@@ -488,7 +488,5 @@ export {
   viewLldpNeighbors,
   loadSwitchesForLldp,
   renderMacTable,
-  bindCollapseEvents,
-  groupByNetwork,
-  filterEntries
+  bindCollapseEvents
 };

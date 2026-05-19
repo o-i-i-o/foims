@@ -47,9 +47,7 @@ import {
   deleteSwitchPort,
   submitSwitchPortForm,
   groupPorts,
-  showPortGroupsModal,
-  extractPortNumber,
-  extractPortLastNumber
+  showPortGroupsModal
 } from "./switchPort.js";
 
 import {
@@ -57,9 +55,7 @@ import {
   viewLldpNeighbors,
   loadSwitchesForLldp,
   renderMacTable,
-  bindCollapseEvents,
-  groupByNetwork,
-  filterEntries
+  bindCollapseEvents
 } from "./switchMacLldp.js";
 
 let positionSelector = null;
@@ -201,47 +197,24 @@ function initSwitches() {
 }
 
 export {
-  initSwitches,
-  initSwitchTabs,
   initSwitchSearch,
-
   loadSwitchesData,
-  openSwitchModal,
   editSwitch,
   deleteSwitch,
-  saveSwitch as submitSwitchForm,
   toggleSnmpConfig,
   testSnmpConnection,
   getSwitchInfoFromSnmp,
   syncPortsFromSnmp,
-  onNetworkRegionChange,
-
-  loadSwitchPortsData,
-  loadSwitchPortsBySwitchId,
   manageSwitchPorts,
-  openSwitchPortModal,
   editSwitchPort,
   deleteSwitchPort,
-  submitSwitchPortForm,
-  groupPorts,
-  showPortGroupsModal,
-  extractPortNumber,
-  extractPortLastNumber,
-
   viewArpTable,
   viewLldpNeighbors,
-  loadSwitchesForLldp,
-  renderMacTable,
-  bindCollapseEvents,
-  groupByNetwork,
-  filterEntries,
-
   setCurrentSwitchId,
   setCurrentSwitchName,
   setCurrentSwitchPage,
   getCurrentSwitchId,
   getCurrentSwitchName,
-
   SWITCH_PAGE_SIZE,
   SWITCH_PORT_PAGE_SIZE,
 };
