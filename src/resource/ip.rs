@@ -4,7 +4,7 @@ use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerUpdate, Ip
 use crate::utils::pagination::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
 use crate::utils::{
     OperationLogParams, get_room_id_by_position, get_room_id_by_workstation, log_system_operation,
-    validate_ip_in_cidr, validate_network_in_room,
+    validate_network_in_room,
 };
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -225,13 +225,22 @@ pub async fn create_ip_manager(
         None
     };
 
-    let network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> =
-            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
-                .bind(rid)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
-        room_network
+    let room_network_id: Option<Uuid> = if let Some(rid) = room_id {
+        sqlx::query_scalar(
+            r"SELECT rn.id
+            FROM room_networks rn
+            JOIN network_cidrs nc ON rn.network_id = nc.id
+            WHERE rn.room_id = $1
+            AND (
+                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+            )
+            LIMIT 1"
+        )
+        .bind(rid)
+        .bind(&req.ip_address)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
     } else {
         None
     };
@@ -246,19 +255,8 @@ pub async fn create_ip_manager(
         return Err(AppError::Conflict("该IP地址已存在".to_string()));
     }
 
-    if let Some(nid) = network_id {
-        let network = sqlx::query(crate::utils::NETWORK_QUERY)
-            .bind(nid)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
-            .map(|row| crate::utils::parse_network_from_row(&row))
-            .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
-
-        let ip_in_cidr = validate_ip_in_cidr(&req.ip_address, &network)?;
-
-        if !ip_in_cidr {
-            return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
-        }
+    if room_network_id.is_none() {
+        return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
     }
 
     let id = Uuid::new_v4();
@@ -267,14 +265,15 @@ pub async fn create_ip_manager(
     let ip_version_num = detect_ip_version(&req.ip_address)?;
 
     sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
+        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, room_network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
     )
     .bind(id)
     .bind(req.workstation_id)
     .bind(req.position_id)
     .bind(req.switch_port_id)
     .bind(&req.device_type)
+    .bind(room_network_id)
     .bind(&req.ip_address)
     .bind(ip_version_num)
     .bind(&req.mac_address)
@@ -291,6 +290,7 @@ pub async fn create_ip_manager(
         position_id: req.position_id,
         switch_port_id: req.switch_port_id,
         device_type: req.device_type.clone(),
+        room_network_id,
         network_id: None,
         ip_address: req.ip_address.clone(),
         ip_version: ip_version_num,
@@ -338,15 +338,12 @@ pub async fn get_ip_manager(
     let id = *id_path;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, 
+           m.room_network_id, rn.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
            FROM ips m
-           LEFT JOIN workstations w ON m.workstation_id = w.id
-           LEFT JOIN rooms r ON w.room_id = r.id
-           LEFT JOIN LATERAL (
-               SELECT network_id FROM room_networks WHERE room_id = r.id LIMIT 1
-           ) rn ON true
+           LEFT JOIN room_networks rn ON m.room_network_id = rn.id
            WHERE m.id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
@@ -460,18 +457,12 @@ pub async fn update_ip_manager(
     (*req).validate()?;
 
     let existing_mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, 
+           m.room_network_id, rn.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
            FROM ips m
-           LEFT JOIN workstations w ON m.workstation_id = w.id
-           LEFT JOIN rooms rw ON w.room_id = rw.id
-           LEFT JOIN positions p ON m.position_id = p.id
-           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-           LEFT JOIN rooms rc ON c.room_id = rc.id
-           LEFT JOIN LATERAL (
-               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
-           ) rn ON true
+           LEFT JOIN room_networks rn ON m.room_network_id = rn.id
            WHERE m.id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
@@ -538,32 +529,28 @@ pub async fn update_ip_manager(
         None
     };
 
-    let network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> =
-            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
-                .bind(rid)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
-        room_network
+    let room_network_id = if let Some(rid) = room_id {
+        sqlx::query_scalar::<_, Uuid>(
+            r"SELECT rn.id
+            FROM room_networks rn
+            JOIN network_cidrs nc ON rn.network_id = nc.id
+            WHERE rn.room_id = $1
+            AND (
+                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+            )
+            LIMIT 1"
+        )
+        .bind(rid)
+        .bind(&ip_address)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
     } else {
         None
     };
 
-    if let Some(nid) = network_id
-        && req.ip_address.is_some()
-    {
-        let network = sqlx::query(crate::utils::NETWORK_QUERY)
-            .bind(nid)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
-            .map(|row| crate::utils::parse_network_from_row(&row))
-            .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
-
-        let ip_in_cidr = validate_ip_in_cidr(&ip_address, &network)?;
-
-        if !ip_in_cidr {
-            return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
-        }
+    if room_network_id.is_none() && req.ip_address.is_some() {
+        return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
     }
 
     sqlx::query(
@@ -572,18 +559,20 @@ pub async fn update_ip_manager(
          position_id = $2,
          switch_port_id = $3,
          device_type = COALESCE($4, device_type),
-         ip_address = COALESCE(CAST($5 AS INET), ip_address), 
-         mac_address = COALESCE($6, mac_address), 
-         hostname = COALESCE($7, hostname), 
-         status = COALESCE($8, status), 
-         ip_version = $9, 
-         updated_at = $10 
-         WHERE id = $11",
+         room_network_id = COALESCE($5, room_network_id),
+         ip_address = COALESCE(CAST($6 AS INET), ip_address), 
+         mac_address = COALESCE($7, mac_address), 
+         hostname = COALESCE($8, hostname), 
+         status = COALESCE($9, status), 
+         ip_version = $10, 
+         updated_at = $11 
+         WHERE id = $12",
     )
     .bind(req.workstation_id)
     .bind(req.position_id)
     .bind(req.switch_port_id)
     .bind(&req.device_type)
+    .bind(room_network_id)
     .bind(&req.ip_address)
     .bind(&req.mac_address)
     .bind(&req.hostname)
@@ -595,18 +584,12 @@ pub async fn update_ip_manager(
     .await?;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, 
+           m.room_network_id, rn.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
            FROM ips m
-           LEFT JOIN workstations w ON m.workstation_id = w.id
-           LEFT JOIN rooms rw ON w.room_id = rw.id
-           LEFT JOIN positions p ON m.position_id = p.id
-           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-           LEFT JOIN rooms rc ON c.room_id = rc.id
-           LEFT JOIN LATERAL (
-               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
-           ) rn ON true
+           LEFT JOIN room_networks rn ON m.room_network_id = rn.id
            WHERE m.id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
@@ -708,7 +691,7 @@ async fn sync_switch_macs(
     }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm INNER JOIN ips i ON sm.ip_address = i.ip_address WHERE sm.switch_id = $1 AND i.network_id = $2",
+        "SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm INNER JOIN ips i ON sm.ip_address = i.ip_address INNER JOIN room_networks rn ON i.room_network_id = rn.id WHERE sm.switch_id = $1 AND rn.network_id = $2",
     )
     .bind(switch_id)
     .bind(network_id)
@@ -871,18 +854,12 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, rn.network_id, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, 
+           m.room_network_id, rn.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
            FROM ips m
-           LEFT JOIN workstations w ON m.workstation_id = w.id
-           LEFT JOIN rooms rw ON w.room_id = rw.id
-           LEFT JOIN positions p ON m.position_id = p.id
-           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-           LEFT JOIN rooms rc ON c.room_id = rc.id
-           LEFT JOIN LATERAL (
-               SELECT network_id FROM room_networks WHERE room_id = COALESCE(rw.id, rc.id) LIMIT 1
-           ) rn ON true
+           LEFT JOIN room_networks rn ON m.room_network_id = rn.id
            WHERE rn.network_id = $1"
     )
     .bind(req.network_id)
@@ -1086,13 +1063,14 @@ pub async fn auto_assign_ip(
         None
     };
 
-    let network_id = if let Some(rid) = room_id {
+    let room_network_id: Uuid = if let Some(rid) = room_id {
         let room_network: Option<Uuid> =
-            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
+            sqlx::query_scalar("SELECT id FROM room_networks WHERE room_id = $1 AND network_id = $2")
                 .bind(rid)
+                .bind(req_network_id)
                 .fetch_optional(&state.pool()?.get_conn())
                 .await?;
-        room_network.ok_or_else(|| AppError::Validation("该房间未配置网络".to_string()))?
+        room_network.ok_or_else(|| AppError::Validation("请求的网段不属于该房间".to_string()))?
     } else {
         return Err(AppError::Validation("无法确定设备所属房间".to_string()));
     };
@@ -1109,8 +1087,8 @@ pub async fn auto_assign_ip(
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
-            .bind(network_id)
+        sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE room_network_id = $1")
+            .bind(room_network_id)
             .fetch_all(&state.pool()?.get_conn())
             .await?;
 
@@ -1138,14 +1116,15 @@ pub async fn auto_assign_ip(
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
     sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
+        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, room_network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
     )
     .bind(id)
     .bind(workstation_id)
     .bind(position_id)
     .bind(switch_port_id)
     .bind(&device_type)
+    .bind(room_network_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
     .bind(&mac_address)
@@ -1162,6 +1141,7 @@ pub async fn auto_assign_ip(
         position_id,
         switch_port_id,
         device_type: Some(device_type),
+        room_network_id: Some(room_network_id),
         network_id: None,
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
@@ -1298,11 +1278,20 @@ pub async fn batch_create_ip_managers(
             None
         };
 
-        if let Some(rid) = room_id {
+        let room_network_id = if let Some(rid) = room_id {
             let room_network: Option<Uuid> = match sqlx::query_scalar(
-                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
+                r"SELECT rn.id
+                FROM room_networks rn
+                JOIN network_cidrs nc ON rn.network_id = nc.id
+                WHERE rn.room_id = $1
+                AND (
+                    (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                    OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+                )
+                LIMIT 1",
             )
             .bind(rid)
+            .bind(&ip_req.ip_address)
             .fetch_optional(tx.as_mut())
             .await
             {
@@ -1320,17 +1309,21 @@ pub async fn batch_create_ip_managers(
                 duplicate_errors.push(format!("第{}条记录: 该房间未配置网络", index + 1));
                 continue;
             }
-        }
+            room_network
+        } else {
+            None
+        };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
+            "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, room_network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
         )
         .bind(*id)
         .bind(ip_req.workstation_id)
         .bind(ip_req.position_id)
         .bind(ip_req.switch_port_id)
         .bind(&ip_req.device_type)
+        .bind(room_network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
         .bind(&ip_req.mac_address)
@@ -1352,6 +1345,7 @@ pub async fn batch_create_ip_managers(
             position_id: ip_req.position_id,
             switch_port_id: ip_req.switch_port_id,
             device_type: ip_req.device_type.clone(),
+            room_network_id,
             network_id: None,
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,

@@ -55,48 +55,6 @@ pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     }
 }
 
-pub fn validate_ip_in_cidr(
-    ip_address: &str,
-    network: &crate::models::Network,
-) -> Result<bool, crate::error::AppError> {
-    let ip_addr: std::net::IpAddr = ip_address
-        .parse()
-        .map_err(|_| crate::error::AppError::Validation("无效的IP地址格式".to_string()))?;
-
-    let is_ipv4 = matches!(ip_addr, std::net::IpAddr::V4(_));
-
-    let cidr_fields = vec![
-        if is_ipv4 {
-            network.ipv4_cidr.clone().unwrap_or_default()
-        } else {
-            String::new()
-        },
-        if is_ipv4 {
-            String::new()
-        } else {
-            network.ipv6_cidr.clone().unwrap_or_default()
-        },
-    ];
-
-    for cidr_str in cidr_fields {
-        if cidr_str.is_empty() {
-            continue;
-        }
-
-        if let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(&cidr_str)
-            && network_cidr.contains(ip_addr)
-        {
-            return Ok(true);
-        }
-
-        if let Err(e) = ipnetwork::IpNetwork::from_str(&cidr_str) {
-            tracing::warn!("CIDR格式无效 '{}': {}", cidr_str, e);
-        }
-    }
-
-    Ok(false)
-}
-
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
