@@ -501,7 +501,7 @@ async fn export_switches(
         let description: Option<String> = row.get(9);
 
         let ip_address: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1) LIMIT 1"
+            "SELECT host(ip_address) FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1) LIMIT 1"
         )
         .bind(id)
         .fetch_optional(&mut *conn)
@@ -1988,7 +1988,7 @@ async fn import_switches(
                             results.push(format!("更新交换机: {name}"));
                         } else {
                             let existing_ip: Option<uuid::Uuid> = match sqlx::query_scalar(
-                                "SELECT id FROM ips WHERE position_id = (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1) LIMIT 1"
+                                "SELECT id FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1) LIMIT 1"
                             )
                             .bind(id)
                             .fetch_optional(&mut *conn)
@@ -2004,7 +2004,8 @@ async fn import_switches(
                                     JOIN network_cidrs nc ON rn.network_id = nc.id
                                     JOIN cabinets c ON c.room_id = rn.room_id
                                     JOIN positions p ON p.cabinet_id = c.id
-                                    WHERE p.device_type = 'switch' AND p.device_id = $1
+                                    JOIN switches s ON s.position_id = p.id
+                                    WHERE s.id = $1
                                     AND (
                                         (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
@@ -2041,7 +2042,7 @@ async fn import_switches(
                             } else {
                                 let ip_manager_id = uuid::Uuid::new_v4();
                                 let ip_insert_result = sqlx::query(
-                                    "INSERT INTO ips (id, device_type, room_network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, (SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $5), 'active', NOW(), NOW())"
+                                    "INSERT INTO ips (id, device_type, room_network_id, ip_address, ip_version, position_id, status, created_at, updated_at) VALUES ($1, 'cabinet_position', $2, CAST($3 AS INET), $4, (SELECT position_id FROM switches WHERE id = $5), 'active', NOW(), NOW())"
                                 )
                                 .bind(ip_manager_id)
                                 .bind(room_network_id)
@@ -2077,11 +2078,10 @@ async fn import_switches(
             let position_id = uuid::Uuid::new_v4();
 
             if let Err(e) = sqlx::query(
-                "INSERT INTO positions (id, name, device_type, device_id, created_at, updated_at) VALUES ($1, $2, 'switch', $3, NOW(), NOW())"
+                "INSERT INTO positions (id, name, device_type, created_at, updated_at) VALUES ($1, $2, 'switch', NOW(), NOW())"
             )
             .bind(position_id)
             .bind(name)
-            .bind(id)
             .execute(&mut *conn)
             .await {
                 tracing::warn!("创建交换机位置记录失败: {}", e);

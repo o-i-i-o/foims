@@ -492,7 +492,6 @@ pub struct CabinetPosition {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub device_type: Option<String>,
-    pub device_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -506,7 +505,6 @@ pub struct CabinetPositionWithDetails {
     pub start_u: i32,
     pub end_u: i32,
     pub device_type: Option<String>,
-    pub device_id: Option<Uuid>,
     pub ips: Vec<IpManager>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,

@@ -27,6 +27,231 @@ pub async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+async fn migrate_remove_device_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'remove_device_id'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE positions DROP COLUMN IF EXISTS device_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除positions.device_id列失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('remove_device_id', '删除positions.device_id冗余字段，交换机通过switches.position_id单向关联')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_add_ip_sync_trigger(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'add_ip_sync_trigger'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE FUNCTION sync_workstation_ips_room_network()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.room_id IS DISTINCT FROM OLD.room_id THEN
+                    UPDATE ips i
+                    SET room_network_id = (
+                        SELECT rn.id
+                        FROM room_networks rn
+                        JOIN network_cidrs nc ON rn.network_id = nc.id
+                        WHERE rn.room_id = NEW.room_id
+                        AND (
+                            (nc.ipv4_cidr IS NOT NULL AND i.ip_address <<= nc.ipv4_cidr::inet)
+                            OR (nc.ipv6_cidr IS NOT NULL AND i.ip_address <<= nc.ipv6_cidr::inet)
+                        )
+                        LIMIT 1
+                    )
+                    WHERE i.workstation_id = NEW.id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建sync_workstation_ips_room_network函数失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP TRIGGER IF EXISTS trg_sync_workstation_ips_room_network ON workstations"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除旧触发器失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE TRIGGER trg_sync_workstation_ips_room_network
+            AFTER UPDATE OF room_id ON workstations
+            FOR EACH ROW EXECUTE FUNCTION sync_workstation_ips_room_network()"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建trg_sync_workstation_ips_room_network触发器失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('add_ip_sync_trigger', '添加触发器自动同步工位IP的room_network_id')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_remove_cabinet_layouts_room_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'remove_cabinet_layouts_room_id'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE cabinet_layouts DROP COLUMN IF EXISTS room_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除cabinet_layouts.room_id列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE cabinet_layouts DROP CONSTRAINT IF EXISTS cabinet_layouts_room_cabinet_key"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除cabinet_layouts唯一约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_cabinet_layouts_room_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除cabinet_layouts.room_id索引失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('remove_cabinet_layouts_room_id', '删除cabinet_layouts.room_id冗余字段，改用JOIN查询确保数据一致性')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_room_fk_to_restrict(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'room_fk_to_restrict'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'cabinets_room_id_fkey' 
+                    AND contype = 'f'
+                ) THEN
+                    ALTER TABLE cabinets DROP CONSTRAINT cabinets_room_id_fkey;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除cabinets旧外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE cabinets ADD CONSTRAINT cabinets_room_id_fkey 
+             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加cabinets新外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'workstations_room_id_fkey' 
+                    AND contype = 'f'
+                ) THEN
+                    ALTER TABLE workstations DROP CONSTRAINT workstations_room_id_fkey;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除workstations旧外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstations ADD CONSTRAINT workstations_room_id_fkey 
+             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加workstations新外键约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('room_fk_to_restrict', '修改cabinets和workstations的room_id外键为RESTRICT，防止删除有设备的房间')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn create_schema_migrations_table(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -177,7 +402,7 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS cabinets (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
-            room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
+            room_id UUID REFERENCES rooms(id) ON DELETE RESTRICT,
             capacity INTEGER NOT NULL DEFAULT 42,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -204,7 +429,6 @@ async fn create_cabinet_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             start_u INTEGER NOT NULL DEFAULT 1,
             end_u INTEGER NOT NULL DEFAULT 1,
             device_type VARCHAR(20) DEFAULT 'cabinet_position',
-            device_id UUID,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -221,7 +445,7 @@ async fn create_workstation_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Erro
         r"CREATE TABLE IF NOT EXISTS workstations (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
-            room_id UUID NOT NULL REFERENCES rooms(id),
+            room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             manager VARCHAR(50),
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -508,7 +732,6 @@ async fn create_indexes(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_cabinets_room_id ON cabinets(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_positions_cabinet_id ON positions(cabinet_id)",
         "CREATE INDEX IF NOT EXISTS idx_positions_device_type ON positions(device_type)",
-        "CREATE INDEX IF NOT EXISTS idx_positions_device_id ON positions(device_id)",
         "CREATE INDEX IF NOT EXISTS idx_workstations_room_id ON workstations(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_room_id ON room_networks(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_network_id ON room_networks(network_id)",
@@ -557,6 +780,13 @@ async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     migrate_switch_view_add_room(pool).await?;
     migrate_ips_add_room_network_id(pool).await?;
     migrate_ip_with_details_room_network_id(pool).await?;
+    migrate_element_layouts_structure(pool).await?;
+    migrate_cabinet_layouts_add_room_id(pool).await?;
+    migrate_room_fk_to_restrict(pool).await?;
+    migrate_remove_device_id(pool).await?;
+    migrate_remove_cabinet_layouts_room_id(pool).await?;
+    migrate_workstation_layouts_simplify(pool).await?;
+    migrate_add_ip_sync_trigger(pool).await?;
     Ok(())
 }
 
@@ -1333,7 +1563,7 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
                 imm.switch_port_id,
                 imm.device_type,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     WHEN w.id IS NOT NULL THEN w.name::text
                     WHEN cp.id IS NOT NULL THEN cp.name::text
                     ELSE 'unknown device'
@@ -1348,7 +1578,7 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
                     ELSE NULL
                 END AS cabinet_position_name,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     ELSE NULL
                 END AS switch_name,
                 sp.port_number::text AS switch_port_number,
@@ -1377,7 +1607,7 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
             LEFT JOIN positions cp ON imm.position_id = cp.id
             LEFT JOIN cabinets c ON cp.cabinet_id = c.id
             LEFT JOIN rooms r2 ON c.room_id = r2.id
-            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switches s ON s.position_id = cp.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
             LEFT JOIN LATERAL (
                 SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
@@ -1547,7 +1777,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                 imm.switch_port_id,
                 imm.device_type,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     WHEN w.id IS NOT NULL THEN w.name::text
                     WHEN cp.id IS NOT NULL THEN cp.name::text
                     ELSE 'unknown device'
@@ -1562,7 +1792,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                     ELSE NULL
                 END AS cabinet_position_name,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     ELSE NULL
                 END AS switch_name,
                 sp.port_number::text AS switch_port_number,
@@ -1591,7 +1821,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
             LEFT JOIN positions cp ON imm.position_id = cp.id
             LEFT JOIN cabinets c ON cp.cabinet_id = c.id
             LEFT JOIN rooms r2 ON c.room_id = r2.id
-            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switches s ON s.position_id = cp.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
             LEFT JOIN LATERAL (
                 SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
@@ -1686,7 +1916,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.switch_port_id,
             imm.device_type,
             CASE
-                WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                WHEN s.id IS NOT NULL THEN s.name::text
                 WHEN w.id IS NOT NULL THEN w.name::text
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE 'unknown device'
@@ -1701,7 +1931,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 ELSE NULL
             END AS cabinet_position_name,
             CASE
-                WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                WHEN s.id IS NOT NULL THEN s.name::text
                 ELSE NULL
             END AS switch_name,
             sp.port_number::text AS switch_port_number,
@@ -1730,7 +1960,7 @@ async fn create_views(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
         LEFT JOIN rooms r2 ON c.room_id = r2.id
-        LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+        LEFT JOIN switches s ON s.position_id = cp.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
         LEFT JOIN LATERAL (
             SELECT rn.network_id, nc.name, nr.name as region_name, nc.network_region_id
@@ -2082,7 +2312,7 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
                 imm.switch_port_id,
                 imm.device_type,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     WHEN w.id IS NOT NULL THEN w.name::text
                     WHEN cp.id IS NOT NULL THEN cp.name::text
                     ELSE 'unknown device'
@@ -2097,7 +2327,7 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
                     ELSE NULL
                 END AS cabinet_position_name,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     ELSE NULL
                 END AS switch_name,
                 sp.port_number::text AS switch_port_number,
@@ -2126,7 +2356,7 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
             LEFT JOIN positions cp ON imm.position_id = cp.id
             LEFT JOIN cabinets c ON cp.cabinet_id = c.id
             LEFT JOIN rooms r2 ON c.room_id = r2.id
-            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switches s ON s.position_id = cp.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
             LEFT JOIN LATERAL (
                 SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
@@ -2341,7 +2571,7 @@ async fn migrate_ip_with_details_room_network_id(pool: &sqlx::PgPool) -> Result<
                 imm.switch_port_id,
                 imm.device_type,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     WHEN w.id IS NOT NULL THEN w.name::text
                     WHEN cp.id IS NOT NULL THEN cp.name::text
                     ELSE 'unknown device'
@@ -2357,7 +2587,7 @@ async fn migrate_ip_with_details_room_network_id(pool: &sqlx::PgPool) -> Result<
                     ELSE NULL
                 END AS cabinet_position_name,
                 CASE
-                    WHEN cp.device_type = 'switch' AND cp.device_id IS NOT NULL THEN s.name::text
+                    WHEN s.id IS NOT NULL THEN s.name::text
                     ELSE NULL
                 END AS switch_name,
                 sp.port_number::text AS switch_port_number,
@@ -2385,7 +2615,7 @@ async fn migrate_ip_with_details_room_network_id(pool: &sqlx::PgPool) -> Result<
             LEFT JOIN rooms r ON w.room_id = r.id
             LEFT JOIN positions cp ON imm.position_id = cp.id
             LEFT JOIN cabinets c ON cp.cabinet_id = c.id
-            LEFT JOIN switches s ON cp.device_type = 'switch' AND cp.device_id = s.id
+            LEFT JOIN switches s ON s.position_id = cp.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
             LEFT JOIN room_networks rn ON imm.room_network_id = rn.id
             LEFT JOIN network_cidrs nc ON rn.network_id = nc.id
@@ -2400,6 +2630,285 @@ async fn migrate_ip_with_details_room_network_id(pool: &sqlx::PgPool) -> Result<
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) VALUES ('ip_with_details_room_network_id', '更新ip_with_details视图，使用room_network_id直接关联')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_element_layouts_structure(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'element_layouts_structure'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"CREATE TABLE IF NOT EXISTS element_layouts (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                element_type VARCHAR(20) NOT NULL,
+                x INTEGER NOT NULL DEFAULT 0,
+                y INTEGER NOT NULL DEFAULT 0,
+                width INTEGER NOT NULL DEFAULT 160,
+                height INTEGER NOT NULL DEFAULT 160,
+                rotation INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 element_layouts 表失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_element_layouts_room_id ON element_layouts(room_id)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 idx_element_layouts_room_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_element_layouts_type ON element_layouts(element_type)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 idx_element_layouts_type 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO element_layouts (room_id, element_type, x, y, width, height, rotation)
+            SELECT room_id, 'door', x, y, width, height, rotation
+            FROM workstation_layouts
+            WHERE element_type = 'door'"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("迁移 door 数据到 element_layouts 失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DELETE FROM workstation_layouts WHERE element_type = 'door'"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 workstation_layouts 中的 door 数据失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts DROP COLUMN IF EXISTS element_type"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 workstation_layouts.element_type 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts RENAME COLUMN element_id TO workstation_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("重命名 element_id 为 workstation_id 失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_workstation_layouts_element_type"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_workstation_layouts_element_type 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP CONSTRAINT IF EXISTS workstation_layouts_room_id_element_id_key"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除旧唯一约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'workstation_layouts_workstation_id_fkey'
+                ) THEN
+                    ALTER TABLE workstation_layouts 
+                    ADD CONSTRAINT workstation_layouts_workstation_id_fkey 
+                    FOREIGN KEY (workstation_id) REFERENCES workstations(id) ON DELETE CASCADE;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 workstation_id 外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'workstation_layouts_room_workstation_key'
+                ) THEN
+                    ALTER TABLE workstation_layouts 
+                    ADD CONSTRAINT workstation_layouts_room_workstation_key 
+                    UNIQUE (room_id, workstation_id);
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 room_id+workstation_id 唯一约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('element_layouts_structure', '创建element_layouts表存储非工位元素，简化workstation_layouts表结构，移除element_type列')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_cabinet_layouts_add_room_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'cabinet_layouts_add_room_id'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE cabinet_layouts ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id) ON DELETE CASCADE"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 cabinet_layouts.room_id 列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"UPDATE cabinet_layouts cl
+            SET room_id = (SELECT room_id FROM cabinets WHERE id = cl.cabinet_id)
+            WHERE cl.room_id IS NULL"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("填充 cabinet_layouts.room_id 失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_cabinet_layouts_room_id ON cabinet_layouts(room_id)"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建 idx_cabinet_layouts_room_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'cabinet_layouts_room_cabinet_key'
+                ) THEN
+                    ALTER TABLE cabinet_layouts 
+                    ADD CONSTRAINT cabinet_layouts_room_cabinet_key 
+                    UNIQUE (room_id, cabinet_id);
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 room_id+cabinet_id 唯一约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) VALUES ('cabinet_layouts_add_room_id', '为cabinet_layouts表添加room_id列，统一布局表筛选方式')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_workstation_layouts_simplify(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'workstation_layouts_simplify'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts RENAME COLUMN element_id TO workstation_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("重命名element_id为workstation_id失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts DROP COLUMN IF EXISTS element_type"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除element_type列失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'fk_workstation_layouts_workstation'
+                ) THEN
+                    ALTER TABLE workstation_layouts 
+                    ADD CONSTRAINT fk_workstation_layouts_workstation 
+                    FOREIGN KEY (workstation_id) REFERENCES workstations(id) ON DELETE CASCADE;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加外键约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('workstation_layouts_simplify', '简化workstation_layouts表，重命名element_id为workstation_id，添加外键约束')"
         )
         .execute(pool)
         .await?;

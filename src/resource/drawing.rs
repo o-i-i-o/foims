@@ -40,29 +40,44 @@ pub async fn save_layout(
 
         let mut tx = state.pool()?.get_conn().begin().await?;
 
-        for item in &req.layout {
-            let element_type = if item.element_type == "door" {
-                "door"
-            } else {
-                "workstation"
-            };
+        let workstation_items: Vec<_> = req.layout.iter()
+            .filter(|item| item.element_type != "door")
+            .collect();
+        let element_items: Vec<_> = req.layout.iter()
+            .filter(|item| item.element_type == "door")
+            .collect();
 
+        for item in &workstation_items {
             sqlx::query(
-                "INSERT INTO workstation_layouts (room_id, element_id, element_type, x, y, width, height, rotation) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                 ON CONFLICT (room_id, element_id) 
+                "INSERT INTO workstation_layouts (room_id, workstation_id, x, y, width, height, rotation) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (room_id, workstation_id) 
                  DO UPDATE SET 
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
                      width = EXCLUDED.width,
                      height = EXCLUDED.height,
                      rotation = EXCLUDED.rotation,
-                     element_type = EXCLUDED.element_type,
                      updated_at = NOW()"
             )
             .bind(room_id)
             .bind(item.id)
-            .bind(element_type)
+            .bind(item.position.x_i32())
+            .bind(item.position.y_i32())
+            .bind(item.position.width_i32())
+            .bind(item.position.height_i32())
+            .bind(item.position.rotation_i32())
+            .execute(&mut *tx).await?;
+        }
+
+        for item in &element_items {
+            sqlx::query(
+                "INSERT INTO element_layouts (room_id, element_type, x, y, width, height, rotation) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT DO NOTHING"
+            )
+            .bind(room_id)
+            .bind(&item.element_type)
             .bind(item.position.x_i32())
             .bind(item.position.y_i32())
             .bind(item.position.width_i32())
@@ -180,6 +195,11 @@ pub async fn delete_layout(
         .execute(&state.pool()?.get_conn())
         .await?;
 
+    sqlx::query("DELETE FROM element_layouts WHERE room_id = $1")
+        .bind(room_id)
+        .execute(&state.pool()?.get_conn())
+        .await?;
+
     let details = serde_json::json!({
         "room_id": room_id
     });
@@ -244,8 +264,8 @@ pub async fn get_layout(
 ) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    let layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
-        r"SELECT element_id, element_type,
+    let workstation_layouts = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+        r"SELECT workstation_id,
                   json_build_object(
                       'x', x, 
                       'y', y, 
@@ -260,19 +280,44 @@ pub async fn get_layout(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let layout_data: Vec<serde_json::Value> = layouts
+    let element_layouts = sqlx::query_as::<_, (String, serde_json::Value)>(
+        r"SELECT element_type,
+                  json_build_object(
+                      'x', x, 
+                      'y', y, 
+                      'width', width, 
+                      'height', height, 
+                      'rotation', rotation
+                  ) as position
+           FROM element_layouts
+           WHERE room_id = $1",
+    )
+    .bind(room_id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+
+    let mut layout_data: Vec<serde_json::Value> = workstation_layouts
         .into_iter()
-        .map(|(id, element_type, position)| {
-            let mut obj = serde_json::Map::new();
-            obj.insert("id".to_string(), serde_json::Value::String(id.to_string()));
-            obj.insert(
-                "element_type".to_string(),
-                serde_json::Value::String(element_type),
-            );
-            obj.insert("position".to_string(), position);
-            serde_json::Value::Object(obj)
+        .map(|(id, position)| {
+            serde_json::json!({
+                "id": id,
+                "element_type": "workstation",
+                "position": position
+            })
         })
         .collect();
+
+    layout_data.extend(
+        element_layouts
+            .into_iter()
+            .map(|(element_type, position)| {
+                serde_json::json!({
+                    "id": Uuid::nil(),
+                    "element_type": element_type,
+                    "position": position
+                })
+            })
+    );
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(
@@ -333,8 +378,8 @@ pub async fn get_room_cabinets_with_positions(
 
     let mut result = Vec::new();
     for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {
-        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>, Option<String>, Option<Uuid>)>(
-            "SELECT id, name, cabinet_id, start_u, end_u, description, device_type, device_id FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
+        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>, Option<String>)>(
+            "SELECT id, name, cabinet_id, start_u, end_u, description, device_type FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
         )
         .bind(cab_id)
         .fetch_all(&state.pool()?.get_conn())
@@ -343,7 +388,7 @@ pub async fn get_room_cabinets_with_positions(
 
         let pos_items: Vec<serde_json::Value> = positions
             .iter()
-            .map(|(id, name, pos_cab_id, start_u, end_u, desc, dt, did)| {
+            .map(|(id, name, pos_cab_id, start_u, end_u, desc, dt)| {
                 serde_json::json!({
                     "id": id,
                     "name": name,
@@ -351,8 +396,7 @@ pub async fn get_room_cabinets_with_positions(
                     "start_u": start_u,
                     "end_u": end_u,
                     "description": desc,
-                    "device_type": dt,
-                    "device_id": did
+                    "device_type": dt
                 })
             })
             .collect();

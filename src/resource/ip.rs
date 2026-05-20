@@ -411,7 +411,7 @@ pub async fn get_switch_ips(
     let switch_id = *id_path;
 
     let position_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM positions WHERE device_type = 'switch' AND device_id = $1",
+        "SELECT position_id FROM switches WHERE id = $1",
     )
     .bind(switch_id)
     .fetch_optional(&state.pool()?.get_conn())

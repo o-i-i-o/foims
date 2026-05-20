@@ -370,14 +370,13 @@ pub async fn create_switch(
     if req.position_id.is_none() {
         let position_result = if let Some(cabinet_id) = req.cabinet_id {
             sqlx::query(
-                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, device_type, device_id, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 'switch', $6, $7, $8, $9)"
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, device_type, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 'switch', $6, $7, $8)"
             )
             .bind(position_id)
             .bind(&req.name)
             .bind(cabinet_id)
             .bind(req.start_u)
             .bind(req.end_u)
-            .bind(id)
             .bind(&req.description)
             .bind(now)
             .bind(now)
@@ -385,11 +384,10 @@ pub async fn create_switch(
             .await
         } else {
             sqlx::query(
-                "INSERT INTO positions (id, name, device_type, device_id, description, created_at, updated_at) VALUES ($1, $2, 'switch', $3, $4, $5, $6)"
+                "INSERT INTO positions (id, name, device_type, description, created_at, updated_at) VALUES ($1, $2, 'switch', $3, $4, $5)"
             )
             .bind(position_id)
             .bind(&req.name)
-            .bind(id)
             .bind(&req.description)
             .bind(now)
             .bind(now)
@@ -402,9 +400,8 @@ pub async fn create_switch(
         }
     } else {
         if let Err(e) = sqlx::query(
-            "UPDATE positions SET device_type = 'switch', device_id = $1, name = COALESCE(name, $2), updated_at = $3 WHERE id = $4"
+            "UPDATE positions SET device_type = 'switch', name = COALESCE(name, $1), updated_at = $2 WHERE id = $3"
         )
-        .bind(id)
         .bind(&req.name)
         .bind(now)
         .bind(position_id)
@@ -613,9 +610,8 @@ pub async fn update_switch(
 
     if let Some(new_position_id) = req.position_id
         && let Err(e) = sqlx::query(
-            "UPDATE positions SET device_type = 'switch', device_id = $1, updated_at = $2 WHERE id = $3"
+            "UPDATE positions SET device_type = 'switch', updated_at = $1 WHERE id = $2"
         )
-        .bind(id)
         .bind(now)
         .bind(new_position_id)
         .execute(&state.pool()?.get_conn())

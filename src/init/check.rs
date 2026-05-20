@@ -124,7 +124,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "end_u",
             "description",
             "device_type",
-            "device_id",
             "created_at",
             "updated_at",
         ],

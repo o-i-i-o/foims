@@ -97,7 +97,7 @@ pub async fn get_positions(
                                   c.room_id,
                                   COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                                   p.start_u, p.end_u, p.description, 
-                                  p.device_type, p.device_id,
+                                  p.device_type,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
                            LEFT JOIN cabinets c ON p.cabinet_id = c.id
@@ -119,7 +119,7 @@ pub async fn get_positions(
                                   c.room_id,
                                   COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                                   p.start_u, p.end_u, p.description, 
-                                  p.device_type, p.device_id,
+                                  p.device_type,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                            FROM positions p 
                            LEFT JOIN cabinets c ON p.cabinet_id = c.id
@@ -143,7 +143,7 @@ pub async fn get_positions(
                               c.room_id,
                               COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                               p.start_u, p.end_u, p.description, 
-                              p.device_type, p.device_id,
+                              p.device_type,
                               p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                        FROM positions p 
                        LEFT JOIN cabinets c ON p.cabinet_id = c.id
@@ -165,7 +165,7 @@ pub async fn get_positions(
                           c.room_id,
                           COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
                           p.start_u, p.end_u, p.description, 
-                          p.device_type, p.device_id,
+                          p.device_type,
                           p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
                    FROM positions p 
                    LEFT JOIN cabinets c ON p.cabinet_id = c.id
@@ -193,7 +193,6 @@ pub async fn get_positions(
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-        let device_id: Option<Uuid> = row.get("device_id");
 
         let position_with_details = CabinetPositionWithDetails {
             id,
@@ -205,7 +204,6 @@ pub async fn get_positions(
             start_u,
             end_u,
             device_type,
-            device_id,
             ips: Vec::new(),
             description,
             created_at,
@@ -252,8 +250,8 @@ pub async fn create_cabinet_position(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', NULL, $7, $8)"
+        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', $7, $8)"
     )
     .bind(id)
     .bind(&req.name)
@@ -349,7 +347,6 @@ pub async fn create_cabinet_position(
         created_at: now,
         updated_at: now,
         device_type: Some("cabinet_position".to_string()),
-        device_id: None,
     };
 
     let details = serde_json::json!({
@@ -392,7 +389,7 @@ pub async fn get_cabinet_position(
 
     let position_data = sqlx::query(
         r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description, 
-                  p.device_type, p.device_id,
+                  p.device_type,
                   p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ,
                   c.room_id
            FROM positions p
@@ -405,54 +402,28 @@ pub async fn get_cabinet_position(
     .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
 
     let device_type: Option<String> = position_data.get("device_type");
-    let device_id: Option<Uuid> = position_data.get("device_id");
-    let is_switch = device_type.as_deref() == Some("switch");
 
-    let position_ips = if is_switch {
-        sqlx::query(
-            r"SELECT 
-                m.id, m.workstation_id, m.position_id, m.switch_port_id,
-                m.device_type, rn.network_id, 
-                host(m.ip_address) as ip_address,
-                m.ip_version, m.mac_address, m.hostname,
-                m.status, m.last_seen, m.created_at, m.updated_at,
-                n.network_region_id, nr.name as network_region
-            FROM ips m
-            LEFT JOIN positions p ON m.position_id = p.id
-            LEFT JOIN cabinets c ON p.cabinet_id = c.id
-            LEFT JOIN rooms r ON c.room_id = r.id
-            LEFT JOIN room_networks rn ON r.id = rn.room_id
-            LEFT JOIN network_cidrs n ON rn.network_id = n.id
-            LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-            WHERE m.position_id = (SELECT p.id FROM positions p WHERE p.device_type = 'switch' AND p.device_id = $1)
-            ORDER BY m.ip_address",
-        )
-        .bind(device_id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-    } else {
-        sqlx::query(
-            r"SELECT 
-                m.id, m.workstation_id, m.position_id, m.switch_port_id,
-                m.device_type, rn.network_id, 
-                host(m.ip_address) as ip_address,
-                m.ip_version, m.mac_address, m.hostname,
-                m.status, m.last_seen, m.created_at, m.updated_at,
-                n.network_region_id, nr.name as network_region
-            FROM ips m
-            LEFT JOIN positions p ON m.position_id = p.id
-            LEFT JOIN cabinets c ON p.cabinet_id = c.id
-            LEFT JOIN rooms r ON c.room_id = r.id
-            LEFT JOIN room_networks rn ON r.id = rn.room_id
-            LEFT JOIN network_cidrs n ON rn.network_id = n.id
-            LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-            WHERE m.position_id = $1
-            ORDER BY m.ip_address",
-        )
-        .bind(id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-    };
+    let position_ips = sqlx::query(
+        r"SELECT 
+            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.device_type, rn.network_id, 
+            host(m.ip_address) as ip_address,
+            m.ip_version, m.mac_address, m.hostname,
+            m.status, m.last_seen, m.created_at, m.updated_at,
+            n.network_region_id, nr.name as network_region
+        FROM ips m
+        LEFT JOIN positions p ON m.position_id = p.id
+        LEFT JOIN cabinets c ON p.cabinet_id = c.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN room_networks rn ON r.id = rn.room_id
+        LEFT JOIN network_cidrs n ON rn.network_id = n.id
+        LEFT JOIN network_regions nr ON n.network_region_id = nr.id
+        WHERE m.position_id = $1
+        ORDER BY m.ip_address",
+    )
+    .bind(id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
     let ips_with_region: Vec<serde_json::Value> = position_ips
         .into_iter()
@@ -498,7 +469,6 @@ pub async fn get_cabinet_position(
         "start_u": position_data.get::<i32, _>("start_u"),
         "end_u": position_data.get::<i32, _>("end_u"),
         "device_type": device_type,
-        "device_id": device_id,
         "ips": ips_with_region,
         "description": position_data.get::<Option<String>, _>("description"),
         "created_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
@@ -589,7 +559,7 @@ pub async fn update_cabinet_position(
     tx.commit().await?;
 
     let row = sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.device_type, p.device_id, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.device_type, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
         FROM positions p 
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
         LEFT JOIN rooms r ON c.room_id = r.id 
@@ -614,7 +584,6 @@ pub async fn update_cabinet_position(
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
         device_type: row.get("device_type"),
-        device_id: row.get("device_id"),
         ips,
         description: row.get("description"),
         created_at: row.get("created_at"),
