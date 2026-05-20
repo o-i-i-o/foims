@@ -610,7 +610,7 @@ pub async fn refresh_token(
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
-    tracing::info!("用户 {} 令牌刷新成功", claims.username);
+    tracing::debug!("用户 {} 令牌刷新成功", claims.username);
 
     let secure = is_secure_request(&http_req);
     let access_cookie = create_auth_cookie(
