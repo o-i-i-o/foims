@@ -23,6 +23,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE 'unknown device'
             END AS device_name,
+            imm.room_network_id,
             rn.network_id AS network_id,
             CASE
                 WHEN w.id IS NOT NULL THEN w.name::text
@@ -45,8 +46,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN c.id IS NOT NULL THEN c.name::text
                 ELSE NULL
             END AS cabinet_name,
-            COALESCE(rn.name, 'unknown')::text AS network_name,
-            COALESCE(rn.region_name, 'unknown')::text AS network_region,
+            COALESCE(nc.name, 'unknown')::text AS network_name,
+            COALESCE(nr.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
             imm.mac_address,
@@ -61,17 +62,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
-        LEFT JOIN rooms r2 ON c.room_id = r2.id
         LEFT JOIN switches s ON s.position_id = cp.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
-        LEFT JOIN LATERAL (
-            SELECT rn_l.network_id, nc.name, nr.name as region_name, nc.network_region_id
-            FROM room_networks rn_l
-            JOIN network_cidrs nc ON rn_l.network_id = nc.id
-            JOIN network_regions nr ON nc.network_region_id = nr.id
-            WHERE rn_l.room_id = COALESCE(r.id, r2.id)
-            LIMIT 1
-        ) rn ON true
+        LEFT JOIN room_networks rn ON imm.room_network_id = rn.id
+        LEFT JOIN network_cidrs nc ON rn.network_id = nc.id
+        LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
     ",
     )
     .execute(pool)

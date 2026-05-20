@@ -129,8 +129,8 @@ async fn migrate_ip_with_details_room_network_id(pool: &PgPool) -> Result<(), Er
                     WHEN c.id IS NOT NULL THEN c.name::text
                     ELSE NULL
                 END AS cabinet_name,
-                COALESCE(rn.name, 'unknown')::text AS network_name,
-                COALESCE(rn.region_name, 'unknown')::text AS network_region,
+                COALESCE(nc.name, 'unknown')::text AS network_name,
+                COALESCE(nr.name, 'unknown')::text AS network_region,
                 host(imm.ip_address) as ip_address,
                 imm.ip_version,
                 imm.mac_address,

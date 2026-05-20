@@ -4,12 +4,90 @@ use sqlx::Row;
 use tracing::warn;
 
 pub async fn run(pool: &PgPool) -> Result<(), Error> {
+    migrate_ips_device_type_constraint(pool).await?;
     migrate_room_fk_to_restrict(pool).await?;
     migrate_remove_device_id(pool).await?;
     migrate_remove_cabinet_layouts_room_id(pool).await?;
     migrate_workstation_layouts_simplify(pool).await?;
     migrate_add_ip_sync_trigger(pool).await?;
+    migrate_add_cabinet_room_sync_trigger(pool).await?;
+    migrate_add_position_cabinet_sync_trigger(pool).await?;
     migrate_cleanup_duplicate_constraints(pool).await?;
+    Ok(())
+}
+
+async fn migrate_ips_device_type_constraint(pool: &PgPool) -> Result<(), Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_device_type_switch'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'chk_device_type' AND contype = 'c'
+                ) THEN
+                    ALTER TABLE ips DROP CONSTRAINT chk_device_type;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.chk_device_type 约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE ips ADD CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch'))"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 ips.chk_device_type 新约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'chk_device_consistency' AND contype = 'c'
+                ) THEN
+                    ALTER TABLE ips DROP CONSTRAINT chk_device_consistency;
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 ips.chk_device_consistency 约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"ALTER TABLE ips ADD CONSTRAINT chk_device_consistency CHECK (
+                (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL) OR
+                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
+                (device_type = 'switch' AND position_id IS NOT NULL AND workstation_id IS NULL)
+            )"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 ips.chk_device_consistency 新约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('ips_device_type_switch', '更新ips表device_type约束，支持switch类型')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
     Ok(())
 }
 
@@ -327,6 +405,149 @@ async fn migrate_cleanup_duplicate_constraints(pool: &PgPool) -> Result<(), Erro
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
              VALUES ('cleanup_duplicate_constraints', '清理workstation_layouts重复约束和positions.device_id索引')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_add_cabinet_room_sync_trigger(pool: &PgPool) -> Result<(), Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'add_cabinet_room_sync_trigger'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE FUNCTION sync_cabinet_ips_room_network()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.room_id IS DISTINCT FROM OLD.room_id THEN
+                    UPDATE ips i
+                    SET room_network_id = (
+                        SELECT rn.id
+                        FROM room_networks rn
+                        JOIN network_cidrs nc ON rn.network_id = nc.id
+                        WHERE rn.room_id = NEW.room_id
+                        AND (
+                            (nc.ipv4_cidr IS NOT NULL AND i.ip_address <<= nc.ipv4_cidr::inet)
+                            OR (nc.ipv6_cidr IS NOT NULL AND i.ip_address <<= nc.ipv6_cidr::inet)
+                        )
+                        LIMIT 1
+                    )
+                    WHERE i.position_id IN (
+                        SELECT p.id FROM positions p WHERE p.cabinet_id = NEW.id
+                    );
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建sync_cabinet_ips_room_network函数失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP TRIGGER IF EXISTS trg_sync_cabinet_ips_room_network ON cabinets"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除旧触发器失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE TRIGGER trg_sync_cabinet_ips_room_network
+            AFTER UPDATE OF room_id ON cabinets
+            FOR EACH ROW EXECUTE FUNCTION sync_cabinet_ips_room_network()"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建trg_sync_cabinet_ips_room_network触发器失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('add_cabinet_room_sync_trigger', '添加触发器在机柜room_id变更时自动同步机位IP的room_network_id')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_add_position_cabinet_sync_trigger(pool: &PgPool) -> Result<(), Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'add_position_cabinet_sync_trigger'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            r"CREATE OR REPLACE FUNCTION sync_position_ips_room_network()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.cabinet_id IS DISTINCT FROM OLD.cabinet_id THEN
+                    UPDATE ips i
+                    SET room_network_id = (
+                        SELECT rn.id
+                        FROM room_networks rn
+                        JOIN network_cidrs nc ON rn.network_id = nc.id
+                        JOIN cabinets c ON NEW.cabinet_id = c.id
+                        WHERE rn.room_id = c.room_id
+                        AND (
+                            (nc.ipv4_cidr IS NOT NULL AND i.ip_address <<= nc.ipv4_cidr::inet)
+                            OR (nc.ipv6_cidr IS NOT NULL AND i.ip_address <<= nc.ipv6_cidr::inet)
+                        )
+                        LIMIT 1
+                    )
+                    WHERE i.position_id = NEW.id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建sync_position_ips_room_network函数失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP TRIGGER IF EXISTS trg_sync_position_ips_room_network ON positions"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除旧触发器失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "CREATE TRIGGER trg_sync_position_ips_room_network
+            AFTER UPDATE OF cabinet_id ON positions
+            FOR EACH ROW EXECUTE FUNCTION sync_position_ips_room_network()"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("创建trg_sync_position_ips_room_network触发器失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('add_position_cabinet_sync_trigger', '添加触发器在机位cabinet_id变更时自动同步IP的room_network_id')"
         )
         .execute(pool)
         .await?;
