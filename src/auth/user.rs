@@ -3,7 +3,7 @@ use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams};
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
@@ -84,21 +84,19 @@ pub async fn create_user(
 
     let conn = state.pool()?.get_conn();
 
-    let existing_user =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = $1")
-            .bind(&req.username)
-            .fetch_optional(&conn)
-            .await?;
+    let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = $1")
+        .bind(&req.username)
+        .fetch_optional(&conn)
+        .await?;
 
     if existing_user.is_some() {
         return Err(AppError::Conflict("用户名已存在".to_string()));
     }
 
-    let existing_email =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
-            .bind(&req.email)
-            .fetch_optional(&conn)
-            .await?;
+    let existing_email = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
+        .bind(&req.email)
+        .fetch_optional(&conn)
+        .await?;
 
     if existing_email.is_some() {
         return Err(AppError::Conflict("邮箱已存在".to_string()));

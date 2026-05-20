@@ -10,27 +10,27 @@ use actix_web::{HttpMessage, HttpRequest};
 
 // ==================== IP/MAC 地址验证与格式化 ====================
 
-#[must_use] 
+#[must_use]
 pub fn validate_ip_address(ip: &str) -> bool {
     ip.parse::<IpNetwork>().is_ok()
 }
 
-#[must_use] 
+#[must_use]
 pub fn validate_mac_address(mac: &str) -> bool {
     mac.parse::<MacAddr>().is_ok()
 }
 
-#[must_use] 
+#[must_use]
 pub fn format_ip_address(ip: &str) -> Option<String> {
     ip.parse::<IpNetwork>().ok().map(|n| n.to_string())
 }
 
-#[must_use] 
+#[must_use]
 pub fn format_mac_address(mac: &str) -> Option<String> {
     mac.parse::<MacAddr>().ok().map(|m| m.to_string())
 }
 
-#[must_use] 
+#[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
     if ip.starts_with("::ffff:") {
         ip.strip_prefix("::ffff:").unwrap_or(ip).to_string()
@@ -41,12 +41,12 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
 
 // ==================== CIDR 验证 ====================
 
-#[must_use] 
+#[must_use]
 pub fn validate_cidr(cidr: &str) -> bool {
     ipnetwork::IpNetwork::from_str(cidr).is_ok()
 }
 
-#[must_use] 
+#[must_use]
 pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     match ipnetwork::IpNetwork::from_str(cidr) {
         Ok(ipnetwork::IpNetwork::V4(_)) => Some("ipv4"),
@@ -97,7 +97,11 @@ pub fn validate_ip_in_cidr(
     Ok(false)
 }
 
-pub async fn validate_network_in_room<'e, E>(executor: E, room_id: Uuid, network_id: Option<Uuid>) -> Result<(), crate::error::AppError>
+pub async fn validate_network_in_room<'e, E>(
+    executor: E,
+    room_id: Uuid,
+    network_id: Option<Uuid>,
+) -> Result<(), crate::error::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -122,22 +126,27 @@ where
     Ok(())
 }
 
-pub async fn get_room_id_by_workstation<'e, E>(executor: E, workstation_id: Uuid) -> Result<Option<Uuid>, crate::error::AppError>
+pub async fn get_room_id_by_workstation<'e, E>(
+    executor: E,
+    workstation_id: Uuid,
+) -> Result<Option<Uuid>, crate::error::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let room_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT room_id FROM workstations WHERE id = $1",
-    )
-    .bind(workstation_id)
-    .fetch_optional(executor)
-    .await?
-    .flatten();
+    let room_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
+            .bind(workstation_id)
+            .fetch_optional(executor)
+            .await?
+            .flatten();
 
     Ok(room_id)
 }
 
-pub async fn get_room_id_by_position<'e, E>(executor: E, position_id: Uuid) -> Result<Option<Uuid>, crate::error::AppError>
+pub async fn get_room_id_by_position<'e, E>(
+    executor: E,
+    position_id: Uuid,
+) -> Result<Option<Uuid>, crate::error::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -154,7 +163,7 @@ where
 
 // ==================== Token 管理 ====================
 
-#[must_use] 
+#[must_use]
 pub fn generate_token_hash(token: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -327,7 +336,7 @@ pub async fn log_system_operation(
 
 // ==================== HTTP 请求处理 ====================
 
-#[must_use] 
+#[must_use]
 pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
     if let Some(xff) = req.headers().get("X-Forwarded-For")
         && let Ok(xff_str) = xff.to_str()
@@ -351,7 +360,7 @@ pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
     normalize_ipv4_address(&ip)
 }
 
-#[must_use] 
+#[must_use]
 pub fn detect_user_language(req: &HttpRequest) -> String {
     if let Some(accept_language) = req.headers().get("Accept-Language")
         && let Ok(accept_language_str) = accept_language.to_str()
@@ -392,9 +401,8 @@ pub async fn send_mac_change_notification(
             }
         };
 
-    let content = format!(
-        "工位 {workstation_name} {ip_address} 的MAC地址已从 {old_mac} 变更为 {new_mac}"
-    );
+    let content =
+        format!("工位 {workstation_name} {ip_address} 的MAC地址已从 {old_mac} 变更为 {new_mac}");
     crate::log::notification::create_notification(
         pool,
         "MAC地址变更",
@@ -426,8 +434,6 @@ pub async fn send_mac_change_notification(
 
     Ok(())
 }
-
-
 
 pub fn log_bilingual(message_key: &str) {
     let zh_message = rust_i18n::t!(message_key, locale = "zh");
@@ -463,18 +469,22 @@ pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Net
         ipv6_cidr: row.get(5),
         ipv4_gateway: row.get(6),
         ipv6_gateway: row.get(7),
-        ipv4_dns: row
-            .get::<Option<serde_json::Value>, _>(8)
-            .and_then(|v| serde_json::from_value(v).map_err(|e| {
-                tracing::warn!("IPv4 DNS反序列化失败: {}", e);
-                e
-            }).ok()),
-        ipv6_dns: row
-            .get::<Option<serde_json::Value>, _>(9)
-            .and_then(|v| serde_json::from_value(v).map_err(|e| {
-                tracing::warn!("IPv6 DNS反序列化失败: {}", e);
-                e
-            }).ok()),
+        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| {
+            serde_json::from_value(v)
+                .map_err(|e| {
+                    tracing::warn!("IPv4 DNS反序列化失败: {}", e);
+                    e
+                })
+                .ok()
+        }),
+        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| {
+            serde_json::from_value(v)
+                .map_err(|e| {
+                    tracing::warn!("IPv6 DNS反序列化失败: {}", e);
+                    e
+                })
+                .ok()
+        }),
         description: row.get(10),
         created_at: row.get(11),
         updated_at: row.get(12),

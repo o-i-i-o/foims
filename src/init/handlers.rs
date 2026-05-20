@@ -119,9 +119,7 @@ pub async fn create_database_api(
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "连接PostgreSQL失败: {e}"
-                )));
+                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
@@ -222,9 +220,7 @@ pub async fn import_database_api(
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "连接PostgreSQL失败: {e}"
-                )));
+                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
@@ -290,9 +286,9 @@ pub async fn import_database_from_file(
     let mut verification_code: Option<String> = None;
     let mut sql_file_path: Option<PathBuf> = None;
 
-    tokio::fs::create_dir_all("/tmp/ipma_import").await.map_err(|e| {
-        AppError::Internal(format!("创建临时目录失败: {e}"))
-    })?;
+    tokio::fs::create_dir_all("/tmp/ipma_import")
+        .await
+        .map_err(|e| AppError::Internal(format!("创建临时目录失败: {e}")))?;
 
     while let Some(mut field) = payload
         .try_next()
@@ -322,9 +318,9 @@ pub async fn import_database_from_file(
                 .await
                 .map_err(|e| AppError::Validation(e.to_string()))?
                 .map_err(|e| AppError::Validation(e.to_string()))?;
-            tokio::fs::write(&filepath, &data).await.map_err(|e| {
-                AppError::Internal(format!("写入文件失败: {e}"))
-            })?;
+            tokio::fs::write(&filepath, &data)
+                .await
+                .map_err(|e| AppError::Internal(format!("写入文件失败: {e}")))?;
             sql_file_path = Some(filepath);
         }
     }
@@ -381,9 +377,7 @@ pub async fn import_database_from_file(
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "连接PostgreSQL失败: {e}"
-                )));
+                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
@@ -420,7 +414,8 @@ pub async fn import_database_from_file(
             &db_config.database,
             &db_config.username,
             &db_config.password,
-        ).map_err(AppError::Internal)?;
+        )
+        .map_err(AppError::Internal)?;
 
         std::process::Command::new("psql")
             .arg("-h")
@@ -442,9 +437,7 @@ pub async fn import_database_from_file(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::Internal(format!(
-            "导入SQL文件失败: {stderr}"
-        )));
+        return Err(AppError::Internal(format!("导入SQL文件失败: {stderr}")));
     }
 
     let pool = match ensure_database_and_schema(&state.config.database).await {
@@ -514,7 +507,9 @@ pub async fn init_system(
     };
 
     if count > 0 {
-        return Err(AppError::Validation("数据库已有用户数据，请先通过新建或导入功能初始化数据库。".to_string()));
+        return Err(AppError::Validation(
+            "数据库已有用户数据，请先通过新建或导入功能初始化数据库。".to_string(),
+        ));
     }
 
     if !check_required_tables_exist(&pool).await
@@ -624,7 +619,7 @@ pub async fn check_init_status(state: web::Data<AppState>) -> Result<HttpRespons
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "initialized": false,
             "version": env!("CARGO_PKG_VERSION"),
-        })))
+        })));
     };
 
     let initialized = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")

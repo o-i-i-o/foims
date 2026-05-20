@@ -186,11 +186,7 @@ fn execute_database_backup(
         .arg("--if-exists")
         .env("PGPASSFILE", pgpass.path())
         .output()
-        .map_err(|e| {
-            format!(
-                "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
-            )
-        })?;
+        .map_err(|e| format!("执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -212,9 +208,7 @@ fn execute_database_backup(
 
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
-    Ok(format!(
-        "备份成功: {backup_file} ({file_size_mb:.2} MB)"
-    ))
+    Ok(format!("备份成功: {backup_file} ({file_size_mb:.2} MB)"))
 }
 
 fn cleanup_old_backups(backup_dir: &str, keep_days: u64) -> Result<(), String> {
@@ -497,16 +491,17 @@ fn execute_backup_task(db_config: &crate::config::DatabaseConfig) -> Result<Stri
 
     let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
 
-    Ok(format!(
-        "备份成功: {backup_file} ({file_size_mb:.2} MB)"
-    ))
+    Ok(format!("备份成功: {backup_file} ({file_size_mb:.2} MB)"))
 }
 
 async fn execute_log_cleanup(
     pool: &sqlx::PgPool,
     config: &serde_json::Value,
 ) -> Result<String, String> {
-    let days = config.get("days").and_then(serde_json::Value::as_i64).unwrap_or(30) as i32;
+    let days = config
+        .get("days")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(30) as i32;
 
     if days < 0 {
         return Err("保留天数不能为负数".to_string());

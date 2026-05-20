@@ -14,10 +14,7 @@ use crate::error::AppError;
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
 const SPAWN_BLOCKING_TIMEOUT: Duration = Duration::from_secs(60);
 
-async fn send_with_timeout(
-    transport: SmtpTransport,
-    email: Message,
-) -> Result<(), AppError> {
+async fn send_with_timeout(transport: SmtpTransport, email: Message) -> Result<(), AppError> {
     tokio::time::timeout(
         SPAWN_BLOCKING_TIMEOUT,
         tokio::task::spawn_blocking(move || transport.send(&email)),
@@ -64,15 +61,24 @@ fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> 
         let transport = SmtpTransport::relay(&config.host)
             .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
             .port(config.port)
-            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .credentials(Credentials::new(
+                config.username.clone(),
+                config.password.clone(),
+            ))
             .timeout(Some(SMTP_TIMEOUT))
             .build();
         Ok(transport)
     } else {
-        warn!("使用非加密SMTP连接发送邮件，凭据可能以明文传输 (host: {})", config.host);
+        warn!(
+            "使用非加密SMTP连接发送邮件，凭据可能以明文传输 (host: {})",
+            config.host
+        );
         Ok(SmtpTransport::builder_dangerous(&config.host)
             .port(config.port)
-            .credentials(Credentials::new(config.username.clone(), config.password.clone()))
+            .credentials(Credentials::new(
+                config.username.clone(),
+                config.password.clone(),
+            ))
             .timeout(Some(SMTP_TIMEOUT))
             .build())
     }
@@ -109,7 +115,9 @@ pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
     }
 }
 
-async fn get_smtp_config_from_db_inner(pool: &PgPool) -> Result<Option<SmtpConfig>, SmtpConfigError> {
+async fn get_smtp_config_from_db_inner(
+    pool: &PgPool,
+) -> Result<Option<SmtpConfig>, SmtpConfigError> {
     let rows = sqlx::query(
         "SELECT key, value FROM system_configs WHERE config_type = 'smtp' ORDER BY key",
     )

@@ -36,17 +36,17 @@ pub async fn get_operation_logs(
         let parsed_resource_id = if resource_id.is_empty() {
             None
         } else {
-            Uuid::parse_str(&resource_id).map_err(|_| {
-                AppError::Validation(format!("resource_id格式无效: {resource_id}"))
-            }).ok()
+            Uuid::parse_str(&resource_id)
+                .map_err(|_| AppError::Validation(format!("resource_id格式无效: {resource_id}")))
+                .ok()
         };
 
         let parsed_user_id = if user_id.is_empty() {
             None
         } else {
-            Uuid::parse_str(&user_id).map_err(|_| {
-                AppError::Validation(format!("user_id格式无效: {user_id}"))
-            }).ok()
+            Uuid::parse_str(&user_id)
+                .map_err(|_| AppError::Validation(format!("user_id格式无效: {user_id}")))
+                .ok()
         };
 
         let total: i64 = sqlx::query_scalar::<_, i64>(

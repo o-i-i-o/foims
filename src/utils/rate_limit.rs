@@ -50,7 +50,10 @@ fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
         }
     };
 
-    claims.get("sub")?.as_str().map(std::string::ToString::to_string)
+    claims
+        .get("sub")?
+        .as_str()
+        .map(std::string::ToString::to_string)
 }
 
 #[derive(Debug, Clone)]
@@ -244,7 +247,12 @@ impl RateLimiter {
                     let retry_after = window_secs - entry.window_start.elapsed().as_secs();
                     tracing::warn!(
                         "速率限制触发: key={}, 当前计数={}, 加权计数={}, 限制={}, 窗口={}s, 重试等待={}s",
-                        key, entry.count, weighted, limit, window_secs, retry_after
+                        key,
+                        entry.count,
+                        weighted,
+                        limit,
+                        window_secs,
+                        retry_after
                     );
                     return Err(RateLimitError {
                         message: format!("请求过于频繁，请在 {retry_after} 秒后重试"),
@@ -262,12 +270,15 @@ impl RateLimiter {
 
     pub fn cleanup_expired(&self) {
         let window_secs = self.window_secs;
-        self.ip_limits.retain(|_, entry| !entry.is_expired(window_secs));
+        self.ip_limits
+            .retain(|_, entry| !entry.is_expired(window_secs));
 
-        self.user_limits.retain(|_, entry| !entry.is_expired(window_secs));
+        self.user_limits
+            .retain(|_, entry| !entry.is_expired(window_secs));
 
         let email_window_secs = self.email_window_secs;
-        self.email_limits.retain(|_, entry| !entry.is_expired(email_window_secs));
+        self.email_limits
+            .retain(|_, entry| !entry.is_expired(email_window_secs));
     }
 
     fn is_trusted_proxy(&self, ip: &str) -> bool {
@@ -386,7 +397,13 @@ where
         {
             tracing::warn!(
                 "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
-                method, path, ip, user_id.as_deref().unwrap_or("-"), is_strict, is_email, e.retry_after
+                method,
+                path,
+                ip,
+                user_id.as_deref().unwrap_or("-"),
+                is_strict,
+                is_email,
+                e.retry_after
             );
             return Box::pin(async move { Err(e.into()) });
         }
@@ -400,7 +417,10 @@ where
     }
 }
 
-pub fn start_cleanup_task(limiter: RateLimiter, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
+pub fn start_cleanup_task(
+    limiter: RateLimiter,
+    mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+) {
     tokio::spawn(async move {
         loop {
             tokio::select! {

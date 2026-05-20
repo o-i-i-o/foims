@@ -5,13 +5,13 @@ use crate::models::{
     NetworkUpdate,
 };
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams};
 use crate::utils::parse_network_from_row;
-use tracing::warn;
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -215,7 +215,9 @@ pub async fn get_networks(
 
         data_sql = data_sql.bind(page_size).bind(offset);
 
-        data_sql.fetch_all(&state.pool()?.get_conn()).await?
+        data_sql
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
             .into_iter()
             .map(|row| parse_network_from_row(&row))
             .collect()
@@ -275,7 +277,9 @@ pub async fn create_network(
     .await?;
 
     if existing_network.is_some() {
-        return Err(AppError::Conflict("同一网络区域内网络名称已存在".to_string()));
+        return Err(AppError::Conflict(
+            "同一网络区域内网络名称已存在".to_string(),
+        ));
     }
 
     let mut ipv4_cidr_val: Option<String> = None;
@@ -289,7 +293,9 @@ pub async fn create_network(
             ipv4_cidr_val = Some(ipv4_cidr.clone());
             has_valid_cidr = true;
         } else {
-            return Err(AppError::Validation("请输入有效的IPv4 CIDR格式，例如：192.168.1.0/24".to_string()));
+            return Err(AppError::Validation(
+                "请输入有效的IPv4 CIDR格式，例如：192.168.1.0/24".to_string(),
+            ));
         }
     }
 
@@ -300,12 +306,16 @@ pub async fn create_network(
             ipv6_cidr_val = Some(ipv6_cidr.clone());
             has_valid_cidr = true;
         } else {
-            return Err(AppError::Validation("请输入有效的IPv6 CIDR格式，例如：2001:db8::/32".to_string()));
+            return Err(AppError::Validation(
+                "请输入有效的IPv6 CIDR格式，例如：2001:db8::/32".to_string(),
+            ));
         }
     }
 
     if !has_valid_cidr {
-        return Err(AppError::Validation("至少需要提供一个有效的IPv4或IPv6 CIDR".to_string()));
+        return Err(AppError::Validation(
+            "至少需要提供一个有效的IPv4或IPv6 CIDR".to_string(),
+        ));
     }
 
     if let Some(ref ipv4) = ipv4_cidr_val {
@@ -320,7 +330,9 @@ pub async fn create_network(
                 })?;
 
         if existing_ipv4.is_some() {
-            return Err(AppError::Conflict("IPv4网段已存在，网段不能重复".to_string()));
+            return Err(AppError::Conflict(
+                "IPv4网段已存在，网段不能重复".to_string(),
+            ));
         }
     }
 
@@ -336,7 +348,9 @@ pub async fn create_network(
                 })?;
 
         if existing_ipv6.is_some() {
-            return Err(AppError::Conflict("IPv6网段已存在，网段不能重复".to_string()));
+            return Err(AppError::Conflict(
+                "IPv6网段已存在，网段不能重复".to_string(),
+            ));
         }
     }
 
@@ -444,20 +458,22 @@ pub async fn update_network(
 
     (*req).validate()?;
 
-    let existing_network = sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    let existing_network =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing_network.is_none() {
         return Err(AppError::NotFound("网络未找到".to_string()));
     }
 
     if let Some(network_region_id) = &req.network_region_id {
-        let region_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM network_regions WHERE id = $1")
-            .bind(network_region_id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
+        let region_exists: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM network_regions WHERE id = $1")
+                .bind(network_region_id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
 
         if region_exists.is_none() {
             return Err(AppError::NotFound("网络区域不存在".to_string()));
@@ -497,7 +513,9 @@ pub async fn update_network(
     .await?;
 
     if existing_network.is_some() {
-        return Err(AppError::Conflict("同一网络区域内网络名称已存在".to_string()));
+        return Err(AppError::Conflict(
+            "同一网络区域内网络名称已存在".to_string(),
+        ));
     }
 
     if let Some(ref ipv4) = req.ipv4_cidr {
@@ -514,7 +532,9 @@ pub async fn update_network(
         })?;
 
         if existing_ipv4.is_some() {
-            return Err(AppError::Conflict("IPv4网段已被其他网段使用，网段不能重复".to_string()));
+            return Err(AppError::Conflict(
+                "IPv4网段已被其他网段使用，网段不能重复".to_string(),
+            ));
         }
     }
 
@@ -532,7 +552,9 @@ pub async fn update_network(
         })?;
 
         if existing_ipv6.is_some() {
-            return Err(AppError::Conflict("IPv6网段已被其他网段使用，网段不能重复".to_string()));
+            return Err(AppError::Conflict(
+                "IPv6网段已被其他网段使用，网段不能重复".to_string(),
+            ));
         }
     }
 
@@ -613,35 +635,38 @@ pub async fn delete_network(
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let existing_network = sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    let existing_network =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing_network.is_none() {
         return Err(AppError::NotFound("网络未找到".to_string()));
     }
 
-    let ip_count: i64 = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM ips WHERE network_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let ip_count: i64 =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE network_id = $1")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
     if ip_count > 0 {
-        return Err(AppError::Validation("无法删除网络：该网络已被IP管理关联，请先解除关联关系".to_string()));
+        return Err(AppError::Validation(
+            "无法删除网络：该网络已被IP管理关联，请先解除关联关系".to_string(),
+        ));
     }
 
-    let room_network_count: i64 = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM room_networks WHERE network_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let room_network_count: i64 =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_networks WHERE network_id = $1")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
     if room_network_count > 0 {
-        return Err(AppError::Validation("无法删除网络：该网络已被房间关联，请先解除关联关系".to_string()));
+        return Err(AppError::Validation(
+            "无法删除网络：该网络已被房间关联，请先解除关联关系".to_string(),
+        ));
     }
 
     let cabinet_network_count: i64 = sqlx::query_scalar::<_, i64>(
@@ -652,7 +677,9 @@ pub async fn delete_network(
         .await?;
 
     if cabinet_network_count > 0 {
-        return Err(AppError::Validation("无法删除网络：该网络已被机柜通过房间间接关联，请先解除关联关系".to_string()));
+        return Err(AppError::Validation(
+            "无法删除网络：该网络已被机柜通过房间间接关联，请先解除关联关系".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM network_cidrs WHERE id = $1")
@@ -748,10 +775,11 @@ pub async fn create_network_region(
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
-    let existing: Option<Uuid> = sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE name = $1")
-        .bind(&req.name)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    let existing: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE name = $1")
+            .bind(&req.name)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing.is_some() {
         return Err(AppError::Conflict("网络区域名称已存在".to_string()));
@@ -838,10 +866,11 @@ pub async fn update_network_region(
 
     (*req).validate()?;
 
-    let existing: Option<Uuid> = sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    let existing: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing.is_none() {
         return Err(AppError::NotFound("网络区域未找到".to_string()));
@@ -917,10 +946,11 @@ pub async fn delete_network_region(
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let existing: Option<Uuid> = sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    let existing: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing.is_none() {
         return Err(AppError::NotFound("网络区域未找到".to_string()));
@@ -934,7 +964,9 @@ pub async fn delete_network_region(
     .await?;
 
     if network_count > 0 {
-        return Err(AppError::Validation("无法删除网络区域：该区域下存在网络，请先删除相关网络".to_string()));
+        return Err(AppError::Validation(
+            "无法删除网络区域：该区域下存在网络，请先删除相关网络".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM network_regions WHERE id = $1")

@@ -247,7 +247,10 @@ pub struct SnmpParamsLegacy {
 }
 
 pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
-    data.snmp_community = data.snmp_community.as_ref().map(|v| decrypt_password(v).unwrap_or_default());
+    data.snmp_community = data
+        .snmp_community
+        .as_ref()
+        .map(|v| decrypt_password(v).unwrap_or_default());
     data.snmp_auth_password = data
         .snmp_auth_password
         .as_ref()
@@ -345,9 +348,7 @@ pub fn format_snmp_error(e: Box<Error>) -> String {
             index,
             ..
         } => {
-            format!(
-                "SNMP错误 (目标: {target}, 状态: {status:?}, 索引: {index})"
-            )
+            format!("SNMP错误 (目标: {target}, 状态: {status:?}, 索引: {index})")
         }
         Error::Auth { target } => {
             format!("认证失败 (目标: {target})")
@@ -548,7 +549,8 @@ pub async fn get_switch_ports_via_snmp(
 
         let port_number = vb
             .value
-            .as_str().map_or_else(|| if_index.clone(), std::string::ToString::to_string);
+            .as_str()
+            .map_or_else(|| if_index.clone(), std::string::ToString::to_string);
 
         ports.push(SwitchPortCreate {
             port_number: port_number.clone(),
@@ -667,10 +669,11 @@ pub async fn get_switch_info_snmp(
 ) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
-    let (switch, ip_address) = get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
+    let (switch, ip_address) =
+        get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
 
-    let ip_address = ip_address
-        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+    let ip_address =
+        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 
@@ -689,10 +692,11 @@ pub async fn get_switch_ports_snmp(
 ) -> Result<HttpResponse, AppError> {
     let switch_id = path.into_inner();
 
-    let (switch, ip_address) = get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
+    let (switch, ip_address) =
+        get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
 
-    let ip_address = ip_address
-        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+    let ip_address =
+        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 

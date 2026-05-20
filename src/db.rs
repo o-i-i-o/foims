@@ -320,9 +320,7 @@ impl DbPool {
             .await
     }
 
-    pub async fn acquire(
-        &self,
-    ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
+    pub async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
         let start_time = Instant::now();
         self.metrics.record_request_start();
 
@@ -400,7 +398,10 @@ impl DbPool {
             self.metrics.record_leak_warning();
             warn!(
                 "连接池接近耗尽，可能存在连接泄漏! 活跃: {}/{}, 利用率: {:.1}%, 阈值: {:.1}%",
-                active, total, utilization * 100.0, threshold * 100.0
+                active,
+                total,
+                utilization * 100.0,
+                threshold * 100.0
             );
         }
 
@@ -428,7 +429,11 @@ impl DbPool {
         }
     }
 
-    pub fn start_health_check_task(&self, interval_seconds: u64, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
+    pub fn start_health_check_task(
+        &self,
+        interval_seconds: u64,
+        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+    ) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(interval_seconds));
@@ -471,7 +476,11 @@ impl DbPool {
         });
     }
 
-    pub fn start_metrics_collection_task(&self, interval_seconds: u64, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
+    pub fn start_metrics_collection_task(
+        &self,
+        interval_seconds: u64,
+        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+    ) {
         let pool_clone = self.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(interval_seconds));
@@ -668,10 +677,7 @@ impl DbPool {
         }
     }
 
-    pub async fn transaction_with_retry<F, Fut, T, E>(
-        &self,
-        operation: F,
-    ) -> Result<T, E>
+    pub async fn transaction_with_retry<F, Fut, T, E>(&self, operation: F) -> Result<T, E>
     where
         F: Fn(&mut sqlx::Transaction<'_, sqlx::Postgres>) -> Fut,
         Fut: std::future::Future<Output = Result<T, E>>,
@@ -773,11 +779,12 @@ impl DbPool {
 
 pub fn is_retriable_error(e: &sqlx::Error) -> bool {
     match e {
-        sqlx::Error::PoolTimedOut
-        | sqlx::Error::PoolClosed
-        | sqlx::Error::Io(_) => true,
+        sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_) => true,
         sqlx::Error::Database(db_err) => {
-            matches!(db_err.code().as_deref(), Some("08006") | Some("08001") | Some("08004") | Some("57P03"))
+            matches!(
+                db_err.code().as_deref(),
+                Some("08006") | Some("08001") | Some("08004") | Some("57P03")
+            )
         }
         _ => false,
     }
@@ -785,9 +792,7 @@ pub fn is_retriable_error(e: &sqlx::Error) -> bool {
 
 pub fn is_app_error_retriable(e: &crate::error::AppError) -> bool {
     match e {
-        crate::error::AppError::Database(msg) => {
-            msg.contains("连接异常") || msg.contains("超时")
-        }
+        crate::error::AppError::Database(msg) => msg.contains("连接异常") || msg.contains("超时"),
         _ => false,
     }
 }
@@ -804,9 +809,20 @@ pub struct PgPassFile {
 }
 
 impl PgPassFile {
-    pub fn create(host: &str, port: u16, database: &str, username: &str, password: &str) -> Result<Self, String> {
+    pub fn create(
+        host: &str,
+        port: u16,
+        database: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<Self, String> {
         let pgpass_dir = std::env::temp_dir();
-        let pgpass_path = pgpass_dir.join(format!(".pgpass_ipma_{}_{}_{}", username, database, std::process::id()));
+        let pgpass_path = pgpass_dir.join(format!(
+            ".pgpass_ipma_{}_{}_{}",
+            username,
+            database,
+            std::process::id()
+        ));
         let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
         std::fs::write(&pgpass_path, &pgpass_content)
             .map_err(|e| format!("写入 .pgpass 文件失败: {e}"))?;
@@ -868,13 +884,24 @@ mod tests {
         let valid_config = PoolConfig::default();
         assert!(valid_config.validate().is_ok());
 
-        let invalid_config = PoolConfig { max_connections: 0, ..Default::default() };
+        let invalid_config = PoolConfig {
+            max_connections: 0,
+            ..Default::default()
+        };
         assert!(invalid_config.validate().is_err());
 
-        let invalid_config2 = PoolConfig { min_connections: 100, max_connections: 10, ..Default::default() };
+        let invalid_config2 = PoolConfig {
+            min_connections: 100,
+            max_connections: 10,
+            ..Default::default()
+        };
         assert!(invalid_config2.validate().is_err());
 
-        let invalid_config3 = PoolConfig { max_lifetime_secs: 60, idle_timeout_secs: 120, ..Default::default() };
+        let invalid_config3 = PoolConfig {
+            max_lifetime_secs: 60,
+            idle_timeout_secs: 120,
+            ..Default::default()
+        };
         assert!(invalid_config3.validate().is_err());
     }
 
@@ -906,6 +933,8 @@ mod tests {
         assert!(is_retriable_error(&sqlx::Error::PoolTimedOut));
         assert!(is_retriable_error(&sqlx::Error::PoolClosed));
         assert!(!is_retriable_error(&sqlx::Error::RowNotFound));
-        assert!(!is_retriable_error(&sqlx::Error::ColumnNotFound("test".to_string())));
+        assert!(!is_retriable_error(&sqlx::Error::ColumnNotFound(
+            "test".to_string()
+        )));
     }
 }

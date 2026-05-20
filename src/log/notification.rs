@@ -90,7 +90,9 @@ pub async fn mark_notification_read(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知已标记为已读")))
 }
 
-pub async fn mark_all_notifications_read(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn mark_all_notifications_read(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     let conn = state.pool()?.get_conn();
 
     sqlx::query("UPDATE notifications SET read = true")

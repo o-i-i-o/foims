@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
-use crate::utils::{log_system_operation, OperationLogParams};
+use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
 pub async fn get_switch_ports(
@@ -26,11 +26,10 @@ pub async fn get_switch_ports(
         .unwrap_or(50);
     let offset = (page - 1) * page_size;
 
-    let total: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
-            .bind(switch_id)
-            .fetch_one(&state.pool()?.get_conn())
-            .await?;
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
+        .bind(switch_id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
     let data = sqlx::query_as::<_, SwitchPort>(
         r"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
@@ -154,8 +153,7 @@ pub async fn create_switch_port(
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(switch_id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            ?;
+            .await?;
 
     if !switch_exists {
         return Err(AppError::NotFound("交换机不存在".to_string()));
@@ -167,8 +165,7 @@ pub async fn create_switch_port(
     .bind(switch_id)
     .bind(&req.port_number)
     .fetch_one(&state.pool()?.get_conn())
-    .await
-    ?;
+    .await?;
 
     if port_exists {
         return Err(AppError::Conflict("该端口号已存在".to_string()));
@@ -338,11 +335,12 @@ pub async fn delete_switch_port(
     )
     .bind(port_id)
     .fetch_one(&state.pool()?.get_conn())
-    .await
-    ?;
+    .await?;
 
     if has_workstation {
-        return Err(AppError::Validation("该端口有工位关联，无法删除".to_string()));
+        return Err(AppError::Validation(
+            "该端口有工位关联，无法删除".to_string(),
+        ));
     }
 
     let has_cabinet_position = sqlx::query_scalar::<_, bool>(
@@ -350,11 +348,12 @@ pub async fn delete_switch_port(
     )
     .bind(port_id)
     .fetch_one(&state.pool()?.get_conn())
-    .await
-    ?;
+    .await?;
 
     if has_cabinet_position {
-        return Err(AppError::Validation("该端口有机位关联，无法删除".to_string()));
+        return Err(AppError::Validation(
+            "该端口有机位关联，无法删除".to_string(),
+        ));
     }
 
     let result = sqlx::query("DELETE FROM switch_ports WHERE id = $1")
@@ -425,7 +424,8 @@ pub async fn sync_ports_from_snmp(
 
     let snmp_params = switch_data.to_snmp_params_async(ip_address).await;
 
-    let ports = get_switch_ports_via_snmp(&snmp_params).await
+    let ports = get_switch_ports_via_snmp(&snmp_params)
+        .await
         .map_err(|e| AppError::Snmp(format!("获取交换机端口信息失败: {e}")))?;
 
     let mut saved_count = 0;
@@ -486,15 +486,12 @@ pub async fn sync_ports_from_snmp(
     )
     .bind(switch_id)
     .fetch_all(&state.pool()?.get_conn())
-    .await
-    ?;
+    .await?;
 
     let message = if error_count > 0 {
         format!("保存 {saved_count} 个端口，跳过 {skipped_count} 个，失败 {error_count} 个")
     } else if saved_count > 0 && skipped_count > 0 {
-        format!(
-            "成功保存 {saved_count} 个端口，跳过 {skipped_count} 个已存在的端口"
-        )
+        format!("成功保存 {saved_count} 个端口，跳过 {skipped_count} 个已存在的端口")
     } else if saved_count > 0 {
         format!("成功保存 {saved_count} 个端口到数据库")
     } else if skipped_count > 0 {

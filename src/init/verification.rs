@@ -17,7 +17,9 @@ fn get_verification_code_storage() -> &'static Mutex<VerificationCode> {
 }
 
 fn generate_verification_code() -> String {
-    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
+    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+        .chars()
+        .collect();
     let mut code = String::with_capacity(16);
     let mut rng = rand::rng();
     for _ in 0..16 {

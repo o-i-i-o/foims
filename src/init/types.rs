@@ -11,7 +11,7 @@ pub struct VerificationCode {
 }
 
 impl VerificationCode {
-    #[must_use] 
+    #[must_use]
     pub fn new(code: String) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

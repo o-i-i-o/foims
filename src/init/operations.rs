@@ -20,7 +20,9 @@ pub fn quote_ident(name: &str) -> String {
 
 pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<String, String> {
     let backup_dir = get_backup_dir();
-    tokio::fs::create_dir_all(&backup_dir).await.map_err(|e| format!("创建备份目录失败: {e}"))?;
+    tokio::fs::create_dir_all(&backup_dir)
+        .await
+        .map_err(|e| format!("创建备份目录失败: {e}"))?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
@@ -91,10 +93,13 @@ pub async fn drop_database(config: &crate::config::DatabaseConfig) -> Result<(),
 
     info!("已断开所有到数据库 {} 的连接", config.database);
 
-    sqlx::query(&format!("DROP DATABASE IF EXISTS {}", quote_ident(&config.database)))
-        .execute(&postgres_pool)
-        .await
-        .map_err(|e| format!("删除数据库失败: {e}"))?;
+    sqlx::query(&format!(
+        "DROP DATABASE IF EXISTS {}",
+        quote_ident(&config.database)
+    ))
+    .execute(&postgres_pool)
+    .await
+    .map_err(|e| format!("删除数据库失败: {e}"))?;
 
     postgres_pool.close().await;
     info!("数据库 {} 已删除", config.database);
@@ -158,9 +163,12 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             .await?;
 
         for table in &tables {
-            sqlx::query(&format!("DROP TABLE IF EXISTS {} CASCADE", quote_ident(table)))
-                .execute(pool)
-                .await?;
+            sqlx::query(&format!(
+                "DROP TABLE IF EXISTS {} CASCADE",
+                quote_ident(table)
+            ))
+            .execute(pool)
+            .await?;
         }
 
         sqlx::query("SET session_replication_role = 'origin'")

@@ -4,12 +4,12 @@ use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams};
-use tracing::warn;
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -64,11 +64,10 @@ pub async fn get_cabinets(
 
         (total, cabinets)
     } else if parsed_room_id.is_some() && search.is_empty() {
-        let total: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM cabinets c WHERE c.room_id = $1")
-                .bind(parsed_room_id)
-                .fetch_one(&state.pool()?.get_conn())
-                .await?;
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cabinets c WHERE c.room_id = $1")
+            .bind(parsed_room_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
             &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3")
@@ -215,13 +214,12 @@ pub async fn create_cabinet(
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
-    let existing_cabinet = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2",
-    )
-    .bind(&req.name)
-    .bind(req.room_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
+    let existing_cabinet =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE name = $1 AND room_id = $2")
+            .bind(&req.name)
+            .bind(req.room_id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing_cabinet.is_some() {
         return Err(AppError::Conflict("机柜名称已存在".to_string()));
@@ -334,11 +332,10 @@ pub async fn update_cabinet(
 
     (*req).validate()?;
 
-    let existing_cabinet =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
+    let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
 
     if existing_cabinet.is_none() {
         return Err(AppError::NotFound("机柜未找到".to_string()));
@@ -401,11 +398,10 @@ pub async fn delete_cabinet(
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let existing_cabinet =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
+    let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
 
     if existing_cabinet.is_none() {
         return Err(AppError::NotFound("机柜未找到".to_string()));
@@ -418,7 +414,9 @@ pub async fn delete_cabinet(
             .await?;
 
     if position_count > 0 {
-        return Err(AppError::Validation("该机柜已被机位关联，无法删除".to_string()));
+        return Err(AppError::Validation(
+            "该机柜已被机位关联，无法删除".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM cabinets WHERE id = $1")
@@ -454,11 +452,10 @@ pub async fn get_cabinet_networks(
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let existing_cabinet =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
+    let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
 
     if existing_cabinet.is_none() {
         return Err(AppError::NotFound("机柜未找到".to_string()));

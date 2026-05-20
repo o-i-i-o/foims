@@ -3,9 +3,7 @@ use crate::config::{Config, I18nConfig, ServerConfig};
 use crate::error::AppError;
 use crate::models::ApiResponse;
 use crate::system::smtp::SmtpConfig;
-use crate::system::smtp::{
-    get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
-};
+use crate::system::smtp::{get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users};
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -81,10 +79,11 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-pub async fn get_system_info(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
-    let database_status = match sqlx::query("SELECT 1").execute(&state.pool()?.get_conn()).await {
+pub async fn get_system_info(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    let database_status = match sqlx::query("SELECT 1")
+        .execute(&state.pool()?.get_conn())
+        .await
+    {
         Ok(_) => "connected".to_string(),
         Err(e) => {
             tracing::error!("数据库连接检查失败: {}", e);
@@ -117,9 +116,7 @@ pub async fn get_system_info(
     Ok(HttpResponse::Ok().json(ApiResponse::success(system_info, "系统信息获取成功")))
 }
 
-pub async fn get_system_config(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+pub async fn get_system_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         state.config.clone(),
         "系统配置获取成功",
@@ -138,9 +135,7 @@ pub async fn update_system_config(
 
     if let Some(server) = &req.server {
         let host = server.host.trim();
-        let host_ipv6 = server.host_ipv6.as_ref()
-            .map(|s| s.trim())
-            .unwrap_or("");
+        let host_ipv6 = server.host_ipv6.as_ref().map(|s| s.trim()).unwrap_or("");
 
         fn validate_ip(addr: &str) -> Result<(), String> {
             if addr.is_empty() {
@@ -157,7 +152,9 @@ pub async fn update_system_config(
         validate_ip(host_ipv6).map_err(AppError::Validation)?;
 
         if host.is_empty() && host_ipv6.is_empty() {
-            return Err(AppError::Validation("至少需要配置一个监听地址（IPv4或IPv6）".to_string()));
+            return Err(AppError::Validation(
+                "至少需要配置一个监听地址（IPv4或IPv6）".to_string(),
+            ));
         }
 
         new_config.server = server.clone();
@@ -182,7 +179,9 @@ pub async fn update_system_config(
     let config_path = crate::config::get_config_file_path();
     tracing::info!("[update_config] 准备保存配置到: {}", config_path);
 
-    save_config_to_file(&new_config).await.map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
+    save_config_to_file(&new_config)
+        .await
+        .map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
     tracing::info!("配置已保存到: {}", config_path);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(new_config, "配置更新成功")))
@@ -253,7 +252,10 @@ pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
 
                 if stderr.contains("Failed") && !stderr.contains("Failed to restart") {
                     tracing::error!("服务重启失败: {}", stderr);
-                    return Err(AppError::Internal(format!("服务重启失败: {}", stderr.trim())));
+                    return Err(AppError::Internal(format!(
+                        "服务重启失败: {}",
+                        stderr.trim()
+                    )));
                 }
 
                 tracing::info!("systemctl 返回非零状态码，使用进程退出方式重启");
@@ -302,13 +304,19 @@ fn check_if_running_as_service() -> bool {
 }
 
 async fn restart_standalone_process() -> Result<HttpResponse, AppError> {
-    let exe_path = std::env::current_exe().map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
+    let exe_path = std::env::current_exe()
+        .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
 
-    let exe_path_str = exe_path.to_str().ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
+    let exe_path_str = exe_path
+        .to_str()
+        .ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
 
-    let working_dir = std::env::current_dir().map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
+    let working_dir = std::env::current_dir()
+        .map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
 
-    let working_dir_str = working_dir.to_str().ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
+    let working_dir_str = working_dir
+        .to_str()
+        .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
 
     let restart_script = format!(
         r#"#!/bin/bash
@@ -319,7 +327,9 @@ exec "{exe_path_str}"
     );
 
     let script_path = "/tmp/ipma_restart.sh";
-    tokio::fs::write(script_path, restart_script).await.map_err(|e| AppError::Internal(format!("创建重启脚本失败: {e}")))?;
+    tokio::fs::write(script_path, restart_script)
+        .await
+        .map_err(|e| AppError::Internal(format!("创建重启脚本失败: {e}")))?;
 
     let output = Command::new("chmod")
         .arg("+x")
@@ -401,8 +411,9 @@ pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
 
     let cert_type = match tokio::task::spawn_blocking(Config::load)
         .await
-        .unwrap_or(Err(config::ConfigError::Message("spawn_blocking failed".into())))
-    {
+        .unwrap_or(Err(config::ConfigError::Message(
+            "spawn_blocking failed".into(),
+        ))) {
         Ok(config) => config
             .server
             .cert_type
@@ -430,7 +441,9 @@ pub async fn generate_certificate(
     let certs_dir = format!("/etc/{app_name}/certs");
 
     if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
-        tokio::fs::create_dir_all(&certs_dir).await.map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
+        tokio::fs::create_dir_all(&certs_dir)
+            .await
+            .map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
     }
 
     let timestamp = chrono::Utc::now().timestamp();
@@ -487,7 +500,9 @@ pub async fn import_certificate(
     let certs_dir = format!("/etc/{app_name}/certs");
 
     if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
-        tokio::fs::create_dir_all(&certs_dir).await.map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
+        tokio::fs::create_dir_all(&certs_dir)
+            .await
+            .map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
     }
 
     let timestamp = chrono::Utc::now().timestamp();
@@ -495,9 +510,13 @@ pub async fn import_certificate(
     let cert_path = format!("{certs_dir}/{base_name}.pem");
     let key_path = format!("{certs_dir}/{base_name}.key");
 
-    tokio::fs::write(&cert_path, cert_data).await.map_err(|e| AppError::Internal(format!("保存证书文件失败: {e}")))?;
+    tokio::fs::write(&cert_path, cert_data)
+        .await
+        .map_err(|e| AppError::Internal(format!("保存证书文件失败: {e}")))?;
 
-    tokio::fs::write(&key_path, key_data).await.map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
+    tokio::fs::write(&key_path, key_data)
+        .await
+        .map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
 }
@@ -508,8 +527,9 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
 
     let cert_type = match tokio::task::spawn_blocking(Config::load)
         .await
-        .unwrap_or(Err(config::ConfigError::Message("spawn_blocking failed".into())))
-    {
+        .unwrap_or(Err(config::ConfigError::Message(
+            "spawn_blocking failed".into(),
+        ))) {
         Ok(config) => config
             .server
             .cert_type
@@ -546,7 +566,9 @@ pub async fn download_certificate() -> Result<HttpResponse, AppError> {
     }
 
     if let Some((path, _)) = latest_cert {
-        let content = tokio::fs::read(&path).await.map_err(|e| AppError::Internal(e.to_string()))?;
+        let content = tokio::fs::read(&path)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
         let filename = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())
@@ -649,18 +671,19 @@ fn generate_self_signed_cert(
     Ok(())
 }
 
-pub async fn disable_init_mode(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+pub async fn disable_init_mode(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     tracing::info!("收到关闭初始化模式请求");
 
     let mut new_config = state.config.clone();
     new_config.init.enabled = false;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&new_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&new_config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     tracing::info!("初始化模式已关闭，配置已保存，正在触发服务重启");
 
@@ -668,7 +691,8 @@ pub async fn disable_init_mode(
 }
 
 pub async fn backup_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let config_json = serde_json::to_string_pretty(&state.config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_json = serde_json::to_string_pretty(&state.config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
@@ -689,13 +713,18 @@ pub async fn restore_config(payload: web::Json<Config>) -> Result<HttpResponse, 
     let https_enabled = new_config.server.https_enabled.unwrap_or(false);
 
     if !http_enabled && !https_enabled {
-        return Err(AppError::Validation("至少需要开启一个端口（HTTP或HTTPS）".to_string()));
+        return Err(AppError::Validation(
+            "至少需要开启一个端口（HTTP或HTTPS）".to_string(),
+        ));
     }
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&new_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&new_config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置恢复成功")))
 }
@@ -716,7 +745,9 @@ pub struct UpdatePageTimeoutRequest {
     pub page_timeout: Option<u64>,
 }
 
-pub async fn get_session_timeout_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_session_timeout_config(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({
             "session_timeout": state.config.server.session_timeout
@@ -737,9 +768,12 @@ pub async fn update_session_timeout_config(
     current_config.server.session_timeout = req.session_timeout;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "会话超时配置更新成功")))
 }
@@ -772,7 +806,9 @@ pub async fn update_language_setting(
 
     let language = req.language.to_lowercase();
     if language != "en" && language != "zh" {
-        return Err(AppError::Validation("不支持的语言代码，请使用 'en' 或 'zh'".to_string()));
+        return Err(AppError::Validation(
+            "不支持的语言代码，请使用 'en' 或 'zh'".to_string(),
+        ));
     }
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -786,9 +822,12 @@ pub async fn update_language_setting(
     });
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "语言设置更新成功")))
 }
@@ -814,9 +853,12 @@ pub async fn update_page_timeout_config(
     current_config.server.page_timeout = req.page_timeout;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config).map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config)
+        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    tokio::fs::write(&config_path, config_str).await.map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+    tokio::fs::write(&config_path, config_str)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "页面超时配置更新成功")))
 }
@@ -826,7 +868,9 @@ pub struct NotificationSettings {
     pub email_recipients: Vec<Uuid>,
 }
 
-pub async fn get_notification_settings(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_notification_settings(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     let recipients = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
@@ -840,7 +884,9 @@ pub async fn get_notification_settings(state: web::Data<AppState>) -> Result<Htt
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
-        NotificationSettings { email_recipients: recipients },
+        NotificationSettings {
+            email_recipients: recipients,
+        },
         "通知设置获取成功",
     )))
 }
@@ -896,7 +942,8 @@ pub async fn update_smtp_config(
         secure: req.secure,
     };
 
-    save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await
+    save_smtp_config_to_db(&state.pool()?.get_conn(), &config)
+        .await
         .map_err(|e| AppError::Internal(format!("保存SMTP配置失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
@@ -919,7 +966,8 @@ pub async fn test_smtp_connection(
         None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
     };
 
-    crate::system::smtp::test_smtp_connection(&config).await
+    crate::system::smtp::test_smtp_connection(&config)
+        .await
         .map_err(|e| AppError::Internal(format!("SMTP测试失败: {e}")))?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功")))
@@ -1042,12 +1090,14 @@ pub async fn get_service_status() -> Result<HttpResponse, AppError> {
 pub async fn register_service() -> Result<HttpResponse, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
-    let exe_path_str = exe_path.to_str()
+    let exe_path_str = exe_path
+        .to_str()
         .ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
 
     let working_dir = std::env::current_dir()
         .map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
-    let working_dir_str = working_dir.to_str()
+    let working_dir_str = working_dir
+        .to_str()
         .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
 
     let service_content = format!(
@@ -1102,15 +1152,16 @@ WantedBy=multi-user.target
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(AppError::Internal(format!("启动服务失败: {}", stderr.trim())))
+            Err(AppError::Internal(format!(
+                "启动服务失败: {}",
+                stderr.trim()
+            )))
         }
         Err(e) => Err(AppError::Internal(format!("启动服务失败: {e}"))),
     }
 }
 
-pub async fn get_dashboard_stats(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let networks_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
         .fetch_one(&state.pool()?.get_conn())
         .await?;

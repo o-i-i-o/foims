@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::LazyLock;
 
-static DURATION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)([smhd])$").expect("failed to compile duration regex"));
+static DURATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d+)([smhd])$").expect("failed to compile duration regex"));
 
 // 配置文件搜索路径（按优先级）
 pub const CONFIG_PATHS: [&str; 3] = [
@@ -14,7 +15,7 @@ pub const CONFIG_PATHS: [&str; 3] = [
 ];
 
 // 获取配置文件路径
-#[must_use] 
+#[must_use]
 pub fn get_config_path() -> &'static str {
     for path in &CONFIG_PATHS {
         if Path::new(&format!("{path}.toml")).exists() {
@@ -26,7 +27,7 @@ pub fn get_config_path() -> &'static str {
 }
 
 // 获取配置文件完整路径
-#[must_use] 
+#[must_use]
 pub fn get_config_file_path() -> String {
     format!("{}.toml", get_config_path())
 }
@@ -264,14 +265,16 @@ impl Config {
 
         // 环境变量覆盖敏感信息
         if let Ok(db_password) = std::env::var("IPMA_DATABASE_PASSWORD")
-            && !db_password.is_empty() {
-                config.database.password = db_password;
-            }
+            && !db_password.is_empty()
+        {
+            config.database.password = db_password;
+        }
 
         if let Ok(jwt_secret) = std::env::var("IPMA_JWT_SECRET")
-            && !jwt_secret.is_empty() {
-                config.jwt.secret = jwt_secret;
-            }
+            && !jwt_secret.is_empty()
+        {
+            config.jwt.secret = jwt_secret;
+        }
 
         // 验证关键配置
         if config.database.host.is_empty() {

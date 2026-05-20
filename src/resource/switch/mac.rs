@@ -10,7 +10,10 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, ArpEntry, SwitchMac};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error, get_switch_ip_address, get_switch_snmp_config};
+use super::snmp::{
+    SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error,
+    get_switch_ip_address, get_switch_snmp_config,
+};
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {
     let iface_lower = iface.to_lowercase();
@@ -47,7 +50,11 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
         }
         let oid_parts = vb.oid.arcs();
         if let Some(&if_index) = oid_parts.last() {
-            let name = vb.value.as_str().map(std::string::ToString::to_string).unwrap_or_default();
+            let name = vb
+                .value
+                .as_str()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default();
             if !name.is_empty() {
                 map.insert(if_index, name);
             }
@@ -287,7 +294,8 @@ pub async fn batch_get_mac_via_snmp(
         return results;
     }
 
-    let all_arp_entries = std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, String>::new()));
+    let all_arp_entries =
+        std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, String>::new()));
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
 
     let mut handles = Vec::new();
@@ -357,8 +365,8 @@ pub async fn get_mac_from_switch(
 ) -> Result<HashMap<String, Option<String>>, SnmpError> {
     let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
 
-    let ip_address = ip_address
-        .ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
+    let ip_address =
+        ip_address.ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
@@ -388,8 +396,8 @@ pub async fn get_all_arp_entries(
 ) -> Result<Vec<ArpEntry>, SnmpError> {
     let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
 
-    let ip_address = ip_address
-        .ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
+    let ip_address =
+        ip_address.ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
         return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
@@ -410,8 +418,8 @@ pub async fn get_switch_mac_table(
 
     let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
 
-    let ip_address = ip_address
-        .ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+    let ip_address =
+        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 
@@ -449,7 +457,12 @@ pub async fn get_switch_mac_table(
             }
             Ok(_) => {}
             Err(e) => {
-                tracing::error!("MAC记录写入失败 (ip={}, mac={}): {}", entry.ip_address, entry.mac_address, e);
+                tracing::error!(
+                    "MAC记录写入失败 (ip={}, mac={}): {}",
+                    entry.ip_address,
+                    entry.mac_address,
+                    e
+                );
             }
         }
     }

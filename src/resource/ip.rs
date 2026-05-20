@@ -2,7 +2,10 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerUpdate, IpManagerWithNames};
 use crate::utils::pagination::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
-use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, validate_network_in_room, get_room_id_by_workstation, get_room_id_by_position};
+use crate::utils::{
+    OperationLogParams, get_room_id_by_position, get_room_id_by_workstation, log_system_operation,
+    validate_ip_in_cidr, validate_network_in_room,
+};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use std::net::IpAddr;
@@ -18,12 +21,20 @@ pub async fn get_ip_managers(
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
     let search = query.get("search").map_or("", std::string::String::as_str);
-    let device_type = query.get("device_type").map_or("", std::string::String::as_str);
+    let device_type = query
+        .get("device_type")
+        .map_or("", std::string::String::as_str);
     let status = query.get("status").map_or("", std::string::String::as_str);
-    let device_name = query.get("device_name").map_or("", std::string::String::as_str);
+    let device_name = query
+        .get("device_name")
+        .map_or("", std::string::String::as_str);
     let network = query.get("network").map_or("", std::string::String::as_str);
-    let ip_address = query.get("ip_address").map_or("", std::string::String::as_str);
-    let network_id = query.get("network_id").and_then(|s| uuid::Uuid::parse_str(s).ok());
+    let ip_address = query
+        .get("ip_address")
+        .map_or("", std::string::String::as_str);
+    let network_id = query
+        .get("network_id")
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
     let page: i64 = query
         .get("page")
         .and_then(|s| s.parse().ok())
@@ -107,9 +118,7 @@ pub async fn get_ip_managers(
         format!("WHERE {}", conditions.join(" AND "))
     };
 
-    let count_query = format!(
-        "SELECT COUNT(*) FROM ip_with_details {where_clause}"
-    );
+    let count_query = format!("SELECT COUNT(*) FROM ip_with_details {where_clause}");
     let mut count_sql = sqlx::query_scalar::<_, i64>(&count_query);
 
     if let Some(ref pattern) = search_param {
@@ -217,23 +226,21 @@ pub async fn create_ip_manager(
     };
 
     let network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> = sqlx::query_scalar(
-            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-        )
-        .bind(rid)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+        let room_network: Option<Uuid> =
+            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
+                .bind(rid)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
         room_network
     } else {
         None
     };
 
-    let existing_mapping = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-    )
-    .bind(&req.ip_address)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
+    let existing_mapping =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
+            .bind(&req.ip_address)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     if existing_mapping.is_some() {
         return Err(AppError::Conflict("该IP地址已存在".to_string()));
@@ -414,10 +421,12 @@ pub async fn get_switch_ips(
     .await?;
 
     let Some(position_id) = position_id else {
-        return Ok(HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
-            vec![],
-            "获取交换机IP列表成功",
-        )));
+        return Ok(
+            HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
+                vec![],
+                "获取交换机IP列表成功",
+            )),
+        );
     };
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
@@ -510,7 +519,10 @@ pub async fn update_ip_manager(
         return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
     }
 
-    let effective_device_type = req.device_type.as_deref().or(existing_mapping.device_type.as_deref());
+    let effective_device_type = req
+        .device_type
+        .as_deref()
+        .or(existing_mapping.device_type.as_deref());
     let effective_workstation_id = req.workstation_id.or(existing_mapping.workstation_id);
     let effective_position_id = req.position_id.or(existing_mapping.position_id);
 
@@ -527,12 +539,11 @@ pub async fn update_ip_manager(
     };
 
     let network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> = sqlx::query_scalar(
-            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-        )
-        .bind(rid)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+        let room_network: Option<Uuid> =
+            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
+                .bind(rid)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
         room_network
     } else {
         None
@@ -686,12 +697,11 @@ async fn sync_switch_macs(
     switch_id: Uuid,
     network_id: Uuid,
 ) -> Result<MacSyncResult, AppError> {
-    let network_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)",
-    )
-    .bind(network_id)
-    .fetch_one(pool)
-    .await?;
+    let network_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
+            .bind(network_id)
+            .fetch_one(pool)
+            .await?;
 
     if !network_exists {
         return Err(AppError::Validation("未找到网段信息".to_string()));
@@ -706,12 +716,11 @@ async fn sync_switch_macs(
     .await?;
 
     if switch_macs.is_empty() {
-        let total_macs: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1",
-        )
-        .bind(switch_id)
-        .fetch_one(pool)
-        .await?;
+        let total_macs: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1")
+                .bind(switch_id)
+                .fetch_one(pool)
+                .await?;
 
         return Ok(MacSyncResult {
             updated_count: 0,
@@ -773,7 +782,7 @@ async fn sync_switch_macs(
                 sqlx::query(
                     r"UPDATE ips 
                        SET mac_address = $1, last_seen = $2, updated_at = $2
-                       WHERE ip_address = CAST($3 AS INET)"
+                       WHERE ip_address = CAST($3 AS INET)",
                 )
                 .bind(mac)
                 .bind(now)
@@ -797,7 +806,7 @@ async fn sync_switch_macs(
                 sqlx::query(
                     r"UPDATE ips 
                        SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
-                       WHERE ip_address = CAST($4 AS INET)"
+                       WHERE ip_address = CAST($4 AS INET)",
                 )
                 .bind(old)
                 .bind(mac)
@@ -817,7 +826,9 @@ async fn sync_switch_macs(
 
                 if let Some(ws_id) = workstation_id {
                     info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac).await {
+                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac)
+                        .await
+                    {
                         Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
                         Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
                     }
@@ -918,7 +929,10 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     match IpAddr::from_str(ip) {
         Ok(IpAddr::V6(_)) => Ok(6),
         Ok(IpAddr::V4(_)) => Ok(4),
-        Err(e) => Err(AppError::Validation(format!("IP地址格式无效 '{}': {}", ip, e))),
+        Err(e) => Err(AppError::Validation(format!(
+            "IP地址格式无效 '{}': {}",
+            ip, e
+        ))),
     }
 }
 
@@ -975,9 +989,8 @@ pub async fn get_available_ips(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let used_ips: Vec<String> =
-        sqlx::query_scalar(
-            r"SELECT host(i.ip_address)::TEXT 
+    let used_ips: Vec<String> = sqlx::query_scalar(
+        r"SELECT host(i.ip_address)::TEXT 
               FROM ips i
               WHERE i.id IN (
                   SELECT i2.id FROM ips i2
@@ -989,11 +1002,11 @@ pub async fn get_available_ips(
                       WHERE rn.network_id = $1 
                       AND rn.room_id = COALESCE(w.room_id, c.room_id)
                   )
-              )"
-        )
-            .bind(network_id)
-            .fetch_all(&state.pool()?.get_conn())
-            .await?;
+              )",
+    )
+    .bind(network_id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
     let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
@@ -1045,19 +1058,20 @@ pub async fn auto_assign_ip(
     let device_type = if workstation_id.is_some() && position_id.is_none() {
         "workstation".to_string()
     } else if workstation_id.is_none() && position_id.is_some() {
-        let pos_device_type: Option<String> = sqlx::query_scalar(
-            "SELECT device_type FROM positions WHERE id = $1",
-        )
-        .bind(position_id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+        let pos_device_type: Option<String> =
+            sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
+                .bind(position_id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
 
         match pos_device_type.as_deref() {
             Some("switch") => "switch".to_string(),
             _ => "cabinet_position".to_string(),
         }
     } else {
-        return Err(AppError::Validation("必须指定一个设备ID（workstation_id或position_id）".to_string()));
+        return Err(AppError::Validation(
+            "必须指定一个设备ID（workstation_id或position_id）".to_string(),
+        ));
     };
 
     let room_id = if device_type == "workstation" {
@@ -1073,12 +1087,11 @@ pub async fn auto_assign_ip(
     };
 
     let network_id = if let Some(rid) = room_id {
-        let room_network: Option<Uuid> = sqlx::query_scalar(
-            "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
-        )
-        .bind(rid)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+        let room_network: Option<Uuid> =
+            sqlx::query_scalar("SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1")
+                .bind(rid)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
         room_network.ok_or_else(|| AppError::Validation("该房间未配置网络".to_string()))?
     } else {
         return Err(AppError::Validation("无法确定设备所属房间".to_string()));
@@ -1095,20 +1108,28 @@ pub async fn auto_assign_ip(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let used_ips: Vec<String> = sqlx::query_scalar(
-        "SELECT ip_address::TEXT FROM ips WHERE network_id = $1",
-    )
-    .bind(network_id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    let used_ips: Vec<String> =
+        sqlx::query_scalar("SELECT ip_address::TEXT FROM ips WHERE network_id = $1")
+            .bind(network_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
     let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
-    let assigned_ip = network.ipv4_cidr.as_ref()
-        .and_then(|cidr| find_available_ips_in_cidr(cidr, network.ipv4_gateway.as_ref(), &used_set, Some(1)).into_iter().next())
+    let assigned_ip = network
+        .ipv4_cidr
+        .as_ref()
+        .and_then(|cidr| {
+            find_available_ips_in_cidr(cidr, network.ipv4_gateway.as_ref(), &used_set, Some(1))
+                .into_iter()
+                .next()
+        })
         .or_else(|| {
-            network.ipv6_cidr.as_ref()
-                .and_then(|cidr| find_available_ips_in_cidr(cidr, network.ipv6_gateway.as_ref(), &used_set, Some(1)).into_iter().next())
+            network.ipv6_cidr.as_ref().and_then(|cidr| {
+                find_available_ips_in_cidr(cidr, network.ipv6_gateway.as_ref(), &used_set, Some(1))
+                    .into_iter()
+                    .next()
+            })
         })
         .ok_or_else(|| AppError::Validation("该网络没有可用的IP地址".to_string()))?;
 
@@ -1232,19 +1253,22 @@ pub async fn batch_create_ip_managers(
     let mut duplicate_errors = Vec::new();
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
-        let existing: Option<Uuid> = match sqlx::query_scalar(
-            "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-        )
-        .bind(&ip_req.ip_address)
-        .fetch_optional(tx.as_mut())
-        .await
-        {
-            Ok(opt) => opt,
-            Err(err) => {
-                duplicate_errors.push(format!("第{}条记录: 数据库查询错误 - {}", index + 1, err));
-                continue;
-            }
-        };
+        let existing: Option<Uuid> =
+            match sqlx::query_scalar("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
+                .bind(&ip_req.ip_address)
+                .fetch_optional(tx.as_mut())
+                .await
+            {
+                Ok(opt) => opt,
+                Err(err) => {
+                    duplicate_errors.push(format!(
+                        "第{}条记录: 数据库查询错误 - {}",
+                        index + 1,
+                        err
+                    ));
+                    continue;
+                }
+            };
 
         if existing.is_some() {
             duplicate_errors.push(format!(
@@ -1258,19 +1282,25 @@ pub async fn batch_create_ip_managers(
         let device_type_str = ip_req.device_type.as_deref().unwrap_or("");
         let room_id = if device_type_str == "workstation" {
             if let Some(ws_id) = ip_req.workstation_id {
-                get_room_id_by_workstation(tx.as_mut(), ws_id).await.ok().flatten()
+                get_room_id_by_workstation(tx.as_mut(), ws_id)
+                    .await
+                    .ok()
+                    .flatten()
             } else {
                 None
             }
         } else if let Some(pos_id) = ip_req.position_id {
-            get_room_id_by_position(tx.as_mut(), pos_id).await.ok().flatten()
+            get_room_id_by_position(tx.as_mut(), pos_id)
+                .await
+                .ok()
+                .flatten()
         } else {
             None
         };
 
         if let Some(rid) = room_id {
             let room_network: Option<Uuid> = match sqlx::query_scalar(
-                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
             )
             .bind(rid)
             .fetch_optional(tx.as_mut())
@@ -1278,7 +1308,11 @@ pub async fn batch_create_ip_managers(
             {
                 Ok(opt) => opt,
                 Err(err) => {
-                    duplicate_errors.push(format!("第{}条记录: 查询房间网络失败 - {}", index + 1, err));
+                    duplicate_errors.push(format!(
+                        "第{}条记录: 查询房间网络失败 - {}",
+                        index + 1,
+                        err
+                    ));
                     continue;
                 }
             };

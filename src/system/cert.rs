@@ -39,19 +39,19 @@ pub async fn generate_cert(req: web::Json<CertGenerateRequest>) -> Result<HttpRe
     let key_path = "certs/key.pem";
 
     if !Path::new("certs").exists()
-        && let Err(e) = tokio::fs::create_dir_all("certs").await {
-            return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
-        }
+        && let Err(e) = tokio::fs::create_dir_all("certs").await
+    {
+        return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
+    }
 
     use rcgen::generate_simple_self_signed;
 
     let common_name = req.common_name.clone();
-    let certified_key = tokio::task::spawn_blocking(move || {
-        generate_simple_self_signed(vec![common_name])
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("证书生成任务失败: {}", e)))?
-    .map_err(|e| AppError::Internal(format!("证书生成失败: {}", e)))?;
+    let certified_key =
+        tokio::task::spawn_blocking(move || generate_simple_self_signed(vec![common_name]))
+            .await
+            .map_err(|e| AppError::Internal(format!("证书生成任务失败: {}", e)))?
+            .map_err(|e| AppError::Internal(format!("证书生成失败: {}", e)))?;
 
     let cert_pem = certified_key.cert.pem();
     let key_pem = certified_key.signing_key.serialize_pem();
@@ -104,17 +104,16 @@ pub async fn import_cert(mut payload: Multipart) -> Result<HttpResponse, AppErro
     }
 
     if !Path::new("certs").exists()
-        && let Err(e) = tokio::fs::create_dir_all("certs").await {
-            return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
-        }
+        && let Err(e) = tokio::fs::create_dir_all("certs").await
+    {
+        return Err(AppError::Internal(format!("创建证书目录失败: {}", e)));
+    }
 
     let cert_path = "certs/imported_cert.pem";
     let key_path = "certs/imported_key.pem";
 
-    let cert_data = cert_data
-        .ok_or_else(|| AppError::Validation("证书数据丢失".to_string()))?;
-    let key_data = key_data
-        .ok_or_else(|| AppError::Validation("密钥数据丢失".to_string()))?;
+    let cert_data = cert_data.ok_or_else(|| AppError::Validation("证书数据丢失".to_string()))?;
+    let key_data = key_data.ok_or_else(|| AppError::Validation("密钥数据丢失".to_string()))?;
 
     tokio::fs::write(cert_path, &cert_data)
         .await
@@ -182,14 +181,16 @@ pub async fn delete_imported_cert() -> Result<HttpResponse, AppError> {
     let imported_key_path = "certs/imported_key.pem";
 
     if tokio::fs::metadata(imported_cert_path).await.is_ok()
-        && let Err(e) = tokio::fs::remove_file(imported_cert_path).await {
-            return Err(AppError::Internal(format!("删除证书文件失败: {}", e)));
-        }
+        && let Err(e) = tokio::fs::remove_file(imported_cert_path).await
+    {
+        return Err(AppError::Internal(format!("删除证书文件失败: {}", e)));
+    }
 
     if tokio::fs::metadata(imported_key_path).await.is_ok()
-        && let Err(e) = tokio::fs::remove_file(imported_key_path).await {
-            return Err(AppError::Internal(format!("删除密钥文件失败: {}", e)));
-        }
+        && let Err(e) = tokio::fs::remove_file(imported_key_path).await
+    {
+        return Err(AppError::Internal(format!("删除密钥文件失败: {}", e)));
+    }
 
     info!("导入的证书删除成功");
 

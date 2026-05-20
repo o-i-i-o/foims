@@ -12,7 +12,7 @@ pub struct Pagination {
 }
 
 impl Pagination {
-    #[must_use] 
+    #[must_use]
     pub fn new(page: i64, page_size: i64) -> Self {
         let page = page.max(1);
         let page_size = page_size.clamp(1, MAX_PAGE_SIZE);
@@ -24,7 +24,7 @@ impl Pagination {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_query(query: &HashMap<String, String>) -> Self {
         let page = query
             .get("page")
@@ -37,7 +37,7 @@ impl Pagination {
         Self::new(page, page_size)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn total_pages(&self, total: i64) -> i64 {
         (total + self.page_size - 1) / self.page_size
     }
@@ -53,7 +53,7 @@ pub struct PaginatedResult<T> {
 }
 
 impl<T> PaginatedResult<T> {
-    #[must_use] 
+    #[must_use]
     pub const fn new(items: Vec<T>, total: i64, pagination: &Pagination) -> Self {
         Self {
             total_pages: pagination.total_pages(total),

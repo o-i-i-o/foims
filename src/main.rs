@@ -5,8 +5,8 @@ use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{SocketAddr, TcpListener};
-use std::path::{Path, PathBuf};
 use std::panic;
+use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 
 use ipma::app_state::AppState;
@@ -61,8 +61,13 @@ fn setup_panic_handler() {
 
 fn build_cors_middleware(config: &Config) -> Cors {
     let mut allowed_origins = config.server.cors_allowed_origins.clone();
-    
-    let public_url = config.server.public_url.trim_end_matches('/').trim_start_matches("http://").trim_start_matches("https://");
+
+    let public_url = config
+        .server
+        .public_url
+        .trim_end_matches('/')
+        .trim_start_matches("http://")
+        .trim_start_matches("https://");
     allowed_origins.push(format!("http://{}", public_url));
     allowed_origins.push(format!("https://{}", public_url));
 
@@ -292,7 +297,10 @@ async fn main() -> std::io::Result<()> {
         config.rate_limit.login_limit,
         config.rate_limit.window_secs,
     )
-    .with_email_limit(config.rate_limit.email_limit, config.rate_limit.email_window_secs);
+    .with_email_limit(
+        config.rate_limit.email_limit,
+        config.rate_limit.email_window_secs,
+    );
     let rate_limit_enabled = config.rate_limit.enabled;
 
     if rate_limit_enabled {
@@ -317,7 +325,10 @@ async fn main() -> std::io::Result<()> {
     }
 
     let server_host_raw = config.server.host.trim().to_string();
-    let server_host_ipv6_raw = config.server.host_ipv6.as_ref()
+    let server_host_ipv6_raw = config
+        .server
+        .host_ipv6
+        .as_ref()
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
 
@@ -332,16 +343,23 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    let validated_ipv4 = validate_ip_address(&server_host_raw)
-        .map_err(std::io::Error::other)?;
-    let validated_ipv6 = validate_ip_address(&server_host_ipv6_raw)
-        .map_err(std::io::Error::other)?;
+    let validated_ipv4 = validate_ip_address(&server_host_raw).map_err(std::io::Error::other)?;
+    let validated_ipv6 =
+        validate_ip_address(&server_host_ipv6_raw).map_err(std::io::Error::other)?;
 
-    let (server_host, server_host_ipv6) = if validated_ipv4.is_empty() && validated_ipv6.is_empty() {
+    let (server_host, server_host_ipv6) = if validated_ipv4.is_empty() && validated_ipv6.is_empty()
+    {
         error!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
         panic!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
     } else {
-        (validated_ipv4, if validated_ipv6.is_empty() { None } else { Some(validated_ipv6) })
+        (
+            validated_ipv4,
+            if validated_ipv6.is_empty() {
+                None
+            } else {
+                Some(validated_ipv6)
+            },
+        )
     };
 
     let http_enabled = config.server.http_enabled.unwrap_or(true);
@@ -365,14 +383,18 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    let http_version = config.server.http_version.clone().unwrap_or_else(|| "http2".to_string());
+    let http_version = config
+        .server
+        .http_version
+        .clone()
+        .unwrap_or_else(|| "http2".to_string());
 
-    let app_state = Data::new(
-        AppState::new(config.clone(), pool.clone())
-            .map_err(std::io::Error::other)?,
-    );
+    let app_state =
+        Data::new(AppState::new(config.clone(), pool.clone()).map_err(std::io::Error::other)?);
 
-    app_state.jwt_utils.start_cache_cleanup_task(shutdown.subscribe());
+    app_state
+        .jwt_utils
+        .start_cache_cleanup_task(shutdown.subscribe());
 
     let http_rate_limiter = rate_limiter.clone();
     let http_rate_limit_enabled = rate_limit_enabled;
@@ -428,7 +450,8 @@ async fn main() -> std::io::Result<()> {
     local_set
         .run_until(async move {
             let mut all_server_handles: Vec<actix_web::dev::ServerHandle> = Vec::new();
-            let mut all_server_join_handles: Vec<tokio::task::JoinHandle<std::io::Result<()>>> = Vec::new();
+            let mut all_server_join_handles: Vec<tokio::task::JoinHandle<std::io::Result<()>>> =
+                Vec::new();
 
             if http_enabled || auto_https {
                 let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
@@ -557,7 +580,8 @@ async fn main() -> std::io::Result<()> {
                 .map(|(idx, handle)| {
                     let stop_future = handle.stop(true);
                     async move {
-                        if let Err(e) = tokio::time::timeout(server_stop_timeout, stop_future).await {
+                        if let Err(e) = tokio::time::timeout(server_stop_timeout, stop_future).await
+                        {
                             warn!("服务器 {} 优雅关闭超时: {}", idx, e);
                         }
                     }
@@ -582,22 +606,17 @@ async fn main() -> std::io::Result<()> {
 
             info!("4. 关闭调度器...");
             if let Some(state) = scheduler_state
-                && let Err(e) = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(5),
-                    state.shutdown(),
-                )
-                .await
+                && let Err(e) =
+                    tokio::time::timeout(tokio::time::Duration::from_secs(5), state.shutdown())
+                        .await
             {
                 warn!("调度器关闭超时: {}", e);
             }
 
             info!("5. 关闭数据库连接池...");
             if let Some(db_pool) = pool
-                && let Err(e) = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(5),
-                    db_pool.close(),
-                )
-                .await
+                && let Err(e) =
+                    tokio::time::timeout(tokio::time::Duration::from_secs(5), db_pool.close()).await
             {
                 warn!("数据库连接池关闭超时: {}", e);
             }

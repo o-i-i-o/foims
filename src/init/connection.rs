@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use tracing::{info, warn};
 
 use crate::db::url_encode_component;
-use crate::init::operations::{validate_identifier, quote_ident};
+use crate::init::operations::{quote_ident, validate_identifier};
 
 pub async fn ensure_database_and_schema(
     config: &crate::config::DatabaseConfig,
@@ -30,10 +30,13 @@ pub async fn ensure_database_and_schema(
 
     if !db_exists {
         info!("数据库 {} 不存在，正在创建...", config.database);
-        sqlx::query(&format!("CREATE DATABASE {}", quote_ident(&config.database)))
-            .execute(&postgres_pool)
-            .await
-            .map_err(|e| format!("创建数据库失败: {e}"))?;
+        sqlx::query(&format!(
+            "CREATE DATABASE {}",
+            quote_ident(&config.database)
+        ))
+        .execute(&postgres_pool)
+        .await
+        .map_err(|e| format!("创建数据库失败: {e}"))?;
         info!("数据库 {} 创建成功", config.database);
     }
 

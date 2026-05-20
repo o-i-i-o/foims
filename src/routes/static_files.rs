@@ -1,10 +1,7 @@
 use actix_web::error::{ErrorBadRequest, JsonPayloadError};
 use actix_web::{Error, HttpRequest, HttpResponse, get, web};
 
-pub const WEB_DIR_PATHS: [&str; 2] = [
-    "/opt/ipma/web",
-    "/usr/share/ipma/web",
-];
+pub const WEB_DIR_PATHS: [&str; 2] = ["/opt/ipma/web", "/usr/share/ipma/web"];
 
 #[must_use]
 pub fn get_web_dir() -> &'static str {

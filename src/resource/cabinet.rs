@@ -1,18 +1,20 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, CabinetPosition, CabinetPositionCreate,
-    CabinetPositionUpdate, CabinetPositionWithDetails, IpManager,
+    ApiResponse, CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate,
+    CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr, get_room_id_by_position};
-use tracing::warn;
+use crate::utils::{
+    OperationLogParams, get_room_id_by_position, log_system_operation, validate_ip_in_cidr,
+};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -269,7 +271,7 @@ pub async fn create_cabinet_position(
 
         let network_id = if let Some(rid) = room_id {
             let room_network: Option<Uuid> = sqlx::query_scalar(
-                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
             )
             .bind(rid)
             .fetch_optional(&mut *tx)
@@ -295,13 +297,12 @@ pub async fn create_cabinet_position(
                 return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
             }
 
-            let existing_mapping: Option<Uuid> =
-                sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-                )
-                .bind(&ip.ip_address)
-                .fetch_optional(&mut *tx)
-                .await?;
+            let existing_mapping: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
+            )
+            .bind(&ip.ip_address)
+            .fetch_optional(&mut *tx)
+            .await?;
 
             if existing_mapping.is_some() {
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
@@ -610,8 +611,7 @@ pub async fn update_cabinet_position(
         id: row.get("id"),
         name: row.get("name"),
         cabinet_id: row.get("cabinet_id"),
-        cabinet_name: row
-            .get::<Option<String>, _>("cabinet_name"),
+        cabinet_name: row.get::<Option<String>, _>("cabinet_name"),
         room_id: row.get("room_id"),
         room_name: row.get("room_name"),
         start_u: row.get("start_u"),
@@ -674,15 +674,16 @@ pub async fn delete_cabinet_position(
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
-    let switch_using_position: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM switches WHERE position_id = $1"
-    )
-    .bind(id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let switch_using_position: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM switches WHERE position_id = $1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
 
     if switch_using_position.is_some() {
-        return Err(AppError::Validation("该机位被交换机占用，请通过交换机管理页面删除对应的交换机".to_string()));
+        return Err(AppError::Validation(
+            "该机位被交换机占用，请通过交换机管理页面删除对应的交换机".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM ips WHERE position_id = $1")

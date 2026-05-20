@@ -59,7 +59,7 @@ where
     }
 }
 
-#[must_use] 
+#[must_use]
 pub const fn hsts_middleware() -> Hsts {
     Hsts
 }

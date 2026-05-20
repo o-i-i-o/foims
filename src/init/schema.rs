@@ -1,5 +1,5 @@
 use sqlx::Row;
-use tracing::{warn, info};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 pub async fn create_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
@@ -880,7 +880,10 @@ async fn migrate_switch_position_link(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             .bind(&name)
             .bind(cabinet_id)
             .fetch_optional(pool)
-            .await { existing_id } else {
+            .await
+            {
+                existing_id
+            } else {
                 let new_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
                     "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, NOW(), NOW())"
@@ -952,7 +955,7 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
                WHERE s.cabinet_id IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM positions p WHERE p.device_id = s.id AND p.device_type = 'switch'
-               )"
+               )",
         )
         .fetch_all(pool)
         .await
@@ -972,7 +975,10 @@ async fn migrate_switch_position_constraint(pool: &sqlx::PgPool) -> Result<(), s
             .bind(&name)
             .bind(cabinet_id)
             .fetch_optional(pool)
-            .await { existing_id } else {
+            .await
+            {
+                existing_id
+            } else {
                 let new_id = Uuid::new_v4();
                 if let Err(e) = sqlx::query(
                     "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, device_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'switch', $7, NOW(), NOW())"
@@ -1098,7 +1104,7 @@ async fn migrate_position_device_type(pool: &sqlx::PgPool) -> Result<(), sqlx::E
             if let Some((pos_id, device_type)) = existing_pos {
                 if device_type != "switch"
                     && let Err(e) = sqlx::query(
-                        "UPDATE positions SET device_type = 'switch', device_id = $1 WHERE id = $2"
+                        "UPDATE positions SET device_type = 'switch', device_id = $1 WHERE id = $2",
                     )
                     .bind(switch_id)
                     .bind(pos_id)
@@ -1230,20 +1236,17 @@ async fn migrate_ips_network_indirect(pool: &sqlx::PgPool) -> Result<(), sqlx::E
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ips_ip_network_unique"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_ips_ip_network_unique")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_ips_ip_network_unique 索引失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_ip_unique ON ips(ip_address)"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_ip_unique ON ips(ip_address)")
+                .execute(pool)
+                .await
         {
             warn!("创建 idx_ips_ip_unique 索引失败: {}", e);
         }
@@ -1268,65 +1271,52 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "DROP VIEW IF EXISTS switches_with_details CASCADE"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP VIEW IF EXISTS switches_with_details CASCADE")
+            .execute(pool)
+            .await
         {
             warn!("删除 switches_with_details 视图失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP VIEW IF EXISTS ip_with_details CASCADE"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP VIEW IF EXISTS ip_with_details CASCADE")
+            .execute(pool)
+            .await
         {
             warn!("删除 ip_with_details 视图失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey")
+                .execute(pool)
+                .await
         {
             warn!("删除 ips.network_id 外键约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey")
+            .execute(pool)
+            .await
         {
             warn!("删除 ips_network_id_fkey 外键约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP COLUMN IF EXISTS network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE ips DROP COLUMN IF EXISTS network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 ips.network_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ips_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_ips_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_ips_network_id 索引失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ip_managers_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_ip_managers_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_ip_managers_network_id 索引失败: {}", e);
         }
@@ -1399,7 +1389,7 @@ async fn migrate_ips_drop_network_id(pool: &sqlx::PgPool) -> Result<(), sqlx::Er
                 )
                 LIMIT 1
             ) rn ON true
-            "
+            ",
         )
         .execute(pool)
         .await
@@ -1428,19 +1418,20 @@ async fn migrate_ips_device_type_cleanup(pool: &sqlx::PgPool) -> Result<(), sqlx
 
     if count == 0 {
         if let Err(e) = sqlx::query(
-            "UPDATE ips SET device_type = 'cabinet_position' WHERE device_type = 'switch'"
+            "UPDATE ips SET device_type = 'cabinet_position' WHERE device_type = 'switch'",
         )
         .execute(pool)
         .await
         {
-            warn!("更新 ips.device_type = 'switch' 为 'cabinet_position' 失败: {}", e);
+            warn!(
+                "更新 ips.device_type = 'switch' 为 'cabinet_position' 失败: {}",
+                e
+            );
         }
 
-        if let Err(e) = sqlx::query(
-            "DELETE FROM ips WHERE device_type = 'unknown'"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DELETE FROM ips WHERE device_type = 'unknown'")
+            .execute(pool)
+            .await
         {
             warn!("删除 ips.device_type = 'unknown' 的记录失败: {}", e);
         }
@@ -1494,65 +1485,52 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "DROP VIEW IF EXISTS switches_with_details CASCADE"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP VIEW IF EXISTS switches_with_details CASCADE")
+            .execute(pool)
+            .await
         {
             warn!("删除 switches_with_details 视图失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP VIEW IF EXISTS ip_with_details CASCADE"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP VIEW IF EXISTS ip_with_details CASCADE")
+            .execute(pool)
+            .await
         {
             warn!("删除 ip_with_details 视图失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS ip_managers_network_id_fkey")
+                .execute(pool)
+                .await
         {
             warn!("删除 ips.network_id 外键约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE ips DROP CONSTRAINT IF EXISTS ips_network_id_fkey")
+            .execute(pool)
+            .await
         {
             warn!("删除 ips_network_id_fkey 外键约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP COLUMN IF EXISTS network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE ips DROP COLUMN IF EXISTS network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 ips.network_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ips_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_ips_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_ips_network_id 索引失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ip_managers_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_ip_managers_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_ip_managers_network_id 索引失败: {}", e);
         }
@@ -1625,7 +1603,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                 )
                 LIMIT 1
             ) rn ON true
-            "
+            ",
         )
         .execute(pool)
         .await
@@ -1673,7 +1651,7 @@ async fn migrate_ips_drop_network_id_v2(pool: &sqlx::PgPool) -> Result<(), sqlx:
                 FROM ips 
                 WHERE position_id = p.id
                 LIMIT 1
-            ) im ON true"
+            ) im ON true",
         )
         .execute(pool)
         .await
@@ -2085,11 +2063,9 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "DROP VIEW IF EXISTS ip_with_details CASCADE"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP VIEW IF EXISTS ip_with_details CASCADE")
+            .execute(pool)
+            .await
         {
             warn!("删除 ip_with_details 视图失败: {}", e);
         }
@@ -2162,7 +2138,7 @@ async fn migrate_ip_with_details_network_match(pool: &sqlx::PgPool) -> Result<()
                 )
                 LIMIT 1
             ) rn ON true
-            "
+            ",
         )
         .execute(pool)
         .await
@@ -2190,17 +2166,16 @@ async fn migrate_switch_parent_columns_removal(pool: &sqlx::PgPool) -> Result<()
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP CONSTRAINT IF EXISTS fk_parent_port_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("ALTER TABLE switches DROP CONSTRAINT IF EXISTS fk_parent_port_id")
+                .execute(pool)
+                .await
         {
             warn!("删除 switches.fk_parent_port_id 约束失败: {}", e);
         }
 
         if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP CONSTRAINT IF EXISTS switches_parent_switch_id_fkey"
+            "ALTER TABLE switches DROP CONSTRAINT IF EXISTS switches_parent_switch_id_fkey",
         )
         .execute(pool)
         .await
@@ -2208,20 +2183,16 @@ async fn migrate_switch_parent_columns_removal(pool: &sqlx::PgPool) -> Result<()
             warn!("删除 switches.parent_switch_id 外键约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_switch_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE switches DROP COLUMN IF EXISTS parent_switch_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 switches.parent_switch_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_port_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE switches DROP COLUMN IF EXISTS parent_port_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 switches.parent_port_id 列失败: {}", e);
         }

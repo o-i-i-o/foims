@@ -70,7 +70,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn error_i18n(message_key: &str, lang: &str) -> Self {
         rust_i18n::set_locale(lang);
         let message = rust_i18n::t!(message_key);
@@ -95,7 +95,7 @@ pub struct PaginatedResponse<T> {
 }
 
 impl<T: Serialize> PaginatedResponse<T> {
-    #[must_use] 
+    #[must_use]
     pub fn new(items: Vec<T>, total: i64, page: i64, page_size: i64, message: &str) -> Self {
         let total_pages = if page_size > 0 {
             (total + page_size - 1) / page_size

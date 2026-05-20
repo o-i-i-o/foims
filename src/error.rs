@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, http::StatusCode, ResponseError};
+use actix_web::{HttpResponse, ResponseError, http::StatusCode};
 use thiserror::Error;
 use tracing::error;
 
@@ -58,37 +58,33 @@ impl ResponseError for AppError {
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
         match &err {
-            sqlx::Error::Database(db_err) => {
-                match db_err.code().as_deref() {
-                    Some("23505") => AppError::Conflict("数据已存在，请检查是否有重复记录".to_string()),
-                    Some("23503") => AppError::Validation("关联数据不存在或无法删除".to_string()),
-                    Some("23514") => AppError::Validation(db_err.message().to_string()),
-                    Some("22P02") => AppError::Validation("数据格式无效".to_string()),
-                    Some("22023") => AppError::Validation("参数值无效".to_string()),
-                    Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                        AppError::Database("数据库连接异常，请稍后重试".to_string())
-                    }
-                    Some("57014") => AppError::Database("数据库操作超时，请稍后重试".to_string()),
-                    _ => {
-                        let err_str = err.to_string();
-                        if err_str.contains("invalid cidr") {
-                            AppError::Validation("不符合CIDR格式".to_string())
-                        } else if err_str.contains("invalid inet") {
-                            AppError::Validation("不符合IP地址格式".to_string())
-                        } else {
-                            error!("数据库错误: {}", err_str);
-                            AppError::Database("数据库操作失败，请稍后重试".to_string())
-                        }
+            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
+                Some("23505") => AppError::Conflict("数据已存在，请检查是否有重复记录".to_string()),
+                Some("23503") => AppError::Validation("关联数据不存在或无法删除".to_string()),
+                Some("23514") => AppError::Validation(db_err.message().to_string()),
+                Some("22P02") => AppError::Validation("数据格式无效".to_string()),
+                Some("22023") => AppError::Validation("参数值无效".to_string()),
+                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
+                    AppError::Database("数据库连接异常，请稍后重试".to_string())
+                }
+                Some("57014") => AppError::Database("数据库操作超时，请稍后重试".to_string()),
+                _ => {
+                    let err_str = err.to_string();
+                    if err_str.contains("invalid cidr") {
+                        AppError::Validation("不符合CIDR格式".to_string())
+                    } else if err_str.contains("invalid inet") {
+                        AppError::Validation("不符合IP地址格式".to_string())
+                    } else {
+                        error!("数据库错误: {}", err_str);
+                        AppError::Database("数据库操作失败，请稍后重试".to_string())
                     }
                 }
-            }
+            },
             sqlx::Error::RowNotFound => AppError::NotFound("资源不存在".to_string()),
             sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
                 AppError::Database("数据库连接异常，请稍后重试".to_string())
             }
-            sqlx::Error::Io(_) => {
-                AppError::Database("数据库连接异常，请稍后重试".to_string())
-            }
+            sqlx::Error::Io(_) => AppError::Database("数据库连接异常，请稍后重试".to_string()),
             _ => {
                 error!("数据库错误: {}", err);
                 AppError::Database("数据库操作失败，请稍后重试".to_string())
@@ -112,7 +108,9 @@ pub trait IntoResponse {
 impl<T: serde::Serialize> IntoResponse for AppResult<T> {
     fn into_response(self) -> HttpResponse {
         match self {
-            Ok(data) => HttpResponse::Ok().json(crate::models::ApiResponse::success(data, "操作成功")),
+            Ok(data) => {
+                HttpResponse::Ok().json(crate::models::ApiResponse::success(data, "操作成功"))
+            }
             Err(e) => e.error_response(),
         }
     }

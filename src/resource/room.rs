@@ -2,12 +2,12 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams};
-use tracing::warn;
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -206,7 +206,10 @@ pub async fn create_room(
     Ok(HttpResponse::Ok().json(ApiResponse::<Room>::success(room, "房间创建成功")))
 }
 
-pub async fn get_room(state: web::Data<AppState>, id_path: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
+pub async fn get_room(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
     let room = sqlx::query_as::<_, Room>(
@@ -362,7 +365,9 @@ pub async fn delete_room(
             .await?;
 
     if cabinet_count > 0 {
-        return Err(AppError::Validation("该房间已被机柜关联，无法删除".to_string()));
+        return Err(AppError::Validation(
+            "该房间已被机柜关联，无法删除".to_string(),
+        ));
     }
 
     let workstation_count: i64 =
@@ -372,7 +377,9 @@ pub async fn delete_room(
             .await?;
 
     if workstation_count > 0 {
-        return Err(AppError::Validation("该房间已被工位关联，无法删除".to_string()));
+        return Err(AppError::Validation(
+            "该房间已被工位关联，无法删除".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM rooms WHERE id = $1")

@@ -125,7 +125,7 @@ impl JwtUtils {
     }
 
     // 生成安全的随机密钥（用于HMAC算法）
-    #[must_use] 
+    #[must_use]
     pub fn generate_secure_secret() -> String {
         let mut bytes = [0u8; 64]; // 64字节 = 512位
         let mut rng = rand::rng();
@@ -134,13 +134,13 @@ impl JwtUtils {
     }
 
     // 验证令牌签名
-    #[must_use] 
+    #[must_use]
     pub fn verify_signature(&self, token: &str) -> bool {
         self.validate_token(token).is_ok()
     }
 
     // 检查令牌是否即将过期（例如，在5分钟内）
-    #[must_use] 
+    #[must_use]
     pub fn is_token_about_to_expire(&self, claims: &JwtClaims) -> bool {
         let now = Utc::now().timestamp() as usize;
         let exp = claims.exp;
@@ -227,7 +227,7 @@ impl JwtUtils {
     }
 
     // 生成设备指纹
-    #[must_use] 
+    #[must_use]
     pub fn generate_device_fingerprint(user_agent: &str, ip_address: &str) -> String {
         use sha2::{Digest, Sha256};
 
@@ -241,7 +241,7 @@ impl JwtUtils {
     }
 
     // 验证设备指纹
-    #[must_use] 
+    #[must_use]
     pub fn validate_device_fingerprint(
         &self,
         claims: &JwtClaims,
@@ -338,19 +338,19 @@ impl JwtUtils {
     }
 
     // 获取访问令牌过期时间
-    #[must_use] 
+    #[must_use]
     pub const fn get_access_token_expiry(&self) -> u64 {
         self.config.access_token_expiry
     }
 
     // 获取刷新令牌过期时间
-    #[must_use] 
+    #[must_use]
     pub const fn get_refresh_token_expiry(&self) -> u64 {
         self.config.refresh_token_expiry
     }
 
     // 获取基于 remember_me 的实际刷新令牌过期时间
-    #[must_use] 
+    #[must_use]
     pub const fn get_actual_refresh_token_expiry(&self, remember_me: bool) -> u64 {
         if remember_me {
             self.config.refresh_token_expiry
@@ -361,7 +361,7 @@ impl JwtUtils {
 }
 
 // 从请求中提取令牌（优先从 Cookie，其次从 Authorization 头）
-#[must_use] 
+#[must_use]
 pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String> {
     // 优先从 Cookie 中获取 access_token
     if let Some(cookie) = req.cookie("access_token") {
@@ -406,13 +406,13 @@ pub fn get_client_info(req: &actix_web::HttpRequest) -> (String, String) {
 }
 
 // 从ServiceRequest中提取令牌
-#[must_use] 
+#[must_use]
 pub fn extract_token_from_service_request(req: &actix_web::dev::ServiceRequest) -> Option<String> {
     extract_token_from_request(req.request())
 }
 
 // 从ServiceRequest中获取客户端信息
-#[must_use] 
+#[must_use]
 pub fn get_client_info_from_service_request(
     req: &actix_web::dev::ServiceRequest,
 ) -> (String, String) {
@@ -422,10 +422,8 @@ pub fn get_client_info_from_service_request(
 // 异步密码哈希函数，使用 spawn_blocking 避免阻塞 tokio 线程
 pub async fn hash_password(password: &str) -> Result<String, crate::error::AppError> {
     let password = password.to_string();
-    tokio::task::spawn_blocking(move || {
-        bcrypt::hash(&password, bcrypt::DEFAULT_COST)
-    })
-    .await
-    .map_err(|e| crate::error::AppError::Internal(format!("密码哈希任务失败: {e}")))?
-    .map_err(|err| crate::error::AppError::Internal(format!("密码哈希错误: {err}")))
+    tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
+        .await
+        .map_err(|e| crate::error::AppError::Internal(format!("密码哈希任务失败: {e}")))?
+        .map_err(|err| crate::error::AppError::Internal(format!("密码哈希错误: {err}")))
 }

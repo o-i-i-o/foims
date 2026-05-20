@@ -21,10 +21,13 @@ pub fn setup_logging() -> String {
             time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]")
                 .unwrap_or_else(|e2| {
                     eprintln!("警告: 默认时间格式也无法解析: {}，使用最简格式", e2);
-                    time::format_description::parse("[hour]:[minute]:[second]").unwrap_or_else(|e3| {
-                        eprintln!("错误: 所有时间格式都无法解析: {}", e3);
-                        time::format_description::parse("[hour][minute][second]").unwrap_or_default()
-                    })
+                    time::format_description::parse("[hour]:[minute]:[second]").unwrap_or_else(
+                        |e3| {
+                            eprintln!("错误: 所有时间格式都无法解析: {}", e3);
+                            time::format_description::parse("[hour][minute][second]")
+                                .unwrap_or_default()
+                        },
+                    )
                 })
         }),
     );
@@ -33,9 +36,10 @@ pub fn setup_logging() -> String {
     let log_dir = format!("/var/log/{app_name}");
 
     if !Path::new(&log_dir).exists()
-        && let Err(e) = fs::create_dir_all(&log_dir) {
-            eprintln!("创建日志目录失败: {e}，将使用当前目录");
-        }
+        && let Err(e) = fs::create_dir_all(&log_dir)
+    {
+        eprintln!("创建日志目录失败: {e}，将使用当前目录");
+    }
 
     let today = chrono::Local::now().format("%Y-%m-%d-%H-%M").to_string();
     let log_file_path = format!("{log_dir}/{today}.log");

@@ -75,7 +75,10 @@ pub async fn export_csv(
 ) -> Result<HttpResponse, AppError> {
     let mut conn = state.pool()?.acquire().await?;
 
-    let export_type = type_param.get("type").cloned().unwrap_or_else(|| "all".to_string());
+    let export_type = type_param
+        .get("type")
+        .cloned()
+        .unwrap_or_else(|| "all".to_string());
     let mut csv_data: Vec<(&str, Vec<u8>)> = Vec::new();
     let utf8_bom = &[0xEF, 0xBB, 0xBF];
 
@@ -404,7 +407,12 @@ async fn export_cabinets(
                 line.push(',');
             }
         }
-        writeln!(line, ",{}", escape_csv_field(&description.unwrap_or_default())).ok();
+        writeln!(
+            line,
+            ",{}",
+            escape_csv_field(&description.unwrap_or_default())
+        )
+        .ok();
         csv.extend_from_slice(line.as_bytes());
     }
 
@@ -600,9 +608,11 @@ pub async fn import_csv(
                 .content_disposition()
                 .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string));
             let mut data = Vec::new();
-            while let Some(chunk) = field.try_next().await.map_err(|e| {
-                AppError::Internal(format!("读取文件块失败: {e}"))
-            })? {
+            while let Some(chunk) = field
+                .try_next()
+                .await
+                .map_err(|e| AppError::Internal(format!("读取文件块失败: {e}")))?
+            {
                 data.extend_from_slice(&chunk);
                 if data.len() > MAX_UPLOAD_SIZE {
                     return Err(AppError::Validation("文件大小超过50MB限制".to_string()));
@@ -627,11 +637,15 @@ pub async fn import_csv(
         let mut entries = Vec::new();
         if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new((*file_data_clone).clone())) {
             for i in 0..zip.len() {
-                let mut file = zip.by_index(i)
+                let mut file = zip
+                    .by_index(i)
                     .map_err(|e| AppError::Internal(format!("读取ZIP文件项失败: {e}")))?;
 
                 let zip_filename = file.name().to_string();
-                if zip_filename.contains("..") || zip_filename.contains('/') || zip_filename.contains('\\') {
+                if zip_filename.contains("..")
+                    || zip_filename.contains('/')
+                    || zip_filename.contains('\\')
+                {
                     continue;
                 }
                 if zip_filename.ends_with(".csv") {
@@ -643,9 +657,7 @@ pub async fn import_csv(
             }
         } else {
             let content = String::from_utf8(file_data_clone.as_ref().clone()).map_err(|e| {
-                AppError::Validation(format!(
-                    "解析CSV文件失败: 文件编码必须是UTF-8 - {e}"
-                ))
+                AppError::Validation(format!("解析CSV文件失败: 文件编码必须是UTF-8 - {e}"))
             })?;
             let table_name = filename_clone
                 .as_ref()
@@ -660,14 +672,8 @@ pub async fn import_csv(
     .map_err(|e| AppError::Internal(format!("ZIP解压任务失败: {e}")))??;
 
     for (table_name, content) in csv_entries {
-        if let Err(e) = process_csv_by_filename(
-            &mut conn,
-            &table_name,
-            &content,
-            overwrite,
-            &mut results,
-        )
-        .await
+        if let Err(e) =
+            process_csv_by_filename(&mut conn, &table_name, &content, overwrite, &mut results).await
         {
             results.push(format!("导入 {table_name}.csv 失败: {e}"));
         }
@@ -731,9 +737,7 @@ async fn import_network_regions(
         }
 
         if name.len() > 20 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过20个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过20个字符"));
             error_count += 1;
             continue;
         }
@@ -825,9 +829,7 @@ async fn import_networks(
         }
 
         if name.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过50个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
             error_count += 1;
             continue;
         }
@@ -841,9 +843,7 @@ async fn import_networks(
         }
 
         if region_name.is_empty() {
-            results.push(format!(
-                "第{line_num}行跳过: 网络 '{name}' - 网络区域为空"
-            ));
+            results.push(format!("第{line_num}行跳过: 网络 '{name}' - 网络区域为空"));
             error_count += 1;
             continue;
         }
@@ -860,7 +860,7 @@ async fn import_networks(
                 "第{line_num}行跳过: 网络 '{name}' - 网络区域 '{region_name}' 不存在"
             ));
             error_count += 1;
-            continue
+            continue;
         };
 
         let existing: Option<uuid::Uuid> =
@@ -899,9 +899,7 @@ async fn import_networks(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新网络 '{name}' 失败 - {e}"
-                        ));
+                        results.push(format!("第{line_num}行跳过: 更新网络 '{name}' 失败 - {e}"));
                         error_count += 1;
                     }
                 }
@@ -938,9 +936,7 @@ async fn import_networks(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入网络 '{name}' 失败 - {e}"
-                    ));
+                    results.push(format!("第{line_num}行跳过: 插入网络 '{name}' 失败 - {e}"));
                     error_count += 1;
                 }
             }
@@ -983,9 +979,7 @@ async fn import_rooms(
         }
 
         if name.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过50个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
             error_count += 1;
             continue;
         }
@@ -1028,10 +1022,11 @@ async fn import_rooms(
 
                 match update_result {
                     Ok(_) => {
-                        let delete_result = sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
-                            .bind(id)
-                            .execute(&mut *conn)
-                            .await;
+                        let delete_result =
+                            sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
+                                .bind(id)
+                                .execute(&mut *conn)
+                                .await;
                         if let Err(e) = delete_result {
                             tracing::warn!("操作失败: {}", e);
                         }
@@ -1066,9 +1061,7 @@ async fn import_rooms(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新房间 '{name}' 失败 - {e}"
-                        ));
+                        results.push(format!("第{line_num}行跳过: 更新房间 '{name}' 失败 - {e}"));
                         error_count += 1;
                     }
                 }
@@ -1136,9 +1129,7 @@ async fn import_rooms(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入房间 '{name}' 失败 - {e}"
-                    ));
+                    results.push(format!("第{line_num}行跳过: 插入房间 '{name}' 失败 - {e}"));
                     error_count += 1;
                 }
             }
@@ -1184,9 +1175,7 @@ async fn import_workstations(
         }
 
         if name.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过50个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
             error_count += 1;
             continue;
         }
@@ -1208,9 +1197,7 @@ async fn import_workstations(
         }
 
         if room_name.is_empty() {
-            results.push(format!(
-                "第{line_num}行跳过: 工位 '{name}' - 房间名称为空"
-            ));
+            results.push(format!("第{line_num}行跳过: 工位 '{name}' - 房间名称为空"));
             error_count += 1;
             continue;
         }
@@ -1227,7 +1214,7 @@ async fn import_workstations(
                 "第{line_num}行跳过: 工位 '{name}' - 房间 '{room_name}' 不存在"
             ));
             error_count += 1;
-            continue
+            continue;
         };
 
         let existing: Option<uuid::Uuid> =
@@ -1267,9 +1254,13 @@ async fn import_workstations(
                             )
                             .bind(room_id)
                             .fetch_optional(&mut *conn)
-                            .await {
+                            .await
+                            {
                                 Ok(v) => v,
-                                Err(e) => { tracing::warn!("查询房间网络失败: {}", e); None }
+                                Err(e) => {
+                                    tracing::warn!("查询房间网络失败: {}", e);
+                                    None
+                                }
                             };
 
                             let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
@@ -1318,16 +1309,12 @@ async fn import_workstations(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新工位 '{name}' 失败 - {e}"
-                        ));
+                        results.push(format!("第{line_num}行跳过: 更新工位 '{name}' 失败 - {e}"));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!(
-                    "跳过工位（已存在）: {name} (房间: {room_name})"
-                ));
+                results.push(format!("跳过工位（已存在）: {name} (房间: {room_name})"));
                 skip_count += 1;
             }
         } else {
@@ -1351,9 +1338,13 @@ async fn import_workstations(
                         )
                         .bind(room_id)
                         .fetch_optional(&mut *conn)
-                        .await {
+                        .await
+                        {
                             Ok(v) => v,
-                            Err(e) => { tracing::warn!("查询房间网络失败: {}", e); None }
+                            Err(e) => {
+                                tracing::warn!("查询房间网络失败: {}", e);
+                                None
+                            }
                         };
 
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
@@ -1380,9 +1371,7 @@ async fn import_workstations(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入工位 '{name}' 失败 - {e}"
-                    ));
+                    results.push(format!("第{line_num}行跳过: 插入工位 '{name}' 失败 - {e}"));
                     error_count += 1;
                 }
             }
@@ -1437,9 +1426,7 @@ async fn import_cabinets(
         }
 
         if name.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过50个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
             error_count += 1;
             continue;
         }
@@ -1453,9 +1440,7 @@ async fn import_cabinets(
         }
 
         if room_name.is_empty() {
-            results.push(format!(
-                "第{line_num}行跳过: 机柜 '{name}' - 房间名称为空"
-            ));
+            results.push(format!("第{line_num}行跳过: 机柜 '{name}' - 房间名称为空"));
             error_count += 1;
             continue;
         }
@@ -1472,7 +1457,7 @@ async fn import_cabinets(
                 "第{line_num}行跳过: 机柜 '{name}' - 房间 '{room_name}' 不存在"
             ));
             error_count += 1;
-            continue
+            continue;
         };
 
         let existing: Option<uuid::Uuid> =
@@ -1485,11 +1470,13 @@ async fn import_cabinets(
 
         if let Some(id) = existing {
             if overwrite {
-                let update_result = sqlx::query("UPDATE cabinets SET description = $1, updated_at = NOW() WHERE id = $2")
-                    .bind(empty_to_none(description))
-                    .bind(id)
-                    .execute(&mut *conn)
-                    .await;
+                let update_result = sqlx::query(
+                    "UPDATE cabinets SET description = $1, updated_at = NOW() WHERE id = $2",
+                )
+                .bind(empty_to_none(description))
+                .bind(id)
+                .execute(&mut *conn)
+                .await;
 
                 match update_result {
                     Ok(_) => {
@@ -1497,16 +1484,12 @@ async fn import_cabinets(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新机柜 '{name}' 失败 - {e}"
-                        ));
+                        results.push(format!("第{line_num}行跳过: 更新机柜 '{name}' 失败 - {e}"));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!(
-                    "跳过机柜（已存在）: {name} (房间: {room_name})"
-                ));
+                results.push(format!("跳过机柜（已存在）: {name} (房间: {room_name})"));
                 skip_count += 1;
             }
         } else {
@@ -1522,9 +1505,7 @@ async fn import_cabinets(
             match insert_result {
                 Ok(_) => {
                     if network_names.is_empty() {
-                        results.push(format!(
-                            "导入机柜: {name} (房间: {room_name}, 无网络关联)"
-                        ));
+                        results.push(format!("导入机柜: {name} (房间: {room_name}, 无网络关联)"));
                     } else {
                         results.push(format!(
                             "导入机柜: {} (房间: {}, 首网络: {})",
@@ -1534,9 +1515,7 @@ async fn import_cabinets(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入机柜 '{name}' 失败 - {e}"
-                    ));
+                    results.push(format!("第{line_num}行跳过: 插入机柜 '{name}' 失败 - {e}"));
                     error_count += 1;
                 }
             }
@@ -1583,9 +1562,7 @@ async fn import_positions(
         }
 
         if name.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过50个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
             error_count += 1;
             continue;
         }
@@ -1599,9 +1576,7 @@ async fn import_positions(
         }
 
         if cabinet_name.is_empty() {
-            results.push(format!(
-                "第{line_num}行跳过: 机位 '{name}' - 机柜名称为空"
-            ));
+            results.push(format!("第{line_num}行跳过: 机位 '{name}' - 机柜名称为空"));
             error_count += 1;
             continue;
         }
@@ -1654,7 +1629,7 @@ async fn import_positions(
                 "第{line_num}行跳过: 机位 '{name}' - 机柜 '{cabinet_name}' 不存在"
             ));
             error_count += 1;
-            continue
+            continue;
         };
 
         let existing: Option<uuid::Uuid> =
@@ -1748,16 +1723,12 @@ async fn import_positions(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新机位 '{name}' 失败 - {e}"
-                        ));
+                        results.push(format!("第{line_num}行跳过: 更新机位 '{name}' 失败 - {e}"));
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!(
-                    "跳过机位（已存在）: {name} (机柜: {cabinet_name})"
-                ));
+                results.push(format!("跳过机位（已存在）: {name} (机柜: {cabinet_name})"));
                 skip_count += 1;
             }
         } else {
@@ -1813,9 +1784,7 @@ async fn import_positions(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入机位 '{name}' 失败 - {e}"
-                    ));
+                    results.push(format!("第{line_num}行跳过: 插入机位 '{name}' 失败 - {e}"));
                     error_count += 1;
                 }
             }
@@ -1866,9 +1835,7 @@ async fn import_switches(
         }
 
         if name.len() > 100 {
-            results.push(format!(
-                "第{line_num}行跳过: 名称 '{name}' 超过100个字符"
-            ));
+            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过100个字符"));
             error_count += 1;
             continue;
         }
@@ -2091,12 +2058,16 @@ async fn import_switches(
                         results.push(format!("导入交换机: {name}"));
                     } else {
                         let _network_id: Option<uuid::Uuid> = match sqlx::query_scalar(
-                            "SELECT network_id FROM room_networks LIMIT 1"
+                            "SELECT network_id FROM room_networks LIMIT 1",
                         )
                         .fetch_optional(&mut *conn)
-                        .await {
+                        .await
+                        {
                             Ok(v) => v,
-                            Err(e) => { tracing::warn!("查询网络失败: {}", e); None }
+                            Err(e) => {
+                                tracing::warn!("查询网络失败: {}", e);
+                                None
+                            }
                         };
 
                         let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
@@ -2141,7 +2112,10 @@ async fn import_switches(
 pub async fn download_template(
     type_param: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let template_type = type_param.get("type").cloned().unwrap_or_else(|| "all".to_string());
+    let template_type = type_param
+        .get("type")
+        .cloned()
+        .unwrap_or_else(|| "all".to_string());
     let utf8_bom = &[0xEF, 0xBB, 0xBF];
     let mut csv_data: Vec<(&str, Vec<u8>)> = Vec::new();
 
@@ -2234,9 +2208,7 @@ pub async fn download_template(
         .body(buf.into_inner()))
 }
 
-pub async fn export_database(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+pub async fn export_database(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let db_config = state.config.database.clone();
 
     let output = tokio::task::spawn_blocking(move || {
@@ -2246,7 +2218,8 @@ pub async fn export_database(
             &db_config.database,
             &db_config.username,
             &db_config.password,
-        ).map_err(AppError::Internal)?;
+        )
+        .map_err(AppError::Internal)?;
 
         std::process::Command::new("pg_dump")
             .arg("-h")
@@ -2301,7 +2274,10 @@ pub struct ClearLogsRequest {
     pub days: Option<i32>,
 }
 
-pub async fn clear_logs(state: web::Data<AppState>, req: web::Json<ClearLogsRequest>) -> Result<HttpResponse, AppError> {
+pub async fn clear_logs(
+    state: web::Data<AppState>,
+    req: web::Json<ClearLogsRequest>,
+) -> Result<HttpResponse, AppError> {
     let req = req.into_inner();
     req.validate()?;
     let days = req.days.unwrap_or(0);
@@ -2329,9 +2305,7 @@ pub async fn clear_logs(state: web::Data<AppState>, req: web::Json<ClearLogsRequ
         }
         "login" => {
             if days == 0 {
-                sqlx::query("DELETE FROM login_logs")
-                    .execute(&conn)
-                    .await
+                sqlx::query("DELETE FROM login_logs").execute(&conn).await
             } else {
                 sqlx::query(
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
@@ -2365,10 +2339,7 @@ pub async fn clear_logs(state: web::Data<AppState>, req: web::Json<ClearLogsRequ
                 {
                     deleted += r.rows_affected();
                 }
-                if let Ok(r) = sqlx::query("DELETE FROM login_logs")
-                    .execute(&conn)
-                    .await
-                {
+                if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(&conn).await {
                     deleted += r.rows_affected();
                 }
                 if let Ok(r) = sqlx::query("DELETE FROM notifications")

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[must_use] 
+#[must_use]
 pub fn get_required_tables() -> Vec<&'static str> {
     vec![
         "users",
@@ -29,7 +29,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
     ]
 }
 
-#[must_use] 
+#[must_use]
 pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     let mut columns: HashMap<&'static str, Vec<&'static str>> = HashMap::new();
 

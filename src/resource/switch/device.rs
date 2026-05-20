@@ -11,7 +11,7 @@ use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{ApiResponse, Switch, SwitchCreate, SwitchUpdate, SwitchWithParent};
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams};
+use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
 const SWITCHES_DETAIL_COLUMNS: &str = r"
@@ -119,9 +119,7 @@ pub async fn get_switches(
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        let count_query = format!(
-            "SELECT COUNT(*) FROM switches_with_details {where_clause}"
-        );
+        let count_query = format!("SELECT COUNT(*) FROM switches_with_details {where_clause}");
 
         let mut count_sql = sqlx::query_scalar(&count_query);
 
@@ -186,7 +184,10 @@ pub async fn get_switches(
 
         let data_query = format!(
             "SELECT {} FROM switches_with_details {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-            SWITCHES_DETAIL_COLUMNS, where_clause, param_count, param_count + 1
+            SWITCHES_DETAIL_COLUMNS,
+            where_clause,
+            param_count,
+            param_count + 1
         );
 
         let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
@@ -215,7 +216,10 @@ pub async fn get_switches(
 
         data_sql.fetch_all(&state.pool()?.get_conn()).await
     } else {
-        let query = format!("SELECT {} FROM switches_with_details ORDER BY created_at DESC LIMIT $1 OFFSET $2", SWITCHES_DETAIL_COLUMNS);
+        let query = format!(
+            "SELECT {} FROM switches_with_details ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            SWITCHES_DETAIL_COLUMNS
+        );
         sqlx::query_as::<_, SwitchWithParent>(&query)
             .bind(page_size)
             .bind(offset)
@@ -241,10 +245,16 @@ pub async fn get_switches(
     )))
 }
 
-pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
+pub async fn get_switch(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    let query = format!("SELECT {} FROM switches_with_details WHERE id = $1", SWITCHES_DETAIL_COLUMNS);
+    let query = format!(
+        "SELECT {} FROM switches_with_details WHERE id = $1",
+        SWITCHES_DETAIL_COLUMNS
+    );
     let mut data = sqlx::query_as::<_, SwitchWithParent>(&query)
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -272,8 +282,7 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
     )
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
-    .await
-    ?;
+    .await?;
 
     let ips_json: Vec<serde_json::Value> = ips
         .into_iter()
@@ -296,11 +305,10 @@ pub async fn get_switch(state: web::Data<AppState>, path: web::Path<Uuid>) -> Re
         })
         .collect();
 
-    let mut response_data = serde_json::to_value(&data)
-        .unwrap_or_else(|e| {
-            tracing::error!("JSON序列化失败: {}", e);
-            serde_json::json!({})
-        });
+    let mut response_data = serde_json::to_value(&data).unwrap_or_else(|e| {
+        tracing::error!("JSON序列化失败: {}", e);
+        serde_json::json!({})
+    });
     response_data["ips"] = serde_json::to_value(&ips_json).unwrap_or(serde_json::json!([]));
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(response_data, "获取交换机成功")))
@@ -316,7 +324,9 @@ pub async fn create_switch(
     let ips = match &req.ips {
         Some(ips) if !ips.is_empty() => ips,
         _ => {
-            return Err(AppError::Validation("交换机必须至少配置一个IP地址".to_string()));
+            return Err(AppError::Validation(
+                "交换机必须至少配置一个IP地址".to_string(),
+            ));
         }
     };
 
@@ -412,7 +422,7 @@ pub async fn create_switch(
             snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port,
             description, created_at, updated_at, position_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
     )
     .bind(id)
     .bind(&req.name)
@@ -440,11 +450,13 @@ pub async fn create_switch(
         )
         .bind(&ip.ip_address)
         .fetch_one(&state.pool()?.get_conn())
-        .await
-        ?;
+        .await?;
 
         if ip_exists {
-            return Err(AppError::Conflict(format!("IP地址 {} 已存在", ip.ip_address)));
+            return Err(AppError::Conflict(format!(
+                "IP地址 {} 已存在",
+                ip.ip_address
+            )));
         }
 
         let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
@@ -521,8 +533,7 @@ pub async fn update_switch(
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
             .bind(id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            ?;
+            .await?;
 
     if !exists {
         return Err(AppError::NotFound("交换机不存在".to_string()));
@@ -614,18 +625,19 @@ pub async fn update_switch(
     }
 
     if let Some(ips) = &req.ips {
-        let position_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT position_id FROM switches WHERE id = $1",
+        let position_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT position_id FROM switches WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await
+                .unwrap_or(None);
+
+        if let Err(e) = sqlx::query(
+            "DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)",
         )
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .execute(&state.pool()?.get_conn())
         .await
-        .unwrap_or(None);
-
-        if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)")
-            .bind(id)
-            .execute(&state.pool()?.get_conn())
-            .await
         {
             tracing::error!("删除交换机旧IP记录失败: {}", e);
         }
@@ -641,7 +653,10 @@ pub async fn update_switch(
             ?;
 
             if ip_exists {
-                return Err(AppError::Conflict(format!("IP地址 {} 已被其他设备使用", ip.ip_address)));
+                return Err(AppError::Conflict(format!(
+                    "IP地址 {} 已被其他设备使用",
+                    ip.ip_address
+                )));
             }
 
             let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
@@ -712,19 +727,22 @@ pub async fn delete_switch(
 ) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
 
-    if let Err(e) = sqlx::query("DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)")
-        .bind(id)
-        .execute(&state.pool()?.get_conn())
-        .await
+    if let Err(e) = sqlx::query(
+        "DELETE FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)",
+    )
+    .bind(id)
+    .execute(&state.pool()?.get_conn())
+    .await
     {
         tracing::error!("删除交换机IP记录失败: {}", e);
     }
 
-    if let Err(e) =
-        sqlx::query("DELETE FROM positions WHERE id = (SELECT position_id FROM switches WHERE id = $1)")
-            .bind(id)
-            .execute(&state.pool()?.get_conn())
-            .await
+    if let Err(e) = sqlx::query(
+        "DELETE FROM positions WHERE id = (SELECT position_id FROM switches WHERE id = $1)",
+    )
+    .bind(id)
+    .execute(&state.pool()?.get_conn())
+    .await
     {
         tracing::error!("删除交换机关联机位失败: {}", e);
     }

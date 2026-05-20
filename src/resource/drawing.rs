@@ -1,10 +1,10 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, LayoutSaveRequest};
-use crate::utils::{log_system_operation, OperationLogParams};
-use tracing::warn;
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde_json;
+use tracing::warn;
 use uuid::Uuid;
 
 pub fn generate_region_map(
@@ -103,16 +103,17 @@ pub async fn save_layout(
         let mut tx = state.pool()?.get_conn().begin().await?;
 
         let cabinet_ids: Vec<Uuid> = req.layout.iter().map(|item| item.id).collect();
-        let existing_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM cabinets WHERE id = ANY($1) AND room_id = $2"
-        )
-        .bind(&cabinet_ids)
-        .bind(room_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        let existing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cabinets WHERE id = ANY($1) AND room_id = $2")
+                .bind(&cabinet_ids)
+                .bind(room_id)
+                .fetch_one(&mut *tx)
+                .await?;
 
         if existing_count as usize != cabinet_ids.len() {
-            return Err(AppError::Validation("部分机柜ID不存在或不属于该房间".to_string()));
+            return Err(AppError::Validation(
+                "部分机柜ID不存在或不属于该房间".to_string(),
+            ));
         }
 
         for item in &req.layout {
@@ -126,7 +127,7 @@ pub async fn save_layout(
                      width = EXCLUDED.width,
                      height = EXCLUDED.height,
                      rotation = EXCLUDED.rotation,
-                     updated_at = NOW()"
+                     updated_at = NOW()",
             )
             .bind(item.id)
             .bind(item.position.x_i32())
@@ -134,7 +135,8 @@ pub async fn save_layout(
             .bind(item.position.width_i32())
             .bind(item.position.height_i32())
             .bind(item.position.rotation_i32())
-            .execute(&mut *tx).await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
@@ -236,7 +238,10 @@ pub async fn delete_positions_layout(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
 }
 
-pub async fn get_layout(state: web::Data<AppState>, room_id: web::Path<Uuid>) -> Result<HttpResponse, AppError> {
+pub async fn get_layout(
+    state: web::Data<AppState>,
+    room_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
     let layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
@@ -293,19 +298,22 @@ pub async fn get_positions_layout(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let items: Vec<serde_json::Value> = rows.iter().map(|(cabinet_id, x, y, width, height, rotation)| {
-        serde_json::json!({
-            "id": cabinet_id,
-            "position": {
-                "x": x,
-                "y": y,
-                "width": width,
-                "height": height,
-                "rotation": rotation
-            },
-            "element_type": "cabinet"
+    let items: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|(cabinet_id, x, y, width, height, rotation)| {
+            serde_json::json!({
+                "id": cabinet_id,
+                "position": {
+                    "x": x,
+                    "y": y,
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation
+                },
+                "element_type": "cabinet"
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(items, "获取机柜布局成功")))
 }
@@ -333,18 +341,21 @@ pub async fn get_room_cabinets_with_positions(
     .await
     ?;
 
-        let pos_items: Vec<serde_json::Value> = positions.iter().map(|(id, name, pos_cab_id, start_u, end_u, desc, dt, did)| {
-            serde_json::json!({
-                "id": id,
-                "name": name,
-                "cabinet_id": pos_cab_id,
-                "start_u": start_u,
-                "end_u": end_u,
-                "description": desc,
-                "device_type": dt,
-                "device_id": did
+        let pos_items: Vec<serde_json::Value> = positions
+            .iter()
+            .map(|(id, name, pos_cab_id, start_u, end_u, desc, dt, did)| {
+                serde_json::json!({
+                    "id": id,
+                    "name": name,
+                    "cabinet_id": pos_cab_id,
+                    "start_u": start_u,
+                    "end_u": end_u,
+                    "description": desc,
+                    "device_type": dt,
+                    "device_id": did
+                })
             })
-        }).collect();
+            .collect();
 
         let layout = sqlx::query_as::<_, (i32, i32, i32, i32, i32)>(
             "SELECT x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = $1",

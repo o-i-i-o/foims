@@ -50,19 +50,18 @@ pub async fn create_scheduled_task(
     let enabled = req.enabled.unwrap_or(true);
 
     let cron_expr = req.cron_expression.clone();
-    let next_run_at = match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr))
-        .await
-    {
-        Ok(Ok(time)) => Some(time),
-        Ok(Err(e)) => {
-            tracing::warn!("计算下次运行时间失败: {}", e);
-            None
-        }
-        Err(e) => {
-            tracing::warn!("计算下次运行时间任务失败: {}", e);
-            None
-        }
-    };
+    let next_run_at =
+        match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
+            Ok(Ok(time)) => Some(time),
+            Ok(Err(e)) => {
+                tracing::warn!("计算下次运行时间失败: {}", e);
+                None
+            }
+            Err(e) => {
+                tracing::warn!("计算下次运行时间任务失败: {}", e);
+                None
+            }
+        };
 
     let task: ScheduledTask = sqlx::query_as(
         r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
@@ -94,9 +93,8 @@ pub async fn update_scheduled_task(
 
     if let Some(ref cron_expr) = req.cron_expression {
         let cron_expr_clone = cron_expr.clone();
-        if let Ok(Ok(next_run)) = tokio::task::spawn_blocking(move || {
-            calculate_next_run(&cron_expr_clone)
-        }).await
+        if let Ok(Ok(next_run)) =
+            tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr_clone)).await
             && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
                 .bind(next_run)
                 .bind(id)
@@ -204,7 +202,7 @@ pub async fn run_scheduled_task_now(
     .await?;
 
     let Some(task) = task else {
-        return Err(AppError::NotFound("定时任务不存在".to_string()))
+        return Err(AppError::NotFound("定时任务不存在".to_string()));
     };
 
     let start_time = Utc::now();
@@ -212,8 +210,7 @@ pub async fn run_scheduled_task_now(
     let task_type = task.task_type.clone();
 
     let db_config = pool.db_config.clone();
-    let result =
-        execute_task_by_type(&conn, &task.task_type, &task.config, &db_config).await;
+    let result = execute_task_by_type(&conn, &task.task_type, &task.config, &db_config).await;
 
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_milliseconds() as i32;
@@ -247,19 +244,18 @@ pub async fn run_scheduled_task_now(
     }
 
     let cron_expr = task.cron_expression.clone();
-    let next_run_at = match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr))
-        .await
-    {
-        Ok(Ok(time)) => Some(time),
-        Ok(Err(e)) => {
-            tracing::warn!("计算下次运行时间失败: {}", e);
-            None
-        }
-        Err(e) => {
-            tracing::warn!("计算下次运行时间任务失败: {}", e);
-            None
-        }
-    };
+    let next_run_at =
+        match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
+            Ok(Ok(time)) => Some(time),
+            Ok(Err(e)) => {
+                tracing::warn!("计算下次运行时间失败: {}", e);
+                None
+            }
+            Err(e) => {
+                tracing::warn!("计算下次运行时间任务失败: {}", e);
+                None
+            }
+        };
 
     let update_query = if let Some(next_run) = next_run_at {
         sqlx::query(

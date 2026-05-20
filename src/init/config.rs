@@ -1,4 +1,4 @@
-#[must_use] 
+#[must_use]
 pub fn get_backup_dir() -> String {
     if let Some(home) = std::env::var_os("HOME") {
         format!("{}/ipma_backups", home.to_string_lossy())

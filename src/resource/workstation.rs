@@ -1,18 +1,18 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, IpManager, Workstation, WorkstationCreate,
-    WorkstationUpdate, WorkstationWithDetails,
+    ApiResponse, IpManager, Workstation, WorkstationCreate, WorkstationUpdate,
+    WorkstationWithDetails,
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{log_system_operation, OperationLogParams, validate_ip_in_cidr};
-use tracing::warn;
+use crate::utils::{OperationLogParams, log_system_operation, validate_ip_in_cidr};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -212,7 +212,7 @@ pub async fn create_workstation(
 
     sqlx::query(
         "INSERT INTO workstations (id, name, room_id, manager, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)"
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
@@ -221,13 +221,14 @@ pub async fn create_workstation(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx).await?;
+    .execute(&mut *tx)
+    .await?;
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
         let network_id = {
             let room_network: Option<Uuid> = sqlx::query_scalar(
-                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1"
+                "SELECT network_id FROM room_networks WHERE room_id = $1 LIMIT 1",
             )
             .bind(req.room_id)
             .fetch_optional(&mut *tx)
@@ -251,13 +252,12 @@ pub async fn create_workstation(
                 return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
             }
 
-            let existing_mapping: Option<Uuid> =
-                sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-                )
-                .bind(&ip.ip_address)
-                .fetch_optional(&mut *tx)
-                .await?;
+            let existing_mapping: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
+            )
+            .bind(&ip.ip_address)
+            .fetch_optional(&mut *tx)
+            .await?;
 
             if existing_mapping.is_some() {
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
@@ -494,9 +494,11 @@ pub async fn update_workstation(
             LIMIT 1
         ) rn ON true
         WHERE m.workstation_id = $1
-        ORDER BY m.ip_address"
-    ).bind(id)
-    .fetch_all(&state.pool()?.get_conn()).await?;
+        ORDER BY m.ip_address",
+    )
+    .bind(id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
 
     let result = WorkstationWithDetails {
         id: row.get("id"),
@@ -566,10 +568,12 @@ pub async fn delete_workstation(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query("DELETE FROM workstation_layouts WHERE element_id = $1 AND element_type = 'workstation'")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "DELETE FROM workstation_layouts WHERE element_id = $1 AND element_type = 'workstation'",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
 
     sqlx::query("DELETE FROM workstations WHERE id = $1")
         .bind(id)
