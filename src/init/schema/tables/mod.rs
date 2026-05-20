@@ -9,6 +9,8 @@ mod logs;
 mod tokens;
 mod notifications;
 mod system;
+mod element;
+mod encryption;
 mod indexes;
 mod views;
 mod triggers;
@@ -40,6 +42,8 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     tokens::create(pool).await?;
     notifications::create(pool).await?;
     system::create(pool).await?;
+    element::create(pool).await?;
+    encryption::create(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

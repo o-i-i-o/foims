@@ -9,6 +9,7 @@ pub async fn run(pool: &PgPool) -> Result<(), Error> {
     migrate_remove_cabinet_layouts_room_id(pool).await?;
     migrate_workstation_layouts_simplify(pool).await?;
     migrate_add_ip_sync_trigger(pool).await?;
+    migrate_cleanup_duplicate_constraints(pool).await?;
     Ok(())
 }
 
@@ -287,6 +288,45 @@ async fn migrate_add_ip_sync_trigger(pool: &PgPool) -> Result<(), Error> {
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
              VALUES ('add_ip_sync_trigger', '添加触发器自动同步工位IP的room_network_id')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_cleanup_duplicate_constraints(pool: &PgPool) -> Result<(), Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'cleanup_duplicate_constraints'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts DROP CONSTRAINT IF EXISTS workstation_layouts_room_id_element_id_key"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除workstation_layouts重复约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_positions_device_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除positions.device_id索引失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('cleanup_duplicate_constraints', '清理workstation_layouts重复约束和positions.device_id索引')"
         )
         .execute(pool)
         .await?;
