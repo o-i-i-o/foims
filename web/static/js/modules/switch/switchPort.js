@@ -17,7 +17,6 @@ import {
 import { openModal, closeModal } from "../../utils/modal.js";
 
 import {
-  listState,
   getCurrentSwitchId,
   getCurrentSwitchName,
   setCurrentSwitchId,
@@ -31,12 +30,7 @@ import { elementCache } from "../../utils/helpers.js";
 import { showConfirm } from "../../utils/confirm.js";
 import { t } from "../../utils/i18n.js";
 
-let currentSwitchPortPage = 1;
-let currentSwitchPortSearchTerm = "";
-
 async function loadSwitchPortsData(page = 1, searchTerm = "") {
-  currentSwitchPortPage = page;
-  currentSwitchPortSearchTerm = searchTerm;
   const currentSwitchName = getCurrentSwitchName();
   try {
     const url = `/api/switches/ports?page=${page}&page_size=${SWITCH_PORT_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
@@ -410,35 +404,30 @@ async function openPortDetailModal(portData) {
 }
 
 async function openSwitchPortModal(portData = null, switchId = null) {
-  await openModal("switch-port-detail-modal");
-
-  const modal = elementCache.get("switch-port-detail-modal");
-  const title = elementCache.get("switch-port-detail-modal-title");
-  const form = elementCache.get("switch-port-form-expanded");
-
-  if (!modal) {
-    return;
-  }
-
-  form.reset();
-
   if (portData) {
-    title.textContent = "编辑端口";
-    elementCache.setValue("switch-port-id-expanded", portData.id || "");
-    elementCache.setValue("switch-port-switch-id-expanded", portData.switch_id || switchId || "");
-    elementCache.setValue("switch-port-number-expanded", portData.port_number || "");
-    elementCache.setValue("switch-port-name-expanded", portData.port_name || "");
-    elementCache.setValue("switch-port-type-expanded", portData.port_type || "access");
-    elementCache.setValue("switch-port-vlan-expanded", portData.vlan_id || "");
-    elementCache.setValue("switch-port-status-expanded", portData.status || "up");
-    elementCache.setValue("switch-port-speed-expanded", portData.speed || "");
-    elementCache.setValue("switch-port-description-expanded", portData.description || "");
+    await openPortDetailModal({
+      portId: portData.id || "",
+      switchId: portData.switch_id || switchId || "",
+      portNumber: portData.port_number || "",
+      portName: portData.port_name || "",
+      portType: portData.port_type || "access",
+      vlanId: portData.vlan_id || "",
+      status: portData.status || "up",
+      speed: portData.speed || "",
+      description: portData.description || ""
+    });
   } else {
-    title.textContent = "添加端口";
-    elementCache.setValue("switch-port-id-expanded", "");
-    elementCache.setValue("switch-port-switch-id-expanded", switchId || "");
-    elementCache.setValue("switch-port-status-expanded", "up");
-    elementCache.setValue("switch-port-type-expanded", "access");
+    await openPortDetailModal({
+      portId: "",
+      switchId: switchId || "",
+      portNumber: "",
+      portName: "",
+      portType: "access",
+      vlanId: "",
+      status: "up",
+      speed: "",
+      description: ""
+    });
   }
 }
 

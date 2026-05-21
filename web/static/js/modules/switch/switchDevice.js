@@ -42,7 +42,6 @@ import {
   loadSwitchPortsData,
   loadSwitchPortsBySwitchId,
   manageSwitchPorts,
-  openSwitchPortModal,
   editSwitchPort,
   deleteSwitchPort,
   submitSwitchPortForm,
