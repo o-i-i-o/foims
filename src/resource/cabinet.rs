@@ -406,17 +406,13 @@ pub async fn get_cabinet_position(
     let position_ips = sqlx::query(
         r"SELECT 
             m.id, m.workstation_id, m.position_id, m.switch_port_id,
-            m.device_type, rn.network_id, 
+            m.device_type, m.network_id, 
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at,
             n.network_region_id, nr.name as network_region
         FROM ips m
-        LEFT JOIN positions p ON m.position_id = p.id
-        LEFT JOIN cabinets c ON p.cabinet_id = c.id
-        LEFT JOIN rooms r ON c.room_id = r.id
-        LEFT JOIN room_networks rn ON r.id = rn.room_id
-        LEFT JOIN network_cidrs n ON rn.network_id = n.id
+        LEFT JOIN network_cidrs n ON m.network_id = n.id
         LEFT JOIN network_regions nr ON n.network_region_id = nr.id
         WHERE m.position_id = $1
         ORDER BY m.ip_address",
@@ -604,7 +600,7 @@ pub async fn update_cabinet_position(
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_port_id, device_type,
+        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id,
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)

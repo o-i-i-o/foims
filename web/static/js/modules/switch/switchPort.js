@@ -409,11 +409,11 @@ function openPortDetailModal(portData) {
 }
 
 function openSwitchPortModal(portData = null, switchId = null) {
-  openModal("switch-port-modal");
+  openModal("switch-port-detail-modal");
 
-  const modal = elementCache.get("switch-port-modal");
-  const title = elementCache.get("switch-port-modal-title");
-  const form = elementCache.get("switch-port-form");
+  const modal = elementCache.get("switch-port-detail-modal");
+  const title = elementCache.get("switch-port-detail-modal-title");
+  const form = elementCache.get("switch-port-form-expanded");
 
   if (!modal) {
     return;
@@ -423,21 +423,21 @@ function openSwitchPortModal(portData = null, switchId = null) {
 
   if (portData) {
     title.textContent = "编辑端口";
-    elementCache.setValue("switch-port-id", portData.id || "");
-    elementCache.setValue("switch-port-switch-id", portData.switch_id || switchId || "");
-    elementCache.setValue("switch-port-number", portData.port_number || "");
-    elementCache.setValue("switch-port-name", portData.port_name || "");
-    elementCache.setValue("switch-port-type", portData.port_type || "access");
-    elementCache.setValue("switch-port-vlan", portData.vlan_id || "");
-    elementCache.setValue("switch-port-status", portData.status || "up");
-    elementCache.setValue("switch-port-speed", portData.speed || "");
-    elementCache.setValue("switch-port-description", portData.description || "");
+    elementCache.setValue("switch-port-id-expanded", portData.id || "");
+    elementCache.setValue("switch-port-switch-id-expanded", portData.switch_id || switchId || "");
+    elementCache.setValue("switch-port-number-expanded", portData.port_number || "");
+    elementCache.setValue("switch-port-name-expanded", portData.port_name || "");
+    elementCache.setValue("switch-port-type-expanded", portData.port_type || "access");
+    elementCache.setValue("switch-port-vlan-expanded", portData.vlan_id || "");
+    elementCache.setValue("switch-port-status-expanded", portData.status || "up");
+    elementCache.setValue("switch-port-speed-expanded", portData.speed || "");
+    elementCache.setValue("switch-port-description-expanded", portData.description || "");
   } else {
     title.textContent = "添加端口";
-    elementCache.setValue("switch-port-id", "");
-    elementCache.setValue("switch-port-switch-id", switchId || "");
-    elementCache.setValue("switch-port-status", "up");
-    elementCache.setValue("switch-port-type", "access");
+    elementCache.setValue("switch-port-id-expanded", "");
+    elementCache.setValue("switch-port-switch-id-expanded", switchId || "");
+    elementCache.setValue("switch-port-status-expanded", "up");
+    elementCache.setValue("switch-port-type-expanded", "access");
   }
 }
 

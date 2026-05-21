@@ -265,17 +265,13 @@ pub async fn get_switch(
 
     let ips = sqlx::query(
         r"SELECT
-            m.id, m.device_type, rn.network_id,
+            m.id, m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at,
             n.network_region_id, nr.name as network_region
         FROM ips m
-        LEFT JOIN positions p ON m.position_id = p.id
-        LEFT JOIN cabinets c ON p.cabinet_id = c.id
-        LEFT JOIN rooms r ON c.room_id = r.id
-        LEFT JOIN room_networks rn ON r.id = rn.room_id
-        LEFT JOIN network_cidrs n ON rn.network_id = n.id
+        LEFT JOIN network_cidrs n ON m.network_id = n.id
         LEFT JOIN network_regions nr ON n.network_region_id = nr.id
         WHERE m.position_id = (SELECT position_id FROM switches WHERE id = $1)
         ORDER BY m.ip_address",
@@ -456,15 +452,34 @@ pub async fn create_switch(
             )));
         }
 
+        let network_id: Option<Uuid> = sqlx::query_scalar(
+            r"SELECT nc.id
+            FROM positions p
+            JOIN cabinets c ON p.cabinet_id = c.id
+            JOIN room_networks rn ON c.room_id = rn.room_id
+            JOIN network_cidrs nc ON rn.network_id = nc.id
+            WHERE p.id = $1
+            AND (
+                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+            )
+            LIMIT 1"
+        )
+        .bind(position_id)
+        .bind(&ip.ip_address)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+
         let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
         let ip_manager_id = Uuid::new_v4();
         if let Err(e) = sqlx::query(
-            "INSERT INTO ips (id, device_type, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
-             VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $8, $9, $10, $11, $12)"
+            "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
         )
         .bind(ip_manager_id)
         .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+        .bind(network_id)
         .bind(&ip.ip_address)
         .bind(ip_version)
         .bind(&ip.mac_address)
@@ -655,15 +670,38 @@ pub async fn update_switch(
                 )));
             }
 
+            let network_id: Option<Uuid> = if let Some(pos_id) = position_id {
+                sqlx::query_scalar(
+                    r"SELECT nc.id
+                    FROM positions p
+                    JOIN cabinets c ON p.cabinet_id = c.id
+                    JOIN room_networks rn ON c.room_id = rn.room_id
+                    JOIN network_cidrs nc ON rn.network_id = nc.id
+                    WHERE p.id = $1
+                    AND (
+                        (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                        OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+                    )
+                    LIMIT 1"
+                )
+                .bind(pos_id)
+                .bind(&ip.ip_address)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?
+            } else {
+                None
+            };
+
             let ip_version = crate::resource::ip::detect_ip_version(&ip.ip_address)?;
 
             let ip_manager_id = Uuid::new_v4();
             if let Err(e) = sqlx::query(
-                "INSERT INTO ips (id, device_type, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $8, $9, $10, $11, $12)"
+                "INSERT INTO ips (id, device_type, network_id, ip_address, ip_version, mac_address, hostname, position_id, switch_port_id, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(ip_manager_id)
             .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
