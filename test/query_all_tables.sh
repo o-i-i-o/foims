@@ -5,7 +5,7 @@ HOST=localhost
 PORT=5432
 USER=postgres
 DB=ipma
-PASSWORD=password
+PASSWORD=admin123
 
 # 获取所有表名
 TABLES=$(PGPASSWORD=$PASSWORD psql -h $HOST -p $PORT -U $USER -d $DB -t -c "\dt" | awk '{print $3}')
