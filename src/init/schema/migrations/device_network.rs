@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 use sqlx::Row;
 use tracing::warn;
 
@@ -21,7 +21,7 @@ async fn migrate_ips_add_network_id(pool: &PgPool) -> Result<(), Error> {
 
     if count == 0 {
         if let Err(e) = sqlx::query(
-            "ALTER TABLE ips ADD COLUMN IF NOT EXISTS network_id UUID REFERENCES network_cidrs(id)"
+            "ALTER TABLE ips ADD COLUMN IF NOT EXISTS network_id UUID REFERENCES network_cidrs(id)",
         )
         .execute(pool)
         .await
@@ -29,11 +29,10 @@ async fn migrate_ips_add_network_id(pool: &PgPool) -> Result<(), Error> {
             warn!("添加 ips.network_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)")
+                .execute(pool)
+                .await
         {
             warn!("创建 idx_ips_network_id 索引失败: {}", e);
         }
@@ -52,7 +51,7 @@ async fn migrate_ips_add_network_id(pool: &PgPool) -> Result<(), Error> {
                 WHERE i.position_id = p.id
                 LIMIT 1
             )
-            WHERE i.network_id IS NULL"
+            WHERE i.network_id IS NULL",
         )
         .execute(pool)
         .await
@@ -143,7 +142,7 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
             LEFT JOIN switches s ON s.position_id = cp.id
             LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
             LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
-            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id"
+            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id",
         )
         .execute(pool)
         .await
@@ -190,7 +189,7 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
                 WHERE ips.position_id = p.id
                 LIMIT 1
             ) i ON true
-            LEFT JOIN network_cidrs nc ON i.network_id = nc.id"
+            LEFT JOIN network_cidrs nc ON i.network_id = nc.id",
         )
         .execute(pool)
         .await
@@ -219,38 +218,31 @@ async fn migrate_remove_device_room_network_id(pool: &PgPool) -> Result<(), Erro
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE workstations DROP COLUMN IF EXISTS room_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("ALTER TABLE workstations DROP COLUMN IF EXISTS room_network_id")
+                .execute(pool)
+                .await
         {
             warn!("删除 workstations.room_network_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE positions DROP COLUMN IF EXISTS room_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE positions DROP COLUMN IF EXISTS room_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 positions.room_network_id 列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_workstations_room_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_workstations_room_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_workstations_room_network_id 索引失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_positions_room_network_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_positions_room_network_id")
+            .execute(pool)
+            .await
         {
             warn!("删除 idx_positions_room_network_id 索引失败: {}", e);
         }

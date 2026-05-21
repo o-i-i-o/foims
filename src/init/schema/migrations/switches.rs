@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 use sqlx::Row;
 use tracing::warn;
 
@@ -64,7 +64,7 @@ async fn migrate_switch_view_add_room(pool: &PgPool) -> Result<(), Error> {
             FROM switches s
             LEFT JOIN positions p ON s.position_id = p.id
             LEFT JOIN cabinets c ON p.cabinet_id = c.id
-            LEFT JOIN rooms r ON c.room_id = r.id"
+            LEFT JOIN rooms r ON c.room_id = r.id",
         )
         .execute(pool)
         .await
@@ -92,20 +92,16 @@ async fn migrate_switch_parent_columns_removal(pool: &PgPool) -> Result<(), Erro
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_switch_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE switches DROP COLUMN IF EXISTS parent_switch_id")
+            .execute(pool)
+            .await
         {
             warn!("删除switches.parent_switch_id列失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE switches DROP COLUMN IF EXISTS parent_port_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE switches DROP COLUMN IF EXISTS parent_port_id")
+            .execute(pool)
+            .await
         {
             warn!("删除switches.parent_port_id列失败: {}", e);
         }
@@ -169,7 +165,7 @@ async fn migrate_fix_switch_view_duplicate(pool: &PgPool) -> Result<(), Error> {
                 WHERE ips.position_id = p.id
                 LIMIT 1
             ) im ON true
-            LEFT JOIN network_cidrs nc ON im.network_id = nc.id"
+            LEFT JOIN network_cidrs nc ON im.network_id = nc.id",
         )
         .execute(pool)
         .await
@@ -236,7 +232,7 @@ async fn migrate_switch_view_add_network_columns(pool: &PgPool) -> Result<(), Er
                 WHERE ips.position_id = p.id
                 LIMIT 1
             ) im ON true
-            LEFT JOIN network_cidrs nc ON im.network_id = nc.id"
+            LEFT JOIN network_cidrs nc ON im.network_id = nc.id",
         )
         .execute(pool)
         .await
@@ -303,7 +299,7 @@ async fn migrate_switch_view_use_network_id(pool: &PgPool) -> Result<(), Error> 
                 WHERE ips.position_id = p.id
                 LIMIT 1
             ) im ON true
-            LEFT JOIN network_cidrs nc ON im.network_id = nc.id"
+            LEFT JOIN network_cidrs nc ON im.network_id = nc.id",
         )
         .execute(pool)
         .await

@@ -1,8 +1,8 @@
-mod tables;
 mod migrations;
+mod tables;
 
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 
 pub async fn create_tables(pool: &PgPool) -> Result<(), Error> {
     tables::create_all_tables(pool).await?;
@@ -21,7 +21,7 @@ pub async fn run_migrations_only(pool: &PgPool) -> Result<(), Error> {
     .execute(pool)
     .await
     .map(|_| ())?;
-    
+
     migrations::run_all(pool).await?;
     Ok(())
 }

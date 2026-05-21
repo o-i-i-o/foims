@@ -40,10 +40,14 @@ pub async fn save_layout(
 
         let mut tx = state.pool()?.get_conn().begin().await?;
 
-        let workstation_items: Vec<_> = req.layout.iter()
+        let workstation_items: Vec<_> = req
+            .layout
+            .iter()
             .filter(|item| item.element_type != "door")
             .collect();
-        let element_items: Vec<_> = req.layout.iter()
+        let element_items: Vec<_> = req
+            .layout
+            .iter()
             .filter(|item| item.element_type == "door")
             .collect();
 
@@ -58,7 +62,7 @@ pub async fn save_layout(
                      width = EXCLUDED.width,
                      height = EXCLUDED.height,
                      rotation = EXCLUDED.rotation,
-                     updated_at = NOW()"
+                     updated_at = NOW()",
             )
             .bind(item.id)
             .bind(item.position.x_i32())
@@ -66,7 +70,8 @@ pub async fn save_layout(
             .bind(item.position.width_i32())
             .bind(item.position.height_i32())
             .bind(item.position.rotation_i32())
-            .execute(&mut *tx).await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         for item in &element_items {
@@ -191,11 +196,11 @@ pub async fn delete_layout(
 
     sqlx::query(
         r"DELETE FROM workstation_layouts 
-         WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)"
+         WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)",
     )
-        .bind(room_id)
-        .execute(&state.pool()?.get_conn())
-        .await?;
+    .bind(room_id)
+    .execute(&state.pool()?.get_conn())
+    .await?;
 
     sqlx::query("DELETE FROM element_layouts WHERE room_id = $1")
         .bind(room_id)
@@ -309,17 +314,13 @@ pub async fn get_layout(
         })
         .collect();
 
-    layout_data.extend(
-        element_layouts
-            .into_iter()
-            .map(|(element_type, position)| {
-                serde_json::json!({
-                    "id": Uuid::nil(),
-                    "element_type": element_type,
-                    "position": position
-                })
-            })
-    );
+    layout_data.extend(element_layouts.into_iter().map(|(element_type, position)| {
+        serde_json::json!({
+            "id": Uuid::nil(),
+            "element_type": element_type,
+            "position": position
+        })
+    }));
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(

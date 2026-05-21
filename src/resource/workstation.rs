@@ -252,7 +252,7 @@ pub async fn create_workstation(
                     (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                     OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                 )
-                LIMIT 1"
+                LIMIT 1",
             )
             .bind(req.room_id)
             .bind(&ip.ip_address)
@@ -548,12 +548,10 @@ pub async fn delete_workstation(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query(
-        "DELETE FROM workstation_layouts WHERE workstation_id = $1",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
     sqlx::query("DELETE FROM workstations WHERE id = $1")
         .bind(id)

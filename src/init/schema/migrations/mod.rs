@@ -1,11 +1,11 @@
 mod data_consistency;
-mod layouts;
-mod ip_network;
-mod switches;
 mod device_network;
+mod ip_network;
+mod layouts;
+mod switches;
 
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 
 pub async fn run_all(pool: &PgPool) -> Result<(), Error> {
     switches::run(pool).await?;

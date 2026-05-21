@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 use sqlx::Row;
 use tracing::warn;
 
@@ -31,7 +31,7 @@ async fn migrate_ips_device_type_constraint(pool: &PgPool) -> Result<(), Error> 
                 ) THEN
                     ALTER TABLE ips DROP CONSTRAINT chk_device_type;
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await
@@ -79,7 +79,7 @@ async fn migrate_ips_device_type_constraint(pool: &PgPool) -> Result<(), Error> 
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('ips_device_type_switch', '更新ips表device_type约束，支持switch类型')"
+             VALUES ('ips_device_type_switch', '更新ips表device_type约束，支持switch类型')",
         )
         .execute(pool)
         .await?;
@@ -108,7 +108,7 @@ async fn migrate_room_fk_to_restrict(pool: &PgPool) -> Result<(), Error> {
                 ) THEN
                     ALTER TABLE cabinets DROP CONSTRAINT cabinets_room_id_fkey;
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await
@@ -118,7 +118,7 @@ async fn migrate_room_fk_to_restrict(pool: &PgPool) -> Result<(), Error> {
 
         if let Err(e) = sqlx::query(
             "ALTER TABLE cabinets ADD CONSTRAINT cabinets_room_id_fkey 
-             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT"
+             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT",
         )
         .execute(pool)
         .await
@@ -136,7 +136,7 @@ async fn migrate_room_fk_to_restrict(pool: &PgPool) -> Result<(), Error> {
                 ) THEN
                     ALTER TABLE workstations DROP CONSTRAINT workstations_room_id_fkey;
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await
@@ -146,7 +146,7 @@ async fn migrate_room_fk_to_restrict(pool: &PgPool) -> Result<(), Error> {
 
         if let Err(e) = sqlx::query(
             "ALTER TABLE workstations ADD CONSTRAINT workstations_room_id_fkey 
-             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT"
+             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT",
         )
         .execute(pool)
         .await
@@ -175,11 +175,9 @@ async fn migrate_remove_device_id(pool: &PgPool) -> Result<(), Error> {
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE positions DROP COLUMN IF EXISTS device_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE positions DROP COLUMN IF EXISTS device_id")
+            .execute(pool)
+            .await
         {
             warn!("删除positions.device_id列失败: {}", e);
         }
@@ -205,11 +203,9 @@ async fn migrate_remove_cabinet_layouts_room_id(pool: &PgPool) -> Result<(), Err
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE cabinet_layouts DROP COLUMN IF EXISTS room_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("ALTER TABLE cabinet_layouts DROP COLUMN IF EXISTS room_id")
+            .execute(pool)
+            .await
         {
             warn!("删除cabinet_layouts.room_id列失败: {}", e);
         }
@@ -223,11 +219,9 @@ async fn migrate_remove_cabinet_layouts_room_id(pool: &PgPool) -> Result<(), Err
             warn!("删除cabinet_layouts唯一约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_cabinet_layouts_room_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_cabinet_layouts_room_id")
+            .execute(pool)
+            .await
         {
             warn!("删除cabinet_layouts.room_id索引失败: {}", e);
         }
@@ -254,7 +248,7 @@ async fn migrate_workstation_layouts_simplify(pool: &PgPool) -> Result<(), Error
 
     if count == 0 {
         if let Err(e) = sqlx::query(
-            "ALTER TABLE workstation_layouts RENAME COLUMN element_id TO workstation_id"
+            "ALTER TABLE workstation_layouts RENAME COLUMN element_id TO workstation_id",
         )
         .execute(pool)
         .await
@@ -262,11 +256,10 @@ async fn migrate_workstation_layouts_simplify(pool: &PgPool) -> Result<(), Error
             warn!("重命名element_id为workstation_id失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE workstation_layouts DROP COLUMN IF EXISTS element_type"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) =
+            sqlx::query("ALTER TABLE workstation_layouts DROP COLUMN IF EXISTS element_type")
+                .execute(pool)
+                .await
         {
             warn!("删除element_type列失败: {}", e);
         }
@@ -282,7 +275,7 @@ async fn migrate_workstation_layouts_simplify(pool: &PgPool) -> Result<(), Error
                     ADD CONSTRAINT fk_workstation_layouts_workstation 
                     FOREIGN KEY (workstation_id) REFERENCES workstations(id) ON DELETE CASCADE;
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await
@@ -320,11 +313,9 @@ async fn migrate_cleanup_duplicate_constraints(pool: &PgPool) -> Result<(), Erro
             warn!("删除workstation_layouts重复约束失败: {}", e);
         }
 
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_positions_device_id"
-        )
-        .execute(pool)
-        .await
+        if let Err(e) = sqlx::query("DROP INDEX IF EXISTS idx_positions_device_id")
+            .execute(pool)
+            .await
         {
             warn!("删除positions.device_id索引失败: {}", e);
         }

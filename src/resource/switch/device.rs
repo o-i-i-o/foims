@@ -463,7 +463,7 @@ pub async fn create_switch(
                 (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                 OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
             )
-            LIMIT 1"
+            LIMIT 1",
         )
         .bind(position_id)
         .bind(&ip.ip_address)
@@ -625,7 +625,7 @@ pub async fn update_switch(
 
     if let Some(new_position_id) = req.position_id
         && let Err(e) = sqlx::query(
-            "UPDATE positions SET device_type = 'switch', updated_at = $1 WHERE id = $2"
+            "UPDATE positions SET device_type = 'switch', updated_at = $1 WHERE id = $2",
         )
         .bind(now)
         .bind(new_position_id)
@@ -682,7 +682,7 @@ pub async fn update_switch(
                         (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                     )
-                    LIMIT 1"
+                    LIMIT 1",
                 )
                 .bind(pos_id)
                 .bind(&ip.ip_address)

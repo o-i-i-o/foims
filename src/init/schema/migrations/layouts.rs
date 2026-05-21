@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 use sqlx::Row;
 use tracing::{info, warn};
 
@@ -107,7 +107,7 @@ async fn migrate_workstation_layouts_structure(pool: &PgPool) -> Result<(), Erro
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('workstation_layouts_structure', '重构workstation_layouts表结构')"
+             VALUES ('workstation_layouts_structure', '重构workstation_layouts表结构')",
         )
         .execute(pool)
         .await?;
@@ -146,7 +146,7 @@ async fn migrate_element_layouts_structure(pool: &PgPool) -> Result<(), Error> {
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('element_layouts_structure', '创建element_layouts表存储非工位元素布局')"
+             VALUES ('element_layouts_structure', '创建element_layouts表存储非工位元素布局')",
         )
         .execute(pool)
         .await?;
@@ -177,7 +177,7 @@ async fn migrate_cabinet_layouts_add_room_id(pool: &PgPool) -> Result<(), Error>
         if let Err(e) = sqlx::query(
             r"UPDATE cabinet_layouts cl
             SET room_id = (SELECT room_id FROM cabinets WHERE id = cl.cabinet_id)
-            WHERE cl.room_id IS NULL"
+            WHERE cl.room_id IS NULL",
         )
         .execute(pool)
         .await
@@ -186,7 +186,7 @@ async fn migrate_cabinet_layouts_add_room_id(pool: &PgPool) -> Result<(), Error>
         }
 
         if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_cabinet_layouts_room_id ON cabinet_layouts(room_id)"
+            "CREATE INDEX IF NOT EXISTS idx_cabinet_layouts_room_id ON cabinet_layouts(room_id)",
         )
         .execute(pool)
         .await
@@ -205,7 +205,7 @@ async fn migrate_cabinet_layouts_add_room_id(pool: &PgPool) -> Result<(), Error>
                     ADD CONSTRAINT cabinet_layouts_room_cabinet_key 
                     UNIQUE (room_id, cabinet_id);
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await
@@ -253,7 +253,7 @@ async fn migrate_workstation_layouts_cleanup_fk(pool: &PgPool) -> Result<(), Err
                     ADD CONSTRAINT workstation_layouts_workstation_id_key 
                     UNIQUE (workstation_id);
                 END IF;
-            END $$"
+            END $$",
         )
         .execute(pool)
         .await

@@ -1,19 +1,19 @@
-mod users;
-mod network;
-mod rooms;
 mod cabinets;
-mod workstations;
-mod switches;
-mod ips;
-mod logs;
-mod tokens;
-mod notifications;
-mod system;
 mod element;
 mod encryption;
 mod indexes;
-mod views;
+mod ips;
+mod logs;
+mod network;
+mod notifications;
+mod rooms;
+mod switches;
+mod system;
+mod tokens;
 mod triggers;
+mod users;
+mod views;
+mod workstations;
 
 pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")

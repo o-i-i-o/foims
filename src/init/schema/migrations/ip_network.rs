@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use sqlx::Error;
+use sqlx::PgPool;
 use sqlx::Row;
 
 pub async fn run(pool: &PgPool) -> Result<(), Error> {

@@ -6,9 +6,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::utils::pagination::DEFAULT_PAGE;
-use crate::utils::{
-    OperationLogParams, log_system_operation,
-};
+use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
@@ -265,12 +263,11 @@ pub async fn create_cabinet_position(
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
-        let cabinet_room_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT room_id FROM cabinets WHERE id = $1"
-        )
-        .bind(req.cabinet_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let cabinet_room_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
+                .bind(req.cabinet_id)
+                .fetch_optional(&mut *tx)
+                .await?;
 
         for ip in ips {
             let device_type = ip.device_type.as_deref().unwrap_or("");
@@ -299,7 +296,7 @@ pub async fn create_cabinet_position(
                         (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                     )
-                    LIMIT 1"
+                    LIMIT 1",
                 )
                 .bind(room_id)
                 .bind(&ip.ip_address)
@@ -526,18 +523,19 @@ pub async fn update_cabinet_position(
     if let Some(ips) = &req.ips {
         let cabinet_id = match req.cabinet_id {
             Some(cid) => cid,
-            None => sqlx::query_scalar::<_, Uuid>("SELECT cabinet_id FROM positions WHERE id = $1")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?
+            None => {
+                sqlx::query_scalar::<_, Uuid>("SELECT cabinet_id FROM positions WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?
+            }
         };
 
-        let cabinet_room_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT room_id FROM cabinets WHERE id = $1"
-        )
-        .bind(cabinet_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let cabinet_room_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
+                .bind(cabinet_id)
+                .fetch_optional(&mut *tx)
+                .await?;
 
         sqlx::query("DELETE FROM ips WHERE position_id = $1")
             .bind(id)
@@ -555,7 +553,7 @@ pub async fn update_cabinet_position(
                         (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                     )
-                    LIMIT 1"
+                    LIMIT 1",
                 )
                 .bind(room_id)
                 .bind(&ip.ip_address)

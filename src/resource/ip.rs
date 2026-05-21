@@ -372,12 +372,11 @@ pub async fn get_switch_ips(
 ) -> Result<HttpResponse, AppError> {
     let switch_id = *id_path;
 
-    let position_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT position_id FROM switches WHERE id = $1",
-    )
-    .bind(switch_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
+    let position_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT position_id FROM switches WHERE id = $1")
+            .bind(switch_id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
 
     let Some(position_id) = position_id else {
         return Ok(
@@ -1006,9 +1005,9 @@ pub async fn auto_assign_ip(
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
-        .bind(req_network_id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+            .bind(req_network_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
     let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
