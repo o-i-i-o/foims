@@ -311,7 +311,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         "workstation_layouts",
         vec![
             "id",
-            "room_id",
             "workstation_id",
             "x",
             "y",

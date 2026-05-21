@@ -7,6 +7,7 @@ pub async fn run(pool: &PgPool) -> Result<(), Error> {
     migrate_workstation_layouts_structure(pool).await?;
     migrate_element_layouts_structure(pool).await?;
     migrate_cabinet_layouts_add_room_id(pool).await?;
+    migrate_workstation_layouts_cleanup_fk(pool).await?;
     Ok(())
 }
 
@@ -214,6 +215,55 @@ async fn migrate_cabinet_layouts_add_room_id(pool: &PgPool) -> Result<(), Error>
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) VALUES ('cabinet_layouts_add_room_id', '为cabinet_layouts表添加room_id列，统一布局表筛选方式')"
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_workstation_layouts_cleanup_fk(pool: &PgPool) -> Result<(), Error> {
+    let result = sqlx::query(
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'workstation_layouts_cleanup_fk'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let count: i64 = result.try_get("count").unwrap_or(0);
+
+    if count == 0 {
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstation_layouts DROP CONSTRAINT IF EXISTS workstation_layouts_workstation_id_fkey"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 workstation_layouts 冗余外键约束失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            r"DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'workstation_layouts_workstation_id_key'
+                ) THEN
+                    ALTER TABLE workstation_layouts 
+                    ADD CONSTRAINT workstation_layouts_workstation_id_key 
+                    UNIQUE (workstation_id);
+                END IF;
+            END $$"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("添加 workstation_id 唯一约束失败: {}", e);
+        }
+
+        sqlx::query(
+            r"INSERT INTO schema_migrations (version, description) 
+             VALUES ('workstation_layouts_cleanup_fk', '删除workstation_layouts表冗余的外键约束，添加workstation_id唯一约束')"
         )
         .execute(pool)
         .await?;

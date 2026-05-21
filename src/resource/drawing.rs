@@ -49,9 +49,9 @@ pub async fn save_layout(
 
         for item in &workstation_items {
             sqlx::query(
-                "INSERT INTO workstation_layouts (room_id, workstation_id, x, y, width, height, rotation) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (room_id, workstation_id) 
+                "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation) 
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (workstation_id) 
                  DO UPDATE SET 
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
@@ -60,7 +60,6 @@ pub async fn save_layout(
                      rotation = EXCLUDED.rotation,
                      updated_at = NOW()"
             )
-            .bind(room_id)
             .bind(item.id)
             .bind(item.position.x_i32())
             .bind(item.position.y_i32())
@@ -190,7 +189,10 @@ pub async fn delete_layout(
 ) -> Result<HttpResponse, AppError> {
     let room_id = *room_id;
 
-    sqlx::query("DELETE FROM workstation_layouts WHERE room_id = $1")
+    sqlx::query(
+        r"DELETE FROM workstation_layouts 
+         WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)"
+    )
         .bind(room_id)
         .execute(&state.pool()?.get_conn())
         .await?;
