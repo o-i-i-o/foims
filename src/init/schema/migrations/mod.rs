@@ -2,6 +2,7 @@ mod data_consistency;
 mod layouts;
 mod ip_network;
 mod switches;
+mod device_network;
 
 use sqlx::PgPool;
 use sqlx::Error;
@@ -11,5 +12,6 @@ pub async fn run_all(pool: &PgPool) -> Result<(), Error> {
     ip_network::run(pool).await?;
     layouts::run(pool).await?;
     data_consistency::run(pool).await?;
+    device_network::run(pool).await?;
     Ok(())
 }
