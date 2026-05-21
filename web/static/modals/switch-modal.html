@@ -1,0 +1,140 @@
+<template id="switch-modal-template">
+<div id="switch-modal" class="modal">
+  <div class="modal-content modal-lg">
+    <header class="modal-header">
+      <h3 class="modal-title" id="switch-modal-title" data-i18n="switch.add_switch">Add Switch</h3>
+      <span class="close" data-modal-id="switch-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="switch-form">
+        <input type="hidden" id="switch-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-name"><span data-i18n="switch.name">Switch Name</span><span class="required">*</span></label>
+            <input type="text" id="switch-name" name="name" required autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-model" data-i18n="switch.model">Model</label>
+            <input type="text" id="switch-model" name="model" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="switch-vendor" data-i18n="switch.vendor">Vendor</label>
+            <input type="text" id="switch-vendor" name="vendor" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-description" data-i18n="common.description">Description</label>
+            <input type="text" id="switch-description" name="description" autocomplete="off" />
+          </div>
+        </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.position_config">机位配置</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-room-select" data-i18n="switch.room">机房</label>
+            <select id="switch-room-select">
+              <option value="" data-i18n="switch.select_room">请选择机房</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-cabinet-select" data-i18n="switch.cabinet">机柜</label>
+            <select id="switch-cabinet-select">
+              <option value="" data-i18n="switch.select_cabinet">请先选择机房</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-start-u" data-i18n="switch.start_u">起始U位</label>
+            <input type="number" id="switch-start-u" name="start_u" min="1" max="48" placeholder="1" />
+          </div>
+          <div class="form-group">
+            <label for="switch-end-u" data-i18n="switch.end_u">结束U位</label>
+            <input type="number" id="switch-end-u" name="end_u" min="1" max="48" placeholder="1" />
+          </div>
+        </div>
+        <input type="hidden" id="switch-location" name="location" />
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.ip_config">IP配置</h4>
+        <div class="form-group">
+          <div id="switch-ips-container"></div>
+        </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="switch.snmp_config">SNMP Configuration</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="switch-snmp-version" data-i18n="switch.snmp_version">SNMP Version</label>
+            <select id="switch-snmp-version" name="snmp_version">
+              <option value="v2c">SNMPv1/v2c</option>
+              <option value="v3">SNMPv3</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="switch-snmp-port" data-i18n="switch.snmp_port">SNMP Port</label>
+            <input type="number" id="switch-snmp-port" name="snmp_port" value="161" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row" id="snmp-v2c-config">
+          <div class="form-group flex-1">
+            <label for="switch-snmp-community" data-i18n="switch.snmp_community">Community String</label>
+            <input type="text" id="switch-snmp-community" name="snmp_community" placeholder="public" autocomplete="off" />
+          </div>
+        </div>
+        <div id="snmp-v3-config" class="hidden">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-username" data-i18n="switch.snmp_username">Username</label>
+              <input type="text" id="switch-snmp-username" name="snmp_username" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="switch-snmp-auth-protocol" data-i18n="switch.snmp_auth_protocol">Auth Protocol</label>
+              <select id="switch-snmp-auth-protocol" name="snmp_auth_protocol">
+                <option value="" data-i18n="switch.snmp_no_auth">No Auth</option>
+                <option value="MD5">MD5</option>
+                <option value="SHA">SHA</option>
+                <option value="SHA-224">SHA-224</option>
+                <option value="SHA-256">SHA-256</option>
+                <option value="SHA-384">SHA-384</option>
+                <option value="SHA-512">SHA-512</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-auth-password" data-i18n="switch.snmp_auth_password">Auth Password</label>
+              <input type="password" id="switch-snmp-auth-password" name="snmp_auth_password" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="switch-snmp-priv-protocol" data-i18n="switch.snmp_priv_protocol">Privacy Protocol</label>
+              <select id="switch-snmp-priv-protocol" name="snmp_priv_protocol">
+                <option value="" data-i18n="switch.snmp_no_priv">No Privacy</option>
+                <option value="DES">DES</option>
+                <option value="AES">AES</option>
+                <option value="AES-128">AES-128</option>
+                <option value="AES-192">AES-192</option>
+                <option value="AES-256">AES-256</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="switch-snmp-priv-password" data-i18n="switch.snmp_priv_password">Privacy Password</label>
+              <input type="password" id="switch-snmp-priv-password" name="snmp_priv_password" autocomplete="off" />
+            </div>
+            <div class="form-group"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" id="test-snmp-btn" class="btn btn-secondary" data-i18n="switch.test_snmp">Test SNMP</button>
+      <button type="button" id="get-snmp-info-btn" class="btn btn-primary" data-i18n="switch.get_snmp_info">Get Info from SNMP</button>
+      <button type="button" class="btn btn-secondary" data-modal-id="switch-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="switch-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

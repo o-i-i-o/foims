@@ -1,0 +1,30 @@
+<template id="cert-import-modal-template">
+<div id="cert-import-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cert.import_title">Import Certificate</h3>
+      <span class="close" data-modal-id="cert-import-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cert-import-form">
+        <div class="form-group">
+          <label for="cert-file" data-i18n="cert.cert_file">Certificate File (PEM format)</label>
+          <input type="file" id="cert-file" name="cert_file" accept=".pem,.crt" required />
+        </div>
+        <div class="form-group">
+          <label for="key-file" data-i18n="cert.key_file">Private Key File (PEM format)</label>
+          <input type="file" id="key-file" name="key_file" accept=".pem,.key" required />
+        </div>
+        <div class="form-group">
+          <label for="key-password" data-i18n="cert.key_password">Private Key Password (optional)</label>
+          <input type="password" id="key-password" name="key_password" data-i18n-placeholder="cert.key_password_placeholder" placeholder="Private key password" autocomplete="new-password" />
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cert-import-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cert-import-form" data-i18n="cert.import">Import Certificate</button>
+    </footer>
+  </div>
+</div>
+</template>

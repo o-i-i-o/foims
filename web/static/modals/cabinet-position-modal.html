@@ -1,0 +1,58 @@
+<template id="cabinet-position-modal-template">
+<div id="cabinet-position-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="cabinet-position-modal-title" data-i18n="cabinet_position.add_position">Add Cabinet Position</h3>
+      <span class="close" data-modal-id="cabinet-position-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cabinet-position-form">
+        <input type="hidden" id="cabinet-position-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-name"><span data-i18n="cabinet_position.name">Position Name</span><span class="required">*</span></label>
+            <input type="text" id="cabinet-position-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="cabinet-position-room"><span data-i18n="cabinet_position.room">Room</span><span class="required">*</span></label>
+            <select id="cabinet-position-room" name="room_id" required>
+              <option value="">请选择房间</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-cabinet"><span data-i18n="cabinet_position.cabinet">Cabinet</span><span class="required">*</span></label>
+            <select id="cabinet-position-cabinet" name="cabinet_id" required>
+              <option value="">请先选择房间</option>
+            </select>
+          </div>
+          <div class="form-group">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cabinet-position-start-u"><span data-i18n="cabinet_position.start_u">Start U</span><span class="required">*</span></label>
+            <input type="number" id="cabinet-position-start-u" name="start_u" min="1" max="48" required value="1" />
+          </div>
+          <div class="form-group">
+            <label for="cabinet-position-end-u"><span data-i18n="cabinet_position.end_u">End U</span><span class="required">*</span></label>
+            <input type="number" id="cabinet-position-end-u" name="end_u" min="1" max="48" required value="1" />
+          </div>
+        </div>
+        <div class="form-group">
+          <div id="cabinet-position-ips-container"></div>
+        </div>
+        <div class="form-group">
+          <label for="cabinet-position-description" data-i18n="common.description">Description</label>
+          <textarea id="cabinet-position-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cabinet-position-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cabinet-position-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

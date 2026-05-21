@@ -1,0 +1,34 @@
+<template id="workstation-modal-template">
+<div id="workstation-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="workstation-modal-title" data-i18n="workstation.add_workstation">Add Workstation</h3>
+      <span class="close" data-modal-id="workstation-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="workstation-form">
+        <input type="hidden" id="workstation-id" />
+        <div class="form-group">
+          <label for="workstation-room"><span data-i18n="workstation.room">Room</span><span class="required">*</span></label>
+          <select id="workstation-room" name="room_id" required></select>
+          <label for="workstation-name"><span data-i18n="workstation.name">Workstation Name</span><span class="required">*</span></label>
+          <input type="text" id="workstation-name" name="name" autocomplete="off" required />
+          <label for="workstation-manager" data-i18n="workstation.manager">Manager</label>
+          <input type="text" id="workstation-manager" name="manager" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <div id="workstation-ips-container"></div>
+        </div>
+        <div class="form-group">
+          <label for="workstation-description" data-i18n="common.description">Description</label>
+          <textarea id="workstation-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="workstation-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="workstation-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

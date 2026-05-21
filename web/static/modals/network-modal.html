@@ -1,0 +1,63 @@
+<template id="network-modal-template">
+<div id="network-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="network-modal-title" data-i18n="network.add_network">Add Network</h3>
+      <span class="close" data-modal-id="network-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="network-form">
+        <input type="hidden" id="network-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-name"><span data-i18n="network.name">Network Name</span><span class="required">*</span></label>
+            <input type="text" id="network-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="network-type"><span data-i18n="network.region">Network Region</span><span class="required">*</span></label>
+            <select id="network-type" name="network_type" required></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-cidr">IPv4 CIDR</label>
+            <input type="text" id="network-ipv4-cidr" name="ipv4_cidr" placeholder="e.g., 192.168.1.0/24" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-cidr">IPv6 CIDR</label>
+            <input type="text" id="network-ipv6-cidr" name="ipv6_cidr" placeholder="e.g., 2001:db8::/32" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-gateway" data-i18n="network.ipv4_gateway">IPv4 Gateway</label>
+            <input type="text" id="network-ipv4-gateway" name="ipv4_gateway" placeholder="e.g., 192.168.1.1" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-gateway" data-i18n="network.ipv6_gateway">IPv6 Gateway</label>
+            <input type="text" id="network-ipv6-gateway" name="ipv6_gateway" placeholder="e.g., 2001:db8::1" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="network-ipv4-dns">IPv4 DNS</label>
+            <input type="text" id="network-ipv4-dns" name="ipv4_dns" placeholder="e.g., 8.8.8.8, 8.8.4.4" />
+          </div>
+          <div class="form-group">
+            <label for="network-ipv6-dns">IPv6 DNS</label>
+            <input type="text" id="network-ipv6-dns" name="ipv6_dns" placeholder="e.g., 2001:4860:4860::8888, 2001:4860:4860::8844" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="network-description" data-i18n="common.description">Description</label>
+          <textarea id="network-description" name="description" rows="3" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="network-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="network-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

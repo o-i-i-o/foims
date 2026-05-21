@@ -1,0 +1,64 @@
+<template id="room-modal-template">
+<div id="room-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="room-modal-title" data-i18n="room.add_room">Add Room</h3>
+      <span class="close" data-modal-id="room-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="room-form">
+        <input type="hidden" id="room-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
+            <select id="room-type" name="room_type" required>
+              <option value="office" data-i18n="room.type_office">Office</option>
+              <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
+            <input type="text" id="room-name" name="name" autocomplete="off" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group network-config-wrapper">
+            <div id="network-configs-container">
+              <div class="network-config-item">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label><span data-i18n="network.region">Network Region</span><span class="required">*</span></label>
+                    <select class="network-region-select" required>
+                      <option value="" data-i18n="network.select_region">Select Network Region</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label><span data-i18n="network.select_network">Network</span><span class="required">*</span></label>
+                    <select class="network-select" required>
+                      <option value="" data-i18n="network.select_network">Select Network</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <button type="button" class="btn btn-danger btn-sm remove-network-config-btn" data-i18n="common.delete">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div class="network-config-actions">
+                <button type="button" id="add-network-config-btn" class="btn btn-secondary btn-sm" data-i18n="network.add_network_config">Add Network Config</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="room-description" data-i18n="common.description">Description</label>
+          <textarea id="room-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="room-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="room-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

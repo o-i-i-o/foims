@@ -1,142 +1,133 @@
 import { updatePageTranslations } from './i18n.js';
 
-const modalTemplates = new Map();
 const loadedModals = new Set();
-let templatesLoaded = false;
-let templatesLoading = false;
-let templatesPromise = null;
+const loadingModals = new Map();
 
 const MODAL_REGISTRY = {
-    'network-type-modal': 'network-type-modal-template',
-    'network-modal': 'network-modal-template',
-    'room-modal': 'room-modal-template',
-    'workstation-modal': 'workstation-modal-template',
-    'cabinet-modal': 'cabinet-modal-template',
-    'cabinet-position-modal': 'cabinet-position-modal-template',
-    'switch-modal': 'switch-modal-template',
-    'switch-ports-group-modal': 'switch-ports-group-modal-template',
-    'switch-port-detail-modal': 'switch-port-detail-modal-template',
-    'user-modal': 'user-modal-template',
-    'two-factor-modal': 'two-factor-modal-template',
-    'cert-generate-modal': 'cert-generate-modal-template',
-    'import-result-modal': 'import-result-modal-template',
-    'cert-import-modal': 'cert-import-modal-template',
-    'scheduled-task-modal': 'scheduled-task-modal-template',
-    'task-logs-modal': 'task-logs-modal-template',
+    'network-type-modal': '/static/modals/network-type-modal.html',
+    'network-modal': '/static/modals/network-modal.html',
+    'room-modal': '/static/modals/room-modal.html',
+    'workstation-modal': '/static/modals/workstation-modal.html',
+    'cabinet-modal': '/static/modals/cabinet-modal.html',
+    'cabinet-position-modal': '/static/modals/cabinet-position-modal.html',
+    'switch-modal': '/static/modals/switch-modal.html',
+    'switch-ports-group-modal': '/static/modals/switch-ports-group-modal.html',
+    'switch-port-detail-modal': '/static/modals/switch-port-detail-modal.html',
+    'user-modal': '/static/modals/user-modal.html',
+    'two-factor-modal': '/static/modals/two-factor-modal.html',
+    'cert-generate-modal': '/static/modals/cert-generate-modal.html',
+    'import-result-modal': '/static/modals/import-result-modal.html',
+    'cert-import-modal': '/static/modals/cert-import-modal.html',
+    'scheduled-task-modal': '/static/modals/scheduled-task-modal.html',
+    'task-logs-modal': '/static/modals/task-logs-modal.html',
 };
 
-async function loadTemplatesFromExternal() {
-    if (templatesLoaded) return true;
-    if (templatesLoading) return templatesPromise;
-    
-    templatesLoading = true;
-    templatesPromise = (async () => {
+async function loadTemplateFile(modalId) {
+    if (loadingModals.has(modalId)) {
+        return loadingModals.get(modalId);
+    }
+
+    const url = MODAL_REGISTRY[modalId];
+    if (!url) {
+        return null;
+    }
+
+    const promise = (async () => {
         try {
-            const response = await fetch('/static/modals/modals.html');
+            const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Failed to load modal templates: ${response.status}`);
+                throw new Error(`Failed to load modal template: ${response.status}`);
             }
-            
+
             const html = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            
-            const templates = doc.querySelectorAll('template');
-            templates.forEach(template => {
-                const id = template.id;
-                if (id) {
-                    document.body.appendChild(template.cloneNode(true));
-                    const modalId = id.replace('-template', '');
-                    modalTemplates.set(modalId, id);
-                }
-            });
-            
-            templatesLoaded = true;
-            templatesLoading = false;
-            return true;
+
+            const template = doc.querySelector('template');
+            if (!template) {
+                return null;
+            }
+
+            document.body.appendChild(template);
+            return template;
         } catch (error) {
-            console.error('加载模态框模板失败:', error);
-            templatesLoading = false;
-            return false;
+            console.error(`加载模态框模板失败 [${modalId}]:`, error);
+            return null;
+        } finally {
+            loadingModals.delete(modalId);
         }
     })();
-    
-    return templatesPromise;
-}
 
-function registerModalTemplate(modalId, templateId) {
-    modalTemplates.set(modalId, templateId);
+    loadingModals.set(modalId, promise);
+    return promise;
 }
 
 export async function loadModal(id) {
     if (loadedModals.has(id)) {
         return document.getElementById(id);
     }
-    
-    if (!templatesLoaded) {
-        await loadTemplatesFromExternal();
+
+    const templateId = `${id}-template`;
+    let template = document.getElementById(templateId);
+
+    if (!template) {
+        template = await loadTemplateFile(id);
     }
-    
-    const templateId = modalTemplates.get(id) || MODAL_REGISTRY[id];
-    if (!templateId) {
-        return null;
-    }
-    
-    const template = document.getElementById(templateId);
+
     if (!template) {
         return null;
     }
-    
+
     const clone = template.content.cloneNode(true);
     const modal = clone.firstElementChild;
-    
+
     if (!modal) {
         return null;
     }
-    
+
     const existingModal = document.getElementById(id);
     if (existingModal) {
         existingModal.remove();
     }
-    
+
     document.body.appendChild(modal);
     loadedModals.add(id);
-    
+
     updatePageTranslations();
-    
+
     return modal;
 }
 
 export async function openModal(id, title = '') {
     let modal = document.getElementById(id);
-    
+
     if (!modal) {
         modal = await loadModal(id);
     }
-    
+
     if (!modal) return;
-    
+
     modal.classList.add('active');
-    
+
     if (title) {
         const titleElement = modal.querySelector('.modal-title');
         if (titleElement) {
             titleElement.textContent = title;
         }
     }
-    
+
     document.body.style.overflow = 'hidden';
-    
+
     return modal;
 }
 
 export function closeModal(id) {
     const modal = document.getElementById(id);
-    
+
     if (!modal) return;
-    
+
     modal.classList.remove('active');
-    
+
     const form = modal.querySelector('form');
     if (form) {
         form.reset();
@@ -145,29 +136,19 @@ export function closeModal(id) {
             hiddenIdField.value = '';
         }
     }
-    
+
     const ipContainers = modal.querySelectorAll('[id$="-ips-container"]');
     ipContainers.forEach(container => {
         container.innerHTML = '';
     });
-    
+
     document.body.style.overflow = '';
 }
 
 export function initModalTemplates() {
-    Object.entries(MODAL_REGISTRY).forEach(([modalId, templateId]) => {
-        registerModalTemplate(modalId, templateId);
-    });
+    // 模态框模板已拆分为独立文件，按需加载，无需预注册
 }
 
 export function preloadModalsOnIdle() {
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-            loadTemplatesFromExternal();
-        }, { timeout: 2000 });
-    } else {
-        setTimeout(() => {
-            loadTemplatesFromExternal();
-        }, 1000);
-    }
+    // 模态框模板已拆分为独立文件，按需加载，无需预加载
 }

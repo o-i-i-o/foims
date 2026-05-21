@@ -1,0 +1,55 @@
+<template id="user-modal-template">
+<div id="user-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="user-modal-title" data-i18n="user.add_user">Add User</h3>
+      <span class="close" data-modal-id="user-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="user-form">
+        <input type="hidden" id="user-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-username"><span data-i18n="auth.username">Username</span><span class="required">*</span></label>
+            <input type="text" id="user-username" name="username" autocomplete="username" required data-i18n-placeholder="user.username_placeholder" placeholder="Enter username" />
+          </div>
+          <div class="form-group">
+            <label for="user-email"><span data-i18n="user.email">Email</span><span class="required">*</span></label>
+            <input type="email" id="user-email" name="email" autocomplete="email" required data-i18n-placeholder="user.email_placeholder" placeholder="Enter email" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-password" data-i18n="auth.password">Password</label>
+            <input type="password" id="user-password" name="password" autocomplete="new-password" data-i18n-placeholder="user.password_placeholder" placeholder="Enter password (required for new users)" />
+          </div>
+          <div class="form-group">
+            <label for="user-password-confirm" data-i18n="auth.confirm_password">Confirm Password</label>
+            <input type="password" id="user-password-confirm" name="password_confirm" autocomplete="new-password" data-i18n-placeholder="user.password_confirm_placeholder" placeholder="Enter password again" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-role"><span data-i18n="user.role">Role</span><span class="required">*</span></label>
+            <select id="user-role" name="role" required>
+              <option value="admin" data-i18n="user.role_admin">Administrator</option>
+              <option value="user" data-i18n="user.role_user">User</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="user-status"><span data-i18n="user.status">Status</span><span class="required">*</span></label>
+            <select id="user-status" name="status" required>
+              <option value="true" data-i18n="user.status_enabled">Enabled</option>
+              <option value="false" data-i18n="user.status_disabled">Disabled</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="user-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="user-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>
