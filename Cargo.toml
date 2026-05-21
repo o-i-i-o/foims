@@ -1,6 +1,6 @@
 [package]
 name = "ipma"
-version = "0.9.57"
+version = "0.9.58"
 edition = "2024"
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
