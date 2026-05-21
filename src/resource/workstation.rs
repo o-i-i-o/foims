@@ -243,8 +243,8 @@ pub async fn create_workstation(
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
             }
 
-            let room_network_id: Option<Uuid> = sqlx::query_scalar(
-                r"SELECT rn.id
+            let network_id: Option<Uuid> = sqlx::query_scalar(
+                r"SELECT nc.id
                 FROM room_networks rn
                 JOIN network_cidrs nc ON rn.network_id = nc.id
                 WHERE rn.room_id = $1
@@ -259,14 +259,14 @@ pub async fn create_workstation(
             .fetch_optional(&mut *tx)
             .await?;
 
-            if room_network_id.is_none() {
+            if network_id.is_none() {
                 return Err(AppError::Validation("IP地址不在所属房间网段内".to_string()));
             }
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, room_network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
@@ -274,7 +274,7 @@ pub async fn create_workstation(
             .bind(ip.position_id)
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
-            .bind(room_network_id)
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -346,12 +346,11 @@ pub async fn get_workstation(
     let workstation_ips = sqlx::query_as::<_, IpManager>(
         r"SELECT
             m.id, m.workstation_id, m.position_id, m.switch_port_id,
-            m.device_type, m.room_network_id, rn.network_id,
+            m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at, m.last_mac
         FROM ips m
-        LEFT JOIN room_networks rn ON m.room_network_id = rn.id
         WHERE m.workstation_id = $1
         ORDER BY m.ip_address",
     )
@@ -469,12 +468,11 @@ pub async fn update_workstation(
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
             m.id, m.workstation_id, m.position_id, m.switch_port_id,
-            m.device_type, m.room_network_id, rn.network_id,
+            m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at, m.last_mac
         FROM ips m
-        LEFT JOIN room_networks rn ON m.room_network_id = rn.id
         WHERE m.workstation_id = $1
         ORDER BY m.ip_address",
     )

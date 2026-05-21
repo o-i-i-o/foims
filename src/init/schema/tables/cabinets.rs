@@ -29,7 +29,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             cabinet_id UUID REFERENCES cabinets(id) ON DELETE CASCADE,
-            room_network_id UUID REFERENCES room_networks(id),
             start_u INTEGER NOT NULL DEFAULT 1,
             end_u INTEGER NOT NULL DEFAULT 1,
             device_type VARCHAR(20) DEFAULT 'cabinet_position',
@@ -41,15 +40,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-
-    if let Err(e) = sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_positions_room_network_id ON positions(room_network_id)"
-    )
-    .execute(pool)
-    .await
-    {
-        warn!("创建 idx_positions_room_network_id 索引失败: {}", e);
-    }
 
     Ok(())
 }

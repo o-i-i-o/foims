@@ -646,7 +646,7 @@ pub async fn delete_network(
     }
 
     let ip_count: i64 =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips i JOIN room_networks rn ON i.room_network_id = rn.id WHERE rn.network_id = $1")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE network_id = $1")
             .bind(id)
             .fetch_one(&state.pool()?.get_conn())
             .await?;

@@ -265,6 +265,13 @@ pub async fn create_cabinet_position(
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
+        let cabinet_room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT room_id FROM cabinets WHERE id = $1"
+        )
+        .bind(req.cabinet_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
         for ip in ips {
             let device_type = ip.device_type.as_deref().unwrap_or("");
             if device_type != "cabinet_position" || ip.position_id.is_some() {
@@ -282,17 +289,38 @@ pub async fn create_cabinet_position(
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
             }
 
+            let network_id: Option<Uuid> = if let Some(room_id) = cabinet_room_id {
+                sqlx::query_scalar(
+                    r"SELECT nc.id
+                    FROM room_networks rn
+                    JOIN network_cidrs nc ON rn.network_id = nc.id
+                    WHERE rn.room_id = $1
+                    AND (
+                        (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                        OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+                    )
+                    LIMIT 1"
+                )
+                .bind(room_id)
+                .bind(&ip.ip_address)
+                .fetch_optional(&mut *tx)
+                .await?
+            } else {
+                None
+            };
+
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, CAST($6 AS INET), $7, $8, $9, $10, $11, $12, $13)"
+                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(ip.workstation_id)
             .bind(Some(id))
             .bind(ip.switch_port_id)
             .bind(&ip.device_type)
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)
@@ -500,21 +528,57 @@ pub async fn update_cabinet_position(
     .await?;
 
     if let Some(ips) = &req.ips {
+        let cabinet_id = match req.cabinet_id {
+            Some(cid) => cid,
+            None => sqlx::query_scalar::<_, Uuid>("SELECT cabinet_id FROM positions WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?
+        };
+
+        let cabinet_room_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT room_id FROM cabinets WHERE id = $1"
+        )
+        .bind(cabinet_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
         sqlx::query("DELETE FROM ips WHERE position_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await?;
 
         for ip in ips {
+            let network_id: Option<Uuid> = if let Some(room_id) = cabinet_room_id {
+                sqlx::query_scalar(
+                    r"SELECT nc.id
+                    FROM room_networks rn
+                    JOIN network_cidrs nc ON rn.network_id = nc.id
+                    WHERE rn.room_id = $1
+                    AND (
+                        (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                        OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+                    )
+                    LIMIT 1"
+                )
+                .bind(room_id)
+                .bind(&ip.ip_address)
+                .fetch_optional(&mut *tx)
+                .await?
+            } else {
+                None
+            };
+
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, position_id, device_type, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
-                 VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12)"
+                "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
             .bind(id)
             .bind(ip.device_type.as_deref().unwrap_or("cabinet_position"))
+            .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
             .bind(&ip.mac_address)

@@ -17,14 +17,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.position_id,
             imm.switch_port_id,
             imm.device_type,
+            imm.network_id,
             CASE
                 WHEN s.id IS NOT NULL THEN s.name::text
                 WHEN w.id IS NOT NULL THEN w.name::text
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE 'unknown device'
             END AS device_name,
-            COALESCE(w.room_network_id, p.room_network_id) AS room_network_id,
-            COALESCE(rnw.network_id, pnw.network_id) AS network_id,
             CASE
                 WHEN w.id IS NOT NULL THEN w.name::text
                 ELSE NULL
@@ -46,8 +45,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN c.id IS NOT NULL THEN c.name::text
                 ELSE NULL
             END AS cabinet_name,
-            COALESCE(nc.name, npc.name, 'unknown')::text AS network_name,
-            COALESCE(nr.name, npr.name, 'unknown')::text AS network_region,
+            COALESCE(nc.name, 'unknown')::text AS network_name,
+            COALESCE(nr.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
             imm.mac_address,
@@ -59,18 +58,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.updated_at
         FROM ips imm
         LEFT JOIN workstations w ON imm.workstation_id = w.id
-        LEFT JOIN positions p ON imm.position_id = p.id
-        LEFT JOIN room_networks rnw ON w.room_network_id = rnw.id
-        LEFT JOIN room_networks pnw ON p.room_network_id = pnw.id
-        LEFT JOIN network_cidrs nc ON rnw.network_id = nc.id
-        LEFT JOIN network_cidrs npc ON pnw.network_id = npc.id
-        LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-        LEFT JOIN network_regions npr ON npc.network_region_id = npr.id
         LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
         LEFT JOIN switches s ON s.position_id = cp.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+        LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
+        LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
     ",
     )
     .execute(pool)

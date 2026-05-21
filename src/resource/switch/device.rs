@@ -27,7 +27,7 @@ const SWITCHES_DETAIL_COLUMNS: &str = r"
     cabinet_id, cabinet_name,
     room_id, room_name,
     start_u, end_u,
-    position_network_id, network_region_id,
+    network_id, network_region_id,
     description,
     device_type,
     ip_address,

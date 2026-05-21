@@ -4,17 +4,15 @@ use sqlx::Row;
 use tracing::warn;
 
 pub async fn run(pool: &PgPool) -> Result<(), Error> {
-    migrate_workstations_add_room_network_id(pool).await?;
-    migrate_positions_add_room_network_id(pool).await?;
-    migrate_ips_remove_room_network_id(pool).await?;
+    migrate_ips_add_network_id(pool).await?;
     migrate_update_views(pool).await?;
-    migrate_remove_old_triggers(pool).await?;
+    migrate_remove_device_room_network_id(pool).await?;
     Ok(())
 }
 
-async fn migrate_workstations_add_room_network_id(pool: &PgPool) -> Result<(), Error> {
+async fn migrate_ips_add_network_id(pool: &PgPool) -> Result<(), Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'workstations_add_room_network_id'",
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_add_network_id_v2'",
     )
     .fetch_one(pool)
     .await?;
@@ -23,138 +21,48 @@ async fn migrate_workstations_add_room_network_id(pool: &PgPool) -> Result<(), E
 
     if count == 0 {
         if let Err(e) = sqlx::query(
-            "ALTER TABLE workstations ADD COLUMN IF NOT EXISTS room_network_id UUID REFERENCES room_networks(id)"
+            "ALTER TABLE ips ADD COLUMN IF NOT EXISTS network_id UUID REFERENCES network_cidrs(id)"
         )
         .execute(pool)
         .await
         {
-            warn!("添加 workstations.room_network_id 列失败: {}", e);
+            warn!("添加 ips.network_id 列失败: {}", e);
         }
 
         if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_workstations_room_network_id ON workstations(room_network_id)"
+            "CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)"
         )
         .execute(pool)
         .await
         {
-            warn!("创建 idx_workstations_room_network_id 索引失败: {}", e);
+            warn!("创建 idx_ips_network_id 索引失败: {}", e);
         }
 
         if let Err(e) = sqlx::query(
-            r"UPDATE workstations w
-            SET room_network_id = (
-                SELECT rn.id
-                FROM room_networks rn
-                JOIN network_cidrs nc ON rn.network_id = nc.id
-                WHERE rn.room_id = w.room_id
+            r"UPDATE ips i
+            SET network_id = (
+                SELECT rn.network_id
+                FROM workstations w
+                LEFT JOIN room_networks rn ON w.room_network_id = rn.id
+                WHERE i.workstation_id = w.id
+                UNION
+                SELECT rn.network_id
+                FROM positions p
+                LEFT JOIN room_networks rn ON p.room_network_id = rn.id
+                WHERE i.position_id = p.id
                 LIMIT 1
             )
-            WHERE w.room_network_id IS NULL"
+            WHERE i.network_id IS NULL"
         )
         .execute(pool)
         .await
         {
-            warn!("迁移 workstations.room_network_id 数据失败: {}", e);
+            warn!("迁移 ips.network_id 数据失败: {}", e);
         }
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('workstations_add_room_network_id', '为 workstations 表添加 room_network_id 列')"
-        )
-        .execute(pool)
-        .await?;
-    }
-
-    Ok(())
-}
-
-async fn migrate_positions_add_room_network_id(pool: &PgPool) -> Result<(), Error> {
-    let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'positions_add_room_network_id'",
-    )
-    .fetch_one(pool)
-    .await?;
-
-    let count: i64 = result.try_get("count").unwrap_or(0);
-
-    if count == 0 {
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE positions ADD COLUMN IF NOT EXISTS room_network_id UUID REFERENCES room_networks(id)"
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("添加 positions.room_network_id 列失败: {}", e);
-        }
-
-        if let Err(e) = sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_positions_room_network_id ON positions(room_network_id)"
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("创建 idx_positions_room_network_id 索引失败: {}", e);
-        }
-
-        if let Err(e) = sqlx::query(
-            r"UPDATE positions p
-            SET room_network_id = (
-                SELECT rn.id
-                FROM room_networks rn
-                JOIN cabinets c ON p.cabinet_id = c.id
-                WHERE rn.room_id = c.room_id
-                LIMIT 1
-            )
-            WHERE p.room_network_id IS NULL"
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("迁移 positions.room_network_id 数据失败: {}", e);
-        }
-
-        sqlx::query(
-            r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('positions_add_room_network_id', '为 positions 表添加 room_network_id 列')"
-        )
-        .execute(pool)
-        .await?;
-    }
-
-    Ok(())
-}
-
-async fn migrate_ips_remove_room_network_id(pool: &PgPool) -> Result<(), Error> {
-    let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'ips_remove_room_network_id'",
-    )
-    .fetch_one(pool)
-    .await?;
-
-    let count: i64 = result.try_get("count").unwrap_or(0);
-
-    if count == 0 {
-        if let Err(e) = sqlx::query(
-            "DROP INDEX IF EXISTS idx_ips_room_network_id"
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("删除 idx_ips_room_network_id 索引失败: {}", e);
-        }
-
-        if let Err(e) = sqlx::query(
-            "ALTER TABLE ips DROP COLUMN IF EXISTS room_network_id"
-        )
-        .execute(pool)
-        .await
-        {
-            warn!("删除 ips.room_network_id 列失败: {}", e);
-        }
-
-        sqlx::query(
-            r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('ips_remove_room_network_id', '从 ips 表移除 room_network_id 列，改为从设备关联获取')"
+             VALUES ('ips_add_network_id_v2', '为 ips 表添加 network_id 列，直接关联 network_cidrs')"
         )
         .execute(pool)
         .await?;
@@ -165,7 +73,7 @@ async fn migrate_ips_remove_room_network_id(pool: &PgPool) -> Result<(), Error> 
 
 async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'update_views_for_device_network'",
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'update_views_for_ips_network_id'",
     )
     .fetch_one(pool)
     .await?;
@@ -188,14 +96,13 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
                 imm.position_id,
                 imm.switch_port_id,
                 imm.device_type,
+                imm.network_id,
                 CASE
                     WHEN s.id IS NOT NULL THEN s.name::text
                     WHEN w.id IS NOT NULL THEN w.name::text
                     WHEN cp.id IS NOT NULL THEN cp.name::text
                     ELSE 'unknown device'
                 END AS device_name,
-                COALESCE(w.room_network_id, p.room_network_id) AS room_network_id,
-                COALESCE(rnw.network_id, pnw.network_id) AS network_id,
                 CASE
                     WHEN w.id IS NOT NULL THEN w.name::text
                     ELSE NULL
@@ -217,8 +124,8 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
                     WHEN c.id IS NOT NULL THEN c.name::text
                     ELSE NULL
                 END AS cabinet_name,
-                COALESCE(nc.name, npc.name, 'unknown')::text AS network_name,
-                COALESCE(nr.name, npr.name, 'unknown')::text AS network_region,
+                COALESCE(nc.name, 'unknown')::text AS network_name,
+                COALESCE(nr.name, 'unknown')::text AS network_region,
                 host(imm.ip_address) as ip_address,
                 imm.ip_version,
                 imm.mac_address,
@@ -230,18 +137,13 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
                 imm.updated_at
             FROM ips imm
             LEFT JOIN workstations w ON imm.workstation_id = w.id
-            LEFT JOIN positions p ON imm.position_id = p.id
-            LEFT JOIN room_networks rnw ON w.room_network_id = rnw.id
-            LEFT JOIN room_networks pnw ON p.room_network_id = pnw.id
-            LEFT JOIN network_cidrs nc ON rnw.network_id = nc.id
-            LEFT JOIN network_cidrs npc ON pnw.network_id = npc.id
-            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-            LEFT JOIN network_regions npr ON npc.network_region_id = npr.id
             LEFT JOIN rooms r ON w.room_id = r.id
             LEFT JOIN positions cp ON imm.position_id = cp.id
             LEFT JOIN cabinets c ON cp.cabinet_id = c.id
             LEFT JOIN switches s ON s.position_id = cp.id
-            LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id"
+            LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+            LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
+            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id"
         )
         .execute(pool)
         .await
@@ -271,26 +173,24 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
                 p.cabinet_id, c.name as cabinet_name,
                 r.id as room_id, r.name as room_name,
                 p.start_u, p.end_u,
-                p.room_network_id,
-                rn.network_id as position_network_id,
+                i.network_id,
                 nc.network_region_id,
                 s.description,
                 'switch'::text as device_type,
-                host(im.ip_address) as ip_address,
-                im.mac_address,
+                host(i.ip_address) as ip_address,
+                i.mac_address,
                 s.created_at, s.updated_at
             FROM switches s
             LEFT JOIN positions p ON s.position_id = p.id
             LEFT JOIN cabinets c ON p.cabinet_id = c.id
             LEFT JOIN rooms r ON c.room_id = r.id
-            LEFT JOIN room_networks rn ON p.room_network_id = rn.id
-            LEFT JOIN network_cidrs nc ON rn.network_id = nc.id
             LEFT JOIN LATERAL (
-                SELECT ips.ip_address, ips.mac_address
+                SELECT ips.ip_address, ips.mac_address, ips.network_id
                 FROM ips
                 WHERE ips.position_id = p.id
                 LIMIT 1
-            ) im ON true"
+            ) i ON true
+            LEFT JOIN network_cidrs nc ON i.network_id = nc.id"
         )
         .execute(pool)
         .await
@@ -300,7 +200,7 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('update_views_for_device_network', '更新视图以从设备获取 room_network_id')"
+             VALUES ('update_views_for_ips_network_id', '更新视图以使用 ips.network_id 直接关联 network_cidrs')"
         )
         .execute(pool)
         .await?;
@@ -309,9 +209,9 @@ async fn migrate_update_views(pool: &PgPool) -> Result<(), Error> {
     Ok(())
 }
 
-async fn migrate_remove_old_triggers(pool: &PgPool) -> Result<(), Error> {
+async fn migrate_remove_device_room_network_id(pool: &PgPool) -> Result<(), Error> {
     let result = sqlx::query(
-        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'remove_old_sync_triggers'",
+        "SELECT COUNT(*) as count FROM schema_migrations WHERE version = 'remove_device_room_network_id'",
     )
     .fetch_one(pool)
     .await?;
@@ -319,43 +219,45 @@ async fn migrate_remove_old_triggers(pool: &PgPool) -> Result<(), Error> {
     let count: i64 = result.try_get("count").unwrap_or(0);
 
     if count == 0 {
-        let triggers = vec![
-            ("trg_sync_workstation_ips_room_network", "workstations"),
-            ("trg_sync_cabinet_ips_room_network", "cabinets"),
-            ("trg_sync_position_ips_room_network", "positions"),
-        ];
-
-        for (trigger, table) in triggers {
-            if let Err(e) = sqlx::query(&format!(
-                "DROP TRIGGER IF EXISTS {} ON {}", trigger, table
-            ))
-            .execute(pool)
-            .await
-            {
-                warn!("删除触发器 {}.{} 失败: {}", table, trigger, e);
-            }
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE workstations DROP COLUMN IF EXISTS room_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 workstations.room_network_id 列失败: {}", e);
         }
 
-        let functions = vec![
-            "sync_workstation_ips_room_network",
-            "sync_cabinet_ips_room_network",
-            "sync_position_ips_room_network",
-        ];
+        if let Err(e) = sqlx::query(
+            "ALTER TABLE positions DROP COLUMN IF EXISTS room_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 positions.room_network_id 列失败: {}", e);
+        }
 
-        for func in functions {
-            if let Err(e) = sqlx::query(&format!(
-                "DROP FUNCTION IF EXISTS {}() CASCADE", func
-            ))
-            .execute(pool)
-            .await
-            {
-                warn!("删除函数 {} 失败: {}", func, e);
-            }
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_workstations_room_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_workstations_room_network_id 索引失败: {}", e);
+        }
+
+        if let Err(e) = sqlx::query(
+            "DROP INDEX IF EXISTS idx_positions_room_network_id"
+        )
+        .execute(pool)
+        .await
+        {
+            warn!("删除 idx_positions_room_network_id 索引失败: {}", e);
         }
 
         sqlx::query(
             r"INSERT INTO schema_migrations (version, description) 
-             VALUES ('remove_old_sync_triggers', '删除旧的 IP 同步触发器，改为设备关联网络')"
+             VALUES ('remove_device_room_network_id', '移除 workstations 和 positions 的 room_network_id 列，改为 ips.network_id 直接关联')"
         )
         .execute(pool)
         .await?;
