@@ -29,6 +29,7 @@ import { syncPortsFromSnmp } from "./switchSnmp.js";
 
 import { elementCache } from "../../utils/helpers.js";
 import { showConfirm } from "../../utils/confirm.js";
+import { t } from "../../utils/i18n.js";
 
 let currentSwitchPortPage = 1;
 let currentSwitchPortSearchTerm = "";
@@ -181,7 +182,7 @@ async function manageSwitchPorts(switchId, switchName) {
     }
 
     const portGroups = groupPorts(ports);
-    showPortGroupsModal(switchName, portGroups, switchId);
+    await showPortGroupsModal(switchName, portGroups, switchId);
   } catch (error) {
     console.error("管理交换机端口失败:", error);
     showToast("操作失败，请重试", "error");
@@ -250,8 +251,8 @@ function groupPorts(ports) {
   return finalGroups;
 }
 
-function showPortGroupsModal(switchName, portGroups, switchId) {
-  openModal("switch-ports-group-modal");
+async function showPortGroupsModal(switchName, portGroups, switchId) {
+  await openModal("switch-ports-group-modal");
 
   const modal = elementCache.get("switch-ports-group-modal");
   const title = elementCache.get("switch-ports-group-modal-title");
@@ -354,8 +355,8 @@ function showPortGroupsModal(switchName, portGroups, switchId) {
   }
 }
 
-function openPortDetailModal(portData) {
-  openModal("switch-port-detail-modal");
+async function openPortDetailModal(portData) {
+  await openModal("switch-port-detail-modal");
 
   const modal = elementCache.get("switch-port-detail-modal");
   const title = elementCache.get("switch-port-detail-modal-title");
@@ -408,8 +409,8 @@ function openPortDetailModal(portData) {
   };
 }
 
-function openSwitchPortModal(portData = null, switchId = null) {
-  openModal("switch-port-detail-modal");
+async function openSwitchPortModal(portData = null, switchId = null) {
+  await openModal("switch-port-detail-modal");
 
   const modal = elementCache.get("switch-port-detail-modal");
   const title = elementCache.get("switch-port-detail-modal-title");
@@ -493,7 +494,7 @@ async function submitSwitchPortForm() {
                 ports = portsResult.data.items;
               }
               const portGroups = groupPorts(ports);
-              showPortGroupsModal(currentSwitchName, portGroups, currentSwitchId);
+              await showPortGroupsModal(currentSwitchName, portGroups, currentSwitchId);
             }
           }
         } catch (refreshError) {

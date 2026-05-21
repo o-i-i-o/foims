@@ -20,7 +20,6 @@ const FORM_CALLBACK_MAP = {
   "cabinet-position-form": "submitCabinetPositionForm",
   "user-form": "submitUserForm",
   "switch-form": "submitSwitchForm",
-  "switch-port-form": "submitSwitchPortForm",
   "switch-port-form-expanded": "submitSwitchPortForm",
 };
 
