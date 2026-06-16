@@ -4,3 +4,4 @@ node_modules
 package*
 web/.trae/
 web-ts/
+config.toml
