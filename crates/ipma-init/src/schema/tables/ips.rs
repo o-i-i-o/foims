@@ -27,12 +27,5 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    if let Err(e) = sqlx::query("CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)")
-        .execute(pool)
-        .await
-    {
-        tracing::warn!("创建 idx_ips_network_id 索引失败: {}", e);
-    }
-
     Ok(())
 }

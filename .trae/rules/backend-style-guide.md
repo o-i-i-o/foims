@@ -31,7 +31,7 @@
 
 ### 4. 部署与测试
 - **代码检查 ：** 每次代码更新后，必须使用 cargo clippy 检查代码风格。
-- **代码测试 ：** 通过cargo run --release 测试
+- **代码测试 ：** 通过cargo build --release  sudo ./target/release/ipma 测试(原因是编译不需要root权限，但是运行需要root权限监听80/443端口，所以需要sudo运行)
 - **测试用户 ：** API测试用户为admin，密码为admin123
 
 ---

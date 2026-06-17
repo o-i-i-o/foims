@@ -23,9 +23,9 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     users::create(pool).await?;
     network::create(pool).await?;
     rooms::create(pool).await?;
-    switches::create(pool).await?;
     cabinets::create(pool).await?;
     workstations::create(pool).await?;
+    switches::create(pool).await?;
     ips::create(pool).await?;
     logs::create(pool).await?;
     tokens::create(pool).await?;
