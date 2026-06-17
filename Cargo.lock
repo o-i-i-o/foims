@@ -2101,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.9.66"
+version = "0.9.67"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2121,6 +2121,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "hex",
+ "ipma-init",
  "ipnetwork 0.21.1",
  "jsonwebtoken",
  "lettre",
@@ -2151,6 +2152,27 @@ dependencies = [
  "uuid",
  "validator",
  "zip",
+]
+
+[[package]]
+name = "ipma-init"
+version = "0.1.0"
+dependencies = [
+ "actix-multipart",
+ "actix-web",
+ "bcrypt",
+ "chrono",
+ "futures-util",
+ "rand 0.10.1",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "toml 1.1.2+spec-1.1.0",
+ "tracing",
+ "uuid",
+ "validator",
 ]
 
 [[package]]

@@ -4,10 +4,10 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use tracing::info;
 
-use crate::app_state::AppState;
-use crate::error::AppError;
-use crate::init::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
-use crate::models::ApiResponse;
+use crate::context::InitContext;
+use crate::error::InitError;
+use crate::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
+use crate::ApiResponse;
 
 static VERIFICATION_CODE: OnceLock<Mutex<VerificationCode>> = OnceLock::new();
 
@@ -78,11 +78,9 @@ pub fn verify_code(provided_code: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn get_verification_code(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
-    }
-
+pub async fn get_verification_code(
+    _ctx: web::Data<InitContext>,
+) -> Result<HttpResponse, InitError> {
     let verification_code = generate_and_print_verification_code();
 
     if let Ok(mut lock) = get_verification_code_storage().lock() {

@@ -7,22 +7,22 @@ use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::auth::utils::hash_password;
-use crate::error::AppError;
-use crate::init::check::{check_has_data, check_required_tables_exist, validate_table_columns};
-use crate::init::config::update_config_enabled;
-use crate::init::connection::ensure_database_and_schema;
-use crate::init::operations::{backup_database, create_database, drop_all_tables, drop_database};
-use crate::init::schema::create_tables;
-use crate::init::types::{
+use crate::check::{check_has_data, check_required_tables_exist, validate_table_columns};
+use crate::config::update_config_enabled;
+use crate::connection::ensure_database_and_schema;
+use crate::context::InitContext;
+use crate::error::InitError;
+use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
+use crate::schema::create_tables;
+use crate::types::{
     CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest,
 };
-use crate::init::verification::verify_code;
-use crate::models::ApiResponse;
+use crate::utils::{PgPassFile, hash_password};
+use crate::verification::verify_code;
+use crate::ApiResponse;
 
-pub async fn check_db_status(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
             return Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -68,21 +68,21 @@ pub async fn check_db_status(state: web::Data<AppState>) -> Result<HttpResponse,
 }
 
 pub async fn create_database_api(
-    state: web::Data<AppState>,
+    ctx: web::Data<InitContext>,
     req: web::Json<CreateDatabaseRequest>,
-) -> Result<HttpResponse, AppError> {
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
+) -> Result<HttpResponse, InitError> {
+    if !ctx.init_enabled {
+        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     if let Err(e) = verify_code(&req.verification) {
-        return Err(AppError::Validation(e));
+        return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
@@ -91,71 +91,71 @@ pub async fn create_database_api(
 
     if has_data {
         info!("数据库不为空，正在备份...");
-        match backup_database(&state.config.database).await {
+        match backup_database(&ctx.db_config).await {
             Ok(file) => {
                 backup_file = Some(file);
                 info!("备份完成，正在删除旧数据库...");
             }
             Err(e) => {
-                return Err(AppError::Internal(format!("备份失败: {e}")));
+                return Err(InitError::Internal(format!("备份失败: {e}")));
             }
         }
 
         drop(pool);
 
-        if let Err(e) = drop_database(&state.config.database).await {
-            return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+        if let Err(e) = drop_database(&ctx.db_config).await {
+            return Err(InitError::Internal(format!("删除数据库失败: {e}")));
         }
     } else {
         drop(pool);
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            state.config.database.username,
-            state.config.database.password,
-            state.config.database.host,
-            state.config.database.port
+            ctx.db_config.username,
+            ctx.db_config.password,
+            ctx.db_config.host,
+            ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
+                return Err(InitError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
         let db_exists: bool =
             match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-                .bind(&state.config.database.database)
+                .bind(&ctx.db_config.database)
                 .fetch_one(&postgres_pool)
                 .await
             {
                 Ok(exists) => exists,
                 Err(e) => {
-                    return Err(AppError::Internal(format!("检查数据库失败: {e}")));
+                    return Err(InitError::Internal(format!("检查数据库失败: {e}")));
                 }
             };
 
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
-            if let Err(e) = drop_database(&state.config.database).await {
-                return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+            if let Err(e) = drop_database(&ctx.db_config).await {
+                return Err(InitError::Internal(format!("删除数据库失败: {e}")));
             }
         }
     }
 
-    if let Err(e) = create_database(&state.config.database).await {
-        return Err(AppError::Internal(format!("创建数据库失败: {e}")));
+    if let Err(e) = create_database(&ctx.db_config).await {
+        return Err(InitError::Internal(format!("创建数据库失败: {e}")));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
     if let Err(e) = create_tables(&pool).await {
-        return Err(AppError::Internal(format!("创建表失败: {e}")));
+        return Err(InitError::Internal(format!("创建表失败: {e}")));
     }
 
     info!("数据库创建成功");
@@ -169,21 +169,21 @@ pub async fn create_database_api(
 }
 
 pub async fn import_database_api(
-    state: web::Data<AppState>,
+    ctx: web::Data<InitContext>,
     req: web::Json<ImportDatabaseRequest>,
-) -> Result<HttpResponse, AppError> {
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
+) -> Result<HttpResponse, InitError> {
+    if !ctx.init_enabled {
+        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     if let Err(e) = verify_code(&req.verification) {
-        return Err(AppError::Validation(e));
+        return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
@@ -192,75 +192,75 @@ pub async fn import_database_api(
 
     if has_data {
         info!("数据库不为空，正在备份...");
-        match backup_database(&state.config.database).await {
+        match backup_database(&ctx.db_config).await {
             Ok(file) => {
                 backup_file = Some(file);
                 info!("备份完成，正在删除旧数据库...");
             }
             Err(e) => {
-                return Err(AppError::Internal(format!("备份失败: {e}")));
+                return Err(InitError::Internal(format!("备份失败: {e}")));
             }
         }
 
         drop(pool);
 
-        if let Err(e) = drop_database(&state.config.database).await {
-            return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+        if let Err(e) = drop_database(&ctx.db_config).await {
+            return Err(InitError::Internal(format!("删除数据库失败: {e}")));
         }
     } else {
         drop(pool);
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            state.config.database.username,
-            state.config.database.password,
-            state.config.database.host,
-            state.config.database.port
+            ctx.db_config.username,
+            ctx.db_config.password,
+            ctx.db_config.host,
+            ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
+                return Err(InitError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
         let db_exists: bool =
             match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-                .bind(&state.config.database.database)
+                .bind(&ctx.db_config.database)
                 .fetch_one(&postgres_pool)
                 .await
             {
                 Ok(exists) => exists,
                 Err(e) => {
-                    return Err(AppError::Internal(format!("检查数据库失败: {e}")));
+                    return Err(InitError::Internal(format!("检查数据库失败: {e}")));
                 }
             };
 
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
-            if let Err(e) = drop_database(&state.config.database).await {
-                return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+            if let Err(e) = drop_database(&ctx.db_config).await {
+                return Err(InitError::Internal(format!("删除数据库失败: {e}")));
             }
         }
     }
 
-    if let Err(e) = create_database(&state.config.database).await {
-        return Err(AppError::Internal(format!("创建数据库失败: {e}")));
+    if let Err(e) = create_database(&ctx.db_config).await {
+        return Err(InitError::Internal(format!("创建数据库失败: {e}")));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
     if let Err(e) = create_tables(&pool).await {
-        return Err(AppError::Internal(format!("创建表失败: {e}")));
+        return Err(InitError::Internal(format!("创建表失败: {e}")));
     }
 
     if let Err(e) = validate_table_columns(&pool).await {
-        return Err(AppError::Validation(format!(
+        return Err(InitError::Validation(format!(
             "数据库字段完整性校验失败: {e}"
         )));
     }
@@ -276,11 +276,11 @@ pub async fn import_database_api(
 }
 
 pub async fn import_database_from_file(
-    state: web::Data<AppState>,
+    ctx: web::Data<InitContext>,
     mut payload: Multipart,
-) -> Result<HttpResponse, AppError> {
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
+) -> Result<HttpResponse, InitError> {
+    if !ctx.init_enabled {
+        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     let mut verification_code: Option<String> = None;
@@ -288,12 +288,12 @@ pub async fn import_database_from_file(
 
     tokio::fs::create_dir_all("/tmp/ipma_import")
         .await
-        .map_err(|e| AppError::Internal(format!("创建临时目录失败: {e}")))?;
+        .map_err(|e| InitError::Internal(format!("创建临时目录失败: {e}")))?;
 
     while let Some(mut field) = payload
         .try_next()
         .await
-        .map_err(|e| AppError::Validation(e.to_string()))?
+        .map_err(|e| InitError::Validation(e.to_string()))?
     {
         let content_disposition = field.content_disposition();
         let field_name = content_disposition
@@ -304,8 +304,8 @@ pub async fn import_database_from_file(
             let data = field
                 .bytes(10 * 1024 * 1024)
                 .await
-                .map_err(|e| AppError::Validation(e.to_string()))?
-                .map_err(|e| AppError::Validation(e.to_string()))?;
+                .map_err(|e| InitError::Validation(e.to_string()))?
+                .map_err(|e| InitError::Validation(e.to_string()))?;
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
         } else if field_name == "sql_file" {
             let filename = content_disposition
@@ -316,31 +316,31 @@ pub async fn import_database_from_file(
             let data = field
                 .bytes(100 * 1024 * 1024)
                 .await
-                .map_err(|e| AppError::Validation(e.to_string()))?
-                .map_err(|e| AppError::Validation(e.to_string()))?;
+                .map_err(|e| InitError::Validation(e.to_string()))?
+                .map_err(|e| InitError::Validation(e.to_string()))?;
             tokio::fs::write(&filepath, &data)
                 .await
-                .map_err(|e| AppError::Internal(format!("写入文件失败: {e}")))?;
+                .map_err(|e| InitError::Internal(format!("写入文件失败: {e}")))?;
             sql_file_path = Some(filepath);
         }
     }
 
     let Some(verification) = verification_code else {
-        return Err(AppError::Validation("缺少验证码".to_string()));
+        return Err(InitError::Validation("缺少验证码".to_string()));
     };
 
     let Some(sql_path) = sql_file_path else {
-        return Err(AppError::Validation("缺少SQL文件".to_string()));
+        return Err(InitError::Validation("缺少SQL文件".to_string()));
     };
 
     if let Err(e) = verify_code(&verification) {
-        return Err(AppError::Validation(e));
+        return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
@@ -349,73 +349,73 @@ pub async fn import_database_from_file(
 
     if has_data {
         info!("数据库不为空，正在备份...");
-        match backup_database(&state.config.database).await {
+        match backup_database(&ctx.db_config).await {
             Ok(file) => {
                 backup_file = Some(file);
                 info!("备份完成，正在删除旧数据库...");
             }
             Err(e) => {
-                return Err(AppError::Internal(format!("备份失败: {e}")));
+                return Err(InitError::Internal(format!("备份失败: {e}")));
             }
         }
 
         drop(pool);
 
-        if let Err(e) = drop_database(&state.config.database).await {
-            return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+        if let Err(e) = drop_database(&ctx.db_config).await {
+            return Err(InitError::Internal(format!("删除数据库失败: {e}")));
         }
     } else {
         drop(pool);
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            state.config.database.username,
-            state.config.database.password,
-            state.config.database.host,
-            state.config.database.port
+            ctx.db_config.username,
+            ctx.db_config.password,
+            ctx.db_config.host,
+            ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
-                return Err(AppError::Internal(format!("连接PostgreSQL失败: {e}")));
+                return Err(InitError::Internal(format!("连接PostgreSQL失败: {e}")));
             }
         };
 
         let db_exists: bool =
             match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-                .bind(&state.config.database.database)
+                .bind(&ctx.db_config.database)
                 .fetch_one(&postgres_pool)
                 .await
             {
                 Ok(exists) => exists,
                 Err(e) => {
-                    return Err(AppError::Internal(format!("检查数据库失败: {e}")));
+                    return Err(InitError::Internal(format!("检查数据库失败: {e}")));
                 }
             };
 
         if db_exists {
             info!("数据库存在但无数据，正在删除重建...");
-            if let Err(e) = drop_database(&state.config.database).await {
-                return Err(AppError::Internal(format!("删除数据库失败: {e}")));
+            if let Err(e) = drop_database(&ctx.db_config).await {
+                return Err(InitError::Internal(format!("删除数据库失败: {e}")));
             }
         }
     }
 
-    if let Err(e) = create_database(&state.config.database).await {
-        return Err(AppError::Internal(format!("创建数据库失败: {e}")));
+    if let Err(e) = create_database(&ctx.db_config).await {
+        return Err(InitError::Internal(format!("创建数据库失败: {e}")));
     }
 
-    let db_config = state.config.database.clone();
+    let db_config = ctx.db_config.clone();
     let sql_path_clone = sql_path.clone();
     let output = tokio::task::spawn_blocking(move || {
-        let pgpass = crate::db::PgPassFile::create(
+        let pgpass = PgPassFile::create(
             &db_config.host,
             db_config.port,
             &db_config.database,
             &db_config.username,
             &db_config.password,
         )
-        .map_err(AppError::Internal)?;
+        .map_err(InitError::Internal)?;
 
         std::process::Command::new("psql")
             .arg("-h")
@@ -430,25 +430,25 @@ pub async fn import_database_from_file(
             .arg(&sql_path_clone)
             .env("PGPASSFILE", pgpass.path())
             .output()
-            .map_err(|e| AppError::Internal(format!("执行psql失败: {e}")))
+            .map_err(|e| InitError::Internal(format!("执行psql失败: {e}")))
     })
     .await
-    .map_err(|e| AppError::Internal(format!("psql任务失败: {e}")))??;
+    .map_err(|e| InitError::Internal(format!("psql任务失败: {e}")))??;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::Internal(format!("导入SQL文件失败: {stderr}")));
+        return Err(InitError::Internal(format!("导入SQL文件失败: {stderr}")));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
     if let Err(e) = validate_table_columns(&pool).await {
-        return Err(AppError::Validation(format!(
+        return Err(InitError::Validation(format!(
             "数据库字段完整性校验失败: {e}"
         )));
     }
@@ -468,23 +468,23 @@ pub async fn import_database_from_file(
 }
 
 pub async fn init_system(
-    state: web::Data<AppState>,
+    ctx: web::Data<InitContext>,
     req: web::Json<InitRequest>,
-) -> Result<HttpResponse, AppError> {
+) -> Result<HttpResponse, InitError> {
     (*req).validate()?;
 
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
+    if !ctx.init_enabled {
+        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     if let Err(e) = verify_code(&req.verification) {
-        return Err(AppError::Validation(e));
+        return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
@@ -498,16 +498,16 @@ pub async fn init_system(
                 if db_err.to_string().contains("UndefinedTable") {
                     0
                 } else {
-                    return Err(AppError::Database(format!("数据库查询错误: {e}")));
+                    return Err(InitError::Database(format!("数据库查询错误: {e}")));
                 }
             } else {
-                return Err(AppError::Database(format!("数据库查询错误: {e}")));
+                return Err(InitError::Database(format!("数据库查询错误: {e}")));
             }
         }
     };
 
     if count > 0 {
-        return Err(AppError::Validation(
+        return Err(InitError::Validation(
             "数据库已有用户数据，请先通过新建或导入功能初始化数据库。".to_string(),
         ));
     }
@@ -515,7 +515,7 @@ pub async fn init_system(
     if !check_required_tables_exist(&pool).await
         && let Err(e) = create_tables(&pool).await
     {
-        return Err(AppError::Internal(format!("创建表失败: {e}")));
+        return Err(InitError::Internal(format!("创建表失败: {e}")));
     }
 
     let password_hash = hash_password(&req.password).await?;
@@ -544,11 +544,11 @@ pub async fn init_system(
     .await
     {
         tracing::error!("创建管理员用户失败: {:?}", e);
-        return Err(AppError::Database(format!("创建管理员用户失败: {e}")));
+        return Err(InitError::Database(format!("创建管理员用户失败: {e}")));
     }
 
-    if let Err(e) = update_config_enabled(false).await {
-        return Err(AppError::Internal(format!("更新配置失败: {e}")));
+    if let Err(e) = update_config_enabled(&ctx.config_path, false).await {
+        return Err(InitError::Internal(format!("更新配置失败: {e}")));
     }
 
     info!(
@@ -559,11 +559,11 @@ pub async fn init_system(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统初始化成功")))
 }
 
-pub async fn init_db(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+pub async fn init_db(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
@@ -573,7 +573,7 @@ pub async fn init_db(state: web::Data<AppState>) -> Result<HttpResponse, AppErro
         info!("数据库表结构已存在，跳过初始化");
     } else {
         if let Err(e) = create_tables(&pool).await {
-            return Err(AppError::Internal(format!("创建表失败: {e}")));
+            return Err(InitError::Internal(format!("创建表失败: {e}")));
         }
         info!("数据库表结构初始化成功");
     }
@@ -582,11 +582,11 @@ pub async fn init_db(state: web::Data<AppState>) -> Result<HttpResponse, AppErro
 }
 
 pub async fn clear_database(
-    state: web::Data<AppState>,
+    ctx: web::Data<InitContext>,
     req: web::Json<serde_json::Value>,
-) -> Result<HttpResponse, AppError> {
-    if !state.config.init.enabled {
-        return Err(AppError::Forbidden("系统初始化已在配置中禁用".to_string()));
+) -> Result<HttpResponse, InitError> {
+    if !ctx.init_enabled {
+        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
 
     let verification_code = match req.get("code") {
@@ -595,27 +595,27 @@ pub async fn clear_database(
     };
 
     if let Err(e) = verify_code(verification_code) {
-        return Err(AppError::Validation(e));
+        return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&state.config.database).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Err(AppError::Internal(e));
+            return Err(InitError::Internal(e));
         }
     };
 
     tracing::info!("正在通过API清空数据库...");
     if let Err(e) = drop_all_tables(&pool).await {
-        return Err(AppError::Internal(format!("清空数据库失败: {e}")));
+        return Err(InitError::Internal(format!("清空数据库失败: {e}")));
     }
 
     tracing::info!("通过API清空数据库成功");
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库清空成功")))
 }
 
-pub async fn check_init_status(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let Ok(pool) = ensure_database_and_schema(&state.config.database).await else {
+pub async fn check_init_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+    let Ok(pool) = ensure_database_and_schema(&ctx.db_config).await else {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "initialized": false,
             "version": env!("CARGO_PKG_VERSION"),
@@ -636,12 +636,19 @@ pub async fn check_init_status(state: web::Data<AppState>) -> Result<HttpRespons
     })))
 }
 
-pub async fn restart_program() -> Result<HttpResponse, AppError> {
+pub async fn restart_program(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
     info!("收到重启程序请求，正在准备重启...");
-    crate::system::config::trigger_service_restart().await
+    (ctx.restart_fn)().await.map_err(InitError::Internal)?;
+    Ok(HttpResponse::Ok().json(
+        crate::ApiResponse::<()> {
+            success: true,
+            message: "服务重启命令已发送，服务正在重启...".to_string(),
+            data: None,
+        },
+    ))
 }
 
-pub async fn check_pgsql(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
     let installed = match tokio::process::Command::new("which")
         .arg("psql")
         .status()
@@ -664,10 +671,10 @@ pub async fn check_pgsql(state: web::Data<AppState>) -> Result<HttpResponse, App
 
     let url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        state.config.database.username,
-        state.config.database.password,
-        state.config.database.host,
-        state.config.database.port
+        ctx.db_config.username,
+        ctx.db_config.password,
+        ctx.db_config.host,
+        ctx.db_config.port
     );
 
     match PgPool::connect(&url).await {

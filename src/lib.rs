@@ -15,7 +15,6 @@ pub mod config;
 pub mod crypto;
 pub mod db;
 pub mod error;
-pub mod init;
 pub mod log;
 pub mod models;
 pub mod resource;

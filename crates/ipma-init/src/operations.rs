@@ -1,8 +1,9 @@
 use sqlx::PgPool;
 use tracing::info;
 
-use crate::db::url_encode_component;
-use crate::init::config::get_backup_dir;
+use crate::config::get_backup_dir;
+use crate::types::DatabaseConfig;
+use crate::utils::{PgPassFile, url_encode_component};
 
 pub fn validate_identifier(name: &str, label: &str) -> Result<(), String> {
     if name.is_empty() {
@@ -18,7 +19,7 @@ pub fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<String, String> {
+pub async fn backup_database(config: &DatabaseConfig) -> Result<String, String> {
     let backup_dir = get_backup_dir();
     tokio::fs::create_dir_all(&backup_dir)
         .await
@@ -30,7 +31,7 @@ pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<S
     let config = config.clone();
     let backup_file_clone = backup_file.clone();
     let output = tokio::task::spawn_blocking(move || {
-        let pgpass = crate::db::PgPassFile::create(
+        let pgpass = PgPassFile::create(
             &config.host,
             config.port,
             &config.database,
@@ -65,7 +66,7 @@ pub async fn backup_database(config: &crate::config::DatabaseConfig) -> Result<S
     Ok(backup_file)
 }
 
-pub async fn drop_database(config: &crate::config::DatabaseConfig) -> Result<(), String> {
+pub async fn drop_database(config: &DatabaseConfig) -> Result<(), String> {
     validate_identifier(&config.database, "数据库名")?;
 
     let postgres_url = format!(
@@ -106,7 +107,7 @@ pub async fn drop_database(config: &crate::config::DatabaseConfig) -> Result<(),
     Ok(())
 }
 
-pub async fn create_database(config: &crate::config::DatabaseConfig) -> Result<(), String> {
+pub async fn create_database(config: &DatabaseConfig) -> Result<(), String> {
     validate_identifier(&config.database, "数据库名")?;
 
     let postgres_url = format!(

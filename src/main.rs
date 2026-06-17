@@ -7,6 +7,7 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{SocketAddr, TcpListener};
 use std::panic;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use ipma::app_state::AppState;
@@ -24,6 +25,7 @@ use ipma::system::config::init_start_time;
 use ipma::system::cron::{SchedulerState, start_scheduler};
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
+use ipma_init::{InitContext, DatabaseConfig as InitDatabaseConfig};
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
@@ -642,31 +644,60 @@ fn configure_app_services(
     cfg.app_data(web::PayloadConfig::new(50 * 1024 * 1024));
 
     if app_state.config.init.enabled {
+        // 创建 InitContext 用于初始化模块
+        let init_context = Data::new(InitContext {
+            db_config: InitDatabaseConfig {
+                host: app_state.config.database.host.clone(),
+                port: app_state.config.database.port,
+                database: app_state.config.database.database.clone(),
+                username: app_state.config.database.username.clone(),
+                password: app_state.config.database.password.clone(),
+                max_connections: app_state.config.database.max_connections,
+                min_connections: app_state.config.database.min_connections,
+                acquire_timeout_secs: app_state.config.database.acquire_timeout_secs,
+                idle_timeout_secs: app_state.config.database.idle_timeout_secs,
+                max_lifetime_secs: app_state.config.database.max_lifetime_secs,
+                query_timeout_secs: app_state.config.database.query_timeout_secs,
+                slow_query_threshold_ms: app_state.config.database.slow_query_threshold_ms,
+                health_check_interval_secs: app_state.config.database.health_check_interval_secs,
+            },
+            config_path: ipma::config::get_config_file_path(),
+            init_enabled: app_state.config.init.enabled,
+            restart_fn: Arc::new(|| Box::pin(async move {
+                ipma::system::config::trigger_service_restart()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(())
+            })),
+        });
+        
+        cfg.app_data(init_context);
+        
         cfg.service(
             web::scope("/api/init")
-                .route("", web::post().to(ipma::init::init_system))
-                .route("/db", web::post().to(ipma::init::init_db))
-                .route("/db/clear", web::post().to(ipma::init::clear_database))
+                .route("", web::post().to(ipma_init::init_system))
+                .route("/db", web::post().to(ipma_init::init_db))
+                .route("/db/clear", web::post().to(ipma_init::clear_database))
                 .route(
                     "/db/create",
-                    web::post().to(ipma::init::create_database_api),
+                    web::post().to(ipma_init::create_database_api),
                 )
                 .route(
                     "/db/import",
-                    web::post().to(ipma::init::import_database_api),
+                    web::post().to(ipma_init::import_database_api),
                 )
                 .route(
                     "/db/import-file",
-                    web::post().to(ipma::init::import_database_from_file),
+                    web::post().to(ipma_init::import_database_from_file),
                 )
-                .route("/restart", web::post().to(ipma::init::restart_program))
-                .route("/status", web::get().to(ipma::init::check_init_status))
-                .route("/db-status", web::get().to(ipma::init::check_db_status))
+                .route("/restart", web::post().to(ipma_init::restart_program))
+                .route("/status", web::get().to(ipma_init::check_init_status))
+                .route("/db-status", web::get().to(ipma_init::check_db_status))
                 .route(
                     "/verification-code",
-                    web::get().to(ipma::init::get_verification_code),
+                    web::get().to(ipma_init::get_verification_code),
                 )
-                .route("/check-pgsql", web::get().to(ipma::init::check_pgsql)),
+                .route("/check-pgsql", web::get().to(ipma_init::check_pgsql)),
         )
         .route(
             "/init_index.html",

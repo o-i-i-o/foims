@@ -1,12 +1,12 @@
 use sqlx::PgPool;
 use tracing::{info, warn};
 
-use crate::db::url_encode_component;
-use crate::init::operations::{quote_ident, validate_identifier};
+use crate::types::DatabaseConfig;
+use crate::utils::url_encode_component;
 
-pub async fn ensure_database_and_schema(
-    config: &crate::config::DatabaseConfig,
-) -> Result<PgPool, String> {
+use crate::operations::{quote_ident, validate_identifier};
+
+pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPool, String> {
     validate_identifier(&config.database, "数据库名")?;
 
     let postgres_url = format!(

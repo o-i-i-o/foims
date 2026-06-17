@@ -56,3 +56,60 @@ pub struct CreateDatabaseResponse {
     pub backup_file: Option<String>,
     pub message: String,
 }
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct DatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+    #[serde(default = "default_max_connections")]
+    pub max_connections: u32,
+    #[serde(default = "default_min_connections")]
+    pub min_connections: u32,
+    #[serde(default = "default_acquire_timeout")]
+    pub acquire_timeout_secs: u64,
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
+    #[serde(default = "default_max_lifetime")]
+    pub max_lifetime_secs: u64,
+    #[serde(default = "default_query_timeout")]
+    pub query_timeout_secs: u64,
+    #[serde(default = "default_slow_query_threshold")]
+    pub slow_query_threshold_ms: u64,
+    #[serde(default = "default_health_check_interval")]
+    pub health_check_interval_secs: u64,
+}
+
+const fn default_max_connections() -> u32 {
+    10
+}
+
+const fn default_min_connections() -> u32 {
+    5
+}
+
+const fn default_acquire_timeout() -> u64 {
+    15
+}
+
+const fn default_idle_timeout() -> u64 {
+    60
+}
+
+const fn default_max_lifetime() -> u64 {
+    1800
+}
+
+const fn default_query_timeout() -> u64 {
+    30
+}
+
+const fn default_slow_query_threshold() -> u64 {
+    1000
+}
+
+const fn default_health_check_interval() -> u64 {
+    30
+}
