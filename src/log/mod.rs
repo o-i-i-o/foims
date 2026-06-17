@@ -18,17 +18,18 @@ pub fn setup_logging() -> String {
         )
         .unwrap_or_else(|e| {
             eprintln!("警告: 无法解析时间格式，使用默认格式: {}", e);
-            time::format_description::parse_borrowed::<2>("[year]-[month]-[day] [hour]:[minute]:[second]")
-                .unwrap_or_else(|e2| {
-                    eprintln!("警告: 默认时间格式也无法解析: {}，使用最简格式", e2);
-                    time::format_description::parse_borrowed::<2>("[hour]:[minute]:[second]").unwrap_or_else(
-                        |e3| {
-                            eprintln!("错误: 所有时间格式都无法解析: {}", e3);
-                            time::format_description::parse_borrowed::<2>("[hour][minute][second]")
-                                .unwrap_or_default()
-                        },
-                    )
-                })
+            time::format_description::parse_borrowed::<2>(
+                "[year]-[month]-[day] [hour]:[minute]:[second]",
+            )
+            .unwrap_or_else(|e2| {
+                eprintln!("警告: 默认时间格式也无法解析: {}，使用最简格式", e2);
+                time::format_description::parse_borrowed::<2>("[hour]:[minute]:[second]")
+                    .unwrap_or_else(|e3| {
+                        eprintln!("错误: 所有时间格式都无法解析: {}", e3);
+                        time::format_description::parse_borrowed::<2>("[hour][minute][second]")
+                            .unwrap_or_default()
+                    })
+            })
         }),
     );
 

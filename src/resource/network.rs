@@ -262,8 +262,8 @@ pub async fn create_network(
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
-                (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(req.network_region_id)
     .fetch_optional(&state.pool()?.get_conn()).await?
@@ -323,14 +323,22 @@ pub async fn create_network(
 
     // Validate that network CIDR belongs to region CIDRs
     if let Some(ref ipv4) = ipv4_cidr_val
-        && !crate::utils::cidr_belongs_to_region(ipv4, &network_region.ipv4_cidrs.clone().unwrap_or_default()) {
+        && !crate::utils::cidr_belongs_to_region(
+            ipv4,
+            &network_region.ipv4_cidrs.clone().unwrap_or_default(),
+        )
+    {
         return Err(AppError::Validation(
             "IPv4网段不属于该网络区域的CIDR范围".to_string(),
         ));
     }
 
     if let Some(ref ipv6) = ipv6_cidr_val
-        && !crate::utils::cidr_belongs_to_region(ipv6, &network_region.ipv6_cidrs.clone().unwrap_or_default()) {
+        && !crate::utils::cidr_belongs_to_region(
+            ipv6,
+            &network_region.ipv6_cidrs.clone().unwrap_or_default(),
+        )
+    {
         return Err(AppError::Validation(
             "IPv6网段不属于该网络区域的CIDR范围".to_string(),
         ));
@@ -489,8 +497,8 @@ pub async fn update_network(
     if let Some(network_region_id) = &req.network_region_id {
         let network_region = sqlx::query_as::<_, NetworkRegion>(
             "SELECT id, name, description,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                     created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
         )
         .bind(network_region_id)
@@ -528,8 +536,8 @@ pub async fn update_network(
     // Get the target network region for CIDR validation
     let target_network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
-                (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     )
     .bind(*network_region_id)
@@ -578,7 +586,10 @@ pub async fn update_network(
         }
 
         // Validate that IPv4 CIDR belongs to region CIDRs
-        if !crate::utils::cidr_belongs_to_region(ipv4, &target_network_region.ipv4_cidrs.clone().unwrap_or_default()) {
+        if !crate::utils::cidr_belongs_to_region(
+            ipv4,
+            &target_network_region.ipv4_cidrs.clone().unwrap_or_default(),
+        ) {
             return Err(AppError::Validation(
                 "IPv4网段不属于该网络区域的CIDR范围".to_string(),
             ));
@@ -611,7 +622,10 @@ pub async fn update_network(
         }
 
         // Validate that IPv6 CIDR belongs to region CIDRs
-        if !crate::utils::cidr_belongs_to_region(ipv6, &target_network_region.ipv6_cidrs.clone().unwrap_or_default()) {
+        if !crate::utils::cidr_belongs_to_region(
+            ipv6,
+            &target_network_region.ipv6_cidrs.clone().unwrap_or_default(),
+        ) {
             return Err(AppError::Validation(
                 "IPv6网段不属于该网络区域的CIDR范围".to_string(),
             ));
@@ -799,8 +813,8 @@ pub async fn get_network_regions(
     let network_regions = if search.is_empty() {
         sqlx::query_as::<_, NetworkRegion>(
             "SELECT id, name, description,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                     created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
@@ -811,8 +825,8 @@ pub async fn get_network_regions(
         let pattern = format!("%{search}%");
         sqlx::query_as::<_, NetworkRegion>(
             "SELECT id, name, description,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                    (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                     created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(&pattern)
@@ -914,8 +928,8 @@ pub async fn get_network_region(
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
-                (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
@@ -985,8 +999,8 @@ pub async fn update_network_region(
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
-                (SELECT json_agg(text(d)) FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                (SELECT json_agg(text(d)) FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
+                (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;

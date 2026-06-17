@@ -68,12 +68,10 @@ pub fn cidr_contains_subnet(subnet: &str, supernet: &str) -> bool {
             match (subnet, supernet) {
                 (ipnetwork::IpNetwork::V4(sub), ipnetwork::IpNetwork::V4(super_net)) => {
                     // 子网的 prefixlen 必须大于父网，且子网的网络地址在父网范围内
-                    sub.prefix() > super_net.prefix()
-                        && super_net.contains(sub.network())
+                    sub.prefix() > super_net.prefix() && super_net.contains(sub.network())
                 }
                 (ipnetwork::IpNetwork::V6(sub), ipnetwork::IpNetwork::V6(super_net)) => {
-                    sub.prefix() > super_net.prefix()
-                        && super_net.contains(sub.network())
+                    sub.prefix() > super_net.prefix() && super_net.contains(sub.network())
                 }
                 _ => false, // IPv4 和 IPv6 不能互相包含
             }
@@ -89,7 +87,9 @@ pub fn cidr_belongs_to_region(cidr: &str, region_cidrs: &[String]) -> bool {
         return true; // 如果区域没有定义 CIDR，则不限制
     }
 
-    region_cidrs.iter().any(|region_cidr| cidr_contains_subnet(cidr, region_cidr))
+    region_cidrs
+        .iter()
+        .any(|region_cidr| cidr_contains_subnet(cidr, region_cidr))
 }
 
 pub async fn validate_network_in_room<'e, E>(
@@ -184,14 +184,25 @@ pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, 
 pub async fn revoke_token(
     pool: &sqlx::PgPool,
     token: &str,
-    user_id: &Uuid,
+    user_id: Option<Uuid>,
     expiry: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), sqlx::Error> {
     let token_hash = generate_token_hash(token);
 
+    // 检查用户是否存在，不存在则使用 NULL
+    let valid_user_id = if let Some(uid) = user_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+        if exists { Some(uid) } else { None }
+    } else {
+        None
+    };
+
     sqlx::query("INSERT INTO revoked_tokens (token_hash, user_id, expiry) VALUES ($1, $2, $3)")
         .bind(&token_hash)
-        .bind(user_id)
+        .bind(valid_user_id)
         .bind(expiry)
         .execute(pool)
         .await?;
@@ -305,24 +316,29 @@ pub async fn log_system_operation(
         claims_opt.cloned()
     };
 
-    let user_id = claims.map_or(Uuid::nil(), |c| {
-        Uuid::parse_str(&c.sub).unwrap_or_else(|_| {
-            tracing::warn!("JWT subject 不是有效的UUID: {}", c.sub);
-            Uuid::nil()
-        })
-    });
-    let ip_address = get_real_ip_from_request(params.req);
+    let user_id: Option<Uuid> = claims.and_then(|c| Uuid::parse_str(&c.sub).ok());
+
+    // 检查用户是否存在，不存在则使用 NULL
+    let valid_user_id = if let Some(uid) = user_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+        if exists { Some(uid) } else { None }
+    } else {
+        None
+    };
 
     sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at) 
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(Uuid::new_v4())
-        .bind(user_id)
+        .bind(valid_user_id)
         .bind(params.action)
         .bind(params.resource_type)
         .bind(params.resource_id)
         .bind(params.details)
         .bind(params.result)
-        .bind(&ip_address)
+        .bind(get_real_ip_from_request(params.req))
         .bind(chrono::Utc::now())
         .execute(pool)
         .await?;

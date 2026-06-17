@@ -25,7 +25,7 @@ use ipma::system::config::init_start_time;
 use ipma::system::cron::{SchedulerState, start_scheduler};
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
-use ipma_init::{InitContext, DatabaseConfig as InitDatabaseConfig};
+use ipma_init::{DatabaseConfig as InitDatabaseConfig, InitContext};
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
@@ -663,29 +663,25 @@ fn configure_app_services(
             },
             config_path: ipma::config::get_config_file_path(),
             init_enabled: app_state.config.init.enabled,
-            restart_fn: Arc::new(|| Box::pin(async move {
-                ipma::system::config::trigger_service_restart()
-                    .await
-                    .map_err(|e| e.to_string())?;
-                Ok(())
-            })),
+            restart_fn: Arc::new(|| {
+                Box::pin(async move {
+                    ipma::system::config::trigger_service_restart()
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    Ok(())
+                })
+            }),
         });
-        
+
         cfg.app_data(init_context);
-        
+
         cfg.service(
             web::scope("/api/init")
                 .route("", web::post().to(ipma_init::init_system))
                 .route("/db", web::post().to(ipma_init::init_db))
                 .route("/db/clear", web::post().to(ipma_init::clear_database))
-                .route(
-                    "/db/create",
-                    web::post().to(ipma_init::create_database_api),
-                )
-                .route(
-                    "/db/import",
-                    web::post().to(ipma_init::import_database_api),
-                )
+                .route("/db/create", web::post().to(ipma_init::create_database_api))
+                .route("/db/import", web::post().to(ipma_init::import_database_api))
                 .route(
                     "/db/import-file",
                     web::post().to(ipma_init::import_database_from_file),

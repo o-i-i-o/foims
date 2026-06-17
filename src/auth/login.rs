@@ -580,7 +580,7 @@ pub async fn refresh_token(
         .map_err(|e| AppError::Internal(format!("无效的用户标识: {e}")))?;
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
-    if let Err(e) = crate::utils::revoke_token(&conn, &token, &user_id, token_expiry).await {
+    if let Err(e) = crate::utils::revoke_token(&conn, &token, Some(user_id), token_expiry).await {
         tracing::error!("撤销令牌失败: {}", e);
     }
 

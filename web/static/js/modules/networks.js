@@ -42,7 +42,16 @@ export async function loadNetworkTypesData(page = 1) {
     renderTable("#network-types-table", {
       data: items,
       columns: [
-        { field: 'name', render: (v) => v },
+        { field: 'name', render: (v) => escapeHtml(v) },
+        { field: 'description', render: (v) => escapeHtml(v) || '-' },
+        { field: 'ipv4_cidrs', render: (v) => {
+          if (!v || v.length === 0) return '-';
+          return v.map(cidr => escapeHtml(cidr)).join('<br>');
+        }},
+        { field: 'ipv6_cidrs', render: (v) => {
+          if (!v || v.length === 0) return '-';
+          return v.map(cidr => escapeHtml(cidr)).join('<br>');
+        }},
         { field: 'created_at', render: (v) => formatDateTime(v) },
         { field: 'id', render: (v) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
@@ -749,10 +758,12 @@ export async function deleteNetworkType(id) {
 
 // ====== 提交网络区域表单 ======
 export async function submitNetworkTypeForm() {
-// 使用通用工具函数获取表单数据
+  // 使用通用工具函数获取表单数据
   const id = getElementValue("network-type-id");
   const name = getElementValue("network-type-name");
   const description = getElementValue("network-type-description");
+  const ipv4CidrsStr = getElementValue("network-type-ipv4-cidrs");
+  const ipv6CidrsStr = getElementValue("network-type-ipv6-cidrs");
 
   // 验证必填字段
   if (!name) {
@@ -760,9 +771,21 @@ export async function submitNetworkTypeForm() {
     return;
   }
 
+  // 解析 CIDR 数组（逗号分隔）
+  const parseCidrList = (cidrStr) => {
+    if (!cidrStr || !cidrStr.trim()) return null;
+    const cidrList = cidrStr.split(/[,\s]+/).map(cidr => cidr.trim()).filter(cidr => cidr.length > 0);
+    return cidrList.length > 0 ? cidrList : null;
+  };
+
+  const ipv4_cidrs = parseCidrList(ipv4CidrsStr);
+  const ipv6_cidrs = parseCidrList(ipv6CidrsStr);
+
   const networkTypeData = {
     name,
     description: description || null,
+    ipv4_cidrs,
+    ipv6_cidrs,
   };
 
   // 使用通用表单提交处理函数
@@ -862,10 +885,16 @@ export function openNetworkTypeModal(networkType = null) {
     elementCache.setValue('network-type-id', networkType.id);
     elementCache.setValue('network-type-name', networkType.name);
     elementCache.setValue('network-type-description', networkType.description || "");
+    elementCache.setValue('network-type-ipv4-cidrs', 
+      Array.isArray(networkType.ipv4_cidrs) ? networkType.ipv4_cidrs.join(', ') : "");
+    elementCache.setValue('network-type-ipv6-cidrs', 
+      Array.isArray(networkType.ipv6_cidrs) ? networkType.ipv6_cidrs.join(', ') : "");
   } else {
     title.textContent = "添加网络区域";
     if (form) form.reset();
     elementCache.setValue('network-type-id', '');
+    elementCache.setValue('network-type-ipv4-cidrs', '');
+    elementCache.setValue('network-type-ipv6-cidrs', '');
   }
 }
 

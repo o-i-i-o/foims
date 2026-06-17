@@ -13,8 +13,18 @@
           <input type="text" id="network-type-name" name="name" autocomplete="off" required aria-required="true" />
         </div>
         <div class="form-group">
-          <label for="network-type-description" data-i18n="network.network_list">Network List</label>
-          <textarea id="network-type-description" name="description" rows="3" data-i18n-placeholder="network.network_list_placeholder" placeholder="Enter networks, one per line"></textarea>
+          <label for="network-type-ipv4-cidrs" data-i18n="network.ipv4_cidrs">IPv4 CIDRs</label>
+          <input type="text" id="network-type-ipv4-cidrs" name="ipv4_cidrs" autocomplete="off" data-i18n-placeholder="network.ipv4_cidrs_placeholder" placeholder="例如: 10.0.0.0/8, 192.168.0.0/16" />
+          <small class="form-text text-muted" data-i18n="network.ipv4_cidrs_hint">多个CIDR用逗号分隔，网段的IPv4 CIDR必须属于此范围</small>
+        </div>
+        <div class="form-group">
+          <label for="network-type-ipv6-cidrs" data-i18n="network.ipv6_cidrs">IPv6 CIDRs</label>
+          <input type="text" id="network-type-ipv6-cidrs" name="ipv6_cidrs" autocomplete="off" data-i18n-placeholder="network.ipv6_cidrs_placeholder" placeholder="例如: 2001:db8::/32" />
+          <small class="form-text text-muted" data-i18n="network.ipv6_cidrs_hint">多个CIDR用逗号分隔，网段的IPv6 CIDR必须属于此范围</small>
+        </div>
+        <div class="form-group">
+          <label for="network-type-description" data-i18n="common.description">Description</label>
+          <textarea id="network-type-description" name="description" rows="3" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
         </div>
       </form>
     </div>

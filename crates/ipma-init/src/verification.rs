@@ -4,10 +4,10 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use tracing::info;
 
+use crate::ApiResponse;
 use crate::context::InitContext;
 use crate::error::InitError;
 use crate::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
-use crate::ApiResponse;
 
 static VERIFICATION_CODE: OnceLock<Mutex<VerificationCode>> = OnceLock::new();
 

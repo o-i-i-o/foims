@@ -7,6 +7,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::ApiResponse;
 use crate::check::{check_has_data, check_required_tables_exist, validate_table_columns};
 use crate::config::update_config_enabled;
 use crate::connection::ensure_database_and_schema;
@@ -19,7 +20,6 @@ use crate::types::{
 };
 use crate::utils::{PgPassFile, hash_password};
 use crate::verification::verify_code;
-use crate::ApiResponse;
 
 pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
     let pool = match ensure_database_and_schema(&ctx.db_config).await {
@@ -111,10 +111,7 @@ pub async fn create_database_api(
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            ctx.db_config.username,
-            ctx.db_config.password,
-            ctx.db_config.host,
-            ctx.db_config.port
+            ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
@@ -212,10 +209,7 @@ pub async fn import_database_api(
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            ctx.db_config.username,
-            ctx.db_config.password,
-            ctx.db_config.host,
-            ctx.db_config.port
+            ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
@@ -369,10 +363,7 @@ pub async fn import_database_from_file(
 
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            ctx.db_config.username,
-            ctx.db_config.password,
-            ctx.db_config.host,
-            ctx.db_config.port
+            ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
@@ -639,13 +630,11 @@ pub async fn check_init_status(ctx: web::Data<InitContext>) -> Result<HttpRespon
 pub async fn restart_program(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
     info!("收到重启程序请求，正在准备重启...");
     (ctx.restart_fn)().await.map_err(InitError::Internal)?;
-    Ok(HttpResponse::Ok().json(
-        crate::ApiResponse::<()> {
-            success: true,
-            message: "服务重启命令已发送，服务正在重启...".to_string(),
-            data: None,
-        },
-    ))
+    Ok(HttpResponse::Ok().json(crate::ApiResponse::<()> {
+        success: true,
+        message: "服务重启命令已发送，服务正在重启...".to_string(),
+        data: None,
+    }))
 }
 
 pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
@@ -671,10 +660,7 @@ pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, In
 
     let url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        ctx.db_config.username,
-        ctx.db_config.password,
-        ctx.db_config.host,
-        ctx.db_config.port
+        ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
     );
 
     match PgPool::connect(&url).await {

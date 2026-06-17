@@ -45,13 +45,11 @@ impl ResponseError for InitError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(
-            crate::ApiResponse::<()> {
-                success: false,
-                message: self.to_string(),
-                data: None,
-            },
-        )
+        HttpResponse::build(self.status_code()).json(crate::ApiResponse::<()> {
+            success: false,
+            message: self.to_string(),
+            data: None,
+        })
     }
 }
 
@@ -59,7 +57,9 @@ impl From<sqlx::Error> for InitError {
     fn from(err: sqlx::Error) -> Self {
         match &err {
             sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => InitError::Conflict("数据已存在，请检查是否有重复记录".to_string()),
+                Some("23505") => {
+                    InitError::Conflict("数据已存在，请检查是否有重复记录".to_string())
+                }
                 Some("23503") => InitError::Validation("关联数据不存在或无法删除".to_string()),
                 Some("23514") => InitError::Validation(db_err.message().to_string()),
                 Some("22P02") => InitError::Validation("数据格式无效".to_string()),
