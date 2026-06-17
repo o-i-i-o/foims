@@ -1,11 +1,22 @@
-2026-06-17T14:13:52.488403  INFO ipma::utils::common: [中文] 日志输出到: {{path}}
-2026-06-17T14:13:52.488432  INFO ipma::utils::common: [English] Log output to: {{path}}
-2026-06-17T14:13:52.488441  INFO ipma::utils::common: [中文] 启动IPMA服务器...
-2026-06-17T14:13:52.488448  INFO ipma::utils::common: [English] Starting IPMA server...
-2026-06-17T14:13:52.488686  INFO ipma::utils::common: [中文] 加载配置成功: {{config}}
-2026-06-17T14:13:52.488698  INFO ipma::utils::common: [English] Configuration loaded successfully: {{config}}
-2026-06-17T14:13:52.488726 ERROR ipma: 程序发生严重panic!
-位置: src/crypto.rs:32:9
-消息: 创建加密密钥目录失败: Permission denied (os error 13)
-堆栈追踪:
-disabled backtrace
+2026-06-17T14:53:30.516388  INFO ipma::utils::common: [中文] 日志输出到: {{path}}
+2026-06-17T14:53:30.516410  INFO ipma::utils::common: [English] Log output to: {{path}}
+2026-06-17T14:53:30.516424  INFO ipma::utils::common: [中文] 启动IPMA服务器...
+2026-06-17T14:53:30.516428  INFO ipma::utils::common: [English] Starting IPMA server...
+2026-06-17T14:53:30.516640  INFO ipma::utils::common: [中文] 加载配置成功: {{config}}
+2026-06-17T14:53:30.516651  INFO ipma::utils::common: [English] Configuration loaded successfully: {{config}}
+2026-06-17T14:53:30.516678  WARN ipma::crypto: 无法创建密钥备份: Permission denied (os error 13)，不影响正常运行
+2026-06-17T14:53:30.516687  INFO ipma::crypto: 加密密钥完整性检查通过
+2026-06-17T14:53:30.516692  INFO ipma::crypto: 主密钥路径: /etc/ipma/encryption.key
+2026-06-17T14:53:30.516698  INFO ipma::crypto: 备份密钥路径: /etc/ipma/encryption.key.backup
+2026-06-17T14:53:30.516709  INFO ipma::crypto: 密钥备份完整性检查通过（与主密钥一致）
+2026-06-17T14:53:30.516719  INFO ipma::utils::common: [中文] 初始化模式已启用: 仅初始化路由可用
+2026-06-17T14:53:30.516725  INFO ipma::utils::common: [English] Initialization mode enabled: only initialization routes available
+2026-06-17T14:53:30.516731  INFO ipma: [中文] 系统启动时间初始化完成
+2026-06-17T14:53:30.516736  INFO ipma: [English] System startup time initialized
+2026-06-17T14:53:30.516817  INFO ipma: 速率限制中间件已启用
+2026-06-17T14:53:30.516826  INFO ipma: IP限制: 1000/60秒
+2026-06-17T14:53:30.516832  INFO ipma: 用户限制: 200/60秒
+2026-06-17T14:53:30.516836  INFO ipma: 登录限制: 5/60秒
+2026-06-17T14:53:30.516841  INFO ipma: 邮件发送限制: 5/3600秒
+2026-06-17T14:53:30.516851  INFO ipma::utils::common: [中文] 初始化模式已启用: 仅初始化路由可用
+2026-06-17T14:53:30.516856  INFO ipma::utils::common: [English] Initialization mode enabled: only initialization routes available
