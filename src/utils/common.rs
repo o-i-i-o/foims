@@ -55,6 +55,43 @@ pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     }
 }
 
+/// 检查子网 CIDR 是否属于父网 CIDR（使用 PostgreSQL 的 << 操作符逻辑）
+/// subnet << supernet 表示 subnet 是 supernet 的子网
+#[must_use]
+pub fn cidr_contains_subnet(subnet: &str, supernet: &str) -> bool {
+    let subnet_net = ipnetwork::IpNetwork::from_str(subnet);
+    let supernet_net = ipnetwork::IpNetwork::from_str(supernet);
+
+    match (subnet_net, supernet_net) {
+        (Ok(subnet), Ok(supernet)) => {
+            // 检查类型是否一致（IPv4 vs IPv6）
+            match (subnet, supernet) {
+                (ipnetwork::IpNetwork::V4(sub), ipnetwork::IpNetwork::V4(super_net)) => {
+                    // 子网的 prefixlen 必须大于父网，且子网的网络地址在父网范围内
+                    sub.prefix() > super_net.prefix()
+                        && super_net.contains(sub.network())
+                }
+                (ipnetwork::IpNetwork::V6(sub), ipnetwork::IpNetwork::V6(super_net)) => {
+                    sub.prefix() > super_net.prefix()
+                        && super_net.contains(sub.network())
+                }
+                _ => false, // IPv4 和 IPv6 不能互相包含
+            }
+        }
+        _ => false,
+    }
+}
+
+/// 检查网段 CIDR 是否属于区域 CIDR 列表中的任一 CIDR
+#[must_use]
+pub fn cidr_belongs_to_region(cidr: &str, region_cidrs: &[String]) -> bool {
+    if region_cidrs.is_empty() {
+        return true; // 如果区域没有定义 CIDR，则不限制
+    }
+
+    region_cidrs.iter().any(|region_cidr| cidr_contains_subnet(cidr, region_cidr))
+}
+
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,

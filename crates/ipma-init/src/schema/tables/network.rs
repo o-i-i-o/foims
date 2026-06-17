@@ -4,6 +4,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(20) NOT NULL UNIQUE,
             description TEXT,
+            ipv4_cidrs CIDR[] DEFAULT '{}',
+            ipv6_cidrs CIDR[] DEFAULT '{}',
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )",

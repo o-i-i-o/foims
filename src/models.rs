@@ -271,6 +271,10 @@ pub struct NetworkRegion {
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
+    #[sqlx(json)]
+    pub ipv4_cidrs: Option<Vec<String>>,
+    #[sqlx(json)]
+    pub ipv6_cidrs: Option<Vec<String>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -281,6 +285,8 @@ pub struct NetworkRegionCreate {
     pub name: String,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub ipv4_cidrs: Option<Vec<String>>,
+    pub ipv6_cidrs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -289,6 +295,8 @@ pub struct NetworkRegionUpdate {
     pub name: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub ipv4_cidrs: Option<Vec<String>>,
+    pub ipv6_cidrs: Option<Vec<String>>,
 }
 
 // ==================== 网络模型 ====================
