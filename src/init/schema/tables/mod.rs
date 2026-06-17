@@ -20,17 +20,6 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS schema_migrations (
-            version VARCHAR(50) PRIMARY KEY,
-            applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            description TEXT
-        )",
-    )
-    .execute(pool)
-    .await
-    .map(|_| ())?;
-
     users::create(pool).await?;
     network::create(pool).await?;
     rooms::create(pool).await?;

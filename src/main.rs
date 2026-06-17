@@ -254,10 +254,6 @@ async fn main() -> std::io::Result<()> {
         match DbPool::new(&config.database).await {
             Ok(p) => {
                 info!("数据库连接池创建成功");
-                if let Err(e) = ipma::init::schema::run_migrations_only(&p.get_conn()).await {
-                    tracing::error!("数据库迁移失败: {}", e);
-                    std::process::exit(1);
-                }
                 Some(p)
             }
             Err(e) => {

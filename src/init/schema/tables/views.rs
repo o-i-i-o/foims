@@ -99,5 +99,51 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS switches_with_details CASCADE")
+        .execute(pool)
+        .await
+    {
+        warn!("删除旧视图失败: {}", e);
+    }
+
+    sqlx::query(
+        r"
+        CREATE VIEW switches_with_details AS
+        SELECT 
+            s.id, s.name, s.model, s.vendor,
+            s.location, s.snmp_version, 
+            s.snmp_community,
+            s.snmp_username, s.snmp_auth_protocol, 
+            s.snmp_auth_password,
+            s.snmp_priv_protocol, 
+            s.snmp_priv_password,
+            s.snmp_port,
+            s.position_id,
+            p.cabinet_id, c.name as cabinet_name,
+            r.id as room_id, r.name as room_name,
+            p.start_u, p.end_u,
+            i.network_id,
+            nc.network_region_id,
+            s.description,
+            'switch'::text as device_type,
+            host(i.ip_address) as ip_address,
+            i.mac_address,
+            s.created_at, s.updated_at
+        FROM switches s
+        LEFT JOIN positions p ON s.position_id = p.id
+        LEFT JOIN cabinets c ON p.cabinet_id = c.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        LEFT JOIN LATERAL (
+            SELECT ips.ip_address, ips.mac_address, ips.network_id
+            FROM ips
+            WHERE ips.position_id = p.id
+            LIMIT 1
+        ) i ON true
+        LEFT JOIN network_cidrs nc ON i.network_id = nc.id
+    ",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
