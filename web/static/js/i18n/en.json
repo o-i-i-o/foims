@@ -172,11 +172,13 @@
     "parent": "Parent",
     "add_root": "Add Headquarters",
     "add_headquarters": "Add Headquarters",
+    "add_node": "Add Node",
     "add_child": "Add Child",
+    "no_child_allowed": "No child node allowed",
     "expand_all": "Expand All",
     "collapse_all": "Collapse All",
     "search_placeholder": "Search organization...",
-    "empty": "No organization data. Click \"Add Headquarters\" to start.",
+    "empty": "No organization data. Click \"Add Node\" to start.",
     "name_required": "Organization name is required",
     "type_required": "Organization type is required",
     "create_success": "Organization node created successfully",
@@ -194,6 +196,23 @@
       "cabinet": "Cabinet",
       "cabinet_position": "Cabinet Position"
     }
+  },
+  "org_template": {
+    "management": "Template Management",
+    "title": "Template Management",
+    "editor_title": "Template Editor",
+    "add": "Add Template",
+    "select_template": "Select Template",
+    "select_required": "Please select a template",
+    "empty": "No template data. Click \"Add Template\" to start.",
+    "add_level": "Add Level",
+    "levels": "Levels",
+    "name_required": "Template name is required",
+    "levels_required": "At least one level is required",
+    "delete_confirm": "Are you sure you want to delete template \"{{name}}\"?",
+    "delete_success": "Template deleted successfully",
+    "create_success": "Template created successfully",
+    "update_success": "Template updated successfully"
   },
   "workstation": {
     "name": "Workstation Name",

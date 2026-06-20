@@ -269,3 +269,97 @@
     transform: translateY(0);
   }
 }
+
+/* ==========================================
+ * 模板管理样式
+ * ========================================== */
+
+.org-template-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-md);
+}
+
+.org-template-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.org-template-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-white);
+  transition: border-color var(--transition-fast);
+}
+
+.org-template-item:hover {
+  border-color: var(--color-primary);
+}
+
+.org-template-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.org-template-info strong {
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+
+.org-template-levels {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.org-template-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.org-template-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 模板编辑器 - 层级行 */
+.org-template-levels-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.org-template-level-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.org-template-level-row .org-template-level-type {
+  flex: 1;
+}
+
+.org-template-remove-level-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  line-height: 1;
+}

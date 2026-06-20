@@ -83,6 +83,7 @@ function getResourceCallbacks() {
     openSwitchModal: createCallback('switch/switchDevice', 'openSwitchModal'),
     openUserModal: createCallback('userManager', 'openUserModal'),
     openOrgModal: createCallback('organization', 'openOrgModal'),
+    submitOrgTemplateForm: createCallback('organization', 'submitOrgTemplateForm'),
     submitNetworkTypeForm: createCallback('networks', 'submitNetworkTypeForm'),
     submitNetworkForm: createCallback('networks', 'submitNetworkForm'),
     submitRoomForm: createCallback('room', 'submitRoomForm'),

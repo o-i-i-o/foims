@@ -1127,6 +1127,44 @@ impl OrgType {
     }
 }
 
+// ==================== 组织模板模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct OrgTemplate {
+    pub id: Uuid,
+    pub name: String,
+    pub levels: serde_json::Value,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct OrgTemplateSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub levels: serde_json::Value,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct OrgTemplateCreate {
+    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    pub levels: serde_json::Value,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct OrgTemplateUpdate {
+    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    pub levels: Option<serde_json::Value>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct Organization {
     pub id: Uuid,
@@ -1134,6 +1172,8 @@ pub struct Organization {
     pub org_type: String,
     pub parent_id: Option<Uuid>,
     pub description: Option<String>,
+    pub template_id: Option<Uuid>,
+    pub level_index: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1145,6 +1185,8 @@ pub struct OrganizationTreeNode {
     pub org_type: String,
     pub parent_id: Option<Uuid>,
     pub description: Option<String>,
+    pub template_id: Option<Uuid>,
+    pub level_index: i32,
     pub children: Vec<OrganizationTreeNode>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1158,6 +1200,8 @@ pub struct OrganizationWithChildren {
     pub parent_id: Option<Uuid>,
     pub parent_name: Option<String>,
     pub description: Option<String>,
+    pub template_id: Option<Uuid>,
+    pub level_index: i32,
     pub children: Vec<Organization>,
     pub child_count: i64,
     pub created_at: DateTime<Utc>,
@@ -1183,6 +1227,7 @@ pub struct OrganizationCreate {
     #[validate(custom(function = "validate_org_type_string", message = "无效的组织类型"))]
     pub org_type: String,
     pub parent_id: Option<Uuid>,
+    pub template_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }

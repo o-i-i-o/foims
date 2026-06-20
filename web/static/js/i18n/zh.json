@@ -174,11 +174,13 @@
     "parent": "上级组织",
     "add_root": "新增总部",
     "add_headquarters": "新增总部",
+    "add_node": "新增节点",
     "add_child": "新增下级",
+    "no_child_allowed": "不允许添加下级节点",
     "expand_all": "全部展开",
     "collapse_all": "全部折叠",
     "search_placeholder": "搜索组织名称...",
-    "empty": "暂无组织数据，点击\"新增总部\"开始创建",
+    "empty": "暂无组织数据，点击\"新增节点\"开始创建",
     "name_required": "组织名称不能为空",
     "type_required": "请选择组织类型",
     "create_success": "组织节点创建成功",
@@ -196,6 +198,23 @@
       "cabinet": "机柜",
       "cabinet_position": "机位"
     }
+  },
+  "org_template": {
+    "management": "模板管理",
+    "title": "模板管理",
+    "editor_title": "编辑模板",
+    "add": "新增模板",
+    "select_template": "选择模板",
+    "select_required": "请选择模板",
+    "empty": "暂无模板数据，点击\"新增模板\"开始创建",
+    "add_level": "新增层级",
+    "levels": "层级",
+    "name_required": "模板名称不能为空",
+    "levels_required": "至少需要一层层级",
+    "delete_confirm": "确定要删除模板「{{name}}」吗？",
+    "delete_success": "模板删除成功",
+    "create_success": "模板创建成功",
+    "update_success": "模板更新成功"
   },
   "workstation": {
     "name": "工位名称",

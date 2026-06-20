@@ -21,6 +21,8 @@ const MODAL_REGISTRY = {
     'scheduled-task-modal': '/static/modals/scheduled-task-modal.html',
     'task-logs-modal': '/static/modals/task-logs-modal.html',
     'organization-modal': '/static/modals/organization-modal.html',
+    'org-template-modal': '/static/modals/org-template-modal.html',
+    'org-template-editor-modal': '/static/modals/org-template-editor-modal.html',
 };
 
 async function loadTemplateFile(modalId) {

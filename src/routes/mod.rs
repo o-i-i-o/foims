@@ -19,18 +19,18 @@ use crate::resource::switch::{
 };
 use crate::resource::{
     auto_assign_ip, batch_create_ip_managers, create_cabinet, create_cabinet_position,
-    create_network, create_network_region, create_organization, create_room, create_workstation,
-    delete_cabinet, delete_cabinet_position, delete_layout, delete_network, delete_network_region,
-    delete_organization, delete_positions_layout, delete_room, delete_workstation,
-    get_allowed_child_types, get_available_ips, get_cabinet, get_cabinet_networks,
-    get_cabinet_position, get_cabinet_position_ips, get_cabinets, get_cabinets_by_network_region,
-    get_children, get_ip_managers, get_layout, get_network, get_network_region,
-    get_network_regions, get_networks, get_org_type_schema, get_organization,
-    get_organization_tree, get_organizations, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_switch_ips,
-    get_workstation, get_workstation_ips, get_workstations, pull_ip_managers, save_layout,
-    update_cabinet, update_cabinet_position, update_network, update_network_region,
-    update_organization, update_room, update_workstation,
+    create_network, create_network_region, create_org_template, create_organization, create_room,
+    create_workstation, delete_cabinet, delete_cabinet_position, delete_layout, delete_network,
+    delete_network_region, delete_org_template, delete_organization, delete_positions_layout,
+    delete_room, delete_workstation, get_allowed_child_types, get_available_ips, get_cabinet,
+    get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
+    get_cabinets_by_network_region, get_children, get_ip_managers, get_layout, get_network,
+    get_network_region, get_network_regions, get_networks, get_org_template, get_org_templates,
+    get_org_type_schema, get_organization, get_organization_tree, get_organizations, get_positions,
+    get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
+    get_switch_ips, get_workstation, get_workstation_ips, get_workstations, pull_ip_managers,
+    save_layout, update_cabinet, update_cabinet_position, update_network, update_network_region,
+    update_org_template, update_organization, update_room, update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -210,6 +210,15 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                     "/{id}/allowed-child-types",
                                     web::get().to(get_allowed_child_types),
                                 ),
+                        )
+                        // 组织模板管理
+                        .service(
+                            web::scope("/org-templates")
+                                .route("", web::get().to(get_org_templates))
+                                .route("", web::post().to(create_org_template))
+                                .route("/{id}", web::get().to(get_org_template))
+                                .route("/{id}", web::put().to(update_org_template))
+                                .route("/{id}", web::delete().to(delete_org_template)),
                         ),
                 )
                 // 交换机管理路由
