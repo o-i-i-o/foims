@@ -1055,3 +1055,145 @@ pub struct Notification {
     pub read: bool,
     pub created_at: DateTime<Utc>,
 }
+
+// ==================== 组织管理模型 ====================
+
+/// 组织节点类型，定义层级关系中允许的实体类型
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum OrgType {
+    Headquarters,
+    Building,
+    Floor,
+    Hall,
+    Office,
+    DataCenter,
+    Workstation,
+    Cabinet,
+    CabinetPosition,
+}
+
+impl OrgType {
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OrgType::Headquarters => "headquarters",
+            OrgType::Building => "building",
+            OrgType::Floor => "floor",
+            OrgType::Hall => "hall",
+            OrgType::Office => "office",
+            OrgType::DataCenter => "data_center",
+            OrgType::Workstation => "workstation",
+            OrgType::Cabinet => "cabinet",
+            OrgType::CabinetPosition => "cabinet_position",
+        }
+    }
+
+    #[must_use]
+    pub fn from_str_value(s: &str) -> Option<Self> {
+        match s {
+            "headquarters" => Some(OrgType::Headquarters),
+            "building" => Some(OrgType::Building),
+            "floor" => Some(OrgType::Floor),
+            "hall" => Some(OrgType::Hall),
+            "office" => Some(OrgType::Office),
+            "data_center" => Some(OrgType::DataCenter),
+            "workstation" => Some(OrgType::Workstation),
+            "cabinet" => Some(OrgType::Cabinet),
+            "cabinet_position" => Some(OrgType::CabinetPosition),
+            _ => None,
+        }
+    }
+
+    /// 获取该类型允许的下级类型
+    #[must_use]
+    pub fn allowed_child_types(&self) -> Vec<OrgType> {
+        match self {
+            OrgType::Headquarters => vec![OrgType::Building],
+            OrgType::Building => vec![OrgType::Floor],
+            OrgType::Floor => vec![OrgType::Hall, OrgType::Office, OrgType::DataCenter],
+            OrgType::Hall => vec![OrgType::Workstation],
+            OrgType::Office => vec![OrgType::Workstation],
+            OrgType::DataCenter => vec![OrgType::Cabinet],
+            OrgType::Cabinet => vec![OrgType::CabinetPosition],
+            OrgType::Workstation => vec![],
+            OrgType::CabinetPosition => vec![],
+        }
+    }
+
+    /// 判断当前类型是否可以包含指定的子类型
+    #[must_use]
+    pub fn can_have_child(&self, child: &OrgType) -> bool {
+        self.allowed_child_types().contains(child)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Organization {
+    pub id: Uuid,
+    pub name: String,
+    pub org_type: String,
+    pub parent_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OrganizationTreeNode {
+    pub id: Uuid,
+    pub name: String,
+    pub org_type: String,
+    pub parent_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub children: Vec<OrganizationTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OrganizationWithChildren {
+    pub id: Uuid,
+    pub name: String,
+    pub org_type: String,
+    pub parent_id: Option<Uuid>,
+    pub parent_name: Option<String>,
+    pub description: Option<String>,
+    pub children: Vec<Organization>,
+    pub child_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+fn validate_org_type_string(org_type: &str) -> Result<(), ValidationError> {
+    if OrgType::from_str_value(org_type).is_some() {
+        Ok(())
+    } else {
+        Err(ValidationError::new("无效的组织类型"))
+    }
+}
+
+fn validate_org_type_option(org_type: &&String) -> Result<(), ValidationError> {
+    validate_org_type_string(org_type)
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct OrganizationCreate {
+    #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    #[validate(custom(function = "validate_org_type_string", message = "无效的组织类型"))]
+    pub org_type: String,
+    pub parent_id: Option<Uuid>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct OrganizationUpdate {
+    #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(custom(function = "validate_org_type_option", message = "无效的组织类型"))]
+    pub org_type: Option<String>,
+    pub parent_id: Option<Option<Uuid>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}

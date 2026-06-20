@@ -12,5 +12,6 @@
 @import url('./components/network-usage.css');
 @import url('./layouts/sidebar.css');
 @import url('./layouts/main-content.css');
+@import url('./pages/organization.css');
 @import url('./utilities/animations.css');
 @import url('./responsive.css');

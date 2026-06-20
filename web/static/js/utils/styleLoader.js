@@ -4,6 +4,7 @@ const loadingStyles = new Map();
 const PAGE_STYLES = {
   dashboard: ['/static/css/pages/dashboard.css'],
   resources: ['/static/css/pages/dashboard.css', '/static/css/pages/visualization.css'],
+  organization: ['/static/css/pages/organization.css'],
   ip: ['/static/css/pages/dashboard.css'],
   visualization: ['/static/css/pages/visualization.css'],
   logs: ['/static/css/pages/dashboard.css'],

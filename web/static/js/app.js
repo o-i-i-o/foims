@@ -82,6 +82,7 @@ function getResourceCallbacks() {
     openCabinetPositionModal: createCallback('position', 'openCabinetPositionModal'),
     openSwitchModal: createCallback('switch/switchDevice', 'openSwitchModal'),
     openUserModal: createCallback('userManager', 'openUserModal'),
+    openOrgModal: createCallback('organization', 'openOrgModal'),
     submitNetworkTypeForm: createCallback('networks', 'submitNetworkTypeForm'),
     submitNetworkForm: createCallback('networks', 'submitNetworkForm'),
     submitRoomForm: createCallback('room', 'submitRoomForm'),
@@ -91,6 +92,7 @@ function getResourceCallbacks() {
     submitSwitchForm: createCallback('switch/switchDevice', 'submitSwitchForm'),
     submitSwitchPortForm: createCallback('switch/switchDevice', 'submitSwitchPortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
+    submitOrgForm: createCallback('organization', 'submitOrgForm'),
   };
 }
 

@@ -20,6 +20,7 @@ const MODAL_REGISTRY = {
     'cert-import-modal': '/static/modals/cert-import-modal.html',
     'scheduled-task-modal': '/static/modals/scheduled-task-modal.html',
     'task-logs-modal': '/static/modals/task-logs-modal.html',
+    'organization-modal': '/static/modals/organization-modal.html',
 };
 
 async function loadTemplateFile(modalId) {

@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-init"]
+members = [".", "crates/ipma-init", "crates/ipma-visualization"]
 resolver = "2"
 
 [workspace.package]
@@ -7,7 +7,7 @@ edition = "2024"
 
 [package]
 name = "ipma"
-version = "0.9.71"
+version = "0.9.73"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -15,6 +15,7 @@ license = "MIT"
 
 [dependencies]
 ipma-init = { path = "crates/ipma-init" }
+ipma-visualization = { path = "crates/ipma-visualization" }
 
 # Actix Web 核心及周边
 actix-web = { version = "4.13.0", features = ["rustls-0_23"] }

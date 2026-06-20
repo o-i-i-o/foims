@@ -8,7 +8,8 @@
     "ip_management": "IP管理",
     "visualization": "可视化",
     "logs": "日志",
-    "system": "系统"
+    "system": "系统",
+    "organization": "组织管理"
   },
   "common": {
     "name": "名称",
@@ -163,6 +164,38 @@
     "type_required": "房间类型不能为空",
     "network_required": "至少需要选择一个网段",
     "network_all_required": "请选择所有网段"
+  },
+  "organization": {
+    "title": "组织管理",
+    "add": "新增组织",
+    "edit": "编辑组织",
+    "type": "组织类型",
+    "select_type": "请选择类型",
+    "parent": "上级组织",
+    "add_root": "新增总部",
+    "add_headquarters": "新增总部",
+    "add_child": "新增下级",
+    "expand_all": "全部展开",
+    "collapse_all": "全部折叠",
+    "search_placeholder": "搜索组织名称...",
+    "empty": "暂无组织数据，点击\"新增总部\"开始创建",
+    "name_required": "组织名称不能为空",
+    "type_required": "请选择组织类型",
+    "create_success": "组织节点创建成功",
+    "update_success": "组织节点更新成功",
+    "delete_success": "组织节点删除成功",
+    "delete_confirm": "确定要删除「{{name}}」吗？",
+    "types": {
+      "headquarters": "总部",
+      "building": "楼号",
+      "floor": "楼层",
+      "hall": "大厅",
+      "office": "办公室",
+      "data_center": "机房",
+      "workstation": "工位",
+      "cabinet": "机柜",
+      "cabinet_position": "机位"
+    }
   },
   "workstation": {
     "name": "工位名称",

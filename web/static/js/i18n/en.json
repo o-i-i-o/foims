@@ -8,7 +8,8 @@
     "ip_management": "IP Management",
     "visualization": "Visualization",
     "logs": "Logs",
-    "system": "System"
+    "system": "System",
+    "organization": "Organization"
   },
   "common": {
     "name": "Name",
@@ -161,6 +162,38 @@
     "type_required": "Room type is required",
     "network_required": "At least one network is required",
     "network_all_required": "Please select all networks"
+  },
+  "organization": {
+    "title": "Organization Management",
+    "add": "Add Organization",
+    "edit": "Edit Organization",
+    "type": "Organization Type",
+    "select_type": "Select Type",
+    "parent": "Parent",
+    "add_root": "Add Headquarters",
+    "add_headquarters": "Add Headquarters",
+    "add_child": "Add Child",
+    "expand_all": "Expand All",
+    "collapse_all": "Collapse All",
+    "search_placeholder": "Search organization...",
+    "empty": "No organization data. Click \"Add Headquarters\" to start.",
+    "name_required": "Organization name is required",
+    "type_required": "Organization type is required",
+    "create_success": "Organization node created successfully",
+    "update_success": "Organization node updated successfully",
+    "delete_success": "Organization node deleted successfully",
+    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
+    "types": {
+      "headquarters": "Headquarters",
+      "building": "Building",
+      "floor": "Floor",
+      "hall": "Hall",
+      "office": "Office",
+      "data_center": "Data Center",
+      "workstation": "Workstation",
+      "cabinet": "Cabinet",
+      "cabinet_position": "Cabinet Position"
+    }
   },
   "workstation": {
     "name": "Workstation Name",

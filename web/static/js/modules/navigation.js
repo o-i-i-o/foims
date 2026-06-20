@@ -15,6 +15,7 @@ const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {
   dashboard: loadDashboardPage,
   resources: loadResourcesPage,
+  organization: loadOrganizationPage,
   ip: loadIpPage,
   logs: loadLogsPage,
   system: loadSystemPage,
@@ -53,6 +54,14 @@ async function loadDashboardPage() {
  */
 async function loadResourcesPage() {
   initResourceTabs();
+}
+
+/**
+ * 加载组织管理页面
+ */
+async function loadOrganizationPage() {
+  const orgModule = await loadModule("organization", "/static/js/modules/organization.js");
+  orgModule.initOrganization();
 }
 
 /**

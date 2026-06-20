@@ -28,6 +28,9 @@
             <a href="#resources" class="nav-link" role="menuitem" data-i18n="nav.resources">Resources</a>
           </li>
           <li role="none">
+            <a href="#organization" class="nav-link" role="menuitem" data-i18n="nav.organization">Organization</a>
+          </li>
+          <li role="none">
             <a href="#ip" class="nav-link" role="menuitem" data-i18n="nav.ip_management">IP Management</a>
           </li>
           <li role="none">
@@ -422,6 +425,22 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <section id="organization" class="content-section" aria-labelledby="organization-heading">
+        <div class="org-toolbar">
+          <div class="org-search-container">
+            <input type="text" id="org-search-input" class="form-control" data-i18n-placeholder="organization.search_placeholder" placeholder="Search organization..." aria-label="Search organization" />
+          </div>
+          <div class="org-actions">
+            <button id="org-expand-all-btn" class="btn btn-secondary btn-sm" data-i18n="organization.expand_all">Expand All</button>
+            <button id="org-collapse-all-btn" class="btn btn-secondary btn-sm" data-i18n="organization.collapse_all">Collapse All</button>
+            <button id="org-add-root-btn" class="btn btn-primary btn-sm" data-i18n="organization.add_root">Add Headquarters</button>
+          </div>
+        </div>
+        <div id="organization-tree-container" class="org-tree-container" role="tree" aria-label="Organization tree">
+          <div class="org-empty-state" data-i18n="organization.empty">No organization data. Click "Add Headquarters" to start.</div>
         </div>
       </section>
 

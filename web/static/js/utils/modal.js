@@ -21,6 +21,7 @@ const FORM_CALLBACK_MAP = {
   "user-form": "submitUserForm",
   "switch-form": "submitSwitchForm",
   "switch-port-form-expanded": "submitSwitchPortForm",
+  "organization-form": "submitOrgForm",
 };
 
 export function openModal(modalId, title = "") {

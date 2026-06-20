@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.9.71"
+version = "0.9.73"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2115,6 +2115,7 @@ dependencies = [
  "futures-util",
  "hex",
  "ipma-init",
+ "ipma-visualization",
  "ipnetwork 0.21.1",
  "jsonwebtoken",
  "lettre",
@@ -2166,6 +2167,19 @@ dependencies = [
  "tracing",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "ipma-visualization"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
