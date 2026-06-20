@@ -31,12 +31,12 @@
 - **初始化相关** 涉及数据库的变更，直接修改数据库后还需要完善初始化代码中的数据库处理代码。
 
 ### 4. 部署与测试
-- **代码检查 ：** 每次代码更新后，必须使用 cargo clippy 检查代码风格。
-- **代码测试 ：** 通过cargo build --release  sudo ./target/release/ipma 测试(原因是编译不需要root权限，但是运行需要root权限监听80/443端口，所以需要sudo运行)
+- **代码检查 ：** 每次代码更新后，必须使用cargo fmt && cargo clippy 检查代码风格。  
+- **代码测试 ：** 通过cargo build --release && sudo ./target/release/ipma 测试(原因是编译不需要root权限，但是运行需要root权限监听80/443端口，所以需要sudo运行)
 - **测试用户 ：** API测试用户为admin，密码为admin123
 
 ---
 
 文档版本： 1.1.5
 
-最后更新： 2026年5月
+最后更新： 2026年6月
