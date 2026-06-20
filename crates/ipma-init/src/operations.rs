@@ -94,10 +94,10 @@ pub async fn drop_database(config: &DatabaseConfig) -> Result<(), String> {
 
     info!("已断开所有到数据库 {} 的连接", config.database);
 
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE IF EXISTS {}",
         quote_ident(&config.database)
-    ))
+    )))
     .execute(&postgres_pool)
     .await
     .map_err(|e| format!("删除数据库失败: {e}"))?;
@@ -135,10 +135,10 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<(), String> {
         return Ok(());
     }
 
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "CREATE DATABASE {} CONNECTION LIMIT = -1",
         quote_ident(&config.database)
-    ))
+    )))
     .execute(&postgres_pool)
     .await
     .map_err(|e| format!("创建数据库失败: {e}"))?;
@@ -164,10 +164,10 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             .await?;
 
         for table in &tables {
-            sqlx::query(&format!(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "DROP TABLE IF EXISTS {} CASCADE",
                 quote_ident(table)
-            ))
+            )))
             .execute(pool)
             .await?;
         }

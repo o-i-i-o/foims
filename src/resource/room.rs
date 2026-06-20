@@ -51,7 +51,7 @@ pub async fn get_rooms(
             .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            &format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms {order_clause} LIMIT $1 OFFSET $2")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -68,7 +68,7 @@ pub async fn get_rooms(
         .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            &format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)

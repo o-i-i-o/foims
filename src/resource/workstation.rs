@@ -59,12 +59,12 @@ pub async fn get_workstations(
             .fetch_one(&state.pool()?.get_conn())
             .await?;
 
-        let workstations_basic = sqlx::query(&format!(
+        let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
                     COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w {order_clause} LIMIT $1 OFFSET $2"
-        ))
+        )))
         .bind(page_size)
         .bind(offset)
         .fetch_all(&state.pool()?.get_conn())
@@ -78,12 +78,12 @@ pub async fn get_workstations(
                 .fetch_one(&state.pool()?.get_conn())
                 .await?;
 
-        let workstations_basic = sqlx::query(&format!(
+        let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
                     COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"
-        ))
+        )))
         .bind(parsed_room_id)
         .bind(page_size)
         .bind(offset)
@@ -100,12 +100,12 @@ pub async fn get_workstations(
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-        let workstations_basic = sqlx::query(&format!(
+        let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
                     COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 AND (w.name ILIKE $2 OR w.manager ILIKE $2 OR w.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"
-        ))
+        )))
         .bind(parsed_room_id)
         .bind(&search_pattern)
         .bind(page_size)
@@ -122,12 +122,12 @@ pub async fn get_workstations(
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-        let workstations_basic = sqlx::query(&format!(
+        let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
                     COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.name ILIKE $1 OR w.manager ILIKE $1 OR w.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
-        ))
+        )))
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)

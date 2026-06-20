@@ -343,7 +343,7 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
 
     for table in &required_tables {
         let Ok(exists) = sqlx::query_scalar::<_, bool>(
-            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')")
+            sqlx::AssertSqlSafe(format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"))
         )
         .fetch_one(pool)
         .await
@@ -364,7 +364,7 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
 
     for (table, columns) in required_columns {
         let table_exists: bool = match sqlx::query_scalar(
-            &format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')")
+            sqlx::AssertSqlSafe(format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"))
         )
         .fetch_one(pool)
         .await
@@ -379,9 +379,9 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
 
         for column in columns {
             let column_exists: bool = match sqlx::query_scalar(
-                &format!(
+                sqlx::AssertSqlSafe(format!(
                     "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{table}' AND column_name = '{column}')"
-                )
+                ))
             )
             .fetch_one(pool)
             .await

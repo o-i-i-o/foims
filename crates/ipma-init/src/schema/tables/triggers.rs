@@ -37,9 +37,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     for table in &tables_with_updated_at {
         let trigger_name = format!("trg_{table}_updated_at");
-        if let Err(e) = sqlx::query(&format!(
+        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
             "CREATE TRIGGER {trigger_name} BEFORE UPDATE ON {table} FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
-        ))
+        )))
         .execute(pool)
         .await
         {

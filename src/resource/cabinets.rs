@@ -55,7 +55,7 @@ pub async fn get_cabinets(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -70,7 +70,7 @@ pub async fn get_cabinets(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(parsed_room_id)
         .bind(page_size)
@@ -89,7 +89,7 @@ pub async fn get_cabinets(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
@@ -108,7 +108,7 @@ pub async fn get_cabinets(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            &format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3")
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)

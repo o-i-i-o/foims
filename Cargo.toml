@@ -29,16 +29,16 @@ tokio-rustls = "0.26.4"
 rcgen = "0.14.8"
 
 # SQLx PostgreSQL驱动
-sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json", "macros"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
 
 # 数据校验
 validator = { version = "0.20.0", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-regex = "1.12.3"
+serde_json = "1.0.150"
+regex = "1.12.4"
 
 # 密码加密
-bcrypt = "0.19.1"
+bcrypt = "0.19.2"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
 rand = "0.10.1"
@@ -63,7 +63,7 @@ async-snmp = "0.12.0"
 tokio-cron-scheduler = "0.15.1"
 
 # 配置管理
-config = { version = "0.15.23", features = ["toml"] }
+config = { version = "0.15.24", features = ["toml"] }
 toml = "1.1.2"
 
 # 其他工具
@@ -71,21 +71,21 @@ tokio = { version = "1.52.3", features = ["full"] }
 socket2 = "0.6"
 anyhow = "1.0.102"
 thiserror = "2.0.18"
-chrono = { version = "0.4.44", features = ["serde"] }
-uuid = { version = "1.23.1", features = ["v4", "serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+uuid = { version = "1.23.3", features = ["v4", "serde"] }
 futures-util = "0.3.32"
 num_cpus = "1.17.0"
 csv = "1.4.0"
-dashmap = "6.1.0"
-arc-swap = "1.7.1"
+dashmap = "6.2.1"
+arc-swap = "1.9.1"
 base64 = "0.22.1"
 lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "5.7.1", features = ["qr", "gen_secret"] }
 flate2 = "1.1.9"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # 国际化支持
-rust-i18n = "4.0.0"
-time = "0.3.47"
+rust-i18n = "4.1.0"
+time = "0.3.49"
 
 [dev-dependencies]
 actix-rt = "2.11.0"

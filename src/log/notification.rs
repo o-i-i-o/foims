@@ -41,15 +41,15 @@ pub async fn get_notifications(
 
     let conn = state.pool()?.get_conn();
 
-    let total: i64 = sqlx::query_scalar(&format!(
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT COUNT(*) FROM notifications {where_clause}"
-    ))
+    )))
     .fetch_one(&conn)
     .await?;
 
-    let notifications = sqlx::query_as::<_, Notification>(&format!(
+    let notifications = sqlx::query_as::<_, Notification>(sqlx::AssertSqlSafe(format!(
         "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} ORDER BY created_at DESC LIMIT {page_size} OFFSET {offset}"
-    ))
+    )))
     .fetch_all(&conn)
     .await?;
 

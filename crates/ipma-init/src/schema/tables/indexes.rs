@@ -37,7 +37,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     ];
 
     for idx in &indexes {
-        if let Err(e) = sqlx::query(idx).execute(pool).await {
+        if let Err(e) = sqlx::query(*idx).execute(pool).await {
             warn!("索引创建失败（可能已存在）: {}", e);
         }
     }

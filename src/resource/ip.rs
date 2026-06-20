@@ -119,7 +119,7 @@ pub async fn get_ip_managers(
     };
 
     let count_query = format!("SELECT COUNT(*) FROM ip_with_details {where_clause}");
-    let mut count_sql = sqlx::query_scalar::<_, i64>(&count_query);
+    let mut count_sql = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(count_query));
 
     if let Some(ref pattern) = search_param {
         for _ in 0..6 {
@@ -154,7 +154,7 @@ pub async fn get_ip_managers(
         param_index + 1
     );
 
-    let mut data_sql = sqlx::query_as::<_, IpManagerWithNames>(&data_query);
+    let mut data_sql = sqlx::query_as::<_, IpManagerWithNames>(sqlx::AssertSqlSafe(data_query));
 
     if let Some(ref pattern) = search_param {
         for _ in 0..6 {

@@ -30,10 +30,10 @@ pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPoo
 
     if !db_exists {
         info!("数据库 {} 不存在，正在创建...", config.database);
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "CREATE DATABASE {}",
             quote_ident(&config.database)
-        ))
+        )))
         .execute(&postgres_pool)
         .await
         .map_err(|e| format!("创建数据库失败: {e}"))?;

@@ -121,7 +121,7 @@ pub async fn get_switches(
 
         let count_query = format!("SELECT COUNT(*) FROM switches_with_details {where_clause}");
 
-        let mut count_sql = sqlx::query_scalar(&count_query);
+        let mut count_sql = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query));
 
         if !search.is_empty() {
             let pattern = format!("%{search}%");
@@ -190,7 +190,7 @@ pub async fn get_switches(
             param_count + 1
         );
 
-        let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(&data_query);
+        let mut data_sql = sqlx::query_as::<_, SwitchWithParent>(sqlx::AssertSqlSafe(data_query));
 
         if !search.is_empty() {
             let pattern = format!("%{search}%");
@@ -220,7 +220,7 @@ pub async fn get_switches(
             "SELECT {} FROM switches_with_details ORDER BY created_at DESC LIMIT $1 OFFSET $2",
             SWITCHES_DETAIL_COLUMNS
         );
-        sqlx::query_as::<_, SwitchWithParent>(&query)
+        sqlx::query_as::<_, SwitchWithParent>(sqlx::AssertSqlSafe(query))
             .bind(page_size)
             .bind(offset)
             .fetch_all(&state.pool()?.get_conn())
@@ -255,7 +255,7 @@ pub async fn get_switch(
         "SELECT {} FROM switches_with_details WHERE id = $1",
         SWITCHES_DETAIL_COLUMNS
     );
-    let mut data = sqlx::query_as::<_, SwitchWithParent>(&query)
+    let mut data = sqlx::query_as::<_, SwitchWithParent>(sqlx::AssertSqlSafe(query))
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
@@ -499,7 +499,7 @@ pub async fn create_switch(
     }
 
     let query = format!("SELECT {} FROM switches WHERE id = $1", SWITCH_COLUMNS);
-    let data = sqlx::query_as::<_, Switch>(&query)
+    let data = sqlx::query_as::<_, Switch>(sqlx::AssertSqlSafe(query))
         .bind(id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
@@ -722,7 +722,7 @@ pub async fn update_switch(
     }
 
     let query = format!("SELECT {} FROM switches WHERE id = $1", SWITCH_COLUMNS);
-    let data = sqlx::query_as::<_, Switch>(&query)
+    let data = sqlx::query_as::<_, Switch>(sqlx::AssertSqlSafe(query))
         .bind(id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;

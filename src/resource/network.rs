@@ -89,7 +89,7 @@ pub async fn get_networks(
             "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id {where_clause}"
         );
 
-        let mut count_sql = sqlx::query_scalar(&count_query);
+        let mut count_sql = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query));
 
         if !search.is_empty() {
             let pattern = format!("%{search}%");
@@ -182,7 +182,7 @@ pub async fn get_networks(
             param_count + 1
         );
 
-        let mut data_sql = sqlx::query(&data_query);
+        let mut data_sql = sqlx::query(sqlx::AssertSqlSafe(data_query));
 
         if !search.is_empty() {
             let pattern = format!("%{search}%");

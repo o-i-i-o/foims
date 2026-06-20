@@ -89,7 +89,7 @@ pub async fn get_positions(
         if let Some(cid) = cabinet_id {
             if search.is_empty() {
                 sqlx::query(
-                    &format!(
+                    sqlx::AssertSqlSafe(format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
                                   c.room_id,
@@ -101,7 +101,7 @@ pub async fn get_positions(
                            LEFT JOIN cabinets c ON p.cabinet_id = c.id
                            WHERE p.cabinet_id = $1
                            {order_clause} LIMIT $2 OFFSET $3"
-                    )
+                    ))
                 )
                 .bind(cid)
                 .bind(page_size)
@@ -111,7 +111,7 @@ pub async fn get_positions(
             } else {
                 let pattern = format!("%{search}%");
                 sqlx::query(
-                    &format!(
+                    sqlx::AssertSqlSafe(format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
                                   COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
                                   c.room_id,
@@ -123,7 +123,7 @@ pub async fn get_positions(
                            LEFT JOIN cabinets c ON p.cabinet_id = c.id
                            WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2)
                            {order_clause} LIMIT $3 OFFSET $4"
-                    )
+                    ))
                 )
                 .bind(cid)
                 .bind(&pattern)
@@ -135,7 +135,7 @@ pub async fn get_positions(
         } else {
             let pattern = format!("%{search}%");
             sqlx::query(
-                &format!(
+                sqlx::AssertSqlSafe(format!(
                     r"SELECT p.id, p.name, p.cabinet_id, 
                               COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
                               c.room_id,
@@ -147,7 +147,7 @@ pub async fn get_positions(
                        LEFT JOIN cabinets c ON p.cabinet_id = c.id
                        WHERE p.name ILIKE $1 OR p.description ILIKE $1
                        {order_clause} LIMIT $2 OFFSET $3"
-                )
+                ))
             )
             .bind(&pattern)
             .bind(page_size)
@@ -157,7 +157,7 @@ pub async fn get_positions(
         }
     } else {
         sqlx::query(
-            &format!(
+            sqlx::AssertSqlSafe(format!(
                 r"SELECT p.id, p.name, p.cabinet_id, 
                           COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
                           c.room_id,
@@ -168,7 +168,7 @@ pub async fn get_positions(
                    FROM positions p 
                    LEFT JOIN cabinets c ON p.cabinet_id = c.id
                    {order_clause} LIMIT $1 OFFSET $2"
-            )
+            ))
         )
         .bind(page_size)
         .bind(offset)
