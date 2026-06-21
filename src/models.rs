@@ -1208,23 +1208,21 @@ pub struct OrganizationWithChildren {
     pub updated_at: DateTime<Utc>,
 }
 
-fn validate_org_type_string(org_type: &str) -> Result<(), ValidationError> {
-    if OrgType::from_str_value(org_type).is_some() {
-        Ok(())
-    } else {
-        Err(ValidationError::new("无效的组织类型"))
-    }
-}
-
 fn validate_org_type_option(org_type: &&String) -> Result<(), ValidationError> {
-    validate_org_type_string(org_type)
+    if org_type.trim().is_empty() {
+        return Err(ValidationError::new("组织类型不能为空"));
+    }
+    if org_type.len() > 50 {
+        return Err(ValidationError::new("组织类型长度不能超过50个字符"));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct OrganizationCreate {
     #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
     pub name: String,
-    #[validate(custom(function = "validate_org_type_string", message = "无效的组织类型"))]
+    #[validate(length(min = 1, max = 50, message = "组织类型长度必须在1到50个字符之间"))]
     pub org_type: String,
     pub parent_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
@@ -1236,7 +1234,10 @@ pub struct OrganizationCreate {
 pub struct OrganizationUpdate {
     #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
-    #[validate(custom(function = "validate_org_type_option", message = "无效的组织类型"))]
+    #[validate(custom(
+        function = "validate_org_type_option",
+        message = "组织类型长度必须在1到50个字符之间"
+    ))]
     pub org_type: Option<String>,
     pub parent_id: Option<Option<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]

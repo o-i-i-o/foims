@@ -13,6 +13,12 @@
           <input type="text" id="org-template-editor-name" name="name" autocomplete="off" required />
         </div>
         <div class="form-group">
+          <label for="org-template-quick-fill" data-i18n="org_template.quick_fill">Quick Fill</label>
+          <select id="org-template-quick-fill">
+            <option value="" data-i18n="org_template.select_quick_fill">Select a preset...</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label data-i18n="org_template.levels">Levels</label>
           <div id="org-template-editor-levels-container" class="org-template-levels-container"></div>
           <button type="button" id="org-template-add-level-btn" class="btn btn-sm btn-secondary" data-i18n="org_template.add_level">Add Level</button>

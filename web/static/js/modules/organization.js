@@ -38,6 +38,13 @@ const ORG_TYPES = [
   "cabinet_position",
 ];
 
+// 快捷填充预设模板
+const QUICK_FILL_PRESETS = [
+  ["headquarters", "building", "floor", "hall", "workstation"],
+  ["headquarters", "building", "floor", "office", "workstation"],
+  ["headquarters", "data_center", "cabinet", "cabinet_position"],
+];
+
 function getOrgTypeLabel(orgType) {
   return t(`organization.types.${orgType}`) || orgType;
 }
@@ -185,16 +192,9 @@ function renderTreeNode(node, depth) {
 
 /**
  * 获取"新增下级"按钮 - 基于模板层级
+ * 始终显示按钮，由后端验证是否允许添加下级
  */
 function getChildButton(node) {
-  // 只有还有下一级的节点才显示按钮
-  // 通过 allowed-child-types API 获取，但渲染时我们用 level_index 判断
-  // 如果节点有 template_id 且 level_index < 模板最大层级，则显示
-  // 这里简化处理：叶子类型不显示
-  const leafTypes = ["workstation", "cabinet_position"];
-  if (leafTypes.includes(node.org_type)) {
-    return "";
-  }
   return `<button class="btn btn-sm btn-add-child" data-action="add-child" data-parent-id="${node.id}" title="${t("organization.add_child")}">${t("organization.add_child")}</button>`;
 }
 
@@ -395,7 +395,12 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
 
 function populateTypeSelect(select, currentValue, disabled) {
   select.innerHTML = "";
-  ORG_TYPES.forEach((value) => {
+  const types = [...ORG_TYPES];
+  // 如果当前值不在预定义列表中，添加为选项
+  if (currentValue && !types.includes(currentValue)) {
+    types.push(currentValue);
+  }
+  types.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = getOrgTypeLabel(value);
@@ -599,7 +604,7 @@ async function openTemplateEditor(template = null) {
     template.levels.forEach((level) => addLevelRow(level));
   } else {
     levelsContainer.innerHTML = "";
-    addLevelRow("headquarters");
+    addLevelRow("");
   }
 
   // 绑定编辑器事件（每次打开时重新绑定，因为模态框是动态加载的）
@@ -617,6 +622,22 @@ async function openTemplateEditor(template = null) {
       }
     });
   }
+
+  // 快捷填充
+  const quickFill = document.getElementById("org-template-quick-fill");
+  if (quickFill) {
+    populateQuickFill(quickFill);
+    if (!quickFill.dataset.bound) {
+      quickFill.dataset.bound = "true";
+      quickFill.addEventListener("change", () => {
+        if (!quickFill.value) return;
+        const levels = quickFill.value.split(",");
+        levelsContainer.innerHTML = "";
+        levels.forEach((level) => addLevelRow(level));
+        quickFill.value = "";
+      });
+    }
+  }
 }
 
 function addLevelRow(selectedType = null) {
@@ -626,24 +647,34 @@ function addLevelRow(selectedType = null) {
   const row = document.createElement("div");
   row.className = "org-template-level-row";
 
-  const select = document.createElement("select");
-  select.className = "form-control org-template-level-type";
-  ORG_TYPES.forEach((type) => {
-    const option = document.createElement("option");
-    option.value = type;
-    option.textContent = getOrgTypeLabel(type);
-    if (selectedType === type) option.selected = true;
-    select.appendChild(option);
-  });
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "form-control org-template-level-type";
+  input.placeholder = t("org_template.level_placeholder");
+  input.maxLength = 50;
+  if (selectedType) input.value = selectedType;
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "btn btn-sm btn-delete org-template-remove-level-btn";
   removeBtn.textContent = "×";
 
-  row.appendChild(select);
+  row.appendChild(input);
   row.appendChild(removeBtn);
   container.appendChild(row);
+}
+
+/**
+ * 填充快捷填充下拉框
+ */
+function populateQuickFill(select) {
+  select.innerHTML = `<option value="">${t("org_template.select_quick_fill")}</option>`;
+  QUICK_FILL_PRESETS.forEach((preset) => {
+    const option = document.createElement("option");
+    option.value = preset.join(",");
+    option.textContent = preset.map((l) => getOrgTypeLabel(l)).join(" → ");
+    select.appendChild(option);
+  });
 }
 
 async function deleteTemplate(id, name) {

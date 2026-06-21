@@ -75,9 +75,12 @@ pub async fn create_org_template(
         let type_str = level
             .as_str()
             .ok_or_else(|| AppError::Validation(format!("levels[{idx}] 必须是字符串")))?;
-        if crate::models::OrgType::from_str_value(type_str).is_none() {
+        if type_str.trim().is_empty() {
+            return Err(AppError::Validation(format!("levels[{idx}] 的值不能为空")));
+        }
+        if type_str.len() > 50 {
             return Err(AppError::Validation(format!(
-                "levels[{idx}] 的值「{type_str}」不是合法的组织类型"
+                "levels[{idx}] 的值长度不能超过50个字符"
             )));
         }
     }
@@ -172,9 +175,12 @@ pub async fn update_org_template(
             let type_str = level
                 .as_str()
                 .ok_or_else(|| AppError::Validation(format!("levels[{idx}] 必须是字符串")))?;
-            if crate::models::OrgType::from_str_value(type_str).is_none() {
+            if type_str.trim().is_empty() {
+                return Err(AppError::Validation(format!("levels[{idx}] 的值不能为空")));
+            }
+            if type_str.len() > 50 {
                 return Err(AppError::Validation(format!(
-                    "levels[{idx}] 的值「{type_str}」不是合法的组织类型"
+                    "levels[{idx}] 的值长度不能超过50个字符"
                 )));
             }
         }

@@ -236,9 +236,6 @@ pub async fn create_organization(
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
-    let req_org_type = OrgType::from_str_value(&req.org_type)
-        .ok_or_else(|| AppError::Validation("无效的组织类型".to_string()))?;
-
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let (template_id, level_index) = if let Some(parent_id) = req.parent_id {
@@ -351,15 +348,6 @@ pub async fn create_organization(
                 req.org_type
             )));
         }
-
-        // 校验根节点类型是合法的 OrgType
-        if OrgType::from_str_value(root_type).is_none() {
-            return Err(AppError::Validation(format!(
-                "模板定义的根节点类型「{root_type}」不是合法的组织类型"
-            )));
-        }
-
-        let _ = req_org_type; // 已通过上面的校验
 
         (Some(template_id), 0i32)
     };
@@ -853,7 +841,7 @@ async fn would_create_cycle(
 }
 
 /// 组织类型中文标签
-fn org_type_label(type_str: &str) -> &'static str {
+fn org_type_label(type_str: &str) -> &str {
     match type_str {
         "headquarters" => "总部",
         "building" => "楼号",
@@ -864,7 +852,7 @@ fn org_type_label(type_str: &str) -> &'static str {
         "workstation" => "工位",
         "cabinet" => "机柜",
         "cabinet_position" => "机位",
-        _ => "未知",
+        _ => type_str,
     }
 }
 
@@ -991,7 +979,8 @@ mod tests {
         assert_eq!(org_type_label("building"), "楼号");
         assert_eq!(org_type_label("floor"), "楼层");
         assert_eq!(org_type_label("data_center"), "机房");
-        assert_eq!(org_type_label("unknown_type"), "未知");
+        // 未知类型返回原始字符串
+        assert_eq!(org_type_label("custom_type"), "custom_type");
     }
 
     #[test]
