@@ -9,6 +9,12 @@
       <form id="organization-form">
         <input type="hidden" id="org-id" />
         <input type="hidden" id="org-parent-id" />
+        <div id="org-template-select-container" class="form-group" style="display: none;">
+          <label for="org-template-select"><span data-i18n="org_template.select_template">Select Template</span><span class="required">*</span></label>
+          <select id="org-template-select" name="template_id">
+            <option value="" data-i18n="org_template.select_template">Select Template</option>
+          </select>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label for="org-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
@@ -24,12 +30,6 @@
         <div class="form-group">
           <label for="org-description" data-i18n="common.description">Description</label>
           <textarea id="org-description" name="description" rows="3"></textarea>
-        </div>
-        <div id="org-template-select-container" class="form-group" style="display: none;">
-          <label for="org-template-select"><span data-i18n="org_template.select_template">Select Template</span><span class="required">*</span></label>
-          <select id="org-template-select" name="template_id">
-            <option value="" data-i18n="org_template.select_template">Select Template</option>
-          </select>
         </div>
         <div id="org-parent-info" class="org-parent-info" style="display: none;">
           <p><span data-i18n="organization.parent">Parent</span>: <strong id="org-parent-name"></strong> (<span id="org-parent-type"></span>)</p>
