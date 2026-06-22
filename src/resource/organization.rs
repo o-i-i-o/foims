@@ -4,6 +4,7 @@ use crate::models::{
     ApiResponse, OrgTemplate, OrgType, Organization, OrganizationCreate, OrganizationTreeNode,
     OrganizationUpdate, OrganizationWithChildren,
 };
+use crate::resource::org_template::{get_allowed_children, validate_levels_mapping};
 use crate::utils::pagination::DEFAULT_PAGE;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -265,31 +266,24 @@ pub async fn create_organization(
         .await?
         .ok_or_else(|| AppError::Validation("关联的模板不存在".to_string()))?;
 
-        let levels = template
-            .levels
-            .as_array()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
-        let next_level = parent_level + 1;
-        if next_level as usize >= levels.len() {
+        let allowed_children = get_allowed_children(&template.levels, &parent.org_type)?;
+        if allowed_children.is_empty() {
             return Err(AppError::Validation(format!(
-                "已到达模板「{}」的最大层级({})，无法继续添加下级节点",
-                template.name,
-                levels.len()
+                "类型「{}」不允许添加下级节点（模板「{}」）",
+                org_type_label(&parent.org_type),
+                template.name
             )));
         }
-
-        // 模板定义的下一级类型
-        let expected_type = levels[next_level as usize]
-            .as_str()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
-        if req.org_type != expected_type {
+        if !allowed_children.contains(&req.org_type) {
             return Err(AppError::Validation(format!(
-                "根据模板「{}」，第{}层应为类型「{}」，实际为「{}」",
+                "根据模板「{}」，类型「{}」的下级应为 {}，实际为「{}」",
                 template.name,
-                next_level + 1,
-                org_type_label(expected_type),
+                org_type_label(&parent.org_type),
+                allowed_children
+                    .iter()
+                    .map(|s| format!("「{}」", org_type_label(s)))
+                    .collect::<Vec<_>>()
+                    .join("、"),
                 req.org_type
             )));
         }
@@ -311,7 +305,7 @@ pub async fn create_organization(
             return Err(AppError::Conflict("同级下已存在同名组织节点".to_string()));
         }
 
-        (Some(parent_template_id), next_level)
+        (Some(parent_template_id), parent_level + 1)
     } else {
         // 根节点：必须指定 template_id
         let template_id = req
@@ -327,24 +321,13 @@ pub async fn create_organization(
         .await?
         .ok_or_else(|| AppError::NotFound("指定的模板不存在".to_string()))?;
 
-        let levels = template
-            .levels
-            .as_array()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
-        if levels.is_empty() {
-            return Err(AppError::Validation("模板的 levels 为空".to_string()));
-        }
-
-        let root_type = levels[0]
-            .as_str()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+        let root_type = validate_levels_mapping(&template.levels)?;
 
         if req.org_type != root_type {
             return Err(AppError::Validation(format!(
                 "根据模板「{}」，根节点应为类型「{}」，实际为「{}」",
                 template.name,
-                org_type_label(root_type),
+                org_type_label(&root_type),
                 req.org_type
             )));
         }
@@ -485,29 +468,26 @@ pub async fn update_organization(
         .await?
         .ok_or_else(|| AppError::Validation("目标父级关联的模板不存在".to_string()))?;
 
-        let levels = template
-            .levels
-            .as_array()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
-        let target_level = parent.level_index + 1;
-        if target_level as usize >= levels.len() {
+        let allowed_children = get_allowed_children(&template.levels, &parent.org_type)?;
+        if allowed_children.is_empty() {
             return Err(AppError::Validation(format!(
-                "目标父级已到达模板「{}」的最大层级，无法移动到此节点下",
+                "目标父级类型「{}」不允许添加下级节点（模板「{}」）",
+                org_type_label(&parent.org_type),
                 template.name
             )));
         }
 
-        let expected_type = levels[target_level as usize]
-            .as_str()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
         let effective_type = req.org_type.as_ref().unwrap_or(&existing.org_type);
-        if effective_type != expected_type {
+        if !allowed_children.contains(effective_type) {
             return Err(AppError::Validation(format!(
-                "根据模板「{}」，目标层级应为类型「{}」，实际为「{}」",
+                "根据模板「{}」，类型「{}」的下级应为 {}，实际为「{}」",
                 template.name,
-                org_type_label(expected_type),
+                org_type_label(&parent.org_type),
+                allowed_children
+                    .iter()
+                    .map(|s| format!("「{}」", org_type_label(s)))
+                    .collect::<Vec<_>>()
+                    .join("、"),
                 effective_type
             )));
         }
@@ -687,24 +667,21 @@ pub async fn get_allowed_child_types(
     .await?
     .ok_or_else(|| AppError::Validation("关联的模板不存在".to_string()))?;
 
-    let levels = template
-        .levels
-        .as_array()
-        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
+    let allowed_children = get_allowed_children(&template.levels, &org.org_type)?;
     let next_level = org.level_index + 1;
-    let allowed: Vec<serde_json::Value> = if (next_level as usize) < levels.len() {
-        let next_type = levels[next_level as usize]
-            .as_str()
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-        vec![json!({
-            "type": next_type,
-            "label": org_type_label(next_type),
-            "level_index": next_level
-        })]
-    } else {
-        vec![]
-    };
+    let allowed: Vec<serde_json::Value> = allowed_children
+        .iter()
+        .map(|child_type| {
+            json!({
+                "type": child_type,
+                "label": org_type_label(child_type),
+                "level_index": next_level
+            })
+        })
+        .collect();
+
+    let levels_map = template.levels.as_object();
+    let type_count = levels_map.as_ref().map(|m| m.len()).unwrap_or(0);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         json!({
@@ -714,7 +691,7 @@ pub async fn get_allowed_child_types(
             "template_id": template_id,
             "template_name": template.name,
             "current_level_index": org.level_index,
-            "max_level_index": levels.len() - 1,
+            "type_count": type_count,
             "allowed_child_types": allowed
         }),
         "允许的下级类型获取成功",

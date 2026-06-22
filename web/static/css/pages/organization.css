@@ -352,6 +352,17 @@
   flex: 1;
 }
 
+.org-template-level-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  font-size: 1.2rem;
+  padding: 0 4px;
+}
+
+.org-template-level-row .org-template-level-children {
+  flex: 2;
+}
+
 .org-template-remove-level-btn {
   flex-shrink: 0;
   width: 32px;

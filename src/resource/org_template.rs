@@ -11,6 +11,108 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
+/// 校验 levels 映射格式并返回根类型
+/// levels 格式: { "type_a": ["type_b"], "type_b": ["type_c", "type_d"], ... }
+pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, AppError> {
+    let levels_map = levels.as_object().ok_or_else(|| {
+        AppError::Validation("levels 必须是一个对象（类型→子级映射）".to_string())
+    })?;
+
+    if levels_map.is_empty() {
+        return Err(AppError::Validation("levels 映射不能为空".to_string()));
+    }
+
+    if levels_map.len() > 50 {
+        return Err(AppError::Validation(
+            "levels 映射的类型数量不能超过50".to_string(),
+        ));
+    }
+
+    let mut all_child_types: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for (key, value) in levels_map {
+        if key.trim().is_empty() {
+            return Err(AppError::Validation("类型名称不能为空".to_string()));
+        }
+        if key.len() > 50 {
+            return Err(AppError::Validation(format!(
+                "类型名称「{key}」长度不能超过50个字符"
+            )));
+        }
+
+        let children = value
+            .as_array()
+            .ok_or_else(|| AppError::Validation(format!("类型「{key}」的子级必须是数组")))?;
+
+        for (idx, child) in children.iter().enumerate() {
+            let child_str = child.as_str().ok_or_else(|| {
+                AppError::Validation(format!("类型「{key}」的子级[{idx}]必须是字符串"))
+            })?;
+            if child_str.trim().is_empty() {
+                return Err(AppError::Validation(format!(
+                    "类型「{key}」的子级[{idx}]不能为空"
+                )));
+            }
+            if child_str.len() > 50 {
+                return Err(AppError::Validation(format!(
+                    "类型「{key}」的子级[{idx}]长度不能超过50个字符"
+                )));
+            }
+            all_child_types.insert(child_str.to_string());
+        }
+    }
+
+    // 所有子类型必须在映射中定义
+    for child_type in &all_child_types {
+        if !levels_map.contains_key(child_type) {
+            return Err(AppError::Validation(format!(
+                "子类型「{child_type}」未在映射中定义，请添加该类型作为 key"
+            )));
+        }
+    }
+
+    // 必须有且仅有一个根类型
+    let root_types: Vec<&String> = levels_map
+        .keys()
+        .filter(|k| !all_child_types.contains(*k))
+        .collect();
+    match root_types.len() {
+        1 => Ok(root_types[0].clone()),
+        0 => Err(AppError::Validation(
+            "未找到根类型（所有类型都作为子级出现，存在循环引用）".to_string(),
+        )),
+        _ => Err(AppError::Validation(format!(
+            "存在多个根类型: {:?}，请确保只有一个根类型",
+            root_types
+        ))),
+    }
+}
+
+/// 从 levels 映射中获取指定类型的允许子级类型
+pub fn get_allowed_children(
+    levels: &serde_json::Value,
+    type_str: &str,
+) -> Result<Vec<String>, AppError> {
+    let levels_map = levels
+        .as_object()
+        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+
+    let children = levels_map
+        .get(type_str)
+        .ok_or_else(|| AppError::Validation(format!("类型「{type_str}」未在模板中定义")))?
+        .as_array()
+        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+
+    children
+        .iter()
+        .map(|c| {
+            c.as_str()
+                .map(String::from)
+                .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))
+        })
+        .collect()
+}
+
 /// 获取所有模板
 pub async fn get_org_templates(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let templates = sqlx::query_as::<_, OrgTemplateSummary>(
@@ -55,35 +157,8 @@ pub async fn create_org_template(
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
-    // 校验 levels 是一个非空字符串数组，且每个值都是合法的 OrgType
-    let levels = req
-        .levels
-        .as_array()
-        .ok_or_else(|| AppError::Validation("levels 必须是一个数组".to_string()))?;
-
-    if levels.is_empty() {
-        return Err(AppError::Validation("levels 数组不能为空".to_string()));
-    }
-
-    if levels.len() > 10 {
-        return Err(AppError::Validation(
-            "levels 数组长度不能超过10".to_string(),
-        ));
-    }
-
-    for (idx, level) in levels.iter().enumerate() {
-        let type_str = level
-            .as_str()
-            .ok_or_else(|| AppError::Validation(format!("levels[{idx}] 必须是字符串")))?;
-        if type_str.trim().is_empty() {
-            return Err(AppError::Validation(format!("levels[{idx}] 的值不能为空")));
-        }
-        if type_str.len() > 50 {
-            return Err(AppError::Validation(format!(
-                "levels[{idx}] 的值长度不能超过50个字符"
-            )));
-        }
-    }
+    // 校验 levels 映射格式
+    let _root_type = validate_levels_mapping(&req.levels)?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -157,33 +232,7 @@ pub async fn update_org_template(
 
     // 如果更新了 levels，需要校验
     if let Some(ref levels_val) = req.levels {
-        let levels = levels_val
-            .as_array()
-            .ok_or_else(|| AppError::Validation("levels 必须是一个数组".to_string()))?;
-
-        if levels.is_empty() {
-            return Err(AppError::Validation("levels 数组不能为空".to_string()));
-        }
-
-        if levels.len() > 10 {
-            return Err(AppError::Validation(
-                "levels 数组长度不能超过10".to_string(),
-            ));
-        }
-
-        for (idx, level) in levels.iter().enumerate() {
-            let type_str = level
-                .as_str()
-                .ok_or_else(|| AppError::Validation(format!("levels[{idx}] 必须是字符串")))?;
-            if type_str.trim().is_empty() {
-                return Err(AppError::Validation(format!("levels[{idx}] 的值不能为空")));
-            }
-            if type_str.len() > 50 {
-                return Err(AppError::Validation(format!(
-                    "levels[{idx}] 的值长度不能超过50个字符"
-                )));
-            }
-        }
+        validate_levels_mapping(levels_val)?;
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;

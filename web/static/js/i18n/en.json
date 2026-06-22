@@ -208,6 +208,8 @@
     "add_level": "Add Level",
     "levels": "Levels",
     "level_placeholder": "Enter level name",
+    "type_placeholder": "Type name",
+    "children_placeholder": "Child types (comma separated)",
     "quick_fill": "Quick Fill",
     "select_quick_fill": "Select a preset...",
     "name_required": "Template name is required",

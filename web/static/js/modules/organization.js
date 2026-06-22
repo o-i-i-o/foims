@@ -38,15 +38,46 @@ const ORG_TYPES = [
   "cabinet_position",
 ];
 
-// 快捷填充预设模板
+// 快捷填充预设模板（映射格式：类型→允许的子级类型）
 const QUICK_FILL_PRESETS = [
-  ["headquarters", "building", "floor", "hall", "workstation"],
-  ["headquarters", "building", "floor", "office", "workstation"],
-  ["headquarters", "data_center", "cabinet", "cabinet_position"],
+  { name: "综合楼", levels: { headquarters: ["building"], building: ["floor"], floor: ["hall", "office", "data_center"], hall: [], office: [], data_center: [] } },
+  { name: "办公楼", levels: { headquarters: ["building"], building: ["floor"], floor: ["hall", "office"], hall: [], office: [] } },
+  { name: "数据中心", levels: { headquarters: ["data_center"], data_center: ["cabinet"], cabinet: ["cabinet_position"], cabinet_position: [] } },
 ];
 
 function getOrgTypeLabel(orgType) {
   return t(`organization.types.${orgType}`) || orgType;
+}
+
+/** 从 levels 映射中找到根类型（不出现在任何子级列表中的类型） */
+function findRootType(levels) {
+  if (!levels || typeof levels !== "object" || Array.isArray(levels)) return null;
+  const allChildren = new Set();
+  Object.values(levels).forEach((children) => {
+    if (Array.isArray(children)) children.forEach((c) => allChildren.add(c));
+  });
+  const roots = Object.keys(levels).filter((k) => !allChildren.has(k));
+  return roots.length === 1 ? roots[0] : null;
+}
+
+/** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
+function renderLevelsMapping(levels, separator = "<br>") {
+  if (Array.isArray(levels)) {
+    return levels.map((l) => getOrgTypeLabel(l)).join(" → ");
+  }
+  const rootType = findRootType(levels);
+  if (!rootType) return "";
+  const paths = [];
+  function findPaths(type, currentPath) {
+    const children = levels[type] || [];
+    if (children.length === 0) {
+      paths.push([...currentPath, type]);
+    } else {
+      children.forEach((child) => findPaths(child, [...currentPath, type]));
+    }
+  }
+  findPaths(rootType, []);
+  return paths.map((p) => p.map((t) => getOrgTypeLabel(t)).join(" → ")).join(separator);
 }
 
 let allExpanded = false;
@@ -337,8 +368,8 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
     try {
       const allowed = await getAllowedChildTypes(parentId);
       if (allowed && allowed.allowed_child_types && allowed.allowed_child_types.length > 0) {
-        const childType = allowed.allowed_child_types[0];
-        populateTypeSelect(typeSelect, childType.type, true);
+        const allowedTypes = allowed.allowed_child_types.map((ct) => ct.type);
+        populateTypeSelect(typeSelect, allowedTypes[0], allowedTypes.length === 1, allowedTypes);
       } else {
         typeSelect.innerHTML = `<option value="">${t("organization.no_child_allowed")}</option>`;
         typeSelect.disabled = true;
@@ -370,9 +401,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
           templates.forEach((tpl) => {
             const option = document.createElement("option");
             option.value = tpl.id;
-            const levelLabels = tpl.levels
-              .map((l) => getOrgTypeLabel(l))
-              .join(" → ");
+            const levelLabels = renderLevelsMapping(tpl.levels, " / ");
             option.textContent = `${tpl.name} (${levelLabels})`;
             templateSelect.appendChild(option);
           });
@@ -380,9 +409,11 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
           // 模板选择变化时，自动设置根节点类型
           templateSelect.onchange = () => {
             const selectedTpl = templates.find((tpl) => tpl.id === templateSelect.value);
-            if (selectedTpl && selectedTpl.levels.length > 0) {
-              const rootType = selectedTpl.levels[0];
-              populateTypeSelect(typeSelect, rootType, true);
+            if (selectedTpl && selectedTpl.levels) {
+              const rootType = findRootType(selectedTpl.levels);
+              if (rootType) {
+                populateTypeSelect(typeSelect, rootType, true);
+              }
             }
           };
         } catch (error) {
@@ -393,10 +424,10 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
   }
 }
 
-function populateTypeSelect(select, currentValue, disabled) {
+function populateTypeSelect(select, currentValue, disabled, allowedValues = null) {
   select.innerHTML = "";
-  const types = [...ORG_TYPES];
-  // 如果当前值不在预定义列表中，添加为选项
+  const types = allowedValues ? [...allowedValues] : [...ORG_TYPES];
+  // 如果当前值不在列表中，添加为选项
   if (currentValue && !types.includes(currentValue)) {
     types.push(currentValue);
   }
@@ -533,7 +564,7 @@ function renderTemplateList(container, templates) {
   templates.forEach((tpl) => {
     const item = document.createElement("div");
     item.className = "org-template-item";
-    const levelLabels = tpl.levels.map((l) => getOrgTypeLabel(l)).join(" → ");
+    const levelLabels = renderLevelsMapping(tpl.levels);
     item.innerHTML = `
       <div class="org-template-info">
         <strong>${escapeHtml(tpl.name)}</strong>
@@ -601,10 +632,13 @@ async function openTemplateEditor(template = null) {
     nameInput.value = template.name;
     descInput.value = template.description || "";
     levelsContainer.innerHTML = "";
-    template.levels.forEach((level) => addLevelRow(level));
+    const levelsMap = template.levels;
+    Object.entries(levelsMap).forEach(([type, children]) => {
+      addLevelRow(type, Array.isArray(children) ? children.join(",") : "");
+    });
   } else {
     levelsContainer.innerHTML = "";
-    addLevelRow("");
+    addLevelRow("", "");
   }
 
   // 绑定编辑器事件（每次打开时重新绑定，因为模态框是动态加载的）
@@ -631,35 +665,52 @@ async function openTemplateEditor(template = null) {
       quickFill.dataset.bound = "true";
       quickFill.addEventListener("change", () => {
         if (!quickFill.value) return;
-        const levels = quickFill.value.split(",");
-        levelsContainer.innerHTML = "";
-        levels.forEach((level) => addLevelRow(level));
+        const preset = QUICK_FILL_PRESETS.find((p) => p.name === quickFill.value);
+        if (preset) {
+          levelsContainer.innerHTML = "";
+          Object.entries(preset.levels).forEach(([type, children]) => {
+            addLevelRow(type, children.join(","));
+          });
+        }
         quickFill.value = "";
       });
     }
   }
 }
 
-function addLevelRow(selectedType = null) {
+function addLevelRow(type = "", children = "") {
   const container = document.getElementById("org-template-editor-levels-container");
   if (!container) return;
 
   const row = document.createElement("div");
   row.className = "org-template-level-row";
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "form-control org-template-level-type";
-  input.placeholder = t("org_template.level_placeholder");
-  input.maxLength = 50;
-  if (selectedType) input.value = selectedType;
+  const typeInput = document.createElement("input");
+  typeInput.type = "text";
+  typeInput.className = "form-control org-template-level-type";
+  typeInput.placeholder = t("org_template.type_placeholder");
+  typeInput.maxLength = 50;
+  if (type) typeInput.value = type;
+
+  const arrow = document.createElement("span");
+  arrow.className = "org-template-level-arrow";
+  arrow.textContent = "→";
+
+  const childrenInput = document.createElement("input");
+  childrenInput.type = "text";
+  childrenInput.className = "form-control org-template-level-children";
+  childrenInput.placeholder = t("org_template.children_placeholder");
+  childrenInput.maxLength = 200;
+  if (children) childrenInput.value = children;
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "btn btn-sm btn-delete org-template-remove-level-btn";
   removeBtn.textContent = "×";
 
-  row.appendChild(input);
+  row.appendChild(typeInput);
+  row.appendChild(arrow);
+  row.appendChild(childrenInput);
   row.appendChild(removeBtn);
   container.appendChild(row);
 }
@@ -671,8 +722,8 @@ function populateQuickFill(select) {
   select.innerHTML = `<option value="">${t("org_template.select_quick_fill")}</option>`;
   QUICK_FILL_PRESETS.forEach((preset) => {
     const option = document.createElement("option");
-    option.value = preset.join(",");
-    option.textContent = preset.map((l) => getOrgTypeLabel(l)).join(" → ");
+    option.value = preset.name;
+    option.textContent = `${preset.name}: ${renderLevelsMapping(preset.levels, " / ")}`;
     select.appendChild(option);
   });
 }
@@ -700,15 +751,31 @@ export async function submitOrgTemplateForm() {
   const id = document.getElementById("org-template-editor-id")?.value;
   const name = document.getElementById("org-template-editor-name")?.value;
   const description = document.getElementById("org-template-editor-description")?.value;
-  const levelSelects = document.querySelectorAll(".org-template-level-type");
+  const rows = document.querySelectorAll(".org-template-level-row");
 
   if (!name) {
     showToast(t("org_template.name_required"), "warning");
     return;
   }
 
-  const levels = Array.from(levelSelects).map((s) => s.value);
-  if (levels.length === 0) {
+  if (rows.length === 0) {
+    showToast(t("org_template.levels_required"), "warning");
+    return;
+  }
+
+  const levels = {};
+  rows.forEach((row) => {
+    const type = row.querySelector(".org-template-level-type")?.value?.trim();
+    const childrenStr = row.querySelector(".org-template-level-children")?.value?.trim();
+    if (type) {
+      const children = childrenStr
+        ? childrenStr.split(",").map((c) => c.trim()).filter((c) => c)
+        : [];
+      levels[type] = children;
+    }
+  });
+
+  if (Object.keys(levels).length === 0) {
     showToast(t("org_template.levels_required"), "warning");
     return;
   }
