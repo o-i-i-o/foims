@@ -615,7 +615,6 @@ async function editTemplate(id) {
 }
 
 async function openTemplateEditor(template = null) {
-  // 打开模板编辑模态框
   await openModal("org-template-editor-modal", t("org_template.editor_title"));
 
   const form = document.getElementById("org-template-editor-form");
@@ -626,34 +625,48 @@ async function openTemplateEditor(template = null) {
 
   const nameInput = document.getElementById("org-template-editor-name");
   const descInput = document.getElementById("org-template-editor-description");
-  const levelsContainer = document.getElementById("org-template-editor-levels-container");
+  const treeContainer = document.getElementById("org-template-editor-levels-container");
 
   if (template) {
     nameInput.value = template.name;
     descInput.value = template.description || "";
-    levelsContainer.innerHTML = "";
-    const levelsMap = template.levels;
-    Object.entries(levelsMap).forEach(([type, children]) => {
-      addLevelRow(type, Array.isArray(children) ? children.join(",") : "");
-    });
+    loadMappingIntoTree(treeContainer, template.levels);
   } else {
-    levelsContainer.innerHTML = "";
-    addLevelRow("", "");
+    nameInput.value = "";
+    descInput.value = "";
+    treeContainer.innerHTML = "";
+    treeContainer.appendChild(createTypeNode(""));
   }
 
-  // 绑定编辑器事件（每次打开时重新绑定，因为模态框是动态加载的）
-  const addLevelBtn = document.getElementById("org-template-add-level-btn");
-  if (addLevelBtn && !addLevelBtn.dataset.bound) {
-    addLevelBtn.dataset.bound = "true";
-    addLevelBtn.addEventListener("click", () => addLevelRow());
-  }
+  // 绑定树形编辑器事件（事件委托）
+  if (!treeContainer.dataset.bound) {
+    treeContainer.dataset.bound = "true";
+    treeContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
 
-  if (!levelsContainer.dataset.bound) {
-    levelsContainer.dataset.bound = "true";
-    levelsContainer.addEventListener("click", (e) => {
-      if (e.target.classList.contains("org-template-remove-level-btn")) {
-        e.target.closest(".org-template-level-row")?.remove();
+      if (btn.dataset.action === "add-type-child") {
+        const node = btn.closest(".org-template-type-node");
+        const cc = getChildrenContainer(node);
+        if (cc) {
+          const newNode = createTypeNode("");
+          cc.appendChild(newNode);
+          newNode.querySelector(".org-template-type-input")?.focus();
+        }
+      } else if (btn.dataset.action === "remove-type") {
+        btn.closest(".org-template-type-node")?.remove();
       }
+    });
+  }
+
+  // 新增根类型按钮
+  const addRootBtn = document.getElementById("org-template-add-level-btn");
+  if (addRootBtn && !addRootBtn.dataset.bound) {
+    addRootBtn.dataset.bound = "true";
+    addRootBtn.addEventListener("click", () => {
+      const newNode = createTypeNode("");
+      treeContainer.appendChild(newNode);
+      newNode.querySelector(".org-template-type-input")?.focus();
     });
   }
 
@@ -667,10 +680,7 @@ async function openTemplateEditor(template = null) {
         if (!quickFill.value) return;
         const preset = QUICK_FILL_PRESETS.find((p) => p.name === quickFill.value);
         if (preset) {
-          levelsContainer.innerHTML = "";
-          Object.entries(preset.levels).forEach(([type, children]) => {
-            addLevelRow(type, children.join(","));
-          });
+          loadMappingIntoTree(treeContainer, preset.levels);
         }
         quickFill.value = "";
       });
@@ -678,41 +688,118 @@ async function openTemplateEditor(template = null) {
   }
 }
 
-function addLevelRow(type = "", children = "") {
-  const container = document.getElementById("org-template-editor-levels-container");
-  if (!container) return;
+/** 创建一个类型节点 DOM 元素 */
+function createTypeNode(type = "") {
+  const wrapper = document.createElement("div");
+  wrapper.className = "org-template-type-node";
 
   const row = document.createElement("div");
-  row.className = "org-template-level-row";
+  row.className = "org-template-type-row";
 
-  const typeInput = document.createElement("input");
-  typeInput.type = "text";
-  typeInput.className = "form-control org-template-level-type";
-  typeInput.placeholder = t("org_template.type_placeholder");
-  typeInput.maxLength = 50;
-  if (type) typeInput.value = type;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "form-control org-template-type-input";
+  input.placeholder = t("org_template.type_placeholder");
+  input.maxLength = 50;
+  if (type) input.value = type;
 
-  const arrow = document.createElement("span");
-  arrow.className = "org-template-level-arrow";
-  arrow.textContent = "→";
-
-  const childrenInput = document.createElement("input");
-  childrenInput.type = "text";
-  childrenInput.className = "form-control org-template-level-children";
-  childrenInput.placeholder = t("org_template.children_placeholder");
-  childrenInput.maxLength = 200;
-  if (children) childrenInput.value = children;
+  const addChildBtn = document.createElement("button");
+  addChildBtn.type = "button";
+  addChildBtn.className = "btn btn-sm btn-add-child";
+  addChildBtn.dataset.action = "add-type-child";
+  addChildBtn.textContent = "+";
+  addChildBtn.title = t("organization.add_child");
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
-  removeBtn.className = "btn btn-sm btn-delete org-template-remove-level-btn";
+  removeBtn.className = "btn btn-sm btn-delete";
+  removeBtn.dataset.action = "remove-type";
   removeBtn.textContent = "×";
 
-  row.appendChild(typeInput);
-  row.appendChild(arrow);
-  row.appendChild(childrenInput);
+  row.appendChild(input);
+  row.appendChild(addChildBtn);
   row.appendChild(removeBtn);
-  container.appendChild(row);
+
+  const childrenContainer = document.createElement("div");
+  childrenContainer.className = "org-template-type-children";
+
+  wrapper.appendChild(row);
+  wrapper.appendChild(childrenContainer);
+  return wrapper;
+}
+
+/** 获取节点的子级容器 */
+function getChildrenContainer(node) {
+  for (const child of node.children) {
+    if (child.classList.contains("org-template-type-children")) return child;
+  }
+  return null;
+}
+
+/** 获取节点的类型名称 */
+function getTypeOfNode(node) {
+  for (const child of node.children) {
+    if (child.classList.contains("org-template-type-row")) {
+      const input = child.querySelector(".org-template-type-input");
+      return input?.value?.trim() || null;
+    }
+  }
+  return null;
+}
+
+/** 将映射格式加载为树形 DOM */
+function loadMappingIntoTree(container, mapping) {
+  container.innerHTML = "";
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
+    container.appendChild(createTypeNode(""));
+    return;
+  }
+  const rootType = findRootType(mapping);
+  if (!rootType) {
+    container.appendChild(createTypeNode(""));
+    return;
+  }
+
+  function addTypeWithChildren(parentContainer, type) {
+    const node = createTypeNode(type);
+    parentContainer.appendChild(node);
+    const cc = getChildrenContainer(node);
+    const children = mapping[type] || [];
+    children.forEach((childType) => addTypeWithChildren(cc, childType));
+  }
+
+  addTypeWithChildren(container, rootType);
+}
+
+/** 从树形 DOM 收集映射数据 */
+function collectMapping(container) {
+  const mapping = {};
+
+  function processNode(node) {
+    const type = getTypeOfNode(node);
+    if (!type) return;
+    const cc = getChildrenContainer(node);
+    const childTypes = [];
+    if (cc) {
+      for (const childNode of cc.children) {
+        if (!childNode.classList.contains("org-template-type-node")) continue;
+        const childType = getTypeOfNode(childNode);
+        if (childType) {
+          childTypes.push(childType);
+          processNode(childNode);
+        }
+      }
+    }
+    mapping[type] = childTypes;
+  }
+
+  for (const rootNode of container.children) {
+    if (rootNode.classList.contains("org-template-type-node")) {
+      processNode(rootNode);
+    }
+  }
+
+  return mapping;
 }
 
 /**
@@ -751,30 +838,14 @@ export async function submitOrgTemplateForm() {
   const id = document.getElementById("org-template-editor-id")?.value;
   const name = document.getElementById("org-template-editor-name")?.value;
   const description = document.getElementById("org-template-editor-description")?.value;
-  const rows = document.querySelectorAll(".org-template-level-row");
+  const treeContainer = document.getElementById("org-template-editor-levels-container");
 
   if (!name) {
     showToast(t("org_template.name_required"), "warning");
     return;
   }
 
-  if (rows.length === 0) {
-    showToast(t("org_template.levels_required"), "warning");
-    return;
-  }
-
-  const levels = {};
-  rows.forEach((row) => {
-    const type = row.querySelector(".org-template-level-type")?.value?.trim();
-    const childrenStr = row.querySelector(".org-template-level-children")?.value?.trim();
-    if (type) {
-      const children = childrenStr
-        ? childrenStr.split(",").map((c) => c.trim()).filter((c) => c)
-        : [];
-      levels[type] = children;
-    }
-  });
-
+  const levels = collectMapping(treeContainer);
   if (Object.keys(levels).length === 0) {
     showToast(t("org_template.levels_required"), "warning");
     return;

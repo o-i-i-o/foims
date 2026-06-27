@@ -345,7 +345,12 @@ function handleEditDeleteClick(e) {
   if (!isEdit && !isDelete) {
     return;
   }
-  
+
+  // 有 data-action 属性的按钮由模块自身的事件处理器处理，跳过全局处理
+  if (e.target.dataset.action) {
+    return;
+  }
+
   e.preventDefault();
   
   const button = e.target;

@@ -334,36 +334,30 @@
   flex-shrink: 0;
 }
 
-/* 模板编辑器 - 层级行 */
-.org-template-levels-container {
+/* 模板编辑器 - 树形结构 */
+.org-template-tree-container {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   margin-bottom: var(--space-sm);
 }
 
-.org-template-level-row {
+.org-template-type-node {
+  display: flex;
+  flex-direction: column;
+}
+
+.org-template-type-row {
   display: flex;
   gap: var(--space-sm);
   align-items: center;
 }
 
-.org-template-level-row .org-template-level-type {
+.org-template-type-row .org-template-type-input {
   flex: 1;
 }
 
-.org-template-level-arrow {
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-  font-size: 1.2rem;
-  padding: 0 4px;
-}
-
-.org-template-level-row .org-template-level-children {
-  flex: 2;
-}
-
-.org-template-remove-level-btn {
+.org-template-type-row .btn {
   flex-shrink: 0;
   width: 32px;
   height: 32px;
@@ -373,4 +367,14 @@
   justify-content: center;
   font-size: 1.2rem;
   line-height: 1;
+}
+
+.org-template-type-children {
+  margin-left: 28px;
+  padding-left: 12px;
+  border-left: 1px dashed var(--color-border-light);
+  margin-top: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
