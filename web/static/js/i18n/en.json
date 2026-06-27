@@ -184,18 +184,7 @@
     "create_success": "Organization node created successfully",
     "update_success": "Organization node updated successfully",
     "delete_success": "Organization node deleted successfully",
-    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
-    "types": {
-      "headquarters": "Headquarters",
-      "building": "Building",
-      "floor": "Floor",
-      "hall": "Hall",
-      "office": "Office",
-      "data_center": "Data Center",
-      "workstation": "Workstation",
-      "cabinet": "Cabinet",
-      "cabinet_position": "Cabinet Position"
-    }
+    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?"
   },
   "org_template": {
     "management": "Template Management",
@@ -206,6 +195,7 @@
     "select_required": "Please select a template",
     "empty": "No template data. Click \"Add Template\" to start.",
     "add_root_type": "Add Root Type",
+    "root": "Root",
     "levels": "Hierarchy",
     "type_placeholder": "Type name",
     "quick_fill": "Quick Fill",

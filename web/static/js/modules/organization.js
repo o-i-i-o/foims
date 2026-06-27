@@ -46,7 +46,9 @@ const QUICK_FILL_PRESETS = [
 ];
 
 function getOrgTypeLabel(orgType) {
-  return t(`organization.types.${orgType}`) || orgType;
+  const key = `organization.types.${orgType}`;
+  const translated = t(key);
+  return translated === key ? orgType : translated;
 }
 
 /** 从 levels 映射中找到根类型（不出现在任何子级列表中的类型） */
@@ -635,7 +637,7 @@ async function openTemplateEditor(template = null) {
     nameInput.value = "";
     descInput.value = "";
     treeContainer.innerHTML = "";
-    treeContainer.appendChild(createTypeNode(""));
+    treeContainer.appendChild(createTypeNode("", true));
   }
 
   // 绑定树形编辑器事件（事件委托）
@@ -659,17 +661,6 @@ async function openTemplateEditor(template = null) {
     });
   }
 
-  // 新增根类型按钮
-  const addRootBtn = document.getElementById("org-template-add-level-btn");
-  if (addRootBtn && !addRootBtn.dataset.bound) {
-    addRootBtn.dataset.bound = "true";
-    addRootBtn.addEventListener("click", () => {
-      const newNode = createTypeNode("");
-      treeContainer.appendChild(newNode);
-      newNode.querySelector(".org-template-type-input")?.focus();
-    });
-  }
-
   // 快捷填充
   const quickFill = document.getElementById("org-template-quick-fill");
   if (quickFill) {
@@ -689,12 +680,20 @@ async function openTemplateEditor(template = null) {
 }
 
 /** 创建一个类型节点 DOM 元素 */
-function createTypeNode(type = "") {
+function createTypeNode(type = "", isRoot = false) {
   const wrapper = document.createElement("div");
   wrapper.className = "org-template-type-node";
+  if (isRoot) wrapper.classList.add("org-template-type-root");
 
   const row = document.createElement("div");
   row.className = "org-template-type-row";
+
+  if (isRoot) {
+    const rootBadge = document.createElement("span");
+    rootBadge.className = "org-template-root-badge";
+    rootBadge.textContent = t("org_template.root");
+    row.appendChild(rootBadge);
+  }
 
   const input = document.createElement("input");
   input.type = "text";
@@ -710,15 +709,17 @@ function createTypeNode(type = "") {
   addChildBtn.textContent = "+";
   addChildBtn.title = t("organization.add_child");
 
-  const removeBtn = document.createElement("button");
-  removeBtn.type = "button";
-  removeBtn.className = "btn btn-sm btn-delete";
-  removeBtn.dataset.action = "remove-type";
-  removeBtn.textContent = "×";
-
   row.appendChild(input);
   row.appendChild(addChildBtn);
-  row.appendChild(removeBtn);
+
+  if (!isRoot) {
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-sm btn-delete";
+    removeBtn.dataset.action = "remove-type";
+    removeBtn.textContent = "×";
+    row.appendChild(removeBtn);
+  }
 
   const childrenContainer = document.createElement("div");
   childrenContainer.className = "org-template-type-children";
@@ -751,24 +752,24 @@ function getTypeOfNode(node) {
 function loadMappingIntoTree(container, mapping) {
   container.innerHTML = "";
   if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
-    container.appendChild(createTypeNode(""));
+    container.appendChild(createTypeNode("", true));
     return;
   }
   const rootType = findRootType(mapping);
   if (!rootType) {
-    container.appendChild(createTypeNode(""));
+    container.appendChild(createTypeNode("", true));
     return;
   }
 
-  function addTypeWithChildren(parentContainer, type) {
-    const node = createTypeNode(type);
+  function addTypeWithChildren(parentContainer, type, isRoot = false) {
+    const node = createTypeNode(type, isRoot);
     parentContainer.appendChild(node);
     const cc = getChildrenContainer(node);
     const children = mapping[type] || [];
-    children.forEach((childType) => addTypeWithChildren(cc, childType));
+    children.forEach((childType) => addTypeWithChildren(cc, childType, false));
   }
 
-  addTypeWithChildren(container, rootType);
+  addTypeWithChildren(container, rootType, true);
 }
 
 /** 从树形 DOM 收集映射数据 */

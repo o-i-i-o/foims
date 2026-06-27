@@ -347,6 +347,23 @@
   flex-direction: column;
 }
 
+.org-template-type-root > .org-template-type-row {
+  background: var(--color-primary-light);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.org-template-root-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  background: var(--color-primary);
+  color: white;
+  flex-shrink: 0;
+}
+
 .org-template-type-row {
   display: flex;
   gap: var(--space-sm);

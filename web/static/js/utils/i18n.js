@@ -1,5 +1,20 @@
 let i18nInstance = null;
 
+/** 将 source 深合并到 target（递归合并对象，非对象直接覆盖） */
+function deepMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!target[key] || typeof target[key] !== 'object') {
+        target[key] = {};
+      }
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+
 function detectBrowserLanguage() {
   const browserLang = navigator.language || navigator.userLanguage || navigator.browserLanguage || 'en';
   if (browserLang.startsWith('zh')) {
@@ -30,6 +45,18 @@ export async function initI18n() {
       fetch('/static/js/i18n/zh.json').then(r => r.json()),
       fetch('/static/js/i18n/en.json').then(r => r.json())
     ]);
+
+    // 加载数据翻译（用户自定义内容的翻译），文件不存在时静默跳过
+    try {
+      const [zhData, enData] = await Promise.all([
+        fetch('/static/js/i18n/data_zh.json').then(r => r.json()),
+        fetch('/static/js/i18n/data_en.json').then(r => r.json())
+      ]);
+      deepMerge(zhTranslations, zhData);
+      deepMerge(enTranslations, enData);
+    } catch (_e) {
+      // 数据翻译文件不存在时使用纯系统翻译
+    }
 
     i18nInstance = {
       language: initialLanguage,

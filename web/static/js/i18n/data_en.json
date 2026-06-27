@@ -1,0 +1,15 @@
+{
+  "organization": {
+    "types": {
+      "headquarters": "Headquarters",
+      "building": "Building",
+      "floor": "Floor",
+      "hall": "Hall",
+      "office": "Office",
+      "data_center": "Data Center",
+      "workstation": "Workstation",
+      "cabinet": "Cabinet",
+      "cabinet_position": "Cabinet Position"
+    }
+  }
+}
