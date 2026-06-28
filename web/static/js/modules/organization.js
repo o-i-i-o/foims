@@ -48,6 +48,7 @@ const QUICK_FILL_PRESETS = [
 function getOrgTypeLabel(orgType) {
   const key = `organization.types.${orgType}`;
   const translated = t(key);
+  // t() 找不到 key 时会返回完整 key 路径，此时应返回原始值
   return translated === key ? orgType : translated;
 }
 

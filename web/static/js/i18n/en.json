@@ -184,7 +184,18 @@
     "create_success": "Organization node created successfully",
     "update_success": "Organization node updated successfully",
     "delete_success": "Organization node deleted successfully",
-    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?"
+    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
+    "types": {
+      "headquarters": "Headquarters",
+      "building": "Building",
+      "floor": "Floor",
+      "hall": "Hall",
+      "office": "Office",
+      "data_center": "Data Center",
+      "workstation": "Workstation",
+      "cabinet": "Cabinet",
+      "cabinet_position": "Cabinet Position"
+    }
   },
   "org_template": {
     "management": "Template Management",

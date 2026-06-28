@@ -186,7 +186,18 @@
     "create_success": "组织节点创建成功",
     "update_success": "组织节点更新成功",
     "delete_success": "组织节点删除成功",
-    "delete_confirm": "确定要删除「{{name}}」吗？"
+    "delete_confirm": "确定要删除「{{name}}」吗？",
+    "types": {
+      "headquarters": "总部",
+      "building": "楼号",
+      "floor": "楼层",
+      "hall": "大厅",
+      "office": "办公室",
+      "data_center": "机房",
+      "workstation": "工位",
+      "cabinet": "机柜",
+      "cabinet_position": "机位"
+    }
   },
   "org_template": {
     "management": "模板管理",
