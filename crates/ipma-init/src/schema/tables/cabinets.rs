@@ -1,5 +1,3 @@
-use tracing::warn;
-
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS cabinets (
@@ -9,20 +7,12 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             capacity INTEGER NOT NULL DEFAULT 42,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            CONSTRAINT uq_cabinets_room_name UNIQUE (room_id, name)
         )",
     )
     .execute(pool)
     .await?;
-
-    if let Err(e) = sqlx::query(
-        "ALTER TABLE cabinets ADD CONSTRAINT uq_cabinets_room_name UNIQUE (room_id, name)",
-    )
-    .execute(pool)
-    .await
-    {
-        warn!("cabinets复合唯一约束可能已存在: {}", e);
-    }
 
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS positions (
