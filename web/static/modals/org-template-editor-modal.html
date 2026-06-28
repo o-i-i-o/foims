@@ -9,8 +9,15 @@
       <form id="org-template-editor-form">
         <input type="hidden" id="org-template-editor-id" />
         <div class="form-group">
-          <label for="org-template-editor-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
+          <div class="org-template-name-row">
+            <label for="org-template-editor-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="org-template-save-preset" />
+              <span data-i18n="org_template.save_as_preset">Save as preset template</span>
+            </label>
+          </div>
           <input type="text" id="org-template-editor-name" name="name" autocomplete="off" required />
+          <span class="org-template-save-preset-hint" data-i18n="org_template.save_preset_hint">Preset templates are saved in browser and can be reused via quick fill</span>
         </div>
         <div class="form-group">
           <label data-i18n="org_template.levels">Hierarchy</label>
@@ -25,13 +32,6 @@
         <div class="form-group">
           <label for="org-template-editor-description" data-i18n="common.description">Description</label>
           <textarea id="org-template-editor-description" name="description" rows="3"></textarea>
-        </div>
-        <div class="form-group org-template-save-preset-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="org-template-save-preset" />
-            <span data-i18n="org_template.save_as_preset">Save as preset template</span>
-          </label>
-          <span class="org-template-save-preset-hint" data-i18n="org_template.save_preset_hint">Preset templates are saved in browser and can be reused via quick fill</span>
         </div>
       </form>
     </div>

@@ -700,6 +700,19 @@ async function openTemplateEditor(template = null) {
       });
     }
   }
+
+  // 保存为预设复选框 — 控制提示文字显示
+  const savePresetCheckbox = document.getElementById("org-template-save-preset");
+  const savePresetHint = document.querySelector(".org-template-save-preset-hint");
+  if (savePresetCheckbox && savePresetHint) {
+    savePresetHint.classList.toggle("visible", savePresetCheckbox.checked);
+    if (!savePresetCheckbox.dataset.bound) {
+      savePresetCheckbox.dataset.bound = "true";
+      savePresetCheckbox.addEventListener("change", () => {
+        savePresetHint.classList.toggle("visible", savePresetCheckbox.checked);
+      });
+    }
+  }
 }
 
 /** 创建一个类型节点 DOM 元素 */
@@ -835,7 +848,7 @@ function populateQuickFill(select) {
   presets.forEach((preset) => {
     const option = document.createElement("option");
     option.value = preset.name;
-    option.textContent = `${preset.name}: ${renderLevelsMapping(preset.levels, " / ")}`;
+    option.textContent = preset.name;
     select.appendChild(option);
   });
 }
