@@ -44,6 +44,8 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
             .as_array()
             .ok_or_else(|| AppError::Validation(format!("类型「{key}」的子级必须是数组")))?;
 
+        let mut seen_in_this_key: std::collections::HashSet<&str> =
+            std::collections::HashSet::new();
         for (idx, child) in children.iter().enumerate() {
             let child_str = child.as_str().ok_or_else(|| {
                 AppError::Validation(format!("类型「{key}」的子级[{idx}]必须是字符串"))
@@ -56,6 +58,11 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
             if child_str.len() > 50 {
                 return Err(AppError::Validation(format!(
                     "类型「{key}」的子级[{idx}]长度不能超过50个字符"
+                )));
+            }
+            if !seen_in_this_key.insert(child_str) {
+                return Err(AppError::Validation(format!(
+                    "类型「{key}」的子级中存在重复类型「{child_str}」"
                 )));
             }
             all_child_types.insert(child_str.to_string());
@@ -76,16 +83,56 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         .keys()
         .filter(|k| !all_child_types.contains(*k))
         .collect();
-    match root_types.len() {
-        1 => Ok(root_types[0].clone()),
-        0 => Err(AppError::Validation(
-            "未找到根类型（所有类型都作为子级出现，存在循环引用）".to_string(),
-        )),
-        _ => Err(AppError::Validation(format!(
-            "存在多个根类型: {:?}，请确保只有一个根类型",
-            root_types
-        ))),
+    let root_type = match root_types.len() {
+        1 => root_types[0].clone(),
+        0 => {
+            return Err(AppError::Validation(
+                "未找到根类型（所有类型都作为子级出现，存在循环引用）".to_string(),
+            ));
+        }
+        _ => {
+            return Err(AppError::Validation(format!(
+                "存在多个根类型: {:?}，请确保只有一个根类型",
+                root_types
+            )));
+        }
+    };
+
+    // 检测非根节点间的循环引用（DFS 染色法）
+    let mut visited: std::collections::HashMap<&String, u8> = std::collections::HashMap::new();
+    fn has_cycle<'a>(
+        node: &'a String,
+        levels_map: &'a serde_json::Map<String, serde_json::Value>,
+        visited: &mut std::collections::HashMap<&'a String, u8>,
+    ) -> bool {
+        match visited.get(node) {
+            Some(&2) => return false,
+            Some(&1) => return true,
+            _ => {}
+        }
+        visited.insert(node, 1);
+        if let Some(children) = levels_map.get(node).and_then(|v| v.as_array()) {
+            for child in children {
+                if let Some(child_str) = child.as_str() {
+                    let child_key = levels_map.keys().find(|k| k.as_str() == child_str);
+                    if let Some(child_key) = child_key
+                        && has_cycle(child_key, levels_map, visited)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        visited.insert(node, 2);
+        false
     }
+    if has_cycle(&root_type, levels_map, &mut visited) {
+        return Err(AppError::Validation(
+            "模板层级存在循环引用，请检查类型间的父子关系".to_string(),
+        ));
+    }
+
+    Ok(root_type)
 }
 
 /// 从 levels 映射中获取指定类型的允许子级类型

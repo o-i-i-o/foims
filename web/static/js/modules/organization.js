@@ -43,12 +43,6 @@ function savePreset(preset) {
   localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
 }
 
-/** 删除预设模板 */
-function deletePreset(name) {
-  const presets = loadPresets().filter((p) => p.name !== name);
-  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
-}
-
 /** 获取节点图标（按类型名称模糊匹配） */
 function getNodeIcon(orgType) {
   const iconMap = {
@@ -68,11 +62,6 @@ function getNodeIcon(orgType) {
   return DEFAULT_NODE_ICON;
 }
 
-/** 获取组织类型的显示标签（用户输入数据不做翻译，直接返回原始值） */
-function getOrgTypeLabel(orgType) {
-  return orgType || "";
-}
-
 /** 从 levels 映射中找到根类型（不出现在任何子级列表中的类型） */
 function findRootType(levels) {
   if (!levels || typeof levels !== "object" || Array.isArray(levels)) return null;
@@ -86,9 +75,6 @@ function findRootType(levels) {
 
 /** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
 function renderLevelsMapping(levels, separator = "<br>") {
-  if (Array.isArray(levels)) {
-    return levels.map((l) => getOrgTypeLabel(l)).join(" → ");
-  }
   const rootType = findRootType(levels);
   if (!rootType) return "";
   const paths = [];
@@ -101,7 +87,7 @@ function renderLevelsMapping(levels, separator = "<br>") {
     }
   }
   findPaths(rootType, []);
-  return paths.map((p) => p.map((t) => getOrgTypeLabel(t)).join(" → ")).join(separator);
+  return paths.map((p) => p.join(" → ")).join(separator);
 }
 
 let allExpanded = false;
@@ -125,7 +111,7 @@ function bindOrgEvents() {
   container.addEventListener("click", handleTreeClick);
 
   const addRootBtn = document.getElementById("org-add-root-btn");
-  addRootBtn?.addEventListener("click", () => openOrgModal(null, null, null, true));
+  addRootBtn?.addEventListener("click", () => openOrgModal(null, null, true));
 
   const expandAllBtn = document.getElementById("org-expand-all-btn");
   expandAllBtn?.addEventListener("click", expandAllNodes);
@@ -205,10 +191,10 @@ function renderTreeNode(node, depth) {
 
   const hasChildren = node.children && node.children.length > 0;
   const icon = getNodeIcon(node.org_type);
-  const typeLabel = getOrgTypeLabel(node.org_type);
+  const typeLabel = node.org_type || "";
 
   const toggleBtn = hasChildren
-    ? `<span class="org-toggle" data-action="toggle" role="button" tabindex="0" aria-label="展开/折叠">
+    ? `<span class="org-toggle ${allExpanded ? "expanded" : ""}" data-action="toggle" role="button" tabindex="0">
          <svg class="org-toggle-icon" width="16" height="16" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
        </span>`
     : `<span class="org-toggle-placeholder"></span>`;
@@ -233,7 +219,7 @@ function renderTreeNode(node, depth) {
   if (hasChildren) {
     const childrenContainer = document.createElement("div");
     childrenContainer.className = "org-children";
-    if (!allExpanded && depth >= 0) {
+    if (!allExpanded) {
       childrenContainer.style.display = "none";
     }
     node.children.forEach((child) => {
@@ -274,7 +260,7 @@ function handleTreeClick(e) {
       break;
     case "add-child":
       e.stopPropagation();
-      openOrgModal(null, target.dataset.parentId, null, false);
+      openOrgModal(null, target.dataset.parentId, false);
       break;
     case "edit":
       e.stopPropagation();
@@ -324,9 +310,8 @@ function handleOrgSearch(e) {
   const nodes = document.querySelectorAll(".org-node-wrapper");
 
   if (!keyword) {
-    nodes.forEach((n) => {
-      n.style.display = "";
-    });
+    // 清空搜索：重新渲染树以还原展开/折叠状态
+    loadOrganizationTree();
     return;
   }
 
@@ -357,10 +342,9 @@ function handleOrgSearch(e) {
  * 打开组织节点模态框
  * @param {Object|null} org - 编辑时传入现有节点
  * @param {string|null} parentId - 新增子节点时传入父节点ID
- * @param {string|null} presetType - 预设类型（不再使用，类型由模板决定）
  * @param {boolean} isRoot - 是否为新增根节点
  */
-export async function openOrgModal(org = null, parentId = null, presetType = null, isRoot = false) {
+export async function openOrgModal(org = null, parentId = null, isRoot = false) {
   await openModal("organization-modal");
 
   const modal = elementCache.get("organization-modal");
@@ -401,8 +385,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
       if (parentInfo) {
         parentInfo.style.display = "";
         document.getElementById("org-parent-name").textContent = allowed?.parent_name || "";
-        document.getElementById("org-parent-type").textContent =
-          getOrgTypeLabel(allowed?.parent_type) || allowed?.parent_type || "";
+        document.getElementById("org-parent-type").textContent = allowed?.parent_type || "";
       }
       if (templateSelectContainer) templateSelectContainer.style.display = "none";
     } catch (error) {
@@ -522,23 +505,26 @@ export async function submitOrgForm() {
     return;
   }
 
-  const orgData = {
-    name: name.trim(),
-    org_type: orgType,
-    parent_id: parentId || null,
-    description: description || null,
-  };
-
-  // 新增根节点时带上 template_id
-  if (!id && !parentId && templateId) {
-    orgData.template_id = templateId;
-  }
-
   try {
     let result;
     if (id) {
-      result = await apiPut(`/api/resources/organizations/${id}`, orgData);
+      // 编辑模式：仅更新 name / org_type / description，不修改结构性字段
+      result = await apiPut(`/api/resources/organizations/${id}`, {
+        name: name.trim(),
+        org_type: orgType,
+        description: description || null,
+      });
     } else {
+      // 新增模式：需要 parent_id（子节点）或 template_id（根节点）
+      const orgData = {
+        name: name.trim(),
+        org_type: orgType,
+        parent_id: parentId || null,
+        description: description || null,
+      };
+      if (!parentId && templateId) {
+        orgData.template_id = templateId;
+      }
       result = await apiPost("/api/resources/organizations", orgData);
     }
 
@@ -767,21 +753,13 @@ function createTypeNode(type = "", isRoot = false) {
 
 /** 获取节点的子级容器 */
 function getChildrenContainer(node) {
-  for (const child of node.children) {
-    if (child.classList.contains("org-template-type-children")) return child;
-  }
-  return null;
+  return node.querySelector(":scope > .org-template-type-children");
 }
 
 /** 获取节点的类型名称 */
 function getTypeOfNode(node) {
-  for (const child of node.children) {
-    if (child.classList.contains("org-template-type-row")) {
-      const input = child.querySelector(".org-template-type-input");
-      return input?.value?.trim() || null;
-    }
-  }
-  return null;
+  const input = node.querySelector(":scope > .org-template-type-row .org-template-type-input");
+  return input?.value?.trim() || null;
 }
 
 /** 将映射格式加载为树形 DOM */

@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, OrgTemplate, OrgType, Organization, OrganizationCreate, OrganizationTreeNode,
+    ApiResponse, OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode,
     OrganizationUpdate, OrganizationWithChildren,
 };
 use crate::resource::org_template::{get_allowed_children, validate_levels_mapping};
@@ -270,18 +270,17 @@ pub async fn create_organization(
         if allowed_children.is_empty() {
             return Err(AppError::Validation(format!(
                 "类型「{}」不允许添加下级节点（模板「{}」）",
-                org_type_label(&parent.org_type),
-                template.name
+                &parent.org_type, template.name
             )));
         }
         if !allowed_children.contains(&req.org_type) {
             return Err(AppError::Validation(format!(
                 "根据模板「{}」，类型「{}」的下级应为 {}，实际为「{}」",
                 template.name,
-                org_type_label(&parent.org_type),
+                &parent.org_type,
                 allowed_children
                     .iter()
-                    .map(|s| format!("「{}」", org_type_label(s)))
+                    .map(|s| format!("「{}」", s))
                     .collect::<Vec<_>>()
                     .join("、"),
                 req.org_type
@@ -326,9 +325,7 @@ pub async fn create_organization(
         if req.org_type != root_type {
             return Err(AppError::Validation(format!(
                 "根据模板「{}」，根节点应为类型「{}」，实际为「{}」",
-                template.name,
-                org_type_label(&root_type),
-                req.org_type
+                template.name, &root_type, req.org_type
             )));
         }
 
@@ -401,6 +398,10 @@ pub async fn create_organization(
 }
 
 /// 更新组织节点
+///
+/// 仅支持更新 name / org_type / description。
+/// 不支持通过此接口修改 parent_id、template_id、level_index 等结构性字段
+/// （这些字段涉及模板层级关系和深度计算，应通过专门的移动接口处理）。
 pub async fn update_organization(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
@@ -421,96 +422,21 @@ pub async fn update_organization(
     .await?
     .ok_or_else(|| AppError::NotFound("组织节点未找到".to_string()))?;
 
-    if let Some(Some(pid)) = req.parent_id {
-        if pid == id {
-            return Err(AppError::Validation("不能将节点的父级设为自身".to_string()));
-        }
-
-        if would_create_cycle(&mut tx, id, pid).await? {
-            return Err(AppError::Validation(
-                "操作会导致循环引用，不允许将节点移动到其子级下".to_string(),
-            ));
-        }
-
-        let parent: Organization = sqlx::query_as::<_, Organization>(
-            "SELECT id, name, org_type, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-             FROM organizations WHERE id = $1",
-        )
-        .bind(pid)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| AppError::NotFound("新的父级组织节点未找到".to_string()))?;
-
-        // 不允许通过 update 改变 parent_id（模板层级关系会断裂），除非节点没有子节点
-        let child_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM organizations WHERE parent_id = $1")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if child_count > 0 {
-            return Err(AppError::Validation(
-                "该节点下还有子节点，不允许移动。请先删除所有子节点".to_string(),
-            ));
-        }
-
-        // 父节点必须有模板
-        let parent_template_id = parent
-            .template_id
-            .ok_or_else(|| AppError::Validation("目标父级节点未关联模板".to_string()))?;
-
-        // 获取模板，确定目标层级类型
-        let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
-            "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-             FROM org_templates WHERE id = $1",
-        )
-        .bind(parent_template_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| AppError::Validation("目标父级关联的模板不存在".to_string()))?;
-
-        let allowed_children = get_allowed_children(&template.levels, &parent.org_type)?;
-        if allowed_children.is_empty() {
-            return Err(AppError::Validation(format!(
-                "目标父级类型「{}」不允许添加下级节点（模板「{}」）",
-                org_type_label(&parent.org_type),
-                template.name
-            )));
-        }
-
-        let effective_type = req.org_type.as_ref().unwrap_or(&existing.org_type);
-        if !allowed_children.contains(effective_type) {
-            return Err(AppError::Validation(format!(
-                "根据模板「{}」，类型「{}」的下级应为 {}，实际为「{}」",
-                template.name,
-                org_type_label(&parent.org_type),
-                allowed_children
-                    .iter()
-                    .map(|s| format!("「{}」", org_type_label(s)))
-                    .collect::<Vec<_>>()
-                    .join("、"),
-                effective_type
-            )));
-        }
-
-        let depth = get_depth(&mut tx, pid).await?;
-        if depth >= MAX_DEPTH {
-            return Err(AppError::Validation(format!(
-                "已达到最大层级深度限制({MAX_DEPTH})"
-            )));
-        }
+    // 类型变更校验：必须符合当前节点位置（根节点或父节点的子级类型）的模板约束
+    if let Some(ref new_org_type) = req.org_type
+        && new_org_type != &existing.org_type
+    {
+        validate_org_type_change(&mut tx, &existing, new_org_type).await?;
     }
 
-    if let Some(ref new_name) = req.name {
-        let effective_parent = match req.parent_id {
-            Some(Some(pid)) => Some(pid),
-            Some(None) => None,
-            None => existing.parent_id,
-        };
-
+    // 名称变更校验：同级下不能重名
+    if let Some(ref new_name) = req.name
+        && new_name != &existing.name
+    {
         let duplicate: Option<Uuid> = sqlx::query_scalar(
             "SELECT id FROM organizations WHERE parent_id IS NOT DISTINCT FROM $1 AND name = $2 AND id != $3",
         )
-        .bind(effective_parent)
+        .bind(existing.parent_id)
         .bind(new_name)
         .bind(id)
         .fetch_optional(&mut *tx)
@@ -526,14 +452,12 @@ pub async fn update_organization(
         "UPDATE organizations SET
          name = COALESCE($1, name),
          org_type = COALESCE($2, org_type),
-         parent_id = COALESCE($3, parent_id),
-         description = COALESCE($4, description),
-         updated_at = $5
-         WHERE id = $6",
+         description = COALESCE($3, description),
+         updated_at = $4
+         WHERE id = $5",
     )
     .bind(&req.name)
     .bind(&req.org_type)
-    .bind(req.parent_id)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -578,6 +502,84 @@ pub async fn update_organization(
             "组织节点更新成功",
         )),
     )
+}
+
+/// 校验节点类型变更是否符合模板约束
+///
+/// 规则：
+/// - 根节点：新类型必须是模板的根类型
+/// - 子节点：新类型必须在父节点类型的允许子级列表中
+/// - 如果有子节点：所有子节点的现有类型必须在新类型的允许子级列表中
+async fn validate_org_type_change(
+    conn: &mut sqlx::PgConnection,
+    existing: &Organization,
+    new_org_type: &str,
+) -> Result<(), AppError> {
+    let template_id = existing
+        .template_id
+        .ok_or_else(|| AppError::Validation("该节点未关联模板，无法校验类型".to_string()))?;
+
+    let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
+        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+         FROM org_templates WHERE id = $1",
+    )
+    .bind(template_id)
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| AppError::Validation("关联的模板不存在".to_string()))?;
+
+    // 根据节点位置（根/子节点）确定允许的类型列表
+    let (allowed_types, position_desc) = if let Some(parent_id) = existing.parent_id {
+        let parent: Organization = sqlx::query_as::<_, Organization>(
+            "SELECT id, name, org_type, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+             FROM organizations WHERE id = $1",
+        )
+        .bind(parent_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| AppError::Validation("父级节点不存在".to_string()))?;
+
+        let children = get_allowed_children(&template.levels, &parent.org_type)?;
+        (children, format!("父级「{}」的子级", parent.org_type))
+    } else {
+        let root_type = validate_levels_mapping(&template.levels)?;
+        (vec![root_type], "根节点".to_string())
+    };
+
+    if !allowed_types.iter().any(|t| t == new_org_type) {
+        return Err(AppError::Validation(format!(
+            "根据模板「{}」，{}允许的类型为 {}，实际为「{}」",
+            template.name,
+            position_desc,
+            allowed_types
+                .iter()
+                .map(|s| format!("「{}」", s))
+                .collect::<Vec<_>>()
+                .join("、"),
+            new_org_type
+        )));
+    }
+
+    // 如果该节点有子节点，需要保证子节点的现有类型在新类型的允许子级列表中
+    let children: Vec<String> =
+        sqlx::query_scalar("SELECT org_type FROM organizations WHERE parent_id = $1")
+            .bind(existing.id)
+            .fetch_all(&mut *conn)
+            .await?;
+
+    if !children.is_empty() {
+        let new_allowed = get_allowed_children(&template.levels, new_org_type)?;
+        for child_type in &children {
+            if !new_allowed.iter().any(|t| t == child_type) {
+                return Err(AppError::Validation(format!(
+                    "类型变更后子节点类型「{}」不在新类型「{}」的允许子级列表中，无法变更类型",
+                    child_type, new_org_type
+                )));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// 删除组织节点
@@ -674,7 +676,7 @@ pub async fn get_allowed_child_types(
         .map(|child_type| {
             json!({
                 "type": child_type,
-                "label": org_type_label(child_type),
+                "label": child_type,
                 "level_index": next_level
             })
         })
@@ -696,42 +698,6 @@ pub async fn get_allowed_child_types(
         }),
         "允许的下级类型获取成功",
     )))
-}
-
-/// 获取所有组织类型的允许下级类型映射（用于前端预定义）
-pub async fn get_org_type_schema() -> HttpResponse {
-    let all_types = [
-        OrgType::Headquarters,
-        OrgType::Building,
-        OrgType::Floor,
-        OrgType::Hall,
-        OrgType::Office,
-        OrgType::DataCenter,
-        OrgType::Workstation,
-        OrgType::Cabinet,
-        OrgType::CabinetPosition,
-    ];
-
-    let schema: Vec<serde_json::Value> = all_types
-        .iter()
-        .map(|t| {
-            json!({
-                "type": t.as_str(),
-                "label": org_type_label(t.as_str()),
-                "allowed_children": t.allowed_child_types().iter().map(|c| {
-                    json!({
-                        "type": c.as_str(),
-                        "label": org_type_label(c.as_str())
-                    })
-                }).collect::<Vec<_>>()
-            })
-        })
-        .collect();
-
-    HttpResponse::Ok().json(ApiResponse::success(
-        json!({ "schema": schema }),
-        "组织类型结构获取成功",
-    ))
 }
 
 /// 获取指定父节点的子节点列表
@@ -792,85 +758,9 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
     Ok(depth)
 }
 
-/// 检查将 node 移动到 new_parent 下是否会形成循环引用
-async fn would_create_cycle(
-    conn: &mut sqlx::PgConnection,
-    node_id: Uuid,
-    new_parent_id: Uuid,
-) -> Result<bool, AppError> {
-    let mut current = new_parent_id;
-    for _ in 0..=MAX_DEPTH {
-        if current == node_id {
-            return Ok(true);
-        }
-        let parent: Option<Uuid> =
-            sqlx::query_scalar("SELECT parent_id FROM organizations WHERE id = $1")
-                .bind(current)
-                .fetch_optional(&mut *conn)
-                .await?
-                .flatten();
-        match parent {
-            Some(pid) => current = pid,
-            None => break,
-        }
-    }
-    Ok(false)
-}
-
-/// 组织类型显示标签（用户输入数据不做翻译，直接返回原始值）
-fn org_type_label(type_str: &str) -> &str {
-    type_str
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_org_type_allowed_children() {
-        assert_eq!(
-            OrgType::Headquarters.allowed_child_types(),
-            vec![OrgType::Building]
-        );
-        assert_eq!(
-            OrgType::Floor.allowed_child_types(),
-            vec![OrgType::Hall, OrgType::Office, OrgType::DataCenter]
-        );
-        assert!(OrgType::Workstation.allowed_child_types().is_empty());
-        assert!(OrgType::CabinetPosition.allowed_child_types().is_empty());
-    }
-
-    #[test]
-    fn test_can_have_child() {
-        assert!(OrgType::Headquarters.can_have_child(&OrgType::Building));
-        assert!(!OrgType::Headquarters.can_have_child(&OrgType::Floor));
-        assert!(OrgType::Floor.can_have_child(&OrgType::Hall));
-        assert!(OrgType::Floor.can_have_child(&OrgType::Office));
-        assert!(OrgType::Floor.can_have_child(&OrgType::DataCenter));
-        assert!(!OrgType::Floor.can_have_child(&OrgType::Cabinet));
-        assert!(OrgType::DataCenter.can_have_child(&OrgType::Cabinet));
-        assert!(OrgType::Cabinet.can_have_child(&OrgType::CabinetPosition));
-        assert!(!OrgType::Cabinet.can_have_child(&OrgType::Workstation));
-    }
-
-    #[test]
-    fn test_org_type_from_str() {
-        assert_eq!(
-            OrgType::from_str_value("headquarters"),
-            Some(OrgType::Headquarters)
-        );
-        assert_eq!(
-            OrgType::from_str_value("data_center"),
-            Some(OrgType::DataCenter)
-        );
-        assert_eq!(OrgType::from_str_value("invalid"), None);
-    }
-
-    #[test]
-    fn test_org_type_as_str() {
-        assert_eq!(OrgType::Headquarters.as_str(), "headquarters");
-        assert_eq!(OrgType::CabinetPosition.as_str(), "cabinet_position");
-    }
 
     #[test]
     fn test_build_tree_empty() {
@@ -937,14 +827,6 @@ mod tests {
         let tree = build_tree(&[root, child1, child2]);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].children.len(), 2);
-    }
-
-    #[test]
-    fn test_org_type_label() {
-        // 直接返回原始值，不做翻译
-        assert_eq!(org_type_label("headquarters"), "headquarters");
-        assert_eq!(org_type_label("总部"), "总部");
-        assert_eq!(org_type_label("custom_type"), "custom_type");
     }
 
     #[test]

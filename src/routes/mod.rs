@@ -26,7 +26,7 @@ use crate::resource::{
     get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
     get_cabinets_by_network_region, get_children, get_ip_managers, get_layout, get_network,
     get_network_region, get_network_regions, get_networks, get_org_template, get_org_templates,
-    get_org_type_schema, get_organization, get_organization_tree, get_organizations, get_positions,
+    get_organization, get_organization_tree, get_organizations, get_positions,
     get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
     get_switch_ips, get_workstation, get_workstation_ips, get_workstations, pull_ip_managers,
     save_layout, update_cabinet, update_cabinet_position, update_network, update_network_region,
@@ -201,7 +201,6 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("", web::get().to(get_organizations))
                                 .route("", web::post().to(create_organization))
                                 .route("/tree", web::get().to(get_organization_tree))
-                                .route("/schema", web::get().to(get_org_type_schema))
                                 .route("/{id}", web::get().to(get_organization))
                                 .route("/{id}", web::put().to(update_organization))
                                 .route("/{id}", web::delete().to(delete_organization))
