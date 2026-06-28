@@ -107,6 +107,8 @@
 .modal-body {
     padding: 1.5rem;
     flex: 1;
+    overflow-y: auto;
+    max-height: calc(90vh - 140px);
     background: linear-gradient(180deg, var(--color-bg-white) 0%, var(--color-bg) 100%);
 }
 

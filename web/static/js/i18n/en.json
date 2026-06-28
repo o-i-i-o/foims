@@ -117,6 +117,8 @@
     "rooms": "Rooms",
     "workstations": "Workstations",
     "networks": "Networks",
+    "network_regions": "Network Regions",
+    "network_segments": "Network Segments",
     "switches": "Switches",
     "cabinets": "Cabinets",
     "cabinet_positions": "Cabinet Positions"
@@ -184,18 +186,7 @@
     "create_success": "Organization node created successfully",
     "update_success": "Organization node updated successfully",
     "delete_success": "Organization node deleted successfully",
-    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
-    "types": {
-      "headquarters": "Headquarters",
-      "building": "Building",
-      "floor": "Floor",
-      "hall": "Hall",
-      "office": "Office",
-      "data_center": "Data Center",
-      "workstation": "Workstation",
-      "cabinet": "Cabinet",
-      "cabinet_position": "Cabinet Position"
-    }
+    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?"
   },
   "org_template": {
     "management": "Template Management",
@@ -208,6 +199,9 @@
     "add_root_type": "Add Root Type",
     "root": "Root",
     "levels": "Hierarchy",
+    "add_child_type": "Add Child",
+    "save_as_preset": "Save as preset template",
+    "save_preset_hint": "Preset templates are saved in browser and can be reused via quick fill",
     "type_placeholder": "Type name",
     "quick_fill": "Quick Fill",
     "select_quick_fill": "Select a preset...",
@@ -518,6 +512,7 @@
       "switch": "Switch"
     },
     "network": "Network",
+    "location": "Location",
     "last_seen": "Last Seen",
     "management": "IP Address Management",
     "search_placeholder": "Search IP/MAC/Switch Port",

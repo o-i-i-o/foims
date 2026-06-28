@@ -817,20 +817,9 @@ async fn would_create_cycle(
     Ok(false)
 }
 
-/// 组织类型中文标签
+/// 组织类型显示标签（用户输入数据不做翻译，直接返回原始值）
 fn org_type_label(type_str: &str) -> &str {
-    match type_str {
-        "headquarters" => "总部",
-        "building" => "楼号",
-        "floor" => "楼层",
-        "hall" => "大厅",
-        "office" => "办公室",
-        "data_center" => "机房",
-        "workstation" => "工位",
-        "cabinet" => "机柜",
-        "cabinet_position" => "机位",
-        _ => type_str,
-    }
+    type_str
 }
 
 #[cfg(test)]
@@ -952,11 +941,9 @@ mod tests {
 
     #[test]
     fn test_org_type_label() {
-        assert_eq!(org_type_label("headquarters"), "总部");
-        assert_eq!(org_type_label("building"), "楼号");
-        assert_eq!(org_type_label("floor"), "楼层");
-        assert_eq!(org_type_label("data_center"), "机房");
-        // 未知类型返回原始字符串
+        // 直接返回原始值，不做翻译
+        assert_eq!(org_type_label("headquarters"), "headquarters");
+        assert_eq!(org_type_label("总部"), "总部");
         assert_eq!(org_type_label("custom_type"), "custom_type");
     }
 

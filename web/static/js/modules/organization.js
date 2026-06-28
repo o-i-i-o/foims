@@ -14,42 +14,63 @@ import { elementCache } from "../utils/helpers.js";
 // 常量定义
 // ==========================================
 
-const ORG_TYPE_ICONS = {
-  headquarters: "🏢",
-  building: "🏬",
-  floor: "📐",
-  hall: "🚪",
-  office: "🏠",
-  data_center: "🖥️",
-  workstation: "💺",
-  cabinet: "🗄️",
-  cabinet_position: "📦",
-};
+/** localStorage 键名：用户自建的预设模板 */
+const PRESET_STORAGE_KEY = "org_template_presets";
 
-const ORG_TYPES = [
-  "headquarters",
-  "building",
-  "floor",
-  "hall",
-  "office",
-  "data_center",
-  "workstation",
-  "cabinet",
-  "cabinet_position",
-];
+/** 默认节点图标（无特定图标时使用） */
+const DEFAULT_NODE_ICON = "📁";
 
-// 快捷填充预设模板（映射格式：类型→允许的子级类型）
-const QUICK_FILL_PRESETS = [
-  { name: "综合楼", levels: { headquarters: ["building"], building: ["floor"], floor: ["hall", "office", "data_center"], hall: [], office: [], data_center: [] } },
-  { name: "办公楼", levels: { headquarters: ["building"], building: ["floor"], floor: ["hall", "office"], hall: [], office: [] } },
-  { name: "数据中心", levels: { headquarters: ["data_center"], data_center: ["cabinet"], cabinet: ["cabinet_position"], cabinet_position: [] } },
-];
+/** 从 localStorage 读取用户预设模板 */
+function loadPresets() {
+  try {
+    const data = localStorage.getItem(PRESET_STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
 
+/** 保存预设模板到 localStorage */
+function savePreset(preset) {
+  const presets = loadPresets();
+  // 同名预设覆盖
+  const idx = presets.findIndex((p) => p.name === preset.name);
+  if (idx >= 0) {
+    presets[idx] = preset;
+  } else {
+    presets.push(preset);
+  }
+  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+}
+
+/** 删除预设模板 */
+function deletePreset(name) {
+  const presets = loadPresets().filter((p) => p.name !== name);
+  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+}
+
+/** 获取节点图标（按类型名称模糊匹配） */
+function getNodeIcon(orgType) {
+  const iconMap = {
+    总部: "🏢", headquarters: "🏢",
+    楼: "🏬", building: "🏬",
+    层: "📐", floor: "📐",
+    厅: "🚪", hall: "🚪",
+    办公: "🏠", office: "🏠",
+    机房: "🖥️", 数据中心: "🖥️", data_center: "🖥️",
+    工位: "💺", workstation: "💺",
+    机柜: "🗄️", cabinet: "🗄️",
+    机位: "📦", cabinet_position: "📦",
+  };
+  for (const [keyword, icon] of Object.entries(iconMap)) {
+    if (orgType.includes(keyword)) return icon;
+  }
+  return DEFAULT_NODE_ICON;
+}
+
+/** 获取组织类型的显示标签（用户输入数据不做翻译，直接返回原始值） */
 function getOrgTypeLabel(orgType) {
-  const key = `organization.types.${orgType}`;
-  const translated = t(key);
-  // t() 找不到 key 时会返回完整 key 路径，此时应返回原始值
-  return translated === key ? orgType : translated;
+  return orgType || "";
 }
 
 /** 从 levels 映射中找到根类型（不出现在任何子级列表中的类型） */
@@ -183,7 +204,7 @@ function renderTreeNode(node, depth) {
   nodeEl.style.paddingLeft = `${depth * 24 + 16}px`;
 
   const hasChildren = node.children && node.children.length > 0;
-  const icon = ORG_TYPE_ICONS[node.org_type] || "📁";
+  const icon = getNodeIcon(node.org_type);
   const typeLabel = getOrgTypeLabel(node.org_type);
 
   const toggleBtn = hasChildren
@@ -429,7 +450,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
 
 function populateTypeSelect(select, currentValue, disabled, allowedValues = null) {
   select.innerHTML = "";
-  const types = allowedValues ? [...allowedValues] : [...ORG_TYPES];
+  const types = allowedValues ? [...allowedValues] : [];
   // 如果当前值不在列表中，添加为选项
   if (currentValue && !types.includes(currentValue)) {
     types.push(currentValue);
@@ -437,11 +458,11 @@ function populateTypeSelect(select, currentValue, disabled, allowedValues = null
   types.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;
-    option.textContent = getOrgTypeLabel(value);
+    option.textContent = value;
     if (value === currentValue) option.selected = true;
     select.appendChild(option);
   });
-  select.disabled = disabled;
+  select.disabled = disabled || types.length === 0;
 }
 
 export async function editOrganization(id) {
@@ -670,7 +691,8 @@ async function openTemplateEditor(template = null) {
       quickFill.dataset.bound = "true";
       quickFill.addEventListener("change", () => {
         if (!quickFill.value) return;
-        const preset = QUICK_FILL_PRESETS.find((p) => p.name === quickFill.value);
+        const presets = loadPresets();
+        const preset = presets.find((p) => p.name === quickFill.value);
         if (preset) {
           loadMappingIntoTree(treeContainer, preset.levels);
         }
@@ -707,8 +729,7 @@ function createTypeNode(type = "", isRoot = false) {
   addChildBtn.type = "button";
   addChildBtn.className = "btn btn-sm btn-add-child";
   addChildBtn.dataset.action = "add-type-child";
-  addChildBtn.textContent = "+";
-  addChildBtn.title = t("organization.add_child");
+  addChildBtn.innerHTML = `<span class="btn-icon">+</span> <span class="btn-text">${t("org_template.add_child_type")}</span>`;
 
   row.appendChild(input);
   row.appendChild(addChildBtn);
@@ -718,6 +739,7 @@ function createTypeNode(type = "", isRoot = false) {
     removeBtn.type = "button";
     removeBtn.className = "btn btn-sm btn-delete";
     removeBtn.dataset.action = "remove-type";
+    removeBtn.title = t("common.delete");
     removeBtn.textContent = "×";
     row.appendChild(removeBtn);
   }
@@ -805,11 +827,12 @@ function collectMapping(container) {
 }
 
 /**
- * 填充快捷填充下拉框
+ * 填充快捷填充下拉框（从 localStorage 加载用户预设）
  */
 function populateQuickFill(select) {
   select.innerHTML = `<option value="">${t("org_template.select_quick_fill")}</option>`;
-  QUICK_FILL_PRESETS.forEach((preset) => {
+  const presets = loadPresets();
+  presets.forEach((preset) => {
     const option = document.createElement("option");
     option.value = preset.name;
     option.textContent = `${preset.name}: ${renderLevelsMapping(preset.levels, " / ")}`;
@@ -841,6 +864,7 @@ export async function submitOrgTemplateForm() {
   const name = document.getElementById("org-template-editor-name")?.value;
   const description = document.getElementById("org-template-editor-description")?.value;
   const treeContainer = document.getElementById("org-template-editor-levels-container");
+  const savePresetCheckbox = document.getElementById("org-template-save-preset");
 
   if (!name) {
     showToast(t("org_template.name_required"), "warning");
@@ -858,6 +882,11 @@ export async function submitOrgTemplateForm() {
     levels: levels,
     description: description || null,
   };
+
+  // 如果勾选了"保存为预设模板"，同步保存到 localStorage
+  if (savePresetCheckbox?.checked) {
+    savePreset({ name: name.trim(), levels });
+  }
 
   try {
     let result;
