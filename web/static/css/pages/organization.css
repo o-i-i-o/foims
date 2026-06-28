@@ -291,6 +291,7 @@
 
 /* 模板编辑器 - 树形结构 */
 .org-template-tree-container {
+  flex-basis: 100%;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   padding: var(--space-md);
@@ -387,6 +388,7 @@
 
 /* 快捷填充行 */
 .org-template-quick-fill-row {
+  flex-basis: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -410,44 +412,21 @@
   text-overflow: ellipsis;
 }
 
-/* 名称行 + 保存为预设 */
-.org-template-name-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.org-template-name-row .checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--color-text-secondary);
-  margin: 0;
-}
-
-.org-template-name-row .checkbox-label input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-}
-
+/* 保存为预设模板 */
 .org-template-save-preset-hint {
+  flex-basis: 100%;
   display: block;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  margin-top: 4px;
-  height: 0;
-  overflow: hidden;
-  transition: height 0.2s ease, opacity 0.2s ease;
+  max-height: 0;
   opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.25s ease, margin-top 0.25s ease;
 }
 
 .org-template-save-preset-hint.visible {
-  height: auto;
+  max-height: 40px;
   opacity: 1;
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-sm);
 }
