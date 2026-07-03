@@ -1,7 +1,0 @@
-node_modules/
-static/js/types/
-static/js/utils/*.js
-static/js/utils/*.js.map
-static/js/utils/*.d.ts
-static/js/utils/*.d.ts.map
-!static/js/utils/lib/
