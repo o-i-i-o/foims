@@ -3,6 +3,8 @@
 set -e
 
 echo "=== IPMA PostgreSQL 初始化脚本 ==="
+echo "=== IPMA PostgreSQL Init Script ==="
+
 echo ""
 
 PG_USER="${PG_USER:-ipma}"
@@ -10,38 +12,62 @@ PG_PASSWORD="${PG_PASSWORD:-}"
 PG_DATABASE="${PG_DATABASE:-ipma}"
 PG_HOST="${PG_HOST:-localhost}"
 PG_PORT="${PG_PORT:-5432}"
+CONFIG_FILE="/etc/ipma/config.toml"
 
 if [ -z "$PG_PASSWORD" ]; then
     echo "错误: 请设置环境变量 PG_PASSWORD"
+    echo "Error: Please set PG_PASSWORD environment variable"
+
     echo "用法: PG_PASSWORD=your_password $0"
+    echo "Usage: PG_PASSWORD=your_password $0"
     echo ""
     echo "可选环境变量:"
+    echo "Optional environment variables:"
     echo "  PG_USER      - 数据库用户名 (默认: ipma)"
+    echo "  PG_USER      - Database username (default: ipma)"
+
     echo "  PG_PASSWORD  - 数据库密码 (必需)"
+    echo "  PG_PASSWORD  - Database password (required)"
+
     echo "  PG_DATABASE  - 数据库名称 (默认: ipma)"
+    echo "  PG_DATABASE  - Database name (default: ipma)"
+
     echo "  PG_HOST      - 数据库主机 (默认: localhost)"
+    echo "  PG_HOST      - Database host (default: localhost)"
+
     echo "  PG_PORT      - 数据库端口 (默认: 5432)"
+    echo "  PG_PORT      - Database port (default: 5432)"
     exit 1
 fi
 
 echo "配置信息:"
+echo "Configuration:"
+
 echo "  用户名: $PG_USER"
+echo "  Username: $PG_USER"
+
 echo "  数据库: $PG_DATABASE"
+echo "  Database: $PG_DATABASE"
+
 echo "  主机: $PG_HOST:$PG_PORT"
+echo "  Host: $PG_HOST:$PG_PORT"
 echo ""
 
 if ! command -v psql &> /dev/null; then
     echo "错误: psql 命令未找到，请先安装 PostgreSQL"
+    echo "Error: psql command not found, please install PostgreSQL first"
     exit 1
 fi
 
 if ! systemctl is-active --quiet postgresql 2>/dev/null; then
     echo "启动 PostgreSQL 服务..."
+    echo "Starting PostgreSQL service..."
     systemctl start postgresql
     systemctl enable postgresql
 fi
 
 echo "创建数据库用户和数据库..."
+echo "Creating database user and database..."
 
 if [ "$PG_HOST" = "localhost" ] || [ "$PG_HOST" = "127.0.0.1" ]; then
     sudo -u postgres psql -v ON_ERROR_STOP=1 << EOSQL
@@ -77,15 +103,16 @@ EOSQL
 
     echo ""
     echo "PostgreSQL 初始化完成!"
+    echo "PostgreSQL initialization completed!"
 else
     echo "远程数据库模式，请确保数据库已创建并有访问权限"
+    echo "Remote database mode, please ensure database is created and accessible"
 fi
-
-CONFIG_FILE="/etc/ipma/config.toml"
 
 if [ -f "$CONFIG_FILE" ]; then
     echo ""
     echo "更新配置文件: $CONFIG_FILE"
+    echo "Updating config file: $CONFIG_FILE"
     
     sed -i "s/^username = .*/username = \"$PG_USER\"/" "$CONFIG_FILE"
     sed -i "s/^password = .*/password = \"$PG_PASSWORD\"/" "$CONFIG_FILE"
@@ -94,16 +121,21 @@ if [ -f "$CONFIG_FILE" ]; then
     sed -i "s/^port = .*/port = $PG_PORT/" "$CONFIG_FILE"
     
     echo "配置文件已更新"
+    echo "Config file updated"
 fi
 
 echo ""
 echo "=== 初始化完成 ==="
+echo "=== Initialization completed ==="
 echo ""
 echo "测试连接:"
+echo "Test connection:"
 echo "  PGPASSWORD=$PG_PASSWORD psql -U $PG_USER -h $PG_HOST -d $PG_DATABASE"
 echo ""
 echo "启动服务:"
+echo "Start service:"
 echo "  systemctl restart ipma"
 echo ""
 echo "查看日志:"
+echo "View logs:"
 echo "  journalctl -u ipma -f"
