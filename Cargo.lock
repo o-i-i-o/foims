@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.9.88"
+version = "0.10.2"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2114,6 +2114,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "hex",
+ "ipma-data-manager",
  "ipma-init",
  "ipma-visualization",
  "ipnetwork 0.21.1",
@@ -2143,6 +2144,29 @@ dependencies = [
  "totp-rs",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+ "validator",
+ "zip",
+]
+
+[[package]]
+name = "ipma-data-manager"
+version = "0.1.0"
+dependencies = [
+ "actix-multipart",
+ "actix-web",
+ "aes-gcm",
+ "base64",
+ "chrono",
+ "csv",
+ "futures-util",
+ "hex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
  "validator",
  "zip",
