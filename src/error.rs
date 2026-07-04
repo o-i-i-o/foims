@@ -99,6 +99,16 @@ impl From<validator::ValidationErrors> for AppError {
     }
 }
 
+impl From<ipma_data_manager::DataError> for AppError {
+    fn from(err: ipma_data_manager::DataError) -> Self {
+        match err {
+            ipma_data_manager::DataError::Database(msg) => AppError::Database(msg),
+            ipma_data_manager::DataError::Validation(msg) => AppError::Validation(msg),
+            ipma_data_manager::DataError::Internal(msg) => AppError::Internal(msg),
+        }
+    }
+}
+
 pub type AppResult<T> = Result<T, AppError>;
 
 pub trait IntoResponse {

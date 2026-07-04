@@ -1,11 +1,13 @@
 pub mod static_files;
 
+use crate::app_state::AppState;
 use crate::auth::login::{
     auth_middleware, disable_two_factor, enable_two_factor, forgot_password, get_current_user,
     init_two_factor, login, login_with_email_code, login_with_two_factor, logout, refresh_token,
     reset_password, send_login_code, send_two_factor_code,
 };
 use crate::auth::user::{create_user, delete_user, get_user, get_users, update_user};
+use crate::error::AppError;
 use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
@@ -42,14 +44,59 @@ use crate::system::config::{
     update_page_timeout_config, update_session_timeout_config, update_smtp_config,
     update_system_config,
 };
-use crate::system::data::{
-    clear_logs, download_template, export_csv, export_database, get_logs_stats, import_csv,
-};
 use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
 use actix_web::{HttpResponse, middleware, web};
+
+async fn data_export_csv(
+    state: web::Data<AppState>,
+    type_param: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::export_csv(state.as_ref().clone(), type_param)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn data_import_csv(
+    state: web::Data<AppState>,
+    payload: actix_multipart::Multipart,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::import_csv(state.as_ref().clone(), payload, query)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn data_download_template(
+    type_param: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::download_template(type_param)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn data_export_database(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::export_database(state.as_ref().clone())
+        .await
+        .map_err(AppError::from)
+}
+
+async fn data_clear_logs(
+    state: web::Data<AppState>,
+    req: web::Json<ipma_data_manager::ClearLogsRequest>,
+) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::clear_logs(state.as_ref().clone(), req)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn data_get_logs_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    ipma_data_manager::get_logs_stats(state.as_ref().clone())
+        .await
+        .map_err(AppError::from)
+}
 
 // 初始化相关路由将根据配置动态添加
 // 这里只定义基础路由
@@ -327,14 +374,14 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         // 导入导出功能
                         .service(
                             web::scope("/import-export")
-                                .route("/import/csv", web::post().to(import_csv))
-                                .route("/export/csv", web::get().to(export_csv))
-                                .route("/export/database", web::get().to(export_database))
-                                .route("/template", web::get().to(download_template)),
+                                .route("/import/csv", web::post().to(data_import_csv))
+                                .route("/export/csv", web::get().to(data_export_csv))
+                                .route("/export/database", web::get().to(data_export_database))
+                                .route("/template", web::get().to(data_download_template)),
                         )
                         // 日志清理功能
-                        .route("/logs/stats", web::get().to(get_logs_stats))
-                        .route("/logs/clear", web::post().to(clear_logs))
+                        .route("/logs/stats", web::get().to(data_get_logs_stats))
+                        .route("/logs/clear", web::post().to(data_clear_logs))
                         // 定时任务管理
                         .service(
                             web::scope("/scheduled-tasks")
