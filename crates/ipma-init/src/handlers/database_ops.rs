@@ -4,68 +4,17 @@ use futures_util::TryStreamExt;
 use sqlx::PgPool;
 use std::path::PathBuf;
 use tracing::{info, warn};
-use uuid::Uuid;
-use validator::Validate;
 
 use crate::ApiResponse;
-use crate::check::{check_has_data, check_required_tables_exist, validate_table_columns};
-use crate::config::update_config_enabled;
+use crate::check::{check_has_data, validate_table_columns};
 use crate::connection::ensure_database_and_schema;
 use crate::context::InitContext;
 use crate::error::InitError;
 use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::schema::create_tables;
-use crate::types::{
-    CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest, InitRequest,
-};
-use crate::utils::{PgPassFile, hash_password};
+use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest};
+use crate::utils::PgPassFile;
 use crate::verification::verify_code;
-
-pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
-        Ok(p) => p,
-        Err(e) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
-                "success": true,
-                "data": {
-                    "connected": false,
-                    "has_tables": false,
-                    "required_tables_exist": false,
-                    "has_data": false,
-                    "error": e
-                }
-            })));
-        }
-    };
-
-    let has_tables = match sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'",
-    )
-    .fetch_one(&pool)
-    .await
-    {
-        Ok(count) => count > 0,
-        Err(_) => false,
-    };
-
-    let required_tables_exist = check_required_tables_exist(&pool).await;
-
-    let has_data = if required_tables_exist {
-        check_has_data(&pool).await
-    } else {
-        false
-    };
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": true,
-        "data": {
-            "connected": true,
-            "has_tables": has_tables,
-            "required_tables_exist": required_tables_exist,
-            "has_data": has_data
-        }
-    })))
-}
 
 pub async fn create_database_api(
     ctx: web::Data<InitContext>,
@@ -458,120 +407,6 @@ pub async fn import_database_from_file(
     )))
 }
 
-pub async fn init_system(
-    ctx: web::Data<InitContext>,
-    req: web::Json<InitRequest>,
-) -> Result<HttpResponse, InitError> {
-    (*req).validate()?;
-
-    if !ctx.init_enabled {
-        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
-    }
-
-    if let Err(e) = verify_code(&req.verification) {
-        return Err(InitError::Validation(e));
-    }
-
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
-        Ok(p) => p,
-        Err(e) => {
-            return Err(InitError::Internal(e));
-        }
-    };
-
-    let count: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&pool)
-        .await
-    {
-        Ok(count) => count,
-        Err(e) => {
-            if let Some(db_err) = e.as_database_error() {
-                if db_err.to_string().contains("UndefinedTable") {
-                    0
-                } else {
-                    return Err(InitError::Database(format!("数据库查询错误: {e}")));
-                }
-            } else {
-                return Err(InitError::Database(format!("数据库查询错误: {e}")));
-            }
-        }
-    };
-
-    if count > 0 {
-        return Err(InitError::Validation(
-            "数据库已有用户数据，请先通过新建或导入功能初始化数据库。".to_string(),
-        ));
-    }
-
-    if !check_required_tables_exist(&pool).await
-        && let Err(e) = create_tables(&pool).await
-    {
-        return Err(InitError::Internal(format!("创建表失败: {e}")));
-    }
-
-    let password_hash = hash_password(&req.password).await?;
-
-    let user_id = Uuid::new_v4();
-
-    tracing::info!(
-        "正在创建管理员用户，ID: {}, 用户名: {}, 邮箱: {}, 角色: {}",
-        user_id,
-        req.username,
-        req.email,
-        req.role
-    );
-
-    if let Err(e) = sqlx::query(
-        r"INSERT INTO users (id, username, password_hash, email, role, status) 
-               VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(user_id)
-    .bind(&req.username)
-    .bind(&password_hash)
-    .bind(&req.email)
-    .bind(&req.role)
-    .bind(true)
-    .execute(&pool)
-    .await
-    {
-        tracing::error!("创建管理员用户失败: {:?}", e);
-        return Err(InitError::Database(format!("创建管理员用户失败: {e}")));
-    }
-
-    if let Err(e) = update_config_enabled(&ctx.config_path, false).await {
-        return Err(InitError::Internal(format!("更新配置失败: {e}")));
-    }
-
-    info!(
-        "系统初始化成功，管理员用户已创建: {}, 初始化模式已禁用",
-        req.username
-    );
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统初始化成功")))
-}
-
-pub async fn init_db(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
-        Ok(p) => p,
-        Err(e) => {
-            return Err(InitError::Internal(e));
-        }
-    };
-
-    let required_tables_exist = check_required_tables_exist(&pool).await;
-
-    if required_tables_exist {
-        info!("数据库表结构已存在，跳过初始化");
-    } else {
-        if let Err(e) = create_tables(&pool).await {
-            return Err(InitError::Internal(format!("创建表失败: {e}")));
-        }
-        info!("数据库表结构初始化成功");
-    }
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库初始化成功")))
-}
-
 pub async fn clear_database(
     ctx: web::Data<InitContext>,
     req: web::Json<serde_json::Value>,
@@ -603,83 +438,4 @@ pub async fn clear_database(
 
     tracing::info!("通过API清空数据库成功");
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库清空成功")))
-}
-
-pub async fn check_init_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
-    let Ok(pool) = ensure_database_and_schema(&ctx.db_config).await else {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
-            "initialized": false,
-            "version": env!("CARGO_PKG_VERSION"),
-        })));
-    };
-
-    let initialized = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
-        .fetch_one(&pool)
-        .await
-    {
-        Ok(count) => count > 0,
-        Err(_) => false,
-    };
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "initialized": initialized,
-        "version": env!("CARGO_PKG_VERSION"),
-    })))
-}
-
-pub async fn restart_program(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
-    info!("收到重启程序请求，正在准备重启...");
-    (ctx.restart_fn)().await.map_err(InitError::Internal)?;
-    Ok(HttpResponse::Ok().json(crate::ApiResponse::<()> {
-        success: true,
-        message: "服务重启命令已发送，服务正在重启...".to_string(),
-        data: None,
-    }))
-}
-
-pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
-    let installed = match tokio::process::Command::new("which")
-        .arg("psql")
-        .status()
-        .await
-    {
-        Ok(s) => s.success(),
-        Err(e) => {
-            tracing::warn!("检查 psql 安装状态失败: {}", e);
-            false
-        }
-    };
-
-    if !installed {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
-            "installed": false,
-            "running": false,
-            "error": "PostgreSQL is not installed. Please install PostgreSQL first."
-        })));
-    }
-
-    let url = format!(
-        "postgres://{}:{}@{}:{}/postgres",
-        ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
-    );
-
-    match PgPool::connect(&url).await {
-        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
-            "installed": true,
-            "running": true,
-            "message": "PostgreSQL is running and connection is successful."
-        }))),
-        Err(e) => {
-            let error_str = e.to_string();
-            let running = !error_str.contains("connect")
-                && !error_str.contains("timeout")
-                && !error_str.contains("refused");
-
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "installed": true,
-                "running": running,
-                "error": error_str
-            })))
-        }
-    }
 }

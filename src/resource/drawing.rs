@@ -57,12 +57,7 @@ pub async fn save_layout(
 
     let result = ipma_visualization::save_layout(&state.pool()?.get_conn(), visualization_req)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })?;
+        .map_err(AppError::from)?;
 
     if let Some(room_id) = req.room_id {
         let details = serde_json::json!({
@@ -99,12 +94,7 @@ pub async fn delete_layout(
 
     let result = ipma_visualization::delete_layout(&state.pool()?.get_conn(), room_id)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })?;
+        .map_err(AppError::from)?;
 
     let details = serde_json::json!({
         "room_id": room_id
@@ -137,12 +127,7 @@ pub async fn delete_positions_layout(
 
     let result = ipma_visualization::delete_positions_layout(&state.pool()?.get_conn(), room_id)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })?;
+        .map_err(AppError::from)?;
 
     let details = serde_json::json!({
         "room_id": room_id
@@ -174,12 +159,7 @@ pub async fn get_layout(
 
     ipma_visualization::get_layout(&state.pool()?.get_conn(), room_id)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })
+        .map_err(AppError::from)
 }
 
 pub async fn get_positions_layout(
@@ -190,12 +170,7 @@ pub async fn get_positions_layout(
 
     ipma_visualization::get_positions_layout(&state.pool()?.get_conn(), room_id)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })
+        .map_err(AppError::from)
 }
 
 pub async fn get_room_cabinets_with_positions(
@@ -206,10 +181,5 @@ pub async fn get_room_cabinets_with_positions(
 
     ipma_visualization::get_room_cabinets_with_positions(&state.pool()?.get_conn(), room_id)
         .await
-        .map_err(|e| match e {
-            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
-            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
-            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
-            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
-        })
+        .map_err(AppError::from)
 }

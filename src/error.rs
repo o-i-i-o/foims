@@ -109,6 +109,17 @@ impl From<ipma_data_manager::DataError> for AppError {
     }
 }
 
+impl From<ipma_visualization::VisualizationError> for AppError {
+    fn from(err: ipma_visualization::VisualizationError) -> Self {
+        match err {
+            ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
+            ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
+            ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
+            ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
+        }
+    }
+}
+
 pub type AppResult<T> = Result<T, AppError>;
 
 pub trait IntoResponse {
