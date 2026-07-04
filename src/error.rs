@@ -103,7 +103,9 @@ impl From<ipma_data_manager::DataError> for AppError {
     fn from(err: ipma_data_manager::DataError) -> Self {
         match err {
             ipma_data_manager::DataError::Database(msg) => AppError::Database(msg),
+            ipma_data_manager::DataError::NotFound(msg) => AppError::NotFound(msg),
             ipma_data_manager::DataError::Validation(msg) => AppError::Validation(msg),
+            ipma_data_manager::DataError::Conflict(msg) => AppError::Conflict(msg),
             ipma_data_manager::DataError::Internal(msg) => AppError::Internal(msg),
         }
     }
@@ -115,7 +117,22 @@ impl From<ipma_visualization::VisualizationError> for AppError {
             ipma_visualization::VisualizationError::Database(msg) => AppError::Database(msg),
             ipma_visualization::VisualizationError::NotFound(msg) => AppError::NotFound(msg),
             ipma_visualization::VisualizationError::Validation(msg) => AppError::Validation(msg),
+            ipma_visualization::VisualizationError::Conflict(msg) => AppError::Conflict(msg),
             ipma_visualization::VisualizationError::Internal(msg) => AppError::Internal(msg),
+        }
+    }
+}
+
+impl From<ipma_scheduler::SchedulerError> for AppError {
+    fn from(err: ipma_scheduler::SchedulerError) -> Self {
+        match err {
+            ipma_scheduler::SchedulerError::Database(msg) => AppError::Database(msg),
+            ipma_scheduler::SchedulerError::NotFound(msg) => AppError::NotFound(msg),
+            ipma_scheduler::SchedulerError::Validation(msg) => AppError::Validation(msg),
+            ipma_scheduler::SchedulerError::Conflict(msg) => AppError::Conflict(msg),
+            ipma_scheduler::SchedulerError::TaskNotFound(msg) => AppError::NotFound(msg),
+            ipma_scheduler::SchedulerError::Execution(msg) => AppError::Internal(msg),
+            ipma_scheduler::SchedulerError::Internal(msg) => AppError::Internal(msg),
         }
     }
 }

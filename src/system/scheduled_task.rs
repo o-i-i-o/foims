@@ -3,12 +3,13 @@ use crate::error::AppError;
 use crate::models::ApiResponse;
 use actix_web::{HttpResponse, web};
 use chrono::Utc;
+use ipma_data_manager::DatabaseConfig;
+use ipma_scheduler::{TaskContext, TaskLog, calculate_next_run};
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::models::{ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
-use crate::system::cron::{calculate_next_run, execute_task_by_type};
 
 pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
@@ -209,8 +210,21 @@ pub async fn run_scheduled_task_now(
     let task_name = task.name.clone();
     let task_type = task.task_type.clone();
 
-    let db_config = pool.db_config.clone();
-    let result = execute_task_by_type(&conn, &task.task_type, &task.config, &db_config).await;
+    let db_config = DatabaseConfig {
+        host: pool.db_config.host.clone(),
+        port: pool.db_config.port,
+        database: pool.db_config.database.clone(),
+        username: pool.db_config.username.clone(),
+        password: pool.db_config.password.clone(),
+    };
+
+    let ctx = TaskContext {
+        pool: conn.clone(),
+        config: task.config.clone(),
+        db_config,
+    };
+
+    let result = state.task_registry.execute(&task.task_type, &ctx).await;
 
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_milliseconds() as i32;
@@ -222,7 +236,7 @@ pub async fn run_scheduled_task_now(
         ),
         Err(e) => (
             "failed",
-            serde_json::json!({ "error": e, "task_type": task_type }),
+            serde_json::json!({ "error": e.to_string(), "task_type": task_type }),
         ),
     };
 
@@ -279,7 +293,7 @@ pub async fn run_scheduled_task_now(
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
-        serde_json::json!({"result": result}),
+        serde_json::json!({"result": result.map_err(|e| e.to_string())}),
         "执行定时任务成功",
     )))
 }
@@ -296,7 +310,7 @@ pub async fn get_task_logs(
     let conn = state.pool()?.get_conn();
 
     let logs = if let Some(name) = task_name {
-        sqlx::query_as::<_, crate::models::TaskLog>(
+        sqlx::query_as::<_, TaskLog>(
             "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs WHERE task_name = $1 ORDER BY start_time DESC LIMIT $2"
         )
         .bind(&name)
@@ -305,7 +319,7 @@ pub async fn get_task_logs(
         .await
         ?
     } else {
-        sqlx::query_as::<_, crate::models::TaskLog>(
+        sqlx::query_as::<_, TaskLog>(
             "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
         )
         .bind(limit)

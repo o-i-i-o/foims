@@ -35,8 +35,14 @@ pub enum DataError {
     #[error("数据库错误: {0}")]
     Database(String),
 
+    #[error("资源未找到: {0}")]
+    NotFound(String),
+
     #[error("验证失败: {0}")]
     Validation(String),
+
+    #[error("冲突: {0}")]
+    Conflict(String),
 
     #[error("内部错误: {0}")]
     Internal(String),
@@ -46,7 +52,9 @@ impl DataError {
     pub fn status_code(&self) -> StatusCode {
         match self {
             DataError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            DataError::NotFound(_) => StatusCode::NOT_FOUND,
             DataError::Validation(_) => StatusCode::BAD_REQUEST,
+            DataError::Conflict(_) => StatusCode::CONFLICT,
             DataError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -67,7 +75,7 @@ impl From<sqlx::Error> for DataError {
         match &err {
             sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
                 Some("23505") => {
-                    DataError::Validation("数据已存在，请检查是否有重复记录".to_string())
+                    DataError::Conflict("数据已存在，请检查是否有重复记录".to_string())
                 }
                 Some("23503") => DataError::Validation("关联数据不存在或无法删除".to_string()),
                 Some("23514") => DataError::Validation(db_err.message().to_string()),
@@ -89,7 +97,7 @@ impl From<sqlx::Error> for DataError {
                     }
                 }
             },
-            sqlx::Error::RowNotFound => DataError::Validation("资源不存在".to_string()),
+            sqlx::Error::RowNotFound => DataError::NotFound("资源不存在".to_string()),
             sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
                 DataError::Database("数据库连接异常，请稍后重试".to_string())
             }
@@ -110,6 +118,7 @@ impl From<validator::ValidationErrors> for DataError {
 
 pub type DataResult<T> = Result<T, DataError>;
 
+#[derive(Debug, Clone)]
 pub struct DatabaseConfig {
     pub host: String,
     pub port: u16,
@@ -122,11 +131,6 @@ pub trait DataProvider: Clone + Send + Sync + 'static {
     fn pool(&self) -> DataResult<PgPool>;
     fn database_config(&self) -> DatabaseConfig;
     fn decrypt_password(&self, encrypted: &str) -> DataResult<String>;
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ImportRequest {
-    pub mode: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

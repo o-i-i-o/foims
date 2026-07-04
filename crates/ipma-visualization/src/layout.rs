@@ -17,6 +17,9 @@ pub enum VisualizationError {
     #[error("验证失败: {0}")]
     Validation(String),
 
+    #[error("冲突: {0}")]
+    Conflict(String),
+
     #[error("内部错误: {0}")]
     Internal(String),
 }
@@ -31,6 +34,7 @@ impl actix_web::ResponseError for VisualizationError {
             VisualizationError::Database(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
             VisualizationError::NotFound(_) => actix_web::http::StatusCode::NOT_FOUND,
             VisualizationError::Validation(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            VisualizationError::Conflict(_) => actix_web::http::StatusCode::CONFLICT,
             VisualizationError::Internal(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -41,16 +45,38 @@ impl From<sqlx::Error> for VisualizationError {
         match &err {
             sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
                 Some("23505") => {
-                    VisualizationError::Validation("数据已存在，请检查是否有重复记录".to_string())
+                    VisualizationError::Conflict("数据已存在，请检查是否有重复记录".to_string())
                 }
                 Some("23503") => {
                     VisualizationError::Validation("关联数据不存在或无法删除".to_string())
                 }
                 Some("23514") => VisualizationError::Validation(db_err.message().to_string()),
                 Some("22P02") => VisualizationError::Validation("数据格式无效".to_string()),
-                _ => VisualizationError::Database("数据库操作失败，请稍后重试".to_string()),
+                Some("22023") => VisualizationError::Validation("参数值无效".to_string()),
+                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
+                    VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
+                }
+                Some("57014") => {
+                    VisualizationError::Database("数据库操作超时，请稍后重试".to_string())
+                }
+                _ => {
+                    let err_str = err.to_string();
+                    if err_str.contains("invalid cidr") {
+                        VisualizationError::Validation("不符合CIDR格式".to_string())
+                    } else if err_str.contains("invalid inet") {
+                        VisualizationError::Validation("不符合IP地址格式".to_string())
+                    } else {
+                        VisualizationError::Database("数据库操作失败，请稍后重试".to_string())
+                    }
+                }
             },
             sqlx::Error::RowNotFound => VisualizationError::NotFound("资源不存在".to_string()),
+            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
+                VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
+            }
+            sqlx::Error::Io(_) => {
+                VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
+            }
             _ => VisualizationError::Database("数据库操作失败，请稍后重试".to_string()),
         }
     }

@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager"]
+members = [".", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler"]
 resolver = "2"
 
 [workspace.package]
@@ -45,9 +45,15 @@ base64 = "0.22.1"
 # Error handling
 thiserror = "2.0.18"
 
+# Async trait
+async-trait = "0.1.88"
+
+# Cron scheduler
+tokio-cron-scheduler = "0.15.1"
+
 [package]
 name = "ipma"
-version = "0.10.2"
+version = "0.10.3"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -58,6 +64,7 @@ license = "MIT"
 ipma-init = { path = "crates/ipma-init" }
 ipma-visualization = { path = "crates/ipma-visualization" }
 ipma-data-manager = { path = "crates/ipma-data-manager" }
+ipma-scheduler = { path = "crates/ipma-scheduler" }
 
 # Workspace dependencies (使用共享版本)
 actix-web = { workspace = true }
@@ -77,6 +84,7 @@ base64 = { workspace = true }
 csv = { workspace = true }
 zip = { workspace = true }
 thiserror = { workspace = true }
+async-trait = { workspace = true }
 
 # 主项目特有依赖
 actix-files = "0.6.10"
@@ -102,8 +110,6 @@ macaddr = "1.0.1"
 pnet = "0.35"
 
 async-snmp = "0.12.0"
-
-tokio-cron-scheduler = "0.15.1"
 
 config = { version = "0.15.24", features = ["toml"] }
 toml = "1.1.2"

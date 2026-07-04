@@ -1,0 +1,20 @@
+[package]
+name = "ipma-scheduler"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "IPMA Scheduler - Cron scheduling infrastructure and task management"
+license = "MIT"
+
+[dependencies]
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-cron-scheduler = "0.15.1"
+async-trait = "0.1.88"
+ipma-data-manager = { path = "../ipma-data-manager" }

@@ -804,51 +804,6 @@ pub struct PoolStatus {
     pub is_closed: bool,
 }
 
-pub struct PgPassFile {
-    path: std::path::PathBuf,
-}
-
-impl PgPassFile {
-    pub fn create(
-        host: &str,
-        port: u16,
-        database: &str,
-        username: &str,
-        password: &str,
-    ) -> Result<Self, String> {
-        let pgpass_dir = std::env::temp_dir();
-        let pgpass_path = pgpass_dir.join(format!(
-            ".pgpass_ipma_{}_{}_{}",
-            username,
-            database,
-            std::process::id()
-        ));
-        let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        std::fs::write(&pgpass_path, &pgpass_content)
-            .map_err(|e| format!("写入 .pgpass 文件失败: {e}"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&pgpass_path, std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| {
-                    let _ = std::fs::remove_file(&pgpass_path);
-                    format!("设置 .pgpass 权限失败: {e}")
-                })?;
-        }
-        Ok(Self { path: pgpass_path })
-    }
-
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-}
-
-impl Drop for PgPassFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

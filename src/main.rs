@@ -22,10 +22,14 @@ use ipma::db::DbPool;
 use ipma::routes::init_routes;
 use ipma::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use ipma::system::config::init_start_time;
-use ipma::system::cron::{SchedulerState, start_scheduler};
+use ipma::system::task_executors::{
+    BackupTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor, TokenCleanupTaskExecutor,
+    TokenUsageCleanupTaskExecutor,
+};
 use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{RateLimitMiddleware, RateLimiter, start_cleanup_task};
 use ipma_init::{DatabaseConfig as InitDatabaseConfig, InitContext};
+use ipma_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
@@ -270,18 +274,81 @@ async fn main() -> std::io::Result<()> {
     info!("[中文] 系统启动时间初始化完成");
     info!("[English] System startup time initialized");
 
-    let mut scheduler_state: Option<SchedulerState> = None;
+    let mut running_scheduler: Option<RunningScheduler> = None;
+
+    let task_registry = Arc::new({
+        let mut registry = TaskRegistry::new();
+        registry.register(Box::new(BackupTaskExecutor));
+        registry.register(Box::new(TokenCleanupTaskExecutor));
+        registry.register(Box::new(TokenUsageCleanupTaskExecutor));
+        registry.register(Box::new(LogCleanupTaskExecutor));
+        registry.register(Box::new(MacSyncTaskExecutor));
+        registry
+    });
 
     if let Some(ref db_pool) = pool {
-        use std::sync::Arc;
-        let pool_for_scheduler = Arc::new(db_pool.clone());
-        match start_scheduler(pool_for_scheduler).await {
-            Ok(state) => {
-                scheduler_state = Some(state);
-                info!("调度器启动成功");
+        let scheduler_db_config = ipma_data_manager::DatabaseConfig {
+            host: db_pool.db_config.host.clone(),
+            port: db_pool.db_config.port,
+            database: db_pool.db_config.database.clone(),
+            username: db_pool.db_config.username.clone(),
+            password: db_pool.db_config.password.clone(),
+        };
+
+        match SchedulerState::new(
+            db_pool.get_conn(),
+            scheduler_db_config,
+            task_registry.clone(),
+        )
+        .await
+        {
+            Ok(mut state) => {
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_backup",
+                        "0 0 0 * * *",
+                        "backup",
+                        serde_json::json!({}),
+                    )
+                    .await
+                {
+                    error!("注册备份定时任务失败: {}", e);
+                }
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_token_cleanup",
+                        "0 0 * * * *",
+                        "token_cleanup",
+                        serde_json::json!({}),
+                    )
+                    .await
+                {
+                    error!("注册Token清理定时任务失败: {}", e);
+                }
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_usage_cleanup",
+                        "0 0 2 * * *",
+                        "token_usage_cleanup",
+                        serde_json::json!({}),
+                    )
+                    .await
+                {
+                    error!("注册Token使用记录清理定时任务失败: {}", e);
+                }
+
+                match state.start().await {
+                    Ok(running) => {
+                        running_scheduler = Some(running);
+                        info!("调度器启动成功");
+                    }
+                    Err(e) => {
+                        error!("启动调度器失败: {}", e);
+                    }
+                }
             }
             Err(e) => {
-                error!("启动cron调度器失败: {:?}", e);
+                error!("创建调度器失败: {}", e);
             }
         }
 
@@ -387,8 +454,10 @@ async fn main() -> std::io::Result<()> {
         .clone()
         .unwrap_or_else(|| "http2".to_string());
 
-    let app_state =
-        Data::new(AppState::new(config.clone(), pool.clone()).map_err(std::io::Error::other)?);
+    let app_state = Data::new(
+        AppState::new(config.clone(), pool.clone(), task_registry.clone())
+            .map_err(std::io::Error::other)?,
+    );
 
     app_state
         .jwt_utils
@@ -603,9 +672,9 @@ async fn main() -> std::io::Result<()> {
             info!("后台任务已发送关闭信号");
 
             info!("4. 关闭调度器...");
-            if let Some(state) = scheduler_state
+            if let Some(scheduler) = running_scheduler
                 && let Err(e) =
-                    tokio::time::timeout(tokio::time::Duration::from_secs(5), state.shutdown())
+                    tokio::time::timeout(tokio::time::Duration::from_secs(5), scheduler.shutdown())
                         .await
             {
                 warn!("调度器关闭超时: {}", e);

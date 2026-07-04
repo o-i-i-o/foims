@@ -1,8 +1,110 @@
 use crate::types::{ApiResponse, ClearLogsRequest, DataError, DataProvider, DataResult};
 use actix_web::{HttpResponse, web};
 use serde_json::json;
+use sqlx::PgPool;
 use validator::Validate;
 
+/// 核心日志清理逻辑，返回删除的行数
+pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataResult<u64> {
+    if days < 0 {
+        return Err(DataError::Validation("保留天数不能为负数".to_string()));
+    }
+
+    match log_type {
+        "operation" => {
+            let result = if days == 0 {
+                sqlx::query("DELETE FROM operation_logs")
+                    .execute(pool)
+                    .await
+            } else {
+                sqlx::query(
+                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+            };
+            Ok(result.map_err(DataError::from)?.rows_affected())
+        }
+        "login" => {
+            let result = if days == 0 {
+                sqlx::query("DELETE FROM login_logs").execute(pool).await
+            } else {
+                sqlx::query(
+                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+            };
+            Ok(result.map_err(DataError::from)?.rows_affected())
+        }
+        "notification" => {
+            let result = if days == 0 {
+                sqlx::query("DELETE FROM notifications").execute(pool).await
+            } else {
+                sqlx::query(
+                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+            };
+            Ok(result.map_err(DataError::from)?.rows_affected())
+        }
+        "all" => {
+            let mut deleted = 0u64;
+
+            if days == 0 {
+                if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
+                    .execute(pool)
+                    .await
+                {
+                    deleted += r.rows_affected();
+                }
+                if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(pool).await {
+                    deleted += r.rows_affected();
+                }
+                if let Ok(r) = sqlx::query("DELETE FROM notifications").execute(pool).await {
+                    deleted += r.rows_affected();
+                }
+            } else {
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+                {
+                    deleted += r.rows_affected();
+                }
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+                {
+                    deleted += r.rows_affected();
+                }
+                if let Ok(r) = sqlx::query(
+                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                )
+                .bind(days)
+                .execute(pool)
+                .await
+                {
+                    deleted += r.rows_affected();
+                }
+            }
+
+            Ok(deleted)
+        }
+        _ => Err(DataError::Validation("无效的日志类型".to_string())),
+    }
+}
+
+/// API 端点：清理日志
 pub async fn clear_logs<P: DataProvider>(
     provider: P,
     req: web::Json<ClearLogsRequest>,
@@ -10,115 +112,10 @@ pub async fn clear_logs<P: DataProvider>(
     let req = req.into_inner();
     req.validate()?;
     let days = req.days.unwrap_or(0);
-
-    if days < 0 {
-        return Err(DataError::Validation("保留天数不能为负数".to_string()));
-    }
-
     let pool = provider.pool()?;
 
-    let result = match req.log_type.as_str() {
-        "operation" => {
-            if days == 0 {
-                sqlx::query("DELETE FROM operation_logs")
-                    .execute(&pool)
-                    .await
-            } else {
-                sqlx::query(
-                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-            }
-        }
-        "login" => {
-            if days == 0 {
-                sqlx::query("DELETE FROM login_logs").execute(&pool).await
-            } else {
-                sqlx::query(
-                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-            }
-        }
-        "notification" => {
-            if days == 0 {
-                sqlx::query("DELETE FROM notifications")
-                    .execute(&pool)
-                    .await
-            } else {
-                sqlx::query(
-                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-            }
-        }
-        "all" => {
-            let mut deleted = 0u64;
+    let deleted = clear_logs_core(&pool, days, &req.log_type).await?;
 
-            if days == 0 {
-                if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
-                    .execute(&pool)
-                    .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(&pool).await {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query("DELETE FROM notifications")
-                    .execute(&pool)
-                    .await
-                {
-                    deleted += r.rows_affected();
-                }
-            } else {
-                if let Ok(r) = sqlx::query(
-                    "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query(
-                    "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query(
-                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                )
-                .bind(days)
-                .execute(&pool)
-                .await
-                {
-                    deleted += r.rows_affected();
-                }
-            }
-
-            return Ok(HttpResponse::Ok().json(ApiResponse::success(
-                json!({ "deleted": deleted }),
-                &format!("成功清理 {deleted} 条日志记录"),
-            )));
-        }
-        _ => {
-            return Err(DataError::Validation("无效的日志类型".to_string()));
-        }
-    };
-
-    let r = result.map_err(DataError::from)?;
-    let deleted = r.rows_affected();
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         json!({ "deleted": deleted }),
         &format!("成功清理 {deleted} 条日志记录"),

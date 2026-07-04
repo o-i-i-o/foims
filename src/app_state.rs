@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use crate::auth::utils::JwtUtils;
 use crate::config::Config;
 use crate::crypto::decrypt_password;
 use crate::db::DbPool;
 use crate::error::AppError;
 use ipma_data_manager::{DataError, DataProvider, DataResult, DatabaseConfig};
+use ipma_scheduler::TaskRegistry;
 use sqlx::PgPool;
 
 #[derive(Clone)]
@@ -11,15 +14,21 @@ pub struct AppState {
     pub config: Config,
     pub pool: Option<DbPool>,
     pub jwt_utils: JwtUtils,
+    pub task_registry: Arc<TaskRegistry>,
 }
 
 impl AppState {
-    pub fn new(config: Config, pool: Option<DbPool>) -> Result<Self, String> {
+    pub fn new(
+        config: Config,
+        pool: Option<DbPool>,
+        task_registry: Arc<TaskRegistry>,
+    ) -> Result<Self, String> {
         let jwt_utils = JwtUtils::new(&config)?;
         Ok(Self {
             config,
             pool,
             jwt_utils,
+            task_registry,
         })
     }
 
