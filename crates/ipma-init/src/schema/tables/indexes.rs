@@ -34,6 +34,19 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_name ON scheduled_tasks(name)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
+        "CREATE INDEX IF NOT EXISTS idx_nodes_parent_id ON nodes(parent_id)",
+        "CREATE INDEX IF NOT EXISTS idx_nodes_node_type ON nodes(node_type)",
+        "CREATE INDEX IF NOT EXISTS idx_rooms_node_id ON rooms(node_id)",
+        "CREATE INDEX IF NOT EXISTS idx_access_points_room_id ON access_points(room_id)",
+        "CREATE INDEX IF NOT EXISTS idx_access_points_cabinet_id ON access_points(cabinet_id)",
+        "CREATE INDEX IF NOT EXISTS idx_access_points_switch_port_id ON access_points(switch_port_id)",
+        "CREATE INDEX IF NOT EXISTS idx_access_points_peer_ap_id ON access_points(peer_access_point_id)",
+        "CREATE INDEX IF NOT EXISTS idx_devices_workstation_id ON devices(workstation_id)",
+        "CREATE INDEX IF NOT EXISTS idx_devices_position_id ON devices(position_id)",
+        "CREATE INDEX IF NOT EXISTS idx_devices_access_point_id ON devices(access_point_id)",
+        "CREATE INDEX IF NOT EXISTS idx_devices_switch_port_id ON devices(switch_port_id)",
+        "CREATE INDEX IF NOT EXISTS idx_devices_device_type ON devices(device_type)",
+        "CREATE INDEX IF NOT EXISTS idx_ips_device_id ON ips(device_id)",
     ];
 
     for idx in &indexes {

@@ -51,7 +51,7 @@ pub async fn get_rooms(
             .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms {order_clause} LIMIT $1 OFFSET $2"))
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, node_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -68,7 +68,7 @@ pub async fn get_rooms(
         .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, node_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)
@@ -104,6 +104,8 @@ pub async fn get_rooms(
             id: room.id,
             name: room.name,
             room_type: room.room_type,
+            node_id: room.node_id,
+            node_name: None,
             description: room.description,
             networks: room_networks,
             workstation_count,
@@ -146,12 +148,13 @@ pub async fn create_room(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO rooms (id, name, room_type, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO rooms (id, name, room_type, node_id, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(&req.room_type)
+    .bind(req.node_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -176,6 +179,7 @@ pub async fn create_room(
         id,
         name: req.name.clone(),
         room_type: req.room_type.clone(),
+        node_id: req.node_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -213,7 +217,7 @@ pub async fn get_room(
     let id = *id_path;
 
     let room = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+        "SELECT id, name, room_type, node_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound("房间未找到".to_string()))?;
@@ -236,10 +240,21 @@ pub async fn get_room(
             .await
             .unwrap_or(0);
 
+    let node_name: Option<String> = if let Some(nid) = room.node_id {
+        sqlx::query_scalar("SELECT name FROM nodes WHERE id = $1")
+            .bind(nid)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?
+    } else {
+        None
+    };
+
     let room_with_networks = RoomWithNetworks {
         id: room.id,
         name: room.name,
         room_type: room.room_type,
+        node_id: room.node_id,
+        node_name,
         description: room.description,
         networks: room_networks,
         workstation_count,
@@ -280,12 +295,15 @@ pub async fn update_room(
         "UPDATE rooms SET
          name = COALESCE($1, name),
          room_type = COALESCE($2, room_type),
-         description = COALESCE($3, description),
-         updated_at = $4
-         WHERE id = $5",
+         node_id = CASE WHEN $3::boolean THEN $4 ELSE node_id END,
+         description = COALESCE($5, description),
+         updated_at = $6
+         WHERE id = $7",
     )
     .bind(&req.name)
     .bind(&req.room_type)
+    .bind(req.node_id.is_some())
+    .bind(req.node_id.flatten())
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -314,7 +332,7 @@ pub async fn update_room(
     }
 
     let room = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+        "SELECT id, name, room_type, node_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 

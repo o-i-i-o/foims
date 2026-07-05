@@ -6,6 +6,31 @@ use validator::{Validate, ValidationError};
 
 // ==================== 验证函数 ====================
 
+pub fn validate_node_type_string(node_type: &str) -> Result<(), ValidationError> {
+    match node_type {
+        "campus" | "building" | "floor" => Ok(()),
+        _ => Err(ValidationError::new("节点类型必须是campus/building/floor")),
+    }
+}
+
+fn validate_node_type_option(node_type: &&String) -> Result<(), ValidationError> {
+    validate_node_type_string(node_type)
+}
+
+pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
+    match device_type {
+        "pc" | "laptop" | "printer" | "server" | "network_device" | "camera" | "phone" | "ap"
+        | "other" => Ok(()),
+        _ => Err(ValidationError::new(
+            "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other",
+        )),
+    }
+}
+
+fn validate_device_type_option(device_type: &&String) -> Result<(), ValidationError> {
+    validate_device_type_string(device_type)
+}
+
 pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError> {
     let room_type_lower = room_type.to_lowercase();
     if room_type_lower == "office" || room_type_lower == "data_center" {
@@ -371,6 +396,7 @@ pub struct Room {
     pub id: Uuid,
     pub name: String,
     pub room_type: String,
+    pub node_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -404,6 +430,8 @@ pub struct RoomWithNetworks {
     pub id: Uuid,
     pub name: String,
     pub room_type: String,
+    pub node_id: Option<Uuid>,
+    pub node_name: Option<String>,
     pub description: Option<String>,
     pub networks: Vec<NetworkInfo>,
     pub workstation_count: i64,
@@ -420,6 +448,7 @@ pub struct RoomCreate {
         message = "房间类型必须是office或data_center"
     ))]
     pub room_type: String,
+    pub node_id: Option<Uuid>,
     pub network_ids: Vec<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -434,6 +463,7 @@ pub struct RoomUpdate {
         message = "房间类型必须是office或data_center"
     ))]
     pub room_type: Option<String>,
+    pub node_id: Option<Option<Uuid>>,
     pub network_ids: Option<Vec<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -605,6 +635,7 @@ pub struct IpManager {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Option<Uuid>,
     pub ip_address: String,
@@ -624,6 +655,7 @@ pub struct IpManagerWithNames {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
     pub network_id: Option<Uuid>,
@@ -631,8 +663,13 @@ pub struct IpManagerWithNames {
     pub cabinet_position_name: Option<String>,
     pub switch_name: Option<String>,
     pub switch_port_number: Option<String>,
+    pub connected_device_name: Option<String>,
+    pub connected_device_type: Option<String>,
+    pub access_point_name: Option<String>,
+    pub peer_access_point_name: Option<String>,
     pub room_name: Option<String>,
     pub cabinet_name: Option<String>,
+    pub node_name: Option<String>,
     pub network_name: String,
     pub network_region: String,
     pub ip_address: String,
@@ -651,6 +688,7 @@ pub struct IpManagerCreate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Option<Uuid>,
     #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
@@ -667,6 +705,7 @@ pub struct AutoAssignIpRequest {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
     pub mac_address: Option<String>,
     #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
@@ -684,6 +723,7 @@ pub struct IpManagerUpdate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub ip_address: Option<String>,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
@@ -1154,4 +1194,289 @@ pub struct OrganizationUpdate {
     pub org_type: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+}
+
+// ==================== 节点模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Node {
+    pub id: Uuid,
+    pub name: String,
+    pub node_type: String,
+    pub parent_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NodeTreeNode {
+    pub id: Uuid,
+    pub name: String,
+    pub node_type: String,
+    pub parent_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub children: Vec<NodeTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NodeWithChildren {
+    pub id: Uuid,
+    pub name: String,
+    pub node_type: String,
+    pub parent_id: Option<Uuid>,
+    pub parent_name: Option<String>,
+    pub description: Option<String>,
+    pub children: Vec<Node>,
+    pub child_count: i64,
+    pub room_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NodeCreate {
+    #[validate(length(min = 1, max = 100, message = "节点名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    #[validate(custom(
+        function = "validate_node_type_string",
+        message = "节点类型必须是campus/building/floor"
+    ))]
+    pub node_type: String,
+    pub parent_id: Option<Uuid>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NodeUpdate {
+    #[validate(length(min = 1, max = 100, message = "节点名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(custom(
+        function = "validate_node_type_option",
+        message = "节点类型必须是campus/building/floor"
+    ))]
+    pub node_type: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// ==================== 接入点模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct AccessPoint {
+    pub id: Uuid,
+    pub name: String,
+    pub ap_type: String,
+    pub room_id: Uuid,
+    pub cabinet_id: Option<Uuid>,
+    pub peer_access_point_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct AccessPointWithDetails {
+    pub id: Uuid,
+    pub name: String,
+    pub ap_type: String,
+    pub room_id: Uuid,
+    pub room_name: Option<String>,
+    pub cabinet_id: Option<Uuid>,
+    pub cabinet_name: Option<String>,
+    pub peer_access_point_id: Option<Uuid>,
+    pub peer_access_point_name: Option<String>,
+    pub switch_port_id: Option<Uuid>,
+    pub connected_switch_port: Option<String>,
+    pub connected_switch_name: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct AccessPointCreate {
+    #[validate(length(min = 1, max = 100, message = "接入点名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    pub ap_type: Option<String>,
+    pub room_id: Uuid,
+    pub cabinet_id: Option<Uuid>,
+    pub peer_access_point_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct AccessPointUpdate {
+    #[validate(length(min = 1, max = 100, message = "接入点名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    pub ap_type: Option<String>,
+    pub room_id: Option<Uuid>,
+    pub cabinet_id: Option<Option<Uuid>>,
+    pub peer_access_point_id: Option<Option<Uuid>>,
+    pub switch_port_id: Option<Option<Uuid>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct AccessPointLinkPeer {
+    pub peer_access_point_id: Uuid,
+}
+
+// ==================== 设备模板模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct DeviceTemplate {
+    pub id: Uuid,
+    pub name: String,
+    pub device_type: String,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct DeviceTemplateSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub device_type: String,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct DeviceTemplateCreate {
+    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    #[validate(custom(
+        function = "validate_device_type_option",
+        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+    ))]
+    pub device_type: Option<String>,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct DeviceTemplateUpdate {
+    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(custom(
+        function = "validate_device_type_option",
+        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+    ))]
+    pub device_type: Option<String>,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+// ==================== 设备模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Device {
+    pub id: Uuid,
+    pub name: String,
+    pub device_type: String,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub access_point_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub template_id: Option<Uuid>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct DeviceWithDetails {
+    pub id: Uuid,
+    pub name: String,
+    pub device_type: String,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub workstation_id: Option<Uuid>,
+    pub workstation_name: Option<String>,
+    pub position_id: Option<Uuid>,
+    pub room_id: Option<Uuid>,
+    pub room_name: Option<String>,
+    pub cabinet_id: Option<Uuid>,
+    pub cabinet_name: Option<String>,
+    pub start_u: Option<i32>,
+    pub end_u: Option<i32>,
+    pub access_point_id: Option<Uuid>,
+    pub access_point_name: Option<String>,
+    pub access_point_type: Option<String>,
+    pub switch_port_id: Option<Uuid>,
+    pub connected_switch_port: Option<String>,
+    pub connected_switch_name: Option<String>,
+    pub template_id: Option<Uuid>,
+    pub template_name: Option<String>,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct DeviceCreate {
+    #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
+    pub name: String,
+    #[validate(custom(
+        function = "validate_device_type_option",
+        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+    ))]
+    pub device_type: Option<String>,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub workstation_id: Option<Uuid>,
+    pub position_id: Option<Uuid>,
+    pub access_point_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub template_id: Option<Uuid>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct DeviceUpdate {
+    #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
+    pub name: Option<String>,
+    #[validate(custom(
+        function = "validate_device_type_option",
+        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+    ))]
+    pub device_type: Option<String>,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub workstation_id: Option<Option<Uuid>>,
+    pub position_id: Option<Option<Uuid>>,
+    pub access_point_id: Option<Option<Uuid>>,
+    pub switch_port_id: Option<Option<Uuid>>,
+    pub ips: Option<Vec<IpManagerCreate>>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct DeviceConnectRequest {
+    pub access_point_id: Option<Option<Uuid>>,
+    pub switch_port_id: Option<Option<Uuid>>,
 }

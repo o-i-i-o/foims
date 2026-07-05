@@ -1,10 +1,14 @@
+mod access_points;
 mod cabinets;
+mod device_templates;
+mod devices;
 mod element;
 mod encryption;
 mod indexes;
 mod ips;
 mod logs;
 mod network;
+mod nodes;
 mod notifications;
 mod org_templates;
 mod organizations;
@@ -24,9 +28,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     users::create(pool).await?;
     network::create(pool).await?;
+    nodes::create(pool).await?;
     rooms::create(pool).await?;
     cabinets::create(pool).await?;
     workstations::create(pool).await?;
+    device_templates::create(pool).await?;
+    access_points::create(pool).await?;
+    devices::create(pool).await?;
     switches::create(pool).await?;
     ips::create(pool).await?;
     logs::create(pool).await?;

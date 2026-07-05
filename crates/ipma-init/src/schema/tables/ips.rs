@@ -5,6 +5,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
             switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
+            device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
             device_type VARCHAR(20) NOT NULL,
             network_id UUID REFERENCES network_cidrs(id),
             ip_address INET NOT NULL,
@@ -16,11 +17,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             last_mac VARCHAR(20),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch')),
-            CONSTRAINT chk_device_consistency CHECK (
-                (device_type = 'workstation' AND workstation_id IS NOT NULL AND position_id IS NULL) OR
-                (device_type = 'cabinet_position' AND position_id IS NOT NULL AND workstation_id IS NULL) OR
-                (device_type = 'switch' AND position_id IS NOT NULL AND workstation_id IS NULL)
+            CONSTRAINT chk_device_type CHECK (device_type IN ('workstation', 'cabinet_position', 'switch', 'device')),
+            CONSTRAINT chk_ip_device_ref CHECK (
+                device_id IS NOT NULL OR workstation_id IS NOT NULL OR position_id IS NOT NULL
             )
         )",
     )
