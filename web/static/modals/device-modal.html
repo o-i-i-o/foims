@@ -1,0 +1,93 @@
+<template id="device-modal-template">
+<div id="device-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="device-modal-title" data-i18n="device.add">Add Device</h3>
+      <span class="close" data-modal-id="device-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="device-form">
+        <input type="hidden" id="device-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-name"><span data-i18n="device.name">Device Name</span><span class="required">*</span></label>
+            <input type="text" id="device-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="device-type" data-i18n="device.device_type">Device Type</label>
+            <select id="device-type" name="device_type">
+              <option value="other" data-i18n="device_type.other">Other</option>
+              <option value="pc" data-i18n="device_type.pc">PC</option>
+              <option value="laptop" data-i18n="device_type.laptop">Laptop</option>
+              <option value="printer" data-i18n="device_type.printer">Printer</option>
+              <option value="server" data-i18n="device_type.server">Server</option>
+              <option value="network_device" data-i18n="device_type.network_device">Network Device</option>
+              <option value="camera" data-i18n="device_type.camera">Camera</option>
+              <option value="phone" data-i18n="device_type.phone">Phone</option>
+              <option value="ap" data-i18n="device_type.ap">Access Point</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-template-id" data-i18n="device.template">Template</label>
+            <select id="device-template-id" name="template_id">
+              <option value="" data-i18n="device.select_template">Select Template</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-serial-number" data-i18n="device.serial_number">Serial Number</label>
+            <input type="text" id="device-serial-number" name="serial_number" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-brand" data-i18n="device.brand">Brand</label>
+            <input type="text" id="device-brand" name="brand" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="device-model" data-i18n="device.model">Model</label>
+            <input type="text" id="device-model" name="model" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-workstation-id" data-i18n="device.workstation">Workstation</label>
+            <select id="device-workstation-id" name="workstation_id">
+              <option value="" data-i18n="device.select_workstation">Select Workstation</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-position-id" data-i18n="device.position">Cabinet Position</label>
+            <select id="device-position-id" name="position_id">
+              <option value="" data-i18n="device.select_position">Select Position</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-access-point-id" data-i18n="device.access_point">Access Point</label>
+            <select id="device-access-point-id" name="access_point_id">
+              <option value="" data-i18n="device.select_access_point">Select Access Point</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-switch-port-id" data-i18n="device.switch_port">Switch Port</label>
+            <select id="device-switch-port-id" name="switch_port_id">
+              <option value="" data-i18n="device.select_switch_port">Select Switch Port</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="device-description" data-i18n="common.description">Description</label>
+          <textarea id="device-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="device-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="device-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

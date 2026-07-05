@@ -213,6 +213,10 @@
           <button class="tab-btn" data-tab="workstations" role="tab" aria-selected="false" aria-controls="workstations-tab" data-i18n="resources.workstations">Workstations</button>
           <button class="tab-btn" data-tab="cabinets" role="tab" aria-selected="false" aria-controls="cabinets-tab" data-i18n="resources.cabinets">Cabinets</button>
           <button class="tab-btn" data-tab="cabinet-positions" role="tab" aria-selected="false" aria-controls="cabinet-positions-tab" data-i18n="resources.cabinet_positions">Cabinet Positions</button>
+          <button class="tab-btn" data-tab="nodes" role="tab" aria-selected="false" aria-controls="nodes-tab" data-i18n="resources.nodes">Nodes</button>
+          <button class="tab-btn" data-tab="access-points" role="tab" aria-selected="false" aria-controls="access-points-tab" data-i18n="resources.access_points">Access Points</button>
+          <button class="tab-btn" data-tab="device-templates" role="tab" aria-selected="false" aria-controls="device-templates-tab" data-i18n="resources.device_templates">Device Templates</button>
+          <button class="tab-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devices-tab" data-i18n="resources.devices">Devices</button>
         </div>
 
         <div id="network-regions-tab" class="tab-content active" role="tabpanel">
@@ -325,6 +329,7 @@
                   <th data-i18n="common.index" class="index-column">序号</th>
                   <th data-i18n="room.name" class="sortable" data-sort="name">Room Name</th>
                   <th data-i18n="room.type" class="sortable" data-sort="room_type">Room Type</th>
+                  <th data-i18n="node.name" class="sortable" data-sort="node_name">Node</th>
                   <th data-i18n="room.networks">Networks</th>
                   <th data-i18n="common.description">Description</th>
                   <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
@@ -336,7 +341,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -421,6 +426,114 @@
               <tbody>
                 <tr class="empty-row">
                   <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="nodes-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="nodes-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="node.name" class="sortable" data-sort="name">Node Name</th>
+                  <th data-i18n="node.type">Node Type</th>
+                  <th data-i18n="node.parent">Parent Node</th>
+                  <th data-i18n="common.description">Description</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-node-btn" class="btn btn-primary btn-sm" data-i18n="node.add_node">Add Node</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="6" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="access-points-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="access-points-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="access_point.name" class="sortable" data-sort="name">Access Point Name</th>
+                  <th data-i18n="access_point.type">Type</th>
+                  <th data-i18n="access_point.room">Room</th>
+                  <th data-i18n="access_point.cabinet">Cabinet</th>
+                  <th data-i18n="access_point.peer">Peer</th>
+                  <th data-i18n="access_point.switch_port">Switch Port</th>
+                  <th data-i18n="common.description">Description</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-access-point-btn" class="btn btn-primary btn-sm" data-i18n="access_point.add">Add Access Point</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="device-templates-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="device-templates-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="device_template.name">Template Name</th>
+                  <th data-i18n="device_template.device_type">Device Type</th>
+                  <th data-i18n="device_template.brand">Brand</th>
+                  <th data-i18n="device_template.model">Model</th>
+                  <th data-i18n="common.description">Description</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-device-template-btn" class="btn btn-primary btn-sm" data-i18n="device_template.add">Add Device Template</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="devices-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="devices-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="device.name" class="sortable" data-sort="name">Device Name</th>
+                  <th data-i18n="device.device_type">Device Type</th>
+                  <th data-i18n="device.brand">Brand</th>
+                  <th data-i18n="device.model">Model</th>
+                  <th data-i18n="device.location">Location</th>
+                  <th data-i18n="device.connection">Connection</th>
+                  <th data-i18n="device.room">Room</th>
+                  <th data-i18n="common.description">Description</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-device-btn" class="btn btn-primary btn-sm" data-i18n="device.add">Add Device</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>

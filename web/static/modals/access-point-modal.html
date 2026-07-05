@@ -1,0 +1,66 @@
+<template id="access-point-modal-template">
+<div id="access-point-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="access-point-modal-title" data-i18n="access_point.add">Add Access Point</h3>
+      <span class="close" data-modal-id="access-point-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="access-point-form">
+        <input type="hidden" id="access-point-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="access-point-name"><span data-i18n="access_point.name">Access Point Name</span><span class="required">*</span></label>
+            <input type="text" id="access-point-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="access-point-type"><span data-i18n="access_point.type">Type</span></label>
+            <select id="access-point-type" name="ap_type">
+              <option value="wall_socket" data-i18n="access_point.type_wall_socket">Wall Socket</option>
+              <option value="patch_panel" data-i18n="access_point.type_patch_panel">Patch Panel</option>
+              <option value="wifi_ap" data-i18n="access_point.type_wifi_ap">WiFi AP</option>
+              <option value="other" data-i18n="access_point.type_other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="access-point-room-id"><span data-i18n="access_point.room">Room</span><span class="required">*</span></label>
+            <select id="access-point-room-id" name="room_id" required>
+              <option value="" data-i18n="access_point.select_room">Select Room</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="access-point-cabinet-id" data-i18n="access_point.cabinet">Cabinet</label>
+            <select id="access-point-cabinet-id" name="cabinet_id">
+              <option value="" data-i18n="access_point.select_cabinet">Select Cabinet</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="access-point-peer-id" data-i18n="access_point.peer">Peer Access Point</label>
+            <select id="access-point-peer-id" name="peer_access_point_id">
+              <option value="" data-i18n="access_point.select_peer">Select Peer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="access-point-switch-port-id" data-i18n="access_point.switch_port">Switch Port</label>
+            <select id="access-point-switch-port-id" name="switch_port_id">
+              <option value="" data-i18n="access_point.select_switch_port">Select Switch Port</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="access-point-description" data-i18n="common.description">Description</label>
+          <textarea id="access-point-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="access-point-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="access-point-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

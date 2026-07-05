@@ -9,6 +9,10 @@ import { loadRoomsData, initRoomSortEvents } from "./room.js";
 import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";
 import { loadCabinetsData, initCabinetSortEvents } from "./cabinet.js";
 import { loadCabinetPositionsData, initPositionSortEvents } from "./position.js";
+import { loadNodesData, initNodeSortEvents } from "./node.js";
+import { loadAccessPointsData, initAccessPointSortEvents } from "./accessPoint.js";
+import { loadDeviceTemplatesData } from "./deviceTemplate.js";
+import { loadDevicesData, initDeviceSortEvents } from "./device.js";
 import { nextFrame, safeAsync } from "../utils/helpers.js";
 
 // ==========================================
@@ -23,6 +27,10 @@ const TAB_DATA_LOADERS = {
   switches: loadSwitchesData,
   cabinets: loadCabinetsData,
   "cabinet-positions": loadCabinetPositionsData,
+  nodes: loadNodesData,
+  "access-points": loadAccessPointsData,
+  "device-templates": loadDeviceTemplatesData,
+  devices: loadDevicesData,
 };
 
 // ==========================================
@@ -49,6 +57,9 @@ export function initResourceTabs() {
   initWorkstationSortEvents();
   initCabinetSortEvents();
   initPositionSortEvents();
+  initNodeSortEvents();
+  initAccessPointSortEvents();
+  initDeviceSortEvents();
   bindTabClickHandlers(resourcesContainer);
   markAsInitialized(resourcesContainer);
   loadDefaultTabData(resourcesContainer);

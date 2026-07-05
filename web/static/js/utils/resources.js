@@ -260,3 +260,157 @@ export async function loadRoomNetworksForCabinetBySelect(roomSelect) {
   const roomId = roomSelect.value;
   await loadRoomNetworksForCabinet(roomId);
 }
+
+export async function loadNodesForSelect(selectId = "room-node-id") {
+  try {
+    const result = await apiGet("/api/resources/nodes/tree");
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('node.select_node') || '选择节点'}</option>`;
+
+    if (result.success && result.data) {
+      const flatNodes = flattenNodeTree(result.data);
+      flatNodes.forEach(node => {
+        const option = document.createElement("option");
+        option.value = node.id;
+        const indent = "\u00A0\u00A0\u00A0\u00A0".repeat(node.depth);
+        const typeLabels = { campus: t('node.type_campus'), building: t('node.type_building'), floor: t('node.type_floor') };
+        option.textContent = `${indent}${node.name} (${typeLabels[node.node_type] || node.node_type})`;
+        select.appendChild(option);
+      });
+    }
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载节点选项失败:", error);
+  }
+}
+
+function flattenNodeTree(nodes, depth = 0) {
+  const result = [];
+  for (const node of nodes) {
+    result.push({ id: node.id, name: node.name, node_type: node.node_type, depth });
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenNodeTree(node.children, depth + 1));
+    }
+  }
+  return result;
+}
+
+export async function loadAccessPointsForSelect(selectId, roomId = null) {
+  try {
+    const url = roomId
+      ? `/api/resources/access-points?room_id=${roomId}&page_size=1000`
+      : '/api/resources/access-points?page_size=1000';
+    const result = await apiGet(url);
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('access_point.select_access_point') || '选择接入点'}</option>`;
+
+    const items = extractItems(result);
+    items.forEach(ap => {
+      const option = document.createElement("option");
+      option.value = ap.id;
+      option.textContent = ap.name;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载接入点选项失败:", error);
+  }
+}
+
+export async function loadDeviceTemplatesForSelect(selectId) {
+  try {
+    const result = await apiGet("/api/resources/device-templates");
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('device.select_template') || '选择模板'}</option>`;
+
+    const items = extractItems(result);
+    items.forEach(tmpl => {
+      const option = document.createElement("option");
+      option.value = tmpl.id;
+      option.textContent = tmpl.name;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载设备模板选项失败:", error);
+  }
+}
+
+export async function loadWorkstationsForSelect(selectId, roomId = null) {
+  try {
+    const url = roomId
+      ? `/api/resources/workstations?room_id=${roomId}&page_size=1000`
+      : '/api/resources/workstations?page_size=1000';
+    const result = await apiGet(url);
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('device.select_workstation') || '选择工位'}</option>`;
+
+    const items = extractItems(result);
+    items.forEach(ws => {
+      const option = document.createElement("option");
+      option.value = ws.id;
+      option.textContent = ws.name;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载工位选项失败:", error);
+  }
+}
+
+export async function loadPositionsForSelect(selectId, cabinetId = null) {
+  try {
+    const url = cabinetId
+      ? `/api/resources/positions?cabinet_id=${cabinetId}&page_size=1000`
+      : '/api/resources/positions?page_size=1000';
+    const result = await apiGet(url);
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('device.select_position') || '选择机位'}</option>`;
+
+    const items = extractItems(result);
+    items.forEach(pos => {
+      const option = document.createElement("option");
+      option.value = pos.id;
+      option.textContent = pos.name;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载机位选项失败:", error);
+  }
+}

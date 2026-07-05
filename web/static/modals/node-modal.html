@@ -1,0 +1,45 @@
+<template id="node-modal-template">
+<div id="node-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="node-modal-title" data-i18n="node.add_node">Add Node</h3>
+      <span class="close" data-modal-id="node-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="node-form">
+        <input type="hidden" id="node-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="node-name"><span data-i18n="node.name">Node Name</span><span class="required">*</span></label>
+            <input type="text" id="node-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="node-type"><span data-i18n="node.type">Node Type</span><span class="required">*</span></label>
+            <select id="node-type" name="node_type" required>
+              <option value="campus" data-i18n="node.type_campus">Campus</option>
+              <option value="building" data-i18n="node.type_building">Building</option>
+              <option value="floor" data-i18n="node.type_floor">Floor</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="node-parent-id" data-i18n="node.parent">Parent Node</label>
+            <select id="node-parent-id" name="parent_id">
+              <option value="" data-i18n="node.no_parent">No Parent (Root)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="node-description" data-i18n="common.description">Description</label>
+          <textarea id="node-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="node-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="node-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

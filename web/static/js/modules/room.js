@@ -26,6 +26,7 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
+import { loadNodesForSelect } from "../utils/resources.js";
 
 // ==========================================
 // 网段配置管理模块 - 仅用于房间管理
@@ -404,6 +405,7 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
           const roomTypeLower = v ? v.toLowerCase() : '';
           return roomTypeLower === "office" ? t('room.type_office') : roomTypeLower === "data_center" ? t('room.type_datacenter') : v || '-';
         }},
+        { field: 'node_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${n.name} (${n.network_region})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
@@ -487,9 +489,12 @@ export async function submitRoomForm() {
     formattedRoomType = roomType;
   }
   
+  const nodeId = getElementValue("room-node-id");
+
   const roomData = {
     name: name.trim(),
     room_type: formattedRoomType,
+    node_id: nodeId || null,
     network_ids: networkIds,
     description: description || null,
   };
@@ -514,11 +519,14 @@ export async function openRoomModal(room = null) {
   const title = elementCache.get('room-modal-title');
   const form = elementCache.get('room-form');
 
+  await loadNodesForSelect("room-node-id");
+
   if (room) {
     title.textContent = "编辑房间";
     elementCache.setValue('room-id', room.id);
     elementCache.setValue('room-name', room.name);
     elementCache.setValue('room-type', room.room_type ? room.room_type.toLowerCase() : "office");
+    elementCache.setValue('room-node-id', room.node_id || "");
     elementCache.setValue('room-description', room.description || "");
 
     await loadRoomNetworks(room);
