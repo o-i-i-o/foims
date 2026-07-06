@@ -8,8 +8,8 @@ license = "MIT"
 
 [dependencies]
 # Actix Web
-actix-web = "4.13.0"
-actix-multipart = "0.7.2"
+actix-web = "4.14.0"
+actix-multipart = "0.8.0"
 
 # SQLx PostgreSQL
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
@@ -26,8 +26,8 @@ bcrypt = "0.19.2"
 
 # Utilities
 chrono = { version = "0.4.45", features = ["serde"] }
-uuid = { version = "1.23.3", features = ["v4", "serde"] }
-rand = "0.10.1"
+uuid = { version = "1.23.4", features = ["v4", "serde"] }
+rand = "0.10.2"
 tracing = "0.1.44"
 tokio = { version = "1.52.3", features = ["full"] }
 futures-util = "0.3.32"

@@ -16,5 +16,5 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-cron-scheduler = "0.15.1"
-async-trait = "0.1.88"
+async-trait = "0.1.89"
 ipma-data-manager = { path = "../ipma-data-manager" }

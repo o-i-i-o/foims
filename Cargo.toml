@@ -7,8 +7,8 @@ edition = "2024"
 
 [workspace.dependencies]
 # Actix Web
-actix-web = { version = "4.13.0", features = ["rustls-0_23"] }
-actix-multipart = "0.7.2"
+actix-web = { version = "4.14.0", features = ["rustls-0_23"] }
+actix-multipart = "0.8.0"
 
 # SQLx
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
@@ -32,13 +32,13 @@ futures-util = "0.3.32"
 chrono = { version = "0.4.45", features = ["serde"] }
 
 # UUID
-uuid = { version = "1.23.3", features = ["v4", "serde"] }
+uuid = { version = "1.23.4", features = ["v4", "serde"] }
 
 # Logging
 tracing = "0.1.44"
 
 # Crypto (AES)
-aes-gcm = "0.10.3"
+aes-gcm = "0.11.0"
 hex = "0.4.3"
 base64 = "0.22.1"
 
@@ -46,7 +46,7 @@ base64 = "0.22.1"
 thiserror = "2.0.18"
 
 # Async trait
-async-trait = "0.1.88"
+async-trait = "0.1.89"
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
@@ -90,8 +90,8 @@ async-trait = { workspace = true }
 actix-files = "0.6.10"
 actix-cors = "0.7.1"
 
-rustls = { version = "0.23.40", features = ["ring"] }
-rustls-pki-types = "1.14.1"
+rustls = { version = "0.23.41", features = ["ring"] }
+rustls-pki-types = "1.15.0"
 pem = "3.0.6"
 tokio-rustls = "0.26.4"
 rcgen = "0.14.8"
@@ -101,7 +101,7 @@ regex = "1.12.4"
 bcrypt = "0.19.2"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
-rand = "0.10.1"
+rand = "0.10.2"
 
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
 
@@ -111,20 +111,20 @@ pnet = "0.35"
 
 async-snmp = "0.12.0"
 
-config = { version = "0.15.24", features = ["toml"] }
+config = { version = "0.15.25", features = ["toml"] }
 toml = "1.1.2"
 
 socket2 = "0.6"
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 num_cpus = "1.17.0"
 dashmap = "6.2.1"
-arc-swap = "1.9.1"
+arc-swap = "1.9.2"
 lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
-totp-rs = { version = "5.7.1", features = ["qr", "gen_secret"] }
+totp-rs = { version = "5.7.2", features = ["qr", "gen_secret"] }
 flate2 = "1.1.9"
 
 rust-i18n = "4.1.0"
-time = "0.3.49"
+time = "0.3.53"
 
 [dev-dependencies]
 actix-rt = "2.11.0"
