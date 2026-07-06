@@ -343,7 +343,7 @@ pub async fn create_device(
 
     sqlx::query(
         "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, switch_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
+	         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
     )
     .bind(id)
     .bind(&req.name)
