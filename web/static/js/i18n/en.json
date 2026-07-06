@@ -122,9 +122,7 @@
     "switches": "Switches",
     "cabinets": "Cabinets",
     "cabinet_positions": "Cabinet Positions",
-    "nodes": "Nodes",
     "access_points": "Access Points",
-    "device_templates": "Device Templates",
     "devices": "Devices"
   },
   "network": {
@@ -188,7 +186,9 @@
     "create_success": "Organization node created successfully",
     "update_success": "Organization node updated successfully",
     "delete_success": "Organization node deleted successfully",
-    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?"
+    "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
+    "select_org": "Select Organization Node",
+    "parent_org": "Organization Node"
   },
   "org_template": {
     "management": "Template Management",
@@ -627,22 +627,6 @@
     "success": "Operation successful",
     "failed": "Operation failed"
   },
-  "node": {
-    "name": "Node Name",
-    "type": "Node Type",
-    "type_campus": "Campus",
-    "type_building": "Building",
-    "type_floor": "Floor",
-    "parent": "Parent Node",
-    "no_parent": "No Parent (Root)",
-    "select_node": "Select Node",
-    "add_node": "Add Node",
-    "edit_node": "Edit Node",
-    "name_required": "Node name is required",
-    "save_success": "Node saved successfully",
-    "delete_success": "Node deleted successfully",
-    "load_failed": "Failed to load node data"
-  },
   "access_point": {
     "name": "Access Point Name",
     "type": "Type",
@@ -672,10 +656,7 @@
     "device_type": "Device Type",
     "brand": "Brand",
     "model": "Model",
-    "add": "Add Device Template",
-    "edit": "Edit Device Template",
-    "name_required": "Template name is required",
-    "save_success": "Device template saved successfully",
+    "delete_confirm": "Are you sure you want to delete this device template?",
     "delete_success": "Device template deleted successfully",
     "load_failed": "Failed to load device template data"
   },
@@ -709,6 +690,9 @@
     "select_position": "Select Position",
     "select_access_point": "Select Access Point",
     "select_switch_port": "Select Switch Port",
+    "save_as_template": "Save as Template",
+    "template_name": "Template Name",
+    "template_name_placeholder": "Leave empty to use device name",
     "add": "Add Device",
     "edit": "Edit Device",
     "name_required": "Device name is required",

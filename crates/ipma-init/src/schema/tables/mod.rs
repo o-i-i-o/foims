@@ -8,7 +8,6 @@ mod indexes;
 mod ips;
 mod logs;
 mod network;
-mod nodes;
 mod notifications;
 mod org_templates;
 mod organizations;
@@ -28,8 +27,6 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     users::create(pool).await?;
     network::create(pool).await?;
-    nodes::create(pool).await?;
-    rooms::create(pool).await?;
     cabinets::create(pool).await?;
     workstations::create(pool).await?;
     device_templates::create(pool).await?;
@@ -45,6 +42,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     encryption::create(pool).await?;
     org_templates::create(pool).await?;
     organizations::create(pool).await?;
+    rooms::create(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

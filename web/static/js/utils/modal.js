@@ -9,9 +9,7 @@ const BUTTON_CALLBACK_MAP = {
   "add-cabinet-position-btn": "openCabinetPositionModal",
   "add-user-btn": "openUserModal",
   "add-switch-btn": "openSwitchModal",
-  "add-node-btn": "openNodeModal",
   "add-access-point-btn": "openAccessPointModal",
-  "add-device-template-btn": "openDeviceTemplateModal",
   "add-device-btn": "openDeviceModal",
 };
 
@@ -27,9 +25,7 @@ const FORM_CALLBACK_MAP = {
   "switch-port-form-expanded": "submitSwitchPortForm",
   "organization-form": "submitOrgForm",
   "org-template-editor-form": "submitOrgTemplateForm",
-  "node-form": "submitNodeForm",
   "access-point-form": "submitAccessPointForm",
-  "device-template-form": "submitDeviceTemplateForm",
   "device-form": "submitDeviceForm",
 };
 

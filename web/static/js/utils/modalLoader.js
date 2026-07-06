@@ -23,9 +23,7 @@ const MODAL_REGISTRY = {
     'organization-modal': '/static/modals/organization-modal.html',
     'org-template-modal': '/static/modals/org-template-modal.html',
     'org-template-editor-modal': '/static/modals/org-template-editor-modal.html',
-    'node-modal': '/static/modals/node-modal.html',
     'access-point-modal': '/static/modals/access-point-modal.html',
-    'device-template-modal': '/static/modals/device-template-modal.html',
     'device-modal': '/static/modals/device-modal.html',
 };
 

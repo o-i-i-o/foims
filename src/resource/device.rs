@@ -428,6 +428,39 @@ pub async fn create_device(
         }
     }
 
+    if req.save_as_template == Some(true) {
+        let template_name = req.template_name.as_deref().unwrap_or(&req.name);
+        let tmpl_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO device_templates (id, name, device_type, brand, model, description, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(tmpl_id)
+        .bind(template_name)
+        .bind(&final_device_type)
+        .bind(&final_brand)
+        .bind(&final_model)
+        .bind(&req.description)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_unique_violation()
+            {
+                return AppError::Conflict("设备模板名称已存在".to_string());
+            }
+            AppError::from(e)
+        })?;
+
+        sqlx::query("UPDATE devices SET template_id = $1 WHERE id = $2")
+            .bind(tmpl_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     tx.commit().await?;
 
     let device = Device {
@@ -776,6 +809,67 @@ pub async fn update_device(
             .execute(&mut *tx)
             .await?;
         }
+    }
+
+    if req.save_as_template == Some(true) {
+        let template_name = req
+            .template_name
+            .as_deref()
+            .unwrap_or(req.name.as_deref().unwrap_or(""));
+        let tmpl_id = Uuid::new_v4();
+
+        let current_device_type: String =
+            sqlx::query_scalar("SELECT device_type FROM devices WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let current_brand: Option<String> =
+            sqlx::query_scalar("SELECT brand FROM devices WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .flatten();
+        let current_model: Option<String> =
+            sqlx::query_scalar("SELECT model FROM devices WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .flatten();
+        let current_description: Option<String> =
+            sqlx::query_scalar("SELECT description FROM devices WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .flatten();
+
+        sqlx::query(
+            "INSERT INTO device_templates (id, name, device_type, brand, model, description, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(tmpl_id)
+        .bind(template_name)
+        .bind(&current_device_type)
+        .bind(&current_brand)
+        .bind(&current_model)
+        .bind(&current_description)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_unique_violation()
+            {
+                return AppError::Conflict("设备模板名称已存在".to_string());
+            }
+            AppError::from(e)
+        })?;
+
+        sqlx::query("UPDATE devices SET template_id = $1 WHERE id = $2")
+            .bind(tmpl_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
     }
 
     tx.commit().await?;

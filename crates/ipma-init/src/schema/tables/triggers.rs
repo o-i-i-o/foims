@@ -19,7 +19,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "users",
         "network_regions",
         "network_cidrs",
-        "nodes",
         "rooms",
         "room_networks",
         "workstation_layouts",

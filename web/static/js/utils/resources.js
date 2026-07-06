@@ -261,24 +261,23 @@ export async function loadRoomNetworksForCabinetBySelect(roomSelect) {
   await loadRoomNetworksForCabinet(roomId);
 }
 
-export async function loadNodesForSelect(selectId = "room-node-id") {
+export async function loadOrgsForSelect(selectId = "room-org-id") {
   try {
-    const result = await apiGet("/api/resources/nodes/tree");
+    const result = await apiGet("/api/resources/organizations/tree");
     const select = document.getElementById(selectId);
 
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('node.select_node') || '选择节点'}</option>`;
+    select.innerHTML = `<option value="">${t('organization.select_org') || '选择组织节点'}</option>`;
 
     if (result.success && result.data) {
-      const flatNodes = flattenNodeTree(result.data);
-      flatNodes.forEach(node => {
+      const flatOrgs = flattenOrgTree(result.data);
+      flatOrgs.forEach(org => {
         const option = document.createElement("option");
-        option.value = node.id;
-        const indent = "\u00A0\u00A0\u00A0\u00A0".repeat(node.depth);
-        const typeLabels = { campus: t('node.type_campus'), building: t('node.type_building'), floor: t('node.type_floor') };
-        option.textContent = `${indent}${node.name} (${typeLabels[node.node_type] || node.node_type})`;
+        option.value = org.id;
+        const indent = "\u00A0\u00A0\u00A0\u00A0".repeat(org.depth);
+        option.textContent = `${indent}${org.name} (${org.org_type})`;
         select.appendChild(option);
       });
     }
@@ -287,16 +286,16 @@ export async function loadNodesForSelect(selectId = "room-node-id") {
       select.value = currentValue;
     }
   } catch (error) {
-    console.error("加载节点选项失败:", error);
+    console.error("加载组织选项失败:", error);
   }
 }
 
-function flattenNodeTree(nodes, depth = 0) {
+function flattenOrgTree(nodes, depth = 0) {
   const result = [];
   for (const node of nodes) {
-    result.push({ id: node.id, name: node.name, node_type: node.node_type, depth });
+    result.push({ id: node.id, name: node.name, org_type: node.org_type, depth });
     if (node.children && node.children.length > 0) {
-      result.push(...flattenNodeTree(node.children, depth + 1));
+      result.push(...flattenOrgTree(node.children, depth + 1));
     }
   }
   return result;

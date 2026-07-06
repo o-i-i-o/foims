@@ -57,7 +57,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN c.id IS NOT NULL THEN c.name::text
                 ELSE NULL
             END AS cabinet_name,
-            nd.name::text AS node_name,
+            org.name::text AS org_name,
             COALESCE(nc.name, 'unknown')::text AS network_name,
             COALESCE(nr.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
@@ -79,7 +79,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN switches s ON s.position_id = cp.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
         LEFT JOIN rooms r ON COALESCE(w.room_id, (SELECT ws.room_id FROM devices d2 JOIN workstations ws ON d2.workstation_id = ws.id WHERE d2.id = dv.id), (SELECT cab2.room_id FROM devices d3 JOIN positions p2 ON d3.position_id = p2.id JOIN cabinets cab2 ON p2.cabinet_id = cab2.id WHERE d3.id = dv.id)) = r.id
-        LEFT JOIN nodes nd ON r.node_id = nd.id
+        LEFT JOIN organizations org ON r.org_id = org.id
         LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
     ",

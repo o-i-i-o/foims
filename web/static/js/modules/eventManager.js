@@ -18,9 +18,7 @@ import { editWorkstation, deleteWorkstation } from "./workstation.js";
 import { editCabinet, deleteCabinet } from "./cabinet.js";
 import { editCabinetPosition, deleteCabinetPosition } from "./position.js";
 import { editSwitch, deleteSwitch, deleteSwitchPort } from "./switch/switchDevice.js";
-import { editNode, deleteNode } from "./node.js";
 import { editAccessPoint, deleteAccessPoint } from "./accessPoint.js";
-import { editDeviceTemplate, deleteDeviceTemplate } from "./deviceTemplate.js";
 import { editDevice, deleteDevice } from "./device.js";
 
 // ==========================================
@@ -35,9 +33,7 @@ const EDIT_FUNCTIONS = {
   "cabinets-table": editCabinet,
   "cabinet-positions-table": editCabinetPosition,
   "switches-table": editSwitch,
-  "nodes-table": editNode,
   "access-points-table": editAccessPoint,
-  "device-templates-table": editDeviceTemplate,
   "devices-table": editDevice,
   "users-table": async (id) => {
     const { openUserModal } = await loadModule("userManager", "/static/js/modules/userManager.js");
@@ -54,9 +50,7 @@ const DELETE_FUNCTIONS = {
   "cabinet-positions-table": deleteCabinetPosition,
   "switches-table": deleteSwitch,
   "switch-ports-table": deleteSwitchPort,
-  "nodes-table": deleteNode,
   "access-points-table": deleteAccessPoint,
-  "device-templates-table": deleteDeviceTemplate,
   "devices-table": deleteDevice,
   "users-table": async (id) => {
     const { deleteUser } = await loadModule("userManager", "/static/js/modules/userManager.js");

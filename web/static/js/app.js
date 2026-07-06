@@ -83,9 +83,7 @@ function getResourceCallbacks() {
     openSwitchModal: createCallback('switch/switchDevice', 'openSwitchModal'),
     openUserModal: createCallback('userManager', 'openUserModal'),
     openOrgModal: createCallback('organization', 'openOrgModal'),
-    openNodeModal: createCallback('node', 'openNodeModal'),
     openAccessPointModal: createCallback('accessPoint', 'openAccessPointModal'),
-    openDeviceTemplateModal: createCallback('deviceTemplate', 'openDeviceTemplateModal'),
     openDeviceModal: createCallback('device', 'openDeviceModal'),
     submitOrgTemplateForm: createCallback('organization', 'submitOrgTemplateForm'),
     submitNetworkTypeForm: createCallback('networks', 'submitNetworkTypeForm'),
@@ -98,9 +96,7 @@ function getResourceCallbacks() {
     submitSwitchPortForm: createCallback('switch/switchDevice', 'submitSwitchPortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
     submitOrgForm: createCallback('organization', 'submitOrgForm'),
-    submitNodeForm: createCallback('node', 'submitNodeForm'),
     submitAccessPointForm: createCallback('accessPoint', 'submitAccessPointForm'),
-    submitDeviceTemplateForm: createCallback('deviceTemplate', 'submitDeviceTemplateForm'),
     submitDeviceForm: createCallback('device', 'submitDeviceForm'),
   };
 }

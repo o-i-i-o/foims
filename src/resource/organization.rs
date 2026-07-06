@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
     ApiResponse, OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode,
-    OrganizationUpdate, OrganizationWithChildren,
+    OrganizationUpdate, OrganizationWithChildren, Room,
 };
 use crate::resource::org_template::{get_allowed_children, validate_levels_mapping};
 use crate::utils::pagination::DEFAULT_PAGE;
@@ -206,6 +206,11 @@ pub async fn get_organization(
 
     let child_count: i64 = children.len() as i64;
 
+    let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE org_id = $1")
+        .bind(id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
     let result = OrganizationWithChildren {
         id: org.id,
         name: org.name,
@@ -217,6 +222,7 @@ pub async fn get_organization(
         level_index: org.level_index,
         children,
         child_count,
+        room_count,
         created_at: org.created_at,
         updated_at: org.updated_at,
     };
@@ -833,4 +839,30 @@ mod tests {
     fn test_hierarchy_depth_limit() {
         assert!(MAX_DEPTH >= 5);
     }
+}
+
+/// 获取组织节点关联的房间列表
+pub async fn get_org_rooms(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+    if existing.is_none() {
+        return Err(AppError::NotFound("组织节点未找到".to_string()));
+    }
+    let rooms = sqlx::query_as::<_, Room>(
+        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+         FROM rooms WHERE org_id = $1 ORDER BY created_at ASC",
+    )
+    .bind(id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    Ok(HttpResponse::Ok().json(ApiResponse::<Vec<Room>>::success(
+        rooms,
+        "组织节点房间列表获取成功",
+    )))
 }

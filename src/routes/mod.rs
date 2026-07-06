@@ -22,24 +22,22 @@ use crate::resource::switch::{
 use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, connect_device,
     create_access_point, create_cabinet, create_cabinet_position, create_device, create_device_ip,
-    create_device_template, create_network, create_network_region, create_node,
-    create_org_template, create_organization, create_room, create_workstation, delete_access_point,
-    delete_cabinet, delete_cabinet_position, delete_device, delete_device_template, delete_layout,
-    delete_network, delete_network_region, delete_node, delete_org_template, delete_organization,
-    delete_positions_layout, delete_room, delete_workstation, disconnect_device, get_access_point,
-    get_access_points, get_allowed_child_types, get_available_ips, get_cabinet,
-    get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
-    get_cabinets_by_network_region, get_children, get_device, get_device_ips, get_device_template,
-    get_device_templates, get_devices, get_ip_managers, get_layout, get_network,
-    get_network_region, get_network_regions, get_networks, get_node, get_node_children,
-    get_node_rooms, get_node_tree, get_nodes, get_org_template, get_org_templates,
-    get_organization, get_organization_tree, get_organizations, get_positions,
-    get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
-    get_switch_ips, get_workstation, get_workstation_ips, get_workstations, link_peer,
-    pull_ip_managers, save_layout, unlink_peer, update_access_point, update_cabinet,
-    update_cabinet_position, update_device, update_device_template, update_network,
-    update_network_region, update_node, update_org_template, update_organization, update_room,
-    update_workstation,
+    create_network, create_network_region, create_org_template, create_organization, create_room,
+    create_workstation, delete_access_point, delete_cabinet, delete_cabinet_position,
+    delete_device, delete_device_template, delete_layout, delete_network, delete_network_region,
+    delete_org_template, delete_organization, delete_positions_layout, delete_room,
+    delete_workstation, disconnect_device, get_access_point, get_access_points,
+    get_allowed_child_types, get_available_ips, get_cabinet, get_cabinet_networks,
+    get_cabinet_position, get_cabinet_position_ips, get_cabinets, get_cabinets_by_network_region,
+    get_children, get_device, get_device_ips, get_device_template, get_device_templates,
+    get_devices, get_ip_managers, get_layout, get_network, get_network_region, get_network_regions,
+    get_networks, get_org_rooms, get_org_template, get_org_templates, get_organization,
+    get_organization_tree, get_organizations, get_positions, get_positions_layout, get_room,
+    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_switch_ips,
+    get_workstation, get_workstation_ips, get_workstations, link_peer, pull_ip_managers,
+    save_layout, unlink_peer, update_access_point, update_cabinet, update_cabinet_position,
+    update_device, update_network, update_network_region, update_org_template, update_organization,
+    update_room, update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -262,7 +260,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route(
                                     "/{id}/allowed-child-types",
                                     web::get().to(get_allowed_child_types),
-                                ),
+                                )
+                                .route("/{id}/rooms", web::get().to(get_org_rooms)),
                         )
                         // 组织模板管理
                         .service(
@@ -272,18 +271,6 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::get().to(get_org_template))
                                 .route("/{id}", web::put().to(update_org_template))
                                 .route("/{id}", web::delete().to(delete_org_template)),
-                        )
-                        // 节点管理
-                        .service(
-                            web::scope("/nodes")
-                                .route("", web::get().to(get_nodes))
-                                .route("/tree", web::get().to(get_node_tree))
-                                .route("", web::post().to(create_node))
-                                .route("/{id}", web::get().to(get_node))
-                                .route("/{id}", web::put().to(update_node))
-                                .route("/{id}", web::delete().to(delete_node))
-                                .route("/{id}/children", web::get().to(get_node_children))
-                                .route("/{id}/rooms", web::get().to(get_node_rooms)),
                         )
                         // 接入点管理
                         .service(
@@ -300,9 +287,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .service(
                             web::scope("/device-templates")
                                 .route("", web::get().to(get_device_templates))
-                                .route("", web::post().to(create_device_template))
                                 .route("/{id}", web::get().to(get_device_template))
-                                .route("/{id}", web::put().to(update_device_template))
                                 .route("/{id}", web::delete().to(delete_device_template)),
                         )
                         // 设备管理

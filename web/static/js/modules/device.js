@@ -209,10 +209,25 @@ function setupTemplateAutoFill() {
   });
 }
 
+function setupSaveAsTemplateToggle() {
+  const checkbox = document.getElementById('device-save-as-template');
+  const nameGroup = document.getElementById('device-template-name-group');
+  if (!checkbox || !nameGroup) return;
+
+  checkbox.addEventListener('change', () => {
+    nameGroup.style.display = checkbox.checked ? '' : 'none';
+    if (!checkbox.checked) {
+      const nameInput = document.getElementById('device-template-name');
+      if (nameInput) nameInput.value = '';
+    }
+  });
+}
+
 function ensureDeviceListeners() {
   if (deviceListenersBound) return;
   setupMutualExclusion();
   setupTemplateAutoFill();
+  setupSaveAsTemplateToggle();
   deviceListenersBound = true;
 }
 
@@ -245,6 +260,9 @@ export async function submitDeviceForm() {
     return;
   }
 
+  const saveAsTemplate = document.getElementById('device-save-as-template')?.checked;
+  const templateName = getElementValue('device-template-name');
+
   const deviceData = {
     name: name.trim(),
     device_type: deviceType || 'other',
@@ -257,6 +275,8 @@ export async function submitDeviceForm() {
     access_point_id: accessPointId || null,
     switch_port_id: switchPortId || null,
     description: description?.trim() || null,
+    save_as_template: saveAsTemplate || false,
+    template_name: saveAsTemplate ? (templateName?.trim() || name.trim()) : null,
   };
 
   const success = await handleFormSubmit({
@@ -304,5 +324,9 @@ export async function openDeviceModal(device = null) {
     title.textContent = t('device.add');
     form.reset();
     elementCache.setValue('device-id', '');
+    const saveAsTemplateCheckbox = document.getElementById('device-save-as-template');
+    if (saveAsTemplateCheckbox) saveAsTemplateCheckbox.checked = false;
+    const templateNameGroup = document.getElementById('device-template-name-group');
+    if (templateNameGroup) templateNameGroup.style.display = 'none';
   }
 }

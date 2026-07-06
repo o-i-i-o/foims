@@ -148,7 +148,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, access_point_name, peer_access_point_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, node_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, access_point_name, peer_access_point_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -326,7 +326,7 @@ pub async fn get_workstation_ips(
         r"SELECT 
             id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, node_name, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
         WHERE workstation_id = $1"
@@ -353,7 +353,7 @@ pub async fn get_cabinet_position_ips(
         r"SELECT 
             id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, node_name, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
         WHERE position_id = $1"
@@ -395,7 +395,7 @@ pub async fn get_switch_ips(
         r"SELECT 
             id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, node_name, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
         WHERE position_id = $1"

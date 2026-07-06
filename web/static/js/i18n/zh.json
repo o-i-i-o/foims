@@ -122,9 +122,7 @@
     "switches": "交换机",
     "cabinets": "机柜",
     "cabinet_positions": "机位",
-    "nodes": "节点",
     "access_points": "接入点",
-    "device_templates": "设备模板",
     "devices": "设备"
   },
   "network": {
@@ -188,7 +186,9 @@
     "create_success": "组织节点创建成功",
     "update_success": "组织节点更新成功",
     "delete_success": "组织节点删除成功",
-    "delete_confirm": "确定要删除「{{name}}」吗？"
+    "delete_confirm": "确定要删除「{{name}}」吗？",
+    "select_org": "选择组织节点",
+    "parent_org": "所属组织"
   },
   "org_template": {
     "management": "模板管理",
@@ -627,22 +627,6 @@
     "success": "操作成功",
     "failed": "操作失败"
   },
-  "node": {
-    "name": "节点名称",
-    "type": "节点类型",
-    "type_campus": "校区",
-    "type_building": "建筑",
-    "type_floor": "楼层",
-    "parent": "父节点",
-    "no_parent": "无父节点(根节点)",
-    "select_node": "选择节点",
-    "add_node": "添加节点",
-    "edit_node": "编辑节点",
-    "name_required": "节点名称不能为空",
-    "save_success": "节点保存成功",
-    "delete_success": "节点删除成功",
-    "load_failed": "加载节点数据失败"
-  },
   "access_point": {
     "name": "接入点名称",
     "type": "类型",
@@ -672,10 +656,7 @@
     "device_type": "设备类型",
     "brand": "品牌",
     "model": "型号",
-    "add": "添加设备模板",
-    "edit": "编辑设备模板",
-    "name_required": "模板名称不能为空",
-    "save_success": "设备模板保存成功",
+    "delete_confirm": "确定要删除此设备模板吗？",
     "delete_success": "设备模板删除成功",
     "load_failed": "加载设备模板数据失败"
   },
@@ -709,6 +690,9 @@
     "select_position": "选择机位",
     "select_access_point": "选择接入点",
     "select_switch_port": "选择交换机端口",
+    "save_as_template": "保存为模板",
+    "template_name": "模板名称",
+    "template_name_placeholder": "留空则使用设备名称",
     "add": "添加设备",
     "edit": "编辑设备",
     "name_required": "设备名称不能为空",

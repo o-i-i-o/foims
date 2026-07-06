@@ -6,17 +6,6 @@ use validator::{Validate, ValidationError};
 
 // ==================== 验证函数 ====================
 
-pub fn validate_node_type_string(node_type: &str) -> Result<(), ValidationError> {
-    match node_type {
-        "campus" | "building" | "floor" => Ok(()),
-        _ => Err(ValidationError::new("节点类型必须是campus/building/floor")),
-    }
-}
-
-fn validate_node_type_option(node_type: &&String) -> Result<(), ValidationError> {
-    validate_node_type_string(node_type)
-}
-
 pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
     match device_type {
         "pc" | "laptop" | "printer" | "server" | "network_device" | "camera" | "phone" | "ap"
@@ -396,7 +385,7 @@ pub struct Room {
     pub id: Uuid,
     pub name: String,
     pub room_type: String,
-    pub node_id: Option<Uuid>,
+    pub org_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -430,8 +419,8 @@ pub struct RoomWithNetworks {
     pub id: Uuid,
     pub name: String,
     pub room_type: String,
-    pub node_id: Option<Uuid>,
-    pub node_name: Option<String>,
+    pub org_id: Option<Uuid>,
+    pub org_name: Option<String>,
     pub description: Option<String>,
     pub networks: Vec<NetworkInfo>,
     pub workstation_count: i64,
@@ -448,7 +437,7 @@ pub struct RoomCreate {
         message = "房间类型必须是office或data_center"
     ))]
     pub room_type: String,
-    pub node_id: Option<Uuid>,
+    pub org_id: Option<Uuid>,
     pub network_ids: Vec<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -463,7 +452,7 @@ pub struct RoomUpdate {
         message = "房间类型必须是office或data_center"
     ))]
     pub room_type: Option<String>,
-    pub node_id: Option<Option<Uuid>>,
+    pub org_id: Option<Option<Uuid>>,
     pub network_ids: Option<Vec<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -669,7 +658,7 @@ pub struct IpManagerWithNames {
     pub peer_access_point_name: Option<String>,
     pub room_name: Option<String>,
     pub cabinet_name: Option<String>,
-    pub node_name: Option<String>,
+    pub org_name: Option<String>,
     pub network_name: String,
     pub network_region: String,
     pub ip_address: String,
@@ -1149,6 +1138,7 @@ pub struct OrganizationWithChildren {
     pub level_index: i32,
     pub children: Vec<Organization>,
     pub child_count: i64,
+    pub room_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1192,73 +1182,6 @@ pub struct OrganizationUpdate {
         message = "组织类型长度必须在1到50个字符之间且不能为空"
     ))]
     pub org_type: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-}
-
-// ==================== 节点模型 ====================
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct Node {
-    pub id: Uuid,
-    pub name: String,
-    pub node_type: String,
-    pub parent_id: Option<Uuid>,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NodeTreeNode {
-    pub id: Uuid,
-    pub name: String,
-    pub node_type: String,
-    pub parent_id: Option<Uuid>,
-    pub description: Option<String>,
-    pub children: Vec<NodeTreeNode>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NodeWithChildren {
-    pub id: Uuid,
-    pub name: String,
-    pub node_type: String,
-    pub parent_id: Option<Uuid>,
-    pub parent_name: Option<String>,
-    pub description: Option<String>,
-    pub children: Vec<Node>,
-    pub child_count: i64,
-    pub room_count: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct NodeCreate {
-    #[validate(length(min = 1, max = 100, message = "节点名称长度必须在1到100个字符之间"))]
-    pub name: String,
-    #[validate(custom(
-        function = "validate_node_type_string",
-        message = "节点类型必须是campus/building/floor"
-    ))]
-    pub node_type: String,
-    pub parent_id: Option<Uuid>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct NodeUpdate {
-    #[validate(length(min = 1, max = 100, message = "节点名称长度必须在1到100个字符之间"))]
-    pub name: Option<String>,
-    #[validate(custom(
-        function = "validate_node_type_option",
-        message = "节点类型必须是campus/building/floor"
-    ))]
-    pub node_type: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -1352,36 +1275,6 @@ pub struct DeviceTemplateSummary {
     pub model: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct DeviceTemplateCreate {
-    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
-    pub name: String,
-    #[validate(custom(
-        function = "validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
-    ))]
-    pub device_type: Option<String>,
-    pub brand: Option<String>,
-    pub model: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct DeviceTemplateUpdate {
-    #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
-    pub name: Option<String>,
-    #[validate(custom(
-        function = "validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
-    ))]
-    pub device_type: Option<String>,
-    pub brand: Option<String>,
-    pub model: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-}
-
 // ==================== 设备模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -1452,6 +1345,9 @@ pub struct DeviceCreate {
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub save_as_template: Option<bool>,
+    #[validate(length(max = 100, message = "模板名称长度不能超过100个字符"))]
+    pub template_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -1473,6 +1369,9 @@ pub struct DeviceUpdate {
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub save_as_template: Option<bool>,
+    #[validate(length(max = 100, message = "模板名称长度不能超过100个字符"))]
+    pub template_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
