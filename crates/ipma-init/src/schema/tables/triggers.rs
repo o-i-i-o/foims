@@ -28,7 +28,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "device_templates",
         "access_points",
         "devices",
-        "switches",
         "switch_ports",
         "switch_macs",
         "switch_lldps",

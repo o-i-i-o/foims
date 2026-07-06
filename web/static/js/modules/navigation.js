@@ -5,7 +5,7 @@
 
 import { loadDashboardData } from "./dashboard.js";
 import { initResourceTabs } from "./resourceTabs.js";
-import { loadSwitchesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
+import { loadDevicesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
 import { loadModule } from "../utils/moduleLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { initVisualization } from "./visualization/visualizationManager.js";
@@ -68,7 +68,7 @@ async function loadOrganizationPage() {
  * 加载 IP 管理页面
  */
 async function loadIpPage() {
-  loadSwitchesForPullMac();
+  loadDevicesForPullMac();
   loadNetworksForPullMac();
   initIpMacFunctions();
   nextFrame(() => loadIpMacData());

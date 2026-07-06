@@ -30,41 +30,41 @@ let currentPage = 1;
 
 // ====== IP管理 ======
 
-// 加载交换机列表到拉取MAC下拉框
-export async function loadSwitchesForPullMac() {
+// 加载设备列表到拉取MAC下拉框
+export async function loadDevicesForPullMac() {
   try {
-    const result = await apiGet("/api/switches");
-    const select = document.getElementById("pull-mac-switch-select");
+    const result = await apiGet("/api/resources/devices?page_size=1000");
+    const select = document.getElementById("pull-mac-device-select");
     if (!select) return;
 
-    select.innerHTML = '<option value="">-- 选择交换机 --</option>';
+    select.innerHTML = '<option value="">-- 选择设备 --</option>';
 
     if (result.success && result.data) {
-      const switches = Array.isArray(result.data) ? result.data : (result.data.items || []);
+      const devices = Array.isArray(result.data) ? result.data : (result.data.items || []);
       
-      if (switches.length === 0) {
-        select.innerHTML = '<option value="">暂无交换机数据</option>';
+      if (devices.length === 0) {
+        select.innerHTML = '<option value="">暂无设备数据</option>';
         return;
       }
       
-      let hasSnmpSwitch = false;
-      switches.forEach((sw) => {
-        if (sw.snmp_community || sw.snmp_username) {
-          hasSnmpSwitch = true;
+      let hasSnmpDevice = false;
+      devices.forEach((dev) => {
+        if (dev.snmp_community || dev.snmp_username) {
+          hasSnmpDevice = true;
           const option = document.createElement("option");
-          option.value = sw.id;
-          option.textContent = `${sw.name} (${sw.ip_address})`;
+          option.value = dev.id;
+          option.textContent = `${dev.name} (${dev.ip_address || '-'})`;
           select.appendChild(option);
         }
       });
       
-      if (!hasSnmpSwitch) {
-        select.innerHTML = '<option value="">暂无配置SNMP的交换机</option>';
+      if (!hasSnmpDevice) {
+        select.innerHTML = '<option value="">暂无配置SNMP的设备</option>';
       }
     }
   } catch (error) {
-    console.error("加载交换机列表失败:", error);
-    const select = document.getElementById("pull-mac-switch-select");
+    console.error("加载设备列表失败:", error);
+    const select = document.getElementById("pull-mac-device-select");
     if (select) {
       select.innerHTML = '<option value="">加载失败</option>';
     }
@@ -106,12 +106,12 @@ export async function loadNetworksForPullMac() {
 
 // 拉取IP MAC数据
 export async function pullIpMacData() {
-// 获取选中的交换机
-  const switchSelect = document.getElementById("pull-mac-switch-select");
-  const switchId = switchSelect ? switchSelect.value : "";
+// 获取选中的设备
+  const deviceSelect = document.getElementById("pull-mac-device-select");
+  const deviceId = deviceSelect ? deviceSelect.value : "";
 
-  if (!switchId) {
-    showToast("请先选择一个交换机", "warning");
+  if (!deviceId) {
+    showToast("请先选择一个设备", "warning");
     return;
   }
 
@@ -131,7 +131,7 @@ export async function pullIpMacData() {
     btn.innerHTML = '<span class="loading"></span> 拉取中...';
     btn.disabled = true;
 
-    const result = await apiPost("/api/resources/ip/pull", { switch_id: switchId, network_id: networkId });
+    const result = await apiPost("/api/resources/ip/pull", { device_id: deviceId, network_id: networkId });
 
     if (result.success) {
       showToast(result.message || "MAC数据拉取成功", "success");

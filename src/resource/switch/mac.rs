@@ -271,14 +271,14 @@ pub async fn batch_get_mac_via_snmp(
             snmp_username, snmp_auth_protocol,
             snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
-        FROM switches WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL",
+        FROM devices WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL",
     )
     .fetch_all(pool)
     .await
     {
         Ok(s) => s,
         Err(e) => {
-            error!("查询交换机列表失败: {}", e);
+            error!("查询设备列表失败: {}", e);
             ips.iter().for_each(|ip| {
                 results.insert(ip.clone(), None);
             });
@@ -287,7 +287,7 @@ pub async fn batch_get_mac_via_snmp(
     };
 
     if switches.is_empty() {
-        warn!("没有配置SNMP的交换机");
+        warn!("没有配置SNMP的设备");
         ips.iter().for_each(|ip| {
             results.insert(ip.clone(), None);
         });
@@ -360,16 +360,16 @@ async fn fetch_switch_arp(
 
 pub async fn get_mac_from_switch(
     pool: &sqlx::PgPool,
-    switch_id: &uuid::Uuid,
+    device_id: &uuid::Uuid,
     ips: &[String],
 ) -> Result<HashMap<String, Option<String>>, SnmpError> {
-    let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
+    let (switch, ip_address) = get_switch_snmp_config(pool, device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
+        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
     }
 
     let params = switch.to_snmp_params_async(&ip_address).await;
@@ -392,15 +392,15 @@ pub async fn get_mac_from_switch(
 
 pub async fn get_all_arp_entries(
     pool: &sqlx::PgPool,
-    switch_id: &uuid::Uuid,
+    device_id: &uuid::Uuid,
 ) -> Result<Vec<ArpEntry>, SnmpError> {
-    let (switch, ip_address) = get_switch_snmp_config(pool, switch_id).await?;
+    let (switch, ip_address) = get_switch_snmp_config(pool, device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
+        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
     }
 
     let params = switch.to_snmp_params_async(&ip_address).await;
@@ -413,13 +413,13 @@ pub async fn get_switch_mac_table(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let conn = state.pool()?.get_conn();
 
-    let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
+    let (switch, ip_address) = get_switch_snmp_config(&conn, &device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| AppError::Validation("设备没有配置IP地址".to_string()))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await;
 
@@ -433,16 +433,16 @@ pub async fn get_switch_mac_table(
     for entry in &entries {
         let id = Uuid::new_v4();
         let result = sqlx::query(
-            r"INSERT INTO switch_macs (id, switch_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
+            r"INSERT INTO switch_macs (id, device_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
                VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $7)
-               ON CONFLICT (switch_id, ip_address)
+               ON CONFLICT (device_id, ip_address)
                DO UPDATE SET mac_address = EXCLUDED.mac_address,
                              interface = COALESCE(EXCLUDED.interface, switch_macs.interface),
                              vlan_id = COALESCE(EXCLUDED.vlan_id, switch_macs.vlan_id),
                              updated_at = EXCLUDED.updated_at",
         )
         .bind(id)
-        .bind(switch_id)
+        .bind(device_id)
         .bind(&entry.ip_address)
         .bind(&entry.mac_address)
         .bind(&entry.interface)
@@ -468,10 +468,10 @@ pub async fn get_switch_mac_table(
     }
 
     let saved_macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        r"SELECT id, switch_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
-           FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
+        r"SELECT id, device_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
+           FROM switch_macs WHERE device_id = $1 ORDER BY ip_address",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_all(&conn)
     .await?;
 
@@ -484,23 +484,23 @@ pub async fn get_switch_macs_from_db(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let conn = state.pool()?.get_conn();
 
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
-        .bind(switch_id)
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+        .bind(device_id)
         .fetch_one(&conn)
         .await?;
 
     if !exists {
-        return Err(AppError::NotFound("交换机不存在".to_string()));
+        return Err(AppError::NotFound("设备不存在".to_string()));
     }
 
     let macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
-        r"SELECT id, switch_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
-           FROM switch_macs WHERE switch_id = $1 ORDER BY ip_address",
+        r"SELECT id, device_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
+           FROM switch_macs WHERE device_id = $1 ORDER BY ip_address",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_all(&conn)
     .await
     .map_err(|e| {

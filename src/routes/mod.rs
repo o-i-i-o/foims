@@ -13,11 +13,10 @@ use crate::log::notification::{
 };
 use crate::log::{get_login_logs, get_operation_logs};
 use crate::resource::switch::{
-    create_switch, create_switch_port, delete_switch, delete_switch_port, get_all_switch_ports,
-    get_switch, get_switch_info_snmp, get_switch_lldp_neighbors, get_switch_mac_table,
-    get_switch_macs_from_db, get_switch_port, get_switch_ports, get_switch_ports_snmp,
-    get_switches, sync_lldp_from_snmp, sync_ports_from_snmp, test_snmp_connection,
-    test_snmp_connection_by_id, update_switch, update_switch_port,
+    create_switch_port, delete_switch_port, get_all_switch_ports, get_switch_info_snmp,
+    get_switch_lldp_neighbors, get_switch_mac_table, get_switch_macs_from_db, get_switch_port,
+    get_switch_ports, get_switch_ports_snmp, sync_lldp_from_snmp, sync_ports_from_snmp,
+    test_snmp_connection, test_snmp_connection_by_id, update_switch_port,
 };
 use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, connect_device,
@@ -33,11 +32,11 @@ use crate::resource::{
     get_devices, get_ip_managers, get_layout, get_network, get_network_region, get_network_regions,
     get_networks, get_org_rooms, get_org_template, get_org_templates, get_organization,
     get_organization_tree, get_organizations, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_switch_ips,
-    get_workstation, get_workstation_ips, get_workstations, link_peer, pull_ip_managers,
-    save_layout, unlink_peer, update_access_point, update_cabinet, update_cabinet_position,
-    update_device, update_network, update_network_region, update_org_template, update_organization,
-    update_room, update_workstation,
+    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_workstation,
+    get_workstation_ips, get_workstations, link_peer, pull_ip_managers, save_layout, unlink_peer,
+    update_access_point, update_cabinet, update_cabinet_position, update_device, update_network,
+    update_network_region, update_org_template, update_organization, update_room,
+    update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -228,8 +227,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route(
                                     "/cabinet-position/{id}",
                                     web::get().to(get_cabinet_position_ips),
-                                )
-                                .route("/switch/{id}", web::get().to(get_switch_ips)),
+                                ),
                         )
                         // 布局管理
                         .service(
@@ -290,11 +288,13 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::get().to(get_device_template))
                                 .route("/{id}", web::delete().to(delete_device_template)),
                         )
-                        // 设备管理
+                        // 设备管理（含交换机端口/MAC/LLDP/SNMP 功能）
                         .service(
                             web::scope("/devices")
                                 .route("", web::get().to(get_devices))
                                 .route("", web::post().to(create_device))
+                                .route("/ports", web::get().to(get_all_switch_ports))
+                                .route("/test-snmp", web::post().to(test_snmp_connection))
                                 .route("/{id}", web::get().to(get_device))
                                 .route("/{id}", web::put().to(update_device))
                                 .route("/{id}", web::delete().to(delete_device))
@@ -305,41 +305,30 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                     web::post().to(auto_assign_device_ip),
                                 )
                                 .route("/{id}/connect", web::post().to(connect_device))
-                                .route("/{id}/disconnect", web::post().to(disconnect_device)),
+                                .route("/{id}/disconnect", web::post().to(disconnect_device))
+                                .route("/{id}/ports", web::get().to(get_switch_ports))
+                                .route("/{id}/ports", web::post().to(create_switch_port))
+                                .route(
+                                    "/{id}/ports/sync-snmp",
+                                    web::post().to(sync_ports_from_snmp),
+                                )
+                                .route(
+                                    "/{id}/test-snmp",
+                                    web::post().to(test_snmp_connection_by_id),
+                                )
+                                .route("/{id}/macs", web::get().to(get_switch_macs_from_db))
+                                .route("/{id}/macs/sync", web::post().to(get_switch_mac_table))
+                                .route(
+                                    "/{id}/lldp-neighbors",
+                                    web::get().to(get_switch_lldp_neighbors),
+                                )
+                                .route("/{id}/lldp/sync", web::post().to(sync_lldp_from_snmp))
+                                .route("/{id}/snmp-info", web::get().to(get_switch_info_snmp))
+                                .route("/{id}/snmp-ports", web::get().to(get_switch_ports_snmp))
+                                .route("/ports/{port_id}", web::get().to(get_switch_port))
+                                .route("/ports/{port_id}", web::put().to(update_switch_port))
+                                .route("/ports/{port_id}", web::delete().to(delete_switch_port)),
                         ),
-                )
-                // 交换机管理路由
-                .service(
-                    web::scope("/switches")
-                        .route("", web::get().to(get_switches))
-                        .route("", web::post().to(create_switch))
-                        .route("/ports", web::get().to(get_all_switch_ports))
-                        .route("/test-snmp", web::post().to(test_snmp_connection))
-                        .route("/{id}", web::get().to(get_switch))
-                        .route("/{id}", web::put().to(update_switch))
-                        .route("/{id}", web::delete().to(delete_switch))
-                        .route("/{id}/ports", web::get().to(get_switch_ports))
-                        .route("/{id}/ports", web::post().to(create_switch_port))
-                        .route(
-                            "/{id}/ports/sync-snmp",
-                            web::post().to(sync_ports_from_snmp),
-                        )
-                        .route(
-                            "/{id}/test-snmp",
-                            web::post().to(test_snmp_connection_by_id),
-                        )
-                        .route("/{id}/macs", web::get().to(get_switch_macs_from_db))
-                        .route("/{id}/macs/sync", web::post().to(get_switch_mac_table))
-                        .route(
-                            "/{id}/lldp-neighbors",
-                            web::get().to(get_switch_lldp_neighbors),
-                        )
-                        .route("/{id}/lldp/sync", web::post().to(sync_lldp_from_snmp))
-                        .route("/{id}/snmp-info", web::get().to(get_switch_info_snmp))
-                        .route("/{id}/snmp-ports", web::get().to(get_switch_ports_snmp))
-                        .route("/ports/{port_id}", web::get().to(get_switch_port))
-                        .route("/ports/{port_id}", web::put().to(update_switch_port))
-                        .route("/ports/{port_id}", web::delete().to(delete_switch_port)),
                 )
                 // 日志管理路由
                 .service(

@@ -145,20 +145,6 @@
             </div>
           </article>
           
-          <article class="dashboard-card" data-nav="resources" data-tab="switches">
-            <div class="dashboard-card-header">
-              <h3><span class="card-icon">🔀</span><span data-i18n="dashboard.top_switches">Top Switches</span></h3>
-              <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
-            <div class="dashboard-card-body">
-              <ul class="top-list" id="top-switches-list">
-                <li class="loading-item"><span class="skeleton"></span></li>
-                <li class="loading-item"><span class="skeleton"></span></li>
-                <li class="loading-item"><span class="skeleton"></span></li>
-              </ul>
-            </div>
-          </article>
-          
           <article class="dashboard-card" data-nav="resources" data-tab="cabinets">
             <div class="dashboard-card-header">
               <h3><span class="card-icon">🗄️</span><span data-i18n="dashboard.top_cabinets">Top Cabinets</span></h3>
@@ -208,7 +194,6 @@
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="network-regions" role="tab" aria-selected="true" aria-controls="network-regions-tab" data-i18n="resources.network_regions">Network Regions</button>
           <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Network Segments</button>
-          <button class="tab-btn" data-tab="switches" role="tab" aria-selected="false" aria-controls="switches-tab" data-i18n="resources.switches">Switches</button>
           <button class="tab-btn" data-tab="rooms" role="tab" aria-selected="false" aria-controls="rooms-tab" data-i18n="resources.rooms">Rooms</button>
           <button class="tab-btn" data-tab="workstations" role="tab" aria-selected="false" aria-controls="workstations-tab" data-i18n="resources.workstations">Workstations</button>
           <button class="tab-btn" data-tab="cabinets" role="tab" aria-selected="false" aria-controls="cabinets-tab" data-i18n="resources.cabinets">Cabinets</button>
@@ -274,45 +259,6 @@
               <tbody>
                 <tr class="empty-row">
                   <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="switches-tab" class="tab-content" role="tabpanel">
-          <div class="table-container">
-            <table id="switches-table" class="data-table" aria-label="Switch list">
-              <thead>
-                <tr>
-                  <th data-i18n="common.index" class="index-column">序号</th>
-                  <th>
-                    <span data-i18n="switch.name">Switch Name</span>
-                    <input type="text" id="switch-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
-                  </th>
-                  <th data-i18n="switch.device_type">Device Type</th>
-                  <th>
-                    <span data-i18n="switch.ip_address">IP Address</span>
-                    <input type="text" id="switch-ip-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
-                  </th>
-                  <th data-i18n="switch.mac_address">MAC Address</th>
-                  <th>
-                    <span data-i18n="switch.model">Model</span>
-                    <input type="text" id="switch-model-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
-                  </th>
-                  <th data-i18n="switch.vendor">Vendor</th>
-                  <th data-i18n="switch.location">Location</th>
-                  <th>SNMP</th>
-                  <th data-i18n="switch.parent_switch">Parent Switch</th>
-                  <th class="th-actions">
-                    <span data-i18n="common.actions">Actions</span>
-                    <button id="add-switch-btn" class="btn btn-primary btn-sm" data-i18n="switch.add_switch">Add Switch</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="empty-row">
-                  <td colspan="11" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -508,8 +454,8 @@
       <section id="ip" class="content-section" aria-labelledby="ip-heading">
         <div class="section-header-row">
           <div class="search-container">
-            <select id="pull-mac-switch-select" class="form-control inline-select">
-              <option value="" data-i18n="switch.select_switch">-- Select Switch --</option>
+            <select id="pull-mac-device-select" class="form-control inline-select">
+              <option value="" data-i18n="device.select_device">-- Select Device --</option>
             </select>
             <select id="pull-mac-network-select" class="form-control inline-select">
               <option value="" data-i18n="network.select_network">-- Select Network --</option>
@@ -1052,7 +998,6 @@
                     <option value="workstations" data-i18n="import_export.workstations">Workstations</option>
                     <option value="cabinets" data-i18n="import_export.cabinets">Cabinets</option>
                     <option value="positions" data-i18n="import_export.positions">Positions</option>
-                    <option value="switches" data-i18n="import_export.switches">Switches</option>
                     <option value="ip_managers" data-i18n="import_export.ip_managers">IP Data (Export Only)</option>
                   </select>
                   <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_csv">Export CSV</button>

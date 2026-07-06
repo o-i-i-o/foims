@@ -12,12 +12,22 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             access_point_id UUID REFERENCES access_points(id) ON DELETE SET NULL,
             switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
             template_id UUID REFERENCES device_templates(id) ON DELETE SET NULL,
+            vendor VARCHAR(50),
+            location VARCHAR(100),
+            snmp_version VARCHAR(3) DEFAULT 'v2c',
+            snmp_community VARCHAR(64),
+            snmp_username VARCHAR(22),
+            snmp_auth_protocol VARCHAR(10),
+            snmp_auth_password VARCHAR(100),
+            snmp_priv_protocol VARCHAR(10),
+            snmp_priv_password VARCHAR(100),
+            snmp_port INTEGER DEFAULT 161,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_device_type CHECK (device_type IN (
-                'pc', 'laptop', 'printer', 'server', 'network_device',
-                'camera', 'phone', 'ap', 'other'
+                'pc', 'laptop', 'printer', 'server', 'network_device', 'switch',
+                'camera', 'phone', 'other'
             )),
             CONSTRAINT chk_device_location CHECK (
                 (workstation_id IS NOT NULL AND position_id IS NULL) OR

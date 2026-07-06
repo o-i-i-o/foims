@@ -1,6 +1,6 @@
 <template id="device-modal-template">
 <div id="device-modal" class="modal">
-  <div class="modal-content">
+  <div class="modal-content modal-lg">
     <header class="modal-header">
       <h3 class="modal-title" id="device-modal-title" data-i18n="device.add">Add Device</h3>
       <span class="close" data-modal-id="device-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
@@ -22,9 +22,9 @@
               <option value="printer" data-i18n="device_type.printer">Printer</option>
               <option value="server" data-i18n="device_type.server">Server</option>
               <option value="network_device" data-i18n="device_type.network_device">Network Device</option>
+              <option value="switch" data-i18n="device_type.switch">Switch</option>
               <option value="camera" data-i18n="device_type.camera">Camera</option>
               <option value="phone" data-i18n="device_type.phone">Phone</option>
-              <option value="ap" data-i18n="device_type.ap">Access Point</option>
             </select>
           </div>
         </div>
@@ -62,6 +62,16 @@
         </div>
         <div class="form-row">
           <div class="form-group">
+            <label for="device-vendor" data-i18n="device.vendor">Vendor</label>
+            <input type="text" id="device-vendor" name="vendor" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="device-location" data-i18n="device.location">Location</label>
+            <input type="text" id="device-location" name="location" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
             <label for="device-workstation-id" data-i18n="device.workstation">Workstation</label>
             <select id="device-workstation-id" name="workstation_id">
               <option value="" data-i18n="device.select_workstation">Select Workstation</option>
@@ -92,9 +102,81 @@
           <label for="device-description" data-i18n="common.description">Description</label>
           <textarea id="device-description" name="description" rows="3"></textarea>
         </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="device.ip_config">IP Configuration</h4>
+        <div class="form-group">
+          <div id="device-ips-container"></div>
+        </div>
+        <hr class="section-divider" />
+        <h4 class="section-subtitle" data-i18n="device.snmp_config">SNMP Configuration</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-snmp-version" data-i18n="device.snmp_version">SNMP Version</label>
+            <select id="device-snmp-version" name="snmp_version">
+              <option value="v2c">SNMPv1/v2c</option>
+              <option value="v3">SNMPv3</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-snmp-port" data-i18n="device.snmp_port">SNMP Port</label>
+            <input type="number" id="device-snmp-port" name="snmp_port" value="161" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row" id="snmp-v2c-config">
+          <div class="form-group flex-1">
+            <label for="device-snmp-community" data-i18n="device.snmp_community">Community String</label>
+            <input type="text" id="device-snmp-community" name="snmp_community" placeholder="public" autocomplete="off" />
+          </div>
+        </div>
+        <div id="snmp-v3-config" class="hidden">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device-snmp-username" data-i18n="device.snmp_username">Username</label>
+              <input type="text" id="device-snmp-username" name="snmp_username" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="device-snmp-auth-protocol" data-i18n="device.snmp_auth_protocol">Auth Protocol</label>
+              <select id="device-snmp-auth-protocol" name="snmp_auth_protocol">
+                <option value="" data-i18n="device.snmp_no_auth">No Auth</option>
+                <option value="MD5">MD5</option>
+                <option value="SHA">SHA</option>
+                <option value="SHA-224">SHA-224</option>
+                <option value="SHA-256">SHA-256</option>
+                <option value="SHA-384">SHA-384</option>
+                <option value="SHA-512">SHA-512</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device-snmp-auth-password" data-i18n="device.snmp_auth_password">Auth Password</label>
+              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="device-snmp-priv-protocol" data-i18n="device.snmp_priv_protocol">Privacy Protocol</label>
+              <select id="device-snmp-priv-protocol" name="snmp_priv_protocol">
+                <option value="" data-i18n="device.snmp_no_priv">No Privacy</option>
+                <option value="DES">DES</option>
+                <option value="AES">AES</option>
+                <option value="AES-128">AES-128</option>
+                <option value="AES-192">AES-192</option>
+                <option value="AES-256">AES-256</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
+              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="off" />
+            </div>
+            <div class="form-group"></div>
+          </div>
+        </div>
       </form>
     </div>
     <footer class="modal-footer">
+      <button type="button" id="test-snmp-btn" class="btn btn-secondary" data-i18n="device.test_snmp">Test SNMP</button>
+      <button type="button" id="get-snmp-info-btn" class="btn btn-primary" data-i18n="device.get_snmp_info">Get Info from SNMP</button>
       <button type="button" class="btn btn-secondary" data-modal-id="device-modal" data-i18n="common.cancel">Cancel</button>
       <button type="submit" class="btn btn-primary" form="device-form" data-i18n="common.save">Save</button>
     </footer>

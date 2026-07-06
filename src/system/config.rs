@@ -1190,7 +1190,7 @@ pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpRespo
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-    let switches_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switches")
+    let devices_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices")
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -1212,7 +1212,7 @@ pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpRespo
             "rooms": rooms_count,
             "cabinets": cabinets_count,
             "workstations": workstations_count,
-            "switches": switches_count
+            "devices": devices_count
         },
         "users": {
             "total": users_count

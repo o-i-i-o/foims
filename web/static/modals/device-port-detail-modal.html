@@ -1,0 +1,64 @@
+<template id="device-port-detail-modal-template">
+<div id="device-port-detail-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="device-port-detail-modal-title" data-i18n="device.port_detail">Port Detail</h3>
+      <span class="close" data-modal-id="device-port-detail-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="device-port-form-expanded">
+        <input type="hidden" id="device-port-id-expanded" />
+        <input type="hidden" id="device-port-device-id-expanded" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-port-number-expanded"><span data-i18n="device.port_number">Port Number</span><span class="required">*</span></label>
+            <input type="text" id="device-port-number-expanded" name="port_number" required autocomplete="off" placeholder="e.g., Gi0/1, Fa1/0/1" />
+          </div>
+          <div class="form-group">
+            <label for="device-port-name-expanded" data-i18n="device.port_name">Port Name</label>
+            <input type="text" id="device-port-name-expanded" name="port_name" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-port-type-expanded" data-i18n="device.port_type">Port Type</label>
+            <select id="device-port-type-expanded" name="port_type">
+              <option value="access">Access</option>
+              <option value="trunk">Trunk</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="uplink">Uplink</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-port-vlan-expanded">VLAN ID</label>
+            <input type="number" id="device-port-vlan-expanded" name="vlan_id" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="device-port-status-expanded" data-i18n="ip.status">Status</label>
+            <select id="device-port-status-expanded" name="status">
+              <option value="up">Up</option>
+              <option value="down">Down</option>
+              <option value="admin-down">Admin Down</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="device-port-speed-expanded" data-i18n="device.speed">Speed</label>
+            <input type="text" id="device-port-speed-expanded" name="speed" autocomplete="off" placeholder="e.g., 1000Mbps" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="device-port-description-expanded" data-i18n="common.description">Description</label>
+          <textarea id="device-port-description-expanded" name="description" rows="2"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="device-port-detail-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="delete-port-btn" data-i18n="common.delete">Delete</button>
+      <button type="button" class="btn btn-primary" id="save-port-btn" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::{decrypt_credential, decrypt_credential_async, decrypt_password};
 use crate::error::AppError;
-use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate, SwitchWithParent};
+use crate::models::{ApiResponse, DeviceWithDetails, SnmpTestRequest, SwitchPortCreate};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SwitchForSnmp {
@@ -193,7 +193,7 @@ impl From<SwitchConfigError> for SnmpError {
 
 pub async fn get_switch_snmp_config(
     pool: &sqlx::PgPool,
-    switch_id: &Uuid,
+    device_id: &Uuid,
 ) -> Result<(SwitchForSnmp, Option<String>), SwitchConfigError> {
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
         r"SELECT
@@ -201,29 +201,29 @@ pub async fn get_switch_snmp_config(
             snmp_username, snmp_auth_protocol,
             snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
+        FROM devices WHERE id = $1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| SwitchConfigError::Database(e.to_string()))?
-    .ok_or_else(|| SwitchConfigError::NotFound("交换机不存在".to_string()))?;
+    .ok_or_else(|| SwitchConfigError::NotFound("设备不存在".to_string()))?;
 
-    let ip_address = get_switch_ip_address(pool, switch_id).await?;
+    let ip_address = get_switch_ip_address(pool, device_id).await?;
 
     Ok((switch, ip_address))
 }
 
 pub async fn get_switch_ip_address(
     pool: &sqlx::PgPool,
-    switch_id: &Uuid,
+    device_id: &Uuid,
 ) -> Result<Option<String>, SwitchConfigError> {
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)
+           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
            ORDER BY created_at LIMIT 1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| SwitchConfigError::Database(e.to_string()))?
@@ -246,7 +246,7 @@ pub struct SnmpParamsLegacy {
     pub timeout_secs: u64,
 }
 
-pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
+pub fn decrypt_snmp_fields(data: &mut DeviceWithDetails) {
     data.snmp_community = data
         .snmp_community
         .as_ref()
@@ -261,7 +261,7 @@ pub fn decrypt_snmp_fields(data: &mut SwitchWithParent) {
         .map(|v| decrypt_password(v).unwrap_or_default());
 }
 
-pub async fn decrypt_snmp_fields_async(data: &mut SwitchWithParent) {
+pub async fn decrypt_snmp_fields_async(data: &mut DeviceWithDetails) {
     let community = data.snmp_community.take();
     let auth_password = data.snmp_auth_password.take();
     let priv_password = data.snmp_priv_password.take();
@@ -572,9 +572,9 @@ pub async fn test_snmp_connection_by_id(
     path: web::Path<Uuid>,
     req: web::Json<SnmpTestRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let mut test_req = req.into_inner();
-    test_req.switch_id = Some(switch_id);
+    test_req.device_id = Some(device_id);
     test_snmp_connection(state, web::Json(test_req)).await
 }
 
@@ -585,9 +585,9 @@ pub async fn test_snmp_connection(
     tracing::info!("[test_snmp] 收到的完整请求: {:?}", req);
 
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
-        if let Some(switch_id) = req.switch_id {
+        if let Some(device_id) = req.device_id {
             let conn = state.pool()?.get_conn();
-            let (switch, ip_address) = get_switch_snmp_config(&conn, &switch_id).await?;
+            let (switch, ip_address) = get_switch_snmp_config(&conn, &device_id).await?;
 
             let creds = DecryptedSnmpCredentials::from_switch_snmp_async(&switch).await;
 
@@ -667,10 +667,10 @@ pub async fn get_switch_info_snmp(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
 
     let (switch, ip_address) =
-        get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
+        get_switch_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
@@ -690,10 +690,10 @@ pub async fn get_switch_ports_snmp(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
 
     let (switch, ip_address) =
-        get_switch_snmp_config(&state.pool()?.get_conn(), &switch_id).await?;
+        get_switch_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;

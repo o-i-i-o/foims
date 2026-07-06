@@ -11,7 +11,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
         CREATE VIEW ip_with_details AS
-        SELECT 
+        SELECT
             imm.id,
             imm.workstation_id,
             imm.position_id,
@@ -21,7 +21,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.network_id,
             CASE
                 WHEN dv.id IS NOT NULL THEN dv.name::text
-                WHEN s.id IS NOT NULL THEN s.name::text
                 WHEN w.id IS NOT NULL THEN w.name::text
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE 'unknown device'
@@ -34,10 +33,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE NULL
             END AS cabinet_position_name,
-            CASE
-                WHEN s.id IS NOT NULL THEN s.name::text
-                ELSE NULL
-            END AS switch_name,
             sp.port_number::text AS switch_port_number,
             CASE
                 WHEN dv.id IS NOT NULL THEN dv.name::text
@@ -76,8 +71,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN workstations w ON imm.workstation_id = w.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
-        LEFT JOIN switches s ON s.position_id = cp.id
         LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+        LEFT JOIN devices sdv ON sp.device_id = sdv.id
         LEFT JOIN rooms r ON COALESCE(w.room_id, (SELECT ws.room_id FROM devices d2 JOIN workstations ws ON d2.workstation_id = ws.id WHERE d2.id = dv.id), (SELECT cab2.room_id FROM devices d3 JOIN positions p2 ON d3.position_id = p2.id JOIN cabinets cab2 ON p2.cabinet_id = cab2.id WHERE d3.id = dv.id)) = r.id
         LEFT JOIN organizations org ON r.org_id = org.id
         LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
@@ -97,9 +92,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
         CREATE VIEW mac_comparison AS
-        SELECT 
-            sm.switch_id,
-            s.name AS switch_name,
+        SELECT
+            sm.device_id,
+            sdv.name AS device_name,
             host(sm.ip_address) AS ip_address,
             sm.mac_address AS snmp_mac,
             im.mac_address AS managed_mac,
@@ -109,54 +104,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 ELSE 'mismatch'
             END AS comparison_result
         FROM switch_macs sm
-        JOIN switches s ON sm.switch_id = s.id
+        JOIN devices sdv ON sm.device_id = sdv.id
         LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_type != 'switch'
-    ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS switches_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
-        r"
-        CREATE VIEW switches_with_details AS
-        SELECT 
-            s.id, s.name, s.model, s.vendor,
-            s.location, s.snmp_version, 
-            s.snmp_community,
-            s.snmp_username, s.snmp_auth_protocol, 
-            s.snmp_auth_password,
-            s.snmp_priv_protocol, 
-            s.snmp_priv_password,
-            s.snmp_port,
-            s.position_id,
-            p.cabinet_id, c.name as cabinet_name,
-            r.id as room_id, r.name as room_name,
-            p.start_u, p.end_u,
-            i.network_id,
-            nc.network_region_id,
-            s.description,
-            'switch'::text as device_type,
-            host(i.ip_address) as ip_address,
-            i.mac_address,
-            s.created_at, s.updated_at
-        FROM switches s
-        LEFT JOIN positions p ON s.position_id = p.id
-        LEFT JOIN cabinets c ON p.cabinet_id = c.id
-        LEFT JOIN rooms r ON c.room_id = r.id
-        LEFT JOIN LATERAL (
-            SELECT ips.ip_address, ips.mac_address, ips.network_id
-            FROM ips
-            WHERE ips.position_id = p.id
-            LIMIT 1
-        ) i ON true
-        LEFT JOIN network_cidrs nc ON i.network_id = nc.id
     ",
     )
     .execute(pool)
@@ -172,10 +121,14 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
         CREATE VIEW devices_with_details AS
-        SELECT 
+        SELECT
             d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
             d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-            d.template_id, d.description,
+            d.template_id, d.vendor, d.location,
+            d.snmp_version, d.snmp_community, d.snmp_username,
+            d.snmp_auth_protocol, d.snmp_auth_password,
+            d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+            d.description,
             w.name AS workstation_name,
             COALESCE(w.room_id, (SELECT cab.room_id FROM positions p JOIN cabinets cab ON p.cabinet_id = cab.id WHERE p.id = d.position_id)) AS room_id,
             COALESCE(r.name, (SELECT cab2.name FROM positions p2 JOIN cabinets cab2 ON p2.cabinet_id = cab2.id WHERE p2.id = d.position_id)) AS room_name,
@@ -185,7 +138,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             ap.name AS access_point_name,
             ap.ap_type AS access_point_type,
             sp.port_number AS connected_switch_port,
-            sw.name AS connected_switch_name,
+            sdv.name AS connected_switch_name,
             dt.name AS template_name,
             d.created_at, d.updated_at
         FROM devices d
@@ -194,7 +147,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN positions p ON d.position_id = p.id
         LEFT JOIN access_points ap ON d.access_point_id = ap.id
         LEFT JOIN switch_ports sp ON d.switch_port_id = sp.id
-        LEFT JOIN switches sw ON sp.switch_id = sw.id
+        LEFT JOIN devices sdv ON sp.device_id = sdv.id
         LEFT JOIN device_templates dt ON d.template_id = dt.id
     ",
     )
@@ -211,21 +164,21 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
         CREATE VIEW access_points_with_details AS
-        SELECT 
+        SELECT
             ap.id, ap.name, ap.ap_type, ap.room_id, ap.cabinet_id,
             ap.peer_access_point_id, ap.switch_port_id, ap.description,
             r.name AS room_name,
             cab.name AS cabinet_name,
             pap.name AS peer_access_point_name,
             sp.port_number AS connected_switch_port,
-            sw.name AS connected_switch_name,
+            sdv.name AS connected_switch_name,
             ap.created_at, ap.updated_at
         FROM access_points ap
         LEFT JOIN rooms r ON ap.room_id = r.id
         LEFT JOIN cabinets cab ON ap.cabinet_id = cab.id
         LEFT JOIN access_points pap ON ap.peer_access_point_id = pap.id
         LEFT JOIN switch_ports sp ON ap.switch_port_id = sp.id
-        LEFT JOIN switches sw ON sp.switch_id = sw.id
+        LEFT JOIN devices sdv ON sp.device_id = sdv.id
     ",
     )
     .execute(pool)

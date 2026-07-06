@@ -108,9 +108,9 @@ impl TaskExecutor for MacSyncTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let switch_id = ctx
+        let device_id = ctx
             .config
-            .get("switch_id")
+            .get("device_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
         let network_id = ctx
@@ -119,15 +119,15 @@ impl TaskExecutor for MacSyncTaskExecutor {
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
 
-        match (switch_id, network_id) {
-            (Some(switch_id), Some(network_id)) => {
-                crate::resource::ip::pull_ip_managers_internal(&ctx.pool, switch_id, network_id)
+        match (device_id, network_id) {
+            (Some(device_id), Some(network_id)) => {
+                crate::resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
                     .await
                     .map(|()| "MAC同步成功".to_string())
                     .map_err(|e| SchedulerError::Execution(format!("MAC同步失败: {e}")))
             }
             _ => Err(SchedulerError::Validation(
-                "MAC同步任务需要配置switch_id和network_id".to_string(),
+                "MAC同步任务需要配置device_id和network_id".to_string(),
             )),
         }
     }

@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{
     ApiResponse, Device, DeviceConnectRequest, DeviceCreate, DeviceUpdate, DeviceWithDetails,
@@ -24,9 +25,9 @@ const VALID_DEVICE_TYPES: [&str; 9] = [
     "printer",
     "server",
     "network_device",
+    "switch",
     "camera",
     "phone",
-    "ap",
     "other",
 ];
 
@@ -130,7 +131,11 @@ pub async fn get_devices(
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-                d.template_id, d.description,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
                 d.connected_switch_port, d.connected_switch_name, d.template_name,
@@ -316,9 +321,29 @@ pub async fn create_device(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
+    // Encrypt SNMP sensitive fields
+    let encrypted_community = match &req.snmp_community {
+        Some(c) if !c.is_empty() => encrypt_password_async(c.clone()).await,
+        _ => None,
+    };
+    let encrypted_auth_password = match &req.snmp_auth_password {
+        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        _ => None,
+    };
+    let encrypted_priv_password = match &req.snmp_priv_password {
+        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        _ => None,
+    };
+
+    let snmp_version = req
+        .snmp_version
+        .clone()
+        .unwrap_or_else(|| "v2c".to_string());
+    let snmp_port = req.snmp_port.unwrap_or(161);
+
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, switch_port_id, template_id, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, switch_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
     )
     .bind(id)
     .bind(&req.name)
@@ -331,6 +356,16 @@ pub async fn create_device(
     .bind(req.access_point_id)
     .bind(req.switch_port_id)
     .bind(req.template_id)
+    .bind(&req.vendor)
+    .bind(&req.location)
+    .bind(&snmp_version)
+    .bind(&encrypted_community)
+    .bind(&req.snmp_username)
+    .bind(&req.snmp_auth_protocol)
+    .bind(&encrypted_auth_password)
+    .bind(&req.snmp_priv_protocol)
+    .bind(&encrypted_priv_password)
+    .bind(snmp_port)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -475,6 +510,16 @@ pub async fn create_device(
         access_point_id: req.access_point_id,
         switch_port_id: req.switch_port_id,
         template_id: req.template_id,
+        vendor: req.vendor.clone(),
+        location: req.location.clone(),
+        snmp_version,
+        snmp_community: encrypted_community,
+        snmp_username: req.snmp_username.clone(),
+        snmp_auth_protocol: req.snmp_auth_protocol.clone(),
+        snmp_auth_password: encrypted_auth_password,
+        snmp_priv_protocol: req.snmp_priv_protocol.clone(),
+        snmp_priv_password: encrypted_priv_password,
+        snmp_port,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -517,7 +562,11 @@ pub async fn get_device(
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-                d.template_id, d.description,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
                 d.connected_switch_port, d.connected_switch_name, d.template_name,
@@ -678,6 +727,20 @@ pub async fn update_device(
 
     let now = Utc::now();
 
+    // Encrypt SNMP sensitive fields if provided
+    let encrypted_community = match &req.snmp_community {
+        Some(c) if !c.is_empty() => encrypt_password_async(c.clone()).await,
+        _ => None,
+    };
+    let encrypted_auth_password = match &req.snmp_auth_password {
+        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        _ => None,
+    };
+    let encrypted_priv_password = match &req.snmp_priv_password {
+        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        _ => None,
+    };
+
     sqlx::query(
         "UPDATE devices SET
          name = COALESCE($1, name),
@@ -689,9 +752,19 @@ pub async fn update_device(
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
          access_point_id = CASE WHEN $10::boolean THEN $11 ELSE access_point_id END,
          switch_port_id = CASE WHEN $12::boolean THEN $13 ELSE switch_port_id END,
-         description = COALESCE($14, description),
-         updated_at = $15
-         WHERE id = $16",
+         vendor = COALESCE($14, vendor),
+         location = COALESCE($15, location),
+         snmp_version = COALESCE($16, snmp_version),
+         snmp_community = CASE WHEN $17::boolean THEN $18 ELSE snmp_community END,
+         snmp_username = COALESCE($19, snmp_username),
+         snmp_auth_protocol = COALESCE($20, snmp_auth_protocol),
+         snmp_auth_password = CASE WHEN $21::boolean THEN $22 ELSE snmp_auth_password END,
+         snmp_priv_protocol = COALESCE($23, snmp_priv_protocol),
+         snmp_priv_password = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_password END,
+         snmp_port = COALESCE($26, snmp_port),
+         description = COALESCE($27, description),
+         updated_at = $28
+         WHERE id = $29",
     )
     .bind(&req.name)
     .bind(&req.device_type)
@@ -710,6 +783,23 @@ pub async fn update_device(
     // switch_port_id
     .bind(req.switch_port_id.is_some())
     .bind(resolved_switch_port_id)
+    // vendor, location
+    .bind(&req.vendor)
+    .bind(&req.location)
+    // snmp_version, snmp_community (CASE WHEN provided)
+    .bind(&req.snmp_version)
+    .bind(req.snmp_community.is_some())
+    .bind(&encrypted_community)
+    // snmp_username, snmp_auth_protocol, snmp_auth_password (CASE WHEN provided)
+    .bind(&req.snmp_username)
+    .bind(&req.snmp_auth_protocol)
+    .bind(req.snmp_auth_password.is_some())
+    .bind(&encrypted_auth_password)
+    // snmp_priv_protocol, snmp_priv_password (CASE WHEN provided), snmp_port
+    .bind(&req.snmp_priv_protocol)
+    .bind(req.snmp_priv_password.is_some())
+    .bind(&encrypted_priv_password)
+    .bind(req.snmp_port)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -878,7 +968,11 @@ pub async fn update_device(
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-                d.template_id, d.description,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
                 d.connected_switch_port, d.connected_switch_name, d.template_name,
@@ -1438,7 +1532,11 @@ pub async fn connect_device(
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-                d.template_id, d.description,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
                 d.connected_switch_port, d.connected_switch_name, d.template_name,
@@ -1522,7 +1620,11 @@ pub async fn disconnect_device(
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
-                d.template_id, d.description,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
                 d.connected_switch_port, d.connected_switch_name, d.template_name,

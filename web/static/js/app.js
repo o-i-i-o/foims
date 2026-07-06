@@ -80,7 +80,6 @@ function getResourceCallbacks() {
     openWorkstationModal: createCallback('workstation', 'openWorkstationModal'),
     openCabinetModal: createCallback('cabinet', 'openCabinetModal'),
     openCabinetPositionModal: createCallback('position', 'openCabinetPositionModal'),
-    openSwitchModal: createCallback('switch/switchDevice', 'openSwitchModal'),
     openUserModal: createCallback('userManager', 'openUserModal'),
     openOrgModal: createCallback('organization', 'openOrgModal'),
     openAccessPointModal: createCallback('accessPoint', 'openAccessPointModal'),
@@ -91,9 +90,8 @@ function getResourceCallbacks() {
     submitRoomForm: createCallback('room', 'submitRoomForm'),
     submitWorkstationForm: createCallback('workstation', 'submitWorkstationForm'),
     submitCabinetForm: createCallback('cabinet', 'submitCabinetForm'),
-    submitCabinetPositionForm: createCallback('position', 'submitCabinetPositionForm'),
-    submitSwitchForm: createCallback('switch/switchDevice', 'submitSwitchForm'),
-    submitSwitchPortForm: createCallback('switch/switchDevice', 'submitSwitchPortForm'),
+    submitCabinetPositionForm: createCallback('position', 'openCabinetPositionModal'),
+    submitDevicePortForm: createCallback('devicePorts', 'submitDevicePortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
     submitOrgForm: createCallback('organization', 'submitOrgForm'),
     submitAccessPointForm: createCallback('accessPoint', 'submitAccessPointForm'),
@@ -116,7 +114,8 @@ function initResourcePreloading() {
     'workstation',
     'cabinet',
     'position',
-    'switchDevice',
+    'device',
+    'devicePorts',
     'visualizationManager'
   ], { delay: 2000, priority: 'low' });
   

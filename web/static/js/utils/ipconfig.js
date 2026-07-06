@@ -208,9 +208,9 @@ const CONFIG = {
     switchLabel: '上级交换机',
     portLabel: '上级端口'
   },
-  switch: {
-    containerId: 'switch-ips-container',
-    classPrefix: 'switch',
+  device: {
+    containerId: 'device-ips-container',
+    classPrefix: 'device',
     networksApi: (regionId) => regionId ? `/api/resources/networks?region_id=${regionId}&page_size=1000` : null,
     excludeSwitchId: null,
     parentSwitchRequired: false,
@@ -220,7 +220,7 @@ const CONFIG = {
   }
 };
 
-let switchesCache = null;
+let devicesCache = null;
 
 export class IpConfigManager {
   constructor(resourceType) {
@@ -426,8 +426,8 @@ export class IpConfigManager {
             mac_address: macAddressInput && macAddressInput.value ? macAddressInput.value.trim() : null,
           };
 
-          if (this.resourceType === 'switch') {
-            ipData.device_type = 'cabinet_position';
+          if (this.resourceType === 'device') {
+            ipData.device_type = 'network_device';
           } else if (this.resourceType === 'cabinet-position') {
             ipData.device_type = 'cabinet_position';
           } else if (this.resourceType === 'workstation') {
@@ -509,8 +509,8 @@ export class IpConfigManager {
           mac_address: macAddress || null,
         };
 
-        if (this.resourceType === 'switch') {
-          ipData.device_type = 'cabinet_position';
+        if (this.resourceType === 'device') {
+          ipData.device_type = 'network_device';
         } else if (this.resourceType === 'cabinet-position') {
           ipData.device_type = 'cabinet_position';
         } else if (this.resourceType === 'workstation') {
@@ -748,7 +748,7 @@ export class IpConfigManager {
           networkSelect.value = filtered[0].id;
         }
         
-        if (this.resourceType === 'switch') {
+        if (this.resourceType === 'device') {
           dispatchNetworkRegionChange(regionId, regionName);
         }
       });
@@ -759,7 +759,7 @@ export class IpConfigManager {
         const networkId = networkSelect.value;
         const network = this.networks.find(n => n.id === networkId);
         if (network) {
-          if (this.resourceType === 'switch') {
+          if (this.resourceType === 'device') {
             dispatchNetworkChange(networkId, network.name, network.network_region_id);
           }
         }
@@ -831,39 +831,39 @@ export class IpConfigManager {
     if (!switchSelect || !portSelect) return;
 
     try {
-      const result = await apiGet("/api/switches");
-      let switchesData = [];
+      const result = await apiGet("/api/resources/devices?page_size=1000");
+      let devicesData = [];
       if (result.success && result.data) {
         if (Array.isArray(result.data)) {
-          switchesData = result.data;
+          devicesData = result.data;
         } else if (result.data.items && Array.isArray(result.data.items)) {
-          switchesData = result.data.items;
+          devicesData = result.data.items;
         }
       }
-      switchesCache = switchesData;
-      
-      switchSelect.innerHTML = '<option value="">选择交换机</option>';
-      
-      let filteredSwitches = switchesCache;
-      if (this.resourceType === 'switch' && this.config.excludeSwitchId) {
-        filteredSwitches = switchesCache.filter(sw => sw.id !== this.config.excludeSwitchId);
+      devicesCache = devicesData;
+
+      switchSelect.innerHTML = '<option value="">选择设备</option>';
+
+      let filteredDevices = devicesCache;
+      if (this.config.excludeSwitchId) {
+        filteredDevices = devicesCache.filter(dev => dev.id !== this.config.excludeSwitchId);
       }
-      
-      filteredSwitches.forEach(sw => {
+
+      filteredDevices.forEach(dev => {
         const option = document.createElement("option");
-        option.value = sw.id;
-        option.textContent = sw.name;
+        option.value = dev.id;
+        option.textContent = dev.name;
         switchSelect.appendChild(option);
       });
 
       switchSelect.addEventListener("change", () => this.handleSwitchChange(switchSelect, portSelect));
     } catch (error) {
-      console.error("加载交换机失败:", error);
+      console.error("加载设备列表失败:", error);
     }
   }
 
   filterSwitchesByRegion(switchSelect, portSelect, regionId) {
-    if (!switchSelect || !switchesCache) return;
+    if (!switchSelect || !devicesCache) return;
 
     if (portSelect) {
       portSelect.innerHTML = '<option value="">选择端口</option>';
@@ -871,38 +871,38 @@ export class IpConfigManager {
 
     const currentSwitchId = switchSelect.value;
 
-    switchSelect.innerHTML = '<option value="">选择交换机</option>';
+    switchSelect.innerHTML = '<option value="">选择设备</option>';
 
-    let filteredSwitches = switchesCache;
-    
+    let filteredDevices = devicesCache;
+
     if (regionId) {
-      filteredSwitches = switchesCache.filter(sw => sw.network_region_id === regionId);
+      filteredDevices = devicesCache.filter(dev => dev.network_region_id === regionId);
     }
 
-    if (this.resourceType === 'switch' && this.config.excludeSwitchId) {
-      filteredSwitches = filteredSwitches.filter(sw => sw.id !== this.config.excludeSwitchId);
+    if (this.config.excludeSwitchId) {
+      filteredDevices = filteredDevices.filter(dev => dev.id !== this.config.excludeSwitchId);
     }
 
-    filteredSwitches.forEach(sw => {
+    filteredDevices.forEach(dev => {
       const option = document.createElement("option");
-      option.value = sw.id;
-      option.textContent = sw.name;
+      option.value = dev.id;
+      option.textContent = dev.name;
       switchSelect.appendChild(option);
     });
 
-    if (currentSwitchId && filteredSwitches.some(sw => sw.id === currentSwitchId)) {
+    if (currentSwitchId && filteredDevices.some(dev => dev.id === currentSwitchId)) {
       switchSelect.value = currentSwitchId;
     }
   }
 
   async handleSwitchChange(switchSelect, portSelect) {
-    const switchId = switchSelect.value;
+    const deviceId = switchSelect.value;
     portSelect.innerHTML = '<option value="">选择端口</option>';
-    
-    if (!switchId) return;
-    
+
+    if (!deviceId) return;
+
     try {
-      const result = await apiGet(`/api/switches/${switchId}/ports`);
+      const result = await apiGet(`/api/resources/devices/${deviceId}/ports`);
       if (result.success && result.data) {
           let ports;
           if (Array.isArray(result.data)) {

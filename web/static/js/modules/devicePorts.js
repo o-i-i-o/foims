@@ -3,7 +3,7 @@ import {
   apiPost,
   apiPut,
   apiDelete,
-} from "../../utils/apiClient.js";
+} from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -12,36 +12,48 @@ import {
   handleDelete,
   handleError,
   appendPaginationToTable,
-} from "../../utils/ui.js";
+} from "../utils/ui.js";
 
-import { openModal, closeModal } from "../../utils/modal.js";
+import { openModal, closeModal } from "../utils/modal.js";
+import { elementCache } from "../utils/helpers.js";
+import { showConfirm } from "../utils/confirm.js";
+import { t } from "../utils/i18n.js";
 
-import {
-  getCurrentSwitchId,
-  getCurrentSwitchName,
-  setCurrentSwitchId,
-  setCurrentSwitchName,
-  SWITCH_PORT_PAGE_SIZE
-} from "./switchState.js";
+export const DEVICE_PORT_PAGE_SIZE = 50;
 
-import { syncPortsFromSnmp } from "./switchSnmp.js";
+const devicePortState = {
+  currentDeviceId: null,
+  currentDeviceName: null,
+};
 
-import { elementCache } from "../../utils/helpers.js";
-import { showConfirm } from "../../utils/confirm.js";
-import { t } from "../../utils/i18n.js";
+export function setCurrentDeviceId(id) {
+  devicePortState.currentDeviceId = id;
+}
 
-async function loadSwitchPortsData(page = 1, searchTerm = "") {
-  const currentSwitchName = getCurrentSwitchName();
+export function getCurrentDeviceId() {
+  return devicePortState.currentDeviceId;
+}
+
+export function setCurrentDeviceName(name) {
+  devicePortState.currentDeviceName = name;
+}
+
+export function getCurrentDeviceName() {
+  return devicePortState.currentDeviceName;
+}
+
+async function loadDevicePortsData(page = 1, searchTerm = "") {
+  const currentDeviceName = getCurrentDeviceName();
   try {
-    const url = `/api/switches/ports?page=${page}&page_size=${SWITCH_PORT_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
+    const url = `/api/resources/devices/ports?page=${page}&page_size=${DEVICE_PORT_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const ports = data.items || data;
 
-    renderTable("#switch-ports-table", {
+    renderTable("#device-ports-table", {
       data: ports,
       columns: [
-        { field: 'switch_name', render: (v, row) => v ? `${v} (${row.switch_ip || ''})` : currentSwitchName },
+        { field: 'device_name', render: (v, row) => v ? `${v} (${row.device_ip || ''})` : currentDeviceName },
         { field: 'port_number', render: (v) => v },
         { field: 'port_name', render: (v) => v || '-' },
         { field: 'port_type', render: (v) => v },
@@ -49,33 +61,33 @@ async function loadSwitchPortsData(page = 1, searchTerm = "") {
         { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
         { field: 'speed', render: (v) => v || '-' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit switch-port-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete switch-port-delete" data-id="${v}">删除</button>
+          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: '暂无端口数据'
+      emptyMessage: t('device.no_ports') || '暂无端口数据'
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#switch-ports-table", data, (p) => loadSwitchPortsData(p, searchTerm));
+      appendPaginationToTable("#device-ports-table", data, (p) => loadDevicePortsData(p, searchTerm));
     }
   } catch (error) {
-    handleError(error, "加载端口数据失败", () => {
-      renderTable("#switch-ports-table", { data: [], columns: [], emptyMessage: "加载失败" });
+    handleError(error, t('device.load_ports_failed') || "加载端口数据失败", () => {
+      renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
     });
   }
 }
 
-async function loadSwitchPortsBySwitchId(switchId) {
+async function loadDevicePortsByDeviceId(deviceId) {
   try {
-    const result = await apiGet(`/api/switches/${switchId}/ports?page_size=1000`);
+    const result = await apiGet(`/api/resources/devices/${deviceId}/ports?page_size=1000`);
 
     const searchContainer = document.querySelector(
-      "#switch-ports-list-tab .search-container",
+      "#device-ports-list-tab .search-container",
     );
 
     if (!searchContainer) {
-      renderTable("#switch-ports-table", {
+      renderTable("#device-ports-table", {
         data: result.success ? result.data : [],
         columns: [
           { field: 'port_number', render: (v) => v },
@@ -85,11 +97,11 @@ async function loadSwitchPortsBySwitchId(switchId) {
           { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
           { field: 'speed', render: (v) => v || '-' },
           { field: 'id', render: (v) => `
-            <button class="btn btn-sm btn-edit switch-port-edit" data-id="${v}">编辑</button>
-            <button class="btn btn-sm btn-delete switch-port-delete" data-id="${v}">删除</button>
+            <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
+            <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
           ` }
         ],
-        emptyMessage: '暂无端口数据'
+        emptyMessage: t('device.no_ports') || '暂无端口数据'
       });
       return;
     }
@@ -102,13 +114,13 @@ async function loadSwitchPortsBySwitchId(switchId) {
         return container;
       })();
 
-    let addBtn = elementCache.get("add-switch-port-btn");
+    let addBtn = elementCache.get("add-device-port-btn");
     if (!addBtn) {
       addBtn = document.createElement("button");
-      addBtn.id = "add-switch-port-btn";
+      addBtn.id = "add-device-port-btn";
       addBtn.className = "btn btn-primary btn-sm";
-      addBtn.textContent = "添加端口";
-      addBtn.addEventListener("click", () => openSwitchPortModal(null, getCurrentSwitchId()));
+      addBtn.textContent = t('device.add_port') || "添加端口";
+      addBtn.addEventListener("click", () => openDevicePortModal(null, getCurrentDeviceId()));
       actionButtonsContainer.appendChild(addBtn);
     }
 
@@ -117,12 +129,12 @@ async function loadSwitchPortsBySwitchId(switchId) {
       snmpPortsBtn = document.createElement("button");
       snmpPortsBtn.id = "sync-snmp-ports-btn";
       snmpPortsBtn.className = "btn btn-secondary btn-sm";
-      snmpPortsBtn.textContent = "从SNMP获取端口";
-      snmpPortsBtn.addEventListener("click", () => syncPortsFromSnmp(getCurrentSwitchId()));
+      snmpPortsBtn.textContent = t('device.sync_ports_from_snmp') || "从SNMP获取端口";
+      snmpPortsBtn.addEventListener("click", () => syncPortsFromSnmp(getCurrentDeviceId()));
       actionButtonsContainer.appendChild(snmpPortsBtn);
     }
 
-    renderTable("#switch-ports-table", {
+    renderTable("#device-ports-table", {
       data: result.success ? result.data : [],
       columns: [
         { field: 'port_number', render: (v) => v },
@@ -132,37 +144,37 @@ async function loadSwitchPortsBySwitchId(switchId) {
         { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
         { field: 'speed', render: (v) => v || '-' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit switch-port-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete switch-port-delete" data-id="${v}">删除</button>
+          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: '暂无端口数据'
+      emptyMessage: t('device.no_ports') || '暂无端口数据'
     });
   } catch (error) {
-    renderTable("#switch-ports-table", { data: [], columns: [], emptyMessage: "加载失败" });
+    renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
   }
 }
 
-async function manageSwitchPorts(switchId, switchName) {
-  setCurrentSwitchId(switchId);
-  setCurrentSwitchName(switchName);
+async function manageDevicePorts(deviceId, deviceName) {
+  setCurrentDeviceId(deviceId);
+  setCurrentDeviceName(deviceName);
 
   try {
-    const switchResult = await apiGet(`/api/switches/${switchId}`);
-    if (!switchResult.success) {
-      showToast("获取交换机信息失败，请检查网络连接", "error");
+    const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
+    if (!deviceResult.success) {
+      showToast(t('device.load_failed') || "获取设备信息失败，请检查网络连接", "error");
       return;
     }
 
-    const switchData = switchResult.data;
-    const hasSnmpConfig = switchData.snmp_community || switchData.snmp_username;
+    const deviceData = deviceResult.data;
+    const hasSnmpConfig = deviceData.snmp_community || deviceData.snmp_username;
     if (!hasSnmpConfig) {
-      showToast("该交换机未配置SNMP信息，无法获取端口数据", "warning");
+      showToast(t('device.no_snmp_config') || "该设备未配置SNMP信息，无法获取端口数据", "warning");
     }
 
-    const portsResult = await apiGet(`/api/switches/${switchId}/ports?page_size=1000`);
+    const portsResult = await apiGet(`/api/resources/devices/${deviceId}/ports?page_size=1000`);
     if (!portsResult.success) {
-      showToast("获取端口数据失败", "error");
+      showToast(t('device.load_ports_failed') || "获取端口数据失败", "error");
       return;
     }
 
@@ -176,10 +188,10 @@ async function manageSwitchPorts(switchId, switchName) {
     }
 
     const portGroups = groupPorts(ports);
-    await showPortGroupsModal(switchName, portGroups, switchId);
+    await showPortGroupsModal(deviceName, portGroups, deviceId);
   } catch (error) {
-    console.error("管理交换机端口失败:", error);
-    showToast("操作失败，请重试", "error");
+    console.error("管理设备端口失败:", error);
+    showToast(t('common.operation_failed') || "操作失败，请重试", "error");
   }
 }
 
@@ -203,7 +215,7 @@ function groupPorts(ports) {
 
   ports.forEach(port => {
     const portNumber = port.port_number;
-    let groupKey = "其他";
+    let groupKey = t('device.port_group_other') || "其他";
 
     for (const { regex, subGroup } of portTypePatterns) {
       const match = portNumber.match(regex);
@@ -235,21 +247,22 @@ function groupPorts(ports) {
   });
 
   if (smallGroupPorts.length > 0) {
-    if (finalGroups["其他"]) {
-      finalGroups["其他"].push(...smallGroupPorts);
+    const otherKey = t('device.port_group_other') || "其他";
+    if (finalGroups[otherKey]) {
+      finalGroups[otherKey].push(...smallGroupPorts);
     } else {
-      finalGroups["其他"] = smallGroupPorts;
+      finalGroups[otherKey] = smallGroupPorts;
     }
   }
 
   return finalGroups;
 }
 
-async function showPortGroupsModal(switchName, portGroups, switchId) {
-  await openModal("switch-ports-group-modal");
+async function showPortGroupsModal(deviceName, portGroups, deviceId) {
+  await openModal("device-ports-group-modal");
 
-  const modal = elementCache.get("switch-ports-group-modal");
-  const title = elementCache.get("switch-ports-group-modal-title");
+  const modal = elementCache.get("device-ports-group-modal");
+  const title = elementCache.get("device-ports-group-modal-title");
   const container = document.querySelector(".port-groups-container");
   const addPortBtn = elementCache.get("add-port-btn");
 
@@ -258,7 +271,7 @@ async function showPortGroupsModal(switchName, portGroups, switchId) {
     return;
   }
 
-  title.textContent = `${switchName} - 端口分组显示`;
+  title.textContent = `${deviceName} - ${t('device.port_groups') || '端口分组显示'}`;
   container.innerHTML = "";
 
   Object.entries(portGroups).forEach(([groupName, ports]) => {
@@ -282,7 +295,7 @@ async function showPortGroupsModal(switchName, portGroups, switchId) {
       const portItem = document.createElement("div");
       portItem.className = `port-item status-${port.status}`;
       portItem.dataset.portId = port.id;
-      portItem.dataset.switchId = port.switch_id;
+      portItem.dataset.deviceId = port.device_id;
       portItem.dataset.portNumber = port.port_number;
       portItem.dataset.portName = port.port_name || "";
       portItem.dataset.portType = port.port_type || "access";
@@ -311,7 +324,7 @@ async function showPortGroupsModal(switchName, portGroups, switchId) {
     if (portItem) {
       openPortDetailModal({
         portId: portItem.dataset.portId,
-        switchId: portItem.dataset.switchId,
+        deviceId: portItem.dataset.deviceId,
         portNumber: portItem.dataset.portNumber,
         portName: portItem.dataset.portName,
         portType: portItem.dataset.portType,
@@ -326,7 +339,7 @@ async function showPortGroupsModal(switchName, portGroups, switchId) {
   addPortBtn.onclick = () => {
     openPortDetailModal({
       portId: "",
-      switchId: switchId,
+      deviceId: deviceId,
       portNumber: "",
       portName: "",
       portType: "access",
@@ -340,21 +353,21 @@ async function showPortGroupsModal(switchName, portGroups, switchId) {
   const getSnmpPortsBtn = elementCache.get("get-snmp-ports-btn");
   if (getSnmpPortsBtn) {
     getSnmpPortsBtn.onclick = async () => {
-      const ports = await syncPortsFromSnmp(switchId);
+      const ports = await syncPortsFromSnmp(deviceId);
       if (ports && ports.length > 0) {
         const portGroups = groupPorts(ports);
-        showPortGroupsModal(getCurrentSwitchName() || "", portGroups, switchId);
+        showPortGroupsModal(getCurrentDeviceName() || "", portGroups, deviceId);
       }
     };
   }
 }
 
 async function openPortDetailModal(portData) {
-  await openModal("switch-port-detail-modal");
+  await openModal("device-port-detail-modal");
 
-  const modal = elementCache.get("switch-port-detail-modal");
-  const title = elementCache.get("switch-port-detail-modal-title");
-  const form = elementCache.get("switch-port-form-expanded");
+  const modal = elementCache.get("device-port-detail-modal");
+  const title = elementCache.get("device-port-detail-modal-title");
+  const form = elementCache.get("device-port-form-expanded");
   const saveBtn = elementCache.get("save-port-btn");
   const deleteBtn = elementCache.get("delete-port-btn");
 
@@ -364,50 +377,50 @@ async function openPortDetailModal(portData) {
   }
 
   const isNewPort = !portData.portId;
-  title.textContent = isNewPort ? "新增端口" : `端口详情 - ${portData.portNumber}`;
+  title.textContent = isNewPort ? (t('device.add_port') || "新增端口") : `${t('device.port_detail') || '端口详情'} - ${portData.portNumber}`;
 
-  elementCache.setValue("switch-port-id-expanded", portData.portId || "");
-  elementCache.setValue("switch-port-switch-id-expanded", portData.switchId || "");
-  elementCache.setValue("switch-port-number-expanded", portData.portNumber || "");
-  elementCache.setValue("switch-port-name-expanded", portData.portName || "");
-  elementCache.setValue("switch-port-type-expanded", portData.portType || "access");
-  elementCache.setValue("switch-port-vlan-expanded", portData.vlanId || "");
-  elementCache.setValue("switch-port-status-expanded", portData.status || "up");
-  elementCache.setValue("switch-port-speed-expanded", portData.speed || "");
-  elementCache.setValue("switch-port-description-expanded", portData.description || "");
+  elementCache.setValue("device-port-id-expanded", portData.portId || "");
+  elementCache.setValue("device-port-device-id-expanded", portData.deviceId || "");
+  elementCache.setValue("device-port-number-expanded", portData.portNumber || "");
+  elementCache.setValue("device-port-name-expanded", portData.portName || "");
+  elementCache.setValue("device-port-type-expanded", portData.portType || "access");
+  elementCache.setValue("device-port-vlan-expanded", portData.vlanId || "");
+  elementCache.setValue("device-port-status-expanded", portData.status || "up");
+  elementCache.setValue("device-port-speed-expanded", portData.speed || "");
+  elementCache.setValue("device-port-description-expanded", portData.description || "");
 
   deleteBtn.style.display = isNewPort ? "none" : "inline-block";
 
   saveBtn.onclick = async () => {
-    await submitSwitchPortForm();
+    await submitDevicePortForm();
   };
 
   deleteBtn.onclick = async () => {
-    const confirmed = await showConfirm(t('switch.confirm_delete_port'));
+    const confirmed = await showConfirm(t('device.confirm_delete_port') || t('switch.confirm_delete_port'));
     if (confirmed) {
-      const portId = elementCache.getValue("switch-port-id-expanded");
+      const portId = elementCache.getValue("device-port-id-expanded");
       if (portId) {
-        const result = await apiDelete(`/api/switches/ports/${portId}`);
+        const result = await apiDelete(`/api/resources/devices/ports/${portId}`);
         if (result.success) {
-          showToast("端口删除成功", "success");
-          closeModal("switch-port-detail-modal");
-          const currentSwitchId = getCurrentSwitchId();
-          if (currentSwitchId) {
-            manageSwitchPorts(currentSwitchId, getCurrentSwitchName() || "");
+          showToast(t('device.port_delete_success') || "端口删除成功", "success");
+          closeModal("device-port-detail-modal");
+          const currentDeviceId = getCurrentDeviceId();
+          if (currentDeviceId) {
+            manageDevicePorts(currentDeviceId, getCurrentDeviceName() || "");
           }
         } else {
-          showToast("删除端口失败: " + result.message, "error");
+          showToast(t('device.port_delete_failed') || "删除端口失败: " + result.message, "error");
         }
       }
     }
   };
 }
 
-async function openSwitchPortModal(portData = null, switchId = null) {
+async function openDevicePortModal(portData = null, deviceId = null) {
   if (portData) {
     await openPortDetailModal({
       portId: portData.id || "",
-      switchId: portData.switch_id || switchId || "",
+      deviceId: portData.device_id || deviceId || "",
       portNumber: portData.port_number || "",
       portName: portData.port_name || "",
       portType: portData.port_type || "access",
@@ -419,7 +432,7 @@ async function openSwitchPortModal(portData = null, switchId = null) {
   } else {
     await openPortDetailModal({
       portId: "",
-      switchId: switchId || "",
+      deviceId: deviceId || "",
       portNumber: "",
       portName: "",
       portType: "access",
@@ -431,19 +444,19 @@ async function openSwitchPortModal(portData = null, switchId = null) {
   }
 }
 
-async function submitSwitchPortForm() {
-  const id = getElementValue("switch-port-id-expanded");
-  const switchId = getElementValue("switch-port-switch-id-expanded");
-  const portNumber = getElementValue("switch-port-number-expanded");
-  const portName = getElementValue("switch-port-name-expanded");
-  const portType = getElementValue("switch-port-type-expanded");
-  const vlanId = getElementValue("switch-port-vlan-expanded");
-  const status = getElementValue("switch-port-status-expanded");
-  const speed = getElementValue("switch-port-speed-expanded");
-  const description = getElementValue("switch-port-description-expanded");
+async function submitDevicePortForm() {
+  const id = getElementValue("device-port-id-expanded");
+  const deviceId = getElementValue("device-port-device-id-expanded");
+  const portNumber = getElementValue("device-port-number-expanded");
+  const portName = getElementValue("device-port-name-expanded");
+  const portType = getElementValue("device-port-type-expanded");
+  const vlanId = getElementValue("device-port-vlan-expanded");
+  const status = getElementValue("device-port-status-expanded");
+  const speed = getElementValue("device-port-speed-expanded");
+  const description = getElementValue("device-port-description-expanded");
 
   if (!portNumber) {
-    showToast("请填写端口号", "warning");
+    showToast(t('device.port_number_required') || "请填写端口号", "warning");
     return;
   }
 
@@ -460,21 +473,21 @@ async function submitSwitchPortForm() {
   try {
     let result;
     if (id) {
-      result = await apiPut(`/api/switches/ports/${id}`, data);
+      result = await apiPut(`/api/resources/devices/ports/${id}`, data);
     } else {
-      result = await apiPost(`/api/switches/${switchId}/ports`, data);
+      result = await apiPost(`/api/resources/devices/${deviceId}/ports`, data);
     }
 
     if (result.success) {
-      closeModal("switch-port-detail-modal");
-      showToast(id ? "端口更新成功" : "端口添加成功", "success");
-      const currentSwitchId = getCurrentSwitchId();
-      if (currentSwitchId) {
+      closeModal("device-port-detail-modal");
+      showToast(id ? (t('device.port_update_success') || "端口更新成功") : (t('device.port_add_success') || "端口添加成功"), "success");
+      const currentDeviceId = getCurrentDeviceId();
+      if (currentDeviceId) {
         try {
-          await loadSwitchPortsBySwitchId(currentSwitchId);
-          const currentSwitchName = getCurrentSwitchName();
-          if (currentSwitchName) {
-            const portsResult = await apiGet(`/api/switches/${currentSwitchId}/ports?page_size=1000`);
+          await loadDevicePortsByDeviceId(currentDeviceId);
+          const currentDeviceName = getCurrentDeviceName();
+          if (currentDeviceName) {
+            const portsResult = await apiGet(`/api/resources/devices/${currentDeviceId}/ports?page_size=1000`);
             if (portsResult.success && portsResult.data) {
               let ports = [];
               if (Array.isArray(portsResult.data)) {
@@ -483,47 +496,76 @@ async function submitSwitchPortForm() {
                 ports = portsResult.data.items;
               }
               const portGroups = groupPorts(ports);
-              await showPortGroupsModal(currentSwitchName, portGroups, currentSwitchId);
+              await showPortGroupsModal(currentDeviceName, portGroups, currentDeviceId);
             }
           }
         } catch (refreshError) {
           console.error("刷新端口数据失败:", refreshError);
-          showToast("端口保存成功，但刷新数据失败，请手动刷新", "warning");
+          showToast(t('device.port_save_refresh_failed') || "端口保存成功，但刷新数据失败，请手动刷新", "warning");
         }
       }
     } else {
-      const errorMsg = result.message ?? "操作失败，请检查输入信息";
-      showToast(`操作失败: ${errorMsg}`, "error");
+      const errorMsg = result.message ?? (t('common.operation_failed') || "操作失败，请检查输入信息");
+      showToast(`${t('common.operation_failed') || '操作失败'}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
-    handleError(error, "提交端口表单失败");
+    handleError(error, t('device.port_submit_failed') || "提交端口表单失败");
   }
 }
 
-async function editSwitchPort(id) {
+async function editDevicePort(id) {
   try {
-    const result = await apiGet(`/api/switches/ports/${id}`);
+    const result = await apiGet(`/api/resources/devices/ports/${id}`);
     if (result.success) {
-      openSwitchPortModal(result.data);
+      openDevicePortModal(result.data);
     } else {
-      showToast("获取端口信息失败", "error");
+      showToast(t('device.load_port_failed') || "获取端口信息失败", "error");
     }
   } catch (error) {
-    handleError(error, "获取端口信息失败");
+    handleError(error, t('device.load_port_failed') || "获取端口信息失败");
   }
 }
 
-async function deleteSwitchPort(id) {
-  const currentSwitchId = getCurrentSwitchId();
+async function deleteDevicePort(id) {
+  const currentDeviceId = getCurrentDeviceId();
   const successCallback = () => {
-    if (currentSwitchId) {
-      loadSwitchPortsBySwitchId(currentSwitchId);
+    if (currentDeviceId) {
+      loadDevicePortsByDeviceId(currentDeviceId);
     } else {
-      loadSwitchPortsData(1, "");
+      loadDevicePortsData(1, "");
     }
   };
-  await handleDelete(id, "/api/switches/ports", "端口删除成功", successCallback);
+  await handleDelete(id, "/api/resources/devices/ports", t('device.port_delete_success') || "端口删除成功", successCallback);
+}
+
+async function syncPortsFromSnmp(deviceId) {
+  const getPortsBtn = elementCache.get("get-snmp-ports-btn");
+  const originalText = getPortsBtn?.textContent || (t('device.sync_ports_from_snmp') || "从SNMP获取端口");
+  if (getPortsBtn) {
+    getPortsBtn.disabled = true;
+    getPortsBtn.textContent = t('common.syncing') || "同步中...";
+  }
+
+  try {
+    const result = await apiPost(`/api/resources/devices/${deviceId}/ports/sync-snmp`, {});
+
+    if (result.success) {
+      showToast(result.message || (t('device.port_sync_success') || '端口同步成功'), "success");
+      return result.data || [];
+    } else {
+      showToast((t('device.port_sync_failed') || '端口同步失败') + ': ' + result.message, "error");
+      return [];
+    }
+  } catch (error) {
+    showToast(t('device.port_sync_failed') || '端口同步失败', "error");
+    return [];
+  } finally {
+    if (getPortsBtn) {
+      getPortsBtn.disabled = false;
+      getPortsBtn.textContent = originalText;
+    }
+  }
 }
 
 function extractPortNumber(portNumber) {
@@ -545,14 +587,14 @@ function extractPortLastNumber(portNumber) {
 }
 
 export {
-  loadSwitchPortsData,
-  loadSwitchPortsBySwitchId,
-  manageSwitchPorts,
-  openSwitchPortModal,
-  editSwitchPort,
-  deleteSwitchPort,
-  submitSwitchPortForm,
+  loadDevicePortsData,
+  loadDevicePortsByDeviceId,
+  manageDevicePorts,
+  openDevicePortModal,
+  editDevicePort,
+  deleteDevicePort,
+  submitDevicePortForm,
   groupPorts,
   showPortGroupsModal,
-  SWITCH_PORT_PAGE_SIZE
+  syncPortsFromSnmp
 };

@@ -670,15 +670,15 @@ pub async fn delete_cabinet_position(
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
-    let switch_using_position: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM switches WHERE position_id = $1")
+    let device_using_position: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM devices WHERE position_id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
 
-    if switch_using_position.is_some() {
+    if device_using_position.is_some() {
         return Err(AppError::Validation(
-            "该机位被交换机占用，请通过交换机管理页面删除对应的交换机".to_string(),
+            "该机位被设备占用，请先删除对应的设备".to_string(),
         ));
     }
 

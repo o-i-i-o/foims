@@ -8,10 +8,10 @@ use validator::{Validate, ValidationError};
 
 pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
     match device_type {
-        "pc" | "laptop" | "printer" | "server" | "network_device" | "camera" | "phone" | "ap"
-        | "other" => Ok(()),
+        "pc" | "laptop" | "printer" | "server" | "network_device" | "switch" | "camera"
+        | "phone" | "other" => Ok(()),
         _ => Err(ValidationError::new(
-            "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other",
+            "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other",
         )),
     }
 }
@@ -703,7 +703,7 @@ pub struct AutoAssignIpRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PullIpManagersRequest {
-    pub switch_id: Uuid,
+    pub device_id: Uuid,
     pub network_id: Uuid,
 }
 
@@ -724,138 +724,12 @@ pub struct IpManagerUpdate {
     pub ip_version: Option<i16>,
 }
 
-// ==================== 交换机模型 ====================
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct Switch {
-    pub id: Uuid,
-    pub name: String,
-    pub model: Option<String>,
-    pub vendor: Option<String>,
-    pub location: Option<String>,
-    pub snmp_version: String,
-    pub snmp_community: Option<String>,
-    pub snmp_username: Option<String>,
-    pub snmp_auth_protocol: Option<String>,
-    pub snmp_auth_password: Option<String>,
-    pub snmp_priv_protocol: Option<String>,
-    pub snmp_priv_password: Option<String>,
-    pub snmp_port: i32,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub position_id: Option<Uuid>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchWithParent {
-    pub id: Uuid,
-    pub name: String,
-    pub model: Option<String>,
-    pub vendor: Option<String>,
-    pub location: Option<String>,
-    pub snmp_version: String,
-    pub snmp_community: Option<String>,
-    pub snmp_username: Option<String>,
-    pub snmp_auth_protocol: Option<String>,
-    pub snmp_auth_password: Option<String>,
-    pub snmp_priv_protocol: Option<String>,
-    pub snmp_priv_password: Option<String>,
-    pub snmp_port: i32,
-    pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub cabinet_name: Option<String>,
-    pub room_id: Option<Uuid>,
-    pub room_name: Option<String>,
-    pub start_u: Option<i32>,
-    pub end_u: Option<i32>,
-    pub network_id: Option<Uuid>,
-    pub network_region_id: Option<Uuid>,
-    pub description: Option<String>,
-    pub device_type: Option<String>,
-    pub ip_address: Option<String>,
-    pub mac_address: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SwitchPosition {
-    pub id: Uuid,
-    pub cabinet_id: Uuid,
-    pub cabinet_name: String,
-    pub start_u: i32,
-    pub end_u: i32,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchCreate {
-    #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
-    pub name: String,
-    #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
-    pub model: Option<String>,
-    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
-    pub vendor: Option<String>,
-    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
-    pub location: Option<String>,
-    pub snmp_version: Option<String>,
-    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
-    pub snmp_community: Option<String>,
-    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
-    pub snmp_username: Option<String>,
-    pub snmp_auth_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
-    pub snmp_auth_password: Option<String>,
-    pub snmp_priv_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
-    pub snmp_priv_password: Option<String>,
-    pub snmp_port: Option<i32>,
-    pub ips: Option<Vec<IpManagerCreate>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-    pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub start_u: Option<i32>,
-    pub end_u: Option<i32>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchUpdate {
-    #[validate(length(min = 1, max = 100, message = "交换机名称长度必须在1到100个字符之间"))]
-    pub name: Option<String>,
-    #[validate(length(max = 100, message = "型号长度不能超过100个字符"))]
-    pub model: Option<String>,
-    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
-    pub vendor: Option<String>,
-    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
-    pub location: Option<String>,
-    pub snmp_version: Option<String>,
-    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
-    pub snmp_community: Option<String>,
-    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
-    pub snmp_username: Option<String>,
-    pub snmp_auth_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
-    pub snmp_auth_password: Option<String>,
-    pub snmp_priv_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
-    pub snmp_priv_password: Option<String>,
-    pub snmp_port: Option<i32>,
-    pub ips: Option<Vec<IpManagerCreate>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
-    pub position_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub start_u: Option<i32>,
-    pub end_u: Option<i32>,
-}
-
-// ==================== 交换机端口模型 ====================
+// ==================== 设备端口模型（原交换机端口） ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SwitchPort {
     pub id: Uuid,
-    pub switch_id: Uuid,
+    pub device_id: Uuid,
     pub port_number: String,
     pub port_name: Option<String>,
     pub port_type: String,
@@ -870,9 +744,9 @@ pub struct SwitchPort {
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SwitchPortWithSwitch {
     pub id: Uuid,
-    pub switch_id: Uuid,
-    pub switch_name: String,
-    pub switch_ip: String,
+    pub device_id: Uuid,
+    pub device_name: String,
+    pub device_ip: Option<String>,
     pub port_number: String,
     pub port_name: Option<String>,
     pub port_type: String,
@@ -918,7 +792,7 @@ pub struct SwitchPortUpdate {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnmpTestRequest {
-    pub switch_id: Option<Uuid>,
+    pub device_id: Option<Uuid>,
     pub ip_address: Option<String>,
     pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
@@ -951,7 +825,7 @@ pub struct LldpNeighbor {
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SwitchMac {
     pub id: Uuid,
-    pub switch_id: Uuid,
+    pub device_id: Uuid,
     pub ip_address: String,
     pub mac_address: String,
     pub interface: Option<String>,
@@ -971,7 +845,7 @@ pub struct SwitchMacCreate {
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SwitchLldp {
     pub id: Uuid,
-    pub switch_id: Uuid,
+    pub device_id: Uuid,
     pub local_port: String,
     pub neighbor_chassis_id: Option<String>,
     pub neighbor_port_id: Option<String>,
@@ -1290,6 +1164,16 @@ pub struct Device {
     pub access_point_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
+    pub vendor: Option<String>,
+    pub location: Option<String>,
+    pub snmp_version: String,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: i32,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1320,6 +1204,16 @@ pub struct DeviceWithDetails {
     pub connected_switch_name: Option<String>,
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
+    pub vendor: Option<String>,
+    pub location: Option<String>,
+    pub snmp_version: Option<String>,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1331,7 +1225,7 @@ pub struct DeviceCreate {
     pub name: String,
     #[validate(custom(
         function = "validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+        message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
     ))]
     pub device_type: Option<String>,
     pub brand: Option<String>,
@@ -1342,6 +1236,22 @@ pub struct DeviceCreate {
     pub access_point_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
+    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
+    pub vendor: Option<String>,
+    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    pub location: Option<String>,
+    pub snmp_version: Option<String>,
+    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    pub snmp_community: Option<String>,
+    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
@@ -1356,7 +1266,7 @@ pub struct DeviceUpdate {
     pub name: Option<String>,
     #[validate(custom(
         function = "validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/camera/phone/ap/other"
+        message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
     ))]
     pub device_type: Option<String>,
     pub brand: Option<String>,
@@ -1366,6 +1276,22 @@ pub struct DeviceUpdate {
     pub position_id: Option<Option<Uuid>>,
     pub access_point_id: Option<Option<Uuid>>,
     pub switch_port_id: Option<Option<Uuid>>,
+    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
+    pub vendor: Option<String>,
+    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    pub location: Option<String>,
+    pub snmp_version: Option<String>,
+    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    pub snmp_community: Option<String>,
+    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    pub snmp_priv_password: Option<String>,
+    pub snmp_port: Option<i32>,
     pub ips: Option<Vec<IpManagerCreate>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,

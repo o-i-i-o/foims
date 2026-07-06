@@ -374,11 +374,11 @@ pub async fn get_switch_ips(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = *id_path;
+    let device_id = *id_path;
 
     let position_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT position_id FROM switches WHERE id = $1")
-            .bind(switch_id)
+        sqlx::query_scalar("SELECT position_id FROM devices WHERE id = $1")
+            .bind(device_id)
             .fetch_optional(&state.pool()?.get_conn())
             .await?;
 
@@ -386,18 +386,18 @@ pub async fn get_switch_ips(
         return Ok(
             HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
                 vec![],
-                "获取交换机IP列表成功",
+                "获取设备IP列表成功",
             )),
         );
     };
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
-        r"SELECT 
-            id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
+        r"SELECT
+            id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name,
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
-        FROM ip_with_details 
+            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region,
+            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at
+        FROM ip_with_details
         WHERE position_id = $1"
     )
     .bind(position_id)
@@ -407,7 +407,7 @@ pub async fn get_switch_ips(
     Ok(
         HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
             ips,
-            "获取交换机IP列表成功",
+            "获取设备IP列表成功",
         )),
     )
 }
@@ -612,7 +612,7 @@ struct MacSyncResult {
 
 async fn sync_switch_macs(
     pool: &sqlx::PgPool,
-    switch_id: Uuid,
+    device_id: Uuid,
     network_id: Uuid,
 ) -> Result<MacSyncResult, AppError> {
     let network_exists: bool =
@@ -626,19 +626,19 @@ async fn sync_switch_macs(
     }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        r"SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm 
-          INNER JOIN ips i ON sm.ip_address = i.ip_address 
-          WHERE sm.switch_id = $1 AND i.network_id = $2",
+        r"SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm
+          INNER JOIN ips i ON sm.ip_address = i.ip_address
+          WHERE sm.device_id = $1 AND i.network_id = $2",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .bind(network_id)
     .fetch_all(pool)
     .await?;
 
     if switch_macs.is_empty() {
         let total_macs: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM switch_macs WHERE switch_id = $1")
-                .bind(switch_id)
+            sqlx::query_scalar("SELECT COUNT(*) FROM switch_macs WHERE device_id = $1")
+                .bind(device_id)
                 .fetch_one(pool)
                 .await?;
 
@@ -772,13 +772,13 @@ pub async fn pull_ip_managers(
 ) -> Result<HttpResponse, AppError> {
     req.validate()?;
 
-    let result = sync_switch_macs(&state.pool()?.get_conn(), req.switch_id, req.network_id).await?;
+    let result = sync_switch_macs(&state.pool()?.get_conn(), req.device_id, req.network_id).await?;
 
     if result.switch_macs_empty {
         if result.total_macs_on_switch == 0 {
             return Ok(
                 HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
-                    "该交换机暂无MAC数据，请先在交换机管理中同步MAC表",
+                    "该设备暂无MAC数据，请先在设备管理中同步MAC表",
                 )),
             );
         }
@@ -824,10 +824,10 @@ pub async fn pull_ip_managers(
 
 pub async fn pull_ip_managers_internal(
     pool: &sqlx::PgPool,
-    switch_id: Uuid,
+    device_id: Uuid,
     network_id: Uuid,
 ) -> Result<(), String> {
-    let result = sync_switch_macs(pool, switch_id, network_id)
+    let result = sync_switch_macs(pool, device_id, network_id)
         .await
         .map_err(|e| format!("MAC同步失败: {e}"))?;
 

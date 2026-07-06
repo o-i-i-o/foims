@@ -17,9 +17,9 @@ import { editRoom, deleteRoom } from "./room.js";
 import { editWorkstation, deleteWorkstation } from "./workstation.js";
 import { editCabinet, deleteCabinet } from "./cabinet.js";
 import { editCabinetPosition, deleteCabinetPosition } from "./position.js";
-import { editSwitch, deleteSwitch, deleteSwitchPort } from "./switch/switchDevice.js";
 import { editAccessPoint, deleteAccessPoint } from "./accessPoint.js";
 import { editDevice, deleteDevice } from "./device.js";
+import { deleteDevicePort } from "./devicePorts.js";
 
 // ==========================================
 // 编辑/删除函数映射
@@ -32,7 +32,6 @@ const EDIT_FUNCTIONS = {
   "workstations-table": editWorkstation,
   "cabinets-table": editCabinet,
   "cabinet-positions-table": editCabinetPosition,
-  "switches-table": editSwitch,
   "access-points-table": editAccessPoint,
   "devices-table": editDevice,
   "users-table": async (id) => {
@@ -48,10 +47,9 @@ const DELETE_FUNCTIONS = {
   "workstations-table": deleteWorkstation,
   "cabinets-table": deleteCabinet,
   "cabinet-positions-table": deleteCabinetPosition,
-  "switches-table": deleteSwitch,
-  "switch-ports-table": deleteSwitchPort,
   "access-points-table": deleteAccessPoint,
   "devices-table": deleteDevice,
+  "device-ports-table": deleteDevicePort,
   "users-table": async (id) => {
     const { deleteUser } = await loadModule("userManager", "/static/js/modules/userManager.js");
     deleteUser(id);
@@ -68,7 +66,6 @@ const DELETE_FUNCTIONS = {
 const MODULE_PATHS = {
   log: "/static/js/modules/log.js",
   systemManager: "/static/js/modules/systemManager.js",
-  switchDevice: "/static/js/modules/switch/switchDevice.js",
   userManager: "/static/js/modules/userManager.js",
   authManager: "/static/js/modules/authManager.js",
   i18n: "/static/js/utils/i18n.js",
@@ -236,26 +233,6 @@ const BUTTON_EVENT_BINDINGS = [
     handler: (e) => {
       const { changeLanguage } = getModule("i18n");
       changeLanguage(e.target.value);
-    },
-  },
-  {
-    id: "test-snmp-btn",
-    event: "click",
-    handler: () => {
-      const switchDevice = getModule("switchDevice");
-      if (switchDevice && switchDevice.testSnmpConnection) {
-        switchDevice.testSnmpConnection();
-      }
-    },
-  },
-  {
-    id: "get-snmp-info-btn",
-    event: "click",
-    handler: () => {
-      const switchDevice = getModule("switchDevice");
-      if (switchDevice && switchDevice.getSwitchInfoFromSnmp) {
-        switchDevice.getSwitchInfoFromSnmp();
-      }
     },
   },
 ];

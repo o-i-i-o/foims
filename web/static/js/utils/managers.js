@@ -151,41 +151,6 @@ export function createWorkstationManager() {
     });
 }
 
-export function createSwitchManager() {
-    return createCrudManager({
-        endpoint: '/api/resources/switches',
-        entityName: 'switch',
-        entityNameKey: 'switch.switch',
-        formId: 'switch-form',
-        modalId: 'switch-modal',
-        
-        validateCallback: (data) => {
-            if (!data.name || !data.name.trim()) {
-                return t('common.required_field');
-            }
-            if (!data.ip_address || !data.ip_address.trim()) {
-                return t('common.required_field');
-            }
-            return null;
-        },
-        
-        transformDataCallback: (data) => ({
-            name: data.name?.trim(),
-            ip_address: data.ip_address?.trim(),
-            snmp_version: data.snmp_version || 'v2c',
-            snmp_community: data.snmp_community?.trim() || 'public',
-            snmp_username: data.snmp_username?.trim() || null,
-            snmp_auth_password: data.snmp_auth_password?.trim() || null,
-            snmp_priv_password: data.snmp_priv_password?.trim() || null,
-            description: data.description?.trim() || null
-        }),
-        
-        afterCreateCallback: () => {},
-        afterUpdateCallback: () => {},
-        afterDeleteCallback: () => {}
-    });
-}
-
 export function createUserManager() {
     return createCrudManager({
         endpoint: '/api/users',
@@ -223,7 +188,6 @@ export const managers = {
     room: createRoomManager(),
     cabinet: createCabinetManager(),
     workstation: createWorkstationManager(),
-    switch: createSwitchManager(),
     user: createUserManager()
 };
 

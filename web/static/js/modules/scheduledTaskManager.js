@@ -16,24 +16,24 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
-let switches = [];
+let devices = [];
 let networks = [];
 
 export async function initScheduledTaskManager() {
-    await loadSwitches();
+    await loadDevices();
     await loadNetworks();
     await loadScheduledTasks();
     setupEventListeners();
 }
 
-async function loadSwitches() {
+async function loadDevices() {
     try {
-        const response = await apiGet('/api/switches');
+        const response = await apiGet('/api/resources/devices?page_size=1000');
         if (response.success) {
-            switches = response.data || [];
+            devices = response.data?.items || response.data || [];
         }
     } catch (error) {
-        console.error('Failed to load switches:', error);
+        console.error('Failed to load devices:', error);
     }
 }
 
@@ -81,7 +81,7 @@ function handleTaskTypeChange(e) {
     if (taskType === 'mac_sync') {
         if (macSyncConfig) {
             macSyncConfig.style.display = 'block';
-            populateSwitchSelect();
+            populateDeviceSelect();
             populateNetworkSelect();
         }
     } else if (taskType === 'log_cleanup') {
@@ -91,18 +91,18 @@ function handleTaskTypeChange(e) {
     }
 }
 
-function populateSwitchSelect() {
-    const select = document.getElementById('scheduled-task-switch-id');
+function populateDeviceSelect() {
+    const select = document.getElementById('scheduled-task-device-id');
     if (!select) return;
 
     const currentLang = localStorage.getItem('language') || 'zh';
-    const selectText = currentLang === 'zh' ? '选择交换机' : 'Select Switch';
+    const selectText = currentLang === 'zh' ? '选择设备' : 'Select Device';
 
     select.innerHTML = `<option value="">${selectText}</option>`;
-    switches.forEach(sw => {
+    devices.forEach(dev => {
         const option = document.createElement('option');
-        option.value = sw.id;
-        option.textContent = sw.name || sw.hostname || sw.id;
+        option.value = dev.id;
+        option.textContent = dev.name || dev.hostname || dev.id;
         select.appendChild(option);
     });
 }
@@ -215,7 +215,7 @@ window.editScheduledTask = async function(id) {
 
                 if (task.task_type === 'mac_sync' && task.config) {
                     setTimeout(() => {
-                        document.getElementById('scheduled-task-switch-id').value = task.config.switch_id || '';
+                        document.getElementById('scheduled-task-device-id').value = task.config.device_id || '';
                         document.getElementById('scheduled-task-network-id').value = task.config.network_id || '';
                     }, 100);
                 } else if (task.task_type === 'log_cleanup' && task.config) {
@@ -255,13 +255,13 @@ async function handleScheduledTaskSubmit(e) {
     let config = {};
 
     if (taskType === 'mac_sync') {
-        const switchId = document.getElementById('scheduled-task-switch-id').value;
+        const deviceId = document.getElementById('scheduled-task-device-id').value;
         const networkId = document.getElementById('scheduled-task-network-id').value;
-        if (!switchId || !networkId) {
+        if (!deviceId || !networkId) {
             alert(t('scheduled_tasks.required_fields'));
             return;
         }
-        config = { switch_id: switchId, network_id: networkId };
+        config = { device_id: deviceId, network_id: networkId };
     } else if (taskType === 'log_cleanup') {
         const keepDays = parseInt(document.getElementById('scheduled-task-keep-days').value, 10) || 30;
         config = { days: keepDays };

@@ -162,16 +162,16 @@ async function loadSwitchPortsForSelect(selectedPortId = null) {
   const portSelect = elementCache.get('access-point-switch-port-id');
   if (!portSelect) return;
 
-  portSelect.innerHTML = `<option value="">${t('access_point.select_switch_port') || '选择交换机端口'}</option>`;
+  portSelect.innerHTML = `<option value="">${t('access_point.select_switch_port') || '选择设备端口'}</option>`;
 
   try {
-    const result = await apiGet('/api/switches/ports?page_size=1000');
+    const result = await apiGet('/api/resources/devices/ports?page_size=1000');
     if (result.success && result.data) {
       const ports = result.data.items || result.data;
       ports.forEach(port => {
         const option = document.createElement('option');
         option.value = port.id;
-        const label = port.switch_name ? `${port.switch_name}: ${port.name || port.port_number}` : (port.name || port.port_number);
+        const label = port.device_name ? `${port.device_name}: ${port.name || port.port_number}` : (port.name || port.port_number);
         option.textContent = label;
         portSelect.appendChild(option);
       });
@@ -181,7 +181,7 @@ async function loadSwitchPortsForSelect(selectedPortId = null) {
       }
     }
   } catch (error) {
-    console.error('加载交换机端口选项失败:', error);
+    console.error('加载设备端口选项失败:', error);
   }
 }
 

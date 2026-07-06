@@ -13,28 +13,28 @@ use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format
 
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
-    switch_id: &Uuid,
+    device_id: &Uuid,
 ) -> Result<Vec<LldpNeighbor>, SnmpError> {
     let switch = sqlx::query_as::<_, SwitchForSnmp>(
-        r"SELECT 
-            id, name, snmp_version, snmp_community, 
-            snmp_username, snmp_auth_protocol, 
-            snmp_auth_password, snmp_priv_protocol, 
+        r"SELECT
+            id, name, snmp_version, snmp_community,
+            snmp_username, snmp_auth_protocol,
+            snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
+        FROM devices WHERE id = $1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| SnmpError::Message(e.to_string()))?
-    .ok_or_else(|| SnmpError::Message("交换机不存在".to_string()))?;
+    .ok_or_else(|| SnmpError::Message("设备不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips 
-           WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)
+        r"SELECT host(ip_address) FROM ips
+           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
            ORDER BY created_at LIMIT 1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| SnmpError::Message(e.to_string()))?
@@ -42,10 +42,10 @@ pub async fn get_lldp_neighbors(
 
     let ip_address = ip_address
         .filter(|ip| !ip.is_empty())
-        .ok_or_else(|| SnmpError::Message("交换机没有配置IP地址".to_string()))?;
+        .ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该交换机未配置SNMP".to_string()));
+        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
     }
 
     let params = switch.to_snmp_params_async(&ip_address).await;
@@ -381,22 +381,22 @@ pub async fn get_switch_lldp_neighbors(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let conn = state.pool()?.get_conn();
 
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
-        .bind(switch_id)
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+        .bind(device_id)
         .fetch_one(&conn)
         .await?;
 
     if !exists {
-        return Err(AppError::NotFound("交换机不存在".to_string()));
+        return Err(AppError::NotFound("设备不存在".to_string()));
     }
 
     let lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
+        "SELECT * FROM switch_lldps WHERE device_id = $1 ORDER BY local_port",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_all(&conn)
     .await?;
 
@@ -407,10 +407,10 @@ pub async fn sync_lldp_from_snmp(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let conn = state.pool()?.get_conn();
 
-    let neighbors = get_lldp_neighbors(&conn, &switch_id)
+    let neighbors = get_lldp_neighbors(&conn, &device_id)
         .await
         .map_err(|e| AppError::Snmp(format!("获取LLDP邻居失败: {e}")))?;
 
@@ -420,23 +420,23 @@ pub async fn sync_lldp_from_snmp(
 
     for neighbor in &neighbors {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE switch_id = $1 AND local_port = $2)",
+            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE device_id = $1 AND local_port = $2)",
         )
-        .bind(switch_id)
+        .bind(device_id)
         .bind(&neighbor.local_port)
         .fetch_one(&conn)
         .await?;
 
         if exists {
             let result = sqlx::query(
-                r"UPDATE switch_lldps SET 
+                r"UPDATE switch_lldps SET
                     neighbor_chassis_id = $1,
                     neighbor_port_id = $2,
                     neighbor_port_desc = $3,
                     neighbor_sys_name = $4,
                     neighbor_sys_desc = $5,
                     updated_at = $6
-                WHERE switch_id = $7 AND local_port = $8",
+                WHERE device_id = $7 AND local_port = $8",
             )
             .bind(&neighbor.neighbor_chassis_id)
             .bind(&neighbor.neighbor_port_id)
@@ -444,7 +444,7 @@ pub async fn sync_lldp_from_snmp(
             .bind(&neighbor.neighbor_sys_name)
             .bind(&neighbor.neighbor_sys_desc)
             .bind(now)
-            .bind(switch_id)
+            .bind(device_id)
             .bind(&neighbor.local_port)
             .execute(&conn)
             .await;
@@ -461,11 +461,11 @@ pub async fn sync_lldp_from_snmp(
         } else {
             let id = Uuid::new_v4();
             let result = sqlx::query(
-                r"INSERT INTO switch_lldps (id, switch_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
+                r"INSERT INTO switch_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"
             )
             .bind(id)
-            .bind(switch_id)
+            .bind(device_id)
             .bind(&neighbor.local_port)
             .bind(&neighbor.neighbor_chassis_id)
             .bind(&neighbor.neighbor_port_id)
@@ -489,9 +489,9 @@ pub async fn sync_lldp_from_snmp(
     }
 
     let saved_lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE switch_id = $1 ORDER BY local_port",
+        "SELECT * FROM switch_lldps WHERE device_id = $1 ORDER BY local_port",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_all(&conn)
     .await?;
 

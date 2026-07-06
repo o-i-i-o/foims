@@ -3,7 +3,6 @@
  * 处理资源管理页面的标签页切换和数据加载
  */
 
-import { loadSwitchesData, initSwitchSearch } from "./switch/switchDevice.js";
 import { loadNetworkTypesData, loadNetworksData, initNetworksFilters } from "./networks.js";
 import { loadRoomsData, initRoomSortEvents } from "./room.js";
 import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";
@@ -22,7 +21,6 @@ const TAB_DATA_LOADERS = {
   workstations: loadWorkstationsData,
   "network-regions": loadNetworkTypesData,
   networks: loadNetworksData,
-  switches: loadSwitchesData,
   cabinets: loadCabinetsData,
   "cabinet-positions": loadCabinetPositionsData,
   "access-points": loadAccessPointsData,
@@ -48,7 +46,6 @@ export function initResourceTabs() {
   }
   
   initNetworksFilters();
-  initSwitchSearch();
   initRoomSortEvents();
   initWorkstationSortEvents();
   initCabinetSortEvents();

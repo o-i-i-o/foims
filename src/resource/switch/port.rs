@@ -18,7 +18,7 @@ pub async fn get_switch_ports(
     path: web::Path<Uuid>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
     let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
     let page_size: i64 = query
         .get("page_size")
@@ -26,15 +26,15 @@ pub async fn get_switch_ports(
         .unwrap_or(50);
     let offset = (page - 1) * page_size;
 
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE switch_id = $1")
-        .bind(switch_id)
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE device_id = $1")
+        .bind(device_id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
     let data = sqlx::query_as::<_, SwitchPort>(
-        r"SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
+        r"SELECT * FROM switch_ports WHERE device_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .bind(page_size)
     .bind(offset)
     .fetch_all(&state.pool()?.get_conn())
@@ -72,14 +72,14 @@ pub async fn get_all_switch_ports(
 
     let total: i64 = if let Some(ref pattern) = search_pattern {
         sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id WHERE s.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1"
+            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id WHERE d.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1"
         )
         .bind(pattern)
         .fetch_one(&state.pool()?.get_conn())
         .await?
     } else {
         sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switch_ports sp JOIN switches s ON sp.switch_id = s.id",
+            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id",
         )
         .fetch_one(&state.pool()?.get_conn())
         .await?
@@ -88,17 +88,17 @@ pub async fn get_all_switch_ports(
     let data = if let Some(ref pattern) = search_pattern {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
             r"SELECT
-                sp.id, sp.switch_id, s.name as switch_name,
+                sp.id, sp.device_id, d.name as device_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
                     ''
-                ) as switch_ip,
+                ) as device_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
                 sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
             FROM switch_ports sp
-            JOIN switches s ON sp.switch_id = s.id
-            WHERE s.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1
-            ORDER BY s.name, sp.port_number
+            JOIN devices d ON sp.device_id = d.id
+            WHERE d.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1
+            ORDER BY d.name, sp.port_number
             LIMIT $2 OFFSET $3"
         )
         .bind(pattern)
@@ -109,16 +109,16 @@ pub async fn get_all_switch_ports(
     } else {
         sqlx::query_as::<_, SwitchPortWithSwitch>(
             r"SELECT
-                sp.id, sp.switch_id, s.name as switch_name,
+                sp.id, sp.device_id, d.name as device_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
                     ''
-                ) as switch_ip,
+                ) as device_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
                 sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
             FROM switch_ports sp
-            JOIN switches s ON sp.switch_id = s.id
-            ORDER BY s.name, sp.port_number
+            JOIN devices d ON sp.device_id = d.id
+            ORDER BY d.name, sp.port_number
             LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
@@ -145,24 +145,24 @@ pub async fn create_switch_port(
     req: web::Json<SwitchPortCreate>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
 
     req.validate()?;
 
-    let switch_exists =
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM switches WHERE id = $1)")
-            .bind(switch_id)
+    let device_exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+            .bind(device_id)
             .fetch_one(&state.pool()?.get_conn())
             .await?;
 
-    if !switch_exists {
-        return Err(AppError::NotFound("交换机不存在".to_string()));
+    if !device_exists {
+        return Err(AppError::NotFound("设备不存在".to_string()));
     }
 
     let port_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE switch_id = $1 AND port_number = $2)",
+        "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE device_id = $1 AND port_number = $2)",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .bind(&req.port_number)
     .fetch_one(&state.pool()?.get_conn())
     .await?;
@@ -176,12 +176,12 @@ pub async fn create_switch_port(
 
     sqlx::query(
         r"INSERT INTO switch_ports (
-            id, switch_id, port_number, port_name, port_type, vlan_id,
+            id, device_id, port_number, port_name, port_type, vlan_id,
             status, speed, description, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
     )
     .bind(id)
-    .bind(switch_id)
+    .bind(device_id)
     .bind(&req.port_number)
     .bind(&req.port_name)
     .bind(req.port_type.as_deref().unwrap_or("access"))
@@ -200,7 +200,7 @@ pub async fn create_switch_port(
         .await?;
 
     let details = serde_json::json!({
-        "switch_id": switch_id,
+        "device_id": device_id,
         "port_number": data.port_number,
         "port_name": data.port_name,
         "port_type": data.port_type,
@@ -233,15 +233,15 @@ pub async fn get_switch_port(
 
     let data = sqlx::query_as::<_, SwitchPortWithSwitch>(
         r"SELECT
-            sp.id, sp.switch_id, s.name as switch_name,
+            sp.id, sp.device_id, d.name as device_name,
             COALESCE(
-                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = s.position_id LIMIT 1),
+                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
                 ''
-            ) as switch_ip,
+            ) as device_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
         FROM switch_ports sp
-        JOIN switches s ON sp.switch_id = s.id
+        JOIN devices d ON sp.device_id = d.id
         WHERE sp.id = $1",
     )
     .bind(port_id)
@@ -298,7 +298,7 @@ pub async fn update_switch_port(
         .await?;
 
     let details = serde_json::json!({
-        "switch_id": data.switch_id,
+        "device_id": data.device_id,
         "port_number": data.port_number,
         "port_name": data.port_name,
         "port_type": data.port_type,
@@ -391,7 +391,7 @@ pub async fn sync_ports_from_snmp(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let switch_id = path.into_inner();
+    let device_id = path.into_inner();
 
     let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
         r"SELECT
@@ -399,26 +399,26 @@ pub async fn sync_ports_from_snmp(
             snmp_username, snmp_auth_protocol,
             snmp_auth_password, snmp_priv_protocol,
             snmp_priv_password, snmp_port
-        FROM switches WHERE id = $1",
+        FROM devices WHERE id = $1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("交换机不存在".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("设备不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT position_id FROM switches WHERE id = $1)
+           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
            ORDER BY created_at LIMIT 1",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?;
 
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
         _ => {
-            return Err(AppError::Validation("交换机没有配置IP地址".to_string()));
+            return Err(AppError::Validation("设备没有配置IP地址".to_string()));
         }
     };
 
@@ -426,7 +426,7 @@ pub async fn sync_ports_from_snmp(
 
     let ports = get_switch_ports_via_snmp(&snmp_params)
         .await
-        .map_err(|e| AppError::Snmp(format!("获取交换机端口信息失败: {e}")))?;
+        .map_err(|e| AppError::Snmp(format!("获取设备端口信息失败: {e}")))?;
 
     let mut saved_count = 0;
     let mut skipped_count = 0;
@@ -434,9 +434,9 @@ pub async fn sync_ports_from_snmp(
 
     for port in &ports {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE switch_id = $1 AND port_number = $2)",
+            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE device_id = $1 AND port_number = $2)",
         )
-        .bind(switch_id)
+        .bind(device_id)
         .bind(&port.port_number)
         .fetch_one(&state.pool()?.get_conn())
         .await
@@ -455,12 +455,12 @@ pub async fn sync_ports_from_snmp(
 
         let result = sqlx::query(
             r"INSERT INTO switch_ports (
-                id, switch_id, port_number, port_name, port_type, vlan_id,
+                id, device_id, port_number, port_name, port_type, vlan_id,
                 status, speed, description, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(id)
-        .bind(switch_id)
+        .bind(device_id)
         .bind(&port.port_number)
         .bind(&port.port_name)
         .bind(port.port_type.as_deref().unwrap_or("access"))
@@ -482,9 +482,9 @@ pub async fn sync_ports_from_snmp(
     }
 
     let saved_ports = sqlx::query_as::<_, SwitchPort>(
-        "SELECT * FROM switch_ports WHERE switch_id = $1 ORDER BY port_number",
+        "SELECT * FROM switch_ports WHERE device_id = $1 ORDER BY port_number",
     )
-    .bind(switch_id)
+    .bind(device_id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 

@@ -55,7 +55,7 @@ function updateDashboardUI(data) {
     "total-cabinets": data.locations?.cabinets || 0,
     "total-workstations": data.locations?.workstations || 0,
     "total-positions": data.locations?.positions || 0,
-    "total-switches": data.switches || 0,
+    "total-devices": data.devices || 0,
     "logins-24h": data.activity?.logins_24h || 0
   };
   
@@ -78,7 +78,7 @@ async function loadTopLists() {
     fetchTopData("/api/resources/networks?page_size=5", "networks"),
     fetchTopData("/api/resources/ip?page_size=5", "ips"),
     fetchTopData("/api/resources/rooms?page_size=5", "rooms"),
-    fetchTopData("/api/switches?page_size=5", "switches"),
+    fetchTopData("/api/resources/devices?page_size=5", "devices"),
     fetchTopData("/api/resources/cabinets?page_size=5", "cabinets"),
     fetchTopData("/api/logs/operation?page_size=5", "logs")
   ]);
@@ -87,7 +87,7 @@ async function loadTopLists() {
     networks: results[0].status === "fulfilled" ? results[0].value : [],
     ips: results[1].status === "fulfilled" ? results[1].value : [],
     rooms: results[2].status === "fulfilled" ? results[2].value : [],
-    switches: results[3].status === "fulfilled" ? results[3].value : [],
+    devices: results[3].status === "fulfilled" ? results[3].value : [],
     cabinets: results[4].status === "fulfilled" ? results[4].value : [],
     logs: results[5].status === "fulfilled" ? results[5].value : []
   };
@@ -110,7 +110,7 @@ function renderTopLists(data) {
   renderTopNetworks(data.networks);
   renderTopIPs(data.ips);
   renderTopRooms(data.rooms);
-  renderTopSwitches(data.switches);
+  renderTopDevices(data.devices);
   renderTopCabinets(data.cabinets);
   renderTopLogs(data.logs);
 }
@@ -184,25 +184,25 @@ function renderTopRooms(items) {
   `).join('');
 }
 
-function renderTopSwitches(items) {
-  const container = document.getElementById("top-switches-list");
+function renderTopDevices(items) {
+  const container = document.getElementById("top-devices-list");
   if (!container) return;
   
   if (!items || items.length === 0) {
-    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_switch_data') + '</li>';
+    container.innerHTML = '<li class="empty-list-item">' + t('dashboard.no_device_data') + '</li>';
     return;
   }
   
-  container.innerHTML = items.slice(0, 5).map(sw => `
+  container.innerHTML = items.slice(0, 5).map(dev => `
     <li>
       <div class="item-name">
         <span class="item-icon">🔀</span>
         <div>
-          <div>${sw.name || '-'}</div>
-          <div class="item-meta">${sw.ip_address || '-'}</div>
+          <div>${dev.name || '-'}</div>
+          <div class="item-meta">${dev.ip_address || '-'}</div>
         </div>
       </div>
-      <span class="item-value">${sw.vendor || '-'}</span>
+      <span class="item-value">${dev.vendor || '-'}</span>
     </li>
   `).join('');
 }
