@@ -1,5 +1,5 @@
 use aes_gcm::{
-    Aes256Gcm, Nonce,
+    Aes256Gcm,
     aead::{Aead, KeyInit},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
@@ -157,9 +157,9 @@ pub fn encrypt_password(password: &str) -> Option<String> {
 
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     rand::rng().fill(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = aes_gcm::Nonce::from(nonce_bytes);
 
-    let ciphertext = match cipher.encrypt(nonce, password.as_bytes()) {
+    let ciphertext = match cipher.encrypt(&nonce, password.as_bytes()) {
         Ok(ct) => ct,
         Err(e) => {
             error!("加密失败: {}", e);
@@ -191,9 +191,12 @@ pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     }
 
     let (nonce_bytes, ciphertext) = decoded.split_at(NONCE_SIZE);
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce_arr: [u8; NONCE_SIZE] = nonce_bytes
+        .try_into()
+        .map_err(|_| format!("解密失败: Nonce长度不正确 (期望{}字节)", NONCE_SIZE))?;
+    let nonce = aes_gcm::Nonce::from(nonce_arr);
 
-    let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|_| {
+    let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
         warn!("解密失败: AES-GCM解密错误");
         warn!("可能原因:");
         warn!("1. 数据库中的加密数据使用了旧密钥");
