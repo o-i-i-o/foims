@@ -39,6 +39,8 @@ const MODULE_REGISTRY = {
     'deviceSnmp': '/static/js/modules/deviceSnmp.js',
     'visualizationManager': '/static/js/modules/visualization/visualizationManager.js',
     'SVGVisualization': '/static/js/modules/visualization/SVGVisualization.js',
+    'TopologyVisualization': '/static/js/modules/visualization/TopologyVisualization.js',
+    'TopologyModal': '/static/js/modules/visualization/TopologyModal.js',
 };
 
 export async function loadModule(moduleName, modulePath = null) {

@@ -3,6 +3,7 @@ use crate::error::AppError;
 use crate::models::LayoutSaveRequest;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
+use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};
 use serde_json;
 use tracing::warn;
 use uuid::Uuid;
@@ -180,6 +181,58 @@ pub async fn get_room_cabinets_with_positions(
     let room_id = *room_id_path;
 
     ipma_visualization::get_room_cabinets_with_positions(&state.pool()?.get_conn(), room_id)
+        .await
+        .map_err(AppError::from)
+}
+
+// ==================== 拓扑可视化 ====================
+
+pub async fn get_topology_nodes(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    ipma_visualization::get_topology_nodes(&state.pool()?.get_conn())
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn save_topology_nodes(
+    state: web::Data<AppState>,
+    req: web::Json<TopologyNodesRequest>,
+) -> Result<HttpResponse, AppError> {
+    ipma_visualization::save_topology_nodes(&state.pool()?.get_conn(), req.into_inner())
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn delete_topology_node(
+    state: web::Data<AppState>,
+    device_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    ipma_visualization::delete_topology_node(&state.pool()?.get_conn(), device_id)
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn get_topology_connections(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
+    ipma_visualization::get_topology_connections(&state.pool()?.get_conn())
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn create_topology_connection(
+    state: web::Data<AppState>,
+    req: web::Json<TopologyConnectionRequest>,
+) -> Result<HttpResponse, AppError> {
+    ipma_visualization::create_topology_connection(&state.pool()?.get_conn(), req.into_inner())
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn delete_topology_connection(
+    state: web::Data<AppState>,
+    id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    ipma_visualization::delete_topology_connection(&state.pool()?.get_conn(), id)
         .await
         .map_err(AppError::from)
 }

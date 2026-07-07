@@ -505,6 +505,7 @@
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="workstation-visualization" role="tab" aria-selected="true" aria-controls="workstation-visualization" data-i18n="visualization.workstation">Workstation Visualization</button>
           <button class="tab-btn" data-tab="cabinet-visualization" role="tab" aria-selected="false" aria-controls="cabinet-visualization" data-i18n="visualization.cabinet">Cabinet Visualization</button>
+          <button class="tab-btn" data-tab="global-visualization" role="tab" aria-selected="false" aria-controls="global-visualization" data-i18n="visualization.global">Global Visualization</button>
         </div>
 
         <div id="workstation-visualization" class="tab-content active" role="tabpanel">
@@ -529,6 +530,23 @@
             <button id="save-cabinet-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
           </div>
           <div id="cabinet-visualization-container" role="img" aria-label="Cabinet visualization"></div>
+        </div>
+
+        <div id="global-visualization" class="tab-content" role="tabpanel">
+          <div class="toolbar">
+            <div>
+              <select id="topology-device-select" class="form-control" aria-label="Select device to add">
+                <option value="" data-i18n="visualization.select_device">-- Add Device --</option>
+              </select>
+              <button id="add-device-to-topology" class="btn btn-primary btn-sm" data-i18n="visualization.add_device">Add Device</button>
+            </div>
+            <button id="toggle-connection-mode" class="btn btn-warning btn-sm" data-i18n="visualization.connection_mode">Connection Mode</button>
+            <button id="topology-auto-layout" class="btn btn-primary btn-sm" data-i18n="visualization.auto_layout">Auto Layout</button>
+            <button id="save-topology-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
+            <button id="delete-topology-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
+            <span id="topology-zoom-level" class="zoom-indicator">100%</span>
+          </div>
+          <div id="global-visualization-container" role="img" aria-label="Global topology visualization"></div>
         </div>
       </section>
 

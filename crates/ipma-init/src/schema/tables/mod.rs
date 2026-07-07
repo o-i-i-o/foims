@@ -15,6 +15,7 @@ mod rooms;
 mod switches;
 mod system;
 mod tokens;
+mod topology;
 mod triggers;
 mod users;
 mod views;
@@ -43,6 +44,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     org_templates::create(pool).await?;
     organizations::create(pool).await?;
     rooms::create(pool).await?;
+    topology::create(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

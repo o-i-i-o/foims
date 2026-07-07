@@ -22,21 +22,22 @@ use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, connect_device,
     create_access_point, create_cabinet, create_cabinet_position, create_device, create_device_ip,
     create_network, create_network_region, create_org_template, create_organization, create_room,
-    create_workstation, delete_access_point, delete_cabinet, delete_cabinet_position,
-    delete_device, delete_device_template, delete_layout, delete_network, delete_network_region,
-    delete_org_template, delete_organization, delete_positions_layout, delete_room,
-    delete_workstation, disconnect_device, get_access_point, get_access_points,
-    get_allowed_child_types, get_available_ips, get_cabinet, get_cabinet_networks,
-    get_cabinet_position, get_cabinet_position_ips, get_cabinets, get_cabinets_by_network_region,
-    get_children, get_device, get_device_ips, get_device_template, get_device_templates,
-    get_devices, get_ip_managers, get_layout, get_network, get_network_region, get_network_regions,
+    create_topology_connection, create_workstation, delete_access_point, delete_cabinet,
+    delete_cabinet_position, delete_device, delete_device_template, delete_layout, delete_network,
+    delete_network_region, delete_org_template, delete_organization, delete_positions_layout,
+    delete_room, delete_topology_connection, delete_topology_node, delete_workstation,
+    disconnect_device, get_access_point, get_access_points, get_allowed_child_types,
+    get_available_ips, get_cabinet, get_cabinet_networks, get_cabinet_position,
+    get_cabinet_position_ips, get_cabinets, get_cabinets_by_network_region, get_children,
+    get_device, get_device_ips, get_device_template, get_device_templates, get_devices,
+    get_ip_managers, get_layout, get_network, get_network_region, get_network_regions,
     get_networks, get_org_rooms, get_org_template, get_org_templates, get_organization,
     get_organization_tree, get_organizations, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_workstation,
-    get_workstation_ips, get_workstations, link_peer, pull_ip_managers, save_layout, unlink_peer,
-    update_access_point, update_cabinet, update_cabinet_position, update_device, update_network,
-    update_network_region, update_org_template, update_organization, update_room,
-    update_workstation,
+    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_topology_connections,
+    get_topology_nodes, get_workstation, get_workstation_ips, get_workstations, link_peer,
+    pull_ip_managers, save_layout, save_topology_nodes, unlink_peer, update_access_point,
+    update_cabinet, update_cabinet_position, update_device, update_network, update_network_region,
+    update_org_template, update_organization, update_room, update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -243,6 +244,19 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route(
                                     "/room-cabinets/{room_id}",
                                     web::get().to(get_room_cabinets_with_positions),
+                                ),
+                        )
+                        // 拓扑可视化
+                        .service(
+                            web::scope("/topology")
+                                .route("/nodes", web::get().to(get_topology_nodes))
+                                .route("/nodes", web::post().to(save_topology_nodes))
+                                .route("/nodes/{device_id}", web::delete().to(delete_topology_node))
+                                .route("/connections", web::get().to(get_topology_connections))
+                                .route("/connections", web::post().to(create_topology_connection))
+                                .route(
+                                    "/connections/{id}",
+                                    web::delete().to(delete_topology_connection),
                                 ),
                         )
                         // 组织管理
