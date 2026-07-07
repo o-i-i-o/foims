@@ -298,6 +298,9 @@
     "end_u": "结束U位",
     "switch_port": "交换机端口",
     "add_position": "添加机位",
+    "select_room": "选择房间",
+    "select_cabinet": "选择机柜",
+    "select_room_first": "请先选择房间",
     "position_deleted": "机位删除成功",
     "position_added": "机位添加成功",
     "position_updated": "机位更新成功"

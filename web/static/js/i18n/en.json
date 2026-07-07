@@ -298,6 +298,9 @@
     "end_u": "End U",
     "switch_port": "Switch Port",
     "add_position": "Add Position",
+    "select_room": "Select Room",
+    "select_cabinet": "Select Cabinet",
+    "select_room_first": "Select room first",
     "position_deleted": "Position deleted successfully",
     "position_added": "Position added successfully",
     "position_updated": "Position updated successfully"

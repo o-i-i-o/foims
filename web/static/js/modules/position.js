@@ -94,14 +94,7 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
           // 显示设备类型
           const deviceTypes = [...new Set(ipsData.data.map(ip => ip.device_type).filter(Boolean))];
           if (deviceTypes.length > 0) {
-            deviceTypeHtml = deviceTypes.map(dt => {
-              const typeMap = {
-                'switch': '交换机',
-                'workstation': '工作站',
-                'cabinet_position': '机位'
-              };
-              return typeMap[dt] || dt;
-            }).join(", ");
+            deviceTypeHtml = deviceTypes.map(dt => t(`ip.device_types.${dt}`, dt)).join(", ");
           }
         }
 
@@ -276,7 +269,7 @@ export async function openCabinetPositionModal(position = null) {
   
   // 从 cabinets 数据源只读加载房间选项（去重）
   const loadRoomsFromCabinets = async () => {
-    roomSelect.innerHTML = '<option value="">请选择房间</option>';
+    roomSelect.innerHTML = `<option value="">${t('cabinet_position.select_room', '选择房间')}</option>`;
     
     try {
       const result = await apiGet('/api/resources/cabinets');
@@ -305,7 +298,7 @@ export async function openCabinetPositionModal(position = null) {
   // 房间选择变化时加载机柜（只读）
   const handleRoomChange = async () => {
     const roomId = roomSelect.value;
-    cabinetSelect.innerHTML = '<option value="">请选择机柜</option>';
+    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_cabinet', '选择机柜')}</option>`;
     
     if (roomId) {
       try {
@@ -386,6 +379,6 @@ export async function openCabinetPositionModal(position = null) {
     title.textContent = "添加机位";
     form.reset();
     elementCache.setValue('cabinet-position-id', '');
-    cabinetSelect.innerHTML = '<option value="">请先选择房间</option>';
+    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_room_first', '请先选择房间')}</option>`;
   }
 }

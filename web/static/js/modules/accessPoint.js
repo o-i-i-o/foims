@@ -230,7 +230,7 @@ export async function submitAccessPointForm() {
 let roomChangeHandler = null;
 
 export async function openAccessPointModal(accessPoint = null) {
-  openModal("access-point-modal");
+  await openModal("access-point-modal");
 
   const title = elementCache.get('access-point-modal-title');
   const form = elementCache.get('access-point-form');
