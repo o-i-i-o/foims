@@ -12,15 +12,19 @@
           <label for="network-type-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
           <input type="text" id="network-type-name" name="name" autocomplete="off" required aria-required="true" />
         </div>
-        <div class="form-group">
-          <label for="network-type-ipv4-cidrs" data-i18n="network.ipv4_cidrs">IPv4 CIDRs</label>
-          <input type="text" id="network-type-ipv4-cidrs" name="ipv4_cidrs" autocomplete="off" data-i18n-placeholder="network.ipv4_cidrs_placeholder" placeholder="例如: 10.0.0.0/8, 192.168.0.0/16" />
-          <small class="form-text text-muted" data-i18n="network.ipv4_cidrs_hint">多个CIDR用逗号分隔，网段的IPv4 CIDR必须属于此范围</small>
-        </div>
-        <div class="form-group">
-          <label for="network-type-ipv6-cidrs" data-i18n="network.ipv6_cidrs">IPv6 CIDRs</label>
-          <input type="text" id="network-type-ipv6-cidrs" name="ipv6_cidrs" autocomplete="off" data-i18n-placeholder="network.ipv6_cidrs_placeholder" placeholder="例如: 2001:db8::/32" />
-          <small class="form-text text-muted" data-i18n="network.ipv6_cidrs_hint">多个CIDR用逗号分隔，网段的IPv6 CIDR必须属于此范围</small>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="network.ipv4_cidrs">IPv4 CIDRs</label>
+            <div id="network-type-ipv4-cidrs-list" class="cidr-input-list"></div>
+            <button type="button" class="btn btn-sm btn-success cidr-add-btn" data-cidr-type="ipv4" aria-label="Add IPv4 CIDR">+</button>
+            <small class="form-text text-muted" data-i18n="network.ipv4_cidrs_hint">网段的IPv4 CIDR必须属于此范围</small>
+          </div>
+          <div class="form-group">
+            <label data-i18n="network.ipv6_cidrs">IPv6 CIDRs</label>
+            <div id="network-type-ipv6-cidrs-list" class="cidr-input-list"></div>
+            <button type="button" class="btn btn-sm btn-success cidr-add-btn" data-cidr-type="ipv6" aria-label="Add IPv6 CIDR">+</button>
+            <small class="form-text text-muted" data-i18n="network.ipv6_cidrs_hint">网段的IPv6 CIDR必须属于此范围</small>
+          </div>
         </div>
         <div class="form-group">
           <label for="network-type-description" data-i18n="common.description">Description</label>

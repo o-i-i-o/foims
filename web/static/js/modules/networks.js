@@ -756,30 +756,81 @@ export async function deleteNetworkType(id) {
   await handleDelete(id, "/api/resources/network-regions", "网络区域删除成功", loadNetworkTypesData);
 }
 
+// ====== CIDR 动态输入框管理 ======
+function addCidrInputRow(containerId, cidrType, value = '') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const row = document.createElement('div');
+  row.className = 'cidr-input-row';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'cidr-input';
+  input.value = value;
+  input.placeholder = cidrType === 'ipv4' ? '例如: 10.0.0.0/8' : '例如: 2001:db8::/32';
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn btn-sm btn-danger cidr-remove-btn';
+  removeBtn.textContent = '−';
+  removeBtn.setAttribute('aria-label', t('common.delete', 'Delete'));
+  removeBtn.addEventListener('click', () => {
+    if (container.children.length > 1) {
+      row.remove();
+    } else {
+      input.value = '';
+    }
+  });
+
+  row.appendChild(input);
+  row.appendChild(removeBtn);
+  container.appendChild(row);
+}
+
+function getCidrValues(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+
+  const values = [];
+  container.querySelectorAll('.cidr-input').forEach(input => {
+    const val = input.value.trim();
+    if (val) values.push(val);
+  });
+
+  return values.length > 0 ? values : null;
+}
+
+function clearCidrInputs(containerId) {
+  const container = document.getElementById(containerId);
+  if (container) container.innerHTML = '';
+}
+
+function initCidrInputListeners() {
+  const modal = document.getElementById('network-type-modal');
+  if (!modal || modal.dataset.cidrListeners === 'true') return;
+  modal.dataset.cidrListeners = 'true';
+
+  modal.addEventListener('click', (e) => {
+    if (e.target.classList.contains('cidr-add-btn')) {
+      const cidrType = e.target.dataset.cidrType;
+      addCidrInputRow(`network-type-${cidrType}-cidrs-list`, cidrType);
+    }
+  });
+}
+
 // ====== 提交网络区域表单 ======
 export async function submitNetworkTypeForm() {
-  // 使用通用工具函数获取表单数据
   const id = getElementValue("network-type-id");
   const name = getElementValue("network-type-name");
   const description = getElementValue("network-type-description");
-  const ipv4CidrsStr = getElementValue("network-type-ipv4-cidrs");
-  const ipv6CidrsStr = getElementValue("network-type-ipv6-cidrs");
+  const ipv4_cidrs = getCidrValues('network-type-ipv4-cidrs-list');
+  const ipv6_cidrs = getCidrValues('network-type-ipv6-cidrs-list');
 
-  // 验证必填字段
   if (!name) {
     showToast("网络区域名称不能为空", "warning");
     return;
   }
-
-  // 解析 CIDR 数组（逗号分隔）
-  const parseCidrList = (cidrStr) => {
-    if (!cidrStr || !cidrStr.trim()) return null;
-    const cidrList = cidrStr.split(/[,\s]+/).map(cidr => cidr.trim()).filter(cidr => cidr.length > 0);
-    return cidrList.length > 0 ? cidrList : null;
-  };
-
-  const ipv4_cidrs = parseCidrList(ipv4CidrsStr);
-  const ipv6_cidrs = parseCidrList(ipv6CidrsStr);
 
   const networkTypeData = {
     name,
@@ -788,7 +839,6 @@ export async function submitNetworkTypeForm() {
     ipv6_cidrs,
   };
 
-  // 使用通用表单提交处理函数
   const success = await handleFormSubmit({
     formData: networkTypeData,
     id,
@@ -797,7 +847,7 @@ export async function submitNetworkTypeForm() {
     modalId: "network-type-modal",
     reloadFunction: () => {
       loadNetworkTypesData();
-      loadNetworkTypeOptions(); // 更新网络区域下拉选择器
+      loadNetworkTypeOptions();
     }
   });
 
@@ -873,29 +923,44 @@ export async function submitNetworkForm() {
 }
 
 // ====== 网络区域管理模态框 ======
-export function openNetworkTypeModal(networkType = null) {
-  openModal("network-type-modal");
-  
-  const modal = elementCache.get('network-type-modal');
+export async function openNetworkTypeModal(networkType = null) {
+  await openModal("network-type-modal");
+
   const title = elementCache.get('network-type-modal-title');
   const form = elementCache.get('network-type-form');
+
+  clearCidrInputs('network-type-ipv4-cidrs-list');
+  clearCidrInputs('network-type-ipv6-cidrs-list');
 
   if (networkType) {
     title.textContent = "编辑网络区域";
     elementCache.setValue('network-type-id', networkType.id);
     elementCache.setValue('network-type-name', networkType.name);
     elementCache.setValue('network-type-description', networkType.description || "");
-    elementCache.setValue('network-type-ipv4-cidrs', 
-      Array.isArray(networkType.ipv4_cidrs) ? networkType.ipv4_cidrs.join(', ') : "");
-    elementCache.setValue('network-type-ipv6-cidrs', 
-      Array.isArray(networkType.ipv6_cidrs) ? networkType.ipv6_cidrs.join(', ') : "");
+
+    const ipv4Cidrs = Array.isArray(networkType.ipv4_cidrs) ? networkType.ipv4_cidrs : [];
+    const ipv6Cidrs = Array.isArray(networkType.ipv6_cidrs) ? networkType.ipv6_cidrs : [];
+
+    if (ipv4Cidrs.length > 0) {
+      ipv4Cidrs.forEach(cidr => addCidrInputRow('network-type-ipv4-cidrs-list', 'ipv4', cidr));
+    } else {
+      addCidrInputRow('network-type-ipv4-cidrs-list', 'ipv4');
+    }
+
+    if (ipv6Cidrs.length > 0) {
+      ipv6Cidrs.forEach(cidr => addCidrInputRow('network-type-ipv6-cidrs-list', 'ipv6', cidr));
+    } else {
+      addCidrInputRow('network-type-ipv6-cidrs-list', 'ipv6');
+    }
   } else {
     title.textContent = "添加网络区域";
     if (form) form.reset();
     elementCache.setValue('network-type-id', '');
-    elementCache.setValue('network-type-ipv4-cidrs', '');
-    elementCache.setValue('network-type-ipv6-cidrs', '');
+    addCidrInputRow('network-type-ipv4-cidrs-list', 'ipv4');
+    addCidrInputRow('network-type-ipv6-cidrs-list', 'ipv6');
   }
+
+  initCidrInputListeners();
 }
 
 // ====== 网络管理模态框 ======

@@ -3,7 +3,7 @@
 # 设置数据库连接信息
 HOST=localhost
 PORT=5432
-USER=postgres
+USER=ipma
 DB=ipma
 PASSWORD=admin123
 

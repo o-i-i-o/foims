@@ -150,7 +150,11 @@
     "network_list_placeholder": "请输入网络，每行一个",
     "select_region": "选择网络区域",
     "select_network": "选择网络",
-    "add_region_first": "请先添加网络区域"
+    "add_region_first": "请先添加网络区域",
+    "ipv4_cidrs": "IPv4 CIDR范围",
+    "ipv6_cidrs": "IPv6 CIDR范围",
+    "ipv4_cidrs_hint": "网段的IPv4 CIDR必须属于此范围",
+    "ipv6_cidrs_hint": "网段的IPv6 CIDR必须属于此范围"
   },
   "room": {
     "name": "房间名称",

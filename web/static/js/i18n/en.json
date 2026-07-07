@@ -150,7 +150,11 @@
     "network_list_placeholder": "Enter networks, one per line",
     "select_region": "Select Network Region",
     "select_network": "Select Network",
-    "add_region_first": "Please add a network region first"
+    "add_region_first": "Please add a network region first",
+    "ipv4_cidrs": "IPv4 CIDR Ranges",
+    "ipv6_cidrs": "IPv6 CIDR Ranges",
+    "ipv4_cidrs_hint": "Network IPv4 CIDR must belong to this range",
+    "ipv6_cidrs_hint": "Network IPv6 CIDR must belong to this range"
   },
   "room": {
     "name": "Room Name",
