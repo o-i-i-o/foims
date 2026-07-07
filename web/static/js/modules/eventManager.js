@@ -6,54 +6,34 @@
 import { loadModule, getCachedModule } from "../utils/moduleLoader.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modal.js";
-import {
-  editNetworkType,
-  deleteNetworkType,
-  editNetwork,
-  deleteNetwork,
-  showNetworkUsage,
-} from "./networks.js";
-import { editRoom, deleteRoom } from "./room.js";
-import { editWorkstation, deleteWorkstation } from "./workstation.js";
-import { editCabinet, deleteCabinet } from "./cabinet.js";
-import { editCabinetPosition, deleteCabinetPosition } from "./position.js";
-import { editAccessPoint, deleteAccessPoint } from "./accessPoint.js";
-import { editDevice, deleteDevice } from "./device.js";
-import { deleteDevicePort } from "./devicePorts.js";
 
 // ==========================================
-// 编辑/删除函数映射
+// 编辑/删除函数映射（动态加载）
 // ==========================================
 
 const EDIT_FUNCTIONS = {
-  "network-types-table": editNetworkType,
-  "networks-table": editNetwork,
-  "rooms-table": editRoom,
-  "workstations-table": editWorkstation,
-  "cabinets-table": editCabinet,
-  "cabinet-positions-table": editCabinetPosition,
-  "access-points-table": editAccessPoint,
-  "devices-table": editDevice,
-  "users-table": async (id) => {
-    const { openUserModal } = await loadModule("userManager", "/static/js/modules/userManager.js");
-    openUserModal(id);
-  },
+  "network-types-table": { module: "networks", fn: "editNetworkType" },
+  "networks-table": { module: "networks", fn: "editNetwork" },
+  "rooms-table": { module: "room", fn: "editRoom" },
+  "workstations-table": { module: "workstation", fn: "editWorkstation" },
+  "cabinets-table": { module: "cabinet", fn: "editCabinet" },
+  "cabinet-positions-table": { module: "position", fn: "editCabinetPosition" },
+  "access-points-table": { module: "accessPoint", fn: "editAccessPoint" },
+  "devices-table": { module: "device", fn: "editDevice" },
+  "users-table": { module: "userManager", fn: "openUserModal" },
 };
 
 const DELETE_FUNCTIONS = {
-  "network-types-table": deleteNetworkType,
-  "networks-table": deleteNetwork,
-  "rooms-table": deleteRoom,
-  "workstations-table": deleteWorkstation,
-  "cabinets-table": deleteCabinet,
-  "cabinet-positions-table": deleteCabinetPosition,
-  "access-points-table": deleteAccessPoint,
-  "devices-table": deleteDevice,
-  "device-ports-table": deleteDevicePort,
-  "users-table": async (id) => {
-    const { deleteUser } = await loadModule("userManager", "/static/js/modules/userManager.js");
-    deleteUser(id);
-  },
+  "network-types-table": { module: "networks", fn: "deleteNetworkType" },
+  "networks-table": { module: "networks", fn: "deleteNetwork" },
+  "rooms-table": { module: "room", fn: "deleteRoom" },
+  "workstations-table": { module: "workstation", fn: "deleteWorkstation" },
+  "cabinets-table": { module: "cabinet", fn: "deleteCabinet" },
+  "cabinet-positions-table": { module: "position", fn: "deleteCabinetPosition" },
+  "access-points-table": { module: "accessPoint", fn: "deleteAccessPoint" },
+  "devices-table": { module: "device", fn: "deleteDevice" },
+  "device-ports-table": { module: "devicePorts", fn: "deleteDevicePort" },
+  "users-table": { module: "userManager", fn: "deleteUser" },
 };
 
 // ==========================================
@@ -297,22 +277,23 @@ function handleModalCloseClick(e) {
  * 处理使用情况按钮点击
  * @param {Event} e - 点击事件
  */
-function handleUsageButtonClick(e) {
+async function handleUsageButtonClick(e) {
   if (!e.target.classList.contains("btn-usage")) {
     return;
   }
-  
+
   const button = e.target;
   const id = button.dataset.id;
-  
+
   if (!id || id === "undefined") {
     showToast("操作失败：缺少ID参数", "error");
     return;
   }
-  
+
   const table = button.closest("table");
-  
+
   if (table?.id === "networks-table") {
+    const { showNetworkUsage } = await loadModule("networks");
     showNetworkUsage(id);
   }
 }
@@ -321,10 +302,10 @@ function handleUsageButtonClick(e) {
  * 处理编辑和删除按钮点击
  * @param {Event} e - 点击事件
  */
-function handleEditDeleteClick(e) {
+async function handleEditDeleteClick(e) {
   const isEdit = e.target.classList.contains("btn-edit");
   const isDelete = e.target.classList.contains("btn-delete");
-  
+
   if (!isEdit && !isDelete) {
     return;
   }
@@ -335,23 +316,29 @@ function handleEditDeleteClick(e) {
   }
 
   e.preventDefault();
-  
+
   const button = e.target;
   const id = button.dataset.id;
   const table = button.closest("table");
   const tableId = table?.id;
-  
+
   if (!id || id === "undefined") {
     showToast("操作失败：缺少ID参数", "error");
     return;
   }
-  
+
   if (isEdit) {
-    const editFunction = EDIT_FUNCTIONS[tableId];
-    editFunction?.(id);
+    const config = EDIT_FUNCTIONS[tableId];
+    if (config) {
+      const module = await loadModule(config.module);
+      module[config.fn]?.(id);
+    }
   } else if (isDelete) {
-    const deleteFunction = DELETE_FUNCTIONS[tableId];
-    deleteFunction?.(id);
+    const config = DELETE_FUNCTIONS[tableId];
+    if (config) {
+      const module = await loadModule(config.module);
+      module[config.fn]?.(id);
+    }
   }
 }
 

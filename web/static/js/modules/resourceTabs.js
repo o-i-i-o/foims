@@ -3,29 +3,25 @@
  * 处理资源管理页面的标签页切换和数据加载
  */
 
-import { loadNetworkTypesData, loadNetworksData, initNetworksFilters } from "./networks.js";
-import { loadRoomsData, initRoomSortEvents } from "./room.js";
-import { loadWorkstationsData, initWorkstationSortEvents } from "./workstation.js";
-import { loadCabinetsData, initCabinetSortEvents } from "./cabinet.js";
-import { loadCabinetPositionsData, initPositionSortEvents } from "./position.js";
-import { loadAccessPointsData, initAccessPointSortEvents } from "./accessPoint.js";
-import { loadDevicesData, initDeviceSortEvents } from "./device.js";
+import { loadModule } from "../utils/moduleLoader.js";
 import { nextFrame, safeAsync } from "../utils/helpers.js";
 
 // ==========================================
 // 常量定义
 // ==========================================
 
-const TAB_DATA_LOADERS = {
-  rooms: loadRoomsData,
-  workstations: loadWorkstationsData,
-  "network-regions": loadNetworkTypesData,
-  networks: loadNetworksData,
-  cabinets: loadCabinetsData,
-  "cabinet-positions": loadCabinetPositionsData,
-  "access-points": loadAccessPointsData,
-  devices: loadDevicesData,
+const TAB_CONFIG = {
+  rooms: { module: "room", initFn: "initRoomSortEvents", loadFn: "loadRoomsData" },
+  workstations: { module: "workstation", initFn: "initWorkstationSortEvents", loadFn: "loadWorkstationsData" },
+  "network-regions": { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworkTypesData" },
+  networks: { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworksData" },
+  cabinets: { module: "cabinet", initFn: "initCabinetSortEvents", loadFn: "loadCabinetsData" },
+  "cabinet-positions": { module: "position", initFn: "initPositionSortEvents", loadFn: "loadCabinetPositionsData" },
+  "access-points": { module: "accessPoint", initFn: "initAccessPointSortEvents", loadFn: "loadAccessPointsData" },
+  devices: { module: "device", initFn: "initDeviceSortEvents", loadFn: "loadDevicesData" },
 };
+
+const initializedModules = new Set();
 
 // ==========================================
 // 初始化
@@ -34,24 +30,17 @@ const TAB_DATA_LOADERS = {
 /**
  * 初始化资源管理标签页
  */
-export function initResourceTabs() {
+export async function initResourceTabs() {
   const resourcesContainer = document.getElementById("resources");
-  
+
   if (!resourcesContainer) {
     return;
   }
-  
+
   if (isAlreadyInitialized(resourcesContainer)) {
     return;
   }
-  
-  initNetworksFilters();
-  initRoomSortEvents();
-  initWorkstationSortEvents();
-  initCabinetSortEvents();
-  initPositionSortEvents();
-  initAccessPointSortEvents();
-  initDeviceSortEvents();
+
   bindTabClickHandlers(resourcesContainer);
   markAsInitialized(resourcesContainer);
   loadDefaultTabData(resourcesContainer);
@@ -68,11 +57,11 @@ export function initResourceTabs() {
 function bindTabClickHandlers(container) {
   const tabBtns = container.querySelectorAll(".tab-btn");
   const tabContents = container.querySelectorAll(".tab-content");
-  
+
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", function () {
       const tabId = this.getAttribute("data-tab");
-      
+
       updateActiveTab(tabBtns, tabContents, this, tabId);
       loadTabData(tabId);
     });
@@ -89,9 +78,9 @@ function bindTabClickHandlers(container) {
 function updateActiveTab(tabBtns, tabContents, activeBtn, tabId) {
   tabBtns.forEach((btn) => btn.classList.remove("active"));
   activeBtn.classList.add("active");
-  
+
   tabContents.forEach((content) => content.classList.remove("active"));
-  
+
   const targetTab = document.getElementById(`${tabId}-tab`);
   targetTab?.classList.add("active");
 }
@@ -101,12 +90,18 @@ function updateActiveTab(tabBtns, tabContents, activeBtn, tabId) {
  * @param {string} tabId - 标签 ID
  */
 function loadTabData(tabId) {
-  nextFrame(() => {
-    const loader = TAB_DATA_LOADERS[tabId];
-    
-    if (loader) {
-      safeAsync(loader, `加载标签 ${tabId} 数据`);
+  nextFrame(async () => {
+    const config = TAB_CONFIG[tabId];
+    if (!config) return;
+
+    const module = await loadModule(config.module);
+
+    if (!initializedModules.has(config.module)) {
+      initializedModules.add(config.module);
+      module[config.initFn]?.();
     }
+
+    safeAsync(() => module[config.loadFn](), `加载标签 ${tabId} 数据`);
   });
 }
 
@@ -138,7 +133,7 @@ function markAsInitialized(container) {
 function loadDefaultTabData(container) {
   const activeTabBtn = container.querySelector(".tab-btn.active");
   const defaultTabBtn = activeTabBtn || container.querySelector(".tab-btn");
-  
+
   if (defaultTabBtn) {
     const tabId = defaultTabBtn.getAttribute("data-tab");
     loadTabData(tabId);

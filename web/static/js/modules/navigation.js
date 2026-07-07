@@ -3,12 +3,8 @@
  * 处理页面导航、URL 哈希和内容加载
  */
 
-import { loadDashboardData } from "./dashboard.js";
-import { initResourceTabs } from "./resourceTabs.js";
-import { loadDevicesForPullMac, loadNetworksForPullMac, loadIpMacData, initIpMacFunctions } from "./ipmanager.js";
 import { loadModule } from "../utils/moduleLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
-import { initVisualization } from "./visualization/visualizationManager.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 
 const DEFAULT_PAGE = "dashboard";
@@ -46,14 +42,16 @@ export function initNavigation() {
  * 加载仪表盘页面
  */
 async function loadDashboardPage() {
-  await loadDashboardData();
+  const dashboard = await loadModule("dashboard");
+  await dashboard.loadDashboardData();
 }
 
 /**
  * 加载资源管理页面
  */
 async function loadResourcesPage() {
-  initResourceTabs();
+  const resourceTabs = await loadModule("resourceTabs");
+  await resourceTabs.initResourceTabs();
 }
 
 /**
@@ -68,10 +66,11 @@ async function loadOrganizationPage() {
  * 加载 IP 管理页面
  */
 async function loadIpPage() {
-  loadDevicesForPullMac();
-  loadNetworksForPullMac();
-  initIpMacFunctions();
-  nextFrame(() => loadIpMacData());
+  const ipmanager = await loadModule("ipmanager");
+  ipmanager.loadDevicesForPullMac();
+  ipmanager.loadNetworksForPullMac();
+  ipmanager.initIpMacFunctions();
+  nextFrame(() => ipmanager.loadIpMacData());
 }
 
 /**
@@ -80,7 +79,7 @@ async function loadIpPage() {
 async function loadLogsPage() {
   const logModule = await loadModule("log", "/static/js/modules/log.js");
   logModule.initLogTabs();
-  
+
   whenVisible("#logs .tab-btn.active", () => {
     const activeTabBtn = document.querySelector("#logs .tab-btn.active");
     const logType = activeTabBtn?.getAttribute("data-tab") || "operation";
@@ -98,7 +97,7 @@ async function loadLogsPage() {
 async function loadSystemPage() {
   const systemModule = await loadModule("systemManager", "/static/js/modules/systemManager.js");
   systemModule.initSystemTabs();
-  
+
   whenVisible("#system", async () => {
     await safeAsync(() => systemModule.loadSystemInfo(), "加载系统信息");
     await safeAsync(() => systemModule.loadSystemConfig(), "加载系统配置");
@@ -110,7 +109,8 @@ async function loadSystemPage() {
  * 加载可视化页面
  */
 async function loadVisualizationPage() {
-  await initVisualization();
+  const viz = await loadModule("visualizationManager");
+  await viz.initVisualization();
 }
 
 // ==========================================

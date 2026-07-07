@@ -109,13 +109,16 @@ function initResourcePreloading() {
   ]);
   
   schedulePreload([
+    'resourceTabs',
     'networks',
     'room',
     'workstation',
     'cabinet',
     'position',
+    'accessPoint',
     'device',
     'devicePorts',
+    'ipmanager',
     'visualizationManager'
   ], { delay: 2000, priority: 'low' });
   
