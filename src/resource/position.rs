@@ -427,7 +427,7 @@ pub async fn get_cabinet_position(
                 "position_id": row.get::<Option<Uuid>, _>(2),
                 "switch_port_id": row.get::<Option<Uuid>, _>(3),
                 "device_type": row.get::<Option<String>, _>(4),
-                "network_id": row.get::<Uuid, _>(5),
+                "network_id": row.get::<Option<Uuid>, _>(5),
                 "ip_address": row.get::<String, _>(6),
                 "ip_version": row.get::<i16, _>(7),
                 "mac_address": row.get::<Option<String>, _>(8),

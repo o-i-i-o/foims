@@ -33,6 +33,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE NULL
             END AS cabinet_position_name,
+            sdv.name::text AS switch_name,
             sp.port_number::text AS switch_port_number,
             CASE
                 WHEN dv.id IS NOT NULL THEN dv.name::text
