@@ -770,6 +770,18 @@ function addCidrInputRow(containerId, cidrType, value = '') {
   input.value = value;
   input.placeholder = cidrType === 'ipv4' ? '例如: 10.0.0.0/8' : '例如: 2001:db8::/32';
 
+  const btnGroup = document.createElement('div');
+  btnGroup.className = 'cidr-btn-group';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-sm btn-success cidr-add-btn';
+  addBtn.textContent = '+';
+  addBtn.setAttribute('aria-label', t('common.add', 'Add'));
+  addBtn.addEventListener('click', () => {
+    addCidrInputRow(containerId, cidrType);
+  });
+
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'btn btn-sm btn-danger cidr-remove-btn';
@@ -783,8 +795,10 @@ function addCidrInputRow(containerId, cidrType, value = '') {
     }
   });
 
+  btnGroup.appendChild(addBtn);
+  btnGroup.appendChild(removeBtn);
   row.appendChild(input);
-  row.appendChild(removeBtn);
+  row.appendChild(btnGroup);
   container.appendChild(row);
 }
 
@@ -804,19 +818,6 @@ function getCidrValues(containerId) {
 function clearCidrInputs(containerId) {
   const container = document.getElementById(containerId);
   if (container) container.innerHTML = '';
-}
-
-function initCidrInputListeners() {
-  const modal = document.getElementById('network-type-modal');
-  if (!modal || modal.dataset.cidrListeners === 'true') return;
-  modal.dataset.cidrListeners = 'true';
-
-  modal.addEventListener('click', (e) => {
-    if (e.target.classList.contains('cidr-add-btn')) {
-      const cidrType = e.target.dataset.cidrType;
-      addCidrInputRow(`network-type-${cidrType}-cidrs-list`, cidrType);
-    }
-  });
 }
 
 // ====== 提交网络区域表单 ======
@@ -959,8 +960,6 @@ export async function openNetworkTypeModal(networkType = null) {
     addCidrInputRow('network-type-ipv4-cidrs-list', 'ipv4');
     addCidrInputRow('network-type-ipv6-cidrs-list', 'ipv6');
   }
-
-  initCidrInputListeners();
 }
 
 // ====== 网络管理模态框 ======
