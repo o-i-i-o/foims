@@ -34,6 +34,7 @@
     "actions": "Actions",
     "created_at": "Created At",
     "description": "Description",
+    "device_type": "Device Type",
     "description_placeholder": "Enter description",
     "no_data": "No data available",
     "filter": "Filter",
@@ -148,7 +149,8 @@
     "network_list": "Network List",
     "network_list_placeholder": "Enter networks, one per line",
     "select_region": "Select Network Region",
-    "select_network": "Select Network"
+    "select_network": "Select Network",
+    "add_region_first": "Please add a network region first"
   },
   "room": {
     "name": "Room Name",
@@ -166,7 +168,13 @@
     "name_required": "Room name is required",
     "type_required": "Room type is required",
     "network_required": "At least one network is required",
-    "network_all_required": "Please select all networks"
+    "network_all_required": "Please select all networks",
+    "select_room": "Select Room",
+    "select_office": "Select Office",
+    "select_datacenter": "Select Data Center",
+    "no_room_data": "No room data",
+    "no_office_data": "No office data",
+    "no_datacenter_data": "No data center data"
   },
   "organization": {
     "title": "Organization Management",
@@ -287,7 +295,9 @@
     "delete_cabinet": "Delete Cabinet",
     "cabinet_deleted": "Cabinet deleted successfully",
     "cabinet_added": "Cabinet added successfully",
-    "cabinet_updated": "Cabinet updated successfully"
+    "cabinet_updated": "Cabinet updated successfully",
+    "select_room_first": "Please select a room first",
+    "no_network_config": "No network configuration"
   },
   "cabinet_position": {
     "name": "Position Name",

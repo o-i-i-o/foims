@@ -34,6 +34,7 @@
     "actions": "操作",
     "created_at": "创建时间",
     "description": "描述",
+    "device_type": "设备类型",
     "description_placeholder": "请输入描述",
     "no_data": "暂无数据",
     "filter": "筛选",
@@ -148,7 +149,8 @@
     "network_list": "网络列表",
     "network_list_placeholder": "请输入网络，每行一个",
     "select_region": "选择网络区域",
-    "select_network": "选择网络"
+    "select_network": "选择网络",
+    "add_region_first": "请先添加网络区域"
   },
   "room": {
     "name": "房间名称",
@@ -166,7 +168,13 @@
     "name_required": "房间名称不能为空",
     "type_required": "房间类型不能为空",
     "network_required": "至少需要选择一个网段",
-    "network_all_required": "请选择所有网段"
+    "network_all_required": "请选择所有网段",
+    "select_room": "选择房间",
+    "select_office": "选择办公室",
+    "select_datacenter": "选择机房",
+    "no_room_data": "暂无房间数据",
+    "no_office_data": "暂无办公室数据",
+    "no_datacenter_data": "暂无机房数据"
   },
   "organization": {
     "title": "组织管理",
@@ -287,7 +295,9 @@
     "delete_cabinet": "删除机柜",
     "cabinet_deleted": "机柜删除成功",
     "cabinet_added": "机柜添加成功",
-    "cabinet_updated": "机柜更新成功"
+    "cabinet_updated": "机柜更新成功",
+    "select_room_first": "请先选择房间",
+    "no_network_config": "暂无网络配置"
   },
   "cabinet_position": {
     "name": "机位名称",
