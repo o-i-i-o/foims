@@ -10,6 +10,7 @@ use crate::error::AppError;
 use crate::models::{
     ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithSwitch,
 };
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
@@ -19,12 +20,10 @@ pub async fn get_switch_ports(
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
     let device_id = path.into_inner();
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50);
-    let offset = (page - 1) * page_size;
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE device_id = $1")
         .bind(device_id)
@@ -56,13 +55,11 @@ pub async fn get_all_switch_ports(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let offset = (page - 1) * page_size;
 
     let search_pattern = if search.is_empty() {
         None

@@ -4,7 +4,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             room_type VARCHAR(20) NOT NULL DEFAULT 'OFFICE',
-            org_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+            org_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -19,7 +19,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS room_networks (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-            network_id UUID REFERENCES network_cidrs(id),
+            network_id UUID NOT NULL REFERENCES network_cidrs(id),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(room_id, network_id)

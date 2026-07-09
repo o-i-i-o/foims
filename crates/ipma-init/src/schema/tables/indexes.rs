@@ -2,8 +2,6 @@ use tracing::warn;
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let indexes = [
-        "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
-        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_network_cidrs_region ON network_cidrs(network_region_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_room_id ON room_networks(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_network_id ON room_networks(network_id)",
@@ -20,8 +18,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_ips_workstation_id ON ips(workstation_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_position_id ON ips(position_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_switch_port_id ON ips(switch_port_id)",
-        "CREATE INDEX IF NOT EXISTS idx_ips_ip_address ON ips(ip_address)",
         "CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)",
+        "CREATE INDEX IF NOT EXISTS idx_ips_mac_address ON ips(mac_address)",
+        "CREATE INDEX IF NOT EXISTS idx_ips_device_id ON ips(device_id)",
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_user_id ON operation_logs(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at ON operation_logs(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_login_logs_username ON login_logs(username)",
@@ -31,7 +30,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_token_usage_token_hash ON token_usage(token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)",
-        "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_name ON scheduled_tasks(name)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
         "CREATE INDEX IF NOT EXISTS idx_rooms_org_id ON rooms(org_id)",
         "CREATE INDEX IF NOT EXISTS idx_access_points_room_id ON access_points(room_id)",
@@ -43,7 +41,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_devices_access_point_id ON devices(access_point_id)",
         "CREATE INDEX IF NOT EXISTS idx_devices_switch_port_id ON devices(switch_port_id)",
         "CREATE INDEX IF NOT EXISTS idx_devices_device_type ON devices(device_type)",
-        "CREATE INDEX IF NOT EXISTS idx_ips_device_id ON ips(device_id)",
     ];
 
     for idx in &indexes {

@@ -91,20 +91,23 @@ pub async fn update_scheduled_task(
     let id = path.into_inner();
     let now = Utc::now();
     let conn = state.pool()?.get_conn();
+    let mut tx = conn.begin().await?;
 
-    if let Some(ref cron_expr) = req.cron_expression {
+    // 校验 cron 表达式，失败时拒绝写入
+    let next_run_at = if let Some(ref cron_expr) = req.cron_expression {
         let cron_expr_clone = cron_expr.clone();
-        if let Ok(Ok(next_run)) =
-            tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr_clone)).await
-            && let Err(e) = sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
-                .bind(next_run)
-                .bind(id)
-                .execute(&conn)
-                .await
-        {
-            tracing::warn!("更新下次运行时间失败: {}", e);
+        match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr_clone)).await {
+            Ok(Ok(next_run)) => Some(next_run),
+            Ok(Err(e)) => {
+                return Err(AppError::Validation(format!("cron表达式无效: {e}")));
+            }
+            Err(e) => {
+                return Err(AppError::Internal(format!("cron校验任务失败: {e}")));
+            }
         }
-    }
+    } else {
+        None
+    };
 
     let result = sqlx::query(
         r"UPDATE scheduled_tasks SET
@@ -113,31 +116,35 @@ pub async fn update_scheduled_task(
            cron_expression = COALESCE($3, cron_expression),
            enabled = COALESCE($4, enabled),
            config = COALESCE($5, config),
-           updated_at = $6
-           WHERE id = $7",
+           next_run_at = COALESCE($6, next_run_at),
+           updated_at = $7
+           WHERE id = $8",
     )
     .bind(&req.name)
     .bind(&req.task_type)
     .bind(&req.cron_expression)
     .bind(req.enabled)
     .bind(&req.config)
+    .bind(next_run_at)
     .bind(now)
     .bind(id)
-    .execute(&conn)
+    .execute(&mut *tx)
     .await?;
 
-    if result.rows_affected() > 0 {
-        let task: ScheduledTask = sqlx::query_as(
-            "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
-        )
-        .bind(id)
-        .fetch_one(&conn)
-        .await?;
-
-        Ok(HttpResponse::Ok().json(ApiResponse::success(task, "更新定时任务成功")))
-    } else {
-        Err(AppError::NotFound("定时任务不存在".to_string()))
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("定时任务不存在".to_string()));
     }
+
+    let task: ScheduledTask = sqlx::query_as(
+        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(task, "更新定时任务成功")))
 }
 
 pub async fn delete_scheduled_task(
@@ -195,6 +202,17 @@ pub async fn run_scheduled_task_now(
     let pool = state.pool()?;
     let conn = pool.get_conn();
 
+    // 使用 advisory lock 防止同一任务并发执行
+    let lock_key = id.as_u128() as i64;
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(lock_key)
+        .fetch_one(&conn)
+        .await?;
+
+    if !locked {
+        return Err(AppError::Conflict("任务正在执行中，请稍后再试".to_string()));
+    }
+
     let task: Option<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
@@ -203,6 +221,11 @@ pub async fn run_scheduled_task_now(
     .await?;
 
     let Some(task) = task else {
+        let _: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+            .bind(lock_key)
+            .fetch_one(&conn)
+            .await
+            .unwrap_or(false);
         return Err(AppError::NotFound("定时任务不存在".to_string()));
     };
 
@@ -291,6 +314,13 @@ pub async fn run_scheduled_task_now(
     if let Err(e) = update_query.execute(&conn).await {
         tracing::warn!("更新定时任务执行结果失败: {}", e);
     }
+
+    // 释放 advisory lock
+    let _: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+        .bind(lock_key)
+        .fetch_one(&conn)
+        .await
+        .unwrap_or(false);
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({"result": result.map_err(|e| e.to_string())}),

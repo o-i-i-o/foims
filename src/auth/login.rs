@@ -68,6 +68,22 @@ pub async fn auth_middleware(
         }
     };
 
+    // 检查令牌是否已被撤销
+    if let Ok(revoked) =
+        crate::utils::common::is_token_revoked(&state.pool()?.get_conn(), &token).await
+        && revoked
+    {
+        let user_lang = detect_user_language(req.request());
+        return Ok(req.into_response(
+            HttpResponse::Unauthorized()
+                .json(ApiResponse::<()>::error_i18n(
+                    "api.token_revoked",
+                    &user_lang,
+                ))
+                .map_into_right_body(),
+        ));
+    }
+
     let (ip_address, user_agent) = get_client_info_from_service_request(&req);
     let current_fingerprint = JwtUtils::generate_device_fingerprint(&user_agent, &ip_address);
 
@@ -84,6 +100,31 @@ pub async fn auth_middleware(
     }
 
     req.extensions_mut().insert(claims);
+
+    let res = next.call(req).await?;
+    Ok(res.map_into_left_body())
+}
+
+pub async fn localhost_only_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody + 'static>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let peer_addr = req.peer_addr();
+    let is_localhost = peer_addr
+        .map(|addr| addr.ip().is_loopback())
+        .unwrap_or(false);
+
+    if !is_localhost {
+        let user_lang = detect_user_language(req.request());
+        return Ok(req.into_response(
+            HttpResponse::Forbidden()
+                .json(ApiResponse::<()>::error_i18n(
+                    "api.access_denied",
+                    &user_lang,
+                ))
+                .map_into_right_body(),
+        ));
+    }
 
     let res = next.call(req).await?;
     Ok(res.map_into_left_body())
@@ -518,8 +559,49 @@ pub async fn send_two_factor_code(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "验证码已发送")))
 }
 
-pub async fn logout(http_req: HttpRequest) -> Result<HttpResponse, AppError> {
+pub async fn logout(
+    state: web::Data<crate::app_state::AppState>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
     let secure = is_secure_request(&http_req);
+
+    // 撤销 access_token 和 refresh_token
+    if let Some(access_token) = crate::auth::utils::extract_token_from_request(&http_req)
+        && let Ok(claims) = state.jwt_utils.validate_token(&access_token)
+    {
+        let user_id = Uuid::parse_str(&claims.sub).ok();
+        let expiry = chrono::DateTime::from_timestamp(claims.exp as i64, 0)
+            .unwrap_or(chrono::Utc::now() + chrono::Duration::hours(1));
+        if let Err(e) = crate::utils::common::revoke_token(
+            &state.pool()?.get_conn(),
+            &access_token,
+            user_id,
+            expiry,
+        )
+        .await
+        {
+            tracing::warn!("撤销access_token失败: {}", e);
+        }
+    }
+
+    if let Some(refresh_cookie) = http_req.cookie("refresh_token") {
+        let refresh_token = refresh_cookie.value().to_string();
+        if let Ok(claims) = state.jwt_utils.validate_token(&refresh_token) {
+            let user_id = Uuid::parse_str(&claims.sub).ok();
+            let expiry = chrono::DateTime::from_timestamp(claims.exp as i64, 0)
+                .unwrap_or(chrono::Utc::now() + chrono::Duration::days(7));
+            if let Err(e) = crate::utils::common::revoke_token(
+                &state.pool()?.get_conn(),
+                &refresh_token,
+                user_id,
+                expiry,
+            )
+            .await
+            {
+                tracing::warn!("撤销refresh_token失败: {}", e);
+            }
+        }
+    }
 
     let access_cookie = create_clear_cookie("access_token", secure);
     let refresh_cookie = create_clear_cookie("refresh_token", secure);
@@ -716,7 +798,7 @@ pub async fn reset_password(
             let hashed_password = hash_password(&req.new_password).await?;
 
             sqlx::query(
-                "UPDATE users SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2",
+                "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2",
             )
             .bind(&hashed_password)
             .bind(user_id)
@@ -763,6 +845,17 @@ pub async fn init_two_factor(
                 return Err(AppError::NotFound("用户不存在".to_string()));
             }
         };
+
+    let two_factor_enabled: bool =
+        sqlx::query_scalar("SELECT two_factor_enabled FROM users WHERE id = $1")
+            .bind(target_user_id)
+            .fetch_one(&conn)
+            .await?;
+    if two_factor_enabled {
+        return Err(AppError::Conflict(
+            "2FA已启用，请先禁用后再重新初始化".to_string(),
+        ));
+    }
 
     let secret_bytes: Vec<u8> = {
         use rand::Rng;

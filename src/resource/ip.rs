@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerUpdate, IpManagerWithNames};
-use crate::utils::pagination::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
+use crate::utils::pagination::Pagination;
 use crate::utils::{
     OperationLogParams, get_room_id_by_position, get_room_id_by_workstation, log_system_operation,
     validate_network_in_room,
@@ -35,16 +35,10 @@ pub async fn get_ip_managers(
     let network_id = query
         .get("network_id")
         .and_then(|s| uuid::Uuid::parse_str(s).ok());
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE_SIZE)
-        .min(MAX_PAGE_SIZE);
-    let offset = (page - 1) * page_size;
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
 
     let mut conditions: Vec<String> = Vec::new();
     let mut param_index = 1;
@@ -464,49 +458,54 @@ pub async fn update_ip_manager(
         }
     };
 
+    let final_workstation_id = req
+        .workstation_id
+        .unwrap_or(existing_mapping.workstation_id);
+    let final_position_id = req.position_id.unwrap_or(existing_mapping.position_id);
+    let final_switch_port_id = req
+        .switch_port_id
+        .unwrap_or(existing_mapping.switch_port_id);
+    let final_device_type = req
+        .device_type
+        .as_deref()
+        .or(existing_mapping.device_type.as_deref());
+
     if let Some(device_type) = &req.device_type
         && !((device_type == "workstation"
-            && req.workstation_id.is_some()
-            && req.position_id.is_none())
+            && final_workstation_id.is_some()
+            && final_position_id.is_none())
             || (device_type == "cabinet_position"
-                && req.workstation_id.is_none()
-                && req.position_id.is_some()))
+                && final_workstation_id.is_none()
+                && final_position_id.is_some()))
     {
         return Err(AppError::Validation("设备类型与设备ID不匹配".to_string()));
     }
 
-    let effective_device_type = req
-        .device_type
-        .as_deref()
-        .or(existing_mapping.device_type.as_deref());
-    let effective_workstation_id = req.workstation_id.or(existing_mapping.workstation_id);
-    let effective_position_id = req.position_id.or(existing_mapping.position_id);
-
-    if effective_device_type == Some("workstation") && effective_workstation_id.is_none() {
+    if final_device_type == Some("workstation") && final_workstation_id.is_none() {
         return Err(AppError::Validation("工位IP必须关联工位".to_string()));
     }
-    if effective_device_type != Some("workstation") && effective_position_id.is_none() {
+    if final_device_type != Some("workstation") && final_position_id.is_none() {
         return Err(AppError::Validation("机位IP必须关联机位".to_string()));
     }
 
     sqlx::query(
-        "UPDATE ips SET 
-         workstation_id = $1, 
+        "UPDATE ips SET
+         workstation_id = $1,
          position_id = $2,
          switch_port_id = $3,
          device_id = COALESCE($4, device_id),
          device_type = COALESCE($5, device_type),
-         ip_address = COALESCE(CAST($6 AS INET), ip_address), 
-         mac_address = COALESCE($7, mac_address), 
-         hostname = COALESCE($8, hostname), 
-         status = COALESCE($9, status), 
-         ip_version = $10, 
-         updated_at = $11 
+         ip_address = COALESCE(CAST($6 AS INET), ip_address),
+         mac_address = COALESCE($7, mac_address),
+         hostname = COALESCE($8, hostname),
+         status = COALESCE($9, status),
+         ip_version = $10,
+         updated_at = $11
          WHERE id = $12",
     )
-    .bind(req.workstation_id)
-    .bind(req.position_id)
-    .bind(req.switch_port_id)
+    .bind(final_workstation_id)
+    .bind(final_position_id)
+    .bind(final_switch_port_id)
     .bind(req.device_id)
     .bind(&req.device_type)
     .bind(&req.ip_address)
@@ -902,24 +901,11 @@ pub async fn get_available_ips(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let used_ips: Vec<String> = sqlx::query_scalar(
-        r"SELECT host(i.ip_address)::TEXT 
-              FROM ips i
-              WHERE i.id IN (
-                  SELECT i2.id FROM ips i2
-                  LEFT JOIN workstations w ON i2.workstation_id = w.id
-                  LEFT JOIN positions p ON i2.position_id = p.id
-                  LEFT JOIN cabinets c ON p.cabinet_id = c.id
-                  WHERE EXISTS (
-                      SELECT 1 FROM room_networks rn 
-                      WHERE rn.network_id = $1 
-                      AND rn.room_id = COALESCE(w.room_id, c.room_id)
-                  )
-              )",
-    )
-    .bind(network_id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    let used_ips: Vec<String> =
+        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
+            .bind(network_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
     let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
 
@@ -1010,10 +996,13 @@ pub async fn auto_assign_ip(
         .map(|row| crate::utils::parse_network_from_row(&row))
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
+    let conn = state.pool()?.get_conn();
+    let mut tx = conn.begin().await?;
+
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
             .bind(req_network_id)
-            .fetch_all(&state.pool()?.get_conn())
+            .fetch_all(&mut *tx)
             .await?;
 
     let used_set: std::collections::HashSet<String> = used_ips.into_iter().collect();
@@ -1039,7 +1028,7 @@ pub async fn auto_assign_ip(
     let now = Utc::now();
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
-    sqlx::query(
+    let insert_result = sqlx::query(
         "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
     )
@@ -1058,7 +1047,21 @@ pub async fn auto_assign_ip(
     .bind(now)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn()).await?;
+    .execute(&mut *tx).await;
+
+    match insert_result {
+        Ok(_) => {}
+        Err(e) => {
+            if let sqlx::Error::Database(ref db_err) = e
+                && db_err.code().as_deref() == Some("23505")
+            {
+                return Err(AppError::Validation("IP地址已被分配，请重试".to_string()));
+            }
+            return Err(AppError::from(e));
+        }
+    }
+
+    tx.commit().await?;
 
     let mapping = IpManager {
         id,

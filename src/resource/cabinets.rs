@@ -3,7 +3,7 @@ use crate::error::AppError;
 use crate::models::{
     ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
 };
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -17,14 +17,10 @@ pub async fn get_cabinets(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
     let sort_by = query
@@ -35,7 +31,6 @@ pub async fn get_cabinets(
         .get("sort_order")
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
-    let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{search}%");
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());

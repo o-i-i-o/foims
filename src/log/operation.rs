@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, OperationLog};
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use actix_web::{HttpResponse, web};
 use uuid::Uuid;
 
@@ -13,15 +13,10 @@ pub async fn get_operation_logs(
     let resource_id = query.get("resource_id").cloned().unwrap_or_default();
     let user_id = query.get("user_id").cloned().unwrap_or_default();
     let action = query.get("action").cloned().unwrap_or_default();
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50);
-    let offset = (page - 1) * page_size;
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
 
     let search_pattern = format!("%{action}%");
 

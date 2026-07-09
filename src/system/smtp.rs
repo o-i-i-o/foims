@@ -169,12 +169,10 @@ async fn get_smtp_config_from_db_inner(
 pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Result<()> {
     let mut tx = pool.begin().await?;
 
-    let encrypted_password = encrypt_password_async(config.password.clone())
-        .await
-        .unwrap_or_else(|| {
-            error!("SMTP密码加密失败");
-            config.password.clone()
-        });
+    let encrypted_password = match encrypt_password_async(config.password.clone()).await {
+        Some(p) => p,
+        None => return Err(anyhow::anyhow!("SMTP密码加密失败，拒绝以明文存储")),
+    };
 
     let smtp_configs = vec![
         ("host", config.host.clone()),

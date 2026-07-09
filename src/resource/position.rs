@@ -5,7 +5,7 @@ use crate::models::{
     CabinetPositionWithDetails, IpManager,
 };
 use crate::resource::ip::detect_ip_version;
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -20,14 +20,10 @@ pub async fn get_positions(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let cabinet_id = query
         .get("cabinet_id")
@@ -40,7 +36,6 @@ pub async fn get_positions(
         .get("sort_order")
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
-    let offset = (page - 1) * page_size;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",

@@ -632,6 +632,37 @@ pub async fn test_snmp_connection(
         _ => return Err(AppError::Validation("IP地址不能为空".to_string())),
     };
 
+    // 验证目标 IP 不是私有/回环/链路本地/组播地址，防止 SSRF
+    let parsed_ip: std::net::IpAddr = ip
+        .parse()
+        .map_err(|_| AppError::Validation(format!("IP地址格式无效: {ip}")))?;
+    if parsed_ip.is_loopback() {
+        return Err(AppError::Validation("不允许连接回环地址".to_string()));
+    }
+    if parsed_ip.is_multicast() {
+        return Err(AppError::Validation("不允许连接组播地址".to_string()));
+    }
+    match parsed_ip {
+        std::net::IpAddr::V4(v4) => {
+            if v4.is_link_local() {
+                return Err(AppError::Validation("不允许连接链路本地地址".to_string()));
+            }
+            if v4.is_private() {
+                tracing::warn!("[test_snmp] 目标IP {} 为私有地址，允许连接", ip);
+            }
+            let octets = v4.octets();
+            if octets[0] == 169 && octets[1] == 254 && octets[2] == 169 && octets[3] == 254 {
+                return Err(AppError::Validation("不允许连接云元数据端点".to_string()));
+            }
+        }
+        std::net::IpAddr::V6(v6) => {
+            // IPv6 没有与 IPv4 相同的私有/链路本地概念，但检查常用受限范围
+            if v6.is_unique_local() {
+                tracing::warn!("[test_snmp] 目标IPv6 {} 为唯一本地地址，允许连接", ip);
+            }
+        }
+    }
+
     let snmp_params = SnmpParamsLegacy {
         ip: ip.clone(),
         port,

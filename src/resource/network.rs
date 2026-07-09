@@ -4,7 +4,7 @@ use crate::models::{
     ApiResponse, Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate,
     NetworkUpdate,
 };
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use crate::utils::parse_network_from_row;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -19,14 +19,10 @@ pub async fn get_networks(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let region_id = query
         .get("region_id")
@@ -36,8 +32,6 @@ pub async fn get_networks(
     let network_region_filter = query.get("network_region").cloned().unwrap_or_default();
     let ipv4_filter = query.get("ipv4_cidr").cloned().unwrap_or_default();
     let ipv6_filter = query.get("ipv6_cidr").cloned().unwrap_or_default();
-
-    let offset = (page - 1) * page_size;
 
     let has_filters = !search.is_empty()
         || region_id.is_some()
@@ -788,13 +782,11 @@ pub async fn get_network_regions(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let offset = (page - 1) * page_size;
 
     let total: i64 = if search.is_empty() {
         sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")

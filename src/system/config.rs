@@ -116,21 +116,30 @@ pub async fn get_system_info(state: web::Data<AppState>) -> Result<HttpResponse,
     Ok(HttpResponse::Ok().json(ApiResponse::success(system_info, "系统信息获取成功")))
 }
 
-pub async fn get_system_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
-        state.config.clone(),
-        "系统配置获取成功",
-    )))
+pub async fn get_system_config(
+    state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
+    let mut config = state.config.clone();
+    config.database.password = "***".to_string();
+    config.jwt.secret = "***".to_string();
+    Ok(HttpResponse::Ok().json(ApiResponse::success(config, "系统配置获取成功")))
 }
 
 pub async fn update_system_config(
     state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
     req: web::Json<UpdateSystemConfigRequest>,
 ) -> Result<HttpResponse, AppError> {
     let mut new_config = state.config.clone();
 
     if let Some(database) = &req.database {
-        new_config.database = database.clone();
+        // 防止脱敏值覆写真实密码
+        let mut db_config = database.clone();
+        if db_config.password == "***" {
+            db_config.password = state.config.database.password.clone();
+        }
+        new_config.database = db_config;
     }
 
     if let Some(server) = &req.server {
@@ -161,10 +170,20 @@ pub async fn update_system_config(
     }
 
     if let Some(jwt) = &req.jwt {
-        new_config.jwt = jwt.clone();
+        // 防止脱敏值覆写真实密钥
+        let mut jwt_config = jwt.clone();
+        if jwt_config.secret == "***" {
+            jwt_config.secret = state.config.jwt.secret.clone();
+        }
+        new_config.jwt = jwt_config;
     }
 
     if let Some(init) = &req.init {
+        if init.enabled != state.config.init.enabled {
+            return Err(AppError::Validation(
+                "禁止通过API修改初始化模式状态，请直接编辑配置文件".to_string(),
+            ));
+        }
         new_config.init = init.clone();
     }
 
@@ -272,7 +291,9 @@ pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
     }
 }
 
-pub async fn restart_application() -> Result<HttpResponse, AppError> {
+pub async fn restart_application(
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     tracing::info!("收到重启应用请求");
     trigger_service_restart().await
 }
@@ -357,7 +378,9 @@ exec "{exe_path_str}"
     )))
 }
 
-pub async fn restart_os() -> Result<HttpResponse, AppError> {
+pub async fn restart_os(
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     let output = Command::new("sh")
         .arg("-c")
         .arg("sleep 2 && sudo reboot")
@@ -433,6 +456,7 @@ pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
 
 pub async fn generate_certificate(
     state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
     req: web::Json<GenerateCertRequest>,
 ) -> Result<HttpResponse, AppError> {
     req.validate()?;
@@ -467,6 +491,7 @@ pub async fn generate_certificate(
 
 pub async fn import_certificate(
     _state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
     req: actix_multipart::Multipart,
 ) -> Result<HttpResponse, AppError> {
     use futures_util::stream::StreamExt;
@@ -521,7 +546,9 @@ pub async fn import_certificate(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
 }
 
-pub async fn download_certificate() -> Result<HttpResponse, AppError> {
+pub async fn download_certificate(
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
@@ -671,7 +698,10 @@ fn generate_self_signed_cert(
     Ok(())
 }
 
-pub async fn disable_init_mode(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn disable_init_mode(
+    state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     tracing::info!("收到关闭初始化模式请求");
 
     let mut new_config = state.config.clone();
@@ -690,8 +720,14 @@ pub async fn disable_init_mode(state: web::Data<AppState>) -> Result<HttpRespons
     trigger_service_restart().await
 }
 
-pub async fn backup_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    let config_json = serde_json::to_string_pretty(&state.config)
+pub async fn backup_config(
+    state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
+    let mut config = state.config.clone();
+    config.database.password = "***".to_string();
+    config.jwt.secret = "***".to_string();
+    let config_json = serde_json::to_string_pretty(&config)
         .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
     Ok(HttpResponse::Ok()
@@ -706,8 +742,26 @@ pub async fn backup_config(state: web::Data<AppState>) -> Result<HttpResponse, A
         .body(config_json))
 }
 
-pub async fn restore_config(payload: web::Json<Config>) -> Result<HttpResponse, AppError> {
-    let new_config = payload.into_inner();
+pub async fn restore_config(
+    state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
+    payload: web::Json<Config>,
+) -> Result<HttpResponse, AppError> {
+    let mut new_config = payload.into_inner();
+
+    if new_config.init.enabled {
+        return Err(AppError::Validation(
+            "禁止通过API恢复配置启用初始化模式，请直接编辑配置文件".to_string(),
+        ));
+    }
+
+    // 防止脱敏值覆写真实密钥
+    if new_config.database.password == "***" {
+        new_config.database.password = state.config.database.password.clone();
+    }
+    if new_config.jwt.secret == "***" {
+        new_config.jwt.secret = state.config.jwt.secret.clone();
+    }
 
     let http_enabled = new_config.server.http_enabled.unwrap_or(false);
     let https_enabled = new_config.server.https_enabled.unwrap_or(false);
@@ -910,7 +964,10 @@ pub async fn update_notification_settings(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
 }
 
-pub async fn get_smtp_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_smtp_config(
+    state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
         None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
@@ -931,6 +988,7 @@ pub struct UpdateSmtpConfigRequest {
 
 pub async fn update_smtp_config(
     state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
     req: web::Json<UpdateSmtpConfigRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = SmtpConfig {
@@ -985,6 +1043,7 @@ pub struct SendSystemEmailRequest {
 
 pub async fn send_system_email(
     state: web::Data<AppState>,
+    _admin: crate::auth::extractor::AdminUser,
     req: web::Json<SendSystemEmailRequest>,
 ) -> Result<HttpResponse, AppError> {
     req.validate()?;
@@ -1087,7 +1146,9 @@ pub async fn get_service_status() -> Result<HttpResponse, AppError> {
     )))
 }
 
-pub async fn register_service() -> Result<HttpResponse, AppError> {
+pub async fn register_service(
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<HttpResponse, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
     let exe_path_str = exe_path

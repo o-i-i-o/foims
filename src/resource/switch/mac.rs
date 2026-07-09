@@ -429,9 +429,14 @@ pub async fn get_switch_mac_table(
 
     let now = Utc::now();
     let mut upserted_count = 0usize;
+    let mut failed_count = 0usize;
+    let mut seen_ips: Vec<String> = Vec::new();
+
+    let mut tx = conn.begin().await?;
 
     for entry in &entries {
         let id = Uuid::new_v4();
+        seen_ips.push(entry.ip_address.clone());
         let result = sqlx::query(
             r"INSERT INTO switch_macs (id, device_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
                VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $7)
@@ -448,7 +453,7 @@ pub async fn get_switch_mac_table(
         .bind(&entry.interface)
         .bind(entry.vlan_id)
         .bind(now)
-        .execute(&conn)
+        .execute(&mut *tx)
         .await;
 
         match result {
@@ -457,6 +462,7 @@ pub async fn get_switch_mac_table(
             }
             Ok(_) => {}
             Err(e) => {
+                failed_count += 1;
                 tracing::error!(
                     "MAC记录写入失败 (ip={}, mac={}): {}",
                     entry.ip_address,
@@ -467,15 +473,32 @@ pub async fn get_switch_mac_table(
         }
     }
 
+    // 删除本次同步中未出现的陈旧记录
+    if !seen_ips.is_empty() {
+        sqlx::query(
+            "DELETE FROM switch_macs WHERE device_id = $1 AND host(ip_address) NOT IN (SELECT unnest($2::text[]))",
+        )
+        .bind(device_id)
+        .bind(&seen_ips)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
     let saved_macs: Vec<SwitchMac> = sqlx::query_as::<_, SwitchMac>(
         r"SELECT id, device_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
            FROM switch_macs WHERE device_id = $1 ORDER BY ip_address",
     )
     .bind(device_id)
-    .fetch_all(&conn)
+    .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let message = format!("同步 {upserted_count} 条 MAC 记录");
+    let message = if failed_count > 0 {
+        format!("同步 {upserted_count} 条 MAC 记录，{failed_count} 条失败")
+    } else {
+        format!("同步 {upserted_count} 条 MAC 记录")
+    };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(saved_macs, &message)))
 }

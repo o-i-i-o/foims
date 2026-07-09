@@ -6,7 +6,7 @@ use crate::models::{
     IpManager, IpManagerCreate,
 };
 use crate::resource::ip::detect_ip_version;
-use crate::utils::pagination::{DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -46,16 +46,10 @@ pub async fn get_devices(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE)
-        .max(1);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE_SIZE)
-        .min(MAX_PAGE_SIZE);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let workstation_id = query
         .get("workstation_id")
@@ -73,7 +67,6 @@ pub async fn get_devices(
         .get("sort_order")
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
-    let offset = (page - 1) * page_size;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY d.name DESC",
@@ -1055,11 +1048,14 @@ pub async fn delete_device(
         return Err(AppError::NotFound("设备未找到".to_string()));
     }
 
-    // Set device_id to NULL on associated IPs first
-    sqlx::query("UPDATE ips SET device_id = NULL WHERE device_id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+    // 对于同时关联了 workstation/position 的 IP，仅解除 device_id 关联（保留 IP）
+    // 对于仅通过 device_id 关联的 IP，由 ON DELETE CASCADE 自动删除
+    sqlx::query(
+        "UPDATE ips SET device_id = NULL WHERE device_id = $1 AND (workstation_id IS NOT NULL OR position_id IS NOT NULL)",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
 
     sqlx::query("DELETE FROM devices WHERE id = $1")
         .bind(id)
@@ -1487,6 +1483,18 @@ pub async fn connect_device(
                     .await?;
             if !exists {
                 return Err(AppError::NotFound("交换机端口未找到".to_string()));
+            }
+            // 检查端口是否已被其他设备占用
+            let occupied_by: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM devices WHERE switch_port_id = $1 AND id != $2")
+                    .bind(sp_id)
+                    .bind(id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if occupied_by.is_some() {
+                return Err(AppError::Conflict(
+                    "该交换机端口已被其他设备占用".to_string(),
+                ));
             }
             Some(*sp_id)
         }

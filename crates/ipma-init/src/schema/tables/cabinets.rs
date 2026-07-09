@@ -3,7 +3,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS cabinets (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
-            room_id UUID REFERENCES rooms(id) ON DELETE RESTRICT,
+            room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             capacity INTEGER NOT NULL DEFAULT 42,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -25,7 +25,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_position_device_type CHECK (device_type IN ('cabinet_position', 'switch'))
+            CONSTRAINT chk_position_device_type CHECK (device_type IN ('cabinet_position', 'switch')),
+            CONSTRAINT chk_position_u_range CHECK (start_u <= end_u),
+            CONSTRAINT uq_positions_cabinet_name UNIQUE (cabinet_id, name)
         )",
     )
     .execute(pool)

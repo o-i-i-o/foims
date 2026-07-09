@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -15,16 +15,11 @@ pub async fn get_users(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{search}%");
     let conn = state.pool()?.get_conn();
@@ -78,6 +73,7 @@ pub async fn get_users(
 pub async fn create_user(
     state: web::Data<AppState>,
     http_req: HttpRequest,
+    _admin: crate::auth::extractor::AdminUser,
     req: web::Json<UserCreate>,
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
@@ -176,6 +172,7 @@ pub async fn get_user(
 pub async fn update_user(
     state: web::Data<AppState>,
     http_req: HttpRequest,
+    _admin: crate::auth::extractor::AdminUser,
     id_path: web::Path<Uuid>,
     req: web::Json<UserUpdate>,
 ) -> Result<HttpResponse, AppError> {
@@ -243,6 +240,7 @@ pub async fn update_user(
 pub async fn delete_user(
     state: web::Data<AppState>,
     http_req: HttpRequest,
+    _admin: crate::auth::extractor::AdminUser,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
@@ -259,16 +257,8 @@ pub async fn delete_user(
 
     let mut tx = conn.begin().await?;
 
-    sqlx::query("DELETE FROM operation_logs WHERE user_id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("DELETE FROM notifications WHERE user_id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-
+    // operation_logs.user_id ON DELETE SET NULL — 保留日志，user_id 置 NULL
+    // notifications/user_tokens ON DELETE CASCADE — 自动级联删除
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)

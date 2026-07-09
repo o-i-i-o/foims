@@ -1,4 +1,3 @@
-pub mod buffer_pool;
 pub mod common;
 pub mod hsts;
 pub mod pagination;

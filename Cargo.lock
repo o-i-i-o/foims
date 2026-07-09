@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.10.12"
+version = "0.10.15"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2152,7 +2152,6 @@ dependencies = [
  "config",
  "csv",
  "dashmap",
- "flate2",
  "futures-util",
  "hex",
  "ipma-data-manager",

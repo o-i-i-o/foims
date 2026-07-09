@@ -709,9 +709,12 @@ pub struct PullIpManagersRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct IpManagerUpdate {
-    pub workstation_id: Option<Uuid>,
-    pub position_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    #[serde(default)]
+    pub workstation_id: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub position_id: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub switch_port_id: Option<Option<Uuid>>,
     pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub ip_address: Option<String>,
@@ -871,7 +874,7 @@ pub struct SwitchLldpCreate {
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct OperationLog {
     pub id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub username: String,
     pub action: String,
     pub operation_type: String,

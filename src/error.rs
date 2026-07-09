@@ -50,8 +50,18 @@ impl ResponseError for AppError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
-            .json(crate::models::ApiResponse::<()>::error(self.to_string()))
+        match self {
+            AppError::Internal(msg) => {
+                error!("内部错误详情: {}", msg);
+                HttpResponse::build(self.status_code()).json(
+                    crate::models::ApiResponse::<()>::error(
+                        "服务器内部错误，请稍后重试".to_string(),
+                    ),
+                )
+            }
+            _ => HttpResponse::build(self.status_code())
+                .json(crate::models::ApiResponse::<()>::error(self.to_string())),
+        }
     }
 }
 

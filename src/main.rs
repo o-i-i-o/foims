@@ -1,5 +1,6 @@
 use actix_cors::Cors;
 use actix_files::Files;
+use actix_web::middleware as actix_middleware;
 use actix_web::middleware::Compress;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
@@ -67,6 +68,7 @@ fn setup_panic_handler() {
 
 fn build_cors_middleware(config: &Config) -> Cors {
     let mut allowed_origins = config.server.cors_allowed_origins.clone();
+    let allow_localhost = config.server.allow_localhost_cors;
 
     let public_url = config
         .server
@@ -101,12 +103,13 @@ fn build_cors_middleware(config: &Config) -> Cors {
                         return true;
                     }
                 }
-                origin_str.starts_with("http://localhost:")
-                    || origin_str.starts_with("https://localhost:")
-                    || origin_str.starts_with("http://127.0.0.1:")
-                    || origin_str.starts_with("https://127.0.0.1:")
-                    || origin_str.starts_with("http://[::1]:")
-                    || origin_str.starts_with("https://[::1]:")
+                allow_localhost
+                    && (origin_str.starts_with("http://localhost:")
+                        || origin_str.starts_with("https://localhost:")
+                        || origin_str.starts_with("http://127.0.0.1:")
+                        || origin_str.starts_with("https://127.0.0.1:")
+                        || origin_str.starts_with("http://[::1]:")
+                        || origin_str.starts_with("https://[::1]:"))
             } else {
                 false
             }
@@ -746,6 +749,9 @@ fn configure_app_services(
 
         cfg.service(
             web::scope("/api/init")
+                .wrap(actix_middleware::from_fn(
+                    ipma::auth::login::localhost_only_middleware,
+                ))
                 .route("", web::post().to(ipma_init::init_system))
                 .route("/db", web::post().to(ipma_init::init_db))
                 .route("/db/clear", web::post().to(ipma_init::clear_database))

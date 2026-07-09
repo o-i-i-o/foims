@@ -105,6 +105,8 @@ pub struct ServerConfig {
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
     #[serde(default)]
     pub cors_allowed_origins: Vec<String>, // CORS允许的源列表
+    #[serde(default)]
+    pub allow_localhost_cors: bool, // 是否允许localhost/127.0.0.1/[::1]跨域（仅开发环境启用）
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

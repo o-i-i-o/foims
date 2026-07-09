@@ -5,7 +5,7 @@ use crate::models::{
     OrganizationUpdate, OrganizationWithChildren, Room,
 };
 use crate::resource::org_template::{get_allowed_children, validate_levels_mapping};
-use crate::utils::pagination::DEFAULT_PAGE;
+use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
@@ -23,14 +23,10 @@ pub async fn get_organizations(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query
-        .get("page")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PAGE);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(100);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let parent_id = query
         .get("parent_id")
@@ -40,7 +36,6 @@ pub async fn get_organizations(
         .get("root_only")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
-    let offset = (page - 1) * page_size;
 
     let mut conditions: Vec<String> = Vec::new();
     let mut param_idx = 1;
@@ -617,6 +612,16 @@ pub async fn delete_organization(
         )));
     }
 
+    let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE org_id = $1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if room_count > 0 {
+        return Err(AppError::Validation(format!(
+            "该节点下还有 {room_count} 个机房，请先解除关联后再删除"
+        )));
+    }
+
     sqlx::query("DELETE FROM organizations WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
@@ -740,9 +745,13 @@ pub async fn get_children(
 // ==================== 内部辅助函数 ====================
 
 /// 获取节点深度（从根到该节点的层数）
+///
+/// 同时检测 parent_id 链中的循环引用，若发现环则返回错误而非静默返回。
 async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize, AppError> {
     let mut depth = 0usize;
     let mut current_id = node_id;
+    let mut visited = std::collections::HashSet::new();
+    visited.insert(current_id);
 
     for _ in 0..=MAX_DEPTH {
         let parent_id: Option<Uuid> =
@@ -754,6 +763,11 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
 
         match parent_id {
             Some(pid) => {
+                if !visited.insert(pid) {
+                    return Err(AppError::Internal(format!(
+                        "组织节点存在循环引用（检测到节点 {pid} 被重复访问）"
+                    )));
+                }
                 depth += 1;
                 current_id = pid;
             }

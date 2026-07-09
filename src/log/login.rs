@@ -1,19 +1,18 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, LoginLog};
+use crate::utils::pagination::Pagination;
 use actix_web::{HttpResponse, web};
 
 pub async fn get_login_logs(
     state: web::Data<AppState>,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
-    let page: i64 = query.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let page_size: i64 = query
-        .get("page_size")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50);
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let offset = (page - 1) * page_size;
 
     let search_pattern = format!("%{search}%");
     let conn = state.pool()?.get_conn();

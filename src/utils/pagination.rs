@@ -42,35 +42,3 @@ impl Pagination {
         (total + self.page_size - 1) / self.page_size
     }
 }
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PaginatedResult<T> {
-    pub items: Vec<T>,
-    pub total: i64,
-    pub page: i64,
-    pub page_size: i64,
-    pub total_pages: i64,
-}
-
-impl<T> PaginatedResult<T> {
-    #[must_use]
-    pub const fn new(items: Vec<T>, total: i64, pagination: &Pagination) -> Self {
-        Self {
-            total_pages: pagination.total_pages(total),
-            items,
-            total,
-            page: pagination.page,
-            page_size: pagination.page_size,
-        }
-    }
-
-    pub fn map<U, F: Fn(T) -> U>(self, f: F) -> PaginatedResult<U> {
-        PaginatedResult {
-            items: self.items.into_iter().map(f).collect(),
-            total: self.total,
-            page: self.page,
-            page_size: self.page_size,
-            total_pages: self.total_pages,
-        }
-    }
-}
