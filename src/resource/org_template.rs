@@ -135,6 +135,37 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
     Ok(root_type)
 }
 
+/// 校验 icons 映射格式
+/// icons 格式: { "type_name": "🏢", ... }
+/// key 必须存在于 levels 中，值必须是字符串
+pub fn validate_icons_mapping(
+    icons: &serde_json::Value,
+    levels: &serde_json::Value,
+) -> Result<(), AppError> {
+    let icons_map = icons
+        .as_object()
+        .ok_or_else(|| AppError::Validation("icons 必须是一个对象（类型→图标映射）".to_string()))?;
+
+    let levels_map = levels
+        .as_object()
+        .ok_or_else(|| AppError::Internal("levels 格式错误".to_string()))?;
+
+    for (key, value) in icons_map {
+        if !levels_map.contains_key(key) {
+            return Err(AppError::Validation(format!(
+                "图标映射中的类型「{key}」未在 levels 中定义"
+            )));
+        }
+        if !value.is_string() {
+            return Err(AppError::Validation(format!(
+                "类型「{key}」的图标必须是字符串"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// 从 levels 映射中获取指定类型的允许子级类型
 pub fn get_allowed_children(
     levels: &serde_json::Value,
@@ -163,7 +194,7 @@ pub fn get_allowed_children(
 /// 获取所有模板
 pub async fn get_org_templates(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let templates = sqlx::query_as::<_, OrgTemplateSummary>(
-        "SELECT id, name, levels, description FROM org_templates ORDER BY created_at ASC",
+        "SELECT id, name, levels, icons, description FROM org_templates ORDER BY created_at ASC",
     )
     .fetch_all(&state.pool()?.get_conn())
     .await?;
@@ -182,7 +213,7 @@ pub async fn get_org_template(
     let id = *id_path;
 
     let template = sqlx::query_as::<_, OrgTemplate>(
-        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
     )
     .bind(id)
@@ -207,16 +238,21 @@ pub async fn create_org_template(
     // 校验 levels 映射格式
     let _root_type = validate_levels_mapping(&req.levels)?;
 
+    // 校验 icons 格式
+    let icons = req.icons.clone().unwrap_or_else(|| serde_json::json!({}));
+    validate_icons_mapping(&icons, &req.levels)?;
+
     let id = Uuid::new_v4();
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO org_templates (id, name, levels, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO org_templates (id, name, levels, icons, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(&req.levels)
+    .bind(&icons)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -235,6 +271,7 @@ pub async fn create_org_template(
         id,
         name: req.name.clone(),
         levels: req.levels.clone(),
+        icons,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -285,7 +322,7 @@ pub async fn update_org_template(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing = sqlx::query_as::<_, OrgTemplate>(
-        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
     )
     .bind(id)
@@ -310,18 +347,26 @@ pub async fn update_org_template(
         )));
     }
 
+    // 校验 icons 格式
+    let effective_levels = req.levels.as_ref().unwrap_or(&existing.levels);
+    if let Some(ref icons_val) = req.icons {
+        validate_icons_mapping(icons_val, effective_levels)?;
+    }
+
     let now = Utc::now();
 
     sqlx::query(
         "UPDATE org_templates SET
          name = COALESCE($1, name),
          levels = COALESCE($2, levels),
-         description = COALESCE($3, description),
-         updated_at = $4
-         WHERE id = $5",
+         icons = COALESCE($3, icons),
+         description = COALESCE($4, description),
+         updated_at = $5
+         WHERE id = $6",
     )
     .bind(&req.name)
     .bind(&req.levels)
+    .bind(&req.icons)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -339,7 +384,7 @@ pub async fn update_org_template(
     tx.commit().await?;
 
     let template = sqlx::query_as::<_, OrgTemplate>(
-        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
     )
     .bind(id)

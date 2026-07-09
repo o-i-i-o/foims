@@ -119,6 +119,51 @@
   flex-shrink: 0;
 }
 
+.org-node-type-badge[data-type="headquarters"] {
+  background: rgb(102 126 234 / 0.15);
+  color: #5568d3;
+}
+
+.org-node-type-badge[data-type="building"] {
+  background: rgb(0 123 255 / 0.1);
+  color: #007bff;
+}
+
+.org-node-type-badge[data-type="floor"] {
+  background: rgb(23 162 184 / 0.1);
+  color: #17a2b8;
+}
+
+.org-node-type-badge[data-type="data_center"] {
+  background: rgb(220 53 69 / 0.1);
+  color: #dc3545;
+}
+
+.org-node-type-badge[data-type="office"] {
+  background: rgb(40 167 69 / 0.1);
+  color: #28a745;
+}
+
+.org-node-type-badge[data-type="hall"] {
+  background: rgb(255 193 7 / 0.1);
+  color: #856404;
+}
+
+.org-node-type-badge[data-type="workstation"] {
+  background: rgb(108 117 125 / 0.1);
+  color: #6c757d;
+}
+
+.org-node-type-badge[data-type="cabinet"] {
+  background: rgb(111 66 193 / 0.1);
+  color: #6f42c1;
+}
+
+.org-node-type-badge[data-type="cabinet_position"] {
+  background: rgb(253 126 20 / 0.1);
+  color: #fd7e14;
+}
+
 .org-node-desc {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
@@ -330,6 +375,71 @@
   gap: var(--space-sm);
   align-items: center;
   padding: 3px 0;
+}
+
+/* 图标选择按钮 */
+.org-template-icon-btn {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  position: relative;
+}
+
+.org-template-icon-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* 图标选择面板 */
+.org-icon-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 8px;
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  margin-top: 4px;
+}
+
+.org-icon-picker-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 1.1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.org-icon-picker-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.org-icon-picker-item.active {
+  background: var(--color-primary-light);
+  outline: 2px solid var(--color-primary);
+}
+
+.org-template-type-row .org-node-type-badge {
+  flex-shrink: 0;
 }
 
 .org-template-type-row .org-template-type-input {

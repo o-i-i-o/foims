@@ -945,6 +945,7 @@ pub struct OrgTemplate {
     pub id: Uuid,
     pub name: String,
     pub levels: serde_json::Value,
+    pub icons: serde_json::Value,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -955,6 +956,7 @@ pub struct OrgTemplateSummary {
     pub id: Uuid,
     pub name: String,
     pub levels: serde_json::Value,
+    pub icons: serde_json::Value,
     pub description: Option<String>,
 }
 
@@ -963,6 +965,7 @@ pub struct OrgTemplateCreate {
     #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
     pub name: String,
     pub levels: serde_json::Value,
+    pub icons: Option<serde_json::Value>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -972,6 +975,7 @@ pub struct OrgTemplateUpdate {
     #[validate(length(min = 1, max = 100, message = "模板名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
     pub levels: Option<serde_json::Value>,
+    pub icons: Option<serde_json::Value>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
