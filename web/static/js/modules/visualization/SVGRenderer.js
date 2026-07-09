@@ -23,8 +23,8 @@ export class SVGRenderer {
     const ipManager = workstation.ipManager || null;
     const ipAddress = ipManager ? ipManager.ip_address : "无IP";
     let portInfo = "无端口";
-    if (ipManager && ipManager.switch_name && ipManager.switch_port_number) {
-      portInfo = `${ipManager.switch_name}: ${ipManager.switch_port_number}`;
+    if (ipManager && ipManager.port_device_name && ipManager.port_device_number) {
+      portInfo = `${ipManager.port_device_name}: ${ipManager.port_device_number}`;
     }
     
     const statusClass =
@@ -214,8 +214,8 @@ export class SVGRenderer {
     text.textContent = position.name;
 
     let portsLabel = "无端口";
-    if (position.ipManager && position.ipManager.switch_name && position.ipManager.switch_port_number) {
-      portsLabel = `${position.ipManager.switch_name}: ${position.ipManager.switch_port_number}`;
+    if (position.ipManager && position.ipManager.port_device_name && position.ipManager.port_device_number) {
+      portsLabel = `${position.ipManager.port_device_name}: ${position.ipManager.port_device_number}`;
     }
     
     const ipAddress = position.ipManager ? position.ipManager.ip_address : "无IP";

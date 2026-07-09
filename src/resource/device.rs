@@ -123,7 +123,7 @@ pub async fn get_devices(
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -131,7 +131,7 @@ pub async fn get_devices(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
-                d.connected_switch_port, d.connected_switch_name, d.template_name,
+                d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          {where_clause}
@@ -209,8 +209,8 @@ pub async fn create_device(
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: access_point_id and switch_port_id cannot both be set
-    if req.access_point_id.is_some() && req.switch_port_id.is_some() {
+    // Business validation: access_point_id and device_port_id cannot both be set
+    if req.access_point_id.is_some() && req.device_port_id.is_some() {
         return Err(AppError::Validation(
             "接入点和交换机端口不能同时指定".to_string(),
         ));
@@ -254,10 +254,10 @@ pub async fn create_device(
         }
     }
 
-    // If switch_port_id provided, verify it exists
-    if let Some(sp_id) = req.switch_port_id {
+    // If device_port_id provided, verify it exists
+    if let Some(sp_id) = req.device_port_id {
         let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switch_ports WHERE id = $1)")
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
                 .bind(sp_id)
                 .fetch_one(&mut *tx)
                 .await?;
@@ -335,7 +335,7 @@ pub async fn create_device(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, switch_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, device_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
 	         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
     )
     .bind(id)
@@ -347,7 +347,7 @@ pub async fn create_device(
     .bind(req.workstation_id)
     .bind(req.position_id)
     .bind(req.access_point_id)
-    .bind(req.switch_port_id)
+    .bind(req.device_port_id)
     .bind(req.template_id)
     .bind(&req.vendor)
     .bind(&req.location)
@@ -431,13 +431,13 @@ pub async fn create_device(
             };
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
             )
             .bind(Uuid::new_v4())
             .bind(req.workstation_id)
             .bind(req.position_id)
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind(Some(id))
             .bind(ip_device_type)
             .bind(network_id)
@@ -501,7 +501,7 @@ pub async fn create_device(
         workstation_id: req.workstation_id,
         position_id: req.position_id,
         access_point_id: req.access_point_id,
-        switch_port_id: req.switch_port_id,
+        device_port_id: req.device_port_id,
         template_id: req.template_id,
         vendor: req.vendor.clone(),
         location: req.location.clone(),
@@ -554,7 +554,7 @@ pub async fn get_device(
 
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -562,7 +562,7 @@ pub async fn get_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
-                d.connected_switch_port, d.connected_switch_name, d.template_name,
+                d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -575,7 +575,7 @@ pub async fn get_device(
     // Fetch associated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_id, m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
@@ -629,7 +629,7 @@ pub async fn update_device(
 
     // Fetch current device data for business validations
     let current_row = sqlx::query(
-        "SELECT workstation_id, position_id, access_point_id, switch_port_id FROM devices WHERE id = $1",
+        "SELECT workstation_id, position_id, access_point_id, device_port_id FROM devices WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -638,7 +638,7 @@ pub async fn update_device(
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
     let current_ap_id: Option<Uuid> = current_row.get("access_point_id");
-    let current_sp_id: Option<Uuid> = current_row.get("switch_port_id");
+    let current_sp_id: Option<Uuid> = current_row.get("device_port_id");
 
     // Resolve the final values for Option<Option<Uuid>> fields
     let resolved_workstation_id = match &req.workstation_id {
@@ -690,11 +690,11 @@ pub async fn update_device(
         Some(None) => None,
     };
 
-    let resolved_switch_port_id = match &req.switch_port_id {
+    let resolved_device_port_id = match &req.device_port_id {
         None => current_sp_id,
         Some(Some(sp_id)) => {
             let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switch_ports WHERE id = $1)")
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
                     .bind(sp_id)
                     .fetch_one(&mut *tx)
                     .await?;
@@ -711,8 +711,8 @@ pub async fn update_device(
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: access_point_id and switch_port_id cannot both be set
-    if resolved_access_point_id.is_some() && resolved_switch_port_id.is_some() {
+    // Business validation: access_point_id and device_port_id cannot both be set
+    if resolved_access_point_id.is_some() && resolved_device_port_id.is_some() {
         return Err(AppError::Validation(
             "接入点和交换机端口不能同时指定".to_string(),
         ));
@@ -744,7 +744,7 @@ pub async fn update_device(
          workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
          access_point_id = CASE WHEN $10::boolean THEN $11 ELSE access_point_id END,
-         switch_port_id = CASE WHEN $12::boolean THEN $13 ELSE switch_port_id END,
+         device_port_id = CASE WHEN $12::boolean THEN $13 ELSE device_port_id END,
          vendor = COALESCE($14, vendor),
          location = COALESCE($15, location),
          snmp_version = COALESCE($16, snmp_version),
@@ -773,9 +773,9 @@ pub async fn update_device(
     // access_point_id
     .bind(req.access_point_id.is_some())
     .bind(resolved_access_point_id)
-    // switch_port_id
-    .bind(req.switch_port_id.is_some())
-    .bind(resolved_switch_port_id)
+    // device_port_id
+    .bind(req.device_port_id.is_some())
+    .bind(resolved_device_port_id)
     // vendor, location
     .bind(&req.vendor)
     .bind(&req.location)
@@ -871,13 +871,13 @@ pub async fn update_device(
                 };
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
             )
             .bind(Uuid::new_v4())
             .bind(resolved_workstation_id)
             .bind(resolved_position_id)
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind(Some(id))
             .bind(ip_device_type)
             .bind(network_id)
@@ -960,7 +960,7 @@ pub async fn update_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -968,7 +968,7 @@ pub async fn update_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
-                d.connected_switch_port, d.connected_switch_name, d.template_name,
+                d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -980,7 +980,7 @@ pub async fn update_device(
     // Fetch updated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_id, m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
@@ -1104,7 +1104,7 @@ pub async fn get_device_ips(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_id, m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
@@ -1207,13 +1207,13 @@ pub async fn create_device_ip(
     let ip_id = Uuid::new_v4();
 
     sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
     )
     .bind(ip_id)
     .bind(device_ws_id)
     .bind(device_pos_id)
-    .bind(req.switch_port_id)
+    .bind(req.device_port_id)
     .bind(Some(id))
     .bind(ip_device_type)
     .bind(network_id)
@@ -1234,7 +1234,7 @@ pub async fn create_device_ip(
         id: ip_id,
         workstation_id: device_ws_id,
         position_id: device_pos_id,
-        switch_port_id: req.switch_port_id,
+        device_port_id: req.device_port_id,
         device_id: Some(id),
         device_type: Some(ip_device_type.to_string()),
         network_id,
@@ -1360,13 +1360,13 @@ pub async fn auto_assign_device_ip(
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
     sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
     )
     .bind(ip_id)
     .bind(device_ws_id)
     .bind(device_pos_id)
-    .bind(req.switch_port_id)
+    .bind(req.device_port_id)
     .bind(Some(id))
     .bind(&device_type)
     .bind(req_network_id)
@@ -1387,7 +1387,7 @@ pub async fn auto_assign_device_ip(
         id: ip_id,
         workstation_id: device_ws_id,
         position_id: device_pos_id,
-        switch_port_id: req.switch_port_id,
+        device_port_id: req.device_port_id,
         device_id: Some(id),
         device_type: Some(device_type),
         network_id: Some(req_network_id),
@@ -1474,10 +1474,10 @@ pub async fn connect_device(
         }
     };
 
-    let resolved_sp_id = match &req.switch_port_id {
+    let resolved_sp_id = match &req.device_port_id {
         Some(Some(sp_id)) => {
             let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM switch_ports WHERE id = $1)")
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
                     .bind(sp_id)
                     .fetch_one(&mut *tx)
                     .await?;
@@ -1486,7 +1486,7 @@ pub async fn connect_device(
             }
             // 检查端口是否已被其他设备占用
             let occupied_by: Option<Uuid> =
-                sqlx::query_scalar("SELECT id FROM devices WHERE switch_port_id = $1 AND id != $2")
+                sqlx::query_scalar("SELECT id FROM devices WHERE device_port_id = $1 AND id != $2")
                     .bind(sp_id)
                     .bind(id)
                     .fetch_optional(&mut *tx)
@@ -1501,7 +1501,7 @@ pub async fn connect_device(
         Some(None) => None,
         None => {
             let current: Option<Uuid> =
-                sqlx::query_scalar("SELECT switch_port_id FROM devices WHERE id = $1")
+                sqlx::query_scalar("SELECT device_port_id FROM devices WHERE id = $1")
                     .bind(id)
                     .fetch_one(&mut *tx)
                     .await?;
@@ -1509,7 +1509,7 @@ pub async fn connect_device(
         }
     };
 
-    // Business validation: access_point_id and switch_port_id cannot both be set
+    // Business validation: access_point_id and device_port_id cannot both be set
     if resolved_ap_id.is_some() && resolved_sp_id.is_some() {
         return Err(AppError::Validation(
             "接入点和交换机端口不能同时指定".to_string(),
@@ -1521,13 +1521,13 @@ pub async fn connect_device(
     sqlx::query(
         "UPDATE devices SET
          access_point_id = CASE WHEN $1::boolean THEN $2 ELSE access_point_id END,
-         switch_port_id = CASE WHEN $3::boolean THEN $4 ELSE switch_port_id END,
+         device_port_id = CASE WHEN $3::boolean THEN $4 ELSE device_port_id END,
          updated_at = $5
          WHERE id = $6",
     )
     .bind(req.access_point_id.is_some())
     .bind(resolved_ap_id)
-    .bind(req.switch_port_id.is_some())
+    .bind(req.device_port_id.is_some())
     .bind(resolved_sp_id)
     .bind(now)
     .bind(id)
@@ -1539,7 +1539,7 @@ pub async fn connect_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -1547,7 +1547,7 @@ pub async fn connect_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
-                d.connected_switch_port, d.connected_switch_name, d.template_name,
+                d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -1558,7 +1558,7 @@ pub async fn connect_device(
 
     let details = serde_json::json!({
         "access_point_id": updated_device.access_point_id,
-        "switch_port_id": updated_device.switch_port_id
+        "device_port_id": updated_device.device_port_id
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
@@ -1605,17 +1605,17 @@ pub async fn disconnect_device(
     }
 
     // Query old values before update for logging
-    let old_row = sqlx::query("SELECT access_point_id, switch_port_id FROM devices WHERE id = $1")
+    let old_row = sqlx::query("SELECT access_point_id, device_port_id FROM devices WHERE id = $1")
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
     let old_access_point_id: Option<Uuid> = old_row.get("access_point_id");
-    let old_switch_port_id: Option<Uuid> = old_row.get("switch_port_id");
+    let old_device_port_id: Option<Uuid> = old_row.get("device_port_id");
 
     let now = Utc::now();
 
     sqlx::query(
-        "UPDATE devices SET access_point_id = NULL, switch_port_id = NULL, updated_at = $1 WHERE id = $2",
+        "UPDATE devices SET access_point_id = NULL, device_port_id = NULL, updated_at = $1 WHERE id = $2",
     )
     .bind(now)
     .bind(id)
@@ -1627,7 +1627,7 @@ pub async fn disconnect_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -1635,7 +1635,7 @@ pub async fn disconnect_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.access_point_name, d.access_point_type,
-                d.connected_switch_port, d.connected_switch_name, d.template_name,
+                d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -1647,7 +1647,7 @@ pub async fn disconnect_device(
     let details = serde_json::json!({
         "disconnected": true,
         "previous_access_point_id": old_access_point_id,
-        "previous_switch_port_id": old_switch_port_id
+        "previous_device_port_id": old_device_port_id
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),

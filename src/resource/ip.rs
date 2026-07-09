@@ -142,7 +142,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, access_point_name, peer_access_point_name, network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, access_point_name, peer_access_point_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -223,13 +223,13 @@ pub async fn create_ip_manager(
     let ip_version_num = detect_ip_version(&req.ip_address)?;
 
     sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+        "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
     )
     .bind(id)
     .bind(req.workstation_id)
     .bind(req.position_id)
-    .bind(req.switch_port_id)
+    .bind(req.device_port_id)
     .bind(req.device_id)
     .bind(&req.device_type)
     .bind(req.network_id)
@@ -247,7 +247,7 @@ pub async fn create_ip_manager(
         id,
         workstation_id: req.workstation_id,
         position_id: req.position_id,
-        switch_port_id: req.switch_port_id,
+        device_port_id: req.device_port_id,
         device_id: req.device_id,
         device_type: req.device_type.clone(),
         network_id: req.network_id,
@@ -297,7 +297,7 @@ pub async fn get_ip_manager(
     let id = *id_path;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_id, m.device_type, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.device_port_id, m.device_id, m.device_type, 
            m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
@@ -318,9 +318,9 @@ pub async fn get_workstation_ips(
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
-            id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
+            id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
         WHERE workstation_id = $1"
@@ -345,9 +345,9 @@ pub async fn get_cabinet_position_ips(
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
-            id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name, 
+            id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region, 
+            network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
         WHERE position_id = $1"
@@ -387,9 +387,9 @@ pub async fn get_switch_ips(
 
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT
-            id, workstation_id, position_id, switch_port_id, device_id, device_type, device_name,
+            id, workstation_id, position_id, device_port_id, device_id, device_type, device_name,
             connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
-            network_id, workstation_name, cabinet_position_name, switch_name, switch_port_number, room_name, cabinet_name, org_name, network_name, network_region,
+            network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region,
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at
         FROM ip_with_details
         WHERE position_id = $1"
@@ -417,7 +417,7 @@ pub async fn update_ip_manager(
     (*req).validate()?;
 
     let existing_mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_type, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.device_port_id, m.device_type, 
            m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
@@ -462,9 +462,9 @@ pub async fn update_ip_manager(
         .workstation_id
         .unwrap_or(existing_mapping.workstation_id);
     let final_position_id = req.position_id.unwrap_or(existing_mapping.position_id);
-    let final_switch_port_id = req
-        .switch_port_id
-        .unwrap_or(existing_mapping.switch_port_id);
+    let final_device_port_id = req
+        .device_port_id
+        .unwrap_or(existing_mapping.device_port_id);
     let final_device_type = req
         .device_type
         .as_deref()
@@ -492,7 +492,7 @@ pub async fn update_ip_manager(
         "UPDATE ips SET
          workstation_id = $1,
          position_id = $2,
-         switch_port_id = $3,
+         device_port_id = $3,
          device_id = COALESCE($4, device_id),
          device_type = COALESCE($5, device_type),
          ip_address = COALESCE(CAST($6 AS INET), ip_address),
@@ -505,7 +505,7 @@ pub async fn update_ip_manager(
     )
     .bind(final_workstation_id)
     .bind(final_position_id)
-    .bind(final_switch_port_id)
+    .bind(final_device_port_id)
     .bind(req.device_id)
     .bind(&req.device_type)
     .bind(&req.ip_address)
@@ -519,7 +519,7 @@ pub async fn update_ip_manager(
     .await?;
 
     let mapping = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_id, m.device_type, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.device_port_id, m.device_id, m.device_type, 
            m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
@@ -790,7 +790,7 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.switch_port_id, m.device_id, m.device_type, 
+        r"SELECT m.id, m.workstation_id, m.position_id, m.device_port_id, m.device_id, m.device_type, 
            m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
@@ -950,7 +950,7 @@ pub async fn auto_assign_ip(
     let req_network_id = req.network_id;
     let workstation_id = req.workstation_id;
     let position_id = req.position_id;
-    let switch_port_id = req.switch_port_id;
+    let device_port_id = req.device_port_id;
     let mac_address = req.mac_address.clone();
     let hostname = req.hostname.clone();
 
@@ -1029,13 +1029,13 @@ pub async fn auto_assign_ip(
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+        "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
     )
     .bind(id)
     .bind(workstation_id)
     .bind(position_id)
-    .bind(switch_port_id)
+    .bind(device_port_id)
     .bind(req.device_id)
     .bind(&device_type)
     .bind(req_network_id)
@@ -1067,7 +1067,7 @@ pub async fn auto_assign_ip(
         id,
         workstation_id,
         position_id,
-        switch_port_id,
+        device_port_id,
         device_id: req.device_id,
         device_type: Some(device_type),
         network_id: Some(req_network_id),
@@ -1188,13 +1188,13 @@ pub async fn batch_create_ip_managers(
         }
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+            "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
         )
         .bind(*id)
         .bind(ip_req.workstation_id)
         .bind(ip_req.position_id)
-        .bind(ip_req.switch_port_id)
+        .bind(ip_req.device_port_id)
         .bind(ip_req.device_id)
         .bind(&ip_req.device_type)
         .bind(ip_req.network_id)
@@ -1217,7 +1217,7 @@ pub async fn batch_create_ip_managers(
             id: *id,
             workstation_id: ip_req.workstation_id,
             position_id: ip_req.position_id,
-            switch_port_id: ip_req.switch_port_id,
+            device_port_id: ip_req.device_port_id,
             device_id: ip_req.device_id,
             device_type: ip_req.device_type.clone(),
             network_id: ip_req.network_id,

@@ -90,7 +90,7 @@ pub async fn get_access_points(
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT ap.id, ap.name, ap.ap_type, ap.room_id, ap.room_name, \
          ap.cabinet_id, ap.cabinet_name, ap.peer_access_point_id, ap.peer_access_point_name, \
-         ap.switch_port_id, ap.connected_switch_port, ap.connected_switch_name, \
+         ap.device_port_id, ap.connected_device_port, ap.connected_device_name, \
          ap.description, ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
          FROM access_points_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET {}",
         param_idx + 1
@@ -178,7 +178,7 @@ pub async fn create_access_point(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO access_points (id, name, ap_type, room_id, cabinet_id, peer_access_point_id, switch_port_id, description, created_at, updated_at)
+        "INSERT INTO access_points (id, name, ap_type, room_id, cabinet_id, peer_access_point_id, device_port_id, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
@@ -187,7 +187,7 @@ pub async fn create_access_point(
     .bind(req.room_id)
     .bind(req.cabinet_id)
     .bind(req.peer_access_point_id)
-    .bind(req.switch_port_id)
+    .bind(req.device_port_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -209,7 +209,7 @@ pub async fn create_access_point(
         room_id: req.room_id,
         cabinet_id: req.cabinet_id,
         peer_access_point_id: req.peer_access_point_id,
-        switch_port_id: req.switch_port_id,
+        device_port_id: req.device_port_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -252,7 +252,7 @@ pub async fn get_access_point(
     let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
         "SELECT id, name, ap_type, room_id, room_name, \
          cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
-         switch_port_id, connected_switch_port, connected_switch_name, \
+         device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM access_points_with_details WHERE id = $1",
     )
@@ -388,11 +388,11 @@ pub async fn update_access_point(
         param_index += 2;
     }
 
-    // switch_port_id: Option<Option<Uuid>>
-    let switch_port_id_update = req.switch_port_id.is_some();
-    if switch_port_id_update {
+    // device_port_id: Option<Option<Uuid>>
+    let device_port_id_update = req.device_port_id.is_some();
+    if device_port_id_update {
         set_clauses.push(format!(
-            "switch_port_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE switch_port_id END",
+            "device_port_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE device_port_id END",
             param_index = param_index,
             param_idx_val = param_index + 1
         ));
@@ -463,9 +463,9 @@ pub async fn update_access_point(
         }
     }
 
-    // Bind switch_port_id
-    if switch_port_id_update {
-        match req.switch_port_id {
+    // Bind device_port_id
+    if device_port_id_update {
+        match req.device_port_id {
             Some(Some(spid)) => {
                 query = query.bind(true);
                 query = query.bind(spid);
@@ -499,7 +499,7 @@ pub async fn update_access_point(
     let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
         "SELECT id, name, ap_type, room_id, room_name, \
          cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
-         switch_port_id, connected_switch_port, connected_switch_name, \
+         device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM access_points_with_details WHERE id = $1",
     )
@@ -695,7 +695,7 @@ pub async fn link_peer(
     let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
         "SELECT id, name, ap_type, room_id, room_name, \
          cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
-         switch_port_id, connected_switch_port, connected_switch_name, \
+         device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM access_points_with_details WHERE id = $1",
     )
@@ -741,7 +741,7 @@ pub async fn unlink_peer(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing = sqlx::query_as::<_, AccessPoint>(
-        "SELECT id, name, ap_type, room_id, cabinet_id, peer_access_point_id, switch_port_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
+        "SELECT id, name, ap_type, room_id, cabinet_id, peer_access_point_id, device_port_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM access_points WHERE id = $1",
     )
     .bind(id)
@@ -779,7 +779,7 @@ pub async fn unlink_peer(
     let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
         "SELECT id, name, ap_type, room_id, room_name, \
          cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
-         switch_port_id, connected_switch_port, connected_switch_name, \
+         device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM access_points_with_details WHERE id = $1",
     )

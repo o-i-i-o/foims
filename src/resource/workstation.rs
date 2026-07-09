@@ -261,13 +261,13 @@ pub async fn create_workstation(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(Some(id))
             .bind(ip.position_id)
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind(&ip.device_type)
             .bind(network_id)
             .bind(&ip.ip_address)
@@ -340,7 +340,7 @@ pub async fn get_workstation(
 
     let workstation_ips = sqlx::query_as::<_, IpManager>(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
@@ -431,7 +431,7 @@ pub async fn update_workstation(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, device_type, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, workstation_id, device_type, ip_address, ip_version, mac_address, hostname, device_port_id, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10, $11, $12)"
             )
             .bind(Uuid::new_v4())
@@ -441,7 +441,7 @@ pub async fn update_workstation(
             .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind("active")
             .bind(now)
             .bind(now)
@@ -462,7 +462,7 @@ pub async fn update_workstation(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_type, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,

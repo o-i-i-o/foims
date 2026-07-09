@@ -1,6 +1,6 @@
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS switch_ports (
+        r"CREATE TABLE IF NOT EXISTS device_ports (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             port_number VARCHAR(30) NOT NULL,
@@ -19,7 +19,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS switch_macs (
+        r"CREATE TABLE IF NOT EXISTS device_macs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             ip_address INET NOT NULL,
@@ -35,7 +35,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS switch_lldps (
+        r"CREATE TABLE IF NOT EXISTS device_lldps (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             local_port VARCHAR(50) NOT NULL,

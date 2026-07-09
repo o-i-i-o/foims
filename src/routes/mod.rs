@@ -13,10 +13,10 @@ use crate::log::notification::{
 };
 use crate::log::{get_login_logs, get_operation_logs};
 use crate::resource::switch::{
-    create_switch_port, delete_switch_port, get_all_switch_ports, get_switch_info_snmp,
-    get_switch_lldp_neighbors, get_switch_mac_table, get_switch_macs_from_db, get_switch_port,
-    get_switch_ports, get_switch_ports_snmp, sync_lldp_from_snmp, sync_ports_from_snmp,
-    test_snmp_connection, test_snmp_connection_by_id, update_switch_port,
+    create_device_port, delete_device_port, get_all_device_ports, get_device_info_snmp,
+    get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db, get_device_port,
+    get_device_ports, get_device_ports_snmp, sync_lldp_from_snmp, sync_ports_from_snmp,
+    test_snmp_connection, test_snmp_connection_by_id, update_device_port,
 };
 use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, connect_device,
@@ -307,7 +307,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                             web::scope("/devices")
                                 .route("", web::get().to(get_devices))
                                 .route("", web::post().to(create_device))
-                                .route("/ports", web::get().to(get_all_switch_ports))
+                                .route("/ports", web::get().to(get_all_device_ports))
                                 .route("/test-snmp", web::post().to(test_snmp_connection))
                                 .route("/{id}", web::get().to(get_device))
                                 .route("/{id}", web::put().to(update_device))
@@ -320,8 +320,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 )
                                 .route("/{id}/connect", web::post().to(connect_device))
                                 .route("/{id}/disconnect", web::post().to(disconnect_device))
-                                .route("/{id}/ports", web::get().to(get_switch_ports))
-                                .route("/{id}/ports", web::post().to(create_switch_port))
+                                .route("/{id}/ports", web::get().to(get_device_ports))
+                                .route("/{id}/ports", web::post().to(create_device_port))
                                 .route(
                                     "/{id}/ports/sync-snmp",
                                     web::post().to(sync_ports_from_snmp),
@@ -330,18 +330,18 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                     "/{id}/test-snmp",
                                     web::post().to(test_snmp_connection_by_id),
                                 )
-                                .route("/{id}/macs", web::get().to(get_switch_macs_from_db))
-                                .route("/{id}/macs/sync", web::post().to(get_switch_mac_table))
+                                .route("/{id}/macs", web::get().to(get_device_macs_from_db))
+                                .route("/{id}/macs/sync", web::post().to(get_device_mac_table))
                                 .route(
                                     "/{id}/lldp-neighbors",
-                                    web::get().to(get_switch_lldp_neighbors),
+                                    web::get().to(get_device_lldp_neighbors),
                                 )
                                 .route("/{id}/lldp/sync", web::post().to(sync_lldp_from_snmp))
-                                .route("/{id}/snmp-info", web::get().to(get_switch_info_snmp))
-                                .route("/{id}/snmp-ports", web::get().to(get_switch_ports_snmp))
-                                .route("/ports/{port_id}", web::get().to(get_switch_port))
-                                .route("/ports/{port_id}", web::put().to(update_switch_port))
-                                .route("/ports/{port_id}", web::delete().to(delete_switch_port)),
+                                .route("/{id}/snmp-info", web::get().to(get_device_info_snmp))
+                                .route("/{id}/snmp-ports", web::get().to(get_device_ports_snmp))
+                                .route("/ports/{port_id}", web::get().to(get_device_port))
+                                .route("/ports/{port_id}", web::put().to(update_device_port))
+                                .route("/ports/{port_id}", web::delete().to(delete_device_port)),
                         ),
                 )
                 // 日志管理路由

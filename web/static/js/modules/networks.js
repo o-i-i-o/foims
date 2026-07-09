@@ -561,7 +561,7 @@ function buildIPv6Content(network, networkIps, networkId) {
                     ${escapeHtml(ip.status)}
                   </span>
                 </td>
-                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name || ip.switch_name) || "-"}</td>
+                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name || ip.port_device_name) || "-"}</td>
                 <td>${escapeHtml(ip.mac_address) || "-"}</td>
                 <td>${escapeHtml(ip.hostname) || "-"}</td>
               </tr>
@@ -687,7 +687,7 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
                     ${ip.status}
                   </span>
                 </td>
-                <td>${ip.workstation_name || ip.cabinet_position_name || ip.switch_name || "-"}</td>
+                <td>${ip.workstation_name || ip.cabinet_position_name || ip.port_device_name || "-"}</td>
                 <td>${ip.mac_address || "-"}</td>
                 <td>${ip.hostname || "-"}</td>
               </tr>

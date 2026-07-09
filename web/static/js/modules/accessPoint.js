@@ -58,8 +58,8 @@ export async function loadAccessPointsData(page = 1, sortBy = null, sortOrder = 
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'cabinet_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'peer_access_point_name', render: (v) => escapeHtml(v) || '-' },
-        { field: 'connected_switch_port', render: (v, row) => {
-          if (v && row.connected_switch_name) return `${escapeHtml(row.connected_switch_name)}: ${escapeHtml(v)}`;
+        { field: 'connected_device_port', render: (v, row) => {
+          if (v && row.connected_device_name) return `${escapeHtml(row.connected_device_name)}: ${escapeHtml(v)}`;
           return escapeHtml(v) || '-';
         }},
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
@@ -158,11 +158,11 @@ async function loadPeerAccessPoints(currentId = null, selectedPeerId = null) {
   }
 }
 
-async function loadSwitchPortsForSelect(selectedPortId = null) {
-  const portSelect = elementCache.get('access-point-switch-port-id');
+async function loadDevicePortsForSelect(selectedPortId = null) {
+  const portSelect = elementCache.get('access-point-device-port-id');
   if (!portSelect) return;
 
-  portSelect.innerHTML = `<option value="">${t('access_point.select_switch_port') || '选择设备端口'}</option>`;
+  portSelect.innerHTML = `<option value="">${t('access_point.select_device_port') || '选择设备端口'}</option>`;
 
   try {
     const result = await apiGet('/api/resources/devices/ports?page_size=1000');
@@ -192,7 +192,7 @@ export async function submitAccessPointForm() {
   const roomId = getElementValue("access-point-room-id");
   const cabinetId = getElementValue("access-point-cabinet-id");
   const peerId = getElementValue("access-point-peer-id");
-  const switchPortId = getElementValue("access-point-switch-port-id");
+  const switchPortId = getElementValue("access-point-device-port-id");
   const description = getElementValue("access-point-description");
 
   if (!name?.trim()) {
@@ -211,7 +211,7 @@ export async function submitAccessPointForm() {
     room_id: roomId,
     cabinet_id: cabinetId || null,
     peer_access_point_id: peerId || null,
-    switch_port_id: switchPortId || null,
+    device_port_id: switchPortId || null,
     description: description?.trim() || null,
   };
 
@@ -254,7 +254,7 @@ export async function openAccessPointModal(accessPoint = null) {
   }
 
   await loadPeerAccessPoints(accessPoint?.id, accessPoint?.peer_access_point_id);
-  await loadSwitchPortsForSelect(accessPoint?.switch_port_id);
+  await loadDevicePortsForSelect(accessPoint?.device_port_id);
 
   if (accessPoint) {
     title.textContent = t('access_point.edit');
@@ -269,8 +269,8 @@ export async function openAccessPointModal(accessPoint = null) {
     if (accessPoint.peer_access_point_id) {
       elementCache.setValue('access-point-peer-id', accessPoint.peer_access_point_id);
     }
-    if (accessPoint.switch_port_id) {
-      elementCache.setValue('access-point-switch-port-id', accessPoint.switch_port_id);
+    if (accessPoint.device_port_id) {
+      elementCache.setValue('access-point-device-port-id', accessPoint.device_port_id);
     }
   } else {
     title.textContent = t('access_point.add');

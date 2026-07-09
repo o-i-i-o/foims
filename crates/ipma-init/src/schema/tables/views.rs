@@ -15,7 +15,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.id,
             imm.workstation_id,
             imm.position_id,
-            imm.switch_port_id,
+            imm.device_port_id,
             imm.device_id,
             imm.device_type,
             imm.network_id,
@@ -33,8 +33,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN cp.id IS NOT NULL THEN cp.name::text
                 ELSE NULL
             END AS cabinet_position_name,
-            sdv.name::text AS switch_name,
-            sp.port_number::text AS switch_port_number,
+            sdv.name::text AS port_device_name,
+            sp.port_number::text AS port_device_number,
             CASE
                 WHEN dv.id IS NOT NULL THEN dv.name::text
                 ELSE NULL
@@ -72,7 +72,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN workstations w ON imm.workstation_id = w.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
-        LEFT JOIN switch_ports sp ON imm.switch_port_id = sp.id
+        LEFT JOIN device_ports sp ON imm.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
         LEFT JOIN rooms r ON COALESCE(w.room_id, (SELECT ws.room_id FROM devices d2 JOIN workstations ws ON d2.workstation_id = ws.id WHERE d2.id = dv.id), (SELECT cab2.room_id FROM devices d3 JOIN positions p2 ON d3.position_id = p2.id JOIN cabinets cab2 ON p2.cabinet_id = cab2.id WHERE d3.id = dv.id)) = r.id
         LEFT JOIN organizations org ON r.org_id = org.id
@@ -104,7 +104,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN sm.mac_address = im.mac_address THEN 'match'
                 ELSE 'mismatch'
             END AS comparison_result
-        FROM switch_macs sm
+        FROM device_macs sm
         JOIN devices sdv ON sm.device_id = sdv.id
         LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_type != 'switch'
     ",
@@ -124,7 +124,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW devices_with_details AS
         SELECT
             d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-            d.workstation_id, d.position_id, d.access_point_id, d.switch_port_id,
+            d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
             d.template_id, d.vendor, d.location,
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
@@ -138,8 +138,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             p.start_u, p.end_u,
             ap.name AS access_point_name,
             ap.ap_type AS access_point_type,
-            sp.port_number AS connected_switch_port,
-            sdv.name AS connected_switch_name,
+            sp.port_number AS connected_device_port,
+            sdv.name AS connected_device_name,
             dt.name AS template_name,
             d.created_at, d.updated_at
         FROM devices d
@@ -147,7 +147,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions p ON d.position_id = p.id
         LEFT JOIN access_points ap ON d.access_point_id = ap.id
-        LEFT JOIN switch_ports sp ON d.switch_port_id = sp.id
+        LEFT JOIN device_ports sp ON d.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
         LEFT JOIN device_templates dt ON d.template_id = dt.id
     ",
@@ -167,18 +167,18 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW access_points_with_details AS
         SELECT
             ap.id, ap.name, ap.ap_type, ap.room_id, ap.cabinet_id,
-            ap.peer_access_point_id, ap.switch_port_id, ap.description,
+            ap.peer_access_point_id, ap.device_port_id, ap.description,
             r.name AS room_name,
             cab.name AS cabinet_name,
             pap.name AS peer_access_point_name,
-            sp.port_number AS connected_switch_port,
-            sdv.name AS connected_switch_name,
+            sp.port_number AS connected_device_port,
+            sdv.name AS connected_device_name,
             ap.created_at, ap.updated_at
         FROM access_points ap
         LEFT JOIN rooms r ON ap.room_id = r.id
         LEFT JOIN cabinets cab ON ap.cabinet_id = cab.id
         LEFT JOIN access_points pap ON ap.peer_access_point_id = pap.id
-        LEFT JOIN switch_ports sp ON ap.switch_port_id = sp.id
+        LEFT JOIN device_ports sp ON ap.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
     ",
     )

@@ -304,13 +304,13 @@ pub async fn create_cabinet_position(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, switch_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
+                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
                  VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS INET), $8, $9, $10, $11, $12, $13, $14)"
             )
             .bind(Uuid::new_v4())
             .bind(ip.workstation_id)
             .bind(Some(id))
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind(&ip.device_type)
             .bind(network_id)
             .bind(&ip.ip_address)
@@ -397,7 +397,7 @@ pub async fn get_cabinet_position(
 
     let position_ips = sqlx::query(
         r"SELECT 
-            m.id, m.workstation_id, m.position_id, m.switch_port_id,
+            m.id, m.workstation_id, m.position_id, m.device_port_id,
             m.device_type, m.network_id, 
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
@@ -420,7 +420,7 @@ pub async fn get_cabinet_position(
                 "id": row.get::<Uuid, _>(0),
                 "workstation_id": row.get::<Option<Uuid>, _>(1),
                 "position_id": row.get::<Option<Uuid>, _>(2),
-                "switch_port_id": row.get::<Option<Uuid>, _>(3),
+                "device_port_id": row.get::<Option<Uuid>, _>(3),
                 "device_type": row.get::<Option<String>, _>(4),
                 "network_id": row.get::<Option<Uuid>, _>(5),
                 "ip_address": row.get::<String, _>(6),
@@ -561,7 +561,7 @@ pub async fn update_cabinet_position(
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
             sqlx::query(
-                "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, switch_port_id, status, last_seen, created_at, updated_at) 
+                "INSERT INTO ips (id, position_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, device_port_id, status, last_seen, created_at, updated_at) 
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12, $13)"
             )
             .bind(Uuid::new_v4())
@@ -572,7 +572,7 @@ pub async fn update_cabinet_position(
             .bind(ip_version)
             .bind(&ip.mac_address)
             .bind(&ip.hostname)
-            .bind(ip.switch_port_id)
+            .bind(ip.device_port_id)
             .bind("active")
             .bind(now)
             .bind(now)
@@ -593,7 +593,7 @@ pub async fn update_cabinet_position(
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT id, workstation_id, position_id, switch_port_id, device_type, network_id,
+        r"SELECT id, workstation_id, position_id, device_port_id, device_type, network_id,
            host(ip_address) as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, last_mac
            FROM ips WHERE position_id = $1"
     ).bind(id)

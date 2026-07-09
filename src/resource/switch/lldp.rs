@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, LldpNeighbor, SwitchLldp};
+use crate::models::{ApiResponse, DeviceLldp, LldpNeighbor};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
@@ -377,7 +377,7 @@ fn format_mac_address(bytes: &[u8]) -> String {
     }
 }
 
-pub async fn get_switch_lldp_neighbors(
+pub async fn get_device_lldp_neighbors(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
@@ -393,8 +393,8 @@ pub async fn get_switch_lldp_neighbors(
         return Err(AppError::NotFound("设备不存在".to_string()));
     }
 
-    let lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE device_id = $1 ORDER BY local_port",
+    let lldps: Vec<DeviceLldp> = sqlx::query_as::<_, DeviceLldp>(
+        "SELECT * FROM device_lldps WHERE device_id = $1 ORDER BY local_port",
     )
     .bind(device_id)
     .fetch_all(&conn)
@@ -420,7 +420,7 @@ pub async fn sync_lldp_from_snmp(
 
     for neighbor in &neighbors {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_lldps WHERE device_id = $1 AND local_port = $2)",
+            "SELECT EXISTS(SELECT 1 FROM device_lldps WHERE device_id = $1 AND local_port = $2)",
         )
         .bind(device_id)
         .bind(&neighbor.local_port)
@@ -429,7 +429,7 @@ pub async fn sync_lldp_from_snmp(
 
         if exists {
             let result = sqlx::query(
-                r"UPDATE switch_lldps SET
+                r"UPDATE device_lldps SET
                     neighbor_chassis_id = $1,
                     neighbor_port_id = $2,
                     neighbor_port_desc = $3,
@@ -461,7 +461,7 @@ pub async fn sync_lldp_from_snmp(
         } else {
             let id = Uuid::new_v4();
             let result = sqlx::query(
-                r"INSERT INTO switch_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
+                r"INSERT INTO device_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"
             )
             .bind(id)
@@ -488,8 +488,8 @@ pub async fn sync_lldp_from_snmp(
         }
     }
 
-    let saved_lldps: Vec<SwitchLldp> = sqlx::query_as::<_, SwitchLldp>(
-        "SELECT * FROM switch_lldps WHERE device_id = $1 ORDER BY local_port",
+    let saved_lldps: Vec<DeviceLldp> = sqlx::query_as::<_, DeviceLldp>(
+        "SELECT * FROM device_lldps WHERE device_id = $1 ORDER BY local_port",
     )
     .bind(device_id)
     .fetch_all(&conn)

@@ -107,8 +107,8 @@ export async function loadWorkstationsData(page = 1, sortBy = null, sortOrder = 
           ipsHtml = ipsData.data.map(ip => escapeHtml(ip.ip_address)).join("<br>");
           
           const portInfos = ipsData.data
-            .filter(ip => ip.switch_name && ip.switch_port_number)
-            .map(ip => `${escapeHtml(ip.switch_name)}: ${escapeHtml(ip.switch_port_number)}`);
+            .filter(ip => ip.port_device_name && ip.port_device_number)
+            .map(ip => `${escapeHtml(ip.port_device_name)}: ${escapeHtml(ip.port_device_number)}`);
           portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
         }
 

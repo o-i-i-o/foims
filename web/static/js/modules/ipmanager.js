@@ -178,8 +178,8 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
               return escapeHtml(row.room_name);
             } else if (row.device_type === 'cabinet_position' && row.cabinet_name) {
               return escapeHtml(row.cabinet_name);
-            } else if (row.switch_name) {
-              return escapeHtml(row.switch_name);
+            } else if (row.port_device_name) {
+              return escapeHtml(row.port_device_name);
             }
             return '-';
           }},

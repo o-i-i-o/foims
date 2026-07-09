@@ -396,7 +396,7 @@ async function openPortDetailModal(portData) {
   };
 
   deleteBtn.onclick = async () => {
-    const confirmed = await showConfirm(t('device.confirm_delete_port') || t('switch.confirm_delete_port'));
+    const confirmed = await showConfirm(t('device.confirm_delete_port'));
     if (confirmed) {
       const portId = elementCache.getValue("device-port-id-expanded");
       if (portId) {

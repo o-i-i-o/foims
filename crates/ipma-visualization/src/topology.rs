@@ -171,8 +171,8 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<HttpResponse, Vis
           FROM topology_connections tc
           JOIN devices sd ON tc.source_device_id = sd.id
           JOIN devices td ON tc.target_device_id = td.id
-          LEFT JOIN switch_ports sp ON tc.source_port_id = sp.id
-          LEFT JOIN switch_ports tp ON tc.target_port_id = tp.id
+          LEFT JOIN device_ports sp ON tc.source_port_id = sp.id
+	         LEFT JOIN device_ports tp ON tc.target_port_id = tp.id
           ORDER BY tc.created_at",
     )
     .fetch_all(pool)

@@ -100,7 +100,7 @@ export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null)
         }},
         { field: 'access_point_name', render: (v, row) => {
           if (v) return `${t('device.access_point')}: ${escapeHtml(v)}`;
-          if (row.connected_switch_port && row.connected_switch_name) return `${t('device.switch_port')}: ${escapeHtml(row.connected_switch_name)}:${escapeHtml(row.connected_switch_port)}`;
+          if (row.connected_device_port && row.connected_device_name) return `${t('device.device_port')}: ${escapeHtml(row.connected_device_name)}:${escapeHtml(row.connected_device_port)}`;
           return '-';
         }},
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
@@ -176,11 +176,11 @@ export async function deleteDevice(id) {
   await handleDelete(id, "/api/resources/devices", t('device.delete_success'), loadDevicesData);
 }
 
-async function loadSwitchPortsForDeviceSelect(selectedPortId = null) {
-  const portSelect = elementCache.get('device-switch-port-id');
+async function loadDevicePortsForDeviceSelect(selectedPortId = null) {
+  const portSelect = elementCache.get('device-device-port-id');
   if (!portSelect) return;
 
-  portSelect.innerHTML = `<option value="">${t('device.select_switch_port') || '选择交换机端口'}</option>`;
+  portSelect.innerHTML = `<option value="">${t('device.select_device_port') || '选择设备端口'}</option>`;
 
   try {
     const result = await apiGet('/api/resources/devices/ports?page_size=1000');
@@ -199,7 +199,7 @@ async function loadSwitchPortsForDeviceSelect(selectedPortId = null) {
       }
     }
   } catch (error) {
-    console.error('加载交换机端口选项失败:', error);
+    console.error('加载设备端口选项失败:', error);
   }
 }
 
@@ -209,7 +209,7 @@ function setupMutualExclusion() {
   const workstationSelect = elementCache.get('device-workstation-id');
   const positionSelect = elementCache.get('device-position-id');
   const apSelect = elementCache.get('device-access-point-id');
-  const portSelect = elementCache.get('device-switch-port-id');
+  const portSelect = elementCache.get('device-device-port-id');
 
   if (workstationSelect) {
     workstationSelect.addEventListener('change', () => {
@@ -348,7 +348,7 @@ export async function submitDeviceForm() {
   const workstationId = getElementValue("device-workstation-id");
   const positionId = getElementValue("device-position-id");
   const accessPointId = getElementValue("device-access-point-id");
-  const switchPortId = getElementValue("device-switch-port-id");
+  const switchPortId = getElementValue("device-device-port-id");
   const description = getElementValue("device-description");
 
   if (!name?.trim()) {
@@ -393,7 +393,7 @@ export async function submitDeviceForm() {
     workstation_id: workstationId || null,
     position_id: positionId || null,
     access_point_id: accessPointId || null,
-    switch_port_id: switchPortId || null,
+    device_port_id: switchPortId || null,
     description: description?.trim() || null,
     save_as_template: saveAsTemplate || false,
     template_name: saveAsTemplate ? (templateName?.trim() || name.trim()) : null,
@@ -431,7 +431,7 @@ export async function openDeviceModal(device = null) {
   await loadWorkstationsForSelect("device-workstation-id");
   await loadPositionsForSelect("device-position-id");
   await loadAccessPointsForSelect("device-access-point-id");
-  await loadSwitchPortsForDeviceSelect();
+  await loadDevicePortsForDeviceSelect();
 
   ensureDeviceListeners();
 
@@ -455,7 +455,7 @@ export async function openDeviceModal(device = null) {
     if (device.workstation_id) elementCache.setValue('device-workstation-id', device.workstation_id);
     if (device.position_id) elementCache.setValue('device-position-id', device.position_id);
     if (device.access_point_id) elementCache.setValue('device-access-point-id', device.access_point_id);
-    if (device.switch_port_id) elementCache.setValue('device-switch-port-id', device.switch_port_id);
+    if (device.device_port_id) elementCache.setValue('device-device-port-id', device.device_port_id);
 
     if (manager) {
       manager.setExcludeSwitchId(device.id || null);

@@ -7,7 +7,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             cabinet_id UUID REFERENCES cabinets(id) ON DELETE SET NULL,
             peer_access_point_id UUID REFERENCES access_points(id) ON DELETE SET NULL,
-            switch_port_id UUID,
+            device_port_id UUID,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -26,10 +26,10 @@ pub async fn add_foreign_keys(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"DO $$ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.table_constraints
-                WHERE constraint_name = 'fk_access_points_switch_port_id'
+                WHERE constraint_name = 'fk_access_points_device_port_id'
             ) THEN
-                ALTER TABLE access_points ADD CONSTRAINT fk_access_points_switch_port_id
-                    FOREIGN KEY (switch_port_id) REFERENCES switch_ports(id) ON DELETE SET NULL;
+                ALTER TABLE access_points ADD CONSTRAINT fk_access_points_device_port_id
+                    FOREIGN KEY (device_port_id) REFERENCES device_ports(id) ON DELETE SET NULL;
             END IF;
         END $$",
     )

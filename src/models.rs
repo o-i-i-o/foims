@@ -623,7 +623,7 @@ pub struct IpManager {
     pub id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Option<Uuid>,
@@ -643,15 +643,15 @@ pub struct IpManagerWithNames {
     pub id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
     pub network_id: Option<Uuid>,
     pub workstation_name: Option<String>,
     pub cabinet_position_name: Option<String>,
-    pub switch_name: Option<String>,
-    pub switch_port_number: Option<String>,
+    pub port_device_name: Option<String>,
+    pub port_device_number: Option<String>,
     pub connected_device_name: Option<String>,
     pub connected_device_type: Option<String>,
     pub access_point_name: Option<String>,
@@ -676,7 +676,7 @@ pub struct IpManagerWithNames {
 pub struct IpManagerCreate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub network_id: Option<Uuid>,
@@ -693,7 +693,7 @@ pub struct AutoAssignIpRequest {
     pub network_id: Uuid,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
     pub mac_address: Option<String>,
@@ -714,7 +714,7 @@ pub struct IpManagerUpdate {
     #[serde(default)]
     pub position_id: Option<Option<Uuid>>,
     #[serde(default)]
-    pub switch_port_id: Option<Option<Uuid>>,
+    pub device_port_id: Option<Option<Uuid>>,
     pub device_id: Option<Uuid>,
     pub device_type: Option<String>,
     pub ip_address: Option<String>,
@@ -730,7 +730,7 @@ pub struct IpManagerUpdate {
 // ==================== 设备端口模型（原交换机端口） ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchPort {
+pub struct DevicePort {
     pub id: Uuid,
     pub device_id: Uuid,
     pub port_number: String,
@@ -745,7 +745,7 @@ pub struct SwitchPort {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchPortWithSwitch {
+pub struct DevicePortWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
     pub device_name: String,
@@ -762,7 +762,7 @@ pub struct SwitchPortWithSwitch {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchPortCreate {
+pub struct DevicePortCreate {
     #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
     pub port_number: String,
     #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
@@ -777,7 +777,7 @@ pub struct SwitchPortCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchPortUpdate {
+pub struct DevicePortUpdate {
     #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
     pub port_number: Option<String>,
     #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
@@ -826,7 +826,7 @@ pub struct LldpNeighbor {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchMac {
+pub struct DeviceMac {
     pub id: Uuid,
     pub device_id: Uuid,
     pub ip_address: String,
@@ -838,7 +838,7 @@ pub struct SwitchMac {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SwitchMacCreate {
+pub struct DeviceMacCreate {
     pub ip_address: String,
     pub mac_address: String,
     pub interface: Option<String>,
@@ -846,7 +846,7 @@ pub struct SwitchMacCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchLldp {
+pub struct DeviceLldp {
     pub id: Uuid,
     pub device_id: Uuid,
     pub local_port: String,
@@ -860,7 +860,7 @@ pub struct SwitchLldp {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SwitchLldpCreate {
+pub struct DeviceLldpCreate {
     pub local_port: String,
     pub neighbor_chassis_id: Option<String>,
     pub neighbor_port_id: Option<String>,
@@ -1077,7 +1077,7 @@ pub struct AccessPoint {
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
     pub peer_access_point_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1094,9 +1094,9 @@ pub struct AccessPointWithDetails {
     pub cabinet_name: Option<String>,
     pub peer_access_point_id: Option<Uuid>,
     pub peer_access_point_name: Option<String>,
-    pub switch_port_id: Option<Uuid>,
-    pub connected_switch_port: Option<String>,
-    pub connected_switch_name: Option<String>,
+    pub device_port_id: Option<Uuid>,
+    pub connected_device_port: Option<String>,
+    pub connected_device_name: Option<String>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1110,7 +1110,7 @@ pub struct AccessPointCreate {
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
     pub peer_access_point_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -1123,7 +1123,7 @@ pub struct AccessPointUpdate {
     pub room_id: Option<Uuid>,
     pub cabinet_id: Option<Option<Uuid>>,
     pub peer_access_point_id: Option<Option<Uuid>>,
-    pub switch_port_id: Option<Option<Uuid>>,
+    pub device_port_id: Option<Option<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -1169,7 +1169,7 @@ pub struct Device {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub access_point_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
     pub vendor: Option<String>,
     pub location: Option<String>,
@@ -1206,9 +1206,9 @@ pub struct DeviceWithDetails {
     pub access_point_id: Option<Uuid>,
     pub access_point_name: Option<String>,
     pub access_point_type: Option<String>,
-    pub switch_port_id: Option<Uuid>,
-    pub connected_switch_port: Option<String>,
-    pub connected_switch_name: Option<String>,
+    pub device_port_id: Option<Uuid>,
+    pub connected_device_port: Option<String>,
+    pub connected_device_name: Option<String>,
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub vendor: Option<String>,
@@ -1241,7 +1241,7 @@ pub struct DeviceCreate {
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
     pub access_point_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub device_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
     pub vendor: Option<String>,
@@ -1282,7 +1282,7 @@ pub struct DeviceUpdate {
     pub workstation_id: Option<Option<Uuid>>,
     pub position_id: Option<Option<Uuid>>,
     pub access_point_id: Option<Option<Uuid>>,
-    pub switch_port_id: Option<Option<Uuid>>,
+    pub device_port_id: Option<Option<Uuid>>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
     pub vendor: Option<String>,
     #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
@@ -1310,5 +1310,5 @@ pub struct DeviceUpdate {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceConnectRequest {
     pub access_point_id: Option<Option<Uuid>>,
-    pub switch_port_id: Option<Option<Uuid>>,
+    pub device_port_id: Option<Option<Uuid>>,
 }

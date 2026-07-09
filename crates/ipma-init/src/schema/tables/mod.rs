@@ -51,19 +51,19 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 布局元素（引用 rooms）
     element::create(pool).await?;
 
-    // 设备（引用 workstations/positions/device_templates，switch_port_id 延迟添加）
+    // 设备（引用 workstations/positions/device_templates，device_port_id 延迟添加）
     devices::create(pool).await?;
 
     // 交换机端口/MAC/LLDP（引用 devices）
     switches::create(pool).await?;
 
-    // 接入点（引用 rooms/cabinets，switch_port_id 延迟添加）
+    // 接入点（引用 rooms/cabinets，device_port_id 延迟添加）
     access_points::create(pool).await?;
 
-    // IP（引用 workstations/positions/switch_ports/devices/network_cidrs）
+    // IP（引用 workstations/positions/device_ports/devices/network_cidrs）
     ips::create(pool).await?;
 
-    // 拓扑（引用 devices/switch_ports）
+    // 拓扑（引用 devices/device_ports）
     topology::create(pool).await?;
 
     // 日志/令牌/通知（引用 users）
@@ -71,7 +71,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     tokens::create(pool).await?;
     notifications::create(pool).await?;
 
-    // 延迟外键（解决 devices ↔ switch_ports 循环依赖）
+    // 延迟外键（解决 devices ↔ device_ports 循环依赖）
     devices::add_foreign_keys(pool).await?;
     access_points::add_foreign_keys(pool).await?;
 

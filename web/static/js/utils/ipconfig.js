@@ -195,7 +195,7 @@ const CONFIG = {
     idSelector: 'workstation-room',
     idName: '房间',
     parentSwitchRequired: false,
-    switchLabel: '上级交换机',
+    switchLabel: '上级设备',
     portLabel: '上级端口'
   },
   'cabinet-position': {
@@ -205,7 +205,7 @@ const CONFIG = {
     idSelector: 'cabinet-position-cabinet',
     idName: '机柜',
     parentSwitchRequired: false,
-    switchLabel: '上级交换机',
+    switchLabel: '上级设备',
     portLabel: '上级端口'
   },
   device: {
@@ -214,7 +214,7 @@ const CONFIG = {
     networksApi: (regionId) => regionId ? `/api/resources/networks?region_id=${regionId}&page_size=1000` : null,
     excludeSwitchId: null,
     parentSwitchRequired: false,
-    switchLabel: '上级交换机',
+    switchLabel: '上级设备',
     portLabel: '上级端口',
     loadNetworksByRegion: true
   }
@@ -443,7 +443,7 @@ export class IpConfigManager {
           }
 
           if (portSelect && portSelect.value) {
-            ipData.switch_port_id = portSelect.value;
+            ipData.device_port_id = portSelect.value;
           }
 
           ips.push(ipData);
@@ -675,7 +675,7 @@ export class IpConfigManager {
         <div class="form-group">
           <label>${switchLabel}</label>
           <select class="${this.config.classPrefix}-ip-switch-select form-control">
-            <option value="">请选择交换机</option>
+            <option value="">请选择设备</option>
           </select>
         </div>
         <div class="form-group">
@@ -812,8 +812,8 @@ export class IpConfigManager {
         if (initialData.switch_id && switchSelect) {
           switchSelect.value = initialData.switch_id;
           await this.handleSwitchChange(switchSelect, portSelect);
-          if (initialData.switch_port_id && portSelect) {
-            portSelect.value = initialData.switch_port_id;
+          if (initialData.device_port_id && portSelect) {
+            portSelect.value = initialData.device_port_id;
           }
         }
       }
@@ -931,7 +931,7 @@ export class IpConfigManager {
           });
       }
     } catch (error) {
-      console.error("加载交换机端口失败:", error);
+      console.error("加载设备端口失败:", error);
     }
   }
 }

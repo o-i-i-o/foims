@@ -12,9 +12,9 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "workstations",
         "positions",
         "switches",
-        "switch_ports",
-        "switch_macs",
-        "switch_lldps",
+        "device_ports",
+        "device_macs",
+        "device_lldps",
         "ips",
         "operation_logs",
         "task_logs",
@@ -150,7 +150,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "switch_ports",
+        "device_ports",
         vec![
             "id",
             "switch_id",
@@ -166,7 +166,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "switch_macs",
+        "device_macs",
         vec![
             "id",
             "switch_id",
@@ -179,7 +179,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "switch_lldps",
+        "device_lldps",
         vec![
             "id",
             "switch_id",
@@ -199,7 +199,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "id",
             "workstation_id",
             "position_id",
-            "switch_port_id",
+            "device_port_id",
             "device_type",
             "network_id",
             "ip_address",

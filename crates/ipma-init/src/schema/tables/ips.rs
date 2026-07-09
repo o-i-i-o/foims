@@ -4,7 +4,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
-            switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
+            device_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
             device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
             device_type VARCHAR(20),
             network_id UUID REFERENCES network_cidrs(id),
