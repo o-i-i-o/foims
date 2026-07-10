@@ -183,13 +183,13 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
             }
             return '-';
           }},
-          { field: 'device_name', render: (v) => v || '-' },
-          { field: 'device_type', render: (v) => getDeviceTypeName(v) },
-          { field: 'network_name', render: (v, row) => `${v || '未知'} (${row.network_region || '未知'})` },
-          { field: 'ip_address', render: (v) => v },
-          { field: 'mac_address', render: (v) => v || '-' },
-          { field: 'hostname', render: (v) => v || '-' },
-          { field: 'status', render: (v) => `<span class="status-badge ${v === 'active' ? 'status-active' : 'status-inactive'}">${v}</span>` },
+          { field: 'device_name', render: (v) => escapeHtml(v || '-') },
+          { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)) },
+          { field: 'network_name', render: (v, row) => `${escapeHtml(v || '未知')} (${escapeHtml(row.network_region || '未知')})` },
+          { field: 'ip_address', render: (v) => escapeHtml(v) },
+          { field: 'mac_address', render: (v) => escapeHtml(v || '-') },
+          { field: 'hostname', render: (v) => escapeHtml(v || '-') },
+          { field: 'status', render: (v) => `<span class="status-badge ${v === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(v)}</span>` },
           { field: 'last_seen', render: (v) => formatDateTime(v) },
           { field: 'created_at', render: (v) => formatDateTime(v) }
         ],

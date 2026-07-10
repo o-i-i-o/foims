@@ -53,51 +53,52 @@ pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataRe
             Ok(result.map_err(DataError::from)?.rows_affected())
         }
         "all" => {
+            let mut tx = pool.begin().await.map_err(DataError::from)?;
             let mut deleted = 0u64;
 
-            if days == 0 {
-                if let Ok(r) = sqlx::query("DELETE FROM operation_logs")
-                    .execute(pool)
+            let op_result = if days == 0 {
+                sqlx::query("DELETE FROM operation_logs")
+                    .execute(&mut *tx)
                     .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query("DELETE FROM login_logs").execute(pool).await {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query("DELETE FROM notifications").execute(pool).await {
-                    deleted += r.rows_affected();
-                }
             } else {
-                if let Ok(r) = sqlx::query(
+                sqlx::query(
                     "DELETE FROM operation_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query(
+            };
+            deleted += op_result.map_err(DataError::from)?.rows_affected();
+
+            let login_result = if days == 0 {
+                sqlx::query("DELETE FROM login_logs")
+                    .execute(&mut *tx)
+                    .await
+            } else {
+                sqlx::query(
                     "DELETE FROM login_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await
-                {
-                    deleted += r.rows_affected();
-                }
-                if let Ok(r) = sqlx::query(
+            };
+            deleted += login_result.map_err(DataError::from)?.rows_affected();
+
+            let notif_result = if days == 0 {
+                sqlx::query("DELETE FROM notifications")
+                    .execute(&mut *tx)
+                    .await
+            } else {
+                sqlx::query(
                     "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1",
                 )
                 .bind(days)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await
-                {
-                    deleted += r.rows_affected();
-                }
-            }
+            };
+            deleted += notif_result.map_err(DataError::from)?.rows_affected();
 
+            tx.commit().await.map_err(DataError::from)?;
             Ok(deleted)
         }
         _ => Err(DataError::Validation("无效的日志类型".to_string())),

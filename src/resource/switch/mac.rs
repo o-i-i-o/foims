@@ -308,8 +308,18 @@ pub async fn batch_get_mac_via_snmp(
         handles.push(tokio::spawn(async move {
             let _permit = permit.acquire().await;
             let mut local_entries = HashMap::new();
-            if let Err(e) = fetch_switch_arp(&pool_clone, &switch, &mut local_entries).await {
-                warn!("从交换机 {} 获取ARP表失败: {}", switch.name, e);
+            let fetch_result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                fetch_switch_arp(&pool_clone, &switch, &mut local_entries).await
+            })
+            .await;
+            match fetch_result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    warn!("从交换机 {} 获取ARP表失败: {}", switch.name, e);
+                }
+                Err(_) => {
+                    warn!("从交换机 {} 获取ARP表超时（30秒）", switch.name);
+                }
             }
             let mut map = all_arp_entries.lock().await;
             for (ip, mac) in local_entries {

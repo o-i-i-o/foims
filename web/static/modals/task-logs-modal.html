@@ -3,7 +3,7 @@
   <div class="modal-content" style="max-width: 900px;">
     <header class="modal-header">
       <h3 class="modal-title" id="task-logs-modal-title" data-i18n="scheduled_tasks.logs_title">Task Execution Logs</h3>
-      <button type="button" class="close" onclick="closeTaskLogsModal()" aria-label="Close">&times;</button>
+      <button type="button" class="close" data-action="close-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <table class="data-table">
@@ -20,7 +20,7 @@
       </table>
     </div>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="closeTaskLogsModal()" data-i18n="common.close">Close</button>
+      <button type="button" class="btn btn-secondary" data-action="close-modal" data-i18n="common.close">Close</button>
     </footer>
   </div>
 </div>

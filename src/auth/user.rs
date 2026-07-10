@@ -12,6 +12,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_users(
+    _admin: crate::auth::extractor::AdminUser,
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
@@ -152,6 +153,7 @@ pub async fn create_user(
 }
 
 pub async fn get_user(
+    _admin: crate::auth::extractor::AdminUser,
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {

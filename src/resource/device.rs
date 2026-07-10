@@ -176,9 +176,21 @@ pub async fn get_devices(
 
     let devices = data_query.fetch_all(&state.pool()?.get_conn()).await?;
 
+    let items: Vec<serde_json::Value> = devices
+        .into_iter()
+        .map(|d| {
+            let mut v = serde_json::to_value(&d)
+                .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
+            v["snmp_community"] = serde_json::Value::Null;
+            v["snmp_auth_password"] = serde_json::Value::Null;
+            v["snmp_priv_password"] = serde_json::Value::Null;
+            Ok(v)
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         json!({
-            "items": devices,
+            "items": items,
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -593,6 +605,19 @@ pub async fn get_device(
     result["ips"] = serde_json::to_value(device_ips)
         .map_err(|e| AppError::Internal(format!("序列化IP数据失败: {e}")))?;
 
+    let decrypted_community =
+        crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await;
+    let decrypted_auth =
+        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()).await;
+    let decrypted_priv =
+        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()).await;
+    result["snmp_community"] = serde_json::to_value(decrypted_community)
+        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+    result["snmp_auth_password"] = serde_json::to_value(decrypted_auth)
+        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+    result["snmp_priv_password"] = serde_json::to_value(decrypted_priv)
+        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+
     Ok(
         HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(
             result,
@@ -828,18 +853,6 @@ pub async fn update_device(
         for ip in ips {
             ip.validate()?;
 
-            // Check for duplicate IP
-            let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-            )
-            .bind(&ip.ip_address)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            if existing_ip.is_some() {
-                return Err(AppError::Conflict("IP地址已存在".to_string()));
-            }
-
             let network_id: Option<Uuid> = if let Some(r_id) = room_id {
                 sqlx::query_scalar(
                     r"SELECT nc.id
@@ -870,9 +883,10 @@ pub async fn update_device(
                     ip.device_type.as_deref().unwrap_or("device")
                 };
 
-            sqlx::query(
+            let insert_result = sqlx::query(
                 "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)
+                 ON CONFLICT (ip_address) DO NOTHING",
             )
             .bind(Uuid::new_v4())
             .bind(resolved_workstation_id)
@@ -891,6 +905,13 @@ pub async fn update_device(
             .bind(now)
             .execute(&mut *tx)
             .await?;
+
+            if insert_result.rows_affected() == 0 {
+                return Err(AppError::Conflict(format!(
+                    "IP地址 {} 已被其他设备占用",
+                    ip.ip_address
+                )));
+            }
         }
     }
 

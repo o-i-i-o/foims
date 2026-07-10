@@ -121,14 +121,12 @@ pub async fn get_cabinets(
             sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
                 .bind(cabinet.id)
                 .fetch_one(&state.pool()?.get_conn())
-                .await
-                .unwrap_or(0);
+                .await?;
 
         let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
             .bind(cabinet.room_id)
             .fetch_optional(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(None);
+            .await?;
 
         let cabinet_with_networks = CabinetWithNetworks {
             id: cabinet.id,
@@ -288,14 +286,12 @@ pub async fn get_cabinet(
         sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(cabinet.id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(0);
+            .await?;
 
     let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
         .bind(cabinet.room_id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await
-        .unwrap_or(None);
+        .await?;
 
     let cabinet_with_networks = CabinetWithNetworks {
         id: cabinet.id,

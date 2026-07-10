@@ -60,8 +60,12 @@ async function initApp() {
     errorDiv.innerHTML = `
       <h3 style="margin: 0 0 15px 0; color: #e74c3c;">应用程序加载失败</h3>
       <p style="margin: 0 0 15px 0; color: #666;">请刷新页面重试，或联系管理员。</p>
-      <button onclick="location.reload()" style="padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;">刷新页面</button>
     `;
+    const reloadBtn = document.createElement('button');
+    reloadBtn.textContent = '刷新页面';
+    reloadBtn.style.cssText = 'padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;';
+    reloadBtn.addEventListener('click', () => location.reload());
+    errorDiv.appendChild(reloadBtn);
     document.body.appendChild(errorDiv);
   }
 }

@@ -30,7 +30,9 @@ page_timeout = 30
 cors_allowed_origins = []
 
 [jwt]
-secret = "451#Tl{+wpWLE$c}V3V{5d!m5!4R}N/>)p{1"
+# 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）
+# 可使用 openssl rand -base64 48 生成
+secret = "CHANGE_ME_TO_RANDOM_32_PLUS_CHARS"
 # Access Token 有效期：建议 5-15 分钟，短有效期减少被盗用风险
 # 前端自动刷新间隔应设为此值的 50%（如 15min -> 7min）
 access_token_expiry = "15m"

@@ -98,6 +98,14 @@ pub fn backup_to_file(
 ) -> DataResult<String> {
     std::fs::create_dir_all(backup_dir)
         .map_err(|e| DataError::Internal(format!("创建备份目录失败: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(backup_dir, std::fs::Permissions::from_mode(0o700))
+        {
+            tracing::warn!("设置备份目录权限失败 {}: {}", backup_dir, e);
+        }
+    }
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}.sql");
@@ -106,6 +114,12 @@ pub fn backup_to_file(
 
     std::fs::write(&backup_file, sql_content)
         .map_err(|e| DataError::Internal(format!("写入备份文件失败: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&backup_file, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| DataError::Internal(format!("设置备份文件权限失败: {e}")))?;
+    }
 
     Ok(backup_file)
 }

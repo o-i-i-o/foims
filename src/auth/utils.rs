@@ -25,6 +25,7 @@ pub struct JwtClaims {
     pub iss: String,                        // 签发者
     pub jti: String,                        // JWT ID，用于撤销令牌
     pub aud: String,                        // 受众
+    pub token_type: String,                 // 令牌类型："access" 或 "refresh"
     pub device_fingerprint: Option<String>, // 设备指纹
     pub ip_address: Option<String>,         // IP 地址
 }
@@ -171,6 +172,7 @@ impl JwtUtils {
             iss: self.config.issuer.clone(),
             jti,
             aud: self.config.audience.clone(),
+            token_type: "access".to_string(),
             device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
             ip_address: ip_address.map(std::string::ToString::to_string),
         };
@@ -215,6 +217,7 @@ impl JwtUtils {
             iss: self.config.issuer.clone(),
             jti,
             aud: self.config.audience.clone(),
+            token_type: "refresh".to_string(),
             device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
             ip_address: ip_address.map(std::string::ToString::to_string),
         };

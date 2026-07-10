@@ -56,6 +56,7 @@ use crate::system::scheduled_task::{
 use actix_web::{HttpResponse, middleware, web};
 
 async fn data_export_csv(
+    _admin: crate::auth::extractor::AdminUser,
     state: web::Data<AppState>,
     type_param: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
@@ -65,6 +66,7 @@ async fn data_export_csv(
 }
 
 async fn data_import_csv(
+    _admin: crate::auth::extractor::AdminUser,
     state: web::Data<AppState>,
     payload: actix_multipart::Multipart,
     query: web::Query<std::collections::HashMap<String, String>>,
@@ -82,13 +84,17 @@ async fn data_download_template(
         .map_err(AppError::from)
 }
 
-async fn data_export_database(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+async fn data_export_database(
+    _admin: crate::auth::extractor::AdminUser,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     ipma_data_manager::export_database(state.as_ref().clone())
         .await
         .map_err(AppError::from)
 }
 
 async fn data_clear_logs(
+    _admin: crate::auth::extractor::AdminUser,
     state: web::Data<AppState>,
     req: web::Json<ipma_data_manager::ClearLogsRequest>,
 ) -> Result<HttpResponse, AppError> {
@@ -97,7 +103,10 @@ async fn data_clear_logs(
         .map_err(AppError::from)
 }
 
-async fn data_get_logs_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+async fn data_get_logs_stats(
+    _admin: crate::auth::extractor::AdminUser,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, AppError> {
     ipma_data_manager::get_logs_stats(state.as_ref().clone())
         .await
         .map_err(AppError::from)

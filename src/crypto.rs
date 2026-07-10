@@ -5,6 +5,7 @@ use aes_gcm::{
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::OnceLock;
 use tracing::{error, info, warn};
@@ -12,6 +13,13 @@ use tracing::{error, info, warn};
 const NONCE_SIZE: usize = 12;
 
 static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
+
+/// 将文件权限设置为 0600,仅所有者可读写,防止敏感密钥被其他用户读取
+fn secure_file_permissions(path: &str) {
+    if let Err(e) = fs::set_permissions(path, fs::Permissions::from_mode(0o600)) {
+        warn!("设置文件权限失败 {}: {}", path, e);
+    }
+}
 
 fn get_key_paths() -> (String, String) {
     let app_name = "ipma";
@@ -38,6 +46,7 @@ fn load_encryption_key() -> Vec<u8> {
                 if let Err(e) = fs::copy(&key_path, &key_backup_path) {
                     warn!("无法创建密钥备份: {}，不影响正常运行", e);
                 } else {
+                    secure_file_permissions(&key_backup_path);
                     info!("加密密钥已备份到: {}", key_backup_path);
                 }
                 return key;
@@ -57,6 +66,8 @@ fn load_encryption_key() -> Vec<u8> {
                             info!("成功从备份恢复密钥!");
                             if let Err(e) = fs::write(&key_path, &key) {
                                 error!("恢复密钥后无法重新保存: {}", e);
+                            } else {
+                                secure_file_permissions(&key_path);
                             }
                             return key;
                         }
@@ -80,6 +91,8 @@ fn load_encryption_key() -> Vec<u8> {
                 info!("成功从备份恢复密钥!");
                 if let Err(e) = fs::write(&key_path, &key) {
                     error!("恢复密钥后无法重新保存: {}", e);
+                } else {
+                    secure_file_permissions(&key_path);
                 }
                 return key;
             }
@@ -98,6 +111,13 @@ fn load_encryption_key() -> Vec<u8> {
 
     if let Err(e) = fs::write(&key_path, &key) {
         panic!("保存加密密钥失败: {}", e);
+    }
+    secure_file_permissions(&key_path);
+
+    if let Err(e) = fs::write(&key_backup_path, &key) {
+        warn!("保存密钥备份失败: {}，不影响正常运行", e);
+    } else {
+        secure_file_permissions(&key_backup_path);
     }
 
     info!("加密密钥已生成并保存到: {}", key_path);

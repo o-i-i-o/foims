@@ -274,26 +274,46 @@ pub async fn log_system_operation(
 
 #[must_use]
 pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
-    if let Some(xff) = req.headers().get("X-Forwarded-For")
-        && let Ok(xff_str) = xff.to_str()
-        && let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string())
-    {
-        return normalize_ipv4_address(&real_ip);
-    }
+    let peer_trusted = req
+        .peer_addr()
+        .map(|addr| is_trusted_proxy(&addr.ip()))
+        .unwrap_or(false);
 
-    if let Some(x_real_ip) = req.headers().get("X-Real-IP")
-        && let Ok(real_ip_str) = x_real_ip.to_str()
-    {
-        return normalize_ipv4_address(real_ip_str.trim());
+    if peer_trusted {
+        if let Some(xff) = req.headers().get("X-Forwarded-For")
+            && let Ok(xff_str) = xff.to_str()
+            && let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string())
+            && !real_ip.is_empty()
+        {
+            return normalize_ipv4_address(&real_ip);
+        }
+
+        if let Some(x_real_ip) = req.headers().get("X-Real-IP")
+            && let Ok(real_ip_str) = x_real_ip.to_str()
+            && !real_ip_str.trim().is_empty()
+        {
+            return normalize_ipv4_address(real_ip_str.trim());
+        }
     }
 
     let ip = req
-        .connection_info()
-        .realip_remote_addr()
-        .unwrap_or("unknown")
-        .to_string();
+        .peer_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
 
     normalize_ipv4_address(&ip)
+}
+
+fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+        std::net::IpAddr::V6(v6) => v6.is_loopback() || is_ipv6_ula(v6),
+    }
+}
+
+fn is_ipv6_ula(v6: &std::net::Ipv6Addr) -> bool {
+    let segments = v6.segments();
+    (segments[0] & 0xfe00) == 0xfc00
 }
 
 #[must_use]

@@ -1,4 +1,5 @@
 use crate::types::{DataError, DataResult};
+use sqlx::Acquire;
 
 pub mod cabinets;
 pub mod network_regions;
@@ -107,6 +108,9 @@ pub async fn import_csv<P: DataProvider>(
     let filename_clone = filename.clone();
 
     let csv_entries = tokio::task::spawn_blocking(move || {
+        const MAX_DECOMPRESSED_SIZE: u64 = 100 * 1024 * 1024;
+        const MAX_TOTAL_DECOMPRESSED: u64 = 500 * 1024 * 1024;
+        let mut total_decompressed: u64 = 0;
         let mut entries = Vec::new();
         if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new((*file_data_clone).clone())) {
             for i in 0..zip.len() {
@@ -122,9 +126,19 @@ pub async fn import_csv<P: DataProvider>(
                     continue;
                 }
                 if zip_filename.ends_with(".csv") {
+                    let mut limited = (&mut file).take(MAX_DECOMPRESSED_SIZE);
                     let mut content = String::new();
-                    file.read_to_string(&mut content)
+                    limited
+                        .read_to_string(&mut content)
                         .map_err(|e| DataError::Internal(format!("读取CSV文件失败: {e}")))?;
+                    let entry_size = content.len() as u64;
+                    total_decompressed = total_decompressed.saturating_add(entry_size);
+                    if total_decompressed > MAX_TOTAL_DECOMPRESSED {
+                        return Err(DataError::Internal(format!(
+                            "ZIP解压总大小超过限制({}MB),可能为ZIP炸弹",
+                            MAX_TOTAL_DECOMPRESSED / 1024 / 1024
+                        )));
+                    }
                     entries.push((zip_filename.trim_end_matches(".csv").to_string(), content));
                 }
             }
@@ -145,10 +159,20 @@ pub async fn import_csv<P: DataProvider>(
     .map_err(|e| DataError::Internal(format!("ZIP解压任务失败: {e}")))??;
 
     for (table_name, content) in csv_entries {
-        if let Err(e) =
-            process_csv_by_filename(&mut conn, &table_name, &content, overwrite, &mut results).await
+        let mut tx = conn.begin().await.map_err(DataError::from)?;
+        match process_csv_by_filename(&mut tx, &table_name, &content, overwrite, &mut results).await
         {
-            results.push(format!("导入 {table_name}.csv 失败: {e}"));
+            Ok(()) => {
+                if let Err(e) = tx.commit().await {
+                    results.push(format!("提交 {table_name}.csv 事务失败: {e}"));
+                }
+            }
+            Err(e) => {
+                results.push(format!("导入 {table_name}.csv 失败: {e}"));
+                if let Err(rb_err) = tx.rollback().await {
+                    tracing::warn!("回滚 {table_name}.csv 事务失败: {rb_err}");
+                }
+            }
         }
     }
 

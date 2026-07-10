@@ -92,8 +92,7 @@ pub async fn get_rooms(
             sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
                 .bind(room.id)
                 .fetch_one(&state.pool()?.get_conn())
-                .await
-                .unwrap_or(0);
+                .await?;
 
         let org_name: Option<String> = if let Some(oid) = room.org_id {
             sqlx::query_scalar("SELECT name FROM organizations WHERE id = $1")
@@ -241,8 +240,7 @@ pub async fn get_room(
         sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
             .bind(room.id)
             .fetch_one(&state.pool()?.get_conn())
-            .await
-            .unwrap_or(0);
+            .await?;
 
     let org_name: Option<String> = if let Some(oid) = room.org_id {
         sqlx::query_scalar("SELECT name FROM organizations WHERE id = $1")

@@ -68,6 +68,35 @@ function setupEventListeners() {
     if (cancelBtn) {
         cancelBtn.addEventListener('click', closeScheduledTaskModal);
     }
+
+    const modalContainer = document.getElementById('modal-container');
+    if (modalContainer && !modalContainer.dataset.closeHandlerAttached) {
+        modalContainer.dataset.closeHandlerAttached = 'true';
+        modalContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action="close-modal"]');
+            if (!btn) return;
+            closeScheduledTaskModal();
+        });
+    }
+
+    const taskTable = document.querySelector('#scheduled-tasks-table');
+    if (taskTable && !taskTable.dataset.handlerAttached) {
+        taskTable.dataset.handlerAttached = 'true';
+        taskTable.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const taskId = btn.dataset.taskId;
+            const taskName = btn.dataset.taskName;
+            switch (action) {
+                case 'run-task': window.runScheduledTask(taskId); break;
+                case 'toggle-task': window.toggleScheduledTask(taskId); break;
+                case 'edit-task': window.editScheduledTask(taskId); break;
+                case 'view-logs': window.viewTaskLogs(taskName); break;
+                case 'delete-task': window.deleteScheduledTask(taskId); break;
+            }
+        });
+    }
 }
 
 function handleTaskTypeChange(e) {
@@ -164,11 +193,11 @@ function renderScheduledTasks(tasks) {
             <td>${formatDateTime(task.last_run_at)}</td>
             <td>${escapeHtml(task.last_result || '-')}</td>
             <td class="actions">
-                <button class="btn btn-secondary btn-sm" onclick="runScheduledTask('${task.id}')">${t('scheduled_tasks.run_now')}</button>
-                <button class="btn btn-secondary btn-sm" onclick="toggleScheduledTask('${task.id}')">${task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable')}</button>
-                <button class="btn btn-secondary btn-sm" onclick="editScheduledTask('${task.id}')">${t('common.edit')}</button>
-                <button class="btn btn-secondary btn-sm" onclick="viewTaskLogs('${task.name}')">${t('scheduled_tasks.view_logs')}</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteScheduledTask('${task.id}')">${t('common.delete')}</button>
+                <button class="btn btn-secondary btn-sm" data-action="run-task" data-task-id="${escapeHtml(task.id)}">${t('scheduled_tasks.run_now')}</button>
+                <button class="btn btn-secondary btn-sm" data-action="toggle-task" data-task-id="${escapeHtml(task.id)}">${task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable')}</button>
+                <button class="btn btn-secondary btn-sm" data-action="edit-task" data-task-id="${escapeHtml(task.id)}">${t('common.edit')}</button>
+                <button class="btn btn-secondary btn-sm" data-action="view-logs" data-task-name="${escapeHtml(task.name)}">${t('scheduled_tasks.view_logs')}</button>
+                <button class="btn btn-danger btn-sm" data-action="delete-task" data-task-id="${escapeHtml(task.id)}">${t('common.delete')}</button>
             </td>
         `;
         tbody.appendChild(row);

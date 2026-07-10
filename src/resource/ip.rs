@@ -256,10 +256,12 @@ async fn sync_switch_macs(
     device_id: Uuid,
     network_id: Uuid,
 ) -> Result<MacSyncResult, AppError> {
+    let mut tx = pool.begin().await?;
+
     let network_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
             .bind(network_id)
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await?;
 
     if !network_exists {
@@ -273,14 +275,14 @@ async fn sync_switch_macs(
     )
     .bind(device_id)
     .bind(network_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await?;
 
     if switch_macs.is_empty() {
         let total_macs: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM switch_macs WHERE device_id = $1")
                 .bind(device_id)
-                .fetch_one(pool)
+                .fetch_one(&mut *tx)
                 .await?;
 
         return Ok(MacSyncResult {
@@ -296,13 +298,14 @@ async fn sync_switch_macs(
     let mut updated_count = 0usize;
     let mut unchanged_count = 0usize;
     let mut skipped_count = 0usize;
+    let mut pending_notifications: Vec<(Uuid, String, String, String)> = Vec::new();
 
     for (ip, mac) in &switch_macs {
         let current: Option<IpMacCurrentInfo> = sqlx::query_as(
             "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
         )
         .bind(ip)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?;
 
         let Some((old_mac, device_type, ws_id, pos_id)) = current else {
@@ -311,7 +314,7 @@ async fn sync_switch_macs(
 
         let mac_conflict: Option<String> = sqlx::query_scalar(
             r"SELECT host(ip_address) FROM ips
-               WHERE mac_address = $1 
+               WHERE mac_address = $1
                AND ip_address != CAST($2 AS INET)
                AND (
                    device_type != $3
@@ -325,7 +328,7 @@ async fn sync_switch_macs(
         .bind(&device_type)
         .bind(ws_id)
         .bind(pos_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?
         .flatten();
 
@@ -341,14 +344,14 @@ async fn sync_switch_macs(
         match old_mac.as_deref() {
             None | Some("") => {
                 sqlx::query(
-                    r"UPDATE ips 
+                    r"UPDATE ips
                        SET mac_address = $1, last_seen = $2, updated_at = $2
                        WHERE ip_address = CAST($3 AS INET)",
                 )
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
                 updated_count += 1;
                 info!("MAC地址写入: IP={}, MAC={}", ip, mac);
@@ -359,13 +362,13 @@ async fn sync_switch_macs(
                 )
                 .bind(now)
                 .bind(ip)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
                 unchanged_count += 1;
             }
             Some(old) => {
                 sqlx::query(
-                    r"UPDATE ips 
+                    r"UPDATE ips
                        SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
                        WHERE ip_address = CAST($4 AS INET)",
                 )
@@ -373,7 +376,7 @@ async fn sync_switch_macs(
                 .bind(mac)
                 .bind(now)
                 .bind(ip)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
                 updated_count += 1;
 
@@ -381,20 +384,26 @@ async fn sync_switch_macs(
                     "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
                 )
                 .bind(ip)
-                .fetch_optional(pool)
+                .fetch_optional(&mut *tx)
                 .await?
                 .flatten();
 
                 if let Some(ws_id) = workstation_id {
                     info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                    match crate::utils::send_mac_change_notification(pool, &ws_id, ip, old, mac)
-                        .await
-                    {
-                        Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
-                        Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
-                    }
+                    pending_notifications.push((ws_id, ip.clone(), old.to_string(), mac.clone()));
                 }
             }
+        }
+    }
+
+    tx.commit().await?;
+
+    for (ws_id, ip, old_mac, new_mac) in pending_notifications {
+        match crate::utils::send_mac_change_notification(pool, &ws_id, &ip, &old_mac, &new_mac)
+            .await
+        {
+            Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
+            Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
         }
     }
 
@@ -501,6 +510,13 @@ pub fn find_available_ips_in_cidr(
         return Vec::new();
     };
 
+    let is_v6 = matches!(network_cidr, ipnetwork::IpNetwork::V6(_));
+    let effective_max = match (max_count, is_v6) {
+        (Some(max), _) => max,
+        (None, true) => 100,
+        (None, false) => 1000,
+    };
+
     let network_addr = network_cidr.network();
     let broadcast_addr = match network_cidr {
         ipnetwork::IpNetwork::V4(v4) => Some(v4.broadcast().to_string()),
@@ -523,7 +539,7 @@ pub fn find_available_ips_in_cidr(
             continue;
         }
         available.push(ip_str);
-        if max_count.is_some_and(|max| available.len() >= max) {
+        if available.len() >= effective_max {
             break;
         }
     }

@@ -75,15 +75,38 @@ pub async fn https_redirect_handler(req: HttpRequest) -> HttpResponse {
         .map(|q| format!("?{q}"))
         .unwrap_or_default();
 
-    let domain = host.split(':').next().unwrap_or("localhost");
-    if domain.contains('/') || domain.contains('@') {
+    let requested_domain = host.split(':').next().unwrap_or("localhost");
+    if requested_domain.contains('/') || requested_domain.contains('@') {
         return HttpResponse::BadRequest().finish();
     }
 
-    let https_port = req
-        .app_data::<actix_web::web::Data<crate::app_state::AppState>>()
+    let app_state = req.app_data::<actix_web::web::Data<crate::app_state::AppState>>();
+    let https_port = app_state
         .and_then(|s| s.config.server.https_port)
         .unwrap_or(443);
+
+    let trusted_domain = app_state
+        .map(|s| {
+            let mut allowed: Vec<&str> = vec![s.config.server.host.as_str()];
+            if let Some(ipv6) = &s.config.server.host_ipv6 {
+                allowed.push(ipv6.as_str());
+            }
+            if !s.config.server.public_url.is_empty() {
+                let url = s.config.server.public_url.as_str();
+                let after_scheme = url.split("://").nth(1).unwrap_or(url);
+                let host_part = after_scheme.split('/').next().unwrap_or(after_scheme);
+                let host_only = host_part.split(':').next().unwrap_or(host_part);
+                if !host_only.is_empty() {
+                    allowed.push(host_only);
+                }
+            }
+            if allowed.contains(&requested_domain) {
+                requested_domain.to_string()
+            } else {
+                s.config.server.host.clone()
+            }
+        })
+        .unwrap_or_else(|| requested_domain.to_string());
 
     let port_suffix = if https_port == 443 {
         String::new()
@@ -94,7 +117,7 @@ pub async fn https_redirect_handler(req: HttpRequest) -> HttpResponse {
     HttpResponse::Found()
         .insert_header((
             actix_web::http::header::LOCATION,
-            format!("https://{domain}{port_suffix}{path}{query}"),
+            format!("https://{trusted_domain}{port_suffix}{path}{query}"),
         ))
         .finish()
 }

@@ -27,6 +27,36 @@ use crate::models::{
 use crate::utils::detect_user_language;
 use totp_rs::{Algorithm, Secret, TOTP};
 
+type TotpReplayStore =
+    std::sync::Mutex<std::collections::HashMap<Uuid, (String, std::time::Instant)>>;
+static TOTP_REPLAY_STORE: std::sync::OnceLock<TotpReplayStore> = std::sync::OnceLock::new();
+
+fn totp_replay_store() -> &'static TotpReplayStore {
+    TOTP_REPLAY_STORE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+const TOTP_REPLAY_TTL: std::time::Duration = std::time::Duration::from_secs(90);
+
+fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
+    let store = totp_replay_store();
+    if let Ok(map) = store.lock()
+        && let Some((used_code, used_at)) = map.get(&user_id)
+        && used_code == code
+        && used_at.elapsed() < TOTP_REPLAY_TTL
+    {
+        return true;
+    }
+    false
+}
+
+fn record_totp_usage(user_id: Uuid, code: &str) {
+    let store = totp_replay_store();
+    if let Ok(mut map) = store.lock() {
+        map.retain(|_, (_, used_at)| used_at.elapsed() < TOTP_REPLAY_TTL);
+        map.insert(user_id, (code.to_string(), std::time::Instant::now()));
+    }
+}
+
 pub async fn auth_middleware(
     req: ServiceRequest,
     next: Next<impl MessageBody + 'static>,
@@ -67,6 +97,18 @@ pub async fn auth_middleware(
             ));
         }
     };
+
+    if claims.token_type != "access" {
+        let user_lang = detect_user_language(req.request());
+        return Ok(req.into_response(
+            HttpResponse::Unauthorized()
+                .json(ApiResponse::<()>::error_i18n(
+                    "api.invalid_token",
+                    &user_lang,
+                ))
+                .map_into_right_body(),
+        ));
+    }
 
     // 检查令牌是否已被撤销
     if let Ok(revoked) =
@@ -167,7 +209,7 @@ pub async fn login(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Err(AppError::Unauthorized("账户已禁用".to_string()));
+        return Err(AppError::Unauthorized("登录失败".to_string()));
     }
 
     let password_for_verify = req.password.clone();
@@ -267,7 +309,7 @@ pub async fn login_with_email_code(
         {
             tracing::warn!("记录登录日志失败: {}", e);
         }
-        return Err(AppError::Unauthorized("账户已禁用".to_string()));
+        return Err(AppError::Unauthorized("邮箱或验证码无效".to_string()));
     }
 
     let mut verified = false;
@@ -458,11 +500,30 @@ pub async fn login_with_two_factor(
         match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, None, String::new()) {
             Ok(totp) => {
                 let code = req.two_factor_code.clone();
-                let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+                if is_totp_code_replayed(id, &code) {
+                    if let Err(e) = log_login(
+                        &conn,
+                        &username,
+                        &http_req,
+                        false,
+                        Some("TOTP code replayed"),
+                    )
                     .await
-                    .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
-                    .map_err(|e| AppError::Internal(e.to_string()))?;
+                    {
+                        tracing::warn!("记录登录日志失败: {}", e);
+                    }
+                    return Err(AppError::Unauthorized(
+                        "2FA验证码已使用，请等待新验证码".to_string(),
+                    ));
+                }
+                let code_for_check = code.clone();
+                let valid =
+                    tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
+                        .await
+                        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
+                        .map_err(|e| AppError::Internal(e.to_string()))?;
                 if valid {
+                    record_totp_usage(id, &code);
                     verified = true;
                 }
             }
@@ -638,6 +699,10 @@ pub async fn refresh_token(
         };
         AppError::Unauthorized(msg.to_string())
     })?;
+
+    if claims.token_type != "refresh" {
+        return Err(AppError::Unauthorized("无效的刷新令牌".to_string()));
+    }
 
     if crate::utils::is_token_revoked(&conn, &token)
         .await
@@ -974,13 +1039,20 @@ pub async fn enable_two_factor(
     .map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
 
     let code = req.code.clone();
-    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+    if is_totp_code_replayed(target_user_id, &code) {
+        return Err(AppError::Validation(
+            "验证码已使用，请等待新验证码".to_string(),
+        ));
+    }
+    let code_for_check = code.clone();
+    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
         .await
         .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
         .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
         return Err(AppError::Validation("验证码错误".to_string()));
     }
+    record_totp_usage(target_user_id, &code);
 
     sqlx::query(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1",
@@ -1055,11 +1127,18 @@ pub async fn disable_two_factor(
         )
         .map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
         let code = req.code.clone();
-        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code))
+        if is_totp_code_replayed(target_user_id, &code) {
+            return Err(AppError::Validation(
+                "验证码已使用，请等待新验证码".to_string(),
+            ));
+        }
+        let code_for_check = code.clone();
+        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
             .await
             .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
             .map_err(|e| AppError::Internal(e.to_string()))?;
         if valid {
+            record_totp_usage(target_user_id, &code);
             verified = true;
         }
     }

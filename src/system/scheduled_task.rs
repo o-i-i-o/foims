@@ -200,18 +200,26 @@ pub async fn run_scheduled_task_now(
 ) -> Result<HttpResponse, AppError> {
     let id = path.into_inner();
     let pool = state.pool()?;
-    let conn = pool.get_conn();
 
-    // 使用 advisory lock 防止同一任务并发执行
-    let lock_key = id.as_u128() as i64;
-    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+    // 使用事务级 advisory lock 防止同一任务并发执行
+    // 事务提交或回滚时自动释放锁,避免 panic/取消导致锁泄漏
+    let mut lock_tx = pool.begin().await?;
+    let lock_key = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        id.hash(&mut hasher);
+        hasher.finish() as i64
+    };
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
         .bind(lock_key)
-        .fetch_one(&conn)
+        .fetch_one(&mut *lock_tx)
         .await?;
 
     if !locked {
         return Err(AppError::Conflict("任务正在执行中，请稍后再试".to_string()));
     }
+
+    let conn = pool.get_conn();
 
     let task: Option<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
@@ -221,11 +229,6 @@ pub async fn run_scheduled_task_now(
     .await?;
 
     let Some(task) = task else {
-        let _: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
-            .bind(lock_key)
-            .fetch_one(&conn)
-            .await
-            .unwrap_or(false);
         return Err(AppError::NotFound("定时任务不存在".to_string()));
     };
 
@@ -250,7 +253,7 @@ pub async fn run_scheduled_task_now(
     let result = state.task_registry.execute(&task.task_type, &ctx).await;
 
     let end_time = Utc::now();
-    let duration = (end_time - start_time).num_milliseconds() as i32;
+    let duration = i32::try_from((end_time - start_time).num_milliseconds()).unwrap_or(i32::MAX);
 
     let (status, details) = match &result {
         Ok(msg) => (
@@ -315,12 +318,10 @@ pub async fn run_scheduled_task_now(
         tracing::warn!("更新定时任务执行结果失败: {}", e);
     }
 
-    // 释放 advisory lock
-    let _: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
-        .bind(lock_key)
-        .fetch_one(&conn)
-        .await
-        .unwrap_or(false);
+    // 提交事务以释放 advisory lock
+    if let Err(e) = lock_tx.commit().await {
+        tracing::warn!("释放任务锁失败: {}", e);
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         serde_json::json!({"result": result.map_err(|e| e.to_string())}),

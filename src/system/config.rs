@@ -6,6 +6,7 @@ use crate::system::smtp::SmtpConfig;
 use crate::system::smtp::{get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users};
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
+use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
@@ -13,6 +14,13 @@ use uuid::Uuid;
 use validator::Validate;
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
+
+/// 将文件权限设置为 0600,用于保护 TLS 私钥等敏感文件
+async fn secure_file_permissions(path: &str) {
+    if let Err(e) = tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await {
+        tracing::warn!("设置文件权限失败 {}: {}", path, e);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendEmailRequest {
@@ -339,13 +347,11 @@ async fn restart_standalone_process() -> Result<HttpResponse, AppError> {
         .to_str()
         .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
 
-    let restart_script = format!(
-        r#"#!/bin/bash
+    let restart_script = r#"#!/bin/bash
 sleep 3
-cd "{working_dir_str}"
-exec "{exe_path_str}"
-"#
-    );
+cd "$1"
+exec "$2"
+"#;
 
     let script_path = "/tmp/ipma_restart.sh";
     tokio::fs::write(script_path, restart_script)
@@ -363,7 +369,12 @@ exec "{exe_path_str}"
         return Err(AppError::Internal("设置脚本权限失败".to_string()));
     }
 
-    if let Err(e) = Command::new("nohup").arg(script_path).spawn() {
+    if let Err(e) = Command::new("nohup")
+        .arg(script_path)
+        .arg(working_dir_str)
+        .arg(exe_path_str)
+        .spawn()
+    {
         tracing::warn!("启动重启脚本失败: {}", e);
     }
 
@@ -542,6 +553,7 @@ pub async fn import_certificate(
     tokio::fs::write(&key_path, key_data)
         .await
         .map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
+    secure_file_permissions(&key_path).await;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
 }
@@ -964,6 +976,16 @@ pub async fn update_notification_settings(
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmtpConfigResponse {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub from: String,
+    pub secure: bool,
+    pub has_password: bool,
+}
+
 pub async fn get_smtp_config(
     state: web::Data<AppState>,
     _admin: crate::auth::extractor::AdminUser,
@@ -973,15 +995,28 @@ pub async fn get_smtp_config(
         None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(config, "SMTP配置获取成功")))
+    let resp = SmtpConfigResponse {
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        from: config.from,
+        secure: config.secure,
+        has_password: !config.password.is_empty(),
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(resp, "SMTP配置获取成功")))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSmtpConfigRequest {
+    #[validate(length(min = 1, max = 255, message = "SMTP主机不能为空且不超过255个字符"))]
     pub host: String,
     pub port: u16,
+    #[validate(length(min = 1, max = 100, message = "SMTP用户名不能为空且不超过100个字符"))]
     pub username: String,
+    #[validate(length(max = 200, message = "SMTP密码长度不能超过200个字符"))]
     pub password: String,
+    #[validate(email(message = "发件人邮箱格式不正确"))]
     pub from: String,
     pub secure: bool,
 }
@@ -991,11 +1026,24 @@ pub async fn update_smtp_config(
     _admin: crate::auth::extractor::AdminUser,
     req: web::Json<UpdateSmtpConfigRequest>,
 ) -> Result<HttpResponse, AppError> {
+    req.validate()?;
+    if req.port == 0 {
+        return Err(AppError::Validation("SMTP端口不能为0".to_string()));
+    }
+    let password = if req.password.is_empty() {
+        let existing = get_smtp_config_from_db(&state.pool()?.get_conn())
+            .await
+            .ok_or_else(|| AppError::Internal("SMTP配置未设置，请填写密码".to_string()))?;
+        existing.password
+    } else {
+        req.password.clone()
+    };
+
     let config = SmtpConfig {
         host: req.host.clone(),
         port: req.port,
         username: req.username.clone(),
-        password: req.password.clone(),
+        password,
         from: req.from.clone(),
         secure: req.secure,
     };

@@ -33,6 +33,17 @@ pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationEr
     validate_room_type_string(room_type)
 }
 
+fn validate_role(role: &str) -> Result<(), ValidationError> {
+    match role {
+        "admin" | "user" => Ok(()),
+        _ => Err(ValidationError::new("角色必须是admin或user")),
+    }
+}
+
+fn validate_role_option(role: &&String) -> Result<(), ValidationError> {
+    validate_role(role)
+}
+
 pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
     if dns_list.len() > 5 {
         return Err(ValidationError::new("dns_count_exceeded"));
@@ -147,7 +158,7 @@ pub struct UserCreate {
     pub password: String,
     #[validate(email(message = "请输入有效的邮箱地址"))]
     pub email: String,
-    #[validate(length(min = 1, max = 20, message = "角色长度必须在1到20个字符之间"))]
+    #[validate(custom(function = "validate_role", message = "角色必须是admin或user"))]
     pub role: String,
 }
 
@@ -155,7 +166,7 @@ pub struct UserCreate {
 pub struct UserUpdate {
     #[validate(email(message = "请输入有效的邮箱地址"))]
     pub email: Option<String>,
-    #[validate(length(min = 1, max = 20, message = "角色长度必须在1到20个字符之间"))]
+    #[validate(custom(function = "validate_role_option", message = "角色必须是admin或user"))]
     pub role: Option<String>,
     pub status: Option<bool>,
 }

@@ -40,10 +40,11 @@ export class ApiClient {
   }
 
   static async request(url, options = {}, retryCount = 0) {
+    const method = options.method || 'GET';
     const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : '';
-    const requestKey = `${url}_${options.method || 'GET'}${bodyHash}`;
-    
-    if (this.#pendingRequests.has(requestKey)) {
+    const requestKey = `${url}_${method}${bodyHash}`;
+
+    if (method === 'GET' && retryCount === 0 && this.#pendingRequests.has(requestKey)) {
       return this.#pendingRequests.get(requestKey);
     }
 
@@ -219,7 +220,7 @@ export class ApiClient {
         if (disposition && disposition.indexOf("attachment") !== -1) {
           const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
           const matches = filenameRegex.exec(disposition);
-          if (matches != null && matches[1]) {
+          if (matches !== null && matches[1]) {
             filename = matches[1].replace(/['"]/g, "");
           }
         }

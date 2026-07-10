@@ -1,5 +1,5 @@
 import { apiGet } from "../utils/apiClient.js";
-import { showToast } from "../utils/ui.js";
+import { showToast, escapeHtml } from "../utils/ui.js";
 import { cache, safeAsync, nextFrame } from "../utils/helpers.js";
 import { getStatusText, getDeviceTypeName, getRoomTypeName, getActionIcon, formatTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter.js";
 import { t } from "../utils/i18n.js";
@@ -129,11 +129,11 @@ function renderTopNetworks(items) {
       <div class="item-name">
         <span class="item-icon">🌐</span>
         <div>
-          <div>${network.name || '-'}</div>
-          <div class="item-meta">${network.ipv4_cidr || network.ipv6_cidr || '-'}</div>
+          <div>${escapeHtml(network.name || '-')}</div>
+          <div class="item-meta">${escapeHtml(network.ipv4_cidr || network.ipv6_cidr || '-')}</div>
         </div>
       </div>
-      <span class="item-value">${network.network_region_name || '-'}</span>
+      <span class="item-value">${escapeHtml(network.network_region_name || '-')}</span>
     </li>
   `).join('');
 }
@@ -152,8 +152,8 @@ function renderTopIPs(items) {
       <div class="item-name">
         <span class="item-icon">🔗</span>
         <div>
-          <div>${ip.ip_address || '-'}</div>
-          <div class="item-meta">${ip.hostname || ip.device_name || '-'}</div>
+          <div>${escapeHtml(ip.ip_address || '-')}</div>
+          <div class="item-meta">${escapeHtml(ip.hostname || ip.device_name || '-')}</div>
         </div>
       </div>
       <span class="item-status status-${ip.status || 'inactive'}">${getStatusText(ip.status)}</span>
@@ -175,8 +175,8 @@ function renderTopRooms(items) {
       <div class="item-name">
         <span class="item-icon">🏠</span>
         <div>
-          <div>${room.name || '-'}</div>
-          <div class="item-meta">${getRoomTypeName(room.room_type)}</div>
+          <div>${escapeHtml(room.name || '-')}</div>
+          <div class="item-meta">${escapeHtml(getRoomTypeName(room.room_type))}</div>
         </div>
       </div>
       <span class="item-value">${room.workstation_count || 0} 工位</span>
@@ -198,11 +198,11 @@ function renderTopDevices(items) {
       <div class="item-name">
         <span class="item-icon">🔀</span>
         <div>
-          <div>${dev.name || '-'}</div>
-          <div class="item-meta">${dev.ip_address || '-'}</div>
+          <div>${escapeHtml(dev.name || '-')}</div>
+          <div class="item-meta">${escapeHtml(dev.ip_address || '-')}</div>
         </div>
       </div>
-      <span class="item-value">${dev.vendor || '-'}</span>
+      <span class="item-value">${escapeHtml(dev.vendor || '-')}</span>
     </li>
   `).join('');
 }
@@ -221,8 +221,8 @@ function renderTopCabinets(items) {
       <div class="item-name">
         <span class="item-icon">🗄️</span>
         <div>
-          <div>${cabinet.name || '-'}</div>
-          <div class="item-meta">${cabinet.room_name || '-'}</div>
+          <div>${escapeHtml(cabinet.name || '-')}</div>
+          <div class="item-meta">${escapeHtml(cabinet.room_name || '-')}</div>
         </div>
       </div>
       <span class="item-value">${cabinet.position_count || 0} 机位</span>
@@ -244,11 +244,11 @@ function renderTopLogs(items) {
       <div class="item-name">
         <span class="item-icon">${getActionIcon(log.action)}</span>
         <div>
-          <div>${getOperationTypeText(log.action)}</div>
-          <div class="item-meta">${log.username || '-'} · ${formatTime(log.created_at)}</div>
+          <div>${escapeHtml(getOperationTypeText(log.action))}</div>
+          <div class="item-meta">${escapeHtml(log.username || '-')} · ${formatTime(log.created_at)}</div>
         </div>
       </div>
-      <span class="item-value">${getResourceTypeText(log.resource_type)}</span>
+      <span class="item-value">${escapeHtml(getResourceTypeText(log.resource_type))}</span>
     </li>
   `).join('');
 }

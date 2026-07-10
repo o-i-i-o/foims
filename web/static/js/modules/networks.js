@@ -636,15 +636,15 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
           if (ipListBody) {
             ipListBody.innerHTML = refreshedNetworkIps.length > 0 ? refreshedNetworkIps.map(ip => `
               <tr>
-                <td>${ip.ip_address}</td>
+                <td>${escapeHtml(ip.ip_address)}</td>
                 <td>
                   <span class="status-badge ${ip.status === "active" ? "status-active" : "status-inactive"}">
-                    ${ip.status}
+                    ${escapeHtml(ip.status)}
                   </span>
                 </td>
-                <td>${ip.workstation_name || ip.cabinet_position_name || "-"}</td>
-                <td>${ip.mac_address || "-"}</td>
-                <td>${ip.hostname || "-"}</td>
+                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name || "-")}</td>
+                <td>${escapeHtml(ip.mac_address || "-")}</td>
+                <td>${escapeHtml(ip.hostname || "-")}</td>
               </tr>
             `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv4地址记录</td></tr>';
           }
@@ -681,15 +681,15 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
           if (ipListBody) {
             ipListBody.innerHTML = refreshedNetworkIps.length > 0 ? refreshedNetworkIps.map(ip => `
               <tr>
-                <td class="ipv6-address-cell">${ip.ip_address}</td>
+                <td class="ipv6-address-cell">${escapeHtml(ip.ip_address)}</td>
                 <td>
                   <span class="status-badge ${ip.status === "active" ? "status-active" : "status-inactive"}">
-                    ${ip.status}
+                    ${escapeHtml(ip.status)}
                   </span>
                 </td>
-                <td>${ip.workstation_name || ip.cabinet_position_name || ip.port_device_name || "-"}</td>
-                <td>${ip.mac_address || "-"}</td>
-                <td>${ip.hostname || "-"}</td>
+                <td>${escapeHtml(ip.workstation_name || ip.cabinet_position_name || ip.port_device_name || "-")}</td>
+                <td>${escapeHtml(ip.mac_address || "-")}</td>
+                <td>${escapeHtml(ip.hostname || "-")}</td>
               </tr>
             `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv6地址记录</td></tr>';
           }

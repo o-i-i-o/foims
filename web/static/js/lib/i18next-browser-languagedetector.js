@@ -1,3 +1,5 @@
+// i18next-browser-languagedetector v25.x (UMD build) - https://github.com/i18next/i18next-browser-languagedetector
+// Latest as of 2026-07: v8.x — consider updating
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :

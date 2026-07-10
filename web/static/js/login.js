@@ -299,33 +299,33 @@ class LoginManager {
       this.resetToInitState();
       return;
     }
-    
+
     const code = this.dom.twoFactorCodeInput.value.trim();
     if (!code) {
       this.showError("请输入验证码");
       return;
     }
-    
+
     this.setLoading(true);
-    
+
+    const { username, password, rememberMe } = this.tempAuthData;
+    this.tempAuthData = null;
+
     try {
       const result = await apiPost(
         "/api/auth/login/two-factor",
-        { 
-          username: this.tempAuthData.username, 
-          password: this.tempAuthData.password || "", // 邮箱登录时为空，后端允许为空时不验证密码
-          two_factor_code: code, 
-          remember_me: this.tempAuthData.rememberMe 
+        {
+          username,
+          password: password || "",
+          two_factor_code: code,
+          remember_me: rememberMe
         },
         { skipAuthCheck: true }
       );
 
       if (result.success) {
-        loginUser(result.data, this.tempAuthData.rememberMe);
+        loginUser(result.data, rememberMe);
       } else {
-        // 如果是因为密码为空导致的失败（虽然前端没法区分具体原因，除了 message），
-        // 如果是邮箱登录过来的，可能确实无法通过。
-        // 但如果后端 login_with_two_factor 必须密码，那我们这里传空字符串肯定会挂。
         this.showError(result.message || "2FA验证失败");
       }
     } catch (error) {

@@ -7,6 +7,7 @@ import {
 
 import {
   showToast,
+  escapeHtml,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -527,7 +528,7 @@ async function checkServiceStatus() {
             <div class="status-item">
               <span class="status-label">服务状态:</span>
               <span class="status-value ${data.active ? 'status-active' : 'status-inactive'}">
-                ${data.status || (data.active ? '运行中' : '已停止')}
+                ${escapeHtml(data.status || (data.active ? '运行中' : '已停止'))}
               </span>
             </div>
           `;
@@ -665,7 +666,11 @@ async function loadSmtpConfig() {
         elementCache.setValue("smtp-host", smtpConfig.host || "");
         elementCache.setValue("smtp-port", smtpConfig.port || "587");
         elementCache.setValue("smtp-username", smtpConfig.username || "");
-        elementCache.setValue("smtp-password", smtpConfig.password || "");
+        const pwdEl = elementCache.get("smtp-password");
+        if (pwdEl) {
+          pwdEl.value = "";
+          pwdEl.placeholder = smtpConfig.has_password ? "已配置（留空保持不变）" : "请输入密码";
+        }
         elementCache.setValue("smtp-from", smtpConfig.from || "");
         const secureTypeElement = elementCache.get("smtp-secure-type");
         if (secureTypeElement) {
@@ -905,7 +910,7 @@ export async function importCsvData() {
           loadModal('import-result-modal');
           const contentDiv = elementCache.get("import-result-content");
           if (contentDiv) {
-            contentDiv.innerHTML = results.map(r => `<div class="import-result-item">${r}</div>`).join("");
+            contentDiv.innerHTML = results.map(r => `<div class="import-result-item">${escapeHtml(r)}</div>`).join("");
             openModal("import-result-modal");
           }
         }
@@ -978,7 +983,7 @@ export async function exportDatabase() {
     if (disposition && disposition.indexOf("attachment") !== -1) {
       const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
       const matches = filenameRegex.exec(disposition);
-      if (matches != null && matches[1]) {
+      if (matches !== null && matches[1]) {
         filename = matches[1].replace(/['"]/g, "");
       }
     }

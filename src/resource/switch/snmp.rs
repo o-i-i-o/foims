@@ -515,7 +515,12 @@ pub async fn test_snmp_connection(
     state: web::Data<AppState>,
     req: web::Json<SnmpTestRequest>,
 ) -> Result<HttpResponse, AppError> {
-    tracing::info!("[test_snmp] 收到的完整请求: {:?}", req);
+    tracing::info!(
+        "[test_snmp] 测试连接: device_id={:?}, ip={:?}, snmp_version={:?}",
+        req.device_id,
+        req.ip_address,
+        req.snmp_version
+    );
 
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(device_id) = req.device_id {

@@ -251,10 +251,20 @@ pub async fn import_database_from_file(
                 .map_err(|e| InitError::Validation(e.to_string()))?;
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
         } else if field_name == "sql_file" {
-            let filename = content_disposition
+            let raw_filename = content_disposition
                 .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string))
                 .unwrap_or_else(|| "import.sql".to_string());
-            let filepath = PathBuf::from(format!("/tmp/ipma_import/{filename}"));
+            let safe_name = raw_filename
+                .split(['/', '\\'])
+                .filter(|part| *part != ".." && *part != ".")
+                .collect::<Vec<&str>>()
+                .join("_");
+            let safe_name = if safe_name.is_empty() {
+                "import.sql".to_string()
+            } else {
+                safe_name
+            };
+            let filepath = PathBuf::from(format!("/tmp/ipma_import/{safe_name}"));
 
             let data = field
                 .bytes(100 * 1024 * 1024)

@@ -308,7 +308,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
       }
     } else {
       const colSpan = logType === "operation" ? 8 : 7;
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${data.message || t('common.load_failed')}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${escapeHtml(data.message || t('common.load_failed'))}</td></tr>`;
     }
   } catch (error) {
     console.error("加载日志数据失败:", error);
@@ -351,8 +351,8 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
         row.innerHTML = `
           <td class="index-column">${startIndex + index + 1}</td>
           <td>${new Date(notification.created_at).toLocaleString()}</td>
-          <td>${notification.title}</td>
-          <td>${notification.content}</td>
+          <td>${escapeHtml(notification.title)}</td>
+          <td>${escapeHtml(notification.content)}</td>
           <td>
             <span class="status-badge ${notification.read ? "status-active" : "status-inactive"}">
               ${notification.read ? "已读" : "未读"}
@@ -504,14 +504,14 @@ function showLogDetails(log) {
   if (log.details) {
     try {
       const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
-      detailsHtml = `<pre class="log-details-json">${JSON.stringify(details, null, 2)}</pre>`;
+      detailsHtml = `<pre class="log-details-json">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
     } catch (e) {
-      detailsHtml = `<p>${log.details}</p>`;
+      detailsHtml = `<p>${escapeHtml(String(log.details))}</p>`;
     }
   } else {
     detailsHtml = '<p class="text-muted">无详细信息</p>';
   }
-  
+
   const modalHtml = `
     <div id="log-details-modal" class="modal modal-flex">
       <div class="modal-content modal-md">
@@ -526,19 +526,19 @@ function showLogDetails(log) {
           </div>
           <div class="log-detail-row">
             <label>操作人:</label>
-            <span>${log.username || "-"}</span>
+            <span>${escapeHtml(log.username || "-")}</span>
           </div>
           <div class="log-detail-row">
             <label>操作类型:</label>
-            <span>${operationTypeText}</span>
+            <span>${escapeHtml(operationTypeText)}</span>
           </div>
           <div class="log-detail-row">
             <label>资源类型:</label>
-            <span>${resourceTypeText || "-"}</span>
+            <span>${escapeHtml(resourceTypeText || "-")}</span>
           </div>
           <div class="log-detail-row">
             <label>资源ID:</label>
-            <span>${log.resource_id || "-"}</span>
+            <span>${escapeHtml(String(log.resource_id || "-"))}</span>
           </div>
           <div class="log-detail-row">
             <label>执行结果:</label>
@@ -546,7 +546,7 @@ function showLogDetails(log) {
           </div>
           <div class="log-detail-row">
             <label>IP地址:</label>
-            <span>${log.ip_address || "-"}</span>
+            <span>${escapeHtml(log.ip_address || "-")}</span>
           </div>
           <div class="log-detail-section">
             <label>详细信息:</label>

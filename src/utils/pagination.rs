@@ -16,7 +16,7 @@ impl Pagination {
     pub fn new(page: i64, page_size: i64) -> Self {
         let page = page.max(1);
         let page_size = page_size.clamp(1, MAX_PAGE_SIZE);
-        let offset = (page - 1) * page_size;
+        let offset = page.saturating_sub(1).saturating_mul(page_size);
         Self {
             page,
             page_size,

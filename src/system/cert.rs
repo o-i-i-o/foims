@@ -1,6 +1,14 @@
 use crate::config::Config;
 use std::io;
+use std::os::unix::fs::PermissionsExt;
 use tracing::info;
+
+/// 将文件权限设置为 0600,用于保护 TLS 私钥等敏感文件
+async fn secure_file_permissions(path: &str) {
+    if let Err(e) = tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await {
+        tracing::warn!("设置文件权限失败 {}: {}", path, e);
+    }
+}
 
 pub async fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, String)> {
     let mut cert_files = Vec::new();
@@ -97,6 +105,7 @@ pub async fn prepare_server_certificate(config: &Config) -> io::Result<(String, 
 
         tokio::fs::write(&cert_path, cert_pem.as_bytes()).await?;
         tokio::fs::write(&key_path, key_pem.as_bytes()).await?;
+        secure_file_permissions(&key_path).await;
 
         info!("自签名证书生成成功");
     }

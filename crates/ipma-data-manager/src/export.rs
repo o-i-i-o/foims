@@ -255,9 +255,10 @@ async fn export_workstations(
     csv.extend_from_slice("名称,房间,IP地址,负责人,描述\n".as_bytes());
 
     let rows = sqlx::query(
-        r"SELECT w.id, w.name, r.name as room_name, w.manager, w.description 
-           FROM workstations w 
-           JOIN rooms r ON w.room_id = r.id 
+        r"SELECT w.id, w.name, r.name as room_name, w.manager, w.description,
+                  (SELECT host(ip_address) FROM ips WHERE workstation_id = w.id AND device_type = 'workstation' LIMIT 1) as ip_address
+           FROM workstations w
+           JOIN rooms r ON w.room_id = r.id
            ORDER BY r.name, w.name",
     )
     .fetch_all(&mut *conn)
@@ -265,19 +266,11 @@ async fn export_workstations(
     .map_err(DataError::from)?;
 
     for row in rows {
-        let id: uuid::Uuid = row.get(0);
         let name: String = row.get(1);
         let room: String = row.get(2);
         let manager: Option<String> = row.get(3);
         let description: Option<String> = row.get(4);
-
-        let ip_address: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ips WHERE workstation_id = $1 AND device_type = 'workstation' LIMIT 1"
-        )
-        .bind(id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(DataError::from)?;
+        let ip_address: Option<String> = row.get(5);
 
         let line = format!(
             "{},{},{},{},{}\n",
@@ -381,9 +374,10 @@ async fn export_positions(
     csv.extend_from_slice("名称,机柜,起始U,结束U,IP地址,描述\n".as_bytes());
 
     let rows = sqlx::query(
-        r"SELECT p.id, p.name, c.name as cabinet_name, p.start_u, p.end_u, p.description 
-           FROM positions p 
-           JOIN cabinets c ON p.cabinet_id = c.id 
+        r"SELECT p.id, p.name, c.name as cabinet_name, p.start_u, p.end_u, p.description,
+                  (SELECT host(ip_address) FROM ips WHERE position_id = p.id AND device_type = 'cabinet_position' LIMIT 1) as ip_address
+           FROM positions p
+           JOIN cabinets c ON p.cabinet_id = c.id
            ORDER BY c.name, p.start_u",
     )
     .fetch_all(&mut *conn)
@@ -391,20 +385,12 @@ async fn export_positions(
     .map_err(DataError::from)?;
 
     for row in rows {
-        let id: uuid::Uuid = row.get(0);
         let name: String = row.get(1);
         let cabinet: String = row.get(2);
         let start_u: i32 = row.get(3);
         let end_u: i32 = row.get(4);
         let description: Option<String> = row.get(5);
-
-        let ip_address: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ips WHERE position_id = $1 AND device_type = 'cabinet_position' LIMIT 1"
-        )
-        .bind(id)
-        .fetch_optional(&mut *conn)
-        .await
-        .unwrap_or(None);
+        let ip_address: Option<String> = row.get(6);
 
         let line = format!(
             "{},{},{},{},{},{}\n",
@@ -434,8 +420,9 @@ async fn export_switches<P: DataProvider>(
 
     let rows = sqlx::query(
         r"SELECT s.id, s.name, s.model, s.vendor, s.location, s.snmp_version, s.snmp_port,
-           s.snmp_community, s.snmp_username, s.description
-           FROM switches s 
+           s.snmp_community, s.snmp_username, s.description,
+           (SELECT host(ip_address) FROM ips WHERE position_id = s.position_id LIMIT 1) as ip_address
+           FROM switches s
            ORDER BY s.name",
     )
     .fetch_all(&mut *conn)
@@ -443,7 +430,6 @@ async fn export_switches<P: DataProvider>(
     .map_err(DataError::from)?;
 
     for row in rows {
-        let id: uuid::Uuid = row.get(0);
         let name: String = row.get(1);
         let model: Option<String> = row.get(2);
         let vendor: Option<String> = row.get(3);
@@ -453,14 +439,7 @@ async fn export_switches<P: DataProvider>(
         let snmp_community: Option<String> = row.get(7);
         let snmp_username: Option<String> = row.get(8);
         let description: Option<String> = row.get(9);
-
-        let ip_address: Option<String> = sqlx::query_scalar(
-            "SELECT host(ip_address) FROM ips WHERE position_id = (SELECT position_id FROM switches WHERE id = $1) LIMIT 1"
-        )
-        .bind(id)
-        .fetch_optional(&mut *conn)
-        .await
-        .unwrap_or(None);
+        let ip_address: Option<String> = row.get(10);
 
         let decrypted_community = if let Some(c) = snmp_community.filter(|c| !c.is_empty()) {
             Some(provider.decrypt_password(&c).await?)
