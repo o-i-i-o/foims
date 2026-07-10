@@ -5,12 +5,10 @@ const preloadedModules = new Set();
 const MODULE_REGISTRY = {
     'apiClient': '/static/js/utils/apiClient.js',
     'confirm': '/static/js/utils/confirm.js',
-    'crudFactory': '/static/js/utils/crudFactory.js',
     'formatter': '/static/js/utils/formatter.js',
     'helpers': '/static/js/utils/helpers.js',
     'i18n': '/static/js/utils/i18n.js',
     'ipconfig': '/static/js/utils/ipconfig.js',
-    'managers': '/static/js/utils/managers.js',
     'modal': '/static/js/utils/modal.js',
     'modalLoader': '/static/js/utils/modalLoader.js',
     'pagination': '/static/js/utils/pagination.js',

@@ -3,17 +3,11 @@ import {
   apiGet,
   apiPost,
   apiPut,
-  apiDelete,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
-  renderTable,
-  formatDateTime,
-  getElementValue,
-  handleFormSubmit,
   handleDelete,
-  debounce,
   handleError,
   appendPaginationToTable,
   escapeHtml,
@@ -26,10 +20,7 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
-import { IpConfigManager, getManager } from "../utils/ipconfig.js";
-import { loadCabinetsForModalSelect } from "./cabinet.js";
-
-import { handleCabinetPositionCabinetChange } from "../utils/ipconfig.js";
+import { getManager } from "../utils/ipconfig.js";
 
 const tableState = createSortState('name', 'asc');
 let isLoading = false;

@@ -158,13 +158,6 @@ export function changeLanguage(lang) {
   i18nInstance.changeLanguage(lang);
 }
 
-export function getCurrentLanguage() {
-  if (!i18nInstance) {
-    return localStorage.getItem('language') || detectBrowserLanguage();
-  }
-  return i18nInstance.getCurrentLanguage();
-}
-
 export function updatePageTranslations() {
   if (!i18nInstance) {
     return;
@@ -172,20 +165,3 @@ export function updatePageTranslations() {
   i18nInstance.updatePageTranslations();
 }
 
-export function getI18n() {
-  return i18nInstance;
-}
-
-export function initLanguageSelector() {
-  const selector = document.getElementById('language-selector');
-  if (!selector) return;
-  
-  if (i18nInstance) {
-    selector.value = i18nInstance.language;
-  }
-  
-  selector.addEventListener('change', (e) => {
-    const newLang = e.target.value;
-    changeLanguage(newLang);
-  });
-}

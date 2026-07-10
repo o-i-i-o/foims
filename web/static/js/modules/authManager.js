@@ -15,7 +15,6 @@ import {
   getUser,
   setUser,
   hasSession,
-  isRememberMe,
 } from "../utils/sessionManager.js";
 
 const parseDuration = (durationStr) => {

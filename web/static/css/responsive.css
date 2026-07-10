@@ -365,64 +365,9 @@
     display: none !important;
 }
 
-/* 间距工具类 */
-.mt-sm { margin-top: var(--space-sm); }
-.mt-md { margin-top: var(--space-md); }
-.mt-lg { margin-top: var(--space-lg); }
-.mb-sm { margin-bottom: var(--space-sm); }
-.mb-md { margin-bottom: var(--space-md); }
-.mb-lg { margin-bottom: var(--space-lg); }
-.my-sm { margin-top: var(--space-sm); margin-bottom: var(--space-sm); }
-.my-md { margin-top: var(--space-md); margin-bottom: var(--space-md); }
-.my-lg { margin-top: var(--space-lg); margin-bottom: var(--space-lg); }
-
-/* 文本工具类 */
-.text-primary { color: var(--color-primary); }
-.text-secondary { color: var(--color-text-secondary); }
 .text-muted { color: var(--color-text-muted); }
-.text-success { color: var(--color-success); }
-.text-danger { color: var(--color-danger); }
-.text-warning { color: var(--color-warning); }
 .text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
 
-/* 显示工具类 */
-.d-none { display: none; }
-.d-block { display: block; }
-.d-flex { display: flex; }
-.d-grid { display: grid; }
-.d-inline { display: inline; }
 .d-inline-block { display: inline-block; }
 
-/* Flex 工具类 */
-.flex-row { flex-direction: row; }
-.flex-column { flex-direction: column; }
-.flex-wrap { flex-wrap: wrap; }
-.justify-start { justify-content: flex-start; }
-.justify-end { justify-content: flex-end; }
-.justify-center { justify-content: center; }
-.justify-between { justify-content: space-between; }
-.align-start { align-items: flex-start; }
-.align-end { align-items: flex-end; }
-.align-center { align-items: center; }
-.gap-sm { gap: var(--space-sm); }
-.gap-md { gap: var(--space-md); }
-.gap-lg { gap: var(--space-lg); }
-
-/* 宽度工具类 */
-.w-100 { width: 100%; }
 .w-auto { width: auto; }
-.max-w-100 { max-width: 100%; }
-
-/* 字体大小工具类 */
-.fs-xs { font-size: var(--font-size-xs); }
-.fs-sm { font-size: var(--font-size-sm); }
-.fs-base { font-size: var(--font-size-base); }
-.fs-lg { font-size: var(--font-size-lg); }
-.fs-xl { font-size: var(--font-size-xl); }
-
-/* 字重工具类 */
-.fw-normal { font-weight: 400; }
-.fw-medium { font-weight: 500; }
-.fw-bold { font-weight: 700; }

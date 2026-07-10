@@ -68,4 +68,4 @@ export const getUser = () => SessionManager.getUser();
 export const setUser = (user, rememberMe) => SessionManager.setUser(user, rememberMe);
 export const clearSession = () => SessionManager.clear();
 export const hasSession = () => SessionManager.hasSession();
-export const isRememberMe = () => SessionManager.isRememberMe();
+

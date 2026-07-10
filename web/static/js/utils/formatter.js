@@ -6,12 +6,6 @@ export function formatDateTime(dateStr) {
     return date.toLocaleString();
 }
 
-export function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString();
-}
-
 export function getStatusText(status) {
   const statusMap = {
     'active': t('status.active', '活跃'),
@@ -58,19 +52,6 @@ export function formatTime(timestamp) {
   if (diff < 60000) return t('time.just_now', '刚刚');
   if (diff < 3600000) return t('time.minutes_ago', { count: Math.floor(diff / 60000) });
   if (diff < 86400000) return t('time.hours_ago', { count: Math.floor(diff / 3600000) });
-  return date.toLocaleDateString();
-}
-
-export function formatRelativeTime(timestamp) {
-  if (!timestamp) return '-';
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diff = now - date;
-
-  if (diff < 60000) return t('time.just_now', '刚刚');
-  if (diff < 3600000) return t('time.minutes_ago', { count: Math.floor(diff / 60000) });
-  if (diff < 86400000) return t('time.hours_ago', { count: Math.floor(diff / 3600000) });
-  if (diff < 604800000) return t('time.days_ago', { count: Math.floor(diff / 86400000) });
   return date.toLocaleDateString();
 }
 

@@ -181,11 +181,6 @@
     color: var(--color-warning-text);
 }
 
-.info-card-danger .info-icon {
-    background: var(--color-danger-bg);
-    color: var(--color-danger-text);
-}
-
 .info-card-purple .info-icon {
     background: rgb(118 75 162 / 0.1);
     color: #764ba2;

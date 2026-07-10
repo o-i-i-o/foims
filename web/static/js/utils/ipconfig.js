@@ -4,7 +4,6 @@ import { showToast } from "./toast.js";
 const NETWORK_REGION_CHANGED_EVENT = 'ipma:network-region-changed';
 const NETWORK_CHANGED_EVENT = 'ipma:network-changed';
 
-const regionChangeCallbacks = new WeakMap();
 const networkChangeCallbacks = new Set();
 
 function isIPv6(ip) {
@@ -145,36 +144,6 @@ export function dispatchNetworkRegionChange(regionId, regionName = '') {
   document.dispatchEvent(new CustomEvent(NETWORK_REGION_CHANGED_EVENT, {
     detail: { regionId, regionName }
   }));
-}
-
-export function onNetworkRegionChange(callback) {
-  if (typeof callback !== 'function') {
-    console.error("onNetworkRegionChange: callback must be a function");
-    return;
-  }
-  const wrapper = (e) => callback(e.detail.regionId, e.detail.regionName);
-  regionChangeCallbacks.set(callback, wrapper);
-  document.addEventListener(NETWORK_REGION_CHANGED_EVENT, wrapper);
-}
-
-export function offNetworkRegionChange(callback) {
-  const wrapper = regionChangeCallbacks.get(callback);
-  if (wrapper) {
-    document.removeEventListener(NETWORK_REGION_CHANGED_EVENT, wrapper);
-    regionChangeCallbacks.delete(callback);
-  }
-}
-
-export function onNetworkChange(callback) {
-  if (typeof callback !== 'function') {
-    console.error("onNetworkChange: callback must be a function");
-    return;
-  }
-  networkChangeCallbacks.add(callback);
-}
-
-export function offNetworkChange(callback) {
-  networkChangeCallbacks.delete(callback);
 }
 
 function dispatchNetworkChange(networkId, networkName, networkRegionId) {
@@ -948,15 +917,6 @@ function getManager(type) {
 export async function addIpAddressField(resourceType) {
   const manager = getManager(resourceType);
   await manager.addIpRow();
-}
-
-export function bindButton(buttonId, resourceType) {
-  const button = document.getElementById(buttonId);
-  if (!button) return;
-
-  const newButton = button.cloneNode(true);
-  button.replaceWith(newButton);
-  newButton.addEventListener("click", () => addIpAddressField(resourceType));
 }
 
 export const handleWorkstationRoomChange = async () => {

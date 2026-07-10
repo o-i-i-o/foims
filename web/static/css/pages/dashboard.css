@@ -534,14 +534,6 @@
     border-bottom: 1px solid var(--color-border-light);
 }
 
-.import-option h4,
-.export-option h4 {
-    margin-bottom: var(--space-sm);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-}
-
 .import-actions,
 .export-actions {
     display: flex;
@@ -597,30 +589,6 @@
     margin-bottom: 2px;
 }
 
-.import-section,
-.export-section,
-.config-backup-container {
-    border: 1px solid var(--color-border-light);
-    padding: var(--space-lg);
-    border-radius: var(--radius-lg);
-    background-color: var(--color-bg);
-}
-
-.import-section h3,
-.export-section h3,
-.config-backup-container h3 {
-    margin-bottom: var(--space-md);
-    font-size: 0.95rem;
-    font-weight: 600;
-}
-
-.config-backup-container .hint-list {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin: var(--space-xs) 0 0 var(--space-lg);
-    line-height: 1.6;
-}
-
 .backup-actions {
     display: flex;
     gap: var(--space-sm);
@@ -637,12 +605,6 @@
 .restore-actions input[type="file"] {
     min-width: 200px;
     flex: 1;
-}
-
-.backup-hint {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    line-height: 1.6;
 }
 
 .logs-header,
@@ -676,22 +638,6 @@
     background: var(--color-bg);
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-}
-
-.cert-type-selector {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.cert-type-selector label {
-    min-width: 100px;
-    font-weight: 500;
-}
-
-.cert-type-selector select {
-    flex: 1;
-    max-width: 250px;
 }
 
 .button-group {

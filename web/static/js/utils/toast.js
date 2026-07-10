@@ -61,27 +61,3 @@ function removeToast(toast) {
     }, 300);
 }
 
-
-export function showSuccess(message, duration = 3000) {
-    return showToast(message, 'success', duration);
-}
-
-export function showError(message, duration = 4000) {
-    return showToast(message, 'error', duration);
-}
-
-export function showWarning(message, duration = 3500) {
-    return showToast(message, 'warning', duration);
-}
-
-export function showInfo(message, duration = 3000) {
-    return showToast(message, 'info', duration);
-}
-
-export default {
-    showToast,
-    showSuccess,
-    showError,
-    showWarning,
-    showInfo
-};

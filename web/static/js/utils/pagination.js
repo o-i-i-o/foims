@@ -55,103 +55,31 @@ export function renderPagination(container, currentPage, totalPages, onPageChang
 function generatePageNumbers(currentPage, totalPages) {
     const pages = [];
     const delta = 2;
-    
+
     if (totalPages <= 7) {
         for (let i = 1; i <= totalPages; i++) {
             pages.push(i);
         }
     } else {
         pages.push(1);
-        
+
         if (currentPage > delta + 1) {
             pages.push('...');
         }
-        
+
         const start = Math.max(2, currentPage - delta);
         const end = Math.min(totalPages - 1, currentPage + delta);
-        
+
         for (let i = start; i <= end; i++) {
             pages.push(i);
         }
-        
+
         if (currentPage < totalPages - delta - 1) {
             pages.push('...');
         }
-        
+
         pages.push(totalPages);
     }
-    
+
     return pages;
 }
-
-export function renderPageInfo(container, currentPage, total, pageSize) {
-    if (!container) return;
-    
-    const totalPages = Math.ceil(total / pageSize);
-    container.innerHTML = t('common.page_info', {
-        total,
-        page: currentPage,
-        total_pages: totalPages
-    });
-}
-
-export function createPaginationState(pageSize = 20) {
-    let currentPage = 1;
-    let total = 0;
-    
-    return {
-        getPage() { return currentPage; },
-        getTotal() { return total; },
-        getTotalPages() { return Math.ceil(total / pageSize); },
-        getPageSize() { return pageSize; },
-        getOffset() { return (currentPage - 1) * pageSize; },
-        
-        setPage(page) { 
-            currentPage = Math.max(1, page); 
-            return this;
-        },
-        setTotal(t) { 
-            total = t; 
-            return this;
-        },
-        
-        next() {
-            if (currentPage < this.getTotalPages()) {
-                currentPage++;
-                return true;
-            }
-            return false;
-        },
-        
-        prev() {
-            if (currentPage > 1) {
-                currentPage--;
-                return true;
-            }
-            return false;
-        },
-        
-        first() {
-            currentPage = 1;
-            return this;
-        },
-        
-        last() {
-            currentPage = this.getTotalPages();
-            return this;
-        },
-        
-        getQueryParams() {
-            return {
-                page: currentPage,
-                page_size: pageSize
-            };
-        }
-    };
-}
-
-export default {
-    renderPagination,
-    renderPageInfo,
-    createPaginationState
-};

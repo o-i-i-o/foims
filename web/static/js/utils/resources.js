@@ -123,34 +123,6 @@ export async function loadRoomsForSelect(selectId = "workstation-room", options 
   }
 }
 
-export async function loadNetworkRegionsForSelect(selectElement, autoSelectFirst = false) {
-  try {
-    const result = await apiGet("/api/resources/network-regions?page_size=1000");
-
-    const items = extractItems(result);
-    if (selectElement) {
-      selectElement.innerHTML = "";
-
-      items.forEach((region) => {
-        const option = document.createElement("option");
-        option.value = region.id;
-        option.textContent = region.name;
-        selectElement.appendChild(option);
-      });
-
-      if (autoSelectFirst && items.length > 0) {
-        selectElement.value = items[0].id;
-      }
-
-      return items;
-    }
-    return [];
-  } catch (error) {
-    console.error("加载网络区域选项失败:", error);
-    return [];
-  }
-}
-
 export async function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
   try {
     const result = await apiGet("/api/resources/rooms?page_size=1000");
@@ -206,13 +178,6 @@ export async function loadCabinets() {
   }
 }
 
-export function formatMacAddress(mac) {
-  if (!mac) return mac;
-  const cleaned = mac.replace(/[^0-9A-Fa-f]/g, '');
-  if (cleaned.length !== 12) return mac;
-  return cleaned.toUpperCase().match(/.{4}/g).join('-');
-}
-
 export async function loadRoomNetworksForCabinet(roomId, containerId = "cabinet-inherited-networks") {
   const inheritedNetworksContainer = document.getElementById(containerId);
   
@@ -254,11 +219,6 @@ export async function loadRoomNetworksForCabinet(roomId, containerId = "cabinet-
     console.error("加载房间网段配置失败:", error);
     inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('common.load_failed_retry') + '</p>';
   }
-}
-
-export async function loadRoomNetworksForCabinetBySelect(roomSelect) {
-  const roomId = roomSelect.value;
-  await loadRoomNetworksForCabinet(roomId);
 }
 
 export async function loadOrgsForSelect(selectId = "room-org-id") {

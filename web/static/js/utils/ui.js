@@ -1,7 +1,7 @@
-export { showToast, showSuccess, showError, showWarning, showInfo } from './toast.js';
+export { showToast } from './toast.js';
 export { showConfirm, confirmDelete } from './confirm.js';
-export { renderPagination, renderPageInfo, createPaginationState } from './pagination.js';
-export { formatDateTime, formatDate, formatRelativeTime } from './formatter.js';
+export { renderPagination } from './pagination.js';
+export { formatDateTime } from './formatter.js';
 
 export const DEFAULT_PAGE_SIZE = 20;
 
@@ -72,46 +72,6 @@ export function initSortEvents(tableId, sortState, loadDataFn) {
     });
 }
 
-export function createTableState(options = {}) {
-    const {
-        pageSize = DEFAULT_PAGE_SIZE,
-        defaultSortBy = 'name',
-        defaultSortOrder = 'asc'
-    } = options;
-    
-    let isLoading = false;
-    let currentPage = 1;
-    const sortState = createSortState(defaultSortBy, defaultSortOrder);
-    
-    return {
-        get isLoading() { return isLoading; },
-        get currentPage() { return currentPage; },
-        get sortBy() { return sortState.by; },
-        get sortOrder() { return sortState.order; },
-        get pageSize() { return pageSize; },
-        get sortState() { return sortState; },
-        
-        setLoading(value) { isLoading = value; },
-        setPage(page) { currentPage = page; return this; },
-        setSort(by, order) { sortState.by = by; sortState.order = order; return this; },
-        
-        toggleSort(key) {
-            sortState.toggle(key);
-            currentPage = 1;
-            return this;
-        },
-        
-        getQueryParams() {
-            return {
-                page: currentPage,
-                page_size: pageSize,
-                sort_by: sortState.by,
-                sort_order: sortState.order
-            };
-        }
-    };
-}
-
 export function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -122,53 +82,6 @@ export function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
-}
-
-export function throttle(func, limit) {
-    let inThrottle;
-    return function executedFunction(...args) {
-        if (!inThrottle) {
-            func(...args);
-            inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
-        }
-    };
-}
-
-export function sanitizeHtml(html) {
-    if (!html) return '';
-    const div = document.createElement('div');
-    div.textContent = html;
-    return div.innerHTML;
-}
-
-export function createElement(tag, attributes = {}, children = []) {
-    const element = document.createElement(tag);
-    
-    Object.entries(attributes).forEach(([key, value]) => {
-        if (key === 'className') {
-            element.className = value;
-        } else if (key.startsWith('data-')) {
-            element.dataset[key] = value;
-        } else if (key.startsWith('on') && typeof value === 'function') {
-            const eventName = key.slice(2).toLowerCase();
-            element.addEventListener(eventName, value);
-        } else {
-            element[key] = value;
-        }
-    });
-    
-    if (children.length > 0) {
-        children.forEach(child => {
-            if (typeof child === 'string') {
-                element.insertAdjacentHTML('beforeend', child);
-            } else {
-                element.appendChild(child);
-            }
-        });
-    }
-    
-    return element;
 }
 
 export function renderTable(container, dataOrOptions, renderFn, emptyMessage, colSpan) {
@@ -262,67 +175,6 @@ export function renderTable(container, dataOrOptions, renderFn, emptyMessage, co
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
     }
-}
-
-export function showLoading(container, message = '加载中...') {
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="loading-overlay">
-            <div class="loading-spinner"></div>
-            <span class="loading-text">${message}</span>
-        </div>
-    `;
-}
-
-export function hideLoading(container) {
-    const loading = container?.querySelector('.loading-overlay');
-    if (loading) {
-        loading.remove();
-    }
-}
-
-export function setLoading(element, isLoading) {
-    if (!element) return;
-    
-    if (isLoading) {
-        element.classList.add('loading');
-        element.disabled = true;
-    } else {
-        element.classList.remove('loading');
-        element.disabled = false;
-    }
-}
-
-export function highlightElement(element, duration = 2000) {
-    if (!element) return;
-    
-    element.classList.add('highlight');
-    setTimeout(() => {
-        element.classList.remove('highlight');
-    }, duration);
-}
-
-export function copyToClipboard(text) {
-    return navigator.clipboard.writeText(text).then(() => {
-        return true;
-    }).catch(() => {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        
-        try {
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            return true;
-        } catch {
-            document.body.removeChild(textarea);
-            return false;
-        }
-    });
 }
 
 export function getElementValue(id) {
@@ -483,35 +335,3 @@ export function appendPaginationToTable(container, data, onPageChange) {
     paginationContainer.innerHTML = '';
     paginationContainer.appendChild(paginationWrapper);
 }
-
-export function removeToast() {
-    const toasts = document.querySelectorAll('.toast');
-    toasts.forEach(toast => {
-        toast.classList.remove('toast-visible');
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    });
-}
-
-export default {
-    debounce,
-    throttle,
-    escapeHtml,
-    sanitizeHtml,
-    createElement,
-    renderTable,
-    showLoading,
-    hideLoading,
-    setLoading,
-    highlightElement,
-    copyToClipboard,
-    getElementValue,
-    handleError,
-    handleFormSubmit,
-    handleDelete,
-    appendPaginationToTable,
-    removeToast
-};
