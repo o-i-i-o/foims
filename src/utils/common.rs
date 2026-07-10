@@ -1,5 +1,3 @@
-use ipnetwork::IpNetwork;
-use macaddr::MacAddr;
 use std::str::FromStr;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -7,28 +5,6 @@ use uuid::Uuid;
 use hex::encode;
 
 use actix_web::{HttpMessage, HttpRequest};
-
-// ==================== IP/MAC 地址验证与格式化 ====================
-
-#[must_use]
-pub fn validate_ip_address(ip: &str) -> bool {
-    ip.parse::<IpNetwork>().is_ok()
-}
-
-#[must_use]
-pub fn validate_mac_address(mac: &str) -> bool {
-    mac.parse::<MacAddr>().is_ok()
-}
-
-#[must_use]
-pub fn format_ip_address(ip: &str) -> Option<String> {
-    ip.parse::<IpNetwork>().ok().map(|n| n.to_string())
-}
-
-#[must_use]
-pub fn format_mac_address(mac: &str) -> Option<String> {
-    mac.parse::<MacAddr>().ok().map(|m| m.to_string())
-}
 
 #[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
@@ -208,57 +184,6 @@ pub async fn revoke_token(
         .await?;
 
     Ok(())
-}
-
-pub async fn record_token_usage(
-    pool: &sqlx::PgPool,
-    token: &str,
-    user_id: &Uuid,
-    ip_address: &str,
-    user_agent: &str,
-    request_path: &str,
-) -> Result<(), sqlx::Error> {
-    let token_hash = generate_token_hash(token);
-
-    sqlx::query(
-        "INSERT INTO token_usage (token_hash, user_id, ip_address, user_agent, request_path) VALUES ($1, $2, $3, $4, $5)"
-    )
-    .bind(&token_hash)
-    .bind(user_id)
-    .bind(ip_address)
-    .bind(user_agent)
-    .bind(request_path)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn check_token_usage_limit(
-    pool: &sqlx::PgPool,
-    token: &str,
-) -> Result<bool, sqlx::Error> {
-    let token_hash = generate_token_hash(token);
-
-    let count_1min = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM token_usage WHERE token_hash = $1 AND created_at > NOW() - INTERVAL '1 minute'"
-    )
-    .bind(&token_hash)
-    .fetch_one(pool)
-    .await?;
-
-    let count_5min = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM token_usage WHERE token_hash = $1 AND created_at > NOW() - INTERVAL '5 minutes'"
-    )
-    .bind(&token_hash)
-    .fetch_one(pool)
-    .await?;
-
-    if count_1min > 30 || count_5min > 100 {
-        return Ok(true);
-    }
-
-    Ok(false)
 }
 
 pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, sqlx::Error> {

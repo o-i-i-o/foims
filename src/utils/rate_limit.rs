@@ -13,10 +13,6 @@ use serde_json::json;
 use crate::utils::get_real_ip_from_request;
 use actix_web::http::header::AUTHORIZATION;
 
-const DEFAULT_IP_LIMIT: u32 = 100;
-const DEFAULT_USER_LIMIT: u32 = 200;
-const DEFAULT_LOGIN_LIMIT: u32 = 5;
-const DEFAULT_WINDOW_SECS: u64 = 60;
 const DEFAULT_EMAIL_LIMIT: u32 = 5;
 const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
 
@@ -168,21 +164,6 @@ impl RateLimiter {
     pub fn with_email_limit(mut self, limit: u32, window_secs: u64) -> Self {
         self.email_limit = limit;
         self.email_window_secs = window_secs;
-        self
-    }
-
-    #[must_use]
-    pub fn default_limiter() -> Self {
-        Self::new(
-            DEFAULT_IP_LIMIT,
-            DEFAULT_USER_LIMIT,
-            DEFAULT_LOGIN_LIMIT,
-            DEFAULT_WINDOW_SECS,
-        )
-    }
-
-    pub fn with_trusted_proxies(mut self, proxies: Vec<String>) -> Self {
-        self.trusted_proxies = proxies;
         self
     }
 

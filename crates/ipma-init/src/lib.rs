@@ -58,12 +58,4 @@ impl<T> ApiResponse<T> {
             data: Some(data),
         }
     }
-
-    pub fn error(message: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            message: message.into(),
-            data: None,
-        }
-    }
 }

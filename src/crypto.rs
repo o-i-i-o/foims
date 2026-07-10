@@ -140,10 +140,6 @@ pub fn check_key_integrity() -> Result<(), String> {
     Ok(())
 }
 
-pub fn verify_key_with_sample(encrypted_sample: &str) -> bool {
-    decrypt_password(encrypted_sample).is_ok()
-}
-
 #[must_use]
 pub fn encrypt_password(password: &str) -> Option<String> {
     let key = get_encryption_key();
@@ -213,10 +209,6 @@ pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     })?;
 
     String::from_utf8(plaintext).map_err(|e| format!("解密失败: UTF-8解码错误: {e}"))
-}
-
-pub fn decrypt_credential(value: Option<&str>) -> Option<String> {
-    value.and_then(|v| decrypt_password(v).ok())
 }
 
 pub async fn encrypt_password_async(password: String) -> Option<String> {

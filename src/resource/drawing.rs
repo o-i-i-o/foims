@@ -8,27 +8,6 @@ use serde_json;
 use tracing::warn;
 use uuid::Uuid;
 
-pub fn generate_region_map(
-    _state: web::Data<AppState>,
-    id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse, AppError> {
-    ipma_visualization::generate_region_map(id).map_err(|e| AppError::Internal(e.to_string()))
-}
-
-pub fn generate_room_map(
-    _state: web::Data<AppState>,
-    id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse, AppError> {
-    ipma_visualization::generate_room_map(id).map_err(|e| AppError::Internal(e.to_string()))
-}
-
-pub fn generate_workstation_map(
-    _state: web::Data<AppState>,
-    id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse, AppError> {
-    ipma_visualization::generate_workstation_map(id).map_err(|e| AppError::Internal(e.to_string()))
-}
-
 pub async fn save_layout(
     state: web::Data<AppState>,
     req: web::Json<LayoutSaveRequest>,

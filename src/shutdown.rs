@@ -32,11 +32,6 @@ impl ShutdownSignal {
             drop(self.sender.send(()));
         }
     }
-
-    #[must_use]
-    pub fn is_shutdown_requested(&self) -> bool {
-        self.shutdown_requested.load(Ordering::Relaxed)
-    }
 }
 
 impl Default for ShutdownSignal {

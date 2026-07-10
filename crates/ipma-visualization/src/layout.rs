@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, web};
+use actix_web::HttpResponse;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sqlx::PgPool;
@@ -157,11 +157,6 @@ pub struct LayoutItem {
     pub position: Position,
     pub element_type: String,
 }
-
-// ==================== 操作日志回调类型 ====================
-
-pub type LogOperationCallback =
-    fn(&PgPool, &Uuid, &str, &serde_json::Value, bool) -> Result<(), sqlx::Error>;
 
 // ==================== 布局管理函数 ====================
 
@@ -468,26 +463,4 @@ pub async fn get_room_cabinets_with_positions(
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(result, "获取房间机柜数据成功")))
-}
-
-// ==================== 地图生成函数（未实现） ====================
-
-pub fn generate_region_map(_id: web::Path<uuid::Uuid>) -> Result<HttpResponse, VisualizationError> {
-    Err(VisualizationError::NotFound(
-        "区域地图生成功能尚未实现".to_string(),
-    ))
-}
-
-pub fn generate_room_map(_id: web::Path<uuid::Uuid>) -> Result<HttpResponse, VisualizationError> {
-    Err(VisualizationError::NotFound(
-        "房间地图生成功能尚未实现".to_string(),
-    ))
-}
-
-pub fn generate_workstation_map(
-    _id: web::Path<uuid::Uuid>,
-) -> Result<HttpResponse, VisualizationError> {
-    Err(VisualizationError::NotFound(
-        "工位地图生成功能尚未实现".to_string(),
-    ))
 }

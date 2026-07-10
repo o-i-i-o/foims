@@ -97,37 +97,6 @@ impl<T> ApiResponse<T> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PaginatedResponse<T> {
-    pub success: bool,
-    pub message: String,
-    pub data: Vec<T>,
-    pub total: i64,
-    pub page: i64,
-    pub page_size: i64,
-    pub total_pages: i64,
-}
-
-impl<T: Serialize> PaginatedResponse<T> {
-    #[must_use]
-    pub fn new(items: Vec<T>, total: i64, page: i64, page_size: i64, message: &str) -> Self {
-        let total_pages = if page_size > 0 {
-            (total + page_size - 1) / page_size
-        } else {
-            0
-        };
-        Self {
-            success: true,
-            message: message.to_string(),
-            data: items,
-            total,
-            page,
-            page_size,
-            total_pages,
-        }
-    }
-}
-
 // ==================== 布局模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -137,28 +106,6 @@ pub struct Position {
     pub width: f64,
     pub height: f64,
     pub rotation: f64,
-}
-
-impl Position {
-    pub fn x_i32(&self) -> i32 {
-        self.x.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
-    }
-
-    pub fn y_i32(&self) -> i32 {
-        self.y.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
-    }
-
-    pub fn width_i32(&self) -> i32 {
-        self.width.round().clamp(0.0, i32::MAX as f64) as i32
-    }
-
-    pub fn height_i32(&self) -> i32 {
-        self.height.round().clamp(0.0, i32::MAX as f64) as i32
-    }
-
-    pub fn rotation_i32(&self) -> i32 {
-        self.rotation.round().clamp(0.0, 360.0) as i32
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]

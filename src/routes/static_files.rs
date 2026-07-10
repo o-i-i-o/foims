@@ -1,7 +1,7 @@
 use std::sync::OnceLock;
 
 use actix_web::error::{ErrorBadRequest, JsonPayloadError};
-use actix_web::{Error, HttpRequest, HttpResponse, get, web};
+use actix_web::{Error, HttpRequest, HttpResponse};
 
 pub const WEB_DIR_PATHS: [&str; 2] = ["/opt/ipma/web", "/usr/share/ipma/web"];
 
@@ -19,12 +19,6 @@ pub fn get_web_dir() -> &'static str {
     })
 }
 
-#[must_use]
-pub fn get_static_path(sub_path: &str) -> String {
-    let web_dir = get_web_dir();
-    format!("{web_dir}/static/{sub_path}")
-}
-
 async fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::path::PathBuf> {
     let resolved = std::path::PathBuf::from(file_path);
     let canonical = match tokio::fs::canonicalize(&resolved).await {
@@ -40,34 +34,6 @@ async fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::pa
     } else {
         None
     }
-}
-
-#[get("/static/js/i18n/{file}")]
-pub async fn serve_i18n_file(path: web::Path<String>) -> Result<HttpResponse, Error> {
-    let file = path.into_inner();
-    if file.contains("..") || file.contains('/') || file.contains('\\') {
-        return Ok(HttpResponse::NotFound().finish());
-    }
-    let web_dir = get_web_dir();
-    let file_path = format!("{web_dir}/static/js/i18n/{file}");
-    let validated = match validate_static_path(&file_path, web_dir).await {
-        Some(p) => p,
-        None => return Ok(HttpResponse::NotFound().finish()),
-    };
-
-    let content = match tokio::fs::read_to_string(&validated).await {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(HttpResponse::NotFound().finish());
-        }
-        Err(_) => {
-            return Err(actix_web::error::ErrorInternalServerError("无法读取文件"));
-        }
-    };
-
-    Ok(HttpResponse::Ok()
-        .content_type("application/json; charset=utf-8")
-        .body(content))
 }
 
 pub async fn serve_json(req: HttpRequest) -> Result<HttpResponse, Error> {

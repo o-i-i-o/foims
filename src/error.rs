@@ -146,32 +146,3 @@ impl From<ipma_scheduler::SchedulerError> for AppError {
         }
     }
 }
-
-pub type AppResult<T> = Result<T, AppError>;
-
-pub trait IntoResponse {
-    fn into_response(self) -> HttpResponse;
-}
-
-impl<T: serde::Serialize> IntoResponse for AppResult<T> {
-    fn into_response(self) -> HttpResponse {
-        match self {
-            Ok(data) => {
-                HttpResponse::Ok().json(crate::models::ApiResponse::success(data, "操作成功"))
-            }
-            Err(e) => e.error_response(),
-        }
-    }
-}
-
-pub fn not_found<T>(msg: impl Into<String>) -> AppResult<T> {
-    Err(AppError::NotFound(msg.into()))
-}
-
-pub fn validation<T>(msg: impl Into<String>) -> AppResult<T> {
-    Err(AppError::Validation(msg.into()))
-}
-
-pub fn conflict<T>(msg: impl Into<String>) -> AppResult<T> {
-    Err(AppError::Conflict(msg.into()))
-}

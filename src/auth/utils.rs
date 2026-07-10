@@ -240,31 +240,6 @@ impl JwtUtils {
         hex::encode(hash_bytes)
     }
 
-    // 验证设备指纹
-    #[must_use]
-    pub fn validate_device_fingerprint(
-        &self,
-        claims: &JwtClaims,
-        device_fingerprint: &str,
-        ip_address: &str,
-    ) -> bool {
-        // 检查设备指纹是否匹配
-        if let Some(ref claim_fingerprint) = claims.device_fingerprint
-            && claim_fingerprint != device_fingerprint
-        {
-            return false;
-        }
-
-        // 检查 IP 地址是否匹配
-        if let Some(ref claim_ip) = claims.ip_address
-            && claim_ip != ip_address
-        {
-            return false;
-        }
-
-        true
-    }
-
     pub fn validate_token(&self, token: &str) -> Result<JwtClaims, jsonwebtoken::errors::Error> {
         if let Some(entry) = self.token_cache.get(token) {
             let (claims, cached_at) = entry.value();
@@ -292,14 +267,6 @@ impl JwtUtils {
         Ok(decoded.claims)
     }
 
-    pub fn cleanup_expired_cache(&self) {
-        let now = Utc::now();
-        self.token_cache.retain(|_, (claims, cached_at)| {
-            let cache_expiry = *cached_at + Duration::seconds(120);
-            now < cache_expiry && claims.exp > now.timestamp() as usize
-        });
-    }
-
     pub fn start_cache_cleanup_task(&self, mut shutdown_rx: tokio::sync::broadcast::Receiver<()>) {
         let cache = self.token_cache.clone();
         tokio::spawn(async move {
@@ -322,31 +289,10 @@ impl JwtUtils {
         });
     }
 
-    // 解码令牌但不验证过期时间（用于刷新令牌等场景）
-    pub fn decode_token_without_expiration(
-        &self,
-        token: &str,
-    ) -> Result<JwtClaims, jsonwebtoken::errors::Error> {
-        let mut validation = Validation::new(self.config.algorithm);
-        validation.set_issuer(&[&self.config.issuer]);
-        validation.set_audience(&[&self.config.audience]);
-        validation.validate_exp = false; // 不验证过期时间
-
-        let decoded = decode::<JwtClaims>(token, &self.decoding_key, &validation)?;
-
-        Ok(decoded.claims)
-    }
-
     // 获取访问令牌过期时间
     #[must_use]
     pub const fn get_access_token_expiry(&self) -> u64 {
         self.config.access_token_expiry
-    }
-
-    // 获取刷新令牌过期时间
-    #[must_use]
-    pub const fn get_refresh_token_expiry(&self) -> u64 {
-        self.config.refresh_token_expiry
     }
 
     // 获取基于 remember_me 的实际刷新令牌过期时间

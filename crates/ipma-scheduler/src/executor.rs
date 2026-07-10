@@ -42,10 +42,6 @@ impl TaskRegistry {
             ))),
         }
     }
-
-    pub fn task_types(&self) -> Vec<&str> {
-        self.executors.keys().map(|s| s.as_str()).collect()
-    }
 }
 
 /// 异步安全的任务注册表引用
