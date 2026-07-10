@@ -1,4 +1,5 @@
 use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use thiserror::Error;
@@ -127,10 +128,11 @@ pub struct DatabaseConfig {
     pub password: String,
 }
 
+#[async_trait]
 pub trait DataProvider: Clone + Send + Sync + 'static {
     fn pool(&self) -> DataResult<PgPool>;
     fn database_config(&self) -> DatabaseConfig;
-    fn decrypt_password(&self, encrypted: &str) -> DataResult<String>;
+    async fn decrypt_password(&self, encrypted: &str) -> DataResult<String>;
 }
 
 #[derive(Debug, Serialize)]

@@ -41,6 +41,9 @@ tracing = { workspace = true }
 # Error handling
 thiserror = "2.0.18"
 
+# Async trait
+async-trait = { workspace = true }
+
 # Crypto (for decrypting SNMP community in export)
 aes-gcm = { workspace = true }
 hex = { workspace = true }

@@ -4,7 +4,7 @@ use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 use tracing::info;
 
@@ -201,12 +201,11 @@ pub async fn delete_imported_cert() -> Result<HttpResponse, AppError> {
     })))
 }
 
-#[must_use]
-pub fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, String)> {
+pub async fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, String)> {
     let mut cert_files = Vec::new();
 
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
+    if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             if let Some(filename_os) = path.file_name()
                 && let Some(filename) = filename_os.to_str()
@@ -225,7 +224,9 @@ pub fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, Str
         let cert_path = format!("{dir}/{base_name}.pem");
         let key_path = format!("{dir}/{base_name}.key");
 
-        if Path::new(&cert_path).exists() && Path::new(&key_path).exists() {
+        if tokio::fs::try_exists(&cert_path).await.unwrap_or(false)
+            && tokio::fs::try_exists(&key_path).await.unwrap_or(false)
+        {
             return Some((cert_path, key_path));
         }
     }
@@ -233,24 +234,24 @@ pub fn get_latest_certificate(dir: &str, cert_type: &str) -> Option<(String, Str
     None
 }
 
-pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String)> {
+pub async fn prepare_server_certificate(config: &Config) -> io::Result<(String, String)> {
     let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
     let app_name = env!("CARGO_PKG_NAME");
     let certs_dir = format!("/etc/{app_name}/certs");
 
-    if !Path::new(&certs_dir).exists() {
+    if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
         info!("创建证书目录: {}", certs_dir);
-        std::fs::create_dir_all(&certs_dir)?;
+        tokio::fs::create_dir_all(&certs_dir).await?;
     }
 
     let (cert_path, key_path) = match cert_type {
         "imported" => {
-            if let Some((cert, key)) = get_latest_certificate(&certs_dir, "import") {
+            if let Some((cert, key)) = get_latest_certificate(&certs_dir, "import").await {
                 info!("使用导入的证书: {}", cert);
                 (cert, key)
             } else {
                 info!("未找到导入的证书，使用自签名证书");
-                if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create") {
+                if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create").await {
                     (cert, key)
                 } else {
                     let timestamp = chrono::Utc::now().timestamp();
@@ -263,7 +264,7 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
             }
         }
         _ => {
-            if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create") {
+            if let Some((cert, key)) = get_latest_certificate(&certs_dir, "create").await {
                 info!("使用自签名证书: {}", cert);
                 (cert, key)
             } else {
@@ -277,21 +278,24 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
         }
     };
 
-    if !Path::new(&cert_path).exists() || !Path::new(&key_path).exists() {
+    if !tokio::fs::try_exists(&cert_path).await.unwrap_or(false)
+        || !tokio::fs::try_exists(&key_path).await.unwrap_or(false)
+    {
         info!("生成自签名证书");
         use rcgen::generate_simple_self_signed;
 
-        let certified_key =
-            generate_simple_self_signed(vec!["localhost".to_string()]).map_err(io::Error::other)?;
+        let certified_key = tokio::task::spawn_blocking(move || {
+            generate_simple_self_signed(vec!["localhost".to_string()])
+        })
+        .await
+        .map_err(io::Error::other)?
+        .map_err(io::Error::other)?;
 
         let cert_pem = certified_key.cert.pem();
         let key_pem = certified_key.signing_key.serialize_pem();
 
-        let mut cert_file = std::fs::File::create(&cert_path)?;
-        cert_file.write_all(cert_pem.as_bytes())?;
-
-        let mut key_file = std::fs::File::create(&key_path)?;
-        key_file.write_all(key_pem.as_bytes())?;
+        tokio::fs::write(&cert_path, cert_pem.as_bytes()).await?;
+        tokio::fs::write(&key_path, key_pem.as_bytes()).await?;
 
         info!("自签名证书生成成功");
     }
@@ -299,9 +303,12 @@ pub fn prepare_server_certificate(config: &Config) -> io::Result<(String, String
     Ok((cert_path, key_path))
 }
 
-pub fn load_rustls_config(cert_path: &str, key_path: &str) -> io::Result<rustls::ServerConfig> {
-    let cert_data = std::fs::read(cert_path)?;
-    let key_data = std::fs::read(key_path)?;
+pub async fn load_rustls_config(
+    cert_path: &str,
+    key_path: &str,
+) -> io::Result<rustls::ServerConfig> {
+    let cert_data = tokio::fs::read(cert_path).await?;
+    let key_data = tokio::fs::read(key_path).await?;
 
     let certs = pem::parse_many(&cert_data)
         .map_err(io::Error::other)?

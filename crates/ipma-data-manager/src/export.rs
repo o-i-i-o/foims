@@ -463,7 +463,7 @@ async fn export_switches<P: DataProvider>(
         .unwrap_or(None);
 
         let decrypted_community = if let Some(c) = snmp_community.filter(|c| !c.is_empty()) {
-            Some(provider.decrypt_password(&c)?)
+            Some(provider.decrypt_password(&c).await?)
         } else {
             None
         };

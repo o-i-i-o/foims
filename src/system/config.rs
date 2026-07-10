@@ -1072,8 +1072,12 @@ pub struct ServiceStatus {
 }
 
 pub async fn get_service_status() -> Result<HttpResponse, AppError> {
-    let running_as_service = check_if_running_as_service();
-    let service_file_exists = std::path::Path::new("/etc/systemd/system/ipma.service").exists();
+    let running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
+        .await
+        .unwrap_or(false);
+    let service_file_exists = tokio::fs::try_exists("/etc/systemd/system/ipma.service")
+        .await
+        .unwrap_or(false);
 
     let (active, status, enabled, uptime_seconds) = if running_as_service {
         let active_output = Command::new("systemctl")

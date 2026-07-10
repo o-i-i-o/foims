@@ -10,7 +10,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::crypto::{decrypt_credential, decrypt_credential_async, decrypt_password};
+use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
 use crate::models::{ApiResponse, DevicePortCreate, DeviceWithDetails, SnmpTestRequest};
 
@@ -44,23 +44,6 @@ pub struct SwitchForSnmpWithNetwork {
 }
 
 impl SwitchForSnmp {
-    #[must_use]
-    pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
-        let creds = DecryptedSnmpCredentials::from_device_snmp(self);
-        SnmpParamsLegacy {
-            ip: ip_address.to_string(),
-            port: self.snmp_port,
-            version: self.snmp_version.clone(),
-            community: creds.community,
-            username: self.snmp_username.clone(),
-            auth_proto: self.snmp_auth_protocol.clone(),
-            auth_pass: creds.auth_password,
-            priv_proto: self.snmp_priv_protocol.clone(),
-            priv_pass: creds.priv_password,
-            timeout_secs: 10,
-        }
-    }
-
     pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await;
         SnmpParamsLegacy {
@@ -79,23 +62,6 @@ impl SwitchForSnmp {
 }
 
 impl SwitchForSnmpWithNetwork {
-    #[must_use]
-    pub fn to_snmp_params(&self, ip_address: &str) -> SnmpParamsLegacy {
-        let creds = DecryptedSnmpCredentials::from_device_snmp_with_network(self);
-        SnmpParamsLegacy {
-            ip: ip_address.to_string(),
-            port: self.snmp_port,
-            version: self.snmp_version.clone(),
-            community: creds.community,
-            username: self.snmp_username.clone(),
-            auth_proto: self.snmp_auth_protocol.clone(),
-            auth_pass: creds.auth_password,
-            priv_proto: self.snmp_priv_protocol.clone(),
-            priv_pass: creds.priv_password,
-            timeout_secs: 10,
-        }
-    }
-
     pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
         let creds = DecryptedSnmpCredentials::from_device_snmp_with_network_async(self).await;
         SnmpParamsLegacy {
@@ -121,24 +87,6 @@ pub struct DecryptedSnmpCredentials {
 }
 
 impl DecryptedSnmpCredentials {
-    #[must_use]
-    pub fn from_device_snmp(switch: &SwitchForSnmp) -> Self {
-        Self {
-            community: decrypt_credential(switch.snmp_community.as_deref()),
-            auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
-            priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
-        }
-    }
-
-    #[must_use]
-    pub fn from_device_snmp_with_network(switch: &SwitchForSnmpWithNetwork) -> Self {
-        Self {
-            community: decrypt_credential(switch.snmp_community.as_deref()),
-            auth_password: decrypt_credential(switch.snmp_auth_password.as_deref()),
-            priv_password: decrypt_credential(switch.snmp_priv_password.as_deref()),
-        }
-    }
-
     pub async fn from_device_snmp_async(switch: &SwitchForSnmp) -> Self {
         let community = decrypt_credential_async(switch.snmp_community.clone()).await;
         let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await;
@@ -244,21 +192,6 @@ pub struct SnmpParamsLegacy {
     pub priv_proto: Option<String>,
     pub priv_pass: Option<String>,
     pub timeout_secs: u64,
-}
-
-pub fn decrypt_snmp_fields(data: &mut DeviceWithDetails) {
-    data.snmp_community = data
-        .snmp_community
-        .as_ref()
-        .map(|v| decrypt_password(v).unwrap_or_default());
-    data.snmp_auth_password = data
-        .snmp_auth_password
-        .as_ref()
-        .map(|v| decrypt_password(v).unwrap_or_default());
-    data.snmp_priv_password = data
-        .snmp_priv_password
-        .as_ref()
-        .map(|v| decrypt_password(v).unwrap_or_default());
 }
 
 pub async fn decrypt_snmp_fields_async(data: &mut DeviceWithDetails) {

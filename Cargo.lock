@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.10.17"
+version = "0.10.19"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2196,6 +2196,7 @@ dependencies = [
  "actix-multipart",
  "actix-web",
  "aes-gcm",
+ "async-trait",
  "base64",
  "chrono",
  "csv",

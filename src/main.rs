@@ -149,7 +149,7 @@ fn create_tcp_listener(addr: &str, port: u16) -> std::io::Result<TcpListener> {
     Ok(socket.into())
 }
 
-fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<TcpListener> {
+async fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<TcpListener> {
     let mut delay = std::time::Duration::from_millis(500);
 
     for attempt in 0..=max_retries {
@@ -174,7 +174,7 @@ fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<T
                         attempt + 1,
                         max_retries
                     );
-                    std::thread::sleep(delay);
+                    tokio::time::sleep(delay).await;
                     delay = std::cmp::min(delay * 2, std::time::Duration::from_secs(5));
                 } else {
                     error!("端口 {}:{} 绑定失败，已重试{}次", addr, port, max_retries);
@@ -528,7 +528,7 @@ async fn main() -> std::io::Result<()> {
                 let ipv4_address = server_host.as_str();
 
                 if !ipv4_address.is_empty() {
-                    let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20)?;
+                    let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 20).await?;
                     let server_ipv4 = HttpServer::new(create_http_app.clone())
                         .workers(std::cmp::max(2, num_cpus::get()))
                         .disable_signals()
@@ -547,7 +547,7 @@ async fn main() -> std::io::Result<()> {
                 }
 
                 if !ipv6_address.is_empty() {
-                    let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20)?;
+                    let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 20).await?;
                     let server_ipv6 = HttpServer::new(create_http_app)
                         .workers(std::cmp::max(2, num_cpus::get()))
                         .disable_signals()
@@ -570,14 +570,14 @@ async fn main() -> std::io::Result<()> {
 
             if https_enabled {
                 let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
-                let (cert_path, key_path) = prepare_server_certificate(&config)?;
+                let (cert_path, key_path) = prepare_server_certificate(&config).await?;
 
                 let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
                 let ipv4_address = server_host.as_str();
 
                 if !ipv4_address.is_empty() {
-                    let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20)?;
-                    let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path)?;
+                    let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 20).await?;
+                    let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path).await?;
 
                     info!(
                         "HTTPS IPv4服务器运行在 https://{}:{}",
@@ -602,8 +602,8 @@ async fn main() -> std::io::Result<()> {
                 }
 
                 if !ipv6_address.is_empty() {
-                    let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20)?;
-                    let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path)?;
+                    let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 20).await?;
+                    let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path).await?;
 
                     info!(
                         "HTTPS IPv6服务器运行在 https://[{}]:{}",

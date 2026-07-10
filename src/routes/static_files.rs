@@ -1,16 +1,22 @@
+use std::sync::OnceLock;
+
 use actix_web::error::{ErrorBadRequest, JsonPayloadError};
 use actix_web::{Error, HttpRequest, HttpResponse, get, web};
 
 pub const WEB_DIR_PATHS: [&str; 2] = ["/opt/ipma/web", "/usr/share/ipma/web"];
 
+static WEB_DIR: OnceLock<&'static str> = OnceLock::new();
+
 #[must_use]
 pub fn get_web_dir() -> &'static str {
-    for path in &WEB_DIR_PATHS {
-        if std::path::Path::new(path).exists() {
-            return path;
+    WEB_DIR.get_or_init(|| {
+        for path in &WEB_DIR_PATHS {
+            if std::path::Path::new(path).exists() {
+                return path;
+            }
         }
-    }
-    "web"
+        "web"
+    })
 }
 
 #[must_use]
@@ -19,13 +25,13 @@ pub fn get_static_path(sub_path: &str) -> String {
     format!("{web_dir}/static/{sub_path}")
 }
 
-fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::path::PathBuf> {
+async fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::path::PathBuf> {
     let resolved = std::path::PathBuf::from(file_path);
-    let canonical = match resolved.canonicalize() {
+    let canonical = match tokio::fs::canonicalize(&resolved).await {
         Ok(c) => c,
         Err(_) => return None,
     };
-    let canonical_base = match std::path::PathBuf::from(base_dir).canonicalize() {
+    let canonical_base = match tokio::fs::canonicalize(base_dir).await {
         Ok(c) => c,
         Err(_) => return None,
     };
@@ -44,7 +50,7 @@ pub async fn serve_i18n_file(path: web::Path<String>) -> Result<HttpResponse, Er
     }
     let web_dir = get_web_dir();
     let file_path = format!("{web_dir}/static/js/i18n/{file}");
-    let validated = match validate_static_path(&file_path, web_dir) {
+    let validated = match validate_static_path(&file_path, web_dir).await {
         Some(p) => p,
         None => return Ok(HttpResponse::NotFound().finish()),
     };
@@ -72,7 +78,7 @@ pub async fn serve_json(req: HttpRequest) -> Result<HttpResponse, Error> {
     }
     let web_dir = get_web_dir();
     let full_path = format!("{web_dir}/static/{file_path}");
-    let validated = match validate_static_path(&full_path, web_dir) {
+    let validated = match validate_static_path(&full_path, web_dir).await {
         Some(p) => p,
         None => return Ok(HttpResponse::NotFound().finish()),
     };

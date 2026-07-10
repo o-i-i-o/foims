@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::auth::utils::JwtUtils;
 use crate::config::Config;
-use crate::crypto::decrypt_password;
+use crate::crypto::decrypt_password_async;
 use crate::db::DbPool;
 use crate::error::AppError;
 use ipma_data_manager::{DataError, DataProvider, DataResult, DatabaseConfig};
@@ -39,6 +41,7 @@ impl AppState {
     }
 }
 
+#[async_trait]
 impl DataProvider for AppState {
     fn pool(&self) -> DataResult<PgPool> {
         self.pool
@@ -57,7 +60,9 @@ impl DataProvider for AppState {
         }
     }
 
-    fn decrypt_password(&self, encrypted: &str) -> DataResult<String> {
-        decrypt_password(encrypted).map_err(DataError::Internal)
+    async fn decrypt_password(&self, encrypted: &str) -> DataResult<String> {
+        decrypt_password_async(encrypted.to_string())
+            .await
+            .map_err(DataError::Internal)
     }
 }
