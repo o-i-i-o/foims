@@ -60,6 +60,7 @@ pub struct TopologyConnectionWithPorts {
     pub source_port_id: Option<Uuid>,
     pub target_port_id: Option<Uuid>,
     pub label: Option<String>,
+    pub auto_discovered: bool,
     pub source_device_name: Option<String>,
     pub target_device_name: Option<String>,
     pub source_port_number: Option<String>,
@@ -161,7 +162,7 @@ pub async fn delete_topology_node(
 pub async fn get_topology_connections(pool: &PgPool) -> Result<HttpResponse, VisualizationError> {
     let connections = sqlx::query_as::<_, TopologyConnectionWithPorts>(
         r"SELECT tc.id, tc.source_device_id, tc.target_device_id,
-                 tc.source_port_id, tc.target_port_id, tc.label,
+                 tc.source_port_id, tc.target_port_id, tc.label, tc.auto_discovered,
                  sd.name AS source_device_name,
                  td.name AS target_device_name,
                  sp.port_number AS source_port_number,
@@ -224,4 +225,262 @@ pub async fn delete_topology_connection(
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "拓扑连线删除成功")))
+}
+
+// ==================== 自动发现 ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AutoDiscoverResult {
+    pub added_nodes: usize,
+    pub added_connections: usize,
+}
+
+/// 发现的关联关系
+struct DiscoveredLink {
+    switch_device_id: Uuid,
+    switch_port_id: Option<Uuid>,
+    device_port_id: Option<Uuid>,
+}
+
+/// 为设备自动发现拓扑关联并添加到拓扑图
+pub async fn auto_discover_device_topology(
+    pool: &PgPool,
+    device_id: Uuid,
+) -> Result<AutoDiscoverResult, VisualizationError> {
+    let mut added_nodes = 0usize;
+    let mut added_connections = 0usize;
+
+    // 查询设备的 access_point_id 和 device_port_id
+    let row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>)>(
+        r"SELECT access_point_id, device_port_id FROM devices WHERE id = $1",
+    )
+    .bind(device_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let (access_point_id, device_port_id) = match row {
+        Some(r) => r,
+        None => {
+            return Ok(AutoDiscoverResult {
+                added_nodes,
+                added_connections,
+            });
+        }
+    };
+
+    let mut links: Vec<DiscoveredLink> = Vec::new();
+
+    // 通过 device_port_id 发现：端口所属的设备即为交换机
+    if let Some(sp_id) = device_port_id {
+        let switch_row =
+            sqlx::query_as::<_, (Uuid,)>(r"SELECT device_id FROM device_ports WHERE id = $1")
+                .bind(sp_id)
+                .fetch_optional(pool)
+                .await?;
+
+        if let Some((switch_device_id,)) = switch_row
+            && switch_device_id != device_id
+        {
+            let device_default_port = get_default_port_id(pool, device_id).await;
+            links.push(DiscoveredLink {
+                switch_device_id,
+                switch_port_id: Some(sp_id),
+                device_port_id: device_default_port,
+            });
+        }
+    }
+
+    // 通过 access_point_id 发现
+    if let Some(ap_id) = access_point_id {
+        let ap_row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>)>(
+            r"SELECT device_port_id, peer_access_point_id FROM access_points WHERE id = $1",
+        )
+        .bind(ap_id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some((ap_device_port_id, peer_ap_id)) = ap_row {
+            // 通过 AP 的 device_port_id 找交换机
+            if let Some(ap_dp_id) = ap_device_port_id {
+                let switch_row = sqlx::query_as::<_, (Uuid,)>(
+                    r"SELECT device_id FROM device_ports WHERE id = $1",
+                )
+                .bind(ap_dp_id)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((switch_device_id,)) = switch_row
+                    && switch_device_id != device_id
+                {
+                    let device_default_port = get_default_port_id(pool, device_id).await;
+                    links.push(DiscoveredLink {
+                        switch_device_id,
+                        switch_port_id: Some(ap_dp_id),
+                        device_port_id: device_default_port,
+                    });
+                }
+            }
+
+            // 通过 peer AP 的 device_port_id 找交换机
+            if let Some(peer_id) = peer_ap_id {
+                let peer_row = sqlx::query_as::<_, (Option<Uuid>,)>(
+                    r"SELECT device_port_id FROM access_points WHERE id = $1",
+                )
+                .bind(peer_id)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((Some(peer_dp),)) = peer_row {
+                    let switch_row = sqlx::query_as::<_, (Uuid,)>(
+                        r"SELECT device_id FROM device_ports WHERE id = $1",
+                    )
+                    .bind(peer_dp)
+                    .fetch_optional(pool)
+                    .await?;
+
+                    if let Some((switch_device_id,)) = switch_row
+                        && switch_device_id != device_id
+                    {
+                        let device_default_port = get_default_port_id(pool, device_id).await;
+                        links.push(DiscoveredLink {
+                            switch_device_id,
+                            switch_port_id: Some(peer_dp),
+                            device_port_id: device_default_port,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 为每个发现的关联添加拓扑节点和连线
+    for link in &links {
+        // 添加设备的拓扑节点
+        let device_added = ensure_topology_node(pool, device_id).await?;
+        if device_added {
+            added_nodes += 1;
+        }
+
+        // 添加交换机的拓扑节点
+        let switch_added = ensure_topology_node(pool, link.switch_device_id).await?;
+        if switch_added {
+            added_nodes += 1;
+        }
+
+        // 添加拓扑连线（设备 → 交换机）
+        let conn_added = ensure_topology_connection(
+            pool,
+            device_id,
+            link.switch_device_id,
+            link.device_port_id,
+            link.switch_port_id,
+        )
+        .await?;
+        if conn_added {
+            added_connections += 1;
+        }
+    }
+
+    Ok(AutoDiscoverResult {
+        added_nodes,
+        added_connections,
+    })
+}
+
+/// 批量扫描所有设备，自动发现拓扑关联
+pub async fn auto_discover_all_topology(
+    pool: &PgPool,
+) -> Result<AutoDiscoverResult, VisualizationError> {
+    let device_ids: Vec<Uuid> = sqlx::query_as::<_, (Uuid,)>(
+        r"SELECT id FROM devices WHERE access_point_id IS NOT NULL OR device_port_id IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(id,)| id)
+    .collect();
+
+    let mut total_nodes = 0usize;
+    let mut total_connections = 0usize;
+
+    for device_id in device_ids {
+        let result = auto_discover_device_topology(pool, device_id).await?;
+        total_nodes += result.added_nodes;
+        total_connections += result.added_connections;
+    }
+
+    Ok(AutoDiscoverResult {
+        added_nodes: total_nodes,
+        added_connections: total_connections,
+    })
+}
+
+/// HTTP 处理函数：触发批量自动发现
+pub async fn trigger_auto_discover(pool: &PgPool) -> Result<HttpResponse, VisualizationError> {
+    let result = auto_discover_all_topology(pool).await?;
+    Ok(HttpResponse::Ok().json(ApiResponse::success(result, "自动发现完成")))
+}
+
+/// 确保拓扑节点存在，返回是否新增
+async fn ensure_topology_node(pool: &PgPool, device_id: Uuid) -> Result<bool, VisualizationError> {
+    // 查询交换机已有的下挂数量，用于计算位置
+    let existing_count: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM topology_connections
+          WHERE (source_device_id = $1 OR target_device_id = $1) AND auto_discovered = true",
+    )
+    .bind(device_id)
+    .fetch_one(pool)
+    .await?;
+
+    let x = 100 + (existing_count as i32) * 250;
+    let y = if existing_count > 0 { 350 } else { 100 };
+
+    let result = sqlx::query(
+        r"INSERT INTO topology_nodes (device_id, x, y, width, height)
+         VALUES ($1, $2, $3, 200, 100)
+         ON CONFLICT (device_id) DO NOTHING",
+    )
+    .bind(device_id)
+    .bind(x)
+    .bind(y)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// 确保拓扑连线存在，返回是否新增
+async fn ensure_topology_connection(
+    pool: &PgPool,
+    source_device_id: Uuid,
+    target_device_id: Uuid,
+    source_port_id: Option<Uuid>,
+    target_port_id: Option<Uuid>,
+) -> Result<bool, VisualizationError> {
+    let result = sqlx::query(
+        r"INSERT INTO topology_connections (source_device_id, target_device_id, source_port_id, target_port_id, auto_discovered)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (source_device_id, target_device_id, source_port_id, target_port_id) DO NOTHING",
+    )
+    .bind(source_device_id)
+    .bind(target_device_id)
+    .bind(source_port_id)
+    .bind(target_port_id)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// 获取设备的默认端口ID
+async fn get_default_port_id(pool: &PgPool, device_id: Uuid) -> Option<Uuid> {
+    sqlx::query_as::<_, (Uuid,)>(
+        r"SELECT id FROM device_ports WHERE device_id = $1 AND port_number = 'default' LIMIT 1",
+    )
+    .bind(device_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .map(|(id,)| id)
 }

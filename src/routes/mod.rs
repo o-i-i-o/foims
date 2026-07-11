@@ -35,9 +35,10 @@ use crate::resource::{
     get_organization_tree, get_organizations, get_positions, get_positions_layout, get_room,
     get_room_cabinets_with_positions, get_room_networks, get_rooms, get_topology_connections,
     get_topology_nodes, get_workstation, get_workstation_ips, get_workstations, link_peer,
-    pull_ip_managers, save_layout, save_topology_nodes, unlink_peer, update_access_point,
-    update_cabinet, update_cabinet_position, update_device, update_network, update_network_region,
-    update_org_template, update_organization, update_room, update_workstation,
+    pull_ip_managers, save_layout, save_topology_nodes, trigger_auto_discover, unlink_peer,
+    update_access_point, update_cabinet, update_cabinet_position, update_device, update_network,
+    update_network_region, update_org_template, update_organization, update_room,
+    update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -266,7 +267,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route(
                                     "/connections/{id}",
                                     web::delete().to(delete_topology_connection),
-                                ),
+                                )
+                                .route("/auto-discover", web::post().to(trigger_auto_discover)),
                         )
                         // 组织管理
                         .service(

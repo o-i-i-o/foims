@@ -198,7 +198,18 @@
     "delete_success": "组织节点删除成功",
     "delete_confirm": "确定要删除「{{name}}」吗？",
     "select_org": "选择组织节点",
-    "parent_org": "所属组织"
+    "parent_org": "所属组织",
+    "types": {
+      "headquarters": "总部",
+      "building": "楼栋",
+      "floor": "楼层",
+      "hall": "大厅",
+      "office": "办公室",
+      "data_center": "数据中心",
+      "workstation": "工位",
+      "cabinet": "机柜",
+      "cabinet_position": "机位"
+    }
   },
   "org_template": {
     "management": "模板管理",
@@ -472,6 +483,7 @@
     "connection_mode": "连线模式",
     "exit_connection_mode": "退出连线",
     "auto_layout": "自动布局",
+    "auto_discover": "自动发现",
     "show_macs": "显示MAC表",
     "show_ports": "显示端口",
     "show_lldp": "显示LLDP",

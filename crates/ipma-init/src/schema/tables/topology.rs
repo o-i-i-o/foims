@@ -23,6 +23,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             source_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
             target_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
             label VARCHAR(100),
+            auto_discovered BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_no_self_connection CHECK (source_device_id != target_device_id),

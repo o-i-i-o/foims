@@ -58,6 +58,48 @@ fn validate_ip_address(ip: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
+// ==================== Serde 辅助函数 ====================
+
+/// 反序列化 Option<Option<T>>，区分三种状态：
+/// - 字段缺失 → None（不修改）
+/// - JSON null → Some(None)（清除值）
+/// - JSON 值 → Some(Some(value))（设置新值）
+pub(crate) fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    struct OptionOptionVisitor<T>(std::marker::PhantomData<T>);
+
+    impl<'de, T> serde::de::Visitor<'de> for OptionOptionVisitor<T>
+    where
+        T: Deserialize<'de>,
+    {
+        type Value = Option<Option<T>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(formatter, "null 或一个值")
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(Some(None))
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E> {
+            Ok(Some(None))
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            T::deserialize(deserializer).map(|v| Some(Some(v)))
+        }
+    }
+
+    deserializer.deserialize_option(OptionOptionVisitor(std::marker::PhantomData))
+}
+
 // ==================== API 响应模型 ====================
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1237,9 +1279,13 @@ pub struct DeviceUpdate {
     pub brand: Option<String>,
     pub model: Option<String>,
     pub serial_number: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     pub workstation_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     pub position_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     pub access_point_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     pub device_port_id: Option<Option<Uuid>>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
     pub vendor: Option<String>,

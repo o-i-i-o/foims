@@ -198,7 +198,18 @@
     "delete_success": "Organization node deleted successfully",
     "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
     "select_org": "Select Organization Node",
-    "parent_org": "Organization Node"
+    "parent_org": "Organization Node",
+    "types": {
+      "headquarters": "Headquarters",
+      "building": "Building",
+      "floor": "Floor",
+      "hall": "Hall",
+      "office": "Office",
+      "data_center": "Data Center",
+      "workstation": "Workstation",
+      "cabinet": "Cabinet",
+      "cabinet_position": "Cabinet Position"
+    }
   },
   "org_template": {
     "management": "Template Management",
@@ -472,6 +483,7 @@
     "connection_mode": "Connection Mode",
     "exit_connection_mode": "Exit Connection",
     "auto_layout": "Auto Layout",
+    "auto_discover": "Auto Discover",
     "show_macs": "Show MAC Table",
     "show_ports": "Show Ports",
     "show_lldp": "Show LLDP",

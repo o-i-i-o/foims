@@ -406,6 +406,11 @@
     stroke-width: 3;
 }
 
+.topology-connection.auto-discovered {
+    stroke-dasharray: 6 4;
+    stroke: #5c6bc0;
+}
+
 .topology-connection-label {
     font-size: 10px;
     fill: var(--color-text-secondary);

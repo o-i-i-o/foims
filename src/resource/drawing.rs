@@ -215,3 +215,9 @@ pub async fn delete_topology_connection(
         .await
         .map_err(AppError::from)
 }
+
+pub async fn trigger_auto_discover(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    ipma_visualization::trigger_auto_discover(&state.pool()?.get_conn())
+        .await
+        .map_err(AppError::from)
+}

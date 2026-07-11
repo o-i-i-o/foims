@@ -29,6 +29,7 @@ const TYPE_LABELS = {
 export class TopologyRenderer {
   constructor(core) {
     this.core = core;
+    this._connectionPairCount = new Map();
   }
 
   drawDeviceNode(device) {
@@ -125,18 +126,23 @@ export class TopologyRenderer {
     const sourceAnchor = this._getBestAnchor(sourcePos, targetPos);
     const targetAnchor = this._getBestAnchor(targetPos, sourcePos);
 
+    const pairKey = this._getPairKey(connection.source_device_id, connection.target_device_id);
+    const pairIndex = this._connectionPairCount.get(pairKey) || 0;
+    this._connectionPairCount.set(pairKey, pairIndex + 1);
+    const parallelOffset = pairIndex * 15;
+
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("topology-connection-group");
     g.dataset.connectionId = connection.id;
 
     const path = document.createElementNS(SVG_NS, "path");
     path.classList.add("topology-connection");
-    const pathD = this._calculateCurvePath(sourceAnchor, targetAnchor);
+    if (connection.auto_discovered) {
+      path.classList.add("auto-discovered");
+    }
+    const pathD = this._calculateOrthogonalPath(sourceAnchor, targetAnchor, parallelOffset);
     path.setAttribute("d", pathD);
     g.appendChild(path);
-
-    const midX = (sourceAnchor.x + targetAnchor.x) / 2;
-    const midY = (sourceAnchor.y + targetAnchor.y) / 2;
 
     const sourceLabel = this._createConnectionLabel(
       sourceAnchor.x, sourceAnchor.y,
@@ -163,6 +169,11 @@ export class TopologyRenderer {
     return g;
   }
 
+  _getPairKey(id1, id2) {
+    const sorted = [id1, id2].sort();
+    return `${sorted[0]}|${sorted[1]}`;
+  }
+
   _getBestAnchor(sourcePos, targetPos) {
     const cx = sourcePos.x + sourcePos.width / 2;
     const cy = sourcePos.y + sourcePos.height / 2;
@@ -180,26 +191,30 @@ export class TopologyRenderer {
     return { x: cx, y: sourcePos.y, dir: "top" };
   }
 
-  _calculateCurvePath(source, target) {
+  _calculateOrthogonalPath(source, target, parallelOffset = 0) {
     const dx = target.x - source.x;
     const dy = target.y - source.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const offset = Math.min(dist * 0.3, 80);
 
-    const sControl = this._getControlPoint(source, offset);
-    const tControl = this._getControlPoint(target, offset);
+    const midY = source.y + dy * 0.5 + parallelOffset;
+    const midX = source.x + dx * 0.5 + parallelOffset;
 
-    return `M ${source.x} ${source.y} C ${sControl.x} ${sControl.y}, ${tControl.x} ${tControl.y}, ${target.x} ${target.y}`;
-  }
-
-  _getControlPoint(point, offset) {
-    switch (point.dir) {
-      case "top": return { x: point.x, y: point.y - offset };
-      case "right": return { x: point.x + offset, y: point.y };
-      case "bottom": return { x: point.x, y: point.y + offset };
-      case "left": return { x: point.x - offset, y: point.y };
-      default: return { x: point.x, y: point.y - offset };
+    if (source.dir === "bottom" || source.dir === "top") {
+      const elbowY = source.dir === "bottom" ? midY : source.y - Math.abs(dy) * 0.5 - parallelOffset;
+      const clampedEy = source.dir === "bottom"
+        ? Math.max(source.y + 20, Math.min(target.y - 20, elbowY))
+        : Math.min(source.y - 20, Math.max(target.y + 20, elbowY));
+      return `M ${source.x} ${source.y} L ${source.x} ${clampedEy} L ${target.x} ${clampedEy} L ${target.x} ${target.y}`;
     }
+
+    if (source.dir === "right" || source.dir === "left") {
+      const elbowX = source.dir === "right" ? midX : source.x - Math.abs(dx) * 0.5 - parallelOffset;
+      const clampedEx = source.dir === "right"
+        ? Math.max(source.x + 20, Math.min(target.x - 20, elbowX))
+        : Math.min(source.x - 20, Math.max(target.x + 20, elbowX));
+      return `M ${source.x} ${source.y} L ${clampedEx} ${source.y} L ${clampedEx} ${target.y} L ${target.x} ${target.y}`;
+    }
+
+    return `M ${source.x} ${source.y} L ${target.x} ${target.y}`;
   }
 
   _createConnectionLabel(x, y, text, type) {
@@ -218,18 +233,22 @@ export class TopologyRenderer {
     const affectedConnections = this.core.connectionsGroup.querySelectorAll(
       `.topology-connection-group`
     );
+    this._connectionPairCount.clear();
+    const toRedraw = [];
     affectedConnections.forEach((g) => {
       const connectionId = g.dataset.connectionId;
       const conn = this._connectionsMap?.get(connectionId);
-      if (conn && (conn.source_device_id === deviceId || conn.target_device_id === deviceId)) {
+      if (conn) {
+        toRedraw.push(conn);
         g.remove();
-        this.drawConnection(conn);
       }
     });
+    toRedraw.forEach((conn) => this.drawConnection(conn));
   }
 
   setConnectionsMap(map) {
     this._connectionsMap = map;
+    this._connectionPairCount.clear();
   }
 
   clearAll() {

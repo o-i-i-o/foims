@@ -150,4 +150,19 @@ export class TopologyDataManager {
       return [];
     }
   }
+
+  async autoDiscover() {
+    try {
+      const result = await this.apiPost("/api/resources/topology/auto-discover", {});
+      if (result.success) {
+        return result.data || { added_nodes: 0, added_connections: 0 };
+      }
+      this.showToast("自动发现失败: " + result.message, "error");
+      return null;
+    } catch (error) {
+      console.error("自动发现失败:", error);
+      this.showToast("自动发现失败", "error");
+      return null;
+    }
+  }
 }

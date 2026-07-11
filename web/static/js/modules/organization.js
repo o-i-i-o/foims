@@ -38,7 +38,9 @@ const AVAILABLE_ICONS = [
 ];
 
 function getOrgTypeLabel(orgType) {
-  return t(`organization.types.${orgType}`) || orgType;
+  const key = `organization.types.${orgType}`;
+  const translated = t(key);
+  return translated === key ? orgType : translated;
 }
 
 /** 模板图标缓存 { type_name: icon } */

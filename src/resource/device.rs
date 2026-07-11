@@ -377,6 +377,16 @@ pub async fn create_device(
     .execute(&mut *tx)
     .await?;
 
+    // 为设备创建默认端口，确保所有设备都具备拓扑连接能力
+    sqlx::query(
+        r"INSERT INTO device_ports (device_id, port_number, port_name, port_type, status)
+         VALUES ($1, 'default', '默认端口', 'access', 'up')
+         ON CONFLICT (device_id, port_number) DO NOTHING",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
         // Determine room_id for network validation based on device location
@@ -502,6 +512,14 @@ pub async fn create_device(
     }
 
     tx.commit().await?;
+
+    // 若设备配置了接入点或端口，自动发现拓扑关联
+    if (req.access_point_id.is_some() || req.device_port_id.is_some())
+        && let Err(e) =
+            ipma_visualization::auto_discover_device_topology(&state.pool()?.get_conn(), id).await
+    {
+        warn!("设备 {} 自动发现拓扑失败: {}", id, e);
+    }
 
     let device = Device {
         id,
@@ -977,6 +995,30 @@ pub async fn update_device(
     }
 
     tx.commit().await?;
+
+    // 若接入点或端口配置变更，更新自动发现的拓扑连线
+    let ap_changed = req.access_point_id.is_some() && (resolved_access_point_id != current_ap_id);
+    let sp_changed = req.device_port_id.is_some() && (resolved_device_port_id != current_sp_id);
+    if ap_changed || sp_changed {
+        let pool = &state.pool()?.get_conn();
+        // 删除旧的自动发现连线
+        if let Err(e) = sqlx::query(
+            r"DELETE FROM topology_connections
+              WHERE (source_device_id = $1 OR target_device_id = $1) AND auto_discovered = true",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        {
+            warn!("设备 {} 删除旧自动发现连线失败: {}", id, e);
+        }
+        // 重新发现
+        if (resolved_access_point_id.is_some() || resolved_device_port_id.is_some())
+            && let Err(e) = ipma_visualization::auto_discover_device_topology(pool, id).await
+        {
+            warn!("设备 {} 自动发现拓扑失败: {}", id, e);
+        }
+    }
 
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(

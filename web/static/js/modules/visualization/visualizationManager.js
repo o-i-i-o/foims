@@ -128,6 +128,7 @@ function bindTopologyEvents() {
   const deviceSelect = elementCache.get("topology-device-select");
   const addDeviceBtn = elementCache.get("add-device-to-topology");
   const toggleConnModeBtn = elementCache.get("toggle-connection-mode");
+  const autoDiscoverBtn = elementCache.get("topology-auto-discover");
   const autoLayoutBtn = elementCache.get("topology-auto-layout");
   const saveLayoutBtn = elementCache.get("save-topology-layout");
   const deleteLayoutBtn = elementCache.get("delete-topology-layout");
@@ -162,6 +163,13 @@ function bindTopologyEvents() {
   if (autoLayoutBtn) {
     autoLayoutBtn.addEventListener("click", () => {
       topologyVisualization.autoLayout();
+    });
+  }
+
+  if (autoDiscoverBtn) {
+    autoDiscoverBtn.addEventListener("click", async () => {
+      await topologyVisualization.autoDiscover();
+      loadDeviceOptions();
     });
   }
 
