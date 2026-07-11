@@ -945,9 +945,7 @@ pub async fn init_two_factor(
     )
     .map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
 
-    let encrypted_secret = encrypt_password_async(secret_base32)
-        .await
-        .ok_or_else(|| AppError::Internal("2FA密钥加密失败".to_string()))?;
+    let encrypted_secret = encrypt_password_async(secret_base32).await?;
     sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
         .bind(target_user_id)

@@ -86,9 +86,9 @@ pub async fn get_positions(
                 sqlx::query(
                     sqlx::AssertSqlSafe(format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
-                                  COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                  (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
                                   c.room_id,
-                                  COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
+                                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
                                   p.start_u, p.end_u, p.description, 
                                   p.device_type,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
@@ -108,9 +108,9 @@ pub async fn get_positions(
                 sqlx::query(
                     sqlx::AssertSqlSafe(format!(
                         r"SELECT p.id, p.name, p.cabinet_id, 
-                                  COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                                  (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
                                   c.room_id,
-                                  COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
+                                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
                                   p.start_u, p.end_u, p.description, 
                                   p.device_type,
                                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
@@ -132,9 +132,9 @@ pub async fn get_positions(
             sqlx::query(
                 sqlx::AssertSqlSafe(format!(
                     r"SELECT p.id, p.name, p.cabinet_id, 
-                              COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                              (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
                               c.room_id,
-                              COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
+                              (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
                               p.start_u, p.end_u, p.description, 
                               p.device_type,
                               p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
@@ -154,9 +154,9 @@ pub async fn get_positions(
         sqlx::query(
             sqlx::AssertSqlSafe(format!(
                 r"SELECT p.id, p.name, p.cabinet_id, 
-                          COALESCE((SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id), '未知机柜') as cabinet_name, 
+                          (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
                           c.room_id,
-                          COALESCE((SELECT r.name FROM rooms r WHERE r.id = c.room_id), '未知机房') as room_name, 
+                          (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
                           p.start_u, p.end_u, p.description, 
                           p.device_type,
                           p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
@@ -437,16 +437,16 @@ pub async fn get_cabinet_position(
         })
         .collect();
 
-    let cabinet_name: String = if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
-        let cabinet_id: Uuid = position_data.get("cabinet_id");
-        sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
-            .bind(cabinet_id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
-            .unwrap_or_else(|| "未知机柜".to_string())
-    } else {
-        "未知机柜".to_string()
-    };
+    let cabinet_name: Option<String> =
+        if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
+            let cabinet_id: Uuid = position_data.get("cabinet_id");
+            sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
+                .bind(cabinet_id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?
+        } else {
+            None
+        };
 
     let position_with_details = serde_json::json!({
         "id": position_data.get::<Uuid, _>("id"),

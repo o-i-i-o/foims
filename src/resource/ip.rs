@@ -556,8 +556,8 @@ pub async fn get_available_ips(
         .bind(network_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .map(|row| crate::utils::parse_network_from_row(&row))
-        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
+        .and_then(|row| crate::utils::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
@@ -651,8 +651,8 @@ pub async fn auto_assign_ip(
         .bind(req_network_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .map(|row| crate::utils::parse_network_from_row(&row))
-        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
+        .and_then(|row| crate::utils::parse_network_from_row(&row))?;
 
     let conn = state.pool()?.get_conn();
     let mut tx = conn.begin().await?;

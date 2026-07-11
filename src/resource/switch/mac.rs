@@ -355,7 +355,7 @@ async fn fetch_switch_arp(
         None => return Ok(()),
     };
 
-    let params = switch.to_snmp_params_async(&ip_address).await;
+    let params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_arp_table_via_snmp(&params).await {
         Ok(entries) => {
@@ -382,7 +382,7 @@ pub async fn get_macs_from_device(
         return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
     }
 
-    let params = switch.to_snmp_params_async(&ip_address).await;
+    let params = switch.to_snmp_params_async(&ip_address).await?;
 
     let entries = get_arp_table_via_snmp(&params).await?;
 
@@ -413,7 +413,7 @@ pub async fn get_all_arp_entries(
         return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
     }
 
-    let params = switch.to_snmp_params_async(&ip_address).await;
+    let params = switch.to_snmp_params_async(&ip_address).await?;
 
     let entries = get_arp_table_via_snmp(&params).await?;
     Ok(entries)
@@ -431,7 +431,7 @@ pub async fn get_device_mac_table(
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation("设备没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params_async(&ip_address).await;
+    let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     let entries = get_arp_table_via_snmp(&snmp_params)
         .await

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
-use crate::models::{ApiResponse, DevicePortCreate, DeviceWithDetails, SnmpTestRequest};
+use crate::models::{ApiResponse, DevicePortCreate, SnmpTestRequest};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SwitchForSnmp {
@@ -44,9 +44,12 @@ pub struct SwitchForSnmpWithNetwork {
 }
 
 impl SwitchForSnmp {
-    pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
-        let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await;
-        SnmpParamsLegacy {
+    pub async fn to_snmp_params_async(
+        &self,
+        ip_address: &str,
+    ) -> Result<SnmpParamsLegacy, AppError> {
+        let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await?;
+        Ok(SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port,
             version: self.snmp_version.clone(),
@@ -57,14 +60,17 @@ impl SwitchForSnmp {
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
             timeout_secs: 10,
-        }
+        })
     }
 }
 
 impl SwitchForSnmpWithNetwork {
-    pub async fn to_snmp_params_async(&self, ip_address: &str) -> SnmpParamsLegacy {
-        let creds = DecryptedSnmpCredentials::from_device_snmp_with_network_async(self).await;
-        SnmpParamsLegacy {
+    pub async fn to_snmp_params_async(
+        &self,
+        ip_address: &str,
+    ) -> Result<SnmpParamsLegacy, AppError> {
+        let creds = DecryptedSnmpCredentials::from_device_snmp_with_network_async(self).await?;
+        Ok(SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port,
             version: self.snmp_version.clone(),
@@ -75,7 +81,7 @@ impl SwitchForSnmpWithNetwork {
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
             timeout_secs: 10,
-        }
+        })
     }
 }
 
@@ -87,26 +93,28 @@ pub struct DecryptedSnmpCredentials {
 }
 
 impl DecryptedSnmpCredentials {
-    pub async fn from_device_snmp_async(switch: &SwitchForSnmp) -> Self {
-        let community = decrypt_credential_async(switch.snmp_community.clone()).await;
-        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await;
-        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await;
-        Self {
+    pub async fn from_device_snmp_async(switch: &SwitchForSnmp) -> Result<Self, AppError> {
+        let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
+        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
+        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;
+        Ok(Self {
             community,
             auth_password,
             priv_password,
-        }
+        })
     }
 
-    pub async fn from_device_snmp_with_network_async(switch: &SwitchForSnmpWithNetwork) -> Self {
-        let community = decrypt_credential_async(switch.snmp_community.clone()).await;
-        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await;
-        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await;
-        Self {
+    pub async fn from_device_snmp_with_network_async(
+        switch: &SwitchForSnmpWithNetwork,
+    ) -> Result<Self, AppError> {
+        let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
+        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
+        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;
+        Ok(Self {
             community,
             auth_password,
             priv_password,
-        }
+        })
     }
 }
 
@@ -114,6 +122,12 @@ impl DecryptedSnmpCredentials {
 pub enum SnmpError {
     #[error("{0}")]
     Message(String),
+}
+
+impl From<AppError> for SnmpError {
+    fn from(e: AppError) -> Self {
+        SnmpError::Message(e.to_string())
+    }
 }
 
 #[derive(Error, Debug)]
@@ -194,32 +208,13 @@ pub struct SnmpParamsLegacy {
     pub timeout_secs: u64,
 }
 
-pub async fn decrypt_snmp_fields_async(data: &mut DeviceWithDetails) {
-    let community = data.snmp_community.take();
-    let auth_password = data.snmp_auth_password.take();
-    let priv_password = data.snmp_priv_password.take();
-
-    data.snmp_community = if let Some(v) = community {
-        crate::crypto::decrypt_password_async(v).await.ok()
-    } else {
-        None
-    };
-    data.snmp_auth_password = if let Some(v) = auth_password {
-        crate::crypto::decrypt_password_async(v).await.ok()
-    } else {
-        None
-    };
-    data.snmp_priv_password = if let Some(v) = priv_password {
-        crate::crypto::decrypt_password_async(v).await.ok()
-    } else {
-        None
-    };
-}
-
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     match params.version.as_str() {
         "v1" | "v2c" => {
-            let community = params.community.as_deref().unwrap_or("public");
+            let community = params
+                .community
+                .as_deref()
+                .ok_or_else(|| "SNMP v1/v2c 需要配置 community 字符串".to_string())?;
             Ok(Auth::v2c(community))
         }
         "v3" => {
@@ -527,7 +522,7 @@ pub async fn test_snmp_connection(
             let conn = state.pool()?.get_conn();
             let (switch, ip_address) = get_device_snmp_config(&conn, &device_id).await?;
 
-            let creds = DecryptedSnmpCredentials::from_device_snmp_async(&switch).await;
+            let creds = DecryptedSnmpCredentials::from_device_snmp_async(&switch).await?;
 
             let version = req.snmp_version.clone().unwrap_or(switch.snmp_version);
             let community = req.snmp_community.clone().or(creds.community);
@@ -644,7 +639,7 @@ pub async fn get_device_info_snmp(
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params_async(&ip_address).await;
+    let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_info_via_snmp(&snmp_params).await {
         Ok((vendor, model)) => Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -667,7 +662,7 @@ pub async fn get_device_ports_snmp(
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
 
-    let snmp_params = switch.to_snmp_params_async(&ip_address).await;
+    let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_ports_via_snmp(&snmp_params).await {
         Ok(ports) => {

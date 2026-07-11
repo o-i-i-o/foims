@@ -10,6 +10,8 @@ use std::path::Path;
 use std::sync::OnceLock;
 use tracing::{error, info, warn};
 
+use crate::error::AppError;
+
 const NONCE_SIZE: usize = 12;
 
 static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
@@ -160,33 +162,26 @@ pub fn check_key_integrity() -> Result<(), String> {
     Ok(())
 }
 
-#[must_use]
-pub fn encrypt_password(password: &str) -> Option<String> {
+pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     let key = get_encryption_key();
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
-        Ok(c) => c,
-        Err(e) => {
-            error!("创建加密器失败: {}", e);
-            return None;
-        }
-    };
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| {
+        error!("创建加密器失败: {}", e);
+        AppError::Internal(format!("创建加密器失败: {e}"))
+    })?;
 
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     rand::rng().fill(&mut nonce_bytes);
     let nonce = aes_gcm::Nonce::from(nonce_bytes);
 
-    let ciphertext = match cipher.encrypt(&nonce, password.as_bytes()) {
-        Ok(ct) => ct,
-        Err(e) => {
-            error!("加密失败: {}", e);
-            return None;
-        }
-    };
+    let ciphertext = cipher.encrypt(&nonce, password.as_bytes()).map_err(|e| {
+        error!("加密失败: {}", e);
+        AppError::Internal(format!("加密失败: {e}"))
+    })?;
 
     let mut result = nonce_bytes.to_vec();
     result.extend(ciphertext);
 
-    Some(BASE64.encode(&result))
+    Ok(BASE64.encode(&result))
 }
 
 pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
@@ -231,11 +226,10 @@ pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     String::from_utf8(plaintext).map_err(|e| format!("解密失败: UTF-8解码错误: {e}"))
 }
 
-pub async fn encrypt_password_async(password: String) -> Option<String> {
+pub async fn encrypt_password_async(password: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || encrypt_password(&password))
         .await
-        .ok()
-        .flatten()
+        .map_err(|e| AppError::Internal(format!("加密任务失败: {e}")))?
 }
 
 pub async fn decrypt_password_async(encrypted: String) -> Result<String, String> {
@@ -244,11 +238,13 @@ pub async fn decrypt_password_async(encrypted: String) -> Result<String, String>
         .map_err(|e| format!("解密任务失败: {e}"))?
 }
 
-pub async fn decrypt_credential_async(value: Option<String>) -> Option<String> {
-    if let Some(v) = value {
-        decrypt_password_async(v).await.ok()
-    } else {
-        None
+pub async fn decrypt_credential_async(value: Option<String>) -> Result<Option<String>, AppError> {
+    match value {
+        Some(v) => decrypt_password_async(v)
+            .await
+            .map(Some)
+            .map_err(AppError::Internal),
+        None => Ok(None),
     }
 }
 

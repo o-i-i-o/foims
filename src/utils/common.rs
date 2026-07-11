@@ -413,10 +413,12 @@ pub const NETWORK_QUERY: &str = r"
     WHERE n.id = $1
 ";
 
-pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Network {
+pub fn parse_network_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<crate::models::Network, crate::error::AppError> {
     use sqlx::Row;
 
-    crate::models::Network {
+    Ok(crate::models::Network {
         id: row.get(0),
         name: row.get(1),
         network_region_id: row.get(2),
@@ -425,24 +427,24 @@ pub fn parse_network_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Net
         ipv6_cidr: row.get(5),
         ipv4_gateway: row.get(6),
         ipv6_gateway: row.get(7),
-        ipv4_dns: row.get::<Option<serde_json::Value>, _>(8).and_then(|v| {
-            serde_json::from_value(v)
-                .map_err(|e| {
-                    tracing::warn!("IPv4 DNS反序列化失败: {}", e);
-                    e
+        ipv4_dns: row
+            .get::<Option<serde_json::Value>, _>(8)
+            .map(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    crate::error::AppError::Internal(format!("IPv4 DNS反序列化失败: {e}"))
                 })
-                .ok()
-        }),
-        ipv6_dns: row.get::<Option<serde_json::Value>, _>(9).and_then(|v| {
-            serde_json::from_value(v)
-                .map_err(|e| {
-                    tracing::warn!("IPv6 DNS反序列化失败: {}", e);
-                    e
+            })
+            .transpose()?,
+        ipv6_dns: row
+            .get::<Option<serde_json::Value>, _>(9)
+            .map(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    crate::error::AppError::Internal(format!("IPv6 DNS反序列化失败: {e}"))
                 })
-                .ok()
-        }),
+            })
+            .transpose()?,
         description: row.get(10),
         created_at: row.get(11),
         updated_at: row.get(12),
-    }
+    })
 }

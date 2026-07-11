@@ -142,11 +142,23 @@ async fn get_smtp_config_from_db_inner(
         if let Some(value) = value {
             match key.as_str() {
                 "host" => host = value,
-                "port" => port = value.parse().unwrap_or(0),
+                "port" => {
+                    port = value
+                        .parse()
+                        .map_err(|e| SmtpConfigError::QueryFailed(format!("port解析失败: {e}")))?
+                }
                 "username" => username = value,
-                "password" => password = decrypt_password_async(value).await.unwrap_or_default(),
+                "password" => {
+                    password = decrypt_password_async(value)
+                        .await
+                        .map_err(|e| SmtpConfigError::QueryFailed(format!("密码解密失败: {e}")))?
+                }
                 "from" => from = value,
-                "secure" => secure = value.parse().unwrap_or(false),
+                "secure" => {
+                    secure = value
+                        .parse()
+                        .map_err(|e| SmtpConfigError::QueryFailed(format!("secure解析失败: {e}")))?
+                }
                 _ => {}
             }
         }
@@ -169,10 +181,9 @@ async fn get_smtp_config_from_db_inner(
 pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Result<()> {
     let mut tx = pool.begin().await?;
 
-    let encrypted_password = match encrypt_password_async(config.password.clone()).await {
-        Some(p) => p,
-        None => return Err(anyhow::anyhow!("SMTP密码加密失败，拒绝以明文存储")),
-    };
+    let encrypted_password = encrypt_password_async(config.password.clone())
+        .await
+        .map_err(|e| anyhow::anyhow!("SMTP密码加密失败: {e}"))?;
 
     let smtp_configs = vec![
         ("host", config.host.clone()),

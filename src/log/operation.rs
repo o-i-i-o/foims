@@ -28,20 +28,22 @@ pub async fn get_operation_logs(
     let conn = state.pool()?.get_conn();
 
     let (total, logs) = if has_filters {
-        let parsed_resource_id = if resource_id.is_empty() {
-            None
-        } else {
-            Uuid::parse_str(&resource_id)
-                .map_err(|_| AppError::Validation(format!("resource_id格式无效: {resource_id}")))
-                .ok()
-        };
+        let parsed_resource_id =
+            if resource_id.is_empty() {
+                None
+            } else {
+                Some(Uuid::parse_str(&resource_id).map_err(|_| {
+                    AppError::Validation(format!("resource_id格式无效: {resource_id}"))
+                })?)
+            };
 
         let parsed_user_id = if user_id.is_empty() {
             None
         } else {
-            Uuid::parse_str(&user_id)
-                .map_err(|_| AppError::Validation(format!("user_id格式无效: {user_id}")))
-                .ok()
+            Some(
+                Uuid::parse_str(&user_id)
+                    .map_err(|_| AppError::Validation(format!("user_id格式无效: {user_id}")))?,
+            )
         };
 
         let total: i64 = sqlx::query_scalar::<_, i64>(
@@ -61,7 +63,7 @@ pub async fn get_operation_logs(
         .await?;
 
         let logs = sqlx::query_as::<_, OperationLog>(
-            r"SELECT ol.id, ol.user_id, COALESCE(u.username, '已删除用户') as username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ 
+            r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ 
                FROM operation_logs ol 
                LEFT JOIN users u ON ol.user_id = u.id 
                WHERE ($1::text = '' OR ol.resource_type = $1)
@@ -88,7 +90,7 @@ pub async fn get_operation_logs(
             .await?;
 
         let logs = sqlx::query_as::<_, OperationLog>(
-            "SELECT ol.id, ol.user_id, COALESCE(u.username, '已删除用户') as username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id ORDER BY ol.created_at DESC LIMIT $1 OFFSET $2"
+            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id ORDER BY ol.created_at DESC LIMIT $1 OFFSET $2"
         )
         .bind(page_size)
         .bind(offset)

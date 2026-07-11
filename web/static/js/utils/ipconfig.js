@@ -270,32 +270,36 @@ export class IpConfigManager {
         if (regionIds.size === 0 && ips.some(ip => ip.network_id)) {
           const networkIds = ips.filter(ip => ip.network_id).map(ip => ip.network_id);
           const uniqueNetworkIds = [...new Set(networkIds)];
-          const networkPromises = uniqueNetworkIds.map(id => 
-            apiGet(`/api/resources/networks/${id}`).catch(() => null)
+          const networkResults = await Promise.allSettled(
+            uniqueNetworkIds.map(id => apiGet(`/api/resources/networks/${id}`))
           );
-          const networkResults = await Promise.all(networkPromises);
           for (const result of networkResults) {
-            if (result?.success && result.data) {
-              const network = result.data;
+            if (result.status === 'fulfilled' && result.value?.success && result.value.data) {
+              const network = result.value.data;
               if (network.network_region_id) {
                 regionIds.add(network.network_region_id);
               }
               allNetworks.push(network);
+            } else if (result.status === 'rejected') {
+              console.error('网络数据获取失败:', result.reason);
             }
           }
         }
-        
+
         if (regionIds.size > 0) {
-          const networkPromises = Array.from(regionIds).map(regionId => {
-            const url = this.config.networksApi(regionId);
-            return url ? apiGet(url).catch(() => null) : null;
-          }).filter(Boolean);
-          
-          const networkResults = await Promise.all(networkPromises);
+          const networkUrls = Array.from(regionIds)
+            .map(regionId => this.config.networksApi(regionId))
+            .filter(Boolean);
+
+          const networkResults = await Promise.allSettled(
+            networkUrls.map(url => apiGet(url))
+          );
           for (const result of networkResults) {
-            if (result?.success && result.data) {
-              const regionNetworks = result.data.items || result.data || [];
+            if (result.status === 'fulfilled' && result.value?.success && result.value.data) {
+              const regionNetworks = result.value.data.items || result.value.data || [];
               allNetworks = allNetworks.concat(regionNetworks);
+            } else if (result.status === 'rejected') {
+              console.error('网络数据获取失败:', result.reason);
             }
           }
         }
@@ -305,13 +309,14 @@ export class IpConfigManager {
         if (!id && ips && ips.length > 0 && ips[0].network_id) {
           const networkIds = [...new Set(ips.filter(ip => ip.network_id).map(ip => ip.network_id))];
           if (networkIds.length > 0) {
-            const networkPromises = networkIds.map(nid => 
-              apiGet(`/api/resources/networks/${nid}`).catch(() => null)
+            const networkResults = await Promise.allSettled(
+              networkIds.map(nid => apiGet(`/api/resources/networks/${nid}`))
             );
-            const networkResults = await Promise.all(networkPromises);
             for (const result of networkResults) {
-              if (result?.success && result.data) {
-                allNetworks.push(result.data);
+              if (result.status === 'fulfilled' && result.value?.success && result.value.data) {
+                allNetworks.push(result.value.data);
+              } else if (result.status === 'rejected') {
+                console.error('网络数据获取失败:', result.reason);
               }
             }
           }

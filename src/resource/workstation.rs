@@ -56,7 +56,7 @@ pub async fn get_workstations(
 
         let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    (SELECT r.name FROM rooms r WHERE r.id = w.room_id) as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w {order_clause} LIMIT $1 OFFSET $2"
         )))
@@ -75,7 +75,7 @@ pub async fn get_workstations(
 
         let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    (SELECT r.name FROM rooms r WHERE r.id = w.room_id) as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"
         )))
@@ -97,7 +97,7 @@ pub async fn get_workstations(
 
         let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    (SELECT r.name FROM rooms r WHERE r.id = w.room_id) as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.room_id = $1 AND (w.name ILIKE $2 OR w.manager ILIKE $2 OR w.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"
         )))
@@ -119,7 +119,7 @@ pub async fn get_workstations(
 
         let workstations_basic = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT w.id, w.name, w.room_id,
-                    COALESCE((SELECT r.name FROM rooms r WHERE r.id = w.room_id), '未知房间') as room_name,
+                    (SELECT r.name FROM rooms r WHERE r.id = w.room_id) as room_name,
                     w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ
              FROM workstations w WHERE w.name ILIKE $1 OR w.manager ILIKE $1 OR w.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         )))
@@ -143,12 +143,8 @@ pub async fn get_workstations(
     for row in workstations_basic {
         let id: Uuid = row.get("id");
         let name: String = row.get("name");
-        let room_id: Uuid = row
-            .get::<Option<Uuid>, _>("room_id")
-            .unwrap_or_else(Uuid::nil);
-        let room_name: String = row
-            .get::<Option<String>, _>("room_name")
-            .unwrap_or_else(|| "未知房间".to_string());
+        let room_id: Uuid = row.get("room_id");
+        let room_name: Option<String> = row.get("room_name");
         let manager: Option<String> = row.get("manager");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
@@ -353,17 +349,11 @@ pub async fn get_workstation(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let room_name = sqlx::query_scalar::<_, String>("SELECT COALESCE((SELECT r.name FROM rooms r JOIN workstations w ON r.id = w.room_id WHERE w.id = $1), '未知房间')")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?
-        .unwrap_or_else(|| "未知房间".to_string());
-
     let workstation_with_details = WorkstationWithDetails {
         id: workstation.id,
         name: workstation.name,
         room_id: workstation.room_id,
-        room_name,
+        room_name: workstation.room_name,
         manager: workstation.manager.clone(),
         ips: workstation_ips,
         description: workstation.description,
@@ -479,9 +469,7 @@ pub async fn update_workstation(
         id: row.get("id"),
         name: row.get("name"),
         room_id: row.get("room_id"),
-        room_name: row
-            .get::<Option<String>, _>("room_name")
-            .unwrap_or_default(),
+        room_name: row.get::<Option<String>, _>("room_name"),
         manager: row.get("manager"),
         ips,
         description: row.get("description"),

@@ -585,7 +585,7 @@ pub struct WorkstationWithDetails {
     pub id: Uuid,
     pub name: String,
     pub room_id: Uuid,
-    pub room_name: String,
+    pub room_name: Option<String>,
     pub manager: Option<String>,
     pub ips: Vec<IpManager>,
     pub description: Option<String>,
@@ -875,7 +875,7 @@ pub struct DeviceLldpCreate {
 pub struct OperationLog {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
-    pub username: String,
+    pub username: Option<String>,
     pub action: String,
     pub operation_type: String,
     pub resource_type: String,

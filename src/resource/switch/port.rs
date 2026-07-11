@@ -419,7 +419,7 @@ pub async fn sync_ports_from_snmp(
         }
     };
 
-    let snmp_params = switch_data.to_snmp_params_async(ip_address).await;
+    let snmp_params = switch_data.to_snmp_params_async(ip_address).await?;
 
     let ports = get_device_ports_via_snmp(&snmp_params)
         .await

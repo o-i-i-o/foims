@@ -328,15 +328,15 @@ pub async fn create_device(
 
     // Encrypt SNMP sensitive fields
     let encrypted_community = match &req.snmp_community {
-        Some(c) if !c.is_empty() => encrypt_password_async(c.clone()).await,
+        Some(c) if !c.is_empty() => Some(encrypt_password_async(c.clone()).await?),
         _ => None,
     };
     let encrypted_auth_password = match &req.snmp_auth_password {
-        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
         _ => None,
     };
     let encrypted_priv_password = match &req.snmp_priv_password {
-        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
         _ => None,
     };
 
@@ -624,11 +624,11 @@ pub async fn get_device(
         .map_err(|e| AppError::Internal(format!("序列化IP数据失败: {e}")))?;
 
     let decrypted_community =
-        crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await;
+        crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await?;
     let decrypted_auth =
-        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()).await;
+        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()).await?;
     let decrypted_priv =
-        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()).await;
+        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()).await?;
     result["snmp_community"] = serde_json::to_value(decrypted_community)
         .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
     result["snmp_auth_password"] = serde_json::to_value(decrypted_auth)
@@ -765,15 +765,15 @@ pub async fn update_device(
 
     // Encrypt SNMP sensitive fields if provided
     let encrypted_community = match &req.snmp_community {
-        Some(c) if !c.is_empty() => encrypt_password_async(c.clone()).await,
+        Some(c) if !c.is_empty() => Some(encrypt_password_async(c.clone()).await?),
         _ => None,
     };
     let encrypted_auth_password = match &req.snmp_auth_password {
-        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
         _ => None,
     };
     let encrypted_priv_password = match &req.snmp_priv_password {
-        Some(p) if !p.is_empty() => encrypt_password_async(p.clone()).await,
+        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
         _ => None,
     };
 
@@ -1380,8 +1380,8 @@ pub async fn auto_assign_device_ip(
         .bind(req_network_id)
         .fetch_optional(&mut *tx)
         .await?
-        .map(|row| crate::utils::parse_network_from_row(&row))
-        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
+        .and_then(|row| crate::utils::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")

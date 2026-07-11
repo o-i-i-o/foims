@@ -214,7 +214,7 @@ pub async fn get_networks(
             .await?
             .into_iter()
             .map(|row| parse_network_from_row(&row))
-            .collect()
+            .collect::<Result<_, _>>()?
     } else {
         sqlx::query(
             r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
@@ -232,7 +232,7 @@ pub async fn get_networks(
         .await?
         .into_iter()
         .map(|row| parse_network_from_row(&row))
-        .collect()
+        .collect::<Result<_, _>>()?
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
@@ -463,7 +463,7 @@ pub async fn get_network(
     .await?
     .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
 
-    let network = parse_network_from_row(&row);
+    let network = parse_network_from_row(&row)?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络获取成功")))
 }
@@ -506,16 +506,17 @@ pub async fn update_network(
 
     let now = Utc::now();
 
-    let current_network = sqlx::query(
-        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+    let row = sqlx::query(
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
-           FROM network_cidrs n 
-           JOIN network_regions nt ON n.network_region_id = nt.id 
+           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
+           FROM network_cidrs n
+           JOIN network_regions nt ON n.network_region_id = nt.id
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(&state.pool()?.get_conn()).await.map(|row| parse_network_from_row(&row))?;
+    .fetch_one(&state.pool()?.get_conn()).await?;
+    let current_network = parse_network_from_row(&row)?;
 
     let full_network_name = match &req.name {
         Some(new_name) => new_name.clone(),
@@ -668,7 +669,7 @@ pub async fn update_network(
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 
-    let network = parse_network_from_row(&row);
+    let network = parse_network_from_row(&row)?;
 
     let details = serde_json::json!({
         "name": network.name,
