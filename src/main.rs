@@ -642,8 +642,8 @@ async fn main() -> std::io::Result<()> {
                 std::process::exit(1);
             });
 
-            info!("1. 停止接收新连接...");
-            let server_stop_timeout = tokio::time::Duration::from_secs(5);
+            info!("1. 停止接收新连接并等待请求完成...");
+            let server_stop_timeout = tokio::time::Duration::from_secs(10);
             let all_stops: Vec<_> = all_server_handles
                 .into_iter()
                 .enumerate()
@@ -661,7 +661,7 @@ async fn main() -> std::io::Result<()> {
             info!("服务器已停止接收新连接");
 
             info!("2. 等待服务器任务结束...");
-            let task_wait_timeout = tokio::time::Duration::from_secs(5);
+            let task_wait_timeout = tokio::time::Duration::from_secs(3);
             for (idx, join_handle) in all_server_join_handles.into_iter().enumerate() {
                 if let Err(e) = tokio::time::timeout(task_wait_timeout, join_handle).await {
                     warn!("服务器任务 {} 等待超时: {}", idx, e);
