@@ -39,7 +39,8 @@
     "load_failed": "加载失败",
     "load_failed_retry": "加载失败，请刷新页面重试",
     "confirm_delete": "确定要删除此{{name}}吗？",
-    "operation_failed": "操作失败"
+    "operation_failed": "操作失败",
+    "status": "状态"
   },
   "status": {
     "active": "活跃",
@@ -101,7 +102,19 @@
     "mac_table": "MAC表",
     "lldp_neighbors": "LLDP邻居",
     "no_mac_data": "暂无MAC数据",
-    "no_lldp_data": "暂无LLDP数据"
+    "no_lldp_data": "暂无LLDP数据",
+    "snmp_no_auth": "无认证",
+    "snmp_no_priv": "无加密",
+    "snmp_v2c": "SNMPv1/v2c",
+    "snmp_v3": "SNMPv3",
+    "vlan_id": "VLAN ID",
+    "port_type_access": "Access",
+    "port_type_trunk": "Trunk",
+    "port_type_hybrid": "Hybrid",
+    "port_type_uplink": "Uplink",
+    "port_status_up": "Up",
+    "port_status_down": "Down",
+    "port_status_admin_down": "Admin Down"
   },
   "room": {
     "name": "房间名称",
@@ -166,6 +179,8 @@
     "region": "网络区域",
     "ipv4_cidr": "IPv4 CIDR",
     "ipv6_cidr": "IPv6 CIDR",
+    "ipv4_dns": "IPv4 DNS",
+    "ipv6_dns": "IPv6 DNS",
     "ipv4_gateway": "IPv4网关",
     "ipv6_gateway": "IPv6网关",
     "usage": "使用情况",
@@ -279,7 +294,8 @@
     "version": "系统版本",
     "database_status": "数据库状态",
     "system_time": "系统时间",
-    "uptime": "运行时间"
+    "uptime": "运行时间",
+    "scheduled_tasks": "定时任务"
   },
   "user": {
     "email": "邮箱",
@@ -469,7 +485,8 @@
     "network": "网络",
     "location": "位置",
     "last_seen": "最后在线",
-    "pull_mac": "拉取MAC"
+    "pull_mac": "拉取MAC",
+    "add_ip": "添加IP"
   },
   "visualization": {
     "workstation": "工位可视化",

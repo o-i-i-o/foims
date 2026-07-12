@@ -39,7 +39,8 @@
     "load_failed": "Load failed",
     "load_failed_retry": "Load failed, please refresh and try again",
     "confirm_delete": "Are you sure you want to delete this {{name}}?",
-    "operation_failed": "Operation failed"
+    "operation_failed": "Operation failed",
+    "status": "Status"
   },
   "status": {
     "active": "Active",
@@ -101,7 +102,19 @@
     "mac_table": "MAC Table",
     "lldp_neighbors": "LLDP Neighbors",
     "no_mac_data": "No MAC data",
-    "no_lldp_data": "No LLDP data"
+    "no_lldp_data": "No LLDP data",
+    "snmp_no_auth": "No Auth",
+    "snmp_no_priv": "No Privacy",
+    "snmp_v2c": "SNMPv1/v2c",
+    "snmp_v3": "SNMPv3",
+    "vlan_id": "VLAN ID",
+    "port_type_access": "Access",
+    "port_type_trunk": "Trunk",
+    "port_type_hybrid": "Hybrid",
+    "port_type_uplink": "Uplink",
+    "port_status_up": "Up",
+    "port_status_down": "Down",
+    "port_status_admin_down": "Admin Down"
   },
   "room": {
     "name": "Room Name",
@@ -166,6 +179,8 @@
     "region": "Network Region",
     "ipv4_cidr": "IPv4 CIDR",
     "ipv6_cidr": "IPv6 CIDR",
+    "ipv4_dns": "IPv4 DNS",
+    "ipv6_dns": "IPv6 DNS",
     "ipv4_gateway": "IPv4 Gateway",
     "ipv6_gateway": "IPv6 Gateway",
     "usage": "Usage",
@@ -279,7 +294,8 @@
     "version": "System Version",
     "database_status": "Database Status",
     "system_time": "System Time",
-    "uptime": "System Uptime"
+    "uptime": "System Uptime",
+    "scheduled_tasks": "Scheduled Tasks"
   },
   "user": {
     "email": "Email",
@@ -469,7 +485,8 @@
     "network": "Network",
     "location": "Location",
     "last_seen": "Last Seen",
-    "pull_mac": "Pull MAC"
+    "pull_mac": "Pull MAC",
+    "add_ip": "Add IP"
   },
   "visualization": {
     "workstation": "Workstation Visualization",
