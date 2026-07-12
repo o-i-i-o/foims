@@ -135,7 +135,7 @@ async function loadPeerNetOutlets(currentId = null, selectedPeerId = null) {
   const peerSelect = elementCache.get('net-outlet-peer-id');
   if (!peerSelect) return;
 
-  peerSelect.innerHTML = `<option value="">${t('net_outlet.select_peer') || '选择对端网络端口'}</option>`;
+  peerSelect.innerHTML = `<option value="">${t('net_outlet.select_peer') || '选择对端信息点'}</option>`;
 
   try {
     const result = await apiGet('/api/resources/net-outlets?page_size=1000');
@@ -154,7 +154,7 @@ async function loadPeerNetOutlets(currentId = null, selectedPeerId = null) {
       }
     }
   } catch (error) {
-    console.error('加载对端网络端口选项失败:', error);
+    console.error('加载对端信息点选项失败:', error);
   }
 }
 

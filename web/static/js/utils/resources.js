@@ -272,7 +272,7 @@ export async function loadNetOutletsForSelect(selectId, roomId = null) {
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet') || '选择网络端口'}</option>`;
+    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet') || '选择信息点'}</option>`;
 
     const items = extractItems(result);
     items.forEach(outlet => {
@@ -286,7 +286,7 @@ export async function loadNetOutletsForSelect(selectId, roomId = null) {
       select.value = currentValue;
     }
   } catch (error) {
-    console.error("加载网络端口选项失败:", error);
+    console.error("加载信息点选项失败:", error);
   }
 }
 

@@ -295,7 +295,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::put().to(update_org_template))
                                 .route("/{id}", web::delete().to(delete_org_template)),
                         )
-                        // 网络端口管理
+                        // 信息点管理
                         .service(
                             web::scope("/net-outlets")
                                 .route("", web::get().to(get_net_outlets))

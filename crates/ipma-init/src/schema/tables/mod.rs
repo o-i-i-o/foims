@@ -57,7 +57,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 交换机端口/MAC/LLDP（引用 devices）
     switches::create(pool).await?;
 
-    // 网络端口（引用 rooms/cabinets，device_port_id 延迟添加）
+    // 信息点（引用 rooms/cabinets，device_port_id 延迟添加）
     net_outlets::create(pool).await?;
 
     // IP（引用 workstations/positions/device_ports/devices/network_cidrs）

@@ -300,7 +300,7 @@ pub async fn auto_discover_device_topology(
         .await?;
 
         if let Some((outlet_device_port_id, peer_outlet_id)) = outlet_row {
-            // 通过网络端口的 device_port_id 找交换机
+            // 通过信息点的 device_port_id 找交换机
             if let Some(outlet_dp_id) = outlet_device_port_id {
                 let switch_row = sqlx::query_as::<_, (Uuid,)>(
                     r"SELECT device_id FROM device_ports WHERE id = $1",
@@ -321,7 +321,7 @@ pub async fn auto_discover_device_topology(
                 }
             }
 
-            // 通过 peer 网络端口的 device_port_id 找交换机
+            // 通过 peer 信息点的 device_port_id 找交换机
             if let Some(peer_id) = peer_outlet_id {
                 let peer_row = sqlx::query_as::<_, (Option<Uuid>,)>(
                     r"SELECT device_port_id FROM net_outlets WHERE id = $1",

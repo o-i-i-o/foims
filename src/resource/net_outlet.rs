@@ -133,7 +133,7 @@ pub async fn get_net_outlets(
             "page_size": page_size,
             "total_pages": (total + page_size - 1) / page_size
         }),
-        "网络端口列表获取成功",
+        "信息点列表获取成功",
     )))
 }
 
@@ -173,7 +173,7 @@ pub async fn create_net_outlet(
         "wall_socket" | "patch_panel" | "wifi_ap" | "other"
     ) {
         return Err(AppError::Validation(
-            "网络端口类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
+            "信息点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
         ));
     }
 
@@ -200,7 +200,7 @@ pub async fn create_net_outlet(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下网络端口名称已存在".to_string());
+            return AppError::Conflict("该房间下信息点名称已存在".to_string());
         }
         AppError::from(e)
     })?;
@@ -242,7 +242,7 @@ pub async fn create_net_outlet(
 
     Ok(HttpResponse::Ok().json(ApiResponse::<NetOutlet>::success(
         net_outlet,
-        "网络端口创建成功",
+        "信息点创建成功",
     )))
 }
 
@@ -262,12 +262,12 @@ pub async fn get_net_outlet(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("信息点未找到".to_string()))?;
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
             net_outlet,
-            "网络端口获取成功",
+            "信息点获取成功",
         )),
     )
 }
@@ -288,7 +288,7 @@ pub async fn update_net_outlet(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("网络端口未找到".to_string()));
+        return Err(AppError::NotFound("信息点未找到".to_string()));
     }
 
     // Fetch current room_id and cabinet_id for validation
@@ -343,7 +343,7 @@ pub async fn update_net_outlet(
         )
     {
         return Err(AppError::Validation(
-            "网络端口类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
+            "信息点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
         ));
     }
 
@@ -494,7 +494,7 @@ pub async fn update_net_outlet(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下网络端口名称已存在".to_string());
+            return AppError::Conflict("该房间下信息点名称已存在".to_string());
         }
         AppError::from(e)
     })?;
@@ -537,7 +537,7 @@ pub async fn update_net_outlet(
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
             net_outlet,
-            "网络端口更新成功",
+            "信息点更新成功",
         )),
     )
 }
@@ -556,7 +556,7 @@ pub async fn delete_net_outlet(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("网络端口未找到".to_string()));
+        return Err(AppError::NotFound("信息点未找到".to_string()));
     }
 
     // Check if any devices reference this access point
@@ -567,7 +567,7 @@ pub async fn delete_net_outlet(
             .await?;
     if device_count > 0 {
         return Err(AppError::Validation(format!(
-            "该网络端口已被 {device_count} 个设备关联，无法删除"
+            "该信息点已被 {device_count} 个设备关联，无法删除"
         )));
     }
 
@@ -601,7 +601,7 @@ pub async fn delete_net_outlet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "网络端口删除成功")))
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "信息点删除成功")))
 }
 
 pub async fn link_peer(
@@ -617,7 +617,7 @@ pub async fn link_peer(
 
     if id == peer_id {
         return Err(AppError::Validation(
-            "网络端口不能与自身建立对端连接".to_string(),
+            "信息点不能与自身建立对端连接".to_string(),
         ));
     }
 
@@ -628,14 +628,14 @@ pub async fn link_peer(
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("信息点未找到".to_string()))?;
 
     // Verify peer AP exists
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM net_outlets WHERE id = $1")
         .bind(peer_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::Validation("对端网络端口不存在".to_string()))?;
+        .ok_or_else(|| AppError::Validation("对端信息点不存在".to_string()))?;
 
     // Check for circular reference: the peer shouldn't already have a peer that creates a chain > 2
     // If the peer already has a peer_net_outlet_id set (and it's not our current id), that would create a chain
@@ -649,7 +649,7 @@ pub async fn link_peer(
         && other_peer_id != id
     {
         return Err(AppError::Validation(
-            "对端网络端口已有其他对端连接，无法建立链式连接".to_string(),
+            "对端信息点已有其他对端连接，无法建立链式连接".to_string(),
         ));
     }
 
@@ -725,7 +725,7 @@ pub async fn link_peer(
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
             net_outlet,
-            "对端网络端口关联成功",
+            "对端信息点关联成功",
         )),
     )
 }
@@ -746,11 +746,11 @@ pub async fn unlink_peer(
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("信息点未找到".to_string()))?;
 
     let peer_id = existing
         .peer_net_outlet_id
-        .ok_or_else(|| AppError::Validation("该网络端口没有对端连接".to_string()))?;
+        .ok_or_else(|| AppError::Validation("该信息点没有对端连接".to_string()))?;
 
     let now = Utc::now();
 
@@ -807,7 +807,7 @@ pub async fn unlink_peer(
     Ok(
         HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
             net_outlet,
-            "对端网络端口取消关联成功",
+            "对端信息点取消关联成功",
         )),
     )
 }

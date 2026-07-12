@@ -38,7 +38,7 @@ pub async fn connect_device(
                     .fetch_one(&mut *tx)
                     .await?;
             if !exists {
-                return Err(AppError::NotFound("网络端口未找到".to_string()));
+                return Err(AppError::NotFound("信息点未找到".to_string()));
             }
             Some(*outlet_id)
         }
@@ -92,7 +92,7 @@ pub async fn connect_device(
     // Business validation: net_outlet_id and device_port_id cannot both be set
     if resolved_outlet_id.is_some() && resolved_sp_id.is_some() {
         return Err(AppError::Validation(
-            "网络端口和交换机端口不能同时指定".to_string(),
+            "信息点和交换机端口不能同时指定".to_string(),
         ));
     }
 

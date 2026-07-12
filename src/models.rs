@@ -1067,7 +1067,7 @@ pub struct OrganizationUpdate {
     pub description: Option<String>,
 }
 
-// ==================== 网络端口模型 ====================
+// ==================== 信息点模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct NetOutlet {
@@ -1104,7 +1104,7 @@ pub struct NetOutletWithDetails {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetOutletCreate {
-    #[validate(length(min = 1, max = 100, message = "网络端口名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
     pub name: String,
     pub outlet_type: Option<String>,
     pub room_id: Uuid,
@@ -1117,7 +1117,7 @@ pub struct NetOutletCreate {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetOutletUpdate {
-    #[validate(length(min = 1, max = 100, message = "网络端口名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
     pub outlet_type: Option<String>,
     pub room_id: Option<Uuid>,

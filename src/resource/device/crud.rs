@@ -200,7 +200,7 @@ pub async fn create_device(
     // Business validation: net_outlet_id and device_port_id cannot both be set
     if req.net_outlet_id.is_some() && req.device_port_id.is_some() {
         return Err(AppError::Validation(
-            "接入点和交换机端口不能同时指定".to_string(),
+            "信息点和交换机端口不能同时指定".to_string(),
         ));
     }
 
@@ -231,14 +231,14 @@ pub async fn create_device(
     }
 
     // If net_outlet_id provided, verify it exists
-    if let Some(ap_id) = req.net_outlet_id {
+    if let Some(outlet_id) = req.net_outlet_id {
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
-                .bind(ap_id)
+                .bind(outlet_id)
                 .fetch_one(&mut *tx)
                 .await?;
         if !exists {
-            return Err(AppError::NotFound("接入点未找到".to_string()));
+            return Err(AppError::NotFound("信息点未找到".to_string()));
         }
     }
 
@@ -489,7 +489,7 @@ pub async fn create_device(
 
     tx.commit().await?;
 
-    // 若设备配置了接入点或端口，自动发现拓扑关联
+    // 若设备配置了信息点或端口，自动发现拓扑关联
     if (req.net_outlet_id.is_some() || req.device_port_id.is_some())
         && let Err(e) =
             ipma_visualization::auto_discover_device_topology(&state.pool()?.get_conn(), id).await
@@ -656,7 +656,7 @@ pub async fn update_device(
 
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
-    let current_ap_id: Option<Uuid> = current_row.get("net_outlet_id");
+    let current_outlet_id: Option<Uuid> = current_row.get("net_outlet_id");
     let current_sp_id: Option<Uuid> = current_row.get("device_port_id");
 
     // Resolve the final values for Option<Option<Uuid>> fields
@@ -694,17 +694,17 @@ pub async fn update_device(
     };
 
     let resolved_net_outlet_id = match &req.net_outlet_id {
-        None => current_ap_id,
-        Some(Some(ap_id)) => {
+        None => current_outlet_id,
+        Some(Some(outlet_id)) => {
             let exists: bool =
                 sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
-                    .bind(ap_id)
+                    .bind(outlet_id)
                     .fetch_one(&mut *tx)
                     .await?;
             if !exists {
-                return Err(AppError::NotFound("接入点未找到".to_string()));
+                return Err(AppError::NotFound("信息点未找到".to_string()));
             }
-            Some(*ap_id)
+            Some(*outlet_id)
         }
         Some(None) => None,
     };
@@ -733,7 +733,7 @@ pub async fn update_device(
     // Business validation: net_outlet_id and device_port_id cannot both be set
     if resolved_net_outlet_id.is_some() && resolved_device_port_id.is_some() {
         return Err(AppError::Validation(
-            "接入点和交换机端口不能同时指定".to_string(),
+            "信息点和交换机端口不能同时指定".to_string(),
         ));
     }
 
@@ -972,10 +972,11 @@ pub async fn update_device(
 
     tx.commit().await?;
 
-    // 若接入点或端口配置变更，更新自动发现的拓扑连线
-    let ap_changed = req.net_outlet_id.is_some() && (resolved_net_outlet_id != current_ap_id);
+    // 若信息点或端口配置变更，更新自动发现的拓扑连线
+    let outlet_changed =
+        req.net_outlet_id.is_some() && (resolved_net_outlet_id != current_outlet_id);
     let sp_changed = req.device_port_id.is_some() && (resolved_device_port_id != current_sp_id);
-    if ap_changed || sp_changed {
+    if outlet_changed || sp_changed {
         let pool = &state.pool()?.get_conn();
         // 删除旧的自动发现连线
         if let Err(e) = sqlx::query(
