@@ -24,7 +24,7 @@ const MODULE_REGISTRY = {
     'workstation': '/static/js/modules/workstation.js',
     'cabinet': '/static/js/modules/cabinet.js',
     'position': '/static/js/modules/position.js',
-    'accessPoint': '/static/js/modules/accessPoint.js',
+    'netOutlet': '/static/js/modules/netOutlet.js',
     'userManager': '/static/js/modules/userManager.js',
     'systemManager': '/static/js/modules/systemManager.js',
     'logViewer': '/static/js/modules/logViewer.js',

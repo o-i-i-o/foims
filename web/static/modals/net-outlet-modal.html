@@ -1,0 +1,66 @@
+<template id="net-outlet-modal-template">
+<div id="net-outlet-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="net-outlet-modal-title" data-i18n="net_outlet.add">Add Network Outlet</h3>
+      <span class="close" data-modal-id="net-outlet-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="net-outlet-form">
+        <input type="hidden" id="net-outlet-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="net-outlet-name"><span data-i18n="net_outlet.name">Network Outlet Name</span><span class="required">*</span></label>
+            <input type="text" id="net-outlet-name" name="name" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="net-outlet-type"><span data-i18n="net_outlet.type">Type</span></label>
+            <select id="net-outlet-type" name="outlet_type">
+              <option value="wall_socket" data-i18n="net_outlet.type_wall_socket">Wall Socket</option>
+              <option value="patch_panel" data-i18n="net_outlet.type_patch_panel">Patch Panel</option>
+              <option value="wifi_ap" data-i18n="net_outlet.type_wifi_ap">WiFi AP</option>
+              <option value="other" data-i18n="net_outlet.type_other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="net-outlet-room-id"><span data-i18n="net_outlet.room">Room</span><span class="required">*</span></label>
+            <select id="net-outlet-room-id" name="room_id" required>
+              <option value="" data-i18n="net_outlet.select_room">Select Room</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="net-outlet-cabinet-id" data-i18n="net_outlet.cabinet">Cabinet</label>
+            <select id="net-outlet-cabinet-id" name="cabinet_id">
+              <option value="" data-i18n="net_outlet.select_cabinet">Select Cabinet</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="net-outlet-peer-id" data-i18n="net_outlet.peer">Peer Network Outlet</label>
+            <select id="net-outlet-peer-id" name="peer_net_outlet_id">
+              <option value="" data-i18n="net_outlet.select_peer">Select Peer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="net-outlet-device-port-id" data-i18n="net_outlet.device_port">Device Port</label>
+            <select id="net-outlet-device-port-id" name="device_port_id">
+              <option value="" data-i18n="net_outlet.select_device_port">Select Device Port</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="net-outlet-description" data-i18n="common.description">Description</label>
+          <textarea id="net-outlet-description" name="description" rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="net-outlet-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="net-outlet-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

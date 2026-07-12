@@ -654,8 +654,8 @@ pub struct IpManagerWithNames {
     pub port_device_number: Option<String>,
     pub connected_device_name: Option<String>,
     pub connected_device_type: Option<String>,
-    pub access_point_name: Option<String>,
-    pub peer_access_point_name: Option<String>,
+    pub net_outlet_name: Option<String>,
+    pub peer_net_outlet_name: Option<String>,
     pub room_name: Option<String>,
     pub cabinet_name: Option<String>,
     pub org_name: Option<String>,
@@ -1067,16 +1067,16 @@ pub struct OrganizationUpdate {
     pub description: Option<String>,
 }
 
-// ==================== 接入点模型 ====================
+// ==================== 网络端口模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct AccessPoint {
+pub struct NetOutlet {
     pub id: Uuid,
     pub name: String,
-    pub ap_type: String,
+    pub outlet_type: String,
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
-    pub peer_access_point_id: Option<Uuid>,
+    pub peer_net_outlet_id: Option<Uuid>,
     pub device_port_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -1084,16 +1084,16 @@ pub struct AccessPoint {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct AccessPointWithDetails {
+pub struct NetOutletWithDetails {
     pub id: Uuid,
     pub name: String,
-    pub ap_type: String,
+    pub outlet_type: String,
     pub room_id: Uuid,
     pub room_name: Option<String>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
-    pub peer_access_point_id: Option<Uuid>,
-    pub peer_access_point_name: Option<String>,
+    pub peer_net_outlet_id: Option<Uuid>,
+    pub peer_net_outlet_name: Option<String>,
     pub device_port_id: Option<Uuid>,
     pub connected_device_port: Option<String>,
     pub connected_device_name: Option<String>,
@@ -1103,34 +1103,34 @@ pub struct AccessPointWithDetails {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct AccessPointCreate {
-    #[validate(length(min = 1, max = 100, message = "接入点名称长度必须在1到100个字符之间"))]
+pub struct NetOutletCreate {
+    #[validate(length(min = 1, max = 100, message = "网络端口名称长度必须在1到100个字符之间"))]
     pub name: String,
-    pub ap_type: Option<String>,
+    pub outlet_type: Option<String>,
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
-    pub peer_access_point_id: Option<Uuid>,
+    pub peer_net_outlet_id: Option<Uuid>,
     pub device_port_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct AccessPointUpdate {
-    #[validate(length(min = 1, max = 100, message = "接入点名称长度必须在1到100个字符之间"))]
+pub struct NetOutletUpdate {
+    #[validate(length(min = 1, max = 100, message = "网络端口名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
-    pub ap_type: Option<String>,
+    pub outlet_type: Option<String>,
     pub room_id: Option<Uuid>,
     pub cabinet_id: Option<Option<Uuid>>,
-    pub peer_access_point_id: Option<Option<Uuid>>,
+    pub peer_net_outlet_id: Option<Option<Uuid>>,
     pub device_port_id: Option<Option<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct AccessPointLinkPeer {
-    pub peer_access_point_id: Uuid,
+pub struct NetOutletLinkPeer {
+    pub peer_net_outlet_id: Uuid,
 }
 
 // ==================== 设备模板模型 ====================
@@ -1168,7 +1168,7 @@ pub struct Device {
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub access_point_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
     pub device_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
     pub vendor: Option<String>,
@@ -1203,9 +1203,9 @@ pub struct DeviceWithDetails {
     pub cabinet_name: Option<String>,
     pub start_u: Option<i32>,
     pub end_u: Option<i32>,
-    pub access_point_id: Option<Uuid>,
-    pub access_point_name: Option<String>,
-    pub access_point_type: Option<String>,
+    pub net_outlet_id: Option<Uuid>,
+    pub net_outlet_name: Option<String>,
+    pub outlet_type: Option<String>,
     pub device_port_id: Option<Uuid>,
     pub connected_device_port: Option<String>,
     pub connected_device_name: Option<String>,
@@ -1240,7 +1240,7 @@ pub struct DeviceCreate {
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub access_point_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
     pub device_port_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
@@ -1284,7 +1284,7 @@ pub struct DeviceUpdate {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub position_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub access_point_id: Option<Option<Uuid>>,
+    pub net_outlet_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub device_port_id: Option<Option<Uuid>>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
@@ -1313,6 +1313,6 @@ pub struct DeviceUpdate {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceConnectRequest {
-    pub access_point_id: Option<Option<Uuid>>,
+    pub net_outlet_id: Option<Option<Uuid>>,
     pub device_port_id: Option<Option<Uuid>>,
 }

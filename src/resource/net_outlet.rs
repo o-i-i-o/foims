@@ -1,8 +1,8 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    AccessPoint, AccessPointCreate, AccessPointLinkPeer, AccessPointUpdate, AccessPointWithDetails,
-    ApiResponse,
+    ApiResponse, NetOutlet, NetOutletCreate, NetOutletLinkPeer, NetOutletUpdate,
+    NetOutletWithDetails,
 };
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
@@ -14,7 +14,7 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
-pub async fn get_access_points(
+pub async fn get_net_outlets(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
@@ -24,7 +24,7 @@ pub async fn get_access_points(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
-    let ap_type = query.get("ap_type").cloned();
+    let outlet_type = query.get("outlet_type").cloned();
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -48,15 +48,15 @@ pub async fn get_access_points(
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY ap.name DESC",
-        ("ap_type", "desc") => "ORDER BY ap.ap_type DESC, ap.name ASC",
-        ("ap_type", _) => "ORDER BY ap.ap_type ASC, ap.name ASC",
+        ("outlet_type", "desc") => "ORDER BY ap.outlet_type DESC, ap.name ASC",
+        ("outlet_type", _) => "ORDER BY ap.outlet_type ASC, ap.name ASC",
         ("created_at", "desc") => "ORDER BY ap.created_at DESC",
         ("created_at", _) => "ORDER BY ap.created_at ASC",
         _ => "ORDER BY ap.name ASC",
     };
 
     let has_room_filter = parsed_room_id.is_some();
-    let has_type_filter = !ap_type.as_ref().is_none_or(|t| t.is_empty());
+    let has_type_filter = !outlet_type.as_ref().is_none_or(|t| t.is_empty());
     let has_search = !search.is_empty();
 
     // Build WHERE conditions dynamically
@@ -65,7 +65,7 @@ pub async fn get_access_points(
 
     if has_search {
         where_parts.push(format!(
-            "(ap.name ILIKE ${param_idx} OR ap.description ILIKE ${param_idx} OR ap.ap_type ILIKE ${param_idx})"
+            "(ap.name ILIKE ${param_idx} OR ap.description ILIKE ${param_idx} OR ap.outlet_type ILIKE ${param_idx})"
         ));
         param_idx += 1;
     }
@@ -74,7 +74,7 @@ pub async fn get_access_points(
         param_idx += 1;
     }
     if has_type_filter {
-        where_parts.push(format!("ap.ap_type = ${param_idx}"));
+        where_parts.push(format!("ap.outlet_type = ${param_idx}"));
         param_idx += 1;
     }
 
@@ -85,14 +85,14 @@ pub async fn get_access_points(
     };
 
     let count_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM access_points_with_details ap {where_clause}"
+        "SELECT COUNT(*) FROM net_outlets_with_details ap {where_clause}"
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT ap.id, ap.name, ap.ap_type, ap.room_id, ap.room_name, \
-         ap.cabinet_id, ap.cabinet_name, ap.peer_access_point_id, ap.peer_access_point_name, \
+        "SELECT ap.id, ap.name, ap.outlet_type, ap.room_id, ap.room_name, \
+         ap.cabinet_id, ap.cabinet_name, ap.peer_net_outlet_id, ap.peer_net_outlet_name, \
          ap.device_port_id, ap.connected_device_port, ap.connected_device_name, \
          ap.description, ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
-         FROM access_points_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET {}",
+         FROM net_outlets_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET {}",
         param_idx + 1
     ));
 
@@ -105,13 +105,13 @@ pub async fn get_access_points(
             q = q.bind(parsed_room_id);
         }
         if has_type_filter {
-            q = q.bind(&ap_type);
+            q = q.bind(&outlet_type);
         }
         q.fetch_one(&state.pool()?.get_conn()).await?
     };
 
-    let access_points = {
-        let mut q = sqlx::query_as::<_, AccessPointWithDetails>(data_sql);
+    let net_outlets = {
+        let mut q = sqlx::query_as::<_, NetOutletWithDetails>(data_sql);
         if has_search {
             q = q.bind(&search_pattern);
         }
@@ -119,7 +119,7 @@ pub async fn get_access_points(
             q = q.bind(parsed_room_id);
         }
         if has_type_filter {
-            q = q.bind(&ap_type);
+            q = q.bind(&outlet_type);
         }
         q = q.bind(page_size).bind(offset);
         q.fetch_all(&state.pool()?.get_conn()).await?
@@ -127,19 +127,19 @@ pub async fn get_access_points(
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(
         json!({
-            "items": access_points,
+            "items": net_outlets,
             "total": total,
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) / page_size
         }),
-        "接入点列表获取成功",
+        "网络端口列表获取成功",
     )))
 }
 
-pub async fn create_access_point(
+pub async fn create_net_outlet(
     state: web::Data<AppState>,
-    req: web::Json<AccessPointCreate>,
+    req: web::Json<NetOutletCreate>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
@@ -165,12 +165,15 @@ pub async fn create_access_point(
         }
     }
 
-    let ap_type = req.ap_type.as_deref().unwrap_or("wall_socket");
+    let outlet_type = req.outlet_type.as_deref().unwrap_or("wall_socket");
 
-    // Validate ap_type value
-    if !matches!(ap_type, "wall_socket" | "patch_panel" | "wifi_ap" | "other") {
+    // Validate outlet_type value
+    if !matches!(
+        outlet_type,
+        "wall_socket" | "patch_panel" | "wifi_ap" | "other"
+    ) {
         return Err(AppError::Validation(
-            "接入点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
+            "网络端口类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
         ));
     }
 
@@ -178,15 +181,15 @@ pub async fn create_access_point(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO access_points (id, name, ap_type, room_id, cabinet_id, peer_access_point_id, device_port_id, description, created_at, updated_at)
+        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, peer_net_outlet_id, device_port_id, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
     .bind(&req.name)
-    .bind(ap_type)
+    .bind(outlet_type)
     .bind(req.room_id)
     .bind(req.cabinet_id)
-    .bind(req.peer_access_point_id)
+    .bind(req.peer_net_outlet_id)
     .bind(req.device_port_id)
     .bind(&req.description)
     .bind(now)
@@ -197,18 +200,18 @@ pub async fn create_access_point(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下接入点名称已存在".to_string());
+            return AppError::Conflict("该房间下网络端口名称已存在".to_string());
         }
         AppError::from(e)
     })?;
 
-    let access_point = AccessPoint {
+    let net_outlet = NetOutlet {
         id,
         name: req.name.clone(),
-        ap_type: ap_type.to_string(),
+        outlet_type: outlet_type.to_string(),
         room_id: req.room_id,
         cabinet_id: req.cabinet_id,
-        peer_access_point_id: req.peer_access_point_id,
+        peer_net_outlet_id: req.peer_net_outlet_id,
         device_port_id: req.device_port_id,
         description: req.description.clone(),
         created_at: now,
@@ -216,17 +219,17 @@ pub async fn create_access_point(
     };
 
     let details = serde_json::json!({
-        "name": access_point.name,
-        "ap_type": access_point.ap_type,
-        "room_id": access_point.room_id,
-        "description": access_point.description
+        "name": net_outlet.name,
+        "outlet_type": net_outlet.outlet_type,
+        "room_id": net_outlet.room_id,
+        "description": net_outlet.description
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
             req: &http_req,
             action: "create",
-            resource_type: "access_point",
+            resource_type: "net_outlet",
             resource_id: &id,
             details: &details,
             result: true,
@@ -237,42 +240,42 @@ pub async fn create_access_point(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<AccessPoint>::success(
-        access_point,
-        "接入点创建成功",
+    Ok(HttpResponse::Ok().json(ApiResponse::<NetOutlet>::success(
+        net_outlet,
+        "网络端口创建成功",
     )))
 }
 
-pub async fn get_access_point(
+pub async fn get_net_outlet(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
 
-    let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
-        "SELECT id, name, ap_type, room_id, room_name, \
-         cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
+    let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
+        "SELECT id, name, outlet_type, room_id, room_name, \
+         cabinet_id, cabinet_name, peer_net_outlet_id, peer_net_outlet_name, \
          device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
-         FROM access_points_with_details WHERE id = $1",
+         FROM net_outlets_with_details WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("接入点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
 
     Ok(
-        HttpResponse::Ok().json(ApiResponse::<AccessPointWithDetails>::success(
-            access_point,
-            "接入点获取成功",
+        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
+            net_outlet,
+            "网络端口获取成功",
         )),
     )
 }
 
-pub async fn update_access_point(
+pub async fn update_net_outlet(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
-    req: web::Json<AccessPointUpdate>,
+    req: web::Json<NetOutletUpdate>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     let id = *id_path;
@@ -280,17 +283,17 @@ pub async fn update_access_point(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM access_points WHERE id = $1")
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM net_outlets WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("接入点未找到".to_string()));
+        return Err(AppError::NotFound("网络端口未找到".to_string()));
     }
 
     // Fetch current room_id and cabinet_id for validation
     let (current_room_id, current_cabinet_id): (Uuid, Option<Uuid>) =
-        sqlx::query_as("SELECT room_id, cabinet_id FROM access_points WHERE id = $1")
+        sqlx::query_as("SELECT room_id, cabinet_id FROM net_outlets WHERE id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
@@ -332,15 +335,15 @@ pub async fn update_access_point(
     // If room changed and cabinet not explicitly set, force cabinet_id to NULL
     let force_cabinet_null = room_changed && !cabinet_explicitly_set;
 
-    // Validate ap_type if provided
-    if let Some(ref ap_type) = req.ap_type
+    // Validate outlet_type if provided
+    if let Some(ref outlet_type) = req.outlet_type
         && !matches!(
-            ap_type.as_str(),
+            outlet_type.as_str(),
             "wall_socket" | "patch_panel" | "wifi_ap" | "other"
         )
     {
         return Err(AppError::Validation(
-            "接入点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
+            "网络端口类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
         ));
     }
 
@@ -356,8 +359,10 @@ pub async fn update_access_point(
     set_clauses.push(format!("name = COALESCE(${param_index}, name)"));
     param_index += 1;
 
-    // ap_type: Option<String> -> COALESCE pattern
-    set_clauses.push(format!("ap_type = COALESCE(${param_index}, ap_type)"));
+    // outlet_type: Option<String> -> COALESCE pattern
+    set_clauses.push(format!(
+        "outlet_type = COALESCE(${param_index}, outlet_type)"
+    ));
     param_index += 1;
 
     // room_id: Option<Uuid> -> COALESCE pattern
@@ -377,11 +382,11 @@ pub async fn update_access_point(
         param_index += 2;
     }
 
-    // peer_access_point_id: Option<Option<Uuid>>
-    let peer_id_update = req.peer_access_point_id.is_some();
+    // peer_net_outlet_id: Option<Option<Uuid>>
+    let peer_id_update = req.peer_net_outlet_id.is_some();
     if peer_id_update {
         set_clauses.push(format!(
-            "peer_access_point_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_access_point_id END",
+            "peer_net_outlet_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_net_outlet_id END",
             param_index = param_index,
             param_idx_val = param_index + 1
         ));
@@ -413,7 +418,7 @@ pub async fn update_access_point(
     let where_param = param_index;
 
     let sql = format!(
-        "UPDATE access_points SET {} WHERE id = ${}",
+        "UPDATE net_outlets SET {} WHERE id = ${}",
         set_clauses.join(", "),
         where_param
     );
@@ -422,8 +427,8 @@ pub async fn update_access_point(
 
     // Bind name
     query = query.bind(&req.name);
-    // Bind ap_type
-    query = query.bind(&req.ap_type);
+    // Bind outlet_type
+    query = query.bind(&req.outlet_type);
     // Bind room_id
     query = query.bind(req.room_id);
 
@@ -448,9 +453,9 @@ pub async fn update_access_point(
         }
     }
 
-    // Bind peer_access_point_id
+    // Bind peer_net_outlet_id
     if peer_id_update {
-        match req.peer_access_point_id {
+        match req.peer_net_outlet_id {
             Some(Some(pid)) => {
                 query = query.bind(true);
                 query = query.bind(pid);
@@ -489,36 +494,36 @@ pub async fn update_access_point(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下接入点名称已存在".to_string());
+            return AppError::Conflict("该房间下网络端口名称已存在".to_string());
         }
         AppError::from(e)
     })?;
 
     tx.commit().await?;
 
-    let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
-        "SELECT id, name, ap_type, room_id, room_name, \
-         cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
+    let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
+        "SELECT id, name, outlet_type, room_id, room_name, \
+         cabinet_id, cabinet_name, peer_net_outlet_id, peer_net_outlet_name, \
          device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
-         FROM access_points_with_details WHERE id = $1",
+         FROM net_outlets_with_details WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
     let details = serde_json::json!({
-        "name": access_point.name,
-        "ap_type": access_point.ap_type,
-        "room_id": access_point.room_id,
-        "description": access_point.description
+        "name": net_outlet.name,
+        "outlet_type": net_outlet.outlet_type,
+        "room_id": net_outlet.room_id,
+        "description": net_outlet.description
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
             req: &http_req,
             action: "update",
-            resource_type: "access_point",
+            resource_type: "net_outlet",
             resource_id: &id,
             details: &details,
             result: true,
@@ -530,14 +535,14 @@ pub async fn update_access_point(
     }
 
     Ok(
-        HttpResponse::Ok().json(ApiResponse::<AccessPointWithDetails>::success(
-            access_point,
-            "接入点更新成功",
+        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
+            net_outlet,
+            "网络端口更新成功",
         )),
     )
 }
 
-pub async fn delete_access_point(
+pub async fn delete_net_outlet(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
     http_req: HttpRequest,
@@ -546,48 +551,46 @@ pub async fn delete_access_point(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM access_points WHERE id = $1")
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM net_outlets WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("接入点未找到".to_string()));
+        return Err(AppError::NotFound("网络端口未找到".to_string()));
     }
 
     // Check if any devices reference this access point
     let device_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE access_point_id = $1")
+        sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE net_outlet_id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
     if device_count > 0 {
         return Err(AppError::Validation(format!(
-            "该接入点已被 {device_count} 个设备关联，无法删除"
+            "该网络端口已被 {device_count} 个设备关联，无法删除"
         )));
     }
 
-    // Clear peer_access_point_id on any AP that points to this one
-    sqlx::query(
-        "UPDATE access_points SET peer_access_point_id = NULL WHERE peer_access_point_id = $1",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    // Clear peer_net_outlet_id on any AP that points to this one
+    sqlx::query("UPDATE net_outlets SET peer_net_outlet_id = NULL WHERE peer_net_outlet_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query("DELETE FROM access_points WHERE id = $1")
+    sqlx::query("DELETE FROM net_outlets WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
         .await?;
 
     tx.commit().await?;
 
-    let details = serde_json::json!({ "access_point_id": id.to_string() });
+    let details = serde_json::json!({ "net_outlet_id": id.to_string() });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
             req: &http_req,
             action: "delete",
-            resource_type: "access_point",
+            resource_type: "net_outlet",
             resource_id: &id,
             details: &details,
             result: true,
@@ -598,46 +601,46 @@ pub async fn delete_access_point(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "接入点删除成功")))
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "网络端口删除成功")))
 }
 
 pub async fn link_peer(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
-    req: web::Json<AccessPointLinkPeer>,
+    req: web::Json<NetOutletLinkPeer>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
     let id = *id_path;
-    let peer_id = req.peer_access_point_id;
+    let peer_id = req.peer_net_outlet_id;
 
     if id == peer_id {
         return Err(AppError::Validation(
-            "接入点不能与自身建立对端连接".to_string(),
+            "网络端口不能与自身建立对端连接".to_string(),
         ));
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     // Verify current AP exists
-    sqlx::query_scalar::<_, Uuid>("SELECT id FROM access_points WHERE id = $1")
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM net_outlets WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("接入点未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
 
     // Verify peer AP exists
-    sqlx::query_scalar::<_, Uuid>("SELECT id FROM access_points WHERE id = $1")
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM net_outlets WHERE id = $1")
         .bind(peer_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::Validation("对端接入点不存在".to_string()))?;
+        .ok_or_else(|| AppError::Validation("对端网络端口不存在".to_string()))?;
 
     // Check for circular reference: the peer shouldn't already have a peer that creates a chain > 2
-    // If the peer already has a peer_access_point_id set (and it's not our current id), that would create a chain
+    // If the peer already has a peer_net_outlet_id set (and it's not our current id), that would create a chain
     let peer_of_peer: Option<Uuid> =
-        sqlx::query_scalar("SELECT peer_access_point_id FROM access_points WHERE id = $1")
+        sqlx::query_scalar("SELECT peer_net_outlet_id FROM net_outlets WHERE id = $1")
             .bind(peer_id)
             .fetch_one(&mut *tx)
             .await?;
@@ -646,7 +649,7 @@ pub async fn link_peer(
         && other_peer_id != id
     {
         return Err(AppError::Validation(
-            "对端接入点已有其他对端连接，无法建立链式连接".to_string(),
+            "对端网络端口已有其他对端连接，无法建立链式连接".to_string(),
         ));
     }
 
@@ -654,7 +657,7 @@ pub async fn link_peer(
 
     // Check if current AP already has a different peer; if so, clear the old peer's reverse link
     let current_peer_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT peer_access_point_id FROM access_points WHERE id = $1")
+        sqlx::query_scalar("SELECT peer_net_outlet_id FROM net_outlets WHERE id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
@@ -662,7 +665,7 @@ pub async fn link_peer(
         && old_peer_id != peer_id
     {
         sqlx::query(
-            "UPDATE access_points SET peer_access_point_id = NULL, updated_at = $1 WHERE id = $2 AND peer_access_point_id = $3",
+            "UPDATE net_outlets SET peer_net_outlet_id = NULL, updated_at = $1 WHERE id = $2 AND peer_net_outlet_id = $3",
         )
         .bind(now)
         .bind(old_peer_id)
@@ -671,48 +674,44 @@ pub async fn link_peer(
         .await?;
     }
 
-    sqlx::query(
-        "UPDATE access_points SET peer_access_point_id = $1, updated_at = $2 WHERE id = $3",
-    )
-    .bind(peer_id)
-    .bind(now)
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE net_outlets SET peer_net_outlet_id = $1, updated_at = $2 WHERE id = $3")
+        .bind(peer_id)
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
     // Also set the reverse link on the peer
-    sqlx::query(
-        "UPDATE access_points SET peer_access_point_id = $1, updated_at = $2 WHERE id = $3",
-    )
-    .bind(id)
-    .bind(now)
-    .bind(peer_id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE net_outlets SET peer_net_outlet_id = $1, updated_at = $2 WHERE id = $3")
+        .bind(id)
+        .bind(now)
+        .bind(peer_id)
+        .execute(&mut *tx)
+        .await?;
 
     tx.commit().await?;
 
-    let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
-        "SELECT id, name, ap_type, room_id, room_name, \
-         cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
+    let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
+        "SELECT id, name, outlet_type, room_id, room_name, \
+         cabinet_id, cabinet_name, peer_net_outlet_id, peer_net_outlet_name, \
          device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
-         FROM access_points_with_details WHERE id = $1",
+         FROM net_outlets_with_details WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
     let details = serde_json::json!({
-        "access_point_id": id.to_string(),
-        "peer_access_point_id": peer_id.to_string()
+        "net_outlet_id": id.to_string(),
+        "peer_net_outlet_id": peer_id.to_string()
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
             req: &http_req,
             action: "link_peer",
-            resource_type: "access_point",
+            resource_type: "net_outlet",
             resource_id: &id,
             details: &details,
             result: true,
@@ -724,9 +723,9 @@ pub async fn link_peer(
     }
 
     Ok(
-        HttpResponse::Ok().json(ApiResponse::<AccessPointWithDetails>::success(
-            access_point,
-            "对端接入点关联成功",
+        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
+            net_outlet,
+            "对端网络端口关联成功",
         )),
     )
 }
@@ -740,33 +739,31 @@ pub async fn unlink_peer(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing = sqlx::query_as::<_, AccessPoint>(
-        "SELECT id, name, ap_type, room_id, cabinet_id, peer_access_point_id, device_port_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
-         FROM access_points WHERE id = $1",
+    let existing = sqlx::query_as::<_, NetOutlet>(
+        "SELECT id, name, outlet_type, room_id, cabinet_id, peer_net_outlet_id, device_port_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
+         FROM net_outlets WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| AppError::NotFound("接入点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("网络端口未找到".to_string()))?;
 
     let peer_id = existing
-        .peer_access_point_id
-        .ok_or_else(|| AppError::Validation("该接入点没有对端连接".to_string()))?;
+        .peer_net_outlet_id
+        .ok_or_else(|| AppError::Validation("该网络端口没有对端连接".to_string()))?;
 
     let now = Utc::now();
 
     // Clear peer on current AP
-    sqlx::query(
-        "UPDATE access_points SET peer_access_point_id = NULL, updated_at = $1 WHERE id = $2",
-    )
-    .bind(now)
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE net_outlets SET peer_net_outlet_id = NULL, updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
     // Clear reverse link on the peer
     sqlx::query(
-        "UPDATE access_points SET peer_access_point_id = NULL, updated_at = $1 WHERE id = $2 AND peer_access_point_id = $3",
+        "UPDATE net_outlets SET peer_net_outlet_id = NULL, updated_at = $1 WHERE id = $2 AND peer_net_outlet_id = $3",
     )
     .bind(now)
     .bind(peer_id)
@@ -776,19 +773,19 @@ pub async fn unlink_peer(
 
     tx.commit().await?;
 
-    let access_point = sqlx::query_as::<_, AccessPointWithDetails>(
-        "SELECT id, name, ap_type, room_id, room_name, \
-         cabinet_id, cabinet_name, peer_access_point_id, peer_access_point_name, \
+    let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
+        "SELECT id, name, outlet_type, room_id, room_name, \
+         cabinet_id, cabinet_name, peer_net_outlet_id, peer_net_outlet_name, \
          device_port_id, connected_device_port, connected_device_name, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
-         FROM access_points_with_details WHERE id = $1",
+         FROM net_outlets_with_details WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
     let details = serde_json::json!({
-        "access_point_id": id.to_string(),
+        "net_outlet_id": id.to_string(),
         "unlinked_peer_id": peer_id.to_string()
     });
     if let Err(e) = log_system_operation(
@@ -796,7 +793,7 @@ pub async fn unlink_peer(
         OperationLogParams {
             req: &http_req,
             action: "unlink_peer",
-            resource_type: "access_point",
+            resource_type: "net_outlet",
             resource_id: &id,
             details: &details,
             result: true,
@@ -808,9 +805,9 @@ pub async fn unlink_peer(
     }
 
     Ok(
-        HttpResponse::Ok().json(ApiResponse::<AccessPointWithDetails>::success(
-            access_point,
-            "对端接入点取消关联成功",
+        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
+            net_outlet,
+            "对端网络端口取消关联成功",
         )),
     )
 }

@@ -24,7 +24,7 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
 import {
-  loadAccessPointsForSelect,
+  loadNetOutletsForSelect,
   loadDeviceTemplatesForSelect,
   loadWorkstationsForSelect,
   loadPositionsForSelect,
@@ -98,8 +98,8 @@ export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null)
           if (row.cabinet_name) return `${t('device.position')}: ${escapeHtml(row.cabinet_name)}${row.start_u ? ` ${row.start_u}-${row.end_u}U` : ''}`;
           return '-';
         }},
-        { field: 'access_point_name', render: (v, row) => {
-          if (v) return `${t('device.access_point')}: ${escapeHtml(v)}`;
+        { field: 'net_outlet_name', render: (v, row) => {
+          if (v) return `${t('device.net_outlet')}: ${escapeHtml(v)}`;
           if (row.connected_device_port && row.connected_device_name) return `${t('device.device_port')}: ${escapeHtml(row.connected_device_name)}:${escapeHtml(row.connected_device_port)}`;
           return '-';
         }},
@@ -208,7 +208,7 @@ let deviceListenersBound = false;
 function setupMutualExclusion() {
   const workstationSelect = elementCache.get('device-workstation-id');
   const positionSelect = elementCache.get('device-position-id');
-  const apSelect = elementCache.get('device-access-point-id');
+  const outletSelect = elementCache.get('device-net-outlet-id');
   const portSelect = elementCache.get('device-device-port-id');
 
   if (workstationSelect) {
@@ -227,9 +227,9 @@ function setupMutualExclusion() {
     });
   }
 
-  if (apSelect) {
-    apSelect.addEventListener('change', () => {
-      if (apSelect.value) {
+  if (outletSelect) {
+    outletSelect.addEventListener('change', () => {
+      if (outletSelect.value) {
         portSelect.value = '';
       }
     });
@@ -238,7 +238,7 @@ function setupMutualExclusion() {
   if (portSelect) {
     portSelect.addEventListener('change', () => {
       if (portSelect.value) {
-        apSelect.value = '';
+        outletSelect.value = '';
       }
     });
   }
@@ -347,7 +347,7 @@ export async function submitDeviceForm() {
   const templateId = getElementValue("device-template-id");
   const workstationId = getElementValue("device-workstation-id");
   const positionId = getElementValue("device-position-id");
-  const accessPointId = getElementValue("device-access-point-id");
+  const netOutletId = getElementValue("device-net-outlet-id");
   const switchPortId = getElementValue("device-device-port-id");
   const description = getElementValue("device-description");
 
@@ -361,7 +361,7 @@ export async function submitDeviceForm() {
     return;
   }
 
-  if (accessPointId && switchPortId) {
+  if (netOutletId && switchPortId) {
     showToast(t('device.connection_mutual_exclusive'), "warning");
     return;
   }
@@ -392,7 +392,7 @@ export async function submitDeviceForm() {
     template_id: templateId || null,
     workstation_id: workstationId || null,
     position_id: positionId || null,
-    access_point_id: accessPointId || null,
+    net_outlet_id: netOutletId || null,
     device_port_id: switchPortId || null,
     description: description?.trim() || null,
     save_as_template: saveAsTemplate || false,
@@ -430,7 +430,7 @@ export async function openDeviceModal(device = null) {
   await loadDeviceTemplatesForSelect("device-template-id");
   await loadWorkstationsForSelect("device-workstation-id");
   await loadPositionsForSelect("device-position-id");
-  await loadAccessPointsForSelect("device-access-point-id");
+  await loadNetOutletsForSelect("device-net-outlet-id");
   await loadDevicePortsForDeviceSelect();
 
   ensureDeviceListeners();
@@ -454,7 +454,7 @@ export async function openDeviceModal(device = null) {
     if (device.template_id) elementCache.setValue('device-template-id', device.template_id);
     if (device.workstation_id) elementCache.setValue('device-workstation-id', device.workstation_id);
     if (device.position_id) elementCache.setValue('device-position-id', device.position_id);
-    if (device.access_point_id) elementCache.setValue('device-access-point-id', device.access_point_id);
+    if (device.net_outlet_id) elementCache.setValue('device-net-outlet-id', device.net_outlet_id);
     if (device.device_port_id) elementCache.setValue('device-device-port-id', device.device_port_id);
 
     if (manager) {

@@ -43,8 +43,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN dv.id IS NOT NULL THEN dv.device_type::text
                 ELSE NULL
             END AS connected_device_type,
-            ap.name::text AS access_point_name,
-            ap2.name::text AS peer_access_point_name,
+            ap.name::text AS net_outlet_name,
+            ap2.name::text AS peer_net_outlet_name,
             CASE
                 WHEN r.id IS NOT NULL THEN r.name::text
                 ELSE NULL
@@ -67,8 +67,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.updated_at
         FROM ips imm
         LEFT JOIN devices dv ON imm.device_id = dv.id
-        LEFT JOIN access_points ap ON dv.access_point_id = ap.id
-        LEFT JOIN access_points ap2 ON ap.peer_access_point_id = ap2.id
+        LEFT JOIN net_outlets ap ON dv.net_outlet_id = ap.id
+        LEFT JOIN net_outlets ap2 ON ap.peer_net_outlet_id = ap2.id
         LEFT JOIN workstations w ON imm.workstation_id = w.id
         LEFT JOIN positions cp ON imm.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
@@ -124,7 +124,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW devices_with_details AS
         SELECT
             d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-            d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+            d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
             d.template_id, d.vendor, d.location,
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
@@ -136,8 +136,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             (SELECT cab3.id FROM positions p3 JOIN cabinets cab3 ON p3.cabinet_id = cab3.id WHERE p3.id = d.position_id) AS cabinet_id,
             (SELECT cab4.name FROM positions p4 JOIN cabinets cab4 ON p4.cabinet_id = cab4.id WHERE p4.id = d.position_id) AS cabinet_name,
             p.start_u, p.end_u,
-            ap.name AS access_point_name,
-            ap.ap_type AS access_point_type,
+            ap.name AS net_outlet_name,
+            ap.outlet_type AS outlet_type,
             sp.port_number AS connected_device_port,
             sdv.name AS connected_device_name,
             dt.name AS template_name,
@@ -146,7 +146,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN workstations w ON d.workstation_id = w.id
         LEFT JOIN rooms r ON w.room_id = r.id
         LEFT JOIN positions p ON d.position_id = p.id
-        LEFT JOIN access_points ap ON d.access_point_id = ap.id
+        LEFT JOIN net_outlets ap ON d.net_outlet_id = ap.id
         LEFT JOIN device_ports sp ON d.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
         LEFT JOIN device_templates dt ON d.template_id = dt.id
@@ -155,7 +155,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS access_points_with_details CASCADE")
+    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS net_outlets_with_details CASCADE")
         .execute(pool)
         .await
     {
@@ -164,20 +164,20 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         r"
-        CREATE VIEW access_points_with_details AS
+        CREATE VIEW net_outlets_with_details AS
         SELECT
-            ap.id, ap.name, ap.ap_type, ap.room_id, ap.cabinet_id,
-            ap.peer_access_point_id, ap.device_port_id, ap.description,
+            ap.id, ap.name, ap.outlet_type, ap.room_id, ap.cabinet_id,
+            ap.peer_net_outlet_id, ap.device_port_id, ap.description,
             r.name AS room_name,
             cab.name AS cabinet_name,
-            pap.name AS peer_access_point_name,
+            pap.name AS peer_net_outlet_name,
             sp.port_number AS connected_device_port,
             sdv.name AS connected_device_name,
             ap.created_at, ap.updated_at
-        FROM access_points ap
+        FROM net_outlets ap
         LEFT JOIN rooms r ON ap.room_id = r.id
         LEFT JOIN cabinets cab ON ap.cabinet_id = cab.id
-        LEFT JOIN access_points pap ON ap.peer_access_point_id = pap.id
+        LEFT JOIN net_outlets pap ON ap.peer_net_outlet_id = pap.id
         LEFT JOIN device_ports sp ON ap.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
     ",

@@ -250,15 +250,15 @@ pub async fn auto_discover_device_topology(
     let mut added_nodes = 0usize;
     let mut added_connections = 0usize;
 
-    // 查询设备的 access_point_id 和 device_port_id
+    // 查询设备的 net_outlet_id 和 device_port_id
     let row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>)>(
-        r"SELECT access_point_id, device_port_id FROM devices WHERE id = $1",
+        r"SELECT net_outlet_id, device_port_id FROM devices WHERE id = $1",
     )
     .bind(device_id)
     .fetch_optional(pool)
     .await?;
 
-    let (access_point_id, device_port_id) = match row {
+    let (net_outlet_id, device_port_id) = match row {
         Some(r) => r,
         None => {
             return Ok(AutoDiscoverResult {
@@ -290,22 +290,22 @@ pub async fn auto_discover_device_topology(
         }
     }
 
-    // 通过 access_point_id 发现
-    if let Some(ap_id) = access_point_id {
-        let ap_row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>)>(
-            r"SELECT device_port_id, peer_access_point_id FROM access_points WHERE id = $1",
+    // 通过 net_outlet_id 发现
+    if let Some(outlet_id) = net_outlet_id {
+        let outlet_row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>)>(
+            r"SELECT device_port_id, peer_net_outlet_id FROM net_outlets WHERE id = $1",
         )
-        .bind(ap_id)
+        .bind(outlet_id)
         .fetch_optional(pool)
         .await?;
 
-        if let Some((ap_device_port_id, peer_ap_id)) = ap_row {
-            // 通过 AP 的 device_port_id 找交换机
-            if let Some(ap_dp_id) = ap_device_port_id {
+        if let Some((outlet_device_port_id, peer_outlet_id)) = outlet_row {
+            // 通过网络端口的 device_port_id 找交换机
+            if let Some(outlet_dp_id) = outlet_device_port_id {
                 let switch_row = sqlx::query_as::<_, (Uuid,)>(
                     r"SELECT device_id FROM device_ports WHERE id = $1",
                 )
-                .bind(ap_dp_id)
+                .bind(outlet_dp_id)
                 .fetch_optional(pool)
                 .await?;
 
@@ -315,16 +315,16 @@ pub async fn auto_discover_device_topology(
                     let device_default_port = get_default_port_id(pool, device_id).await;
                     links.push(DiscoveredLink {
                         switch_device_id,
-                        switch_port_id: Some(ap_dp_id),
+                        switch_port_id: Some(outlet_dp_id),
                         device_port_id: device_default_port,
                     });
                 }
             }
 
-            // 通过 peer AP 的 device_port_id 找交换机
-            if let Some(peer_id) = peer_ap_id {
+            // 通过 peer 网络端口的 device_port_id 找交换机
+            if let Some(peer_id) = peer_outlet_id {
                 let peer_row = sqlx::query_as::<_, (Option<Uuid>,)>(
-                    r"SELECT device_port_id FROM access_points WHERE id = $1",
+                    r"SELECT device_port_id FROM net_outlets WHERE id = $1",
                 )
                 .bind(peer_id)
                 .fetch_optional(pool)
@@ -392,7 +392,7 @@ pub async fn auto_discover_all_topology(
     pool: &PgPool,
 ) -> Result<AutoDiscoverResult, VisualizationError> {
     let device_ids: Vec<Uuid> = sqlx::query_as::<_, (Uuid,)>(
-        r"SELECT id FROM devices WHERE access_point_id IS NOT NULL OR device_port_id IS NOT NULL",
+        r"SELECT id FROM devices WHERE net_outlet_id IS NOT NULL OR device_port_id IS NOT NULL",
     )
     .fetch_all(pool)
     .await?

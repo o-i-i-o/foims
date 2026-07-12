@@ -261,24 +261,24 @@ function flattenOrgTree(nodes, depth = 0) {
   return result;
 }
 
-export async function loadAccessPointsForSelect(selectId, roomId = null) {
+export async function loadNetOutletsForSelect(selectId, roomId = null) {
   try {
     const url = roomId
-      ? `/api/resources/access-points?room_id=${roomId}&page_size=1000`
-      : '/api/resources/access-points?page_size=1000';
+      ? `/api/resources/net-outlets?room_id=${roomId}&page_size=1000`
+      : '/api/resources/net-outlets?page_size=1000';
     const result = await apiGet(url);
     const select = document.getElementById(selectId);
 
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('access_point.select_access_point') || '选择接入点'}</option>`;
+    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet') || '选择网络端口'}</option>`;
 
     const items = extractItems(result);
-    items.forEach(ap => {
+    items.forEach(outlet => {
       const option = document.createElement("option");
-      option.value = ap.id;
-      option.textContent = ap.name;
+      option.value = outlet.id;
+      option.textContent = outlet.name;
       select.appendChild(option);
     });
 
@@ -286,7 +286,7 @@ export async function loadAccessPointsForSelect(selectId, roomId = null) {
       select.value = currentValue;
     }
   } catch (error) {
-    console.error("加载接入点选项失败:", error);
+    console.error("加载网络端口选项失败:", error);
   }
 }
 

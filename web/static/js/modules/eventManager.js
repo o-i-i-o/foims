@@ -18,7 +18,7 @@ const EDIT_FUNCTIONS = {
   "workstations-table": { module: "workstation", fn: "editWorkstation" },
   "cabinets-table": { module: "cabinet", fn: "editCabinet" },
   "cabinet-positions-table": { module: "position", fn: "editCabinetPosition" },
-  "access-points-table": { module: "accessPoint", fn: "editAccessPoint" },
+  "net-outlets-table": { module: "netOutlet", fn: "editNetOutlet" },
   "devices-table": { module: "device", fn: "editDevice" },
   "users-table": { module: "userManager", fn: "openUserModal" },
 };
@@ -30,7 +30,7 @@ const DELETE_FUNCTIONS = {
   "workstations-table": { module: "workstation", fn: "deleteWorkstation" },
   "cabinets-table": { module: "cabinet", fn: "deleteCabinet" },
   "cabinet-positions-table": { module: "position", fn: "deleteCabinetPosition" },
-  "access-points-table": { module: "accessPoint", fn: "deleteAccessPoint" },
+  "net-outlets-table": { module: "netOutlet", fn: "deleteNetOutlet" },
   "devices-table": { module: "device", fn: "deleteDevice" },
   "device-ports-table": { module: "devicePorts", fn: "deleteDevicePort" },
   "users-table": { module: "userManager", fn: "deleteUser" },

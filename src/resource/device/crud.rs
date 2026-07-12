@@ -99,14 +99,14 @@ pub async fn get_devices(
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
                 d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -197,8 +197,8 @@ pub async fn create_device(
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: access_point_id and device_port_id cannot both be set
-    if req.access_point_id.is_some() && req.device_port_id.is_some() {
+    // Business validation: net_outlet_id and device_port_id cannot both be set
+    if req.net_outlet_id.is_some() && req.device_port_id.is_some() {
         return Err(AppError::Validation(
             "接入点和交换机端口不能同时指定".to_string(),
         ));
@@ -230,10 +230,10 @@ pub async fn create_device(
         }
     }
 
-    // If access_point_id provided, verify it exists
-    if let Some(ap_id) = req.access_point_id {
+    // If net_outlet_id provided, verify it exists
+    if let Some(ap_id) = req.net_outlet_id {
         let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM access_points WHERE id = $1)")
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
                 .bind(ap_id)
                 .fetch_one(&mut *tx)
                 .await?;
@@ -323,7 +323,7 @@ pub async fn create_device(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, access_point_id, device_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, net_outlet_id, device_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
     )
     .bind(id)
@@ -334,7 +334,7 @@ pub async fn create_device(
     .bind(&req.serial_number)
     .bind(req.workstation_id)
     .bind(req.position_id)
-    .bind(req.access_point_id)
+    .bind(req.net_outlet_id)
     .bind(req.device_port_id)
     .bind(req.template_id)
     .bind(&req.vendor)
@@ -490,7 +490,7 @@ pub async fn create_device(
     tx.commit().await?;
 
     // 若设备配置了接入点或端口，自动发现拓扑关联
-    if (req.access_point_id.is_some() || req.device_port_id.is_some())
+    if (req.net_outlet_id.is_some() || req.device_port_id.is_some())
         && let Err(e) =
             ipma_visualization::auto_discover_device_topology(&state.pool()?.get_conn(), id).await
     {
@@ -506,7 +506,7 @@ pub async fn create_device(
         serial_number: req.serial_number.clone(),
         workstation_id: req.workstation_id,
         position_id: req.position_id,
-        access_point_id: req.access_point_id,
+        net_outlet_id: req.net_outlet_id,
         device_port_id: req.device_port_id,
         template_id: req.template_id,
         vendor: req.vendor.clone(),
@@ -560,14 +560,14 @@ pub async fn get_device(
 
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
                 d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -648,7 +648,7 @@ pub async fn update_device(
 
     // Fetch current device data for business validations
     let current_row = sqlx::query(
-        "SELECT workstation_id, position_id, access_point_id, device_port_id FROM devices WHERE id = $1",
+        "SELECT workstation_id, position_id, net_outlet_id, device_port_id FROM devices WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -656,7 +656,7 @@ pub async fn update_device(
 
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
-    let current_ap_id: Option<Uuid> = current_row.get("access_point_id");
+    let current_ap_id: Option<Uuid> = current_row.get("net_outlet_id");
     let current_sp_id: Option<Uuid> = current_row.get("device_port_id");
 
     // Resolve the final values for Option<Option<Uuid>> fields
@@ -693,11 +693,11 @@ pub async fn update_device(
         Some(None) => None,
     };
 
-    let resolved_access_point_id = match &req.access_point_id {
+    let resolved_net_outlet_id = match &req.net_outlet_id {
         None => current_ap_id,
         Some(Some(ap_id)) => {
             let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM access_points WHERE id = $1)")
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
                     .bind(ap_id)
                     .fetch_one(&mut *tx)
                     .await?;
@@ -730,8 +730,8 @@ pub async fn update_device(
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: access_point_id and device_port_id cannot both be set
-    if resolved_access_point_id.is_some() && resolved_device_port_id.is_some() {
+    // Business validation: net_outlet_id and device_port_id cannot both be set
+    if resolved_net_outlet_id.is_some() && resolved_device_port_id.is_some() {
         return Err(AppError::Validation(
             "接入点和交换机端口不能同时指定".to_string(),
         ));
@@ -762,7 +762,7 @@ pub async fn update_device(
          serial_number = COALESCE($5, serial_number),
          workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
-         access_point_id = CASE WHEN $10::boolean THEN $11 ELSE access_point_id END,
+         net_outlet_id = CASE WHEN $10::boolean THEN $11 ELSE net_outlet_id END,
          device_port_id = CASE WHEN $12::boolean THEN $13 ELSE device_port_id END,
          vendor = COALESCE($14, vendor),
          location = COALESCE($15, location),
@@ -789,9 +789,9 @@ pub async fn update_device(
     // position_id
     .bind(req.position_id.is_some())
     .bind(resolved_position_id)
-    // access_point_id
-    .bind(req.access_point_id.is_some())
-    .bind(resolved_access_point_id)
+    // net_outlet_id
+    .bind(req.net_outlet_id.is_some())
+    .bind(resolved_net_outlet_id)
     // device_port_id
     .bind(req.device_port_id.is_some())
     .bind(resolved_device_port_id)
@@ -973,7 +973,7 @@ pub async fn update_device(
     tx.commit().await?;
 
     // 若接入点或端口配置变更，更新自动发现的拓扑连线
-    let ap_changed = req.access_point_id.is_some() && (resolved_access_point_id != current_ap_id);
+    let ap_changed = req.net_outlet_id.is_some() && (resolved_net_outlet_id != current_ap_id);
     let sp_changed = req.device_port_id.is_some() && (resolved_device_port_id != current_sp_id);
     if ap_changed || sp_changed {
         let pool = &state.pool()?.get_conn();
@@ -989,7 +989,7 @@ pub async fn update_device(
             warn!("设备 {} 删除旧自动发现连线失败: {}", id, e);
         }
         // 重新发现
-        if (resolved_access_point_id.is_some() || resolved_device_port_id.is_some())
+        if (resolved_net_outlet_id.is_some() || resolved_device_port_id.is_some())
             && let Err(e) = ipma_visualization::auto_discover_device_topology(pool, id).await
         {
             warn!("设备 {} 自动发现拓扑失败: {}", id, e);
@@ -999,14 +999,14 @@ pub async fn update_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
                 d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d

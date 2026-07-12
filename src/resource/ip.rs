@@ -142,7 +142,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, access_point_name, peer_access_point_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -198,7 +198,7 @@ pub async fn get_workstation_ips(
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
             id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
-            connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
+            connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name,
             network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 
@@ -225,7 +225,7 @@ pub async fn get_cabinet_position_ips(
     let ips = sqlx::query_as::<_, IpManagerWithNames>(
         r"SELECT 
             id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
-            connected_device_name, connected_device_type, access_point_name, peer_access_point_name,
+            connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name,
             network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
             ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
         FROM ip_with_details 

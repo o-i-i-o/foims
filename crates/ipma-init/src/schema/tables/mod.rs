@@ -1,4 +1,3 @@
-mod access_points;
 mod cabinets;
 mod device_templates;
 mod devices;
@@ -7,6 +6,7 @@ mod encryption;
 mod indexes;
 mod ips;
 mod logs;
+mod net_outlets;
 mod network;
 mod notifications;
 mod org_templates;
@@ -57,8 +57,8 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 交换机端口/MAC/LLDP（引用 devices）
     switches::create(pool).await?;
 
-    // 接入点（引用 rooms/cabinets，device_port_id 延迟添加）
-    access_points::create(pool).await?;
+    // 网络端口（引用 rooms/cabinets，device_port_id 延迟添加）
+    net_outlets::create(pool).await?;
 
     // IP（引用 workstations/positions/device_ports/devices/network_cidrs）
     ips::create(pool).await?;
@@ -73,7 +73,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 延迟外键（解决 devices ↔ device_ports 循环依赖）
     devices::add_foreign_keys(pool).await?;
-    access_points::add_foreign_keys(pool).await?;
+    net_outlets::add_foreign_keys(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

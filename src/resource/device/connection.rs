@@ -30,23 +30,23 @@ pub async fn connect_device(
     }
 
     // Resolve final values
-    let resolved_ap_id = match &req.access_point_id {
-        Some(Some(ap_id)) => {
+    let resolved_outlet_id = match &req.net_outlet_id {
+        Some(Some(outlet_id)) => {
             let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM access_points WHERE id = $1)")
-                    .bind(ap_id)
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
+                    .bind(outlet_id)
                     .fetch_one(&mut *tx)
                     .await?;
             if !exists {
-                return Err(AppError::NotFound("接入点未找到".to_string()));
+                return Err(AppError::NotFound("网络端口未找到".to_string()));
             }
-            Some(*ap_id)
+            Some(*outlet_id)
         }
         Some(None) => None,
         None => {
             // Keep current value
             let current: Option<Uuid> =
-                sqlx::query_scalar("SELECT access_point_id FROM devices WHERE id = $1")
+                sqlx::query_scalar("SELECT net_outlet_id FROM devices WHERE id = $1")
                     .bind(id)
                     .fetch_one(&mut *tx)
                     .await?;
@@ -89,10 +89,10 @@ pub async fn connect_device(
         }
     };
 
-    // Business validation: access_point_id and device_port_id cannot both be set
-    if resolved_ap_id.is_some() && resolved_sp_id.is_some() {
+    // Business validation: net_outlet_id and device_port_id cannot both be set
+    if resolved_outlet_id.is_some() && resolved_sp_id.is_some() {
         return Err(AppError::Validation(
-            "接入点和交换机端口不能同时指定".to_string(),
+            "网络端口和交换机端口不能同时指定".to_string(),
         ));
     }
 
@@ -100,13 +100,13 @@ pub async fn connect_device(
 
     sqlx::query(
         "UPDATE devices SET
-         access_point_id = CASE WHEN $1::boolean THEN $2 ELSE access_point_id END,
+         net_outlet_id = CASE WHEN $1::boolean THEN $2 ELSE net_outlet_id END,
          device_port_id = CASE WHEN $3::boolean THEN $4 ELSE device_port_id END,
          updated_at = $5
          WHERE id = $6",
     )
-    .bind(req.access_point_id.is_some())
-    .bind(resolved_ap_id)
+    .bind(req.net_outlet_id.is_some())
+    .bind(resolved_outlet_id)
     .bind(req.device_port_id.is_some())
     .bind(resolved_sp_id)
     .bind(now)
@@ -119,14 +119,14 @@ pub async fn connect_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
                 d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -137,7 +137,7 @@ pub async fn connect_device(
     .await?;
 
     let details = serde_json::json!({
-        "access_point_id": updated_device.access_point_id,
+        "net_outlet_id": updated_device.net_outlet_id,
         "device_port_id": updated_device.device_port_id
     });
     if let Err(e) = log_system_operation(
@@ -185,17 +185,17 @@ pub async fn disconnect_device(
     }
 
     // Query old values before update for logging
-    let old_row = sqlx::query("SELECT access_point_id, device_port_id FROM devices WHERE id = $1")
+    let old_row = sqlx::query("SELECT net_outlet_id, device_port_id FROM devices WHERE id = $1")
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
-    let old_access_point_id: Option<Uuid> = old_row.get("access_point_id");
+    let old_net_outlet_id: Option<Uuid> = old_row.get("net_outlet_id");
     let old_device_port_id: Option<Uuid> = old_row.get("device_port_id");
 
     let now = Utc::now();
 
     sqlx::query(
-        "UPDATE devices SET access_point_id = NULL, device_port_id = NULL, updated_at = $1 WHERE id = $2",
+        "UPDATE devices SET net_outlet_id = NULL, device_port_id = NULL, updated_at = $1 WHERE id = $2",
     )
     .bind(now)
     .bind(id)
@@ -207,14 +207,14 @@ pub async fn disconnect_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
                 d.connected_device_port, d.connected_device_name, d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -226,7 +226,7 @@ pub async fn disconnect_device(
 
     let details = serde_json::json!({
         "disconnected": true,
-        "previous_access_point_id": old_access_point_id,
+        "previous_net_outlet_id": old_net_outlet_id,
         "previous_device_port_id": old_device_port_id
     });
     if let Err(e) = log_system_operation(
