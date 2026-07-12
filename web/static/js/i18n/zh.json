@@ -40,7 +40,8 @@
     "load_failed_retry": "加载失败，请刷新页面重试",
     "confirm_delete": "确定要删除此{{name}}吗？",
     "operation_failed": "操作失败",
-    "status": "状态"
+    "status": "状态",
+    "all": "全部"
   },
   "status": {
     "active": "活跃",
@@ -191,7 +192,27 @@
     "select_network": "选择网络",
     "add_region_first": "请先添加网络区域",
     "ipv4_cidrs": "IPv4 CIDR范围",
-    "ipv6_cidrs": "IPv6 CIDR范围"
+    "ipv6_cidrs": "IPv6 CIDR范围",
+    "load_failed": "加载网络数据失败",
+    "total_ips": "IP总数",
+    "used_ips": "已用IP",
+    "unused_ips": "未用IP",
+    "usage_rate": "使用率",
+    "used": "已使用",
+    "unused": "未使用",
+    "assigned": "已分配",
+    "enabled": "已启用",
+    "connection_status": "连接状态",
+    "ip_visualization": "IP可视化",
+    "ipv4_list": "IPv4地址列表",
+    "ipv6_info": "IPv6信息",
+    "ipv6_list": "IPv6地址列表",
+    "ipv6_stats": "IPv6统计",
+    "no_ip_config": "暂无IPv4配置",
+    "no_ipv4_records": "暂无IPv4记录",
+    "no_ipv6_config": "暂无IPv6配置",
+    "no_ipv6_records": "暂无IPv6记录",
+    "add_ipv6_hint": "请编辑网络以添加IPv6 CIDR"
   },
   "organization": {
     "add": "新增组织",
@@ -486,7 +507,8 @@
     "location": "位置",
     "last_seen": "最后在线",
     "pull_mac": "拉取MAC",
-    "add_ip": "添加IP"
+    "add_ip": "添加IP",
+    "load_failed": "加载IP数据失败"
   },
   "visualization": {
     "workstation": "工位可视化",

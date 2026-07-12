@@ -40,7 +40,8 @@
     "load_failed_retry": "Load failed, please refresh and try again",
     "confirm_delete": "Are you sure you want to delete this {{name}}?",
     "operation_failed": "Operation failed",
-    "status": "Status"
+    "status": "Status",
+    "all": "All"
   },
   "status": {
     "active": "Active",
@@ -191,7 +192,27 @@
     "select_network": "Select Network",
     "add_region_first": "Please add a network region first",
     "ipv4_cidrs": "IPv4 CIDR Ranges",
-    "ipv6_cidrs": "IPv6 CIDR Ranges"
+    "ipv6_cidrs": "IPv6 CIDR Ranges",
+    "load_failed": "Failed to load network data",
+    "total_ips": "Total IPs",
+    "used_ips": "Used IPs",
+    "unused_ips": "Unused IPs",
+    "usage_rate": "Usage Rate",
+    "used": "Used",
+    "unused": "Unused",
+    "assigned": "Assigned",
+    "enabled": "Enabled",
+    "connection_status": "Connection Status",
+    "ip_visualization": "IP Visualization",
+    "ipv4_list": "IPv4 Address List",
+    "ipv6_info": "IPv6 Info",
+    "ipv6_list": "IPv6 Address List",
+    "ipv6_stats": "IPv6 Statistics",
+    "no_ip_config": "No IPv4 configuration",
+    "no_ipv4_records": "No IPv4 records",
+    "no_ipv6_config": "No IPv6 configuration",
+    "no_ipv6_records": "No IPv6 records",
+    "add_ipv6_hint": "Edit network to add IPv6 CIDR"
   },
   "organization": {
     "add": "Add Organization",
@@ -486,7 +507,8 @@
     "location": "Location",
     "last_seen": "Last Seen",
     "pull_mac": "Pull MAC",
-    "add_ip": "Add IP"
+    "add_ip": "Add IP",
+    "load_failed": "Failed to load IP data"
   },
   "visualization": {
     "workstation": "Workstation Visualization",

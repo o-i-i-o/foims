@@ -389,7 +389,7 @@ function buildIPv4Content(network, networkIps, networkId) {
         <span class="stat-value">${escapeHtml(network.ipv4_gateway) || "-"}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">DNS:</span>
+        <span class="stat-label">${t('network.ipv4_dns')}:</span>
         <span class="stat-value">${Array.isArray(network.ipv4_dns) ? network.ipv4_dns.map(d => escapeHtml(d)).join(', ') : (escapeHtml(network.ipv4_dns) || "-")}</span>
       </div>
       <div class="stat-item">
