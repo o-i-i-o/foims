@@ -1,6 +1,5 @@
 pub mod connection;
 pub mod crud;
-pub mod ip;
 pub mod lldp;
 pub mod mac;
 pub mod port;
@@ -9,7 +8,6 @@ pub mod template;
 
 pub use connection::*;
 pub use crud::*;
-pub use ip::*;
 pub use lldp::*;
 pub use mac::*;
 pub use port::*;

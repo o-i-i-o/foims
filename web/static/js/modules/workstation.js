@@ -21,16 +21,8 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 
 import {
-  getManager
-} from "../utils/ipconfig.js";
-
-import {
   loadRoomsForSelect
 } from "../utils/resources.js";
-
-import {
-  handleWorkstationRoomChange
-} from "../utils/ipconfig.js";
 
 import { elementCache } from "../utils/helpers.js";
 
@@ -80,41 +72,20 @@ export async function loadWorkstationsData(page = 1, sortBy = null, sortOrder = 
     if (workstations.length > 0) {
       const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
       
-      const ipPromises = workstations.map(workstation => 
-        apiGet(`/api/resources/ip/workstation/${workstation.id}`)
-          .then(ipsData => ({ workstation, ipsData }))
-          .catch(ipsError => {
-            console.error(`获取工位 ${workstation.id} 的IP地址失败:`, ipsError);
-            return { workstation, ipsData: { success: false, data: [] } };
-          })
-      );
-      
-      const results = await Promise.all(ipPromises);
       let rowIndex = 0;
-      
-      for (const { workstation, ipsData } of results) {
+
+      for (const workstation of workstations) {
         const roomName = escapeHtml(workstation.room_name) || "-";
         const workstationName = escapeHtml(workstation.name);
-        
-        let ipsHtml = "-";
-        let portsHtml = "-";
-        if (ipsData.success && ipsData.data.length > 0) {
-          ipsHtml = ipsData.data.map(ip => escapeHtml(ip.ip_address)).join("<br>");
-          
-          const portInfos = ipsData.data
-            .filter(ip => ip.port_device_name && ip.port_device_number)
-            .map(ip => `${escapeHtml(ip.port_device_name)}: ${escapeHtml(ip.port_device_number)}`);
-          portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
-        }
 
         const row = document.createElement("tr");
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
                     <td>${roomName}</td>
                     <td>${workstationName}</td>
-                    <td>${ipsHtml}</td>
+                    <td>-</td>
                     <td>${escapeHtml(workstation.manager) || "-"}</td>
-                    <td>${portsHtml}</td>
+                    <td>-</td>
                     <td>${escapeHtml(workstation.description) || "-"}</td>
                     <td>${new Date(workstation.created_at).toLocaleString()}</td>
                     <td>
@@ -161,22 +132,6 @@ export async function openWorkstationModal(workstation = null) {
   // 加载房间选项（只加载办公室）
   await loadRoomsForSelect("workstation-room", { onlyOffice: true });
 
-  // 使用单例manager
-  const ipManager = getManager('workstation');
-  ipManager.clear();
-
-  // 获取房间选择框
-  const roomSelect = elementCache.get("workstation-room");
-  
-  // 添加房间选择事件监听器，当选择房间时，清空现有IP行
-  if (roomSelect) {
-    // 移除之前的事件监听器，避免重复添加
-    roomSelect.removeEventListener("change", handleWorkstationRoomChange);
-    
-    // 添加新的事件监听器
-    roomSelect.addEventListener("change", handleWorkstationRoomChange);
-  }
-
   if (workstation) {
     // 编辑模式
     title.textContent = "编辑工位";
@@ -185,13 +140,6 @@ export async function openWorkstationModal(workstation = null) {
     elementCache.setValue("workstation-room", workstation.room_id);
     elementCache.setValue("workstation-manager", workstation.manager || "");
     elementCache.setValue("workstation-description", workstation.description || "");
-
-    // 加载IP配置
-    if (workstation.ips && workstation.ips.length > 0) {
-      await ipManager.loadIps(workstation.ips);
-    } else {
-      await ipManager.addIpRow();
-    }
   } else {
     // 添加模式
     title.textContent = "添加工位";
@@ -218,25 +166,10 @@ export async function submitWorkstationForm() {
     return;
   }
 
-  const ipManager = getManager('workstation');
-  const validation = ipManager.validateIps();
-  
-  if (validation.errors && validation.errors.length > 0) {
-    showToast(validation.errors[0], "warning");
-    return;
-  }
-  
-  if (validation.ips.length === 0) {
-    showToast("请至少添加一个IP地址", "warning");
-    return;
-  }
-
   const workstationData = {
     name: name.trim(),
     room_id: roomId,
     manager: manager.trim() || null,
-    ports: null,
-    ips: validation.ips.map(ip => ({ ...ip, device_type: "workstation" })),
     description: description.trim() || null,
   };
 

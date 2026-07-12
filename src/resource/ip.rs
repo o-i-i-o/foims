@@ -8,22 +8,20 @@ use crate::utils::{
 };
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
+use sqlx::Row;
 use std::net::IpAddr;
 use std::str::FromStr;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
-type IpMacCurrentInfo = (Option<String>, String, Option<Uuid>, Option<Uuid>);
+type IpMacCurrentInfo = (Option<String>, Uuid);
 
 pub async fn get_ip_managers(
     state: web::Data<AppState>,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse, AppError> {
     let search = query.get("search").map_or("", std::string::String::as_str);
-    let device_type = query
-        .get("device_type")
-        .map_or("", std::string::String::as_str);
     let status = query.get("status").map_or("", std::string::String::as_str);
     let device_name = query
         .get("device_name")
@@ -48,19 +46,11 @@ pub async fn get_ip_managers(
     } else {
         let pattern = format!("%{search}%");
         conditions.push(format!(
-            "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
-            param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5
+            "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR device_name ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
+            param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6
         ));
-        param_index += 6;
+        param_index += 7;
         Some(pattern)
-    };
-
-    let device_type_param = if device_type.is_empty() {
-        None
-    } else {
-        conditions.push(format!("device_type = ${param_index}"));
-        param_index += 1;
-        Some(device_type.to_string())
     };
 
     let status_param = if status.is_empty() {
@@ -116,12 +106,9 @@ pub async fn get_ip_managers(
     let mut count_sql = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(count_query));
 
     if let Some(ref pattern) = search_param {
-        for _ in 0..6 {
+        for _ in 0..7 {
             count_sql = count_sql.bind(pattern);
         }
-    }
-    if let Some(ref dt) = device_type_param {
-        count_sql = count_sql.bind(dt);
     }
     if let Some(ref st) = status_param {
         count_sql = count_sql.bind(st);
@@ -142,7 +129,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -151,12 +138,9 @@ pub async fn get_ip_managers(
     let mut data_sql = sqlx::query_as::<_, IpManagerWithNames>(sqlx::AssertSqlSafe(data_query));
 
     if let Some(ref pattern) = search_param {
-        for _ in 0..6 {
+        for _ in 0..7 {
             data_sql = data_sql.bind(pattern);
         }
-    }
-    if let Some(ref dt) = device_type_param {
-        data_sql = data_sql.bind(dt);
     }
     if let Some(ref st) = status_param {
         data_sql = data_sql.bind(st);
@@ -189,58 +173,172 @@ pub async fn get_ip_managers(
     )))
 }
 
-pub async fn get_workstation_ips(
+pub async fn get_device_ips(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
-    let workstation_id = *id_path;
+    let id = *id_path;
 
-    let ips = sqlx::query_as::<_, IpManagerWithNames>(
-        r"SELECT 
-            id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
-            connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name,
-            network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
-        FROM ip_with_details 
-        WHERE workstation_id = $1"
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+        .bind(id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    if !exists {
+        return Err(AppError::NotFound("设备未找到".to_string()));
+    }
+
+    let ips: Vec<IpManager> = sqlx::query_as(
+        r"SELECT
+            m.id, m.device_port_id, m.device_id, m.network_id,
+            host(m.ip_address) as ip_address,
+            m.ip_version, m.mac_address, m.hostname,
+            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
+        FROM ips m
+        WHERE m.device_id = $1
+        ORDER BY m.ip_address",
     )
-    .bind(workstation_id)
+    .bind(id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
-            ips,
-            "获取工位IP列表成功",
-        )),
-    )
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({ "items": ips }),
+        "设备IP列表获取成功",
+    )))
 }
 
-pub async fn get_cabinet_position_ips(
+pub async fn create_device_ip(
     state: web::Data<AppState>,
     id_path: web::Path<Uuid>,
+    req: web::Json<IpManagerCreate>,
+    http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
-    let position_id = *id_path;
+    let id = *id_path;
+    (*req).validate()?;
 
-    let ips = sqlx::query_as::<_, IpManagerWithNames>(
-        r"SELECT 
-            id, workstation_id, position_id, device_port_id, device_id, device_type, device_name, 
-            connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name,
-            network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, 
-            ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at 
-        FROM ip_with_details 
-        WHERE position_id = $1"
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    let device_row = sqlx::query("SELECT workstation_id, position_id FROM devices WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
+
+    let device_ws_id: Option<Uuid> = device_row.get("workstation_id");
+    let device_pos_id: Option<Uuid> = device_row.get("position_id");
+
+    let existing_ip: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
+            .bind(&req.ip_address)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+    if existing_ip.is_some() {
+        return Err(AppError::Conflict("IP地址已存在".to_string()));
+    }
+
+    let room_id = if let Some(ws_id) = device_ws_id {
+        sqlx::query_scalar::<_, Uuid>("SELECT room_id FROM workstations WHERE id = $1")
+            .bind(ws_id)
+            .fetch_optional(&mut *tx)
+            .await?
+    } else if let Some(pos_id) = device_pos_id {
+        sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten()
+    } else {
+        None
+    };
+
+    let network_id: Option<Uuid> = if let Some(r_id) = room_id {
+        sqlx::query_scalar(
+            r"SELECT nc.id
+            FROM room_networks rn
+            JOIN network_cidrs nc ON rn.network_id = nc.id
+            WHERE rn.room_id = $1
+            AND (
+                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+            )
+            LIMIT 1",
+        )
+        .bind(r_id)
+        .bind(&req.ip_address)
+        .fetch_optional(&mut *tx)
+        .await?
+    } else {
+        req.network_id
+    };
+
+    let ip_version = detect_ip_version(&req.ip_address)?;
+    let now = Utc::now();
+    let ip_id = Uuid::new_v4();
+
+    sqlx::query(
+        "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
     )
-    .bind(position_id)
-    .fetch_all(&state.pool()?.get_conn())
+    .bind(ip_id)
+    .bind(req.device_port_id)
+    .bind(id)
+    .bind(network_id)
+    .bind(&req.ip_address)
+    .bind(ip_version)
+    .bind(&req.mac_address)
+    .bind(&req.hostname)
+    .bind("active")
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .execute(&mut *tx)
     .await?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<IpManagerWithNames>>::success(
-            ips,
-            "获取机位IP列表成功",
-        )),
+    tx.commit().await?;
+
+    let mapping = IpManager {
+        id: ip_id,
+        device_port_id: req.device_port_id,
+        device_id: id,
+        network_id,
+        ip_address: req.ip_address.clone(),
+        ip_version,
+        mac_address: req.mac_address.clone(),
+        hostname: req.hostname.clone(),
+        status: "active".to_string(),
+        last_seen: now,
+        last_mac: None,
+        created_at: now,
+        updated_at: now,
+    };
+
+    let details = serde_json::json!({
+        "device_id": id.to_string(),
+        "ip_address": mapping.ip_address,
+        "mac_address": mapping.mac_address,
+        "hostname": mapping.hostname
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "create_device_ip",
+            resource_type: "device",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
     )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "设备IP创建成功")))
 }
 
 struct MacSyncResult {
@@ -302,13 +400,13 @@ async fn sync_switch_macs(
 
     for (ip, mac) in &switch_macs {
         let current: Option<IpMacCurrentInfo> = sqlx::query_as(
-            "SELECT mac_address, device_type, workstation_id, position_id FROM ips WHERE ip_address = CAST($1 AS INET)"
+            "SELECT mac_address, device_id FROM ips WHERE ip_address = CAST($1 AS INET)",
         )
         .bind(ip)
         .fetch_optional(&mut *tx)
         .await?;
 
-        let Some((old_mac, device_type, ws_id, pos_id)) = current else {
+        let Some((old_mac, cur_device_id)) = current else {
             continue;
         };
 
@@ -316,18 +414,12 @@ async fn sync_switch_macs(
             r"SELECT host(ip_address) FROM ips
                WHERE mac_address = $1
                AND ip_address != CAST($2 AS INET)
-               AND (
-                   device_type != $3
-                   OR workstation_id IS DISTINCT FROM $4
-                   OR position_id IS DISTINCT FROM $5
-               )
+               AND device_id != $3
                LIMIT 1",
         )
         .bind(mac)
         .bind(ip)
-        .bind(&device_type)
-        .bind(ws_id)
-        .bind(pos_id)
+        .bind(cur_device_id)
         .fetch_optional(&mut *tx)
         .await?
         .flatten();
@@ -381,7 +473,7 @@ async fn sync_switch_macs(
                 updated_count += 1;
 
                 let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-                    "SELECT COALESCE(i.workstation_id, p.workstation_id) FROM ips i LEFT JOIN positions p ON i.position_id = p.id WHERE i.ip_address = CAST($1 AS INET)"
+                    "SELECT d.workstation_id FROM ips i JOIN devices d ON i.device_id = d.id WHERE i.ip_address = CAST($1 AS INET)"
                 )
                 .bind(ip)
                 .fetch_optional(&mut *tx)
@@ -441,12 +533,11 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.workstation_id, m.position_id, m.device_port_id, m.device_id, m.device_type, 
-           m.network_id,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status, 
-           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ 
+        r"SELECT m.id, m.device_port_id, m.device_id, m.network_id,
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status,
+           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
-           WHERE m.network_id = $1"
+           WHERE m.network_id = $1",
     )
     .bind(req.network_id)
     .fetch_all(&state.pool()?.get_conn())
@@ -606,56 +697,40 @@ pub async fn auto_assign_ip(
     req.validate()?;
 
     let req_network_id = req.network_id;
-    let workstation_id = req.workstation_id;
-    let position_id = req.position_id;
+    let device_id = req.device_id;
     let device_port_id = req.device_port_id;
     let mac_address = req.mac_address.clone();
     let hostname = req.hostname.clone();
 
-    let device_type = if workstation_id.is_some() && position_id.is_none() {
-        "workstation".to_string()
-    } else if workstation_id.is_none() && position_id.is_some() {
-        let pos_device_type: Option<String> =
-            sqlx::query_scalar("SELECT device_type FROM positions WHERE id = $1")
-                .bind(position_id)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
-        match pos_device_type.as_deref() {
-            Some("switch") => "switch".to_string(),
-            _ => "cabinet_position".to_string(),
-        }
-    } else {
-        return Err(AppError::Validation(
-            "必须指定一个设备ID（workstation_id或position_id）".to_string(),
-        ));
-    };
+    let device_row = sqlx::query("SELECT workstation_id, position_id FROM devices WHERE id = $1")
+        .bind(device_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
 
-    let room_id = if device_type == "workstation" {
-        if let Some(ws_id) = workstation_id {
-            get_room_id_by_workstation(&state.pool()?.get_conn(), ws_id).await?
-        } else {
-            None
-        }
-    } else if let Some(pos_id) = position_id {
-        get_room_id_by_position(&state.pool()?.get_conn(), pos_id).await?
+    let device_ws_id: Option<Uuid> = device_row.get("workstation_id");
+    let device_pos_id: Option<Uuid> = device_row.get("position_id");
+
+    let room_id = if let Some(ws_id) = device_ws_id {
+        get_room_id_by_workstation(&mut *tx, ws_id).await?
+    } else if let Some(pos_id) = device_pos_id {
+        get_room_id_by_position(&mut *tx, pos_id).await?
     } else {
         None
     };
 
-    if let Some(rid) = room_id {
-        validate_network_in_room(&state.pool()?.get_conn(), rid, Some(req_network_id)).await?;
+    if let Some(r_id) = room_id {
+        validate_network_in_room(&mut *tx, r_id, Some(req_network_id)).await?;
     }
 
     let network = sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(req_network_id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
         .and_then(|row| crate::utils::parse_network_from_row(&row))?;
-
-    let conn = state.pool()?.get_conn();
-    let mut tx = conn.begin().await?;
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
@@ -687,15 +762,12 @@ pub async fn auto_assign_ip(
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+        "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
     )
     .bind(id)
-    .bind(workstation_id)
-    .bind(position_id)
     .bind(device_port_id)
-    .bind(req.device_id)
-    .bind(&device_type)
+    .bind(device_id)
     .bind(req_network_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
@@ -705,7 +777,8 @@ pub async fn auto_assign_ip(
     .bind(now)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx).await;
+    .execute(&mut *tx)
+    .await;
 
     match insert_result {
         Ok(_) => {}
@@ -723,11 +796,8 @@ pub async fn auto_assign_ip(
 
     let mapping = IpManager {
         id,
-        workstation_id,
-        position_id,
         device_port_id,
-        device_id: req.device_id,
-        device_type: Some(device_type),
+        device_id,
         network_id: Some(req_network_id),
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
@@ -741,6 +811,7 @@ pub async fn auto_assign_ip(
     };
 
     let details = serde_json::json!({
+        "device_id": device_id.to_string(),
         "ip_address": mapping.ip_address,
         "mac_address": mapping.mac_address,
         "hostname": mapping.hostname,
@@ -765,6 +836,17 @@ pub async fn auto_assign_ip(
     Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "IP地址自动分配成功")))
 }
 
+pub async fn auto_assign_device_ip(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    req: web::Json<crate::models::AutoAssignIpRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let mut req = req.into_inner();
+    req.device_id = *id_path;
+    auto_assign_ip(state, web::Json(req), http_req).await
+}
+
 pub async fn batch_create_ip_managers(
     state: web::Data<AppState>,
     req: web::Json<Vec<IpManagerCreate>>,
@@ -777,19 +859,6 @@ pub async fn batch_create_ip_managers(
     for (index, ip_req) in req.iter().enumerate() {
         if let Err(e) = ip_req.validate() {
             errors.push(format!("第{}条记录验证失败: {:?}", index + 1, e));
-            continue;
-        }
-
-        let device_type = ip_req.device_type.as_deref().unwrap_or("");
-        let device_valid = (device_type == "workstation"
-            && ip_req.workstation_id.is_some()
-            && ip_req.position_id.is_none())
-            || (device_type == "cabinet_position"
-                && ip_req.workstation_id.is_none()
-                && ip_req.position_id.is_some());
-
-        if !device_valid {
-            errors.push(format!("第{}条记录: 设备类型与设备ID不匹配", index + 1));
             continue;
         }
 
@@ -846,15 +915,12 @@ pub async fn batch_create_ip_managers(
         }
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)"
+            "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(*id)
-        .bind(ip_req.workstation_id)
-        .bind(ip_req.position_id)
         .bind(ip_req.device_port_id)
         .bind(ip_req.device_id)
-        .bind(&ip_req.device_type)
         .bind(ip_req.network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
@@ -873,11 +939,8 @@ pub async fn batch_create_ip_managers(
 
         created_ips.push(IpManager {
             id: *id,
-            workstation_id: ip_req.workstation_id,
-            position_id: ip_req.position_id,
             device_port_id: ip_req.device_port_id,
             device_id: ip_req.device_id,
-            device_type: ip_req.device_type.clone(),
             network_id: ip_req.network_id,
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,

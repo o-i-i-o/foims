@@ -13,26 +13,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW ip_with_details AS
         SELECT
             imm.id,
-            imm.workstation_id,
-            imm.position_id,
             imm.device_port_id,
             imm.device_id,
-            imm.device_type,
             imm.network_id,
-            CASE
-                WHEN dv.id IS NOT NULL THEN dv.name::text
-                WHEN w.id IS NOT NULL THEN w.name::text
-                WHEN cp.id IS NOT NULL THEN cp.name::text
-                ELSE 'unknown device'
-            END AS device_name,
-            CASE
-                WHEN w.id IS NOT NULL THEN w.name::text
-                ELSE NULL
-            END AS workstation_name,
-            CASE
-                WHEN cp.id IS NOT NULL THEN cp.name::text
-                ELSE NULL
-            END AS cabinet_position_name,
+            dv.name::text AS device_name,
+            dv.device_type::text AS device_type,
             sdv.name::text AS port_device_name,
             sp.port_number::text AS port_device_number,
             CASE
@@ -45,6 +30,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             END AS connected_device_type,
             ap.name::text AS net_outlet_name,
             ap2.name::text AS peer_net_outlet_name,
+            w.name::text AS workstation_name,
+            cp.name::text AS cabinet_position_name,
             CASE
                 WHEN r.id IS NOT NULL THEN r.name::text
                 ELSE NULL
@@ -66,15 +53,15 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.created_at,
             imm.updated_at
         FROM ips imm
-        LEFT JOIN devices dv ON imm.device_id = dv.id
+        JOIN devices dv ON imm.device_id = dv.id
         LEFT JOIN net_outlets ap ON dv.net_outlet_id = ap.id
         LEFT JOIN net_outlets ap2 ON ap.peer_net_outlet_id = ap2.id
-        LEFT JOIN workstations w ON imm.workstation_id = w.id
-        LEFT JOIN positions cp ON imm.position_id = cp.id
+        LEFT JOIN workstations w ON dv.workstation_id = w.id
+        LEFT JOIN positions cp ON dv.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
         LEFT JOIN device_ports sp ON imm.device_port_id = sp.id
         LEFT JOIN devices sdv ON sp.device_id = sdv.id
-        LEFT JOIN rooms r ON COALESCE(w.room_id, (SELECT ws.room_id FROM devices d2 JOIN workstations ws ON d2.workstation_id = ws.id WHERE d2.id = dv.id), (SELECT cab2.room_id FROM devices d3 JOIN positions p2 ON d3.position_id = p2.id JOIN cabinets cab2 ON p2.cabinet_id = cab2.id WHERE d3.id = dv.id)) = r.id
+        LEFT JOIN rooms r ON COALESCE(w.room_id, (SELECT cab.room_id FROM positions p JOIN cabinets cab ON p.cabinet_id = cab.id WHERE p.id = dv.position_id)) = r.id
         LEFT JOIN organizations org ON r.org_id = org.id
         LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
@@ -106,7 +93,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             END AS comparison_result
         FROM device_macs sm
         JOIN devices sdv ON sm.device_id = sdv.id
-        LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_type != 'switch'
+        LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_id != sm.device_id
     ",
     )
     .execute(pool)

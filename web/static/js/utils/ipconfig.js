@@ -157,26 +157,6 @@ function dispatchNetworkChange(networkId, networkName, networkRegionId) {
 }
 
 const CONFIG = {
-  workstation: {
-    containerId: 'workstation-ips-container',
-    classPrefix: 'workstation',
-    networksApi: (id) => `/api/resources/rooms/${id}/networks`,
-    idSelector: 'workstation-room',
-    idName: '房间',
-    parentSwitchRequired: false,
-    switchLabel: '上级设备',
-    portLabel: '上级端口'
-  },
-  'cabinet-position': {
-    containerId: 'cabinet-position-ips-container',
-    classPrefix: 'cabinet-position',
-    networksApi: (id) => `/api/resources/cabinets/${id}/networks`,
-    idSelector: 'cabinet-position-cabinet',
-    idName: '机柜',
-    parentSwitchRequired: false,
-    switchLabel: '上级设备',
-    portLabel: '上级端口'
-  },
   device: {
     containerId: 'device-ips-container',
     classPrefix: 'device',
@@ -400,14 +380,6 @@ export class IpConfigManager {
             mac_address: macAddressInput && macAddressInput.value ? macAddressInput.value.trim() : null,
           };
 
-          if (this.resourceType === 'device') {
-            ipData.device_type = 'network_device';
-          } else if (this.resourceType === 'cabinet-position') {
-            ipData.device_type = 'cabinet_position';
-          } else if (this.resourceType === 'workstation') {
-            ipData.device_type = 'workstation';
-          }
-          
           if (networkRegionSelect && networkRegionSelect.value) {
             ipData.network_region_id = networkRegionSelect.value;
           }
@@ -482,14 +454,6 @@ export class IpConfigManager {
           ip_address: ipAddress,
           mac_address: macAddress || null,
         };
-
-        if (this.resourceType === 'device') {
-          ipData.device_type = 'network_device';
-        } else if (this.resourceType === 'cabinet-position') {
-          ipData.device_type = 'cabinet_position';
-        } else if (this.resourceType === 'workstation') {
-          ipData.device_type = 'workstation';
-        }
 
         if (networkRegionId) {
           ipData.network_region_id = networkRegionId;
@@ -923,17 +887,5 @@ export async function addIpAddressField(resourceType) {
   const manager = getManager(resourceType);
   await manager.addIpRow();
 }
-
-export const handleWorkstationRoomChange = async () => {
-  const manager = getManager('workstation');
-  manager.clear();
-  await manager.addIpRow();
-};
-
-export const handleCabinetPositionCabinetChange = async () => {
-  const manager = getManager('cabinet-position');
-  manager.clear();
-  await manager.addIpRow();
-};
 
 export { getManager };

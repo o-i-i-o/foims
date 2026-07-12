@@ -27,14 +27,13 @@ use crate::resource::{
     delete_network_region, delete_org_template, delete_organization, delete_positions_layout,
     delete_room, delete_topology_connection, delete_topology_node, delete_workstation,
     disconnect_device, get_allowed_child_types, get_available_ips, get_cabinet,
-    get_cabinet_networks, get_cabinet_position, get_cabinet_position_ips, get_cabinets,
-    get_cabinets_by_network_region, get_children, get_device, get_device_ips, get_device_template,
-    get_device_templates, get_devices, get_ip_managers, get_layout, get_net_outlet,
-    get_net_outlets, get_network, get_network_region, get_network_regions, get_networks,
-    get_org_rooms, get_org_template, get_org_templates, get_organization, get_organization_tree,
-    get_organizations, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_topology_connections,
-    get_topology_nodes, get_workstation, get_workstation_ips, get_workstations, link_peer,
+    get_cabinet_networks, get_cabinet_position, get_cabinets, get_cabinets_by_network_region,
+    get_children, get_device, get_device_ips, get_device_template, get_device_templates,
+    get_devices, get_ip_managers, get_layout, get_net_outlet, get_net_outlets, get_network,
+    get_network_region, get_network_regions, get_networks, get_org_rooms, get_org_template,
+    get_org_templates, get_organization, get_organization_tree, get_organizations, get_positions,
+    get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
+    get_topology_connections, get_topology_nodes, get_workstation, get_workstations, link_peer,
     pull_ip_managers, save_layout, save_topology_nodes, trigger_auto_discover, unlink_peer,
     update_cabinet, update_cabinet_position, update_device, update_net_outlet, update_network,
     update_network_region, update_org_template, update_organization, update_room,
@@ -233,12 +232,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/pull", web::post().to(pull_ip_managers))
                                 .route("/available/{network_id}", web::get().to(get_available_ips))
                                 .route("/auto-assign", web::post().to(auto_assign_ip))
-                                .route("/batch", web::post().to(batch_create_ip_managers))
-                                .route("/workstation/{id}", web::get().to(get_workstation_ips))
-                                .route(
-                                    "/cabinet-position/{id}",
-                                    web::get().to(get_cabinet_position_ips),
-                                ),
+                                .route("/batch", web::post().to(batch_create_ip_managers)),
                         )
                         // 布局管理
                         .service(

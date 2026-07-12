@@ -21,7 +21,6 @@ const IP_PAGE_SIZE = 100;
 
 let currentFilters = {
   device_name: '',
-  device_type: '',
   network: '',
   ip_address: ''
 };
@@ -152,11 +151,10 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
   currentPage = page;
   
   try {
-    const { device_name = '', device_type = '', network = '', ip_address = '' } = filters;
-    
+    const { device_name = '', network = '', ip_address = '' } = filters;
+
     const params = new URLSearchParams();
     if (device_name) params.append('device_name', device_name);
-    if (device_type) params.append('device_type', device_type);
     if (network) params.append('network', network);
     if (ip_address) params.append('ip_address', ip_address);
     params.append('page', page);
@@ -174,14 +172,7 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
         columns: [
           { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
           { field: 'location', render: (v, row) => {
-            if (row.device_type === 'workstation' && row.room_name) {
-              return escapeHtml(row.room_name);
-            } else if (row.device_type === 'cabinet_position' && row.cabinet_name) {
-              return escapeHtml(row.cabinet_name);
-            } else if (row.port_device_name) {
-              return escapeHtml(row.port_device_name);
-            }
-            return '-';
+            return escapeHtml(row.workstation_name || row.cabinet_name || row.port_device_name || row.device_name || '-');
           }},
           { field: 'device_name', render: (v) => escapeHtml(v || '-') },
           { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)) },
@@ -239,7 +230,6 @@ export const initIpMacFunctions = () => {
 export function initIpFilters() {
   const filterIds = [
     'ip-device-name-filter',
-    'ip-device-type-filter',
     'ip-network-filter',
     'ip-address-filter'
   ];
@@ -257,7 +247,6 @@ export function initIpFilters() {
 function applyIpFilters() {
   const filters = {
     device_name: document.getElementById('ip-device-name-filter')?.value || '',
-    device_type: document.getElementById('ip-device-type-filter')?.value || '',
     network: document.getElementById('ip-network-filter')?.value || '',
     ip_address: document.getElementById('ip-address-filter')?.value || ''
   };

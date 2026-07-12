@@ -87,7 +87,7 @@ pub async fn get_all_device_ports(
             r"SELECT
                 sp.id, sp.device_id, d.name as device_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
                     ''
                 ) as device_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -108,7 +108,7 @@ pub async fn get_all_device_ports(
             r"SELECT
                 sp.id, sp.device_id, d.name as device_name,
                 COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
+                    (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
                     ''
                 ) as device_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -116,7 +116,7 @@ pub async fn get_all_device_ports(
             FROM device_ports sp
             JOIN devices d ON sp.device_id = d.id
             ORDER BY d.name, sp.port_number
-            LIMIT $1 OFFSET $2"
+            LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
         .bind(offset)
@@ -232,7 +232,7 @@ pub async fn get_device_port(
         r"SELECT
             sp.id, sp.device_id, d.name as device_name,
             COALESCE(
-                (SELECT host(im.ip_address) FROM ips im WHERE im.position_id = d.position_id LIMIT 1),
+                (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
                 ''
             ) as device_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
@@ -327,30 +327,14 @@ pub async fn delete_device_port(
 ) -> Result<HttpResponse, AppError> {
     let port_id = path.into_inner();
 
-    let has_workstation = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM ips WHERE device_port_id = $1 AND workstation_id IS NOT NULL)",
-    )
-    .bind(port_id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let has_ip =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM ips WHERE device_port_id = $1)")
+            .bind(port_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
 
-    if has_workstation {
-        return Err(AppError::Validation(
-            "该端口有工位关联，无法删除".to_string(),
-        ));
-    }
-
-    let has_cabinet_position = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM ips WHERE device_port_id = $1 AND position_id IS NOT NULL)",
-    )
-    .bind(port_id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
-
-    if has_cabinet_position {
-        return Err(AppError::Validation(
-            "该端口有机位关联，无法删除".to_string(),
-        ));
+    if has_ip {
+        return Err(AppError::Validation("该端口有关联IP，无法删除".to_string()));
     }
 
     let result = sqlx::query("DELETE FROM device_ports WHERE id = $1")
@@ -405,7 +389,7 @@ pub async fn sync_ports_from_snmp(
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
+           WHERE device_id = $1
            ORDER BY created_at LIMIT 1",
     )
     .bind(device_id)

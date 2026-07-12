@@ -421,23 +421,13 @@ pub async fn create_device(
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
-            // Determine ip device_type based on device location
-            let ip_device_type = if req.workstation_id.is_some() || req.position_id.is_some() {
-                "device"
-            } else {
-                ip.device_type.as_deref().unwrap_or("device")
-            };
-
             sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)",
+                "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
             )
             .bind(Uuid::new_v4())
-            .bind(req.workstation_id)
-            .bind(req.position_id)
             .bind(ip.device_port_id)
-            .bind(Some(id))
-            .bind(ip_device_type)
+            .bind(id)
             .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
@@ -581,8 +571,7 @@ pub async fn get_device(
     // Fetch associated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.device_port_id,
-            m.device_id, m.device_type, m.network_id,
+            m.id, m.device_port_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
@@ -869,25 +858,14 @@ pub async fn update_device(
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
-            // Determine ip device_type based on device location
-            let ip_device_type =
-                if resolved_workstation_id.is_some() || resolved_position_id.is_some() {
-                    "device"
-                } else {
-                    ip.device_type.as_deref().unwrap_or("device")
-                };
-
             let insert_result = sqlx::query(
-                "INSERT INTO ips (id, workstation_id, position_id, device_port_id, device_id, device_type, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, CAST($8 AS INET), $9, $10, $11, $12, $13, $14, $15)
+                "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)
                  ON CONFLICT (ip_address) DO NOTHING",
             )
             .bind(Uuid::new_v4())
-            .bind(resolved_workstation_id)
-            .bind(resolved_position_id)
             .bind(ip.device_port_id)
-            .bind(Some(id))
-            .bind(ip_device_type)
+            .bind(id)
             .bind(network_id)
             .bind(&ip.ip_address)
             .bind(ip_version)
@@ -1020,8 +998,7 @@ pub async fn update_device(
     // Fetch updated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.workstation_id, m.position_id, m.device_port_id,
-            m.device_id, m.device_type, m.network_id,
+            m.id, m.device_port_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
@@ -1087,15 +1064,6 @@ pub async fn delete_device(
     if existing.is_none() {
         return Err(AppError::NotFound("设备未找到".to_string()));
     }
-
-    // 对于同时关联了 workstation/position 的 IP，仅解除 device_id 关联（保留 IP）
-    // 对于仅通过 device_id 关联的 IP，由 ON DELETE CASCADE 自动删除
-    sqlx::query(
-        "UPDATE ips SET device_id = NULL WHERE device_id = $1 AND (workstation_id IS NOT NULL OR position_id IS NOT NULL)",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
 
     sqlx::query("DELETE FROM devices WHERE id = $1")
         .bind(id)

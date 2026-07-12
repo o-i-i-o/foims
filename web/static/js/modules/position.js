@@ -20,7 +20,6 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
-import { getManager } from "../utils/ipconfig.js";
 
 const tableState = createSortState('name', 'asc');
 let isLoading = false;
@@ -54,57 +53,29 @@ export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrde
 
     if (positions.length > 0) {
       const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-      
-      const ipPromises = positions.map(position => 
-        apiGet(`/api/resources/ip/cabinet-position/${position.id}`)
-          .then(ipsData => ({ position, ipsData }))
-          .catch(ipsError => {
-            console.error(`获取机位 ${position.id} 的IP地址失败:`, ipsError);
-            return { position, ipsData: { success: false, data: [] } };
-          })
-      );
-      
-      const results = await Promise.all(ipPromises);
+
       let rowIndex = 0;
-      
-      for (const { position, ipsData } of results) {
+
+      for (const position of positions) {
         const cabinetName = escapeHtml(position.cabinet_name) || "-";
         const positionName = escapeHtml(position.name);
-        
-        let ipsHtml = "-";
-        let portsHtml = "-";
-        let deviceTypeHtml = "-";
-        if (ipsData.success && ipsData.data.length > 0) {
-          ipsHtml = ipsData.data.map(ip => escapeHtml(ip.ip_address)).join("<br>");
-          
-          const portInfos = ipsData.data
-            .filter(ip => ip.port_device_name && ip.port_device_number)
-            .map(ip => `${escapeHtml(ip.port_device_name)}: ${escapeHtml(ip.port_device_number)}`);
-          portsHtml = portInfos.length > 0 ? portInfos.join("<br>") : "-";
-          
-          // 显示设备类型
-          const deviceTypes = [...new Set(ipsData.data.map(ip => ip.device_type).filter(Boolean))];
-          if (deviceTypes.length > 0) {
-            deviceTypeHtml = deviceTypes.map(dt => t(`ip.device_types.${dt}`, dt)).join(", ");
-          }
-        }
 
         const row = document.createElement("tr");
         const roomName = escapeHtml(position.room_name) || "-";
         const isSwitchPosition = position.device_type === 'switch';
-        const deleteBtnHtml = isSwitchPosition 
+        const deleteBtnHtml = isSwitchPosition
           ? `<button class="btn btn-sm btn-delete disabled" data-id="${position.id}" disabled title="该机位由交换机创建，请通过交换机管理删除">删除</button>`
           : `<button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>`;
-        
+
         row.innerHTML = `
                     <td class="index-column">${startIndex + rowIndex + 1}</td>
                     <td>${roomName}</td>
                     <td>${cabinetName}</td>
                     <td>${positionName}</td>
-                    <td>${deviceTypeHtml}</td>
-                    <td>${ipsHtml}</td>
+                    <td>-</td>
+                    <td>-</td>
                     <td>${position.start_u} - ${position.end_u} U</td>
-                    <td>${portsHtml}</td>
+                    <td>-</td>
                     <td>${escapeHtml(position.description) || "-"}</td>
                     <td>${new Date(position.created_at).toLocaleString()}</td>
                     <td>
@@ -196,25 +167,11 @@ export async function submitCabinetPositionForm() {
     return;
   }
 
-  const ipManager = getManager('cabinet-position');
-  const validation = ipManager.validateIps();
-
-  if (validation.errors && validation.errors.length > 0) {
-    showToast(validation.errors[0], "warning");
-    return;
-  }
-
-  if (validation.ips.length === 0) {
-    showToast("请至少添加一个IP地址", "warning");
-    return;
-  }
-
   const positionData = {
     name: name.trim(),
     cabinet_id: cabinetId,
     start_u: startU,
     end_u: endU,
-    ips: validation.ips,
     description: description.trim() || null,
   };
 
@@ -252,12 +209,6 @@ export async function openCabinetPositionModal(position = null) {
   const roomSelect = elementCache.get('cabinet-position-room');
   const cabinetSelect = elementCache.get('cabinet-position-cabinet');
 
-  // 使用单例manager
-  const ipManager = getManager('cabinet-position');
-  ipManager.clear();
-  
-  const { handleCabinetPositionCabinetChange } = await import("../utils/ipconfig.js");
-  
   // 从 cabinets 数据源只读加载房间选项（去重）
   const loadRoomsFromCabinets = async () => {
     roomSelect.innerHTML = `<option value="">${t('cabinet_position.select_room', '选择房间')}</option>`;
@@ -333,11 +284,6 @@ export async function openCabinetPositionModal(position = null) {
     roomSelect.addEventListener('change', handleRoomChange);
   }
 
-  if (cabinetSelect) {
-    cabinetSelect.removeEventListener("change", handleCabinetPositionCabinetChange);
-    cabinetSelect.addEventListener("change", handleCabinetPositionCabinetChange);
-  }
-
   if (position) {
     // 编辑模式
     title.textContent = "编辑机位";
@@ -355,15 +301,6 @@ export async function openCabinetPositionModal(position = null) {
         await handleRoomChange();
         elementCache.setValue('cabinet-position-cabinet', position.cabinet_id);
       }
-    }
-
-    // 编辑模式下加载IP配置
-    if (position.ips && position.ips.length > 0) {
-      // 如果有IP信息，加载已配置的IP
-      await ipManager.loadIps(position.ips);
-    } else if (position.cabinet_id) {
-      // 如果没有IP信息但有机柜，创建空IP容器
-      await ipManager.addIpRow();
     }
   } else {
     // 添加模式

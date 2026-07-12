@@ -256,7 +256,7 @@ async fn export_workstations(
 
     let rows = sqlx::query(
         r"SELECT w.id, w.name, r.name as room_name, w.manager, w.description,
-                  (SELECT host(ip_address) FROM ips WHERE workstation_id = w.id AND device_type = 'workstation' LIMIT 1) as ip_address
+                  (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.workstation_id = w.id LIMIT 1) as ip_address
            FROM workstations w
            JOIN rooms r ON w.room_id = r.id
            ORDER BY r.name, w.name",
@@ -375,7 +375,7 @@ async fn export_positions(
 
     let rows = sqlx::query(
         r"SELECT p.id, p.name, c.name as cabinet_name, p.start_u, p.end_u, p.description,
-                  (SELECT host(ip_address) FROM ips WHERE position_id = p.id AND device_type = 'cabinet_position' LIMIT 1) as ip_address
+                  (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.position_id = p.id LIMIT 1) as ip_address
            FROM positions p
            JOIN cabinets c ON p.cabinet_id = c.id
            ORDER BY c.name, p.start_u",
@@ -421,7 +421,7 @@ async fn export_switches<P: DataProvider>(
     let rows = sqlx::query(
         r"SELECT s.id, s.name, s.model, s.vendor, s.location, s.snmp_version, s.snmp_port,
            s.snmp_community, s.snmp_username, s.description,
-           (SELECT host(ip_address) FROM ips WHERE position_id = s.position_id LIMIT 1) as ip_address
+           (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.position_id = s.position_id LIMIT 1) as ip_address
            FROM switches s
            ORDER BY s.name",
     )
@@ -475,12 +475,13 @@ async fn export_ip_managers(
     csv.extend_from_slice("工位,机位,网络,IP地址,MAC地址,主机名,状态\n".as_bytes());
 
     let rows = sqlx::query(
-        r"SELECT w.name as workstation_name, p.name as position_name, 
-           n.name as network_name, host(im.ip_address), 
+        r"SELECT w.name as workstation_name, p.name as position_name,
+           n.name as network_name, host(im.ip_address),
            im.mac_address, im.hostname, im.status
-           FROM ips im 
-           LEFT JOIN workstations w ON im.workstation_id = w.id 
-           LEFT JOIN positions p ON im.position_id = p.id 
+           FROM ips im
+           JOIN devices d ON im.device_id = d.id
+           LEFT JOIN workstations w ON d.workstation_id = w.id
+           LEFT JOIN positions p ON d.position_id = p.id
            LEFT JOIN network_cidrs n ON im.network_id = n.id
            ORDER BY im.ip_address",
     )
