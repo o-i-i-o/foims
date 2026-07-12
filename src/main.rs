@@ -531,6 +531,7 @@ async fn main() -> std::io::Result<()> {
                     let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 3).await?;
                     let server_ipv4 = HttpServer::new(create_http_app.clone())
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .keep_alive(std::time::Duration::from_secs(5))
                         .disable_signals()
                         .listen(http_listener_ipv4)?
                         .run();
@@ -550,6 +551,7 @@ async fn main() -> std::io::Result<()> {
                     let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 3).await?;
                     let server_ipv6 = HttpServer::new(create_http_app)
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .keep_alive(std::time::Duration::from_secs(5))
                         .disable_signals()
                         .listen(http_listener_ipv6)?
                         .run();
@@ -588,6 +590,7 @@ async fn main() -> std::io::Result<()> {
 
                     let server_ipv4 = HttpServer::new(create_https_app.clone())
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .keep_alive(std::time::Duration::from_secs(5))
                         .disable_signals()
                         .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
                         .map_err(|e| {
@@ -614,6 +617,7 @@ async fn main() -> std::io::Result<()> {
 
                     let server_ipv6 = HttpServer::new(create_https_app)
                         .workers(std::cmp::max(2, num_cpus::get()))
+                        .keep_alive(std::time::Duration::from_secs(5))
                         .disable_signals()
                         .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
                         .map_err(|e| {
