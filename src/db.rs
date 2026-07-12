@@ -146,8 +146,6 @@ pub struct PoolConfig {
     pub scaling_cooldown_secs: u64,
     pub query_timeout_secs: u64,
     pub slow_query_threshold_ms: u64,
-    pub statement_timeout_ms: u64,
-    pub lock_timeout_ms: u64,
     pub retry_max_attempts: u32,
     pub retry_base_delay_ms: u64,
     pub leak_detection_threshold: f32,
@@ -169,8 +167,6 @@ impl Default for PoolConfig {
             scaling_cooldown_secs: 60,
             query_timeout_secs: 30,
             slow_query_threshold_ms: 1000,
-            statement_timeout_ms: 30000,
-            lock_timeout_ms: 5000,
             retry_max_attempts: 3,
             retry_base_delay_ms: 100,
             leak_detection_threshold: 0.9,
@@ -242,8 +238,6 @@ impl From<&DatabaseConfig> for PoolConfig {
             scaling_cooldown_secs: 60,
             query_timeout_secs: config.query_timeout_secs,
             slow_query_threshold_ms: config.slow_query_threshold_ms,
-            statement_timeout_ms: 30000,
-            lock_timeout_ms: 5000,
             retry_max_attempts: 3,
             retry_base_delay_ms: 100,
             leak_detection_threshold: 0.9,
@@ -274,14 +268,12 @@ impl DbPool {
         }
 
         let url = format!(
-            "postgres://{}:{}@{}:{}/{}?statement_timeout={}&lock_timeout={}",
+            "postgres://{}:{}@{}:{}/{}",
             url_encode_component(&config.username),
             url_encode_component(&config.password),
             config.host,
             config.port,
-            url_encode_component(&config.database),
-            pool_config.statement_timeout_ms,
-            pool_config.lock_timeout_ms
+            url_encode_component(&config.database)
         );
 
         let pool = Self::create_pool(&url, &pool_config).await?;

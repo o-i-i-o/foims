@@ -79,5 +79,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     views::create(pool).await?;
     triggers::create(pool).await?;
 
+    // 角色级超时配置（永久生效，所有新连接自动应用）
+    sqlx::query("ALTER ROLE CURRENT_USER SET statement_timeout = '30s'")
+        .execute(pool)
+        .await?;
+    sqlx::query("ALTER ROLE CURRENT_USER SET lock_timeout = '5s'")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
