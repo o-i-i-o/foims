@@ -1,0 +1,254 @@
+use crate::app_state::AppState;
+use crate::error::AppError;
+use crate::models::{ApiResponse, DeviceConnectRequest, DeviceWithDetails};
+use crate::utils::{OperationLogParams, log_system_operation};
+use actix_web::{HttpRequest, HttpResponse, web};
+use chrono::Utc;
+use sqlx::Row;
+use tracing::warn;
+use uuid::Uuid;
+
+pub async fn connect_device(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    req: web::Json<DeviceConnectRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // Verify device exists
+    let existing: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM devices WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+    if existing.is_none() {
+        return Err(AppError::NotFound("设备未找到".to_string()));
+    }
+
+    // Resolve final values
+    let resolved_ap_id = match &req.access_point_id {
+        Some(Some(ap_id)) => {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM access_points WHERE id = $1)")
+                    .bind(ap_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if !exists {
+                return Err(AppError::NotFound("接入点未找到".to_string()));
+            }
+            Some(*ap_id)
+        }
+        Some(None) => None,
+        None => {
+            // Keep current value
+            let current: Option<Uuid> =
+                sqlx::query_scalar("SELECT access_point_id FROM devices WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            current
+        }
+    };
+
+    let resolved_sp_id = match &req.device_port_id {
+        Some(Some(sp_id)) => {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
+                    .bind(sp_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if !exists {
+                return Err(AppError::NotFound("交换机端口未找到".to_string()));
+            }
+            // 检查端口是否已被其他设备占用
+            let occupied_by: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM devices WHERE device_port_id = $1 AND id != $2")
+                    .bind(sp_id)
+                    .bind(id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if occupied_by.is_some() {
+                return Err(AppError::Conflict(
+                    "该交换机端口已被其他设备占用".to_string(),
+                ));
+            }
+            Some(*sp_id)
+        }
+        Some(None) => None,
+        None => {
+            let current: Option<Uuid> =
+                sqlx::query_scalar("SELECT device_port_id FROM devices WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            current
+        }
+    };
+
+    // Business validation: access_point_id and device_port_id cannot both be set
+    if resolved_ap_id.is_some() && resolved_sp_id.is_some() {
+        return Err(AppError::Validation(
+            "接入点和交换机端口不能同时指定".to_string(),
+        ));
+    }
+
+    let now = Utc::now();
+
+    sqlx::query(
+        "UPDATE devices SET
+         access_point_id = CASE WHEN $1::boolean THEN $2 ELSE access_point_id END,
+         device_port_id = CASE WHEN $3::boolean THEN $4 ELSE device_port_id END,
+         updated_at = $5
+         WHERE id = $6",
+    )
+    .bind(req.access_point_id.is_some())
+    .bind(resolved_ap_id)
+    .bind(req.device_port_id.is_some())
+    .bind(resolved_sp_id)
+    .bind(now)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    // Fetch updated device with details
+    let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
+        "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
+                d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.connected_device_port, d.connected_device_name, d.template_name,
+                d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
+         FROM devices_with_details d
+         WHERE d.id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+
+    let details = serde_json::json!({
+        "access_point_id": updated_device.access_point_id,
+        "device_port_id": updated_device.device_port_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "connect",
+            resource_type: "device",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::<DeviceWithDetails>::success(
+            updated_device,
+            "设备连接设置成功",
+        )),
+    )
+}
+
+pub async fn disconnect_device(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // Verify device exists
+    let existing: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM devices WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+    if existing.is_none() {
+        return Err(AppError::NotFound("设备未找到".to_string()));
+    }
+
+    // Query old values before update for logging
+    let old_row = sqlx::query("SELECT access_point_id, device_port_id FROM devices WHERE id = $1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let old_access_point_id: Option<Uuid> = old_row.get("access_point_id");
+    let old_device_port_id: Option<Uuid> = old_row.get("device_port_id");
+
+    let now = Utc::now();
+
+    sqlx::query(
+        "UPDATE devices SET access_point_id = NULL, device_port_id = NULL, updated_at = $1 WHERE id = $2",
+    )
+    .bind(now)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    // Fetch updated device with details
+    let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
+        "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+                d.workstation_id, d.position_id, d.access_point_id, d.device_port_id,
+                d.template_id, d.vendor, d.location,
+                d.snmp_version, d.snmp_community, d.snmp_username,
+                d.snmp_auth_protocol, d.snmp_auth_password,
+                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.description,
+                d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                d.start_u, d.end_u, d.access_point_name, d.access_point_type,
+                d.connected_device_port, d.connected_device_name, d.template_name,
+                d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
+         FROM devices_with_details d
+         WHERE d.id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+
+    let details = serde_json::json!({
+        "disconnected": true,
+        "previous_access_point_id": old_access_point_id,
+        "previous_device_port_id": old_device_port_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "disconnect",
+            resource_type: "device",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::<DeviceWithDetails>::success(
+            updated_device,
+            "设备断开连接成功",
+        )),
+    )
+}

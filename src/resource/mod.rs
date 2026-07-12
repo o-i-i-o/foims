@@ -1,7 +1,6 @@
 pub mod access_point;
 pub mod cabinets;
 pub mod device;
-pub mod device_template;
 pub mod drawing;
 pub mod ip;
 pub mod network;
@@ -9,13 +8,11 @@ pub mod org_template;
 pub mod organization;
 pub mod position;
 pub mod room;
-pub mod switch;
 pub mod workstation;
 
 pub use access_point::*;
 pub use cabinets::*;
 pub use device::*;
-pub use device_template::*;
 pub use drawing::*;
 pub use ip::*;
 pub use network::*;
@@ -23,5 +20,4 @@ pub use org_template::*;
 pub use organization::*;
 pub use position::*;
 pub use room::*;
-pub use switch::*;
 pub use workstation::*;

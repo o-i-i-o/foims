@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.10.26"
+version = "0.10.28"
 dependencies = [
  "actix-cors",
  "actix-files",

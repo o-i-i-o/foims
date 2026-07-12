@@ -12,7 +12,7 @@ use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
 use crate::log::{get_login_logs, get_operation_logs};
-use crate::resource::switch::{
+use crate::resource::device::{
     create_device_port, delete_device_port, get_all_device_ports, get_device_info_snmp,
     get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db, get_device_port,
     get_device_ports, get_device_ports_snmp, sync_lldp_from_snmp, sync_ports_from_snmp,
