@@ -399,15 +399,13 @@ function handleCertTypeChange() {
 }
 
 // 显示证书生成模态框
-function showCertGenerateModal() {
-  loadModal('cert-generate-modal');
-  openModal("cert-generate-modal");
+async function showCertGenerateModal() {
+  await openModal("cert-generate-modal");
 }
 
 // 显示证书导入模态框
-function showCertImportModal() {
-  loadModal('cert-import-modal');
-  openModal("cert-import-modal");
+async function showCertImportModal() {
+  await openModal("cert-import-modal");
 }
 
 // 下载证书
@@ -907,11 +905,11 @@ export async function importCsvData() {
       if (result.success) {
         const results = result.data?.results || [];
         if (results.length > 0) {
-          loadModal('import-result-modal');
+          await loadModal('import-result-modal');
           const contentDiv = elementCache.get("import-result-content");
           if (contentDiv) {
             contentDiv.innerHTML = results.map(r => `<div class="import-result-item">${escapeHtml(r)}</div>`).join("");
-            openModal("import-result-modal");
+            await openModal("import-result-modal");
           }
         }
         showToast("数据导入完成", "success");

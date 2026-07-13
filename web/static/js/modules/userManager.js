@@ -81,8 +81,8 @@ export async function loadUsersData(page = 1) {
 }
 
 // 打开用户模态框
-export function openUserModal(userId) {
-  openModal("user-modal");
+export async function openUserModal(userId) {
+  await openModal("user-modal");
   
   const modal = elementCache.get("user-modal");
   const title = elementCache.get("user-modal-title");

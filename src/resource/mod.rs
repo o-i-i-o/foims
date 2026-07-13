@@ -1,4 +1,5 @@
 pub mod cabinets;
+pub mod cable_link;
 pub mod device;
 pub mod drawing;
 pub mod ip;
@@ -11,6 +12,7 @@ pub mod room;
 pub mod workstation;
 
 pub use cabinets::*;
+pub use cable_link::*;
 pub use device::*;
 pub use drawing::*;
 pub use ip::*;

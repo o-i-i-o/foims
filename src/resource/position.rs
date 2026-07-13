@@ -324,7 +324,7 @@ pub async fn get_cabinet_position(
 
     let position_ips = sqlx::query(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at, m.updated_at,
@@ -345,7 +345,7 @@ pub async fn get_cabinet_position(
         .map(|row| {
             serde_json::json!({
                 "id": row.get::<Uuid, _>(0),
-                "device_port_id": row.get::<Option<Uuid>, _>(1),
+                "device_interface_id": row.get::<Uuid, _>(1),
                 "device_id": row.get::<Uuid, _>(2),
                 "network_id": row.get::<Option<Uuid>, _>(3),
                 "ip_address": row.get::<String, _>(4),
@@ -452,7 +452,7 @@ pub async fn update_cabinet_position(
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT m.id, m.device_port_id, m.device_id, m.network_id,
+        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname,
            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
            FROM ips m JOIN devices d ON m.device_id = d.id WHERE d.position_id = $1",

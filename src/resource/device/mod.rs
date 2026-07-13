@@ -1,17 +1,19 @@
 pub mod connection;
 pub mod crud;
+pub mod interface;
 pub mod lldp;
 pub mod mac;
-pub mod port;
 pub mod snmp;
+pub mod switch_port;
 pub mod template;
 
 pub use connection::*;
 pub use crud::*;
+pub use interface::*;
 pub use lldp::*;
 pub use mac::*;
-pub use port::*;
 pub use snmp::*;
+pub use switch_port::*;
 pub use template::*;
 
 use crate::error::AppError;

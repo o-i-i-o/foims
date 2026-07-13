@@ -20,14 +20,14 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             source_device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             target_device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-            source_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
-            target_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
+            source_switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
+            target_switch_port_id UUID REFERENCES switch_ports(id) ON DELETE SET NULL,
             label VARCHAR(100),
             auto_discovered BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_no_self_connection CHECK (source_device_id != target_device_id),
-            CONSTRAINT uq_topology_connection UNIQUE (source_device_id, target_device_id, source_port_id, target_port_id)
+            CONSTRAINT uq_topology_connection UNIQUE (source_device_id, target_device_id, source_switch_port_id, target_switch_port_id)
         )",
     )
     .execute(pool)

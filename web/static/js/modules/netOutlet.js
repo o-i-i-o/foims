@@ -57,11 +57,6 @@ export async function loadNetOutletsData(page = 1, sortBy = null, sortOrder = nu
         { field: 'outlet_type', render: (v) => getOutletTypeName(v) },
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'cabinet_name', render: (v) => escapeHtml(v) || '-' },
-        { field: 'peer_net_outlet_name', render: (v) => escapeHtml(v) || '-' },
-        { field: 'connected_device_port', render: (v, row) => {
-          if (v && row.connected_device_name) return `${escapeHtml(row.connected_device_name)}: ${escapeHtml(v)}`;
-          return escapeHtml(v) || '-';
-        }},
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'id', render: (v) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
@@ -131,68 +126,12 @@ async function loadCabinetsForRoom(roomId, selectedCabinetId = null) {
   }
 }
 
-async function loadPeerNetOutlets(currentId = null, selectedPeerId = null) {
-  const peerSelect = elementCache.get('net-outlet-peer-id');
-  if (!peerSelect) return;
-
-  peerSelect.innerHTML = `<option value="">${t('net_outlet.select_peer') || '选择对端信息点'}</option>`;
-
-  try {
-    const result = await apiGet('/api/resources/net-outlets?page_size=1000');
-    if (result.success && result.data) {
-      const items = result.data.items || result.data;
-      items.forEach(outlet => {
-        if (outlet.id === currentId) return;
-        const option = document.createElement('option');
-        option.value = outlet.id;
-        option.textContent = outlet.name;
-        peerSelect.appendChild(option);
-      });
-
-      if (selectedPeerId) {
-        peerSelect.value = selectedPeerId;
-      }
-    }
-  } catch (error) {
-    console.error('加载对端信息点选项失败:', error);
-  }
-}
-
-async function loadDevicePortsForSelect(selectedPortId = null) {
-  const portSelect = elementCache.get('net-outlet-device-port-id');
-  if (!portSelect) return;
-
-  portSelect.innerHTML = `<option value="">${t('net_outlet.select_device_port') || '选择设备端口'}</option>`;
-
-  try {
-    const result = await apiGet('/api/resources/devices/ports?page_size=1000');
-    if (result.success && result.data) {
-      const ports = result.data.items || result.data;
-      ports.forEach(port => {
-        const option = document.createElement('option');
-        option.value = port.id;
-        const label = port.device_name ? `${port.device_name}: ${port.name || port.port_number}` : (port.name || port.port_number);
-        option.textContent = label;
-        portSelect.appendChild(option);
-      });
-
-      if (selectedPortId) {
-        portSelect.value = selectedPortId;
-      }
-    }
-  } catch (error) {
-    console.error('加载设备端口选项失败:', error);
-  }
-}
-
 export async function submitNetOutletForm() {
   const id = getElementValue("net-outlet-id");
   const name = getElementValue("net-outlet-name");
   const outletType = getElementValue("net-outlet-type");
   const roomId = getElementValue("net-outlet-room-id");
   const cabinetId = getElementValue("net-outlet-cabinet-id");
-  const peerId = getElementValue("net-outlet-peer-id");
-  const switchPortId = getElementValue("net-outlet-device-port-id");
   const description = getElementValue("net-outlet-description");
 
   if (!name?.trim()) {
@@ -210,8 +149,6 @@ export async function submitNetOutletForm() {
     outlet_type: outletType || 'other',
     room_id: roomId,
     cabinet_id: cabinetId || null,
-    peer_net_outlet_id: peerId || null,
-    device_port_id: switchPortId || null,
     description: description?.trim() || null,
   };
 
@@ -253,9 +190,6 @@ export async function openNetOutletModal(netOutlet = null) {
     roomSelect.addEventListener('change', roomChangeHandler);
   }
 
-  await loadPeerNetOutlets(netOutlet?.id, netOutlet?.peer_net_outlet_id);
-  await loadDevicePortsForSelect(netOutlet?.device_port_id);
-
   if (netOutlet) {
     title.textContent = t('net_outlet.edit');
     elementCache.setValue('net-outlet-id', netOutlet.id);
@@ -265,13 +199,6 @@ export async function openNetOutletModal(netOutlet = null) {
     elementCache.setValue('net-outlet-description', netOutlet.description || "");
 
     await loadCabinetsForRoom(netOutlet.room_id, netOutlet.cabinet_id);
-
-    if (netOutlet.peer_net_outlet_id) {
-      elementCache.setValue('net-outlet-peer-id', netOutlet.peer_net_outlet_id);
-    }
-    if (netOutlet.device_port_id) {
-      elementCache.setValue('net-outlet-device-port-id', netOutlet.device_port_id);
-    }
   } else {
     title.textContent = t('net_outlet.add');
     form.reset();

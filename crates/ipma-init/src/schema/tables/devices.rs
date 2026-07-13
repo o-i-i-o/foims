@@ -10,7 +10,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
             net_outlet_id UUID REFERENCES net_outlets(id) ON DELETE SET NULL,
-            device_port_id UUID,
             template_id UUID REFERENCES device_templates(id) ON DELETE SET NULL,
             vendor VARCHAR(50),
             location VARCHAR(100),
@@ -33,29 +32,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 (workstation_id IS NOT NULL AND position_id IS NULL) OR
                 (workstation_id IS NULL AND position_id IS NOT NULL) OR
                 (workstation_id IS NULL AND position_id IS NULL)
-            ),
-            CONSTRAINT chk_device_connection CHECK (
-                NOT (net_outlet_id IS NOT NULL AND device_port_id IS NOT NULL)
             )
         )",
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn add_foreign_keys(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r"DO $$ BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.table_constraints
-                WHERE constraint_name = 'fk_devices_device_port_id'
-            ) THEN
-                ALTER TABLE devices ADD CONSTRAINT fk_devices_device_port_id
-                    FOREIGN KEY (device_port_id) REFERENCES device_ports(id) ON DELETE SET NULL;
-            END IF;
-        END $$",
     )
     .execute(pool)
     .await?;

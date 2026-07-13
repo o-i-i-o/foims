@@ -2,7 +2,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS ips (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            device_port_id UUID REFERENCES device_ports(id) ON DELETE SET NULL,
+            device_interface_id UUID NOT NULL REFERENCES device_interfaces(id) ON DELETE SET NULL,
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             network_id UUID REFERENCES network_cidrs(id),
             ip_address INET NOT NULL,

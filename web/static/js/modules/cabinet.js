@@ -20,6 +20,7 @@ import {
 } from "../utils/ui.js";
 
 import { openModal } from "../utils/modal.js";
+import { elementCache } from "../utils/helpers.js";
 
 import {
   loadDataCenterRoomsForSelect,
@@ -97,56 +98,57 @@ export async function deleteCabinet(id) {
 
 // ====== 机柜管理模态框 ======
 export async function openCabinetModal(cabinet = null) {
-  openModal("cabinet-modal");
-  
-  const modal = document.getElementById("cabinet-modal");
-  const title = document.getElementById("cabinet-modal-title");
-  const form = document.getElementById("cabinet-form");
+  await openModal("cabinet-modal");
 
-  // 获取容量输入框
-  const capacityInput = document.getElementById("cabinet-capacity");
-  
+  const title = elementCache.get('cabinet-modal-title');
+  const form = elementCache.get('cabinet-form');
+  const capacityInput = elementCache.get('cabinet-capacity');
+
   // 加载机房选项
   await loadDataCenterRoomsForSelect();
-  
+
   // 获取房间选择框
-  const roomSelect = document.getElementById("cabinet-room");
-  
+  const roomSelect = elementCache.get('cabinet-room');
+
   // 移除旧的事件监听器
   if (roomSelectHandler) {
     roomSelect.removeEventListener("change", roomSelectHandler);
   }
-  
+
   // 创建新的事件监听器 - 使用箭头函数确保this指向正确
   roomSelectHandler = async (event) => {
     const roomId = event.target.value;
     await loadRoomNetworksForCabinet(roomId);
   };
-  
+
   // 添加房间选择事件监听器
-  roomSelect.addEventListener("change", roomSelectHandler);
-  
+  if (roomSelect) {
+    roomSelect.addEventListener("change", roomSelectHandler);
+  }
+
   if (cabinet) {
     // 编辑模式
     title.textContent = "编辑机柜";
-    document.getElementById("cabinet-id").value = cabinet.id;
-    document.getElementById("cabinet-name").value = cabinet.name;
+    elementCache.setValue('cabinet-id', cabinet.id);
+    elementCache.setValue('cabinet-name', cabinet.name);
     // 设置房间选择
     if (cabinet.room_id) {
-      document.getElementById("cabinet-room").value = cabinet.room_id;
+      elementCache.setValue('cabinet-room', cabinet.room_id);
       // 加载所选房间的网段配置
       await loadRoomNetworksForCabinet(cabinet.room_id);
     }
-    capacityInput.value = cabinet.capacity || 42; // 设置默认值42
-    document.getElementById("cabinet-description").value = cabinet.description || "";
+    if (capacityInput) capacityInput.value = cabinet.capacity || 42;
+    elementCache.setValue('cabinet-description', cabinet.description || "");
   } else {
     // 添加模式
     title.textContent = "添加机柜";
-    form.reset();
-    document.getElementById("cabinet-id").value = "";
+    if (form) form.reset();
+    elementCache.setValue('cabinet-id', '');
     // 初始化网段显示
-    const inheritedNetworksContainer = document.getElementById("cabinet-inherited-networks");
-    inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
+    const inheritedNetworksContainer = elementCache.get('cabinet-inherited-networks');
+    if (inheritedNetworksContainer) {
+      inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
+    }
   }
 }
 

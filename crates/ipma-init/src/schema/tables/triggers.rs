@@ -28,9 +28,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "device_templates",
         "net_outlets",
         "devices",
-        "device_ports",
+        "switch_ports",
+        "device_interfaces",
         "device_macs",
         "device_lldps",
+        "cable_links",
         "ips",
         "cabinet_layouts",
         "system_configs",
@@ -54,8 +56,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE OR REPLACE FUNCTION check_position_overlap() RETURNS TRIGGER AS $$
         BEGIN
             IF EXISTS (
-                SELECT 1 FROM positions 
-                WHERE cabinet_id = NEW.cabinet_id 
+                SELECT 1 FROM positions
+                WHERE cabinet_id = NEW.cabinet_id
                 AND id != NEW.id
                 AND (
                     (NEW.start_u BETWEEN start_u AND end_u)

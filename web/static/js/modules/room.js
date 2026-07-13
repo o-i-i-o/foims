@@ -508,9 +508,8 @@ export async function submitRoomForm() {
 
 // 房间管理模态框
 export async function openRoomModal(room = null) {
-  openModal("room-modal");
-  
-  const modal = elementCache.get('room-modal');
+  await openModal("room-modal");
+
   const title = elementCache.get('room-modal-title');
   const form = elementCache.get('room-form');
 
@@ -527,7 +526,7 @@ export async function openRoomModal(room = null) {
     await loadRoomNetworks(room);
   } else {
     title.textContent = "添加房间";
-    form.reset();
+    if (form) form.reset();
     elementCache.setValue('room-id', '');
     await roomNetworkConfigManager.init();
   }

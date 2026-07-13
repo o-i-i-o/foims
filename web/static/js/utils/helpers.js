@@ -257,9 +257,10 @@ class ElementCache {
   
   get(id) {
     const cached = this.cache.get(id);
-    if (cached) {
+    if (cached && document.contains(cached)) {
       return cached;
     }
+    this.cache.delete(id);
     const el = document.getElementById(id);
     if (el) {
       this.cache.set(id, el);

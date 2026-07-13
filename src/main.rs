@@ -1,7 +1,10 @@
 use actix_cors::Cors;
 use actix_files::Files;
+use actix_web::body::MessageBody;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::middleware as actix_middleware;
 use actix_web::middleware::Compress;
+use actix_web::middleware::Next;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -64,6 +67,23 @@ fn setup_panic_handler() {
             location, msg, backtrace
         );
     }));
+}
+
+async fn static_cache_control_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody + 'static>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let path = req.path().to_string();
+    let mut res = next.call(req).await?;
+
+    if path.starts_with("/static/") {
+        res.headers_mut().insert(
+            actix_web::http::header::CACHE_CONTROL,
+            actix_web::http::header::HeaderValue::from_static("no-cache, must-revalidate"),
+        );
+    }
+
+    Ok(res)
 }
 
 fn build_cors_middleware(config: &Config) -> Cors {
@@ -481,6 +501,7 @@ async fn main() -> std::io::Result<()> {
                 http_rate_limiter.clone(),
                 http_rate_limit_enabled,
             ))
+            .wrap(actix_middleware::from_fn(static_cache_control_middleware))
             .configure(|cfg| {
                 configure_app_services(cfg, &http_app_state, enable_normal_routes);
             });
@@ -506,6 +527,7 @@ async fn main() -> std::io::Result<()> {
                 https_rate_limiter.clone(),
                 https_rate_limit_enabled,
             ))
+            .wrap(actix_middleware::from_fn(static_cache_control_middleware))
             .configure(|cfg| configure_app_services(cfg, &https_app_state, true))
     };
 

@@ -11,10 +11,11 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "cabinets",
         "workstations",
         "positions",
-        "switches",
-        "device_ports",
         "device_macs",
         "device_lldps",
+        "switch_ports",
+        "device_interfaces",
+        "cable_links",
         "ips",
         "operation_logs",
         "task_logs",
@@ -55,7 +56,15 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     );
     columns.insert(
         "network_regions",
-        vec!["id", "name", "description", "created_at", "updated_at"],
+        vec![
+            "id",
+            "name",
+            "description",
+            "ipv4_cidrs",
+            "ipv6_cidrs",
+            "created_at",
+            "updated_at",
+        ],
     );
     columns.insert(
         "network_cidrs",
@@ -80,6 +89,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "id",
             "name",
             "room_type",
+            "org_id",
             "description",
             "created_at",
             "updated_at",
@@ -121,39 +131,30 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "cabinet_id",
             "start_u",
             "end_u",
-            "description",
             "device_type",
+            "description",
             "created_at",
             "updated_at",
         ],
     );
     columns.insert(
-        "switches",
+        "net_outlets",
         vec![
             "id",
             "name",
-            "position_id",
-            "model",
-            "vendor",
-            "location",
-            "snmp_version",
-            "snmp_community",
-            "snmp_username",
-            "snmp_auth_protocol",
-            "snmp_auth_password",
-            "snmp_priv_protocol",
-            "snmp_priv_password",
-            "snmp_port",
+            "outlet_type",
+            "room_id",
+            "cabinet_id",
             "description",
             "created_at",
             "updated_at",
         ],
     );
     columns.insert(
-        "device_ports",
+        "switch_ports",
         vec![
             "id",
-            "switch_id",
+            "device_id",
             "port_number",
             "port_name",
             "port_type",
@@ -166,10 +167,24 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
+        "device_interfaces",
+        vec![
+            "id",
+            "device_id",
+            "name",
+            "interface_type",
+            "mac_address",
+            "vlan_id",
+            "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
         "device_macs",
         vec![
             "id",
-            "switch_id",
+            "device_id",
             "ip_address",
             "mac_address",
             "interface",
@@ -182,7 +197,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         "device_lldps",
         vec![
             "id",
-            "switch_id",
+            "device_id",
             "local_port",
             "neighbor_chassis_id",
             "neighbor_port_id",
@@ -194,13 +209,27 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
+        "cable_links",
+        vec![
+            "id",
+            "a_endpoint_type",
+            "a_endpoint_id",
+            "b_endpoint_type",
+            "b_endpoint_id",
+            "link_type",
+            "cable_label",
+            "length_m",
+            "tested",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
         "ips",
         vec![
             "id",
-            "workstation_id",
-            "position_id",
-            "device_port_id",
-            "device_type",
+            "device_interface_id",
+            "device_id",
             "network_id",
             "ip_address",
             "ip_version",

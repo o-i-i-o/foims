@@ -1,0 +1,437 @@
+use actix_web::{HttpRequest, HttpResponse, web};
+use chrono::Utc;
+use std::collections::HashMap;
+use uuid::Uuid;
+use validator::Validate;
+
+use crate::app_state::AppState;
+use crate::error::AppError;
+use crate::models::{
+    ApiResponse, DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate,
+    DeviceInterfaceWithDevice,
+};
+use crate::utils::pagination::Pagination;
+use crate::utils::{OperationLogParams, log_system_operation};
+use tracing::warn;
+
+pub async fn get_device_interfaces(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    query: web::Query<HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    let device_id = path.into_inner();
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
+
+    let total: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM device_interfaces WHERE device_id = $1")
+            .bind(device_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+
+    let data = sqlx::query_as::<_, DeviceInterface>(
+        r"SELECT * FROM device_interfaces WHERE device_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
+    )
+    .bind(device_id)
+    .bind(page_size)
+    .bind(offset)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "items": data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) / page_size
+        }),
+        "获取接口列表成功",
+    )))
+}
+
+pub async fn get_all_device_interfaces(
+    state: web::Data<AppState>,
+    query: web::Query<HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    let pagination = Pagination::from_query(&query);
+    let page = pagination.page;
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
+    let search = query.get("search").cloned().unwrap_or_default();
+
+    let search_pattern = if search.is_empty() {
+        None
+    } else {
+        Some(format!("%{search}%"))
+    };
+
+    let total: i64 = if let Some(ref pattern) = search_pattern {
+        sqlx::query_scalar(
+            "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE d.name ILIKE $1 OR di.name ILIKE $1 OR di.mac_address ILIKE $1 OR di.description ILIKE $1"
+        )
+        .bind(pattern)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?
+    } else {
+        sqlx::query_scalar(
+            "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id",
+        )
+        .fetch_one(&state.pool()?.get_conn())
+        .await?
+    };
+
+    let data = if let Some(ref pattern) = search_pattern {
+        sqlx::query_as::<_, DeviceInterfaceWithDevice>(
+            r"SELECT
+                di.id, di.device_id, d.name as device_name,
+                di.name, di.interface_type, di.mac_address, di.vlan_id,
+                di.description, di.created_at, di.updated_at
+            FROM device_interfaces di
+            JOIN devices d ON di.device_id = d.id
+            WHERE d.name ILIKE $1 OR di.name ILIKE $1 OR di.mac_address ILIKE $1 OR di.description ILIKE $1
+            ORDER BY d.name, di.name
+            LIMIT $2 OFFSET $3"
+        )
+        .bind(pattern)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
+    } else {
+        sqlx::query_as::<_, DeviceInterfaceWithDevice>(
+            r"SELECT
+                di.id, di.device_id, d.name as device_name,
+                di.name, di.interface_type, di.mac_address, di.vlan_id,
+                di.description, di.created_at, di.updated_at
+            FROM device_interfaces di
+            JOIN devices d ON di.device_id = d.id
+            ORDER BY d.name, di.name
+            LIMIT $1 OFFSET $2",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?
+    };
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        serde_json::json!({
+            "items": data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) / page_size
+        }),
+        "获取所有接口列表成功",
+    )))
+}
+
+pub async fn create_device_interface(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    req: web::Json<DeviceInterfaceCreate>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let device_id = path.into_inner();
+
+    req.validate()?;
+
+    let device_exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+            .bind(device_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+
+    if !device_exists {
+        return Err(AppError::NotFound("设备不存在".to_string()));
+    }
+
+    let interface_type = req.interface_type.as_deref().unwrap_or("physical");
+
+    if !matches!(
+        interface_type,
+        "physical" | "svi" | "management" | "loopback" | "wifi"
+    ) {
+        return Err(AppError::Validation(
+            "接口类型必须是physical、svi、management、loopback或wifi".to_string(),
+        ));
+    }
+
+    let interface_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM device_interfaces WHERE device_id = $1 AND name = $2)",
+    )
+    .bind(device_id)
+    .bind(&req.name)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+
+    if interface_exists {
+        return Err(AppError::Conflict("该接口名已存在".to_string()));
+    }
+
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+
+    sqlx::query(
+        r"INSERT INTO device_interfaces (
+            id, device_id, name, interface_type, mac_address, vlan_id, description, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    )
+    .bind(id)
+    .bind(device_id)
+    .bind(&req.name)
+    .bind(interface_type)
+    .bind(&req.mac_address)
+    .bind(req.vlan_id)
+    .bind(&req.description)
+    .bind(now)
+    .bind(now)
+    .execute(&state.pool()?.get_conn())
+    .await?;
+
+    let data =
+        sqlx::query_as::<_, DeviceInterface>("SELECT * FROM device_interfaces WHERE id = $1")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+
+    let details = serde_json::json!({
+        "device_id": device_id,
+        "name": data.name,
+        "interface_type": data.interface_type,
+        "mac_address": data.mac_address
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "create",
+            resource_type: "device_interface",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建接口成功")))
+}
+
+pub async fn get_device_interface(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let interface_id = path.into_inner();
+
+    let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(
+        r"SELECT
+            di.id, di.device_id, d.name as device_name,
+            di.name, di.interface_type, di.mac_address, di.vlan_id,
+            di.description, di.created_at, di.updated_at
+        FROM device_interfaces di
+        JOIN devices d ON di.device_id = d.id
+        WHERE di.id = $1",
+    )
+    .bind(interface_id)
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .ok_or_else(|| AppError::NotFound("接口不存在".to_string()))?;
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "获取接口成功")))
+}
+
+pub async fn update_device_interface(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    req: web::Json<DeviceInterfaceUpdate>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let interface_id = path.into_inner();
+
+    req.validate()?;
+
+    if let Some(ref interface_type) = req.interface_type
+        && !matches!(
+            interface_type.as_str(),
+            "physical" | "svi" | "management" | "loopback" | "wifi"
+        )
+    {
+        return Err(AppError::Validation(
+            "接口类型必须是physical、svi、management、loopback或wifi".to_string(),
+        ));
+    }
+
+    let now = Utc::now();
+
+    let mut set_clauses: Vec<String> = Vec::new();
+    let mut param_index = 1;
+
+    set_clauses.push(format!("name = COALESCE(${param_index}, name)"));
+    param_index += 1;
+
+    set_clauses.push(format!(
+        "interface_type = COALESCE(${param_index}, interface_type)"
+    ));
+    param_index += 1;
+
+    let mac_update = req.mac_address.is_some();
+    if mac_update {
+        set_clauses.push(format!(
+            "mac_address = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE mac_address END",
+            param_index = param_index,
+            param_idx_val = param_index + 1
+        ));
+        param_index += 2;
+    }
+
+    set_clauses.push(format!("vlan_id = COALESCE(${param_index}, vlan_id)"));
+    param_index += 1;
+
+    let desc_update = req.description.is_some();
+    if desc_update {
+        set_clauses.push(format!(
+            "description = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE description END",
+            param_index = param_index,
+            param_idx_val = param_index + 1
+        ));
+        param_index += 2;
+    }
+
+    set_clauses.push(format!("updated_at = ${param_index}"));
+    param_index += 1;
+
+    let where_param = param_index;
+
+    let sql = format!(
+        "UPDATE device_interfaces SET {} WHERE id = ${}",
+        set_clauses.join(", "),
+        where_param
+    );
+
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
+    query = query.bind(&req.name);
+    query = query.bind(&req.interface_type);
+
+    if mac_update {
+        match &req.mac_address {
+            Some(Some(m)) => {
+                query = query.bind(true);
+                query = query.bind(m);
+            }
+            Some(None) => {
+                query = query.bind(true);
+                query = query.bind(Option::<String>::None);
+            }
+            None => unreachable!(),
+        }
+    }
+
+    query = query.bind(req.vlan_id);
+
+    if desc_update {
+        match &req.description {
+            Some(Some(d)) => {
+                query = query.bind(true);
+                query = query.bind(d);
+            }
+            Some(None) => {
+                query = query.bind(true);
+                query = query.bind(Option::<String>::None);
+            }
+            None => unreachable!(),
+        }
+    }
+
+    query = query.bind(now);
+    query = query.bind(interface_id);
+
+    let result = query.execute(&state.pool()?.get_conn()).await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("接口不存在".to_string()));
+    }
+
+    let data =
+        sqlx::query_as::<_, DeviceInterface>("SELECT * FROM device_interfaces WHERE id = $1")
+            .bind(interface_id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+
+    let details = serde_json::json!({
+        "device_id": data.device_id,
+        "name": data.name,
+        "interface_type": data.interface_type,
+        "mac_address": data.mac_address
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "device_interface",
+            resource_id: &interface_id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新接口成功")))
+}
+
+pub async fn delete_device_interface(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let interface_id = path.into_inner();
+
+    let result = sqlx::query("DELETE FROM device_interfaces WHERE id = $1")
+        .bind(interface_id)
+        .execute(&state.pool()?.get_conn())
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_foreign_key_violation()
+            {
+                return AppError::Validation(
+                    "该接口已被 cable_links 或 ips 引用，无法删除".to_string(),
+                );
+            }
+            AppError::from(e)
+        })?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("接口不存在".to_string()));
+    }
+
+    let details = serde_json::json!({
+        "interface_id": interface_id
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "delete",
+            resource_type: "device_interface",
+            resource_id: &interface_id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除接口成功")))
+}

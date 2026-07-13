@@ -123,7 +123,7 @@ export function initWorkstationSortEvents() {
 
 // ====== 工位管理模态框 ======
 export async function openWorkstationModal(workstation = null) {
-  openModal("workstation-modal");
+  await openModal("workstation-modal");
   
   const modal = elementCache.get("workstation-modal");
   const title = elementCache.get("workstation-modal-title");

@@ -964,7 +964,7 @@ export async function openNetworkTypeModal(networkType = null) {
 
 // ====== 网络管理模态框 ======
 export async function openNetworkModal(network = null) {
-  openModal("network-modal");
+  await openModal("network-modal");
   
   const title = elementCache.get('network-modal-title');
   const form = elementCache.get('network-form');

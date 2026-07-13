@@ -129,7 +129,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, device_port_id, device_id, device_type, device_name, connected_device_name, connected_device_type, net_outlet_name, peer_net_outlet_name, network_id, workstation_name, cabinet_position_name, port_device_name, port_device_number, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, net_outlet_name, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -190,7 +190,7 @@ pub async fn get_device_ips(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
@@ -279,12 +279,28 @@ pub async fn create_device_ip(
     let now = Utc::now();
     let ip_id = Uuid::new_v4();
 
+    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认 physical 接口
+    let interface_id = match req.device_interface_id {
+        Some(iid) => iid,
+        None => {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| AppError::Validation(
+                "设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id".to_string()
+            ))?
+        }
+    };
+
     sqlx::query(
-        "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(ip_id)
-    .bind(req.device_port_id)
+    .bind(interface_id)
     .bind(id)
     .bind(network_id)
     .bind(&req.ip_address)
@@ -302,7 +318,7 @@ pub async fn create_device_ip(
 
     let mapping = IpManager {
         id: ip_id,
-        device_port_id: req.device_port_id,
+        device_interface_id: interface_id,
         device_id: id,
         network_id,
         ip_address: req.ip_address.clone(),
@@ -533,7 +549,7 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.device_port_id, m.device_id, m.network_id,
+        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status,
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
@@ -698,7 +714,7 @@ pub async fn auto_assign_ip(
 
     let req_network_id = req.network_id;
     let device_id = req.device_id;
-    let device_port_id = req.device_port_id;
+    let device_interface_id = req.device_interface_id;
     let mac_address = req.mac_address.clone();
     let hostname = req.hostname.clone();
 
@@ -761,12 +777,28 @@ pub async fn auto_assign_ip(
     let now = Utc::now();
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
+    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认 physical 接口
+    let interface_id = match device_interface_id {
+        Some(iid) => iid,
+        None => {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+            )
+            .bind(device_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| AppError::Validation(
+                "设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id".to_string()
+            ))?
+        }
+    };
+
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
     )
     .bind(id)
-    .bind(device_port_id)
+    .bind(interface_id)
     .bind(device_id)
     .bind(req_network_id)
     .bind(&assigned_ip)
@@ -796,7 +828,7 @@ pub async fn auto_assign_ip(
 
     let mapping = IpManager {
         id,
-        device_port_id,
+        device_interface_id: interface_id,
         device_id,
         network_id: Some(req_network_id),
         ip_address: assigned_ip.clone(),
@@ -862,6 +894,11 @@ pub async fn batch_create_ip_managers(
             continue;
         }
 
+        if ip_req.device_id.is_none() {
+            errors.push(format!("第{}条记录: device_id不能为空", index + 1));
+            continue;
+        }
+
         let id = Uuid::new_v4();
         let ip_version_num = match detect_ip_version(&ip_req.ip_address) {
             Ok(v) => v,
@@ -914,13 +951,51 @@ pub async fn batch_create_ip_managers(
             continue;
         }
 
+        let device_id = match ip_req.device_id {
+            Some(d) => d,
+            None => {
+                duplicate_errors.push(format!("第{}条记录: device_id不能为空", index + 1));
+                continue;
+            }
+        };
+
+        let interface_id = match ip_req.device_interface_id {
+            Some(iid) => iid,
+            None => {
+                match sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+                )
+                .bind(device_id)
+                .fetch_optional(tx.as_mut())
+                .await
+                {
+                    Ok(Some(iid)) => iid,
+                    Ok(None) => {
+                        duplicate_errors.push(format!(
+                            "第{}条记录: 设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id",
+                            index + 1
+                        ));
+                        continue;
+                    }
+                    Err(err) => {
+                        duplicate_errors.push(format!(
+                            "第{}条记录: 查询接口失败 - {}",
+                            index + 1,
+                            err
+                        ));
+                        continue;
+                    }
+                }
+            }
+        };
+
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+            "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
              VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(*id)
-        .bind(ip_req.device_port_id)
-        .bind(ip_req.device_id)
+        .bind(interface_id)
+        .bind(device_id)
         .bind(ip_req.network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
@@ -939,8 +1014,8 @@ pub async fn batch_create_ip_managers(
 
         created_ips.push(IpManager {
             id: *id,
-            device_port_id: ip_req.device_port_id,
-            device_id: ip_req.device_id,
+            device_interface_id: interface_id,
+            device_id,
             network_id: ip_req.network_id,
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,

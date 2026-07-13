@@ -45,7 +45,7 @@ export function getCurrentDeviceName() {
 async function loadDevicePortsData(page = 1, searchTerm = "") {
   const currentDeviceName = getCurrentDeviceName();
   try {
-    const url = `/api/resources/devices/ports?page=${page}&page_size=${DEVICE_PORT_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
+    const url = `/api/resources/devices/switch-ports?page=${page}&page_size=${DEVICE_PORT_PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const ports = data.items || data;
@@ -80,7 +80,7 @@ async function loadDevicePortsData(page = 1, searchTerm = "") {
 
 async function loadDevicePortsByDeviceId(deviceId) {
   try {
-    const result = await apiGet(`/api/resources/devices/${deviceId}/ports?page_size=1000`);
+    const result = await apiGet(`/api/resources/devices/${deviceId}/switch-ports?page_size=1000`);
 
     const searchContainer = document.querySelector(
       "#device-ports-list-tab .search-container",
@@ -172,7 +172,7 @@ async function manageDevicePorts(deviceId, deviceName) {
       showToast(t('device.no_snmp_config') || "该设备未配置SNMP信息，无法获取端口数据", "warning");
     }
 
-    const portsResult = await apiGet(`/api/resources/devices/${deviceId}/ports?page_size=1000`);
+    const portsResult = await apiGet(`/api/resources/devices/${deviceId}/switch-ports?page_size=1000`);
     if (!portsResult.success) {
       showToast(t('device.load_ports_failed') || "获取端口数据失败", "error");
       return;
@@ -400,7 +400,7 @@ async function openPortDetailModal(portData) {
     if (confirmed) {
       const portId = elementCache.getValue("device-port-id-expanded");
       if (portId) {
-        const result = await apiDelete(`/api/resources/devices/ports/${portId}`);
+        const result = await apiDelete(`/api/resources/devices/switch-ports/${portId}`);
         if (result.success) {
           showToast(t('device.port_delete_success') || "端口删除成功", "success");
           closeModal("device-port-detail-modal");
@@ -473,9 +473,9 @@ async function submitDevicePortForm() {
   try {
     let result;
     if (id) {
-      result = await apiPut(`/api/resources/devices/ports/${id}`, data);
+      result = await apiPut(`/api/resources/devices/switch-ports/${id}`, data);
     } else {
-      result = await apiPost(`/api/resources/devices/${deviceId}/ports`, data);
+      result = await apiPost(`/api/resources/devices/${deviceId}/switch-ports`, data);
     }
 
     if (result.success) {
@@ -487,7 +487,7 @@ async function submitDevicePortForm() {
           await loadDevicePortsByDeviceId(currentDeviceId);
           const currentDeviceName = getCurrentDeviceName();
           if (currentDeviceName) {
-            const portsResult = await apiGet(`/api/resources/devices/${currentDeviceId}/ports?page_size=1000`);
+            const portsResult = await apiGet(`/api/resources/devices/${currentDeviceId}/switch-ports?page_size=1000`);
             if (portsResult.success && portsResult.data) {
               let ports = [];
               if (Array.isArray(portsResult.data)) {
@@ -516,7 +516,7 @@ async function submitDevicePortForm() {
 
 async function editDevicePort(id) {
   try {
-    const result = await apiGet(`/api/resources/devices/ports/${id}`);
+    const result = await apiGet(`/api/resources/devices/switch-ports/${id}`);
     if (result.success) {
       openDevicePortModal(result.data);
     } else {
@@ -536,7 +536,7 @@ async function deleteDevicePort(id) {
       loadDevicePortsData(1, "");
     }
   };
-  await handleDelete(id, "/api/resources/devices/ports", t('device.port_delete_success') || "端口删除成功", successCallback);
+  await handleDelete(id, "/api/resources/devices/switch-ports", t('device.port_delete_success') || "端口删除成功", successCallback);
 }
 
 async function syncPortsFromSnmp(deviceId) {
@@ -548,7 +548,7 @@ async function syncPortsFromSnmp(deviceId) {
   }
 
   try {
-    const result = await apiPost(`/api/resources/devices/${deviceId}/ports/sync-snmp`, {});
+    const result = await apiPost(`/api/resources/devices/${deviceId}/switch-ports/sync-snmp`, {});
 
     if (result.success) {
       showToast(result.message || (t('device.port_sync_success') || '端口同步成功'), "success");

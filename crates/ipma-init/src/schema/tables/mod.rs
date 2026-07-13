@@ -1,4 +1,6 @@
 mod cabinets;
+mod cable_links;
+mod device_interfaces;
 mod device_templates;
 mod devices;
 mod element;
@@ -12,7 +14,7 @@ mod notifications;
 mod org_templates;
 mod organizations;
 mod rooms;
-mod switches;
+mod switch_ports;
 mod system;
 mod tokens;
 mod topology;
@@ -51,29 +53,31 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 布局元素（引用 rooms）
     element::create(pool).await?;
 
-    // 设备（引用 workstations/positions/device_templates，device_port_id 延迟添加）
+    // 设备（引用 workstations/positions/device_templates/net_outlets）
     devices::create(pool).await?;
 
     // 交换机端口/MAC/LLDP（引用 devices）
-    switches::create(pool).await?;
+    switch_ports::create(pool).await?;
 
-    // 信息点（引用 rooms/cabinets，device_port_id 延迟添加）
+    // 设备三层接口（引用 devices）
+    device_interfaces::create(pool).await?;
+
+    // 信息点（引用 rooms/cabinets）
     net_outlets::create(pool).await?;
 
-    // IP（引用 workstations/positions/device_ports/devices/network_cidrs）
+    // 物理链路（引用 switch_ports/net_outlets/device_interfaces 由触发器校验）
+    cable_links::create(pool).await?;
+
+    // IP（引用 device_interfaces/devices/network_cidrs）
     ips::create(pool).await?;
 
-    // 拓扑（引用 devices/device_ports）
+    // 拓扑（引用 devices/switch_ports）
     topology::create(pool).await?;
 
     // 日志/令牌/通知（引用 users）
     logs::create(pool).await?;
     tokens::create(pool).await?;
     notifications::create(pool).await?;
-
-    // 延迟外键（解决 devices ↔ device_ports 循环依赖）
-    devices::add_foreign_keys(pool).await?;
-    net_outlets::add_foreign_keys(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

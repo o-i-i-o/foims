@@ -99,7 +99,7 @@ pub async fn get_devices(
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -107,7 +107,7 @@ pub async fn get_devices(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
-                d.connected_device_port, d.connected_device_name, d.template_name,
+                d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          {where_clause}
@@ -183,7 +183,6 @@ pub async fn create_device(
 ) -> Result<HttpResponse, AppError> {
     (*req).validate()?;
 
-    // Validate device_type, default to 'other'
     let device_type = match &req.device_type {
         Some(dt) => {
             validate_device_type(dt)?;
@@ -192,21 +191,12 @@ pub async fn create_device(
         None => "other".to_string(),
     };
 
-    // Business validation: workstation_id and position_id cannot both be set
     if req.workstation_id.is_some() && req.position_id.is_some() {
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: net_outlet_id and device_port_id cannot both be set
-    if req.net_outlet_id.is_some() && req.device_port_id.is_some() {
-        return Err(AppError::Validation(
-            "信息点和交换机端口不能同时指定".to_string(),
-        ));
-    }
-
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    // If workstation_id provided, verify it exists
     if let Some(ws_id) = req.workstation_id {
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workstations WHERE id = $1)")
@@ -218,7 +208,6 @@ pub async fn create_device(
         }
     }
 
-    // If position_id provided, verify it exists
     if let Some(pos_id) = req.position_id {
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM positions WHERE id = $1)")
@@ -230,7 +219,6 @@ pub async fn create_device(
         }
     }
 
-    // If net_outlet_id provided, verify it exists
     if let Some(outlet_id) = req.net_outlet_id {
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
@@ -242,19 +230,6 @@ pub async fn create_device(
         }
     }
 
-    // If device_port_id provided, verify it exists
-    if let Some(sp_id) = req.device_port_id {
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
-                .bind(sp_id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if !exists {
-            return Err(AppError::NotFound("交换机端口未找到".to_string()));
-        }
-    }
-
-    // Apply template defaults if template_id is provided
     let (final_device_type, final_brand, final_model) = if let Some(tmpl_id) = req.template_id {
         let template_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_templates WHERE id = $1)")
@@ -281,7 +256,6 @@ pub async fn create_device(
                 .fetch_optional(&mut *tx)
                 .await?;
 
-        // Apply template defaults for missing fields
         let dt = req
             .device_type
             .as_deref()
@@ -296,13 +270,11 @@ pub async fn create_device(
         (device_type, req.brand.clone(), req.model.clone())
     };
 
-    // Validate the final device type
     validate_device_type(&final_device_type)?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // Encrypt SNMP sensitive fields
     let encrypted_community = match &req.snmp_community {
         Some(c) if !c.is_empty() => Some(encrypt_password_async(c.clone()).await?),
         _ => None,
@@ -323,8 +295,8 @@ pub async fn create_device(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, net_outlet_id, device_port_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
+        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, net_outlet_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)",
     )
     .bind(id)
     .bind(&req.name)
@@ -335,7 +307,6 @@ pub async fn create_device(
     .bind(req.workstation_id)
     .bind(req.position_id)
     .bind(req.net_outlet_id)
-    .bind(req.device_port_id)
     .bind(req.template_id)
     .bind(&req.vendor)
     .bind(&req.location)
@@ -353,19 +324,27 @@ pub async fn create_device(
     .execute(&mut *tx)
     .await?;
 
-    // 为设备创建默认端口，确保所有设备都具备拓扑连接能力
-    sqlx::query(
-        r"INSERT INTO device_ports (device_id, port_number, port_name, port_type, status)
-         VALUES ($1, 'default', '默认端口', 'access', 'up')
-         ON CONFLICT (device_id, port_number) DO NOTHING",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    // 非交换机设备自动创建一个 physical 接口，用于承载 IP 和 cable_links 端点
+    let default_interface_id: Option<Uuid> = if final_device_type != "switch" {
+        let iface_id = Uuid::new_v4();
+        sqlx::query(
+            r"INSERT INTO device_interfaces (id, device_id, name, interface_type, created_at, updated_at)
+             VALUES ($1, $2, 'eth0', 'physical', $3, $4)
+             ON CONFLICT (device_id, name) DO NOTHING",
+        )
+        .bind(iface_id)
+        .bind(id)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        Some(iface_id)
+    } else {
+        None
+    };
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
-        // Determine room_id for network validation based on device location
         let room_id = if let Some(ws_id) = req.workstation_id {
             sqlx::query_scalar::<_, Uuid>("SELECT room_id FROM workstations WHERE id = $1")
                 .bind(ws_id)
@@ -386,7 +365,6 @@ pub async fn create_device(
         for ip in ips {
             ip.validate()?;
 
-            // Check for duplicate IP
             let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
             )
@@ -398,7 +376,6 @@ pub async fn create_device(
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
             }
 
-            // Find network_id from room networks
             let network_id: Option<Uuid> = if let Some(r_id) = room_id {
                 sqlx::query_scalar(
                     r"SELECT nc.id
@@ -421,12 +398,23 @@ pub async fn create_device(
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
+            // 解析 device_interface_id：优先使用请求中的；非交换机设备若未提供则使用默认接口
+            let interface_id = match (ip.device_interface_id, default_interface_id) {
+                (Some(user_provided), _) => user_provided,
+                (None, Some(default_id)) => default_id,
+                (None, None) => {
+                    return Err(AppError::Validation(
+                        "交换机设备的 IP 必须指定 device_interface_id（请先创建接口）".to_string(),
+                    ));
+                }
+            };
+
             sqlx::query(
-                "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
             )
             .bind(Uuid::new_v4())
-            .bind(ip.device_port_id)
+            .bind(interface_id)
             .bind(id)
             .bind(network_id)
             .bind(&ip.ip_address)
@@ -479,14 +467,6 @@ pub async fn create_device(
 
     tx.commit().await?;
 
-    // 若设备配置了信息点或端口，自动发现拓扑关联
-    if (req.net_outlet_id.is_some() || req.device_port_id.is_some())
-        && let Err(e) =
-            ipma_visualization::auto_discover_device_topology(&state.pool()?.get_conn(), id).await
-    {
-        warn!("设备 {} 自动发现拓扑失败: {}", id, e);
-    }
-
     let device = Device {
         id,
         name: req.name.clone(),
@@ -497,7 +477,6 @@ pub async fn create_device(
         workstation_id: req.workstation_id,
         position_id: req.position_id,
         net_outlet_id: req.net_outlet_id,
-        device_port_id: req.device_port_id,
         template_id: req.template_id,
         vendor: req.vendor.clone(),
         location: req.location.clone(),
@@ -550,7 +529,7 @@ pub async fn get_device(
 
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -558,7 +537,7 @@ pub async fn get_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
-                d.connected_device_port, d.connected_device_name, d.template_name,
+                d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -571,7 +550,7 @@ pub async fn get_device(
     // Fetch associated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
@@ -636,23 +615,20 @@ pub async fn update_device(
     }
 
     // Fetch current device data for business validations
-    let current_row = sqlx::query(
-        "SELECT workstation_id, position_id, net_outlet_id, device_port_id FROM devices WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let current_row =
+        sqlx::query("SELECT workstation_id, position_id, net_outlet_id FROM devices WHERE id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
 
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
     let current_outlet_id: Option<Uuid> = current_row.get("net_outlet_id");
-    let current_sp_id: Option<Uuid> = current_row.get("device_port_id");
 
     // Resolve the final values for Option<Option<Uuid>> fields
     let resolved_workstation_id = match &req.workstation_id {
         None => current_ws_id,
         Some(Some(ws_id)) => {
-            // Verify the workstation exists
             let exists: bool =
                 sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workstations WHERE id = $1)")
                     .bind(ws_id)
@@ -698,37 +674,12 @@ pub async fn update_device(
         Some(None) => None,
     };
 
-    let resolved_device_port_id = match &req.device_port_id {
-        None => current_sp_id,
-        Some(Some(sp_id)) => {
-            let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = $1)")
-                    .bind(sp_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            if !exists {
-                return Err(AppError::NotFound("交换机端口未找到".to_string()));
-            }
-            Some(*sp_id)
-        }
-        Some(None) => None,
-    };
-
-    // Business validation: workstation_id and position_id cannot both be set
     if resolved_workstation_id.is_some() && resolved_position_id.is_some() {
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
 
-    // Business validation: net_outlet_id and device_port_id cannot both be set
-    if resolved_net_outlet_id.is_some() && resolved_device_port_id.is_some() {
-        return Err(AppError::Validation(
-            "信息点和交换机端口不能同时指定".to_string(),
-        ));
-    }
-
     let now = Utc::now();
 
-    // Encrypt SNMP sensitive fields if provided
     let encrypted_community = match &req.snmp_community {
         Some(c) if !c.is_empty() => Some(encrypt_password_async(c.clone()).await?),
         _ => None,
@@ -752,51 +703,40 @@ pub async fn update_device(
          workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
          net_outlet_id = CASE WHEN $10::boolean THEN $11 ELSE net_outlet_id END,
-         device_port_id = CASE WHEN $12::boolean THEN $13 ELSE device_port_id END,
-         vendor = COALESCE($14, vendor),
-         location = COALESCE($15, location),
-         snmp_version = COALESCE($16, snmp_version),
-         snmp_community = CASE WHEN $17::boolean THEN $18 ELSE snmp_community END,
-         snmp_username = COALESCE($19, snmp_username),
-         snmp_auth_protocol = COALESCE($20, snmp_auth_protocol),
-         snmp_auth_password = CASE WHEN $21::boolean THEN $22 ELSE snmp_auth_password END,
-         snmp_priv_protocol = COALESCE($23, snmp_priv_protocol),
-         snmp_priv_password = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_password END,
-         snmp_port = COALESCE($26, snmp_port),
-         description = COALESCE($27, description),
-         updated_at = $28
-         WHERE id = $29",
+         vendor = COALESCE($12, vendor),
+         location = COALESCE($13, location),
+         snmp_version = COALESCE($14, snmp_version),
+         snmp_community = CASE WHEN $15::boolean THEN $16 ELSE snmp_community END,
+         snmp_username = COALESCE($17, snmp_username),
+         snmp_auth_protocol = COALESCE($18, snmp_auth_protocol),
+         snmp_auth_password = CASE WHEN $19::boolean THEN $20 ELSE snmp_auth_password END,
+         snmp_priv_protocol = COALESCE($21, snmp_priv_protocol),
+         snmp_priv_password = CASE WHEN $22::boolean THEN $23 ELSE snmp_priv_password END,
+         snmp_port = COALESCE($24, snmp_port),
+         description = COALESCE($25, description),
+         updated_at = $26
+         WHERE id = $27",
     )
     .bind(&req.name)
     .bind(&req.device_type)
     .bind(&req.brand)
     .bind(&req.model)
     .bind(&req.serial_number)
-    // workstation_id: CASE WHEN provided THEN resolved_value ELSE current
     .bind(req.workstation_id.is_some())
     .bind(resolved_workstation_id)
-    // position_id
     .bind(req.position_id.is_some())
     .bind(resolved_position_id)
-    // net_outlet_id
     .bind(req.net_outlet_id.is_some())
     .bind(resolved_net_outlet_id)
-    // device_port_id
-    .bind(req.device_port_id.is_some())
-    .bind(resolved_device_port_id)
-    // vendor, location
     .bind(&req.vendor)
     .bind(&req.location)
-    // snmp_version, snmp_community (CASE WHEN provided)
     .bind(&req.snmp_version)
     .bind(req.snmp_community.is_some())
     .bind(&encrypted_community)
-    // snmp_username, snmp_auth_protocol, snmp_auth_password (CASE WHEN provided)
     .bind(&req.snmp_username)
     .bind(&req.snmp_auth_protocol)
     .bind(req.snmp_auth_password.is_some())
     .bind(&encrypted_auth_password)
-    // snmp_priv_protocol, snmp_priv_password (CASE WHEN provided), snmp_port
     .bind(&req.snmp_priv_protocol)
     .bind(req.snmp_priv_password.is_some())
     .bind(&encrypted_priv_password)
@@ -858,13 +798,23 @@ pub async fn update_device(
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
+            // 解析 device_interface_id：非交换机设备的 IP 必须指定接口
+            let interface_id = match ip.device_interface_id {
+                Some(iid) => iid,
+                None => {
+                    return Err(AppError::Validation(
+                        "更新 IP 必须指定 device_interface_id".to_string(),
+                    ));
+                }
+            };
+
             let insert_result = sqlx::query(
-                "INSERT INTO ips (id, device_port_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
+                "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)
                  ON CONFLICT (ip_address) DO NOTHING",
             )
             .bind(Uuid::new_v4())
-            .bind(ip.device_port_id)
+            .bind(interface_id)
             .bind(id)
             .bind(network_id)
             .bind(&ip.ip_address)
@@ -950,35 +900,10 @@ pub async fn update_device(
 
     tx.commit().await?;
 
-    // 若信息点或端口配置变更，更新自动发现的拓扑连线
-    let outlet_changed =
-        req.net_outlet_id.is_some() && (resolved_net_outlet_id != current_outlet_id);
-    let sp_changed = req.device_port_id.is_some() && (resolved_device_port_id != current_sp_id);
-    if outlet_changed || sp_changed {
-        let pool = &state.pool()?.get_conn();
-        // 删除旧的自动发现连线
-        if let Err(e) = sqlx::query(
-            r"DELETE FROM topology_connections
-              WHERE (source_device_id = $1 OR target_device_id = $1) AND auto_discovered = true",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        {
-            warn!("设备 {} 删除旧自动发现连线失败: {}", id, e);
-        }
-        // 重新发现
-        if (resolved_net_outlet_id.is_some() || resolved_device_port_id.is_some())
-            && let Err(e) = ipma_visualization::auto_discover_device_topology(pool, id).await
-        {
-            warn!("设备 {} 自动发现拓扑失败: {}", id, e);
-        }
-    }
-
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id, d.device_port_id,
+                d.workstation_id, d.position_id, d.net_outlet_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
@@ -986,7 +911,7 @@ pub async fn update_device(
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
-                d.connected_device_port, d.connected_device_name, d.template_name,
+                d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
          WHERE d.id = $1",
@@ -998,7 +923,7 @@ pub async fn update_device(
     // Fetch updated IPs
     let device_ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac

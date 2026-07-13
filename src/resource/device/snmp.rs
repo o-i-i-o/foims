@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
-use crate::models::{ApiResponse, DevicePortCreate, SnmpTestRequest};
+use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SwitchForSnmp {
@@ -182,7 +182,7 @@ pub async fn get_device_ip_address(
 ) -> Result<Option<String>, SwitchConfigError> {
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
+           WHERE device_id = $1
            ORDER BY created_at LIMIT 1",
     )
     .bind(device_id)
@@ -438,9 +438,9 @@ fn extract_model(sys_descr: &str) -> String {
     }
 }
 
-pub async fn get_device_ports_via_snmp(
+pub async fn get_switch_ports_via_snmp(
     params: &SnmpParamsLegacy,
-) -> Result<Vec<DevicePortCreate>, SnmpError> {
+) -> Result<Vec<SwitchPortCreate>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
 
@@ -480,7 +480,7 @@ pub async fn get_device_ports_via_snmp(
             .as_str()
             .map_or_else(|| if_index.clone(), std::string::ToString::to_string);
 
-        ports.push(DevicePortCreate {
+        ports.push(SwitchPortCreate {
             port_number: port_number.clone(),
             port_name: None,
             port_type: None,
@@ -664,7 +664,7 @@ pub async fn get_device_ports_snmp(
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
-    match get_device_ports_via_snmp(&snmp_params).await {
+    match get_switch_ports_via_snmp(&snmp_params).await {
         Ok(ports) => {
             Ok(HttpResponse::Ok().json(ApiResponse::success(ports, "获取交换机端口信息成功")))
         }

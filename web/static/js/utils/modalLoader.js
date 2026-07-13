@@ -2,6 +2,7 @@ import { updatePageTranslations } from './i18n.js';
 
 const loadedModals = new Set();
 const loadingModals = new Map();
+const htmlCache = new Map();
 
 const MODAL_REGISTRY = {
     'network-type-modal': '/static/modals/network-type-modal.html',
@@ -26,7 +27,11 @@ const MODAL_REGISTRY = {
     'device-modal': '/static/modals/device-modal.html',
 };
 
-async function loadTemplateFile(modalId) {
+async function fetchModalHtml(modalId) {
+    if (htmlCache.has(modalId)) {
+        return htmlCache.get(modalId);
+    }
+
     if (loadingModals.has(modalId)) {
         return loadingModals.get(modalId);
     }
@@ -44,16 +49,12 @@ async function loadTemplateFile(modalId) {
             }
 
             const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
 
-            const template = doc.querySelector('template');
-            if (!template) {
-                return null;
-            }
+            const match = html.match(/<template[^>]*>([\s\S]*?)<\/template>/);
+            const innerHtml = match ? match[1].trim() : html.trim();
 
-            document.body.appendChild(template);
-            return template;
+            htmlCache.set(modalId, innerHtml);
+            return innerHtml;
         } catch (error) {
             console.error(`加载模态框模板失败 [${modalId}]:`, error);
             return null;
@@ -68,22 +69,21 @@ async function loadTemplateFile(modalId) {
 
 export async function loadModal(id) {
     if (loadedModals.has(id)) {
-        return document.getElementById(id);
+        const existing = document.getElementById(id);
+        if (existing) {
+            return existing;
+        }
+        loadedModals.delete(id);
     }
 
-    const templateId = `${id}-template`;
-    let template = document.getElementById(templateId);
-
-    if (!template) {
-        template = await loadTemplateFile(id);
-    }
-
-    if (!template) {
+    const innerHtml = await fetchModalHtml(id);
+    if (!innerHtml) {
         return null;
     }
 
-    const clone = template.content.cloneNode(true);
-    const modal = clone.firstElementChild;
+    const container = document.createElement('div');
+    container.innerHTML = innerHtml;
+    const modal = container.firstElementChild;
 
     if (!modal) {
         return null;
@@ -150,9 +150,7 @@ export function closeModal(id) {
 }
 
 export function initModalTemplates() {
-    // 模态框模板已拆分为独立文件，按需加载，无需预注册
 }
 
 export function preloadModalsOnIdle() {
-    // 模态框模板已拆分为独立文件，按需加载，无需预加载
 }

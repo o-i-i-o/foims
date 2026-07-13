@@ -1,13 +1,13 @@
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS device_ports (
+        r"CREATE TABLE IF NOT EXISTS switch_ports (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             port_number VARCHAR(30) NOT NULL,
             port_name VARCHAR(50),
-            port_type VARCHAR(20) DEFAULT 'access',
+            port_type VARCHAR(20) NOT NULL DEFAULT 'access' CHECK (port_type IN ('access','trunk','uplink','stack','console')),
             vlan_id INTEGER,
-            status VARCHAR(20) DEFAULT 'up',
+            status VARCHAR(20) NOT NULL DEFAULT 'up',
             speed VARCHAR(20),
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

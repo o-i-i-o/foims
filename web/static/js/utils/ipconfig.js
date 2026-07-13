@@ -389,7 +389,7 @@ export class IpConfigManager {
           }
 
           if (portSelect && portSelect.value) {
-            ipData.device_port_id = portSelect.value;
+            ipData.device_interface_id = portSelect.value;
           }
 
           ips.push(ipData);
@@ -750,8 +750,8 @@ export class IpConfigManager {
         if (initialData.switch_id && switchSelect) {
           switchSelect.value = initialData.switch_id;
           await this.handleSwitchChange(switchSelect, portSelect);
-          if (initialData.device_port_id && portSelect) {
-            portSelect.value = initialData.device_port_id;
+          if (initialData.device_interface_id && portSelect) {
+            portSelect.value = initialData.device_interface_id;
           }
         }
       }
@@ -835,41 +835,32 @@ export class IpConfigManager {
 
   async handleSwitchChange(switchSelect, portSelect) {
     const deviceId = switchSelect.value;
-    portSelect.innerHTML = '<option value="">选择端口</option>';
+    portSelect.innerHTML = '<option value="">选择接口</option>';
 
     if (!deviceId) return;
 
     try {
-      const result = await apiGet(`/api/resources/devices/${deviceId}/ports`);
+      const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces`);
       if (result.success && result.data) {
-          let ports;
+          let interfaces;
           if (Array.isArray(result.data)) {
-            ports = result.data;
+            interfaces = result.data;
           } else if (result.data.items && Array.isArray(result.data.items)) {
-            ports = result.data.items;
+            interfaces = result.data.items;
           } else {
-            ports = [];
+            interfaces = [];
           }
-          
-          ports.sort((a, b) => {
-              const getNum = (s) => {
-                  if (typeof s !== 'string' || !s) return 0;
-                  const m = s.match(/\d+/g);
-                  return m ? parseInt(m[m.length-1]) : 0;
-              };
-              return getNum(a.port_number) - getNum(b.port_number);
-          });
 
-          ports.forEach(port => {
+          interfaces.forEach(iface => {
             const option = document.createElement("option");
-            option.value = port.id;
-            const statusMark = port.status === 'up' ? '🟢' : '🔴';
-            option.textContent = `${statusMark} ${port.port_number}${port.port_name ? ` (${port.port_name})` : ""}`;
+            option.value = iface.id;
+            const typeMark = iface.interface_type ? `[${iface.interface_type}]` : '';
+            option.textContent = `${iface.name}${typeMark}`;
             portSelect.appendChild(option);
           });
       }
     } catch (error) {
-      console.error("加载设备端口失败:", error);
+      console.error("加载设备接口失败:", error);
     }
   }
 }

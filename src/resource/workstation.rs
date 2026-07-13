@@ -269,7 +269,7 @@ pub async fn get_workstation(
 
     let workstation_ips = sqlx::query_as::<_, IpManager>(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
@@ -356,7 +356,7 @@ pub async fn update_workstation(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_port_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac

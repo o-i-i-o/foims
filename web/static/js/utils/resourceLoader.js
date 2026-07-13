@@ -2,6 +2,13 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
+const MODULE_VERSION = '01104';
+
+function withVersion(path) {
+    if (!path) return path;
+    return path.includes('?') ? `${path}&v=${MODULE_VERSION}` : `${path}?v=${MODULE_VERSION}`;
+}
+
 const MODULE_REGISTRY = {
     'apiClient': '/static/js/utils/apiClient.js',
     'confirm': '/static/js/utils/confirm.js',
@@ -51,11 +58,12 @@ export async function loadModule(moduleName, modulePath = null) {
         return loadingPromises.get(moduleName);
     }
     
-    const path = modulePath || MODULE_REGISTRY[moduleName];
-    if (!path) {
+    const basePath = modulePath || MODULE_REGISTRY[moduleName];
+    if (!basePath) {
         throw new Error(`Module "${moduleName}" not found in registry`);
     }
-    
+
+    const path = withVersion(basePath);
     const promise = (async () => {
         try {
             const module = await import(path);
@@ -143,11 +151,12 @@ function preloadModules(moduleNames) {
 }
 
 function prefetchModule(moduleName) {
-    const path = MODULE_REGISTRY[moduleName];
-    if (!path || preloadedModules.has(moduleName)) {
+    const basePath = MODULE_REGISTRY[moduleName];
+    if (!basePath || preloadedModules.has(moduleName)) {
         return;
     }
-    
+
+    const path = withVersion(basePath);
     const link = document.createElement('link');
     link.rel = 'modulepreload';
     link.href = path;

@@ -200,7 +200,7 @@ export async function submitCabinetPositionForm() {
 
 // ====== 机位管理模态框 ======
 export async function openCabinetPositionModal(position = null) {
-  openModal("cabinet-position-modal");
+  await openModal("cabinet-position-modal");
   
   const modal = elementCache.get('cabinet-position-modal');
   const title = elementCache.get('cabinet-position-modal-title');
