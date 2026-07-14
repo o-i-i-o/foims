@@ -129,7 +129,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, net_outlet_name, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1

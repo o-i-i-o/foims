@@ -2,7 +2,7 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-const MODULE_VERSION = '01104';
+const MODULE_VERSION = '01200';
 
 function withVersion(path) {
     if (!path) return path;

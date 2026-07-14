@@ -27,6 +27,7 @@ pub async fn get_positions(
     let cabinet_id = query
         .get("cabinet_id")
         .and_then(|id| Uuid::parse_str(id).ok());
+    let room_id = query.get("room_id").and_then(|id| Uuid::parse_str(id).ok());
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -47,128 +48,71 @@ pub async fn get_positions(
         _ => "ORDER BY name ASC",
     };
 
-    let total: i64 = if !search.is_empty() || cabinet_id.is_some() {
-        if let Some(cid) = cabinet_id {
-            if search.is_empty() {
-                sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
-                    .bind(cid)
-                    .fetch_one(&state.pool()?.get_conn())
-                    .await?
-            } else {
-                let pattern = format!("%{search}%");
-                sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM positions WHERE cabinet_id = $1 AND (name ILIKE $2 OR description ILIKE $2)"
-                )
-                .bind(cid)
-                .bind(&pattern)
-                .fetch_one(&state.pool()?.get_conn())
-                .await?
-            }
-        } else {
-            let pattern = format!("%{search}%");
-            sqlx::query_scalar(
-                "SELECT COUNT(*) FROM positions WHERE name ILIKE $1 OR description ILIKE $1",
-            )
-            .bind(&pattern)
-            .fetch_one(&state.pool()?.get_conn())
-            .await?
-        }
+    let mut conditions: Vec<String> = Vec::new();
+    let mut param_idx = 1;
+
+    if !search.is_empty() {
+        conditions.push(format!(
+            "(p.name ILIKE ${param_idx} OR p.description ILIKE ${param_idx})"
+        ));
+        param_idx += 1;
+    }
+    if cabinet_id.is_some() {
+        conditions.push(format!("p.cabinet_id = ${param_idx}"));
+        param_idx += 1;
+    }
+    if room_id.is_some() {
+        conditions.push(format!("c.room_id = ${param_idx}"));
+        param_idx += 1;
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
     } else {
-        sqlx::query_scalar("SELECT COUNT(*) FROM positions")
-            .fetch_one(&state.pool()?.get_conn())
-            .await?
+        format!("WHERE {}", conditions.join(" AND "))
     };
 
-    let positions_basic = if !search.is_empty() || cabinet_id.is_some() {
-        if let Some(cid) = cabinet_id {
-            if search.is_empty() {
-                sqlx::query(
-                    sqlx::AssertSqlSafe(format!(
-                        r"SELECT p.id, p.name, p.cabinet_id, 
-                                  (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
-                                  c.room_id,
-                                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
-                                  p.start_u, p.end_u, p.description, 
-                                  p.device_type,
-                                  p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
-                           FROM positions p 
-                           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-                           WHERE p.cabinet_id = $1
-                           {order_clause} LIMIT $2 OFFSET $3"
-                    ))
-                )
-                .bind(cid)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?
-            } else {
-                let pattern = format!("%{search}%");
-                sqlx::query(
-                    sqlx::AssertSqlSafe(format!(
-                        r"SELECT p.id, p.name, p.cabinet_id, 
-                                  (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
-                                  c.room_id,
-                                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
-                                  p.start_u, p.end_u, p.description, 
-                                  p.device_type,
-                                  p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
-                           FROM positions p 
-                           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-                           WHERE p.cabinet_id = $1 AND (p.name ILIKE $2 OR p.description ILIKE $2)
-                           {order_clause} LIMIT $3 OFFSET $4"
-                    ))
-                )
-                .bind(cid)
-                .bind(&pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?
-            }
-        } else {
-            let pattern = format!("%{search}%");
-            sqlx::query(
-                sqlx::AssertSqlSafe(format!(
-                    r"SELECT p.id, p.name, p.cabinet_id, 
-                              (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
-                              c.room_id,
-                              (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
-                              p.start_u, p.end_u, p.description, 
-                              p.device_type,
-                              p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
-                       FROM positions p 
-                       LEFT JOIN cabinets c ON p.cabinet_id = c.id
-                       WHERE p.name ILIKE $1 OR p.description ILIKE $1
-                       {order_clause} LIMIT $2 OFFSET $3"
-                ))
-            )
-            .bind(&pattern)
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(&state.pool()?.get_conn())
-            .await?
-        }
-    } else {
-        sqlx::query(
-            sqlx::AssertSqlSafe(format!(
-                r"SELECT p.id, p.name, p.cabinet_id, 
-                          (SELECT c.name FROM cabinets c WHERE c.id = p.cabinet_id) as cabinet_name,
-                          c.room_id,
-                          (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
-                          p.start_u, p.end_u, p.description, 
-                          p.device_type,
-                          p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
-                   FROM positions p 
-                   LEFT JOIN cabinets c ON p.cabinet_id = c.id
-                   {order_clause} LIMIT $1 OFFSET $2"
-            ))
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-    };
+    let search_pattern = format!("%{search}%");
+    let limit_idx = param_idx;
+    let offset_idx = param_idx + 1;
+
+    let count_sql = sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id {where_clause}"
+    ));
+    let data_sql = sqlx::AssertSqlSafe(format!(
+        r"SELECT p.id, p.name, p.cabinet_id,
+                  (SELECT c2.name FROM cabinets c2 WHERE c2.id = p.cabinet_id) as cabinet_name,
+                  c.room_id,
+                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
+                  p.start_u, p.end_u, p.description, p.device_type,
+                  p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
+           FROM positions p
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           {where_clause}
+           {order_clause} LIMIT ${limit_idx} OFFSET ${offset_idx}"
+    ));
+
+    let mut count_query = sqlx::query_scalar::<_, i64>(count_sql);
+    let mut data_query = sqlx::query(data_sql);
+
+    if !search.is_empty() {
+        count_query = count_query.bind(&search_pattern);
+        data_query = data_query.bind(&search_pattern);
+    }
+    if let Some(cid) = cabinet_id {
+        count_query = count_query.bind(cid);
+        data_query = data_query.bind(cid);
+    }
+    if let Some(rid) = room_id {
+        count_query = count_query.bind(rid);
+        data_query = data_query.bind(rid);
+    }
+
+    count_query = count_query.bind(page_size).bind(offset);
+    data_query = data_query.bind(page_size).bind(offset);
+
+    let total: i64 = count_query.fetch_one(&state.pool()?.get_conn()).await?;
+    let positions_basic = data_query.fetch_all(&state.pool()?.get_conn()).await?;
 
     let mut positions_with_details = Vec::new();
 

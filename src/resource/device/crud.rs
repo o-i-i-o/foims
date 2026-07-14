@@ -80,9 +80,7 @@ pub async fn get_devices(
     }
 
     if room_id.is_some() {
-        where_parts.push(format!(
-            "(d.workstation_id IN (SELECT w.id FROM workstations w WHERE w.room_id = ${param_idx}) OR d.position_id IN (SELECT p.id FROM positions p JOIN cabinets c ON p.cabinet_id = c.id WHERE c.room_id = ${param_idx}))"
-        ));
+        where_parts.push(format!("d.room_id = ${param_idx}"));
         param_idx += 1;
     }
 
@@ -99,14 +97,14 @@ pub async fn get_devices(
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id,
+                d.workstation_id, d.position_id, d.room_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
+                d.start_u, d.end_u,
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -219,17 +217,6 @@ pub async fn create_device(
         }
     }
 
-    if let Some(outlet_id) = req.net_outlet_id {
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
-                .bind(outlet_id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if !exists {
-            return Err(AppError::NotFound("信息点未找到".to_string()));
-        }
-    }
-
     let (final_device_type, final_brand, final_model) = if let Some(tmpl_id) = req.template_id {
         let template_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM device_templates WHERE id = $1)")
@@ -295,7 +282,7 @@ pub async fn create_device(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, net_outlet_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)",
     )
     .bind(id)
@@ -306,7 +293,7 @@ pub async fn create_device(
     .bind(&req.serial_number)
     .bind(req.workstation_id)
     .bind(req.position_id)
-    .bind(req.net_outlet_id)
+    .bind(req.room_id)
     .bind(req.template_id)
     .bind(&req.vendor)
     .bind(&req.location)
@@ -345,22 +332,7 @@ pub async fn create_device(
 
     let mut ip_count = 0;
     if let Some(ips) = &req.ips {
-        let room_id = if let Some(ws_id) = req.workstation_id {
-            sqlx::query_scalar::<_, Uuid>("SELECT room_id FROM workstations WHERE id = $1")
-                .bind(ws_id)
-                .fetch_optional(&mut *tx)
-                .await?
-        } else if let Some(pos_id) = req.position_id {
-            sqlx::query_scalar::<_, Option<Uuid>>(
-                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-            )
-            .bind(pos_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten()
-        } else {
-            None
-        };
+        let room_id = req.room_id;
 
         for ip in ips {
             ip.validate()?;
@@ -376,9 +348,8 @@ pub async fn create_device(
                 return Err(AppError::Conflict("IP地址已存在".to_string()));
             }
 
-            let network_id: Option<Uuid> = if let Some(r_id) = room_id {
-                sqlx::query_scalar(
-                    r"SELECT nc.id
+            let network_id: Option<Uuid> = sqlx::query_scalar(
+                r"SELECT nc.id
                     FROM room_networks rn
                     JOIN network_cidrs nc ON rn.network_id = nc.id
                     WHERE rn.room_id = $1
@@ -387,14 +358,11 @@ pub async fn create_device(
                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                     )
                     LIMIT 1",
-                )
-                .bind(r_id)
-                .bind(&ip.ip_address)
-                .fetch_optional(&mut *tx)
-                .await?
-            } else {
-                ip.network_id
-            };
+            )
+            .bind(room_id)
+            .bind(&ip.ip_address)
+            .fetch_optional(&mut *tx)
+            .await?;
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
@@ -476,7 +444,7 @@ pub async fn create_device(
         serial_number: req.serial_number.clone(),
         workstation_id: req.workstation_id,
         position_id: req.position_id,
-        net_outlet_id: req.net_outlet_id,
+        room_id: req.room_id,
         template_id: req.template_id,
         vendor: req.vendor.clone(),
         location: req.location.clone(),
@@ -529,14 +497,14 @@ pub async fn get_device(
 
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id,
+                d.workstation_id, d.position_id, d.room_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
+                d.start_u, d.end_u,
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
@@ -616,14 +584,14 @@ pub async fn update_device(
 
     // Fetch current device data for business validations
     let current_row =
-        sqlx::query("SELECT workstation_id, position_id, net_outlet_id FROM devices WHERE id = $1")
+        sqlx::query("SELECT workstation_id, position_id, room_id FROM devices WHERE id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
 
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
-    let current_outlet_id: Option<Uuid> = current_row.get("net_outlet_id");
+    let current_room_id: Uuid = current_row.get("room_id");
 
     // Resolve the final values for Option<Option<Uuid>> fields
     let resolved_workstation_id = match &req.workstation_id {
@@ -658,22 +626,6 @@ pub async fn update_device(
         Some(None) => None,
     };
 
-    let resolved_net_outlet_id = match &req.net_outlet_id {
-        None => current_outlet_id,
-        Some(Some(outlet_id)) => {
-            let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = $1)")
-                    .bind(outlet_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            if !exists {
-                return Err(AppError::NotFound("信息点未找到".to_string()));
-            }
-            Some(*outlet_id)
-        }
-        Some(None) => None,
-    };
-
     if resolved_workstation_id.is_some() && resolved_position_id.is_some() {
         return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
     }
@@ -702,20 +654,20 @@ pub async fn update_device(
          serial_number = COALESCE($5, serial_number),
          workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
-         net_outlet_id = CASE WHEN $10::boolean THEN $11 ELSE net_outlet_id END,
-         vendor = COALESCE($12, vendor),
-         location = COALESCE($13, location),
-         snmp_version = COALESCE($14, snmp_version),
-         snmp_community = CASE WHEN $15::boolean THEN $16 ELSE snmp_community END,
-         snmp_username = COALESCE($17, snmp_username),
-         snmp_auth_protocol = COALESCE($18, snmp_auth_protocol),
-         snmp_auth_password = CASE WHEN $19::boolean THEN $20 ELSE snmp_auth_password END,
-         snmp_priv_protocol = COALESCE($21, snmp_priv_protocol),
-         snmp_priv_password = CASE WHEN $22::boolean THEN $23 ELSE snmp_priv_password END,
-         snmp_port = COALESCE($24, snmp_port),
-         description = COALESCE($25, description),
-         updated_at = $26
-         WHERE id = $27",
+         room_id = COALESCE($10, room_id),
+         vendor = COALESCE($11, vendor),
+         location = COALESCE($12, location),
+         snmp_version = COALESCE($13, snmp_version),
+         snmp_community = CASE WHEN $14::boolean THEN $15 ELSE snmp_community END,
+         snmp_username = COALESCE($16, snmp_username),
+         snmp_auth_protocol = COALESCE($17, snmp_auth_protocol),
+         snmp_auth_password = CASE WHEN $18::boolean THEN $19 ELSE snmp_auth_password END,
+         snmp_priv_protocol = COALESCE($20, snmp_priv_protocol),
+         snmp_priv_password = CASE WHEN $21::boolean THEN $22 ELSE snmp_priv_password END,
+         snmp_port = COALESCE($23, snmp_port),
+         description = COALESCE($24, description),
+         updated_at = $25
+         WHERE id = $26",
     )
     .bind(&req.name)
     .bind(&req.device_type)
@@ -726,8 +678,7 @@ pub async fn update_device(
     .bind(resolved_workstation_id)
     .bind(req.position_id.is_some())
     .bind(resolved_position_id)
-    .bind(req.net_outlet_id.is_some())
-    .bind(resolved_net_outlet_id)
+    .bind(req.room_id)
     .bind(&req.vendor)
     .bind(&req.location)
     .bind(&req.snmp_version)
@@ -749,23 +700,7 @@ pub async fn update_device(
 
     // Handle IP replacement if ips are provided
     if let Some(ips) = &req.ips {
-        // Determine room_id for network validation based on resolved location
-        let room_id = if let Some(ws_id) = resolved_workstation_id {
-            sqlx::query_scalar::<_, Uuid>("SELECT room_id FROM workstations WHERE id = $1")
-                .bind(ws_id)
-                .fetch_optional(&mut *tx)
-                .await?
-        } else if let Some(pos_id) = resolved_position_id {
-            sqlx::query_scalar::<_, Option<Uuid>>(
-                "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-            )
-            .bind(pos_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten()
-        } else {
-            None
-        };
+        let room_id = req.room_id.unwrap_or(current_room_id);
 
         // Delete old IPs associated with this device
         sqlx::query("DELETE FROM ips WHERE device_id = $1")
@@ -776,9 +711,8 @@ pub async fn update_device(
         for ip in ips {
             ip.validate()?;
 
-            let network_id: Option<Uuid> = if let Some(r_id) = room_id {
-                sqlx::query_scalar(
-                    r"SELECT nc.id
+            let network_id: Option<Uuid> = sqlx::query_scalar(
+                r"SELECT nc.id
                     FROM room_networks rn
                     JOIN network_cidrs nc ON rn.network_id = nc.id
                     WHERE rn.room_id = $1
@@ -787,14 +721,11 @@ pub async fn update_device(
                         OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
                     )
                     LIMIT 1",
-                )
-                .bind(r_id)
-                .bind(&ip.ip_address)
-                .fetch_optional(&mut *tx)
-                .await?
-            } else {
-                ip.network_id
-            };
+            )
+            .bind(room_id)
+            .bind(&ip.ip_address)
+            .fetch_optional(&mut *tx)
+            .await?;
 
             let ip_version = detect_ip_version(&ip.ip_address)?;
 
@@ -903,14 +834,14 @@ pub async fn update_device(
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.net_outlet_id,
+                d.workstation_id, d.position_id, d.room_id,
                 d.template_id, d.vendor, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
                 d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u, d.net_outlet_name, d.outlet_type,
+                d.start_u, d.end_u,
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d

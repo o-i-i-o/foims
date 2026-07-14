@@ -66,6 +66,7 @@
     "select_workstation": "选择工位",
     "select_position": "选择机位",
     "select_net_outlet": "选择信息点",
+    "select_room": "选择房间",
     "save_as_template": "保存为模板",
     "template_name": "模板名称",
     "template_name_placeholder": "留空则使用设备名称",

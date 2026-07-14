@@ -457,7 +457,7 @@ pub async fn get_cable_path(
     validate_endpoint_type(&q.to_type)?;
 
     let rows = sqlx::query(
-        "SELECT hop_idx, node_type, node_id, node_label, cable_id, cable_label \
+        "SELECT hop_idx, node_type, node_id, node_label, cable_id, cable_label, hop_type \
          FROM find_cable_path($1, $2, $3, $4) ORDER BY hop_idx",
     )
     .bind(&q.from_type)
@@ -476,6 +476,7 @@ pub async fn get_cable_path(
             node_label: r.get::<Option<String>, _>("node_label"),
             cable_id: r.get::<Option<Uuid>, _>("cable_id"),
             cable_label: r.get::<Option<String>, _>("cable_label"),
+            hop_type: r.get::<String, _>("hop_type"),
         })
         .collect();
 

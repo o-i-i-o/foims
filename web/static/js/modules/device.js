@@ -24,7 +24,7 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
 import {
-  loadNetOutletsForSelect,
+  loadRoomsForSelect,
   loadDeviceTemplatesForSelect,
   loadWorkstationsForSelect,
   loadPositionsForSelect,
@@ -96,10 +96,6 @@ export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null)
         { field: 'workstation_name', render: (v, row) => {
           if (v) return `${t('device.workstation')}: ${escapeHtml(v)}`;
           if (row.cabinet_name) return `${t('device.position')}: ${escapeHtml(row.cabinet_name)}${row.start_u ? ` ${row.start_u}-${row.end_u}U` : ''}`;
-          return '-';
-        }},
-        { field: 'net_outlet_name', render: (v, row) => {
-          if (v) return `${t('device.net_outlet')}: ${escapeHtml(v)}`;
           return '-';
         }},
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
@@ -256,6 +252,17 @@ function setupSnmpButtons() {
   }
 }
 
+function setupRoomCascade() {
+  const roomSelect = elementCache.get('device-room-id');
+  if (!roomSelect || roomSelect.dataset.bound) return;
+  roomSelect.addEventListener('change', async () => {
+    const roomId = roomSelect.value || null;
+    await loadWorkstationsForSelect('device-workstation-id', roomId);
+    await loadPositionsForSelect('device-position-id', null, roomId);
+  });
+  roomSelect.dataset.bound = 'true';
+}
+
 function ensureDeviceListeners() {
   if (deviceListenersBound) return;
   setupMutualExclusion();
@@ -263,6 +270,7 @@ function ensureDeviceListeners() {
   setupSaveAsTemplateToggle();
   setupSnmpVersionToggle();
   setupSnmpButtons();
+  setupRoomCascade();
   deviceListenersBound = true;
 }
 
@@ -340,7 +348,7 @@ export async function submitDeviceForm() {
     template_id: templateId || null,
     workstation_id: workstationId || null,
     position_id: positionId || null,
-    net_outlet_id: netOutletId || null,
+    room_id: roomId || null,
     description: description?.trim() || null,
     save_as_template: saveAsTemplate || false,
     template_name: saveAsTemplate ? (templateName?.trim() || name.trim()) : null,
@@ -375,9 +383,9 @@ export async function openDeviceModal(device = null) {
   const form = elementCache.get('device-form');
 
   await loadDeviceTemplatesForSelect("device-template-id");
+  await loadRoomsForSelect("device-room-id");
   await loadWorkstationsForSelect("device-workstation-id");
   await loadPositionsForSelect("device-position-id");
-  await loadNetOutletsForSelect("device-net-outlet-id");
 
   ensureDeviceListeners();
 
@@ -398,9 +406,13 @@ export async function openDeviceModal(device = null) {
     setSnmpFieldValues(device);
 
     if (device.template_id) elementCache.setValue('device-template-id', device.template_id);
+    if (device.room_id) {
+      elementCache.setValue('device-room-id', device.room_id);
+      await loadWorkstationsForSelect('device-workstation-id', device.room_id);
+      await loadPositionsForSelect('device-position-id', null, device.room_id);
+    }
     if (device.workstation_id) elementCache.setValue('device-workstation-id', device.workstation_id);
     if (device.position_id) elementCache.setValue('device-position-id', device.position_id);
-    if (device.net_outlet_id) elementCache.setValue('device-net-outlet-id', device.net_outlet_id);
 
     if (manager) {
       manager.setExcludeSwitchId(device.id || null);

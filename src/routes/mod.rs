@@ -13,32 +13,32 @@ use crate::log::notification::{
 };
 use crate::log::{get_login_logs, get_operation_logs};
 use crate::resource::{
-    auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, connect_device,
-    create_cabinet, create_cabinet_position, create_cable_link, create_device,
-    create_device_interface, create_device_ip, create_net_outlet, create_network,
-    create_network_region, create_org_template, create_organization, create_room,
-    create_switch_port, create_topology_connection, create_workstation, delete_cabinet,
-    delete_cabinet_position, delete_cable_link, delete_device, delete_device_interface,
-    delete_device_template, delete_layout, delete_net_outlet, delete_network,
-    delete_network_region, delete_org_template, delete_organization, delete_positions_layout,
-    delete_room, delete_switch_port, delete_topology_connection, delete_topology_node,
-    delete_workstation, disconnect_device, get_all_device_interfaces, get_all_switch_ports,
-    get_allowed_child_types, get_available_ips, get_cabinet, get_cabinet_networks,
-    get_cabinet_position, get_cabinets, get_cabinets_by_network_region, get_cable_link,
-    get_cable_links, get_cable_path, get_children, get_device, get_device_info_snmp,
-    get_device_interface, get_device_interfaces, get_device_ips, get_device_lldp_neighbors,
-    get_device_mac_table, get_device_macs_from_db, get_device_ports_snmp, get_device_template,
-    get_device_templates, get_devices, get_ip_managers, get_layout, get_net_outlet,
-    get_net_outlets, get_network, get_network_region, get_network_regions, get_networks,
-    get_org_rooms, get_org_template, get_org_templates, get_organization, get_organization_tree,
-    get_organizations, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_switch_port,
-    get_switch_ports, get_topology_connections, get_topology_nodes, get_workstation,
-    get_workstations, pull_ip_managers, save_layout, save_topology_nodes, sync_lldp_from_snmp,
-    sync_ports_from_snmp, test_snmp_connection, test_snmp_connection_by_id, trigger_auto_discover,
-    update_cabinet, update_cabinet_position, update_cable_link, update_device,
-    update_device_interface, update_net_outlet, update_network, update_network_region,
-    update_org_template, update_organization, update_room, update_switch_port, update_workstation,
+    auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, create_cabinet,
+    create_cabinet_position, create_cable_link, create_device, create_device_interface,
+    create_device_ip, create_net_outlet, create_network, create_network_region,
+    create_org_template, create_organization, create_room, create_switch_port,
+    create_topology_connection, create_workstation, delete_cabinet, delete_cabinet_position,
+    delete_cable_link, delete_device, delete_device_interface, delete_device_template,
+    delete_layout, delete_net_outlet, delete_network, delete_network_region, delete_org_template,
+    delete_organization, delete_positions_layout, delete_room, delete_switch_port,
+    delete_topology_connection, delete_topology_node, delete_workstation,
+    get_all_device_interfaces, get_all_switch_ports, get_allowed_child_types, get_available_ips,
+    get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
+    get_cabinets_by_network_region, get_cable_link, get_cable_links, get_cable_path, get_children,
+    get_device, get_device_info_snmp, get_device_interface, get_device_interfaces, get_device_ips,
+    get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db,
+    get_device_ports_snmp, get_device_template, get_device_templates, get_devices, get_ip_managers,
+    get_layout, get_net_outlet, get_net_outlets, get_network, get_network_region,
+    get_network_regions, get_networks, get_org_rooms, get_org_template, get_org_templates,
+    get_organization, get_organization_tree, get_organizations, get_positions,
+    get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
+    get_switch_port, get_switch_ports, get_topology_connections, get_topology_nodes,
+    get_workstation, get_workstations, pull_ip_managers, save_layout, save_topology_nodes,
+    sync_lldp_from_snmp, sync_ports_from_snmp, test_snmp_connection, test_snmp_connection_by_id,
+    trigger_auto_discover, update_cabinet, update_cabinet_position, update_cable_link,
+    update_device, update_device_interface, update_net_outlet, update_network,
+    update_network_region, update_org_template, update_organization, update_room,
+    update_switch_port, update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -333,8 +333,6 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                     "/{id}/auto-assign-ip",
                                     web::post().to(auto_assign_device_ip),
                                 )
-                                .route("/{id}/connect", web::post().to(connect_device))
-                                .route("/{id}/disconnect", web::post().to(disconnect_device))
                                 .route("/{id}/switch-ports", web::get().to(get_switch_ports))
                                 .route("/{id}/switch-ports", web::post().to(create_switch_port))
                                 .route(

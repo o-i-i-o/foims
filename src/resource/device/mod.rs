@@ -1,4 +1,3 @@
-pub mod connection;
 pub mod crud;
 pub mod interface;
 pub mod lldp;
@@ -7,7 +6,6 @@ pub mod snmp;
 pub mod switch_port;
 pub mod template;
 
-pub use connection::*;
 pub use crud::*;
 pub use interface::*;
 pub use lldp::*;

@@ -643,7 +643,6 @@ pub struct IpManagerWithNames {
     pub cabinet_position_name: Option<String>,
     pub interface_name: Option<String>,
     pub interface_type: Option<String>,
-    pub net_outlet_name: Option<String>,
     pub room_name: Option<String>,
     pub cabinet_name: Option<String>,
     pub org_name: Option<String>,
@@ -886,6 +885,7 @@ pub struct CablePathNode {
     pub node_label: Option<String>,
     pub cable_id: Option<Uuid>,
     pub cable_label: Option<String>,
+    pub hop_type: String,
 }
 
 // ==================== SNMP 相关模型 ====================
@@ -1249,7 +1249,7 @@ pub struct Device {
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    pub room_id: Uuid,
     pub template_id: Option<Uuid>,
     pub vendor: Option<String>,
     pub location: Option<String>,
@@ -1277,15 +1277,12 @@ pub struct DeviceWithDetails {
     pub workstation_id: Option<Uuid>,
     pub workstation_name: Option<String>,
     pub position_id: Option<Uuid>,
-    pub room_id: Option<Uuid>,
+    pub room_id: Uuid,
     pub room_name: Option<String>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
     pub start_u: Option<i32>,
     pub end_u: Option<i32>,
-    pub net_outlet_id: Option<Uuid>,
-    pub net_outlet_name: Option<String>,
-    pub outlet_type: Option<String>,
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub vendor: Option<String>,
@@ -1317,7 +1314,7 @@ pub struct DeviceCreate {
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    pub room_id: Uuid,
     pub template_id: Option<Uuid>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
     pub vendor: Option<String>,
@@ -1359,8 +1356,7 @@ pub struct DeviceUpdate {
     pub workstation_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub position_id: Option<Option<Uuid>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub net_outlet_id: Option<Option<Uuid>>,
+    pub room_id: Option<Uuid>,
     #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
     pub vendor: Option<String>,
     #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
@@ -1383,9 +1379,4 @@ pub struct DeviceUpdate {
     pub save_as_template: Option<bool>,
     #[validate(length(max = 100, message = "模板名称长度不能超过100个字符"))]
     pub template_name: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct DeviceConnectRequest {
-    pub net_outlet_id: Option<Option<Uuid>>,
 }

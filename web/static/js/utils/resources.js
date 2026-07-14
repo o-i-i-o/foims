@@ -345,11 +345,12 @@ export async function loadWorkstationsForSelect(selectId, roomId = null) {
   }
 }
 
-export async function loadPositionsForSelect(selectId, cabinetId = null) {
+export async function loadPositionsForSelect(selectId, cabinetId = null, roomId = null) {
   try {
-    const url = cabinetId
-      ? `/api/resources/positions?cabinet_id=${cabinetId}&page_size=1000`
-      : '/api/resources/positions?page_size=1000';
+    const params = new URLSearchParams({ page_size: '1000' });
+    if (cabinetId) params.set('cabinet_id', cabinetId);
+    if (roomId) params.set('room_id', roomId);
+    const url = `/api/resources/positions?${params.toString()}`;
     const result = await apiGet(url);
     const select = document.getElementById(selectId);
 

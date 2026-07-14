@@ -66,6 +66,7 @@
     "select_workstation": "Select Workstation",
     "select_position": "Select Position",
     "select_net_outlet": "Select Network Outlet",
+    "select_room": "Select Room",
     "save_as_template": "Save as Template",
     "template_name": "Template Name",
     "template_name_placeholder": "Leave empty to use device name",

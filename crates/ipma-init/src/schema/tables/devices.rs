@@ -9,7 +9,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             serial_number VARCHAR(100),
             workstation_id UUID REFERENCES workstations(id) ON DELETE SET NULL,
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
-            net_outlet_id UUID REFERENCES net_outlets(id) ON DELETE SET NULL,
+            room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             template_id UUID REFERENCES device_templates(id) ON DELETE SET NULL,
             vendor VARCHAR(50),
             location VARCHAR(100),
@@ -27,16 +27,15 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             CONSTRAINT chk_device_type CHECK (device_type IN (
                 'pc', 'laptop', 'printer', 'server', 'network_device', 'switch',
                 'camera', 'phone', 'other'
-            )),
-            CONSTRAINT chk_device_location CHECK (
-                (workstation_id IS NOT NULL AND position_id IS NULL) OR
-                (workstation_id IS NULL AND position_id IS NOT NULL) OR
-                (workstation_id IS NULL AND position_id IS NULL)
-            )
+            ))
         )",
     )
     .execute(pool)
     .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_devices_room_id ON devices(room_id)")
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

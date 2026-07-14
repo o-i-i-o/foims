@@ -20,17 +20,10 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             dv.device_type::text AS device_type,
             di.name::text AS interface_name,
             di.interface_type::text AS interface_type,
-            ap.name::text AS net_outlet_name,
             w.name::text AS workstation_name,
             cp.name::text AS cabinet_position_name,
-            CASE
-                WHEN r.id IS NOT NULL THEN r.name::text
-                ELSE NULL
-            END AS room_name,
-            CASE
-                WHEN c.id IS NOT NULL THEN c.name::text
-                ELSE NULL
-            END AS cabinet_name,
+            r.name::text AS room_name,
+            c.name::text AS cabinet_name,
             org.name::text AS org_name,
             COALESCE(nc.name, 'unknown')::text AS network_name,
             COALESCE(nr.name, 'unknown')::text AS network_region,
@@ -46,11 +39,10 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         FROM ips imm
         JOIN devices dv ON imm.device_id = dv.id
         LEFT JOIN device_interfaces di ON imm.device_interface_id = di.id
-        LEFT JOIN net_outlets ap ON dv.net_outlet_id = ap.id
         LEFT JOIN workstations w ON dv.workstation_id = w.id
         LEFT JOIN positions cp ON dv.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
-        LEFT JOIN rooms r ON COALESCE(w.room_id, c.room_id) = r.id
+        LEFT JOIN rooms r ON dv.room_id = r.id
         LEFT JOIN organizations org ON r.org_id = org.id
         LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
@@ -100,28 +92,24 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW devices_with_details AS
         SELECT
             d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
-            d.workstation_id, d.position_id, d.net_outlet_id,
+            d.workstation_id, d.position_id, d.room_id,
             d.template_id, d.vendor, d.location,
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
             d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
             d.description,
             w.name AS workstation_name,
-            COALESCE(w.room_id, cab.room_id) AS room_id,
-            COALESCE(r.name, NULL) AS room_name,
+            r.name AS room_name,
             cab.id AS cabinet_id,
             cab.name AS cabinet_name,
             p.start_u, p.end_u,
-            ap.name AS net_outlet_name,
-            ap.outlet_type,
             dt.name AS template_name,
             d.created_at, d.updated_at
         FROM devices d
         LEFT JOIN workstations w ON d.workstation_id = w.id
         LEFT JOIN positions p ON d.position_id = p.id
         LEFT JOIN cabinets cab ON p.cabinet_id = cab.id
-        LEFT JOIN rooms r ON COALESCE(w.room_id, cab.room_id) = r.id
-        LEFT JOIN net_outlets ap ON d.net_outlet_id = ap.id
+        LEFT JOIN rooms r ON d.room_id = r.id
         LEFT JOIN device_templates dt ON d.template_id = dt.id
     ",
     )
@@ -162,22 +150,26 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
         CREATE VIEW cable_links_with_details AS
+        WITH endpoint_labels AS (
+            SELECT sp.id, 'switch_port'::VARCHAR AS etype,
+                   (sp.port_number || ' @ ' || d.name) AS label
+            FROM switch_ports sp JOIN devices d ON sp.device_id = d.id
+            UNION ALL
+            SELECT id, 'net_outlet'::VARCHAR, name::text FROM net_outlets
+            UNION ALL
+            SELECT di.id, 'device_interface'::VARCHAR, (di.name || ' @ ' || d.name)
+            FROM device_interfaces di JOIN devices d ON di.device_id = d.id
+        )
         SELECT
             cl.id, cl.link_type, cl.cable_label, cl.length_m, cl.tested,
             cl.created_at, cl.updated_at,
             cl.a_endpoint_type, cl.a_endpoint_id,
             cl.b_endpoint_type, cl.b_endpoint_id,
-            CASE cl.a_endpoint_type
-                WHEN 'switch_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM switch_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = cl.a_endpoint_id)
-                WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = cl.a_endpoint_id)
-                WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = cl.a_endpoint_id)
-            END AS a_endpoint_label,
-            CASE cl.b_endpoint_type
-                WHEN 'switch_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM switch_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = cl.b_endpoint_id)
-                WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = cl.b_endpoint_id)
-                WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = cl.b_endpoint_id)
-            END AS b_endpoint_label
+            a_lbl.label AS a_endpoint_label,
+            b_lbl.label AS b_endpoint_label
         FROM cable_links cl
+        LEFT JOIN endpoint_labels a_lbl ON cl.a_endpoint_id = a_lbl.id AND cl.a_endpoint_type = a_lbl.etype
+        LEFT JOIN endpoint_labels b_lbl ON cl.b_endpoint_id = b_lbl.id AND cl.b_endpoint_type = b_lbl.etype
     ",
     )
     .execute(pool)

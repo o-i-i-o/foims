@@ -220,6 +220,10 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 }
 
 async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query("DROP FUNCTION IF EXISTS find_cable_path(VARCHAR, UUID, VARCHAR, UUID)")
+        .execute(pool)
+        .await?;
+
     let sql = r"CREATE OR REPLACE FUNCTION find_cable_path(
         p_from_type VARCHAR, p_from_id UUID,
         p_to_type   VARCHAR, p_to_id   UUID
@@ -229,33 +233,46 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         node_id     UUID,
         node_label  TEXT,
         cable_id    UUID,
-        cable_label VARCHAR
+        cable_label VARCHAR,
+        hop_type    VARCHAR
     ) AS $$
-    WITH RECURSIVE path_cte AS (
+    WITH RECURSIVE
+    all_edges AS (
+        SELECT a_endpoint_id AS from_node, a_endpoint_type AS from_type,
+               b_endpoint_id AS to_node,   b_endpoint_type AS to_type,
+               id AS cable_id, cable_label, 'cable'::VARCHAR AS hop_type
+        FROM cable_links
+        UNION ALL
+        SELECT b_endpoint_id, b_endpoint_type, a_endpoint_id, a_endpoint_type, id, cable_label, 'cable'::VARCHAR
+        FROM cable_links
+        UNION ALL
+        SELECT sp1.id, 'switch_port', sp2.id, 'switch_port', NULL::UUID, NULL::VARCHAR, 'internal'::VARCHAR
+        FROM switch_ports sp1
+        JOIN switch_ports sp2 ON sp1.device_id = sp2.device_id AND sp1.id <> sp2.id
+    ),
+    path_cte AS (
         SELECT
             0 AS hop_idx,
             p_from_type::VARCHAR AS node_type,
             p_from_id   AS node_id,
             NULL::UUID  AS cable_id,
-            NULL::VARCHAR AS cable_label
+            NULL::VARCHAR AS cable_label,
+            'start'::VARCHAR AS hop_type,
+            ARRAY[p_from_id]::UUID[] AS visited
         UNION ALL
         SELECT
             pc.hop_idx + 1,
-            CASE
-                WHEN cl.a_endpoint_id = pc.node_id THEN cl.b_endpoint_type
-                ELSE cl.a_endpoint_type
-            END AS node_type,
-            CASE
-                WHEN cl.a_endpoint_id = pc.node_id THEN cl.b_endpoint_id
-                ELSE cl.a_endpoint_id
-            END AS node_id,
-            cl.id,
-            cl.cable_label
+            e.to_type,
+            e.to_node,
+            e.cable_id,
+            e.cable_label,
+            e.hop_type,
+            pc.visited || ARRAY[e.to_node]
         FROM path_cte pc
-        JOIN cable_links cl ON
-            cl.a_endpoint_id = pc.node_id OR cl.b_endpoint_id = pc.node_id
+        JOIN all_edges e ON e.from_node = pc.node_id AND e.from_type = pc.node_type
         WHERE pc.hop_idx < 20
           AND NOT (pc.node_type = p_to_type AND pc.node_id = p_to_id)
+          AND NOT (e.to_node = ANY(pc.visited))
     )
     SELECT
         p.hop_idx,
@@ -267,7 +284,8 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = p.node_id)
         END AS node_label,
         p.cable_id,
-        p.cable_label
+        p.cable_label,
+        p.hop_type
     FROM path_cte p
     ORDER BY p.hop_idx;
     $$ LANGUAGE sql STABLE;";

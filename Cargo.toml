@@ -32,7 +32,7 @@ futures-util = "0.3.32"
 chrono = { version = "0.4.45", features = ["serde"] }
 
 # UUID
-uuid = { version = "1.23.4", features = ["v4", "serde"] }
+uuid = { version = "1.23.5", features = ["v4", "serde"] }
 
 # Logging
 tracing = "0.1.44"
@@ -53,7 +53,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.11.4"
+version = "0.12.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
@@ -96,7 +96,7 @@ pem = "3.0.6"
 tokio-rustls = "0.26.4"
 rcgen = "0.14.8"
 
-regex = "1.12.4"
+regex = "1.13.0"
 
 bcrypt = "0.19.2"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
@@ -109,7 +109,7 @@ ipnetwork = "0.21.1"
 macaddr = "1.0.1"
 pnet = "0.35"
 
-async-snmp = "0.12.0"
+async-snmp = "0.13.0"
 
 config = { version = "0.15.25", features = ["toml"] }
 toml = "1.1.2"
@@ -123,7 +123,7 @@ lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "5.7.2", features = ["qr", "gen_secret"] }
 
 
-rust-i18n = "4.1.0"
+rust-i18n = "4.2.0"
 time = "0.3.53"
 
 [dev-dependencies]

@@ -467,17 +467,6 @@ pub async fn delete_net_outlet(
         return Err(AppError::NotFound("信息点未找到".to_string()));
     }
 
-    let device_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE net_outlet_id = $1")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
-    if device_count > 0 {
-        return Err(AppError::Validation(format!(
-            "该信息点已被 {device_count} 个设备关联，无法删除"
-        )));
-    }
-
     sqlx::query("DELETE FROM net_outlets WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
