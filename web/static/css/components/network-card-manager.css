@@ -1,10 +1,11 @@
-/* 网卡管理器样式（网卡 → 网口 → IP） */
+/* 网卡管理器样式（网卡 → 网口 → IP）
+   使用专属类名 nc-fields/nc-field/nc-input 避免与全局 form-row/form-group/form-control 冲突 */
 
 .network-card-actions {
     margin-top: var(--space-sm);
 }
 
-/* ===== 层级标签栏（通用） ===== */
+/* ===== 层级标签栏 ===== */
 .card-level-bar,
 .port-level-bar,
 .ip-level-bar {
@@ -26,23 +27,75 @@
     letter-spacing: 0.5px;
     color: #fff;
     line-height: 1.6;
+    white-space: nowrap;
 }
 
-.level-card {
-    background: var(--color-primary);
-}
-
-.level-port {
-    background: var(--color-info);
-}
-
-.level-ip {
-    background: var(--color-success);
-}
+.level-card { background: var(--color-primary); }
+.level-port { background: var(--color-info); }
+.level-ip   { background: var(--color-success); }
 
 .level-actions {
     display: flex;
     gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+/* ===== 字段网格容器 ===== */
+.nc-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-sm);
+    align-items: end;
+    margin: 0;
+}
+
+.nc-fields + .nc-fields {
+    margin-top: var(--space-xs);
+}
+
+/* ===== 字单项 ===== */
+.nc-field {
+    display: block;
+    margin: 0;
+}
+
+.nc-field label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    width: 100%;
+    min-width: 0;
+}
+
+.nc-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--control-padding-y) var(--control-padding-x);
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    font-size: 0.95rem;
+    background-color: var(--control-bg);
+    color: var(--color-text);
+    transition: all var(--transition-fast);
+    height: var(--control-height);
+}
+
+.nc-input:focus {
+    outline: none;
+    border-color: var(--control-border-focus);
+    box-shadow: var(--control-shadow);
+}
+
+select.nc-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-sm) center;
+    padding-right: var(--space-lg);
 }
 
 /* ===== 网卡层级 ===== */
@@ -62,14 +115,6 @@
     box-shadow: 0 2px 8px rgb(102 126 234 / 0.1);
 }
 
-.network-card-item .card-header.form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--space-md);
-    align-items: end;
-    margin: 0;
-}
-
 /* ===== 网口层级 ===== */
 .card-ports-container {
     margin-left: var(--space-md);
@@ -85,14 +130,6 @@
     margin-bottom: var(--space-sm);
     border: 1px solid var(--color-border-light);
     border-left: 3px solid var(--color-info);
-}
-
-.port-item .port-header.form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-sm);
-    align-items: end;
-    margin: 0;
 }
 
 /* ===== IP 层级 ===== */
@@ -112,50 +149,9 @@
     border-left: 3px solid var(--color-success);
 }
 
-.ip-item .form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-sm);
-    align-items: end;
-    margin: 0;
-}
-
-.ip-item .form-row + .form-row {
-    margin-top: var(--space-xs);
-}
-
-/* ===== 表单元素通用样式 ===== */
-.network-card-item .form-group,
-.port-item .form-group,
-.ip-item .form-group {
-    margin: 0;
-}
-
-.network-card-item .form-group label,
-.port-item .form-group label,
-.ip-item .form-group label {
-    display: block;
-    margin-bottom: var(--space-xs);
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
-
-.network-card-item .form-group input,
-.network-card-item .form-group select,
-.port-item .form-group input,
-.port-item .form-group select,
-.ip-item .form-group input,
-.ip-item .form-group select {
-    min-width: 0;
-    width: 100%;
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
-    .network-card-item .card-header.form-row,
-    .port-item .port-header.form-row,
-    .ip-item .form-row {
+    .nc-fields {
         grid-template-columns: 1fr;
     }
 

@@ -224,25 +224,25 @@ export class NetworkCardManager {
           <button type="button" class="btn btn-secondary btn-sm add-port-btn">${t('device.add_network_port') || '添加网口'}</button>
         </div>
       </div>
-      <div class="card-header form-row">
-        <div class="form-group">
+      <div class="nc-fields">
+        <div class="nc-field">
           <label>${t('device.network_card_name') || '网卡名称'}<span class="required">*</span></label>
           <input type="hidden" class="card-id" value="${escapeHtml(cardData.id || '')}" />
-          <input type="text" class="card-name form-control" value="${escapeHtml(cardData.name || DEFAULT_CARD_NAME)}" placeholder="${t('device.network_card_name') || '网卡名称'}" autocomplete="off" />
+          <input type="text" class="card-name nc-input" value="${escapeHtml(cardData.name || DEFAULT_CARD_NAME)}" placeholder="${t('device.network_card_name') || '网卡名称'}" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('device.network_card_type') || '网卡类型'}</label>
-          <select class="card-type form-control">
+          <select class="card-type nc-input">
             ${CARD_TYPES.map(opt => `<option value="${opt.value}" ${cardData.card_type === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('ip.mac_address') || 'MAC地址'}</label>
-          <input type="text" class="card-mac form-control" value="${escapeHtml(cardData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
+          <input type="text" class="card-mac nc-input" value="${escapeHtml(cardData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('common.description') || '描述'}</label>
-          <input type="text" class="card-description form-control" value="${escapeHtml(cardData.description || '')}" autocomplete="off" />
+          <input type="text" class="card-description nc-input" value="${escapeHtml(cardData.description || '')}" autocomplete="off" />
         </div>
       </div>
       <div class="card-ports-container"></div>
@@ -295,29 +295,29 @@ export class NetworkCardManager {
           <button type="button" class="btn btn-secondary btn-sm add-ip-btn">${t('ip.add_ip') || '添加IP'}</button>
         </div>
       </div>
-      <div class="port-header form-row">
-        <div class="form-group">
+      <div class="nc-fields">
+        <div class="nc-field">
           <label>${t('device.network_port_name') || '网口名称'}<span class="required">*</span></label>
           <input type="hidden" class="port-id" value="${escapeHtml(portData.id || '')}" />
-          <input type="text" class="port-name form-control" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t('device.network_port_name') || '网口名称'}" autocomplete="off" />
+          <input type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t('device.network_port_name') || '网口名称'}" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('device.network_port_type') || '网口类型'}</label>
-          <select class="port-type form-control">
+          <select class="port-type nc-input">
             ${PORT_TYPES.map(opt => `<option value="${opt.value}" ${portData.interface_type === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('device.vlan_id') || 'VLAN ID'}</label>
-          <input type="number" class="port-vlan form-control" value="${portData.vlan_id ?? ''}" min="1" max="4094" autocomplete="off" />
+          <input type="number" class="port-vlan nc-input" value="${portData.vlan_id ?? ''}" min="1" max="4094" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('ip.mac_address') || 'MAC地址'}</label>
-          <input type="text" class="port-mac form-control" value="${escapeHtml(portData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
+          <input type="text" class="port-mac nc-input" value="${escapeHtml(portData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('common.description') || '描述'}</label>
-          <input type="text" class="port-description form-control" value="${escapeHtml(portData.description || '')}" autocomplete="off" />
+          <input type="text" class="port-description nc-input" value="${escapeHtml(portData.description || '')}" autocomplete="off" />
         </div>
       </div>
       <div class="port-ips-container"></div>
@@ -374,43 +374,43 @@ export class NetworkCardManager {
           <button type="button" class="btn btn-danger btn-sm remove-ip-btn">${t('common.delete') || '删除'}</button>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="nc-fields">
+        <div class="nc-field">
           <label>${t('network.region') || '网络区域'}</label>
-          <select class="ip-region form-control">
+          <select class="ip-region nc-input">
             <option value="">${t('network.select_region') || '选择网络区域'}</option>
             ${regionOptions}
           </select>
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('network.name') || '网络'}<span class="required">*</span></label>
-          <select class="ip-network form-control" required>
+          <select class="ip-network nc-input" required>
             <option value="">${t('network.select_network') || '选择网络'}</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('ip.ip_address') || 'IP地址'}<span class="required">*</span></label>
-          <input type="text" class="ip-address form-control" value="${escapeHtml(ipData?.ip_address || '')}" placeholder="192.168.1.100" autocomplete="off" />
+          <input type="text" class="ip-address nc-input" value="${escapeHtml(ipData?.ip_address || '')}" placeholder="192.168.1.100" autocomplete="off" />
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="nc-fields">
+        <div class="nc-field">
           <label>${t('ip.mac_address') || 'MAC地址'}</label>
-          <input type="text" class="ip-mac form-control" value="${escapeHtml(ipData?.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
+          <input type="text" class="ip-mac nc-input" value="${escapeHtml(ipData?.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('ip.hostname') || '主机名'}</label>
-          <input type="text" class="ip-hostname form-control" value="${escapeHtml(ipData?.hostname || '')}" autocomplete="off" />
+          <input type="text" class="ip-hostname nc-input" value="${escapeHtml(ipData?.hostname || '')}" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('device.upstream_device') || '上级设备'}</label>
-          <select class="ip-switch form-control">
+          <select class="ip-switch nc-input">
             <option value="">${t('device.select_upstream_device') || '选择设备'}</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="nc-field">
           <label>${t('device.upstream_port') || '上级端口'}</label>
-          <select class="ip-port form-control">
+          <select class="ip-port nc-input">
             <option value="">${t('device.select_upstream_port') || '选择端口'}</option>
           </select>
         </div>

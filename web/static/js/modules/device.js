@@ -29,7 +29,7 @@ import {
   loadWorkstationsForSelect,
   loadPositionsForSelect,
 } from "../utils/resources.js";
-import { getNetworkCardManager } from "../utils/networkCardManager.js";
+import { loadModule } from "../utils/resourceLoader.js";
 import {
   toggleSnmpConfig,
   testSnmpConnection,
@@ -325,6 +325,7 @@ export async function submitDeviceForm() {
   const saveAsTemplate = document.getElementById('device-save-as-template')?.checked;
   const templateName = getElementValue('device-template-name');
 
+  const { getNetworkCardManager } = await loadModule('networkCardManager');
   const cardManager = getNetworkCardManager();
   const { cards, errors: cardErrors } = cardManager.collectData();
   if (cardErrors.length > 0) {
@@ -386,6 +387,7 @@ export async function openDeviceModal(device = null) {
 
   ensureDeviceListeners();
 
+  const { getNetworkCardManager } = await loadModule('networkCardManager');
   const cardManager = getNetworkCardManager();
 
   if (device) {
