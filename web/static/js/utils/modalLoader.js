@@ -1,4 +1,5 @@
 import { updatePageTranslations } from './i18n.js';
+import { MODULE_VERSION } from './resourceLoader.js';
 
 const loadedModals = new Set();
 const loadingModals = new Map();
@@ -30,12 +31,14 @@ const MODAL_REGISTRY = {
 };
 
 async function fetchModalHtml(modalId) {
-    if (htmlCache.has(modalId)) {
-        return htmlCache.get(modalId);
+    const cacheKey = `${modalId}_${MODULE_VERSION}`;
+
+    if (htmlCache.has(cacheKey)) {
+        return htmlCache.get(cacheKey);
     }
 
-    if (loadingModals.has(modalId)) {
-        return loadingModals.get(modalId);
+    if (loadingModals.has(cacheKey)) {
+        return loadingModals.get(cacheKey);
     }
 
     const url = MODAL_REGISTRY[modalId];
@@ -45,7 +48,8 @@ async function fetchModalHtml(modalId) {
 
     const promise = (async () => {
         try {
-            const response = await fetch(url);
+            const urlWithVersion = url.includes('?') ? `${url}&v=${MODULE_VERSION}` : `${url}?v=${MODULE_VERSION}`;
+            const response = await fetch(urlWithVersion);
             if (!response.ok) {
                 throw new Error(`Failed to load modal template: ${response.status}`);
             }
@@ -55,17 +59,17 @@ async function fetchModalHtml(modalId) {
             const match = html.match(/<template[^>]*>([\s\S]*?)<\/template>/);
             const innerHtml = match ? match[1].trim() : html.trim();
 
-            htmlCache.set(modalId, innerHtml);
+            htmlCache.set(cacheKey, innerHtml);
             return innerHtml;
         } catch (error) {
             console.error(`加载模态框模板失败 [${modalId}]:`, error);
             return null;
         } finally {
-            loadingModals.delete(modalId);
+            loadingModals.delete(cacheKey);
         }
     })();
 
-    loadingModals.set(modalId, promise);
+    loadingModals.set(cacheKey, promise);
     return promise;
 }
 
@@ -149,6 +153,9 @@ export function closeModal(id) {
     });
 
     document.body.style.overflow = '';
+
+    modal.remove();
+    loadedModals.delete(id);
 }
 
 export function initModalTemplates() {

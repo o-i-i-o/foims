@@ -1,8 +1,44 @@
 /* 网卡管理器样式（网卡 → 网口 → IP）
-   使用专属类名 nc-fields/nc-field/nc-input 避免与全局 form-row/form-group/form-control 冲突 */
+   结构：network-card-item > [card-level-bar, nc-fields, port-item]
+        port-item > [port-level-bar, nc-fields, port-ips-container > ip-item]
+        ip-item > [ip-level-bar, nc-fields, nc-fields] */
 
-.network-card-actions {
+/* ===== 层级容器 ===== */
+.network-card-item {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    box-sizing: border-box;
+}
+
+.port-item {
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-info);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
     margin-top: var(--space-sm);
+    box-sizing: border-box;
+}
+
+.ip-item {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-success);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    margin-top: var(--space-sm);
+    box-sizing: border-box;
+}
+
+/* IP 容器：网口内部承装 IP 的区域 */
+.port-ips-container {
+    margin-top: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 2px solid var(--color-border-light);
 }
 
 /* ===== 层级标签栏 ===== */
@@ -18,8 +54,7 @@
 }
 
 .level-badge {
-    display: inline-flex;
-    align-items: center;
+    display: inline-block;
     padding: 2px var(--space-sm);
     border-radius: var(--radius-sm);
     font-size: var(--font-size-xs);
@@ -43,32 +78,35 @@
 /* ===== 字段网格容器 ===== */
 .nc-fields {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--space-sm);
-    align-items: end;
-    margin: 0;
+    margin-bottom: var(--space-sm);
 }
 
-.nc-fields + .nc-fields {
-    margin-top: var(--space-xs);
+.nc-fields:last-child {
+    margin-bottom: 0;
 }
 
-/* ===== 字单项 ===== */
+/* ===== 字段单项 ===== */
 .nc-field {
     display: block;
-    margin: 0;
+    min-width: 0;
 }
 
 .nc-field label {
     display: block;
     margin-bottom: var(--space-xs);
+    font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    width: 100%;
-    min-width: 0;
 }
 
+.nc-field .required {
+    color: var(--color-danger, #dc3545);
+    margin-left: 2px;
+}
+
+/* ===== 输入控件 ===== */
 .nc-input {
     width: 100%;
     min-width: 0;
@@ -76,10 +114,11 @@
     padding: var(--control-padding-y) var(--control-padding-x);
     border: 1px solid var(--control-border);
     border-radius: var(--control-radius);
-    font-size: 0.95rem;
+    font-size: var(--font-size-sm);
+    font-family: inherit;
     background-color: var(--control-bg);
     color: var(--color-text);
-    transition: all var(--transition-fast);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
     height: var(--control-height);
 }
 
@@ -87,6 +126,10 @@
     outline: none;
     border-color: var(--control-border-focus);
     box-shadow: var(--control-shadow);
+}
+
+.nc-input::placeholder {
+    color: var(--color-text-muted);
 }
 
 select.nc-input {
@@ -98,55 +141,9 @@ select.nc-input {
     padding-right: var(--space-lg);
 }
 
-/* ===== 网卡层级 ===== */
-.network-card-item {
-    background: var(--color-bg);
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    margin-bottom: var(--space-md);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-primary);
-    transition: all var(--transition-fast);
-    box-sizing: border-box;
-}
-
-.network-card-item:hover {
-    border-color: var(--color-primary);
-    box-shadow: 0 2px 8px rgb(102 126 234 / 0.1);
-}
-
-/* ===== 网口层级 ===== */
-.card-ports-container {
-    margin-left: var(--space-md);
+/* ===== 操作按钮区域 ===== */
+.network-card-actions {
     margin-top: var(--space-sm);
-    padding-left: var(--space-md);
-    border-left: 2px solid var(--color-border-light);
-}
-
-.port-item {
-    background: var(--color-bg-white);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    margin-bottom: var(--space-sm);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-info);
-}
-
-/* ===== IP 层级 ===== */
-.port-ips-container {
-    margin-left: var(--space-md);
-    margin-top: var(--space-xs);
-    padding-left: var(--space-md);
-    border-left: 2px solid var(--color-border-light);
-}
-
-.ip-item {
-    background: var(--color-bg);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    margin-bottom: var(--space-sm);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-success);
 }
 
 /* ===== 响应式 ===== */
@@ -155,10 +152,8 @@ select.nc-input {
         grid-template-columns: 1fr;
     }
 
-    .card-ports-container,
     .port-ips-container {
-        margin-left: 0;
-        padding-left: var(--space-sm);
+        padding-left: var(--space-xs);
     }
 
     .card-level-bar,

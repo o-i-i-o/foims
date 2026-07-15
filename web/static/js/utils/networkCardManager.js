@@ -245,7 +245,6 @@ export class NetworkCardManager {
           <input type="text" class="card-description nc-input" value="${escapeHtml(cardData.description || '')}" autocomplete="off" />
         </div>
       </div>
-      <div class="card-ports-container"></div>
     `;
     return div;
   }
@@ -253,23 +252,21 @@ export class NetworkCardManager {
   async bindCardEvents(card, cardData = {}) {
     card.querySelector('.remove-card-btn')?.addEventListener('click', () => this.removeCard(card));
     card.querySelector('.add-port-btn')?.addEventListener('click', async () => {
-      const portsContainer = card.querySelector('.card-ports-container');
       const port = this.createPortElement();
-      portsContainer.appendChild(port);
+      card.appendChild(port);
       await this.bindPortEvents(port);
     });
 
-    const portsContainer = card.querySelector('.card-ports-container');
     const ports = cardData.ports || [];
     if (ports.length > 0) {
       for (const portData of ports) {
         const port = this.createPortElement(portData);
-        portsContainer.appendChild(port);
+        card.appendChild(port);
         await this.bindPortEvents(port, portData);
       }
     } else {
       const port = this.createPortElement();
-      portsContainer.appendChild(port);
+      card.appendChild(port);
       await this.bindPortEvents(port);
     }
   }
