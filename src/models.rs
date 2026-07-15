@@ -424,8 +424,35 @@ pub struct RoomWithNetworks {
     pub description: Option<String>,
     pub networks: Vec<NetworkInfo>,
     pub workstation_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workstations: Option<Vec<WorkstationBrief>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cabinets: Option<Vec<CabinetBrief>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkstationBrief {
+    pub id: Uuid,
+    pub name: String,
+    pub manager: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CabinetBrief {
+    pub id: Uuid,
+    pub name: String,
+    pub capacity: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PositionBrief {
+    pub id: Uuid,
+    pub name: String,
+    pub start_u: i32,
+    pub end_u: i32,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -479,6 +506,8 @@ pub struct CabinetWithNetworks {
     pub room_name: Option<String>,
     pub capacity: i32,
     pub position_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub positions: Option<Vec<PositionBrief>>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -612,6 +641,50 @@ pub struct WorkstationUpdate {
     pub description: Option<String>,
 }
 
+// ==================== 批量同步模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct WorkstationSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 50, message = "工位名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    #[validate(length(max = 50, message = "管理人长度不能超过50个字符"))]
+    pub manager: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 50, message = "机柜名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
+    pub capacity: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct PositionSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
+    pub start_u: i32,
+    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
+    pub end_u: i32,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct RoomChildrenSync {
+    pub workstations: Option<Vec<WorkstationSyncItem>>,
+    pub cabinets: Option<Vec<CabinetSyncItem>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetPositionsSync {
+    pub positions: Vec<PositionSyncItem>,
+}
+
 // ==================== IP 管理模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -670,6 +743,55 @@ pub struct IpManagerCreate {
     pub mac_address: Option<String>,
     #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
     pub hostname: Option<String>,
+}
+
+// ==================== 设备网卡配置同步模型（网卡 → 网口 → IP） ====================
+
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+pub struct IpSyncItem {
+    pub id: Option<Uuid>,
+    pub network_id: Option<Uuid>,
+    #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
+    pub ip_address: String,
+    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+pub struct PortSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 50, message = "网口名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub interface_type: Option<String>,
+    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
+    pub mac_address: Option<String>,
+    pub vlan_id: Option<i32>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub ips: Vec<IpSyncItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+pub struct NetworkCardSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub card_type: Option<String>,
+    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub ports: Vec<PortSyncItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+pub struct DeviceNetworkConfigSync {
+    #[serde(default)]
+    pub cards: Vec<NetworkCardSyncItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -767,17 +889,56 @@ pub struct SwitchPortUpdate {
     pub description: Option<String>,
 }
 
-// ==================== 设备三层接口模型 ====================
+// ==================== 设备网卡模型 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct NetworkCard {
+    pub id: Uuid,
+    pub device_id: Uuid,
+    pub name: String,
+    pub card_type: String,
+    pub mac_address: Option<String>,
+    pub description: Option<String>,
+    pub sort_order: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkCardCreate {
+    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    pub name: String,
+    pub card_type: Option<String>,
+    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
+    pub mac_address: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct NetworkCardUpdate {
+    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    pub name: Option<String>,
+    pub card_type: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub mac_address: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub description: Option<Option<String>>,
+}
+
+// ==================== 设备三层接口/网口模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct DeviceInterface {
     pub id: Uuid,
     pub device_id: Uuid,
+    pub network_card_id: Option<Uuid>,
     pub name: String,
     pub interface_type: String,
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
+    pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -787,11 +948,13 @@ pub struct DeviceInterfaceWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
     pub device_name: String,
+    pub network_card_id: Option<Uuid>,
     pub name: String,
     pub interface_type: String,
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
+    pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1332,7 +1495,7 @@ pub struct DeviceCreate {
     #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
-    pub ips: Option<Vec<IpManagerCreate>>,
+    pub cards: Option<Vec<NetworkCardSyncItem>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub save_as_template: Option<bool>,
@@ -1373,7 +1536,7 @@ pub struct DeviceUpdate {
     #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
-    pub ips: Option<Vec<IpManagerCreate>>,
+    pub cards: Option<Vec<NetworkCardSyncItem>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub save_as_template: Option<bool>,

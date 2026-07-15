@@ -29,7 +29,7 @@ import {
   loadWorkstationsForSelect,
   loadPositionsForSelect,
 } from "../utils/resources.js";
-import { getManager } from "../utils/ipconfig.js";
+import { getNetworkCardManager } from "../utils/networkCardManager.js";
 import {
   toggleSnmpConfig,
   testSnmpConnection,
@@ -325,14 +325,12 @@ export async function submitDeviceForm() {
   const saveAsTemplate = document.getElementById('device-save-as-template')?.checked;
   const templateName = getElementValue('device-template-name');
 
-  const manager = getManager('device');
-  const ips = manager ? manager.getIps() : [];
-
-  let networkRegionId = null;
-  const processedIps = ips.map(ip => {
-    if (ip.network_region_id) networkRegionId = ip.network_region_id;
-    return ip;
-  });
+  const cardManager = getNetworkCardManager();
+  const { cards, errors: cardErrors } = cardManager.collectData();
+  if (cardErrors.length > 0) {
+    showToast(cardErrors.join('\n'), "warning");
+    return;
+  }
 
   const snmpVersion = getElementValue("device-snmp-version") || 'v2c';
   const snmpPort = parseInt(getElementValue("device-snmp-port")) || 161;
@@ -360,8 +358,7 @@ export async function submitDeviceForm() {
     snmp_auth_password: maskToNull(getElementValue("device-snmp-auth-password")),
     snmp_priv_protocol: getElementValue("device-snmp-priv-protocol") || null,
     snmp_priv_password: maskToNull(getElementValue("device-snmp-priv-password")),
-    ips: processedIps,
-    network_region_id: networkRegionId
+    cards,
   };
 
   const success = await handleFormSubmit({
@@ -389,7 +386,7 @@ export async function openDeviceModal(device = null) {
 
   ensureDeviceListeners();
 
-  const manager = getManager('device');
+  const cardManager = getNetworkCardManager();
 
   if (device) {
     title.textContent = t('device.edit');
@@ -414,9 +411,9 @@ export async function openDeviceModal(device = null) {
     if (device.workstation_id) elementCache.setValue('device-workstation-id', device.workstation_id);
     if (device.position_id) elementCache.setValue('device-position-id', device.position_id);
 
-    if (manager) {
-      manager.setExcludeSwitchId(device.id || null);
-      await manager.loadIps(device.ips || []);
+    if (cardManager) {
+      cardManager.setExcludeSwitchId(device.id || null);
+      await cardManager.loadExisting(device.cards || []);
     }
   } else {
     title.textContent = t('device.add');
@@ -428,10 +425,9 @@ export async function openDeviceModal(device = null) {
     const templateNameGroup = document.getElementById('device-template-name-group');
     if (templateNameGroup) templateNameGroup.style.display = 'none';
 
-    if (manager) {
-      manager.setExcludeSwitchId(null);
-      manager.clear();
-      await manager.addIpRow();
+    if (cardManager) {
+      cardManager.setExcludeSwitchId(null);
+      await cardManager.init();
     }
   }
 

@@ -1,9 +1,9 @@
 import { loadModule } from "../../utils/moduleLoader.js";
-import { loadRoomsForSelect, loadDataCenterRoomsForSelect, loadCabinets } from "../../utils/resources.js";
+import { loadRoomsForSelect, loadDataCenterRoomsForSelect } from "../../utils/resources.js";
 import { elementCache } from "../../utils/helpers.js";
-import { editWorkstation, deleteWorkstation } from "../workstation.js";
-import { editCabinet, deleteCabinet } from "../cabinet.js";
-import { editCabinetPosition, deleteCabinetPosition } from "../position.js";
+import { editWorkstation } from "../workstation.js";
+import { editCabinet } from "../cabinet.js";
+import { editCabinetPosition } from "../position.js";
 import { showToast } from "../../utils/ui.js";
 import { apiGet } from "../../utils/apiClient.js";
 import { t } from "../../utils/i18n.js";
@@ -14,23 +14,11 @@ let topologyVisualization = null;
 let topologyModal = null;
 let visualizationInitialized = false;
 
-export async function loadCabinetsForSelect(autoSelectFirst = false) {
-  try {
-    const cabinets = await loadCabinets();
-    return cabinets || [];
-  } catch (error) {
-    console.error("加载机柜选项失败:", error);
-    return [];
-  }
-}
-
 function createVisualizationCallbacks() {
   return {
     onEditWorkstation: editWorkstation,
     onEditCabinet: editCabinet,
     onEditCabinetPosition: editCabinetPosition,
-    onDeleteWorkstation: deleteWorkstation,
-    onDeleteCabinetPosition: deleteCabinetPosition
   };
 }
 

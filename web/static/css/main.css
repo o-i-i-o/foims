@@ -10,6 +10,7 @@
 @import url('./components/toggles.css');
 @import url('./components/network-config.css');
 @import url('./components/network-usage.css');
+@import url('./components/network-card-manager.css');
 @import url('./layouts/sidebar.css');
 @import url('./layouts/main-content.css');
 @import url('./pages/organization.css');

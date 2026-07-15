@@ -1,13 +1,15 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, Cabinet, CabinetCreate, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
+    ApiResponse, Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks,
+    NetworkInfo, PositionBrief, PositionSyncItem,
 };
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
+use sqlx::Row;
 use std::collections::HashMap;
 use tracing::warn;
 use uuid::Uuid;
@@ -135,6 +137,7 @@ pub async fn get_cabinets(
             room_name,
             capacity: cabinet.capacity,
             position_count,
+            positions: None,
             description: cabinet.description,
             created_at: cabinet.created_at,
             updated_at: cabinet.updated_at,
@@ -293,6 +296,23 @@ pub async fn get_cabinet(
         .fetch_optional(&state.pool()?.get_conn())
         .await?;
 
+    let pos_rows = sqlx::query(
+        "SELECT id, name, start_u, end_u, description FROM positions WHERE cabinet_id = $1 ORDER BY start_u, name",
+    )
+    .bind(cabinet.id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    let positions: Vec<PositionBrief> = pos_rows
+        .iter()
+        .map(|r| PositionBrief {
+            id: r.get("id"),
+            name: r.get("name"),
+            start_u: r.get("start_u"),
+            end_u: r.get("end_u"),
+            description: r.get("description"),
+        })
+        .collect();
+
     let cabinet_with_networks = CabinetWithNetworks {
         id: cabinet.id,
         name: cabinet.name,
@@ -300,6 +320,7 @@ pub async fn get_cabinet(
         room_name,
         capacity: cabinet.capacity,
         position_count,
+        positions: Some(positions),
         description: cabinet.description,
         created_at: cabinet.created_at,
         updated_at: cabinet.updated_at,
@@ -471,4 +492,122 @@ pub async fn get_cabinet_networks(
             "机柜网段获取成功",
         )),
     )
+}
+
+pub async fn sync_cabinet_positions(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    req: web::Json<CabinetPositionsSync>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+    (*req).validate()?;
+
+    let cabinet_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+    if !cabinet_exists {
+        return Err(AppError::NotFound("机柜未找到".to_string()));
+    }
+
+    let mut tx = state.pool()?.get_conn().begin().await?;
+    let now = Utc::now();
+
+    let items: &Vec<PositionSyncItem> = &req.positions;
+    let existing_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM positions WHERE cabinet_id = $1")
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+
+    let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+    for existing_id in &existing_ids {
+        if !request_ids.contains(existing_id) {
+            let device_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE position_id = $1")
+                    .bind(existing_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if device_count > 0 {
+                return Err(AppError::Validation(
+                    "机位已被设备关联，无法删除".to_string(),
+                ));
+            }
+            sqlx::query("DELETE FROM positions WHERE id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    for item in items {
+        let existing: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+        )
+        .bind(&item.name)
+        .bind(id)
+        .bind(item.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if existing.is_some() {
+            return Err(AppError::Conflict("机位名称已存在".to_string()));
+        }
+
+        if let Some(item_id) = item.id {
+            sqlx::query(
+                "UPDATE positions SET name = $1, start_u = $2, end_u = $3, description = $4, cabinet_id = $5, updated_at = $6 WHERE id = $7",
+            )
+            .bind(&item.name)
+            .bind(item.start_u)
+            .bind(item.end_u)
+            .bind(&item.description)
+            .bind(id)
+            .bind(now)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            let new_id = Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', $7, $8)",
+            )
+            .bind(new_id)
+            .bind(&item.name)
+            .bind(id)
+            .bind(item.start_u)
+            .bind(item.end_u)
+            .bind(&item.description)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
+    tx.commit().await?;
+
+    let details = serde_json::json!({
+        "cabinet_id": id.to_string(),
+        "position_count": items.len()
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "sync_positions",
+            resource_type: "cabinet",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机位同步成功")))
 }

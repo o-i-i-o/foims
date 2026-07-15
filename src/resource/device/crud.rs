@@ -1,10 +1,7 @@
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, Device, DeviceCreate, DeviceUpdate, DeviceWithDetails, IpManager,
-};
-use crate::resource::ip::detect_ip_version;
+use crate::models::{ApiResponse, Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -311,94 +308,13 @@ pub async fn create_device(
     .execute(&mut *tx)
     .await?;
 
-    // 非交换机设备自动创建一个 physical 接口，用于承载 IP 和 cable_links 端点
-    let default_interface_id: Option<Uuid> = if final_device_type != "switch" {
-        let iface_id = Uuid::new_v4();
-        sqlx::query(
-            r"INSERT INTO device_interfaces (id, device_id, name, interface_type, created_at, updated_at)
-             VALUES ($1, $2, 'eth0', 'physical', $3, $4)
-             ON CONFLICT (device_id, name) DO NOTHING",
-        )
-        .bind(iface_id)
+    // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
+    let cards = req.cards.clone().unwrap_or_default();
+    super::network_card::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
+    let ip_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE device_id = $1")
         .bind(id)
-        .bind(now)
-        .bind(now)
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await?;
-        Some(iface_id)
-    } else {
-        None
-    };
-
-    let mut ip_count = 0;
-    if let Some(ips) = &req.ips {
-        let room_id = req.room_id;
-
-        for ip in ips {
-            ip.validate()?;
-
-            let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
-            )
-            .bind(&ip.ip_address)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            if existing_ip.is_some() {
-                return Err(AppError::Conflict("IP地址已存在".to_string()));
-            }
-
-            let network_id: Option<Uuid> = sqlx::query_scalar(
-                r"SELECT nc.id
-                    FROM room_networks rn
-                    JOIN network_cidrs nc ON rn.network_id = nc.id
-                    WHERE rn.room_id = $1
-                    AND (
-                        (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
-                        OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
-                    )
-                    LIMIT 1",
-            )
-            .bind(room_id)
-            .bind(&ip.ip_address)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            let ip_version = detect_ip_version(&ip.ip_address)?;
-
-            // 解析 device_interface_id：优先使用请求中的；非交换机设备若未提供则使用默认接口
-            let interface_id = match (ip.device_interface_id, default_interface_id) {
-                (Some(user_provided), _) => user_provided,
-                (None, Some(default_id)) => default_id,
-                (None, None) => {
-                    return Err(AppError::Validation(
-                        "交换机设备的 IP 必须指定 device_interface_id（请先创建接口）".to_string(),
-                    ));
-                }
-            };
-
-            sqlx::query(
-                "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
-            )
-            .bind(Uuid::new_v4())
-            .bind(interface_id)
-            .bind(id)
-            .bind(network_id)
-            .bind(&ip.ip_address)
-            .bind(ip_version)
-            .bind(&ip.mac_address)
-            .bind(&ip.hostname)
-            .bind("active")
-            .bind(now)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-
-            ip_count += 1;
-        }
-    }
 
     if req.save_as_template == Some(true) {
         let template_name = req.template_name.as_deref().unwrap_or(&req.name);
@@ -515,25 +431,14 @@ pub async fn get_device(
     .await?
     .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
 
-    // Fetch associated IPs
-    let device_ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT
-            m.id, m.device_interface_id, m.device_id, m.network_id,
-            host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
-            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
-        FROM ips m
-        WHERE m.device_id = $1
-        ORDER BY m.ip_address",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    // Fetch associated network cards (with nested ports and IPs)
+    let cards =
+        super::network_card::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&device)
         .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
-    result["ips"] = serde_json::to_value(device_ips)
-        .map_err(|e| AppError::Internal(format!("序列化IP数据失败: {e}")))?;
+    result["cards"] = serde_json::to_value(cards)
+        .map_err(|e| AppError::Internal(format!("序列化网卡数据失败: {e}")))?;
 
     let decrypted_community =
         crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await?;
@@ -698,74 +603,10 @@ pub async fn update_device(
     .execute(&mut *tx)
     .await?;
 
-    // Handle IP replacement if ips are provided
-    if let Some(ips) = &req.ips {
+    // Handle network config replacement if cards are provided
+    if let Some(cards) = &req.cards {
         let room_id = req.room_id.unwrap_or(current_room_id);
-
-        // Delete old IPs associated with this device
-        sqlx::query("DELETE FROM ips WHERE device_id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-
-        for ip in ips {
-            ip.validate()?;
-
-            let network_id: Option<Uuid> = sqlx::query_scalar(
-                r"SELECT nc.id
-                    FROM room_networks rn
-                    JOIN network_cidrs nc ON rn.network_id = nc.id
-                    WHERE rn.room_id = $1
-                    AND (
-                        (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
-                        OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
-                    )
-                    LIMIT 1",
-            )
-            .bind(room_id)
-            .bind(&ip.ip_address)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            let ip_version = detect_ip_version(&ip.ip_address)?;
-
-            // 解析 device_interface_id：非交换机设备的 IP 必须指定接口
-            let interface_id = match ip.device_interface_id {
-                Some(iid) => iid,
-                None => {
-                    return Err(AppError::Validation(
-                        "更新 IP 必须指定 device_interface_id".to_string(),
-                    ));
-                }
-            };
-
-            let insert_result = sqlx::query(
-                "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)
-                 ON CONFLICT (ip_address) DO NOTHING",
-            )
-            .bind(Uuid::new_v4())
-            .bind(interface_id)
-            .bind(id)
-            .bind(network_id)
-            .bind(&ip.ip_address)
-            .bind(ip_version)
-            .bind(&ip.mac_address)
-            .bind(&ip.hostname)
-            .bind("active")
-            .bind(now)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-
-            if insert_result.rows_affected() == 0 {
-                return Err(AppError::Conflict(format!(
-                    "IP地址 {} 已被其他设备占用",
-                    ip.ip_address
-                )));
-            }
-        }
+        super::network_card::apply_network_config(&mut tx, id, room_id, cards, now).await?;
     }
 
     if req.save_as_template == Some(true) {
@@ -851,25 +692,14 @@ pub async fn update_device(
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
-    // Fetch updated IPs
-    let device_ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT
-            m.id, m.device_interface_id, m.device_id, m.network_id,
-            host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
-            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
-        FROM ips m
-        WHERE m.device_id = $1
-        ORDER BY m.ip_address",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    // Fetch updated network cards (with nested ports and IPs)
+    let cards =
+        super::network_card::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&updated_device)
         .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
-    result["ips"] = serde_json::to_value(device_ips)
-        .map_err(|e| AppError::Internal(format!("序列化IP数据失败: {e}")))?;
+    result["cards"] = serde_json::to_value(cards)
+        .map_err(|e| AppError::Internal(format!("序列化网卡数据失败: {e}")))?;
 
     let details = serde_json::json!({
         "name": updated_device.name,

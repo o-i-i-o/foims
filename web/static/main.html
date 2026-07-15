@@ -196,9 +196,7 @@
           <button class="tab-btn active" data-tab="network-regions" role="tab" aria-selected="true" aria-controls="network-regions-tab" data-i18n="resources.network_regions">Network Regions</button>
           <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Network Segments</button>
           <button class="tab-btn" data-tab="rooms" role="tab" aria-selected="false" aria-controls="rooms-tab" data-i18n="resources.rooms">Rooms</button>
-          <button class="tab-btn" data-tab="workstations" role="tab" aria-selected="false" aria-controls="workstations-tab" data-i18n="resources.workstations">Workstations</button>
           <button class="tab-btn" data-tab="cabinets" role="tab" aria-selected="false" aria-controls="cabinets-tab" data-i18n="resources.cabinets">Cabinets</button>
-          <button class="tab-btn" data-tab="cabinet-positions" role="tab" aria-selected="false" aria-controls="cabinet-positions-tab" data-i18n="resources.cabinet_positions">Cabinet Positions</button>
           <button class="tab-btn" data-tab="net-outlets" role="tab" aria-selected="false" aria-controls="net-outlets-tab" data-i18n="resources.net_outlets">Network Outlets</button>
           <button class="tab-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devices-tab" data-i18n="resources.devices">Devices</button>
         </div>
@@ -301,7 +299,8 @@
                   <th data-i18n="common.index" class="index-column">序号</th>
                   <th data-i18n="cabinet.room">Room</th>
                   <th data-i18n="cabinet.name" class="sortable" data-sort="name">Cabinet Name</th>
-                  <th data-i18n="cabinet.networks">Networks</th>
+                  <th data-i18n="cabinet.capacity" class="sortable" data-sort="capacity">Capacity</th>
+                  <th data-i18n="cabinet.positions">Positions</th>
                   <th data-i18n="common.description">Description</th>
                   <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
                   <th class="th-actions">
@@ -312,63 +311,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="cabinet-positions-tab" class="tab-content" role="tabpanel">
-          <div class="table-container">
-            <table id="cabinet-positions-table" class="data-table">
-              <thead>
-                <tr>
-                  <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="cabinet_position.room">Room</th>
-                  <th data-i18n="cabinet_position.cabinet">Cabinet</th>
-                  <th data-i18n="cabinet_position.name" class="sortable" data-sort="name">Position Name</th>
-                  <th data-i18n="common.device_type">Device Type</th>
-                  <th data-i18n="ip.ip_address">IP Address</th>
-                  <th data-i18n="cabinet_position.u_position" class="sortable" data-sort="start_u">U Position</th>
-                  <th data-i18n="common.description">Description</th>
-                  <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
-                  <th class="th-actions">
-                    <span data-i18n="common.actions">Actions</span>
-                    <button id="add-cabinet-position-btn" class="btn btn-primary btn-sm" data-i18n="cabinet_position.add_position">Add Position</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="empty-row">
-                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="workstations-tab" class="tab-content" role="tabpanel">
-          <div class="table-container">
-            <table id="workstations-table" class="data-table">
-              <thead>
-                <tr>
-                  <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="workstation.room">Room</th>
-                  <th data-i18n="workstation.name" class="sortable" data-sort="name">Workstation Name</th>
-                  <th data-i18n="ip.ip_address">IP Address</th>
-                  <th data-i18n="workstation.manager" class="sortable" data-sort="manager">Manager</th>
-                  <th data-i18n="common.description">Description</th>
-                  <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
-                  <th class="th-actions">
-                    <span data-i18n="common.actions">Actions</span>
-                    <button id="add-workstation-btn" class="btn btn-primary btn-sm" data-i18n="workstation.add_workstation">Add Workstation</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="empty-row">
-                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -1118,6 +1061,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01200"></script>
+  <script type="module" src="/static/js/app.js?v=01303"></script>
 </body>
 </html>

@@ -169,15 +169,6 @@ export async function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
   }
 }
 
-export async function loadCabinets() {
-  try {
-    const result = await apiGet("/api/resources/cabinets?page_size=1000");
-    return extractItems(result);
-  } catch (error) {
-    return [];
-  }
-}
-
 export async function loadRoomNetworksForCabinet(roomId, containerId = "cabinet-inherited-networks") {
   const inheritedNetworksContainer = document.getElementById(containerId);
   

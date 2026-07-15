@@ -34,11 +34,11 @@ use crate::resource::{
     get_positions_layout, get_room, get_room_cabinets_with_positions, get_room_networks, get_rooms,
     get_switch_port, get_switch_ports, get_topology_connections, get_topology_nodes,
     get_workstation, get_workstations, pull_ip_managers, save_layout, save_topology_nodes,
-    sync_lldp_from_snmp, sync_ports_from_snmp, test_snmp_connection, test_snmp_connection_by_id,
-    trigger_auto_discover, update_cabinet, update_cabinet_position, update_cable_link,
-    update_device, update_device_interface, update_net_outlet, update_network,
-    update_network_region, update_org_template, update_organization, update_room,
-    update_switch_port, update_workstation,
+    sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
+    sync_room_children, test_snmp_connection, test_snmp_connection_by_id, trigger_auto_discover,
+    update_cabinet, update_cabinet_position, update_cable_link, update_device,
+    update_device_interface, update_net_outlet, update_network, update_network_region,
+    update_org_template, update_organization, update_room, update_switch_port, update_workstation,
 };
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
@@ -196,7 +196,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::get().to(get_room))
                                 .route("/{id}", web::put().to(update_room))
                                 .route("/{id}", web::delete().to(delete_room))
-                                .route("/{id}/networks", web::get().to(get_room_networks)),
+                                .route("/{id}/networks", web::get().to(get_room_networks))
+                                .route("/{id}/children", web::put().to(sync_room_children)),
                         )
                         // 机柜管理
                         .service(
@@ -206,7 +207,8 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}", web::get().to(get_cabinet))
                                 .route("/{id}", web::put().to(update_cabinet))
                                 .route("/{id}", web::delete().to(delete_cabinet))
-                                .route("/{id}/networks", web::get().to(get_cabinet_networks)),
+                                .route("/{id}/networks", web::get().to(get_cabinet_networks))
+                                .route("/{id}/positions", web::put().to(sync_cabinet_positions)),
                         )
                         // 工位管理
                         .service(
@@ -354,6 +356,10 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}/snmp-ports", web::get().to(get_device_ports_snmp))
                                 .route("/{id}/interfaces", web::get().to(get_device_interfaces))
                                 .route("/{id}/interfaces", web::post().to(create_device_interface))
+                                .route(
+                                    "/{id}/network-config",
+                                    web::put().to(sync_device_network_config),
+                                )
                                 .route("/switch-ports/{port_id}", web::get().to(get_switch_port))
                                 .route("/switch-ports/{port_id}", web::put().to(update_switch_port))
                                 .route(

@@ -1,13 +1,14 @@
 // 导入必要的模块
 import {
   apiGet,
+  apiPost,
+  apiPut,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
   renderTable,
   getElementValue,
-  handleFormSubmit,
   handleDelete,
   handleError,
   appendPaginationToTable,
@@ -18,7 +19,7 @@ import {
   initSortEvents,
 } from "../utils/ui.js";
 
-import { openModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
 import { loadOrgsForSelect } from "../utils/resources.js";
@@ -375,6 +376,200 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 });
 
 // ==========================================
+// 房间子项（工位/机柜）动态管理模块
+// ==========================================
+
+class RoomChildrenManager {
+  constructor() {
+    this.container = null;
+    this.roomType = 'office';
+    this.handlers = new WeakMap();
+    this.addHandler = null;
+    this.typeChangeHandler = null;
+  }
+
+  init() {
+    this.container = document.getElementById('room-children-container');
+    if (!this.container) return false;
+
+    this.container.innerHTML = '';
+    this.bindAddButton();
+    this.bindTypeChange();
+    this.updateLabels();
+    this.addItem();
+    return true;
+  }
+
+  bindAddButton() {
+    const addBtn = document.getElementById('add-room-child-btn');
+    if (!addBtn) return;
+    if (this.addHandler) {
+      addBtn.removeEventListener('click', this.addHandler);
+    }
+    this.addHandler = () => this.addItem();
+    addBtn.addEventListener('click', this.addHandler);
+  }
+
+  bindTypeChange() {
+    const typeSelect = document.getElementById('room-type');
+    if (!typeSelect) return;
+    if (this.typeChangeHandler) {
+      typeSelect.removeEventListener('change', this.typeChangeHandler);
+    }
+    this.typeChangeHandler = (e) => this.onTypeChange(e.target.value);
+    typeSelect.addEventListener('change', this.typeChangeHandler);
+  }
+
+  onTypeChange(newType) {
+    const prevType = this.roomType;
+    this.roomType = newType;
+    this.updateLabels();
+    // 类型切换时清空列表
+    this.container.innerHTML = '';
+    this.addItem();
+  }
+
+  updateLabels() {
+    const label = document.getElementById('room-children-label');
+    const addBtn = document.getElementById('add-room-child-btn');
+    if (this.roomType === 'office') {
+      if (label) label.textContent = t('room.workstations');
+      if (addBtn) addBtn.textContent = t('room.add_workstation');
+    } else {
+      if (label) label.textContent = t('room.cabinets');
+      if (addBtn) addBtn.textContent = t('room.add_cabinet');
+    }
+  }
+
+  createWorkstationRow(data = {}) {
+    const id = data.id || '';
+    const name = data.name || '';
+    const manager = data.manager || '';
+    const div = document.createElement('div');
+    div.className = 'room-child-item';
+    div.dataset.childType = 'workstation';
+    div.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <input type="hidden" class="child-id" value="${escapeHtml(id)}" />
+          <input type="text" class="child-name form-control" value="${escapeHtml(name)}" placeholder="${t('workstation.name')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <input type="text" class="child-manager form-control" value="${escapeHtml(manager)}" placeholder="${t('workstation.manager')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t('common.delete')}</button>
+        </div>
+      </div>
+    `;
+    this.bindItemEvents(div);
+    return div;
+  }
+
+  createCabinetRow(data = {}) {
+    const id = data.id || '';
+    const name = data.name || '';
+    const capacity = data.capacity || 42;
+    const div = document.createElement('div');
+    div.className = 'room-child-item';
+    div.dataset.childType = 'cabinet';
+    div.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <input type="hidden" class="child-id" value="${escapeHtml(id)}" />
+          <input type="text" class="child-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet.name')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <input type="number" class="child-capacity form-control" value="${capacity}" min="1" max="48" placeholder="${t('cabinet.capacity')}" />
+        </div>
+        <div class="form-group">
+          <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t('common.delete')}</button>
+        </div>
+      </div>
+    `;
+    this.bindItemEvents(div);
+    return div;
+  }
+
+  addItem(data = {}) {
+    if (!this.container) return;
+    const item = this.roomType === 'office'
+      ? this.createWorkstationRow(data)
+      : this.createCabinetRow(data);
+    this.container.appendChild(item);
+  }
+
+  bindItemEvents(item) {
+    const removeBtn = item.querySelector('.remove-child-btn');
+    if (removeBtn) {
+      const handler = () => this.removeItem(item);
+      this.handlers.set(removeBtn, handler);
+      removeBtn.addEventListener('click', handler);
+    }
+  }
+
+  removeItem(item) {
+    const items = this.container.querySelectorAll('.room-child-item');
+    if (items.length <= 1) {
+      showToast(t('room.at_least_one_child'), 'warning');
+      return;
+    }
+    item.remove();
+  }
+
+  loadExisting(children) {
+    if (!this.container) {
+      this.container = document.getElementById('room-children-container');
+    }
+    if (!this.container) return;
+    this.container.innerHTML = '';
+    this.bindAddButton();
+    this.bindTypeChange();
+
+    if (this.roomType === 'office' && children?.workstations?.length) {
+      children.workstations.forEach(ws => this.addItem(ws));
+    } else if (this.roomType === 'data_center' && children?.cabinets?.length) {
+      children.cabinets.forEach(cab => this.addItem(cab));
+    } else {
+      this.addItem();
+    }
+    this.updateLabels();
+  }
+
+  collectData() {
+    const items = this.container.querySelectorAll('.room-child-item');
+    if (this.roomType === 'office') {
+      const workstations = [];
+      for (const item of items) {
+        const idInput = item.querySelector('.child-id');
+        const nameInput = item.querySelector('.child-name');
+        const managerInput = item.querySelector('.child-manager');
+        workstations.push({
+          id: idInput?.value || null,
+          name: (nameInput?.value || '').trim(),
+          manager: (managerInput?.value || '').trim() || null,
+        });
+      }
+      return { workstations };
+    }
+    const cabinets = [];
+    for (const item of items) {
+      const idInput = item.querySelector('.child-id');
+      const nameInput = item.querySelector('.child-name');
+      const capacityInput = item.querySelector('.child-capacity');
+      cabinets.push({
+        id: idInput?.value || null,
+        name: (nameInput?.value || '').trim(),
+        capacity: parseInt(capacityInput?.value || '42', 10),
+      });
+    }
+    return { cabinets };
+  }
+}
+
+export const roomChildrenManager = new RoomChildrenManager();
+
+// ==========================================
 // 房间管理功能
 // ==========================================
 
@@ -404,13 +599,16 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
         { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${n.name} (${n.network_region})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
-        { field: 'id', render: (v) => `
+        { field: 'id', render: (v, row) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${t('room.children_list') || '列表'}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
       emptyMessage: t('common.no_data')
     });
+
+    bindRoomButtonsEvents();
 
     if (data.total !== undefined) {
       appendPaginationToTable("#rooms-table", data, loadRoomsData);
@@ -420,6 +618,84 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
     handleError(error, "加载房间数据失败", () => {
       renderTable("#rooms-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
     });
+  }
+}
+
+let roomTableClickHandler = null;
+
+function bindRoomButtonsEvents() {
+  const table = elementCache.get("rooms-table");
+  if (!table) return;
+
+  if (roomTableClickHandler) {
+    table.removeEventListener("click", roomTableClickHandler);
+  }
+
+  roomTableClickHandler = async (e) => {
+    const target = e.target;
+    if (target.classList.contains("btn-room-children-list")) {
+      const roomId = target.dataset.roomId;
+      if (roomId) {
+        await openRoomChildrenListModal(roomId);
+      }
+    }
+  };
+
+  table.addEventListener("click", roomTableClickHandler);
+}
+
+export async function openRoomChildrenListModal(roomId) {
+  try {
+    const result = await apiGet(`/api/resources/rooms/${roomId}`);
+    if (!result.success || !result.data) {
+      showToast(result.message || t('room.load_failed') || "加载房间数据失败", "error");
+      return;
+    }
+    const room = result.data;
+    const roomType = (room.room_type || "").toLowerCase();
+    await openModal("room-children-list-modal");
+
+    const titleEl = document.getElementById('room-children-list-modal-title');
+    const extraTh = document.getElementById('room-children-list-extra-th');
+    const tbody = document.getElementById('room-children-list-tbody');
+
+    if (roomType === 'office') {
+      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.workstations') || '工位列表'}`;
+      if (extraTh) extraTh.textContent = t('workstation.manager') || '负责人';
+      const workstations = room.workstations || [];
+      if (tbody) {
+        if (workstations.length === 0) {
+          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+        } else {
+          tbody.innerHTML = workstations.map((ws, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${escapeHtml(ws.name || '')}</td>
+              <td>${escapeHtml(ws.manager || '-')}</td>
+            </tr>
+          `).join('');
+        }
+      }
+    } else if (roomType === 'data_center') {
+      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.cabinets') || '机柜列表'}`;
+      if (extraTh) extraTh.textContent = t('cabinet.capacity') || '容量(U)';
+      const cabinets = room.cabinets || [];
+      if (tbody) {
+        if (cabinets.length === 0) {
+          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+        } else {
+          tbody.innerHTML = cabinets.map((cab, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${escapeHtml(cab.name || '')}</td>
+              <td>${cab.capacity ?? '-'}</td>
+            </tr>
+          `).join('');
+        }
+      }
+    }
+  } catch (error) {
+    handleError(error, t('room.load_failed') || "加载房间数据失败");
   }
 }
 
@@ -464,14 +740,22 @@ export async function submitRoomForm() {
   }
 
   const { networkIds, hasEmpty } = roomNetworkConfigManager.collectData();
-  
+
   if (hasEmpty) {
     showToast(t('room.network_all_required'), "warning");
     return;
   }
-  
+
   if (networkIds.length === 0) {
     showToast(t('room.network_required'), "warning");
+    return;
+  }
+
+  // 收集并校验子项数据（工位/机柜）
+  const childrenData = roomChildrenManager.collectData();
+  const childrenError = validateRoomChildren(childrenData, roomType);
+  if (childrenError) {
+    showToast(childrenError, "warning");
     return;
   }
 
@@ -483,7 +767,7 @@ export async function submitRoomForm() {
   } else {
     formattedRoomType = roomType;
   }
-  
+
   const orgId = getElementValue("room-org-id");
 
   const roomData = {
@@ -494,16 +778,72 @@ export async function submitRoomForm() {
     description: description || null,
   };
 
-  const success = await handleFormSubmit({
-    formData: roomData,
-    id,
-    baseUrl: "/api/resources/rooms",
-    successMessage: "房间保存成功",
-    modalId: "room-modal",
-    reloadFunction: loadRoomsData
-  });
+  try {
+    let roomId = id;
+    if (id) {
+      const result = await apiPut(`/api/resources/rooms/${id}`, roomData);
+      if (!result.success) {
+        showToast(result.message || "房间保存失败", "error");
+        return;
+      }
+    } else {
+      const result = await apiPost("/api/resources/rooms", roomData);
+      if (!result.success) {
+        showToast(result.message || "房间保存失败", "error");
+        return;
+      }
+      roomId = result.data?.id;
+      if (!roomId) {
+        showToast("房间创建成功但未返回ID", "error");
+        return;
+      }
+      // 写回隐藏 ID，便于重试时按更新处理
+      elementCache.setValue('room-id', roomId);
+    }
 
-  return success;
+    // 同步子项（工位/机柜）
+    const syncResult = await apiPut(`/api/resources/rooms/${roomId}/children`, childrenData);
+    if (!syncResult.success) {
+      showToast(syncResult.message || t('room.children_save_failed'), "error");
+      await loadRoomsData();
+      return;
+    }
+
+    showToast("房间保存成功", "success");
+    closeModal("room-modal");
+    await loadRoomsData();
+  } catch (error) {
+    handleError(error, "房间保存失败");
+  }
+}
+
+// 校验房间子项数据
+function validateRoomChildren(childrenData, roomType) {
+  if (roomType === "office") {
+    const workstations = childrenData.workstations || [];
+    if (workstations.length === 0) {
+      return t('room.at_least_one_child');
+    }
+    for (const ws of workstations) {
+      if (!ws.name) {
+        return t('room.child_name_required');
+      }
+    }
+  } else if (roomType === "data_center") {
+    const cabinets = childrenData.cabinets || [];
+    if (cabinets.length === 0) {
+      return t('room.at_least_one_child');
+    }
+    for (const cab of cabinets) {
+      if (!cab.name) {
+        return t('room.child_name_required');
+      }
+      if (!Number.isInteger(cab.capacity) || cab.capacity < 1 || cab.capacity > 48) {
+        return t('room.child_capacity_invalid');
+      }
+    }
+  }
+  return null;
 }
 
 // 房间管理模态框
@@ -524,11 +864,19 @@ export async function openRoomModal(room = null) {
     elementCache.setValue('room-description', room.description || "");
 
     await loadRoomNetworks(room);
+
+    // 初始化子项管理器并加载现有工位/机柜
+    roomChildrenManager.roomType = (room.room_type || "OFFICE").toLowerCase();
+    roomChildrenManager.loadExisting(room);
   } else {
     title.textContent = "添加房间";
     if (form) form.reset();
     elementCache.setValue('room-id', '');
     await roomNetworkConfigManager.init();
+
+    // 初始化子项管理器为默认空状态
+    roomChildrenManager.roomType = 'office';
+    roomChildrenManager.init();
   }
 }
 

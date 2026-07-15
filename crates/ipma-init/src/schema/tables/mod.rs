@@ -10,6 +10,7 @@ mod ips;
 mod logs;
 mod net_outlets;
 mod network;
+mod network_cards;
 mod notifications;
 mod org_templates;
 mod organizations;
@@ -59,7 +60,10 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 交换机端口/MAC/LLDP（引用 devices）
     switch_ports::create(pool).await?;
 
-    // 设备三层接口（引用 devices）
+    // 设备网卡（引用 devices，先于 device_interfaces 创建）
+    network_cards::create(pool).await?;
+
+    // 设备三层接口/网口（引用 devices 与 network_cards）
     device_interfaces::create(pool).await?;
 
     // 信息点（引用 rooms/cabinets）

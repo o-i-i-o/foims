@@ -8,14 +8,7 @@ import {
 
 import {
   showToast,
-  handleDelete,
   handleError,
-  appendPaginationToTable,
-  escapeHtml,
-  DEFAULT_PAGE_SIZE,
-  createSortState,
-  updateSortIcons,
-  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -26,10 +19,7 @@ import {
 
 import { elementCache } from "../utils/helpers.js";
 
-const tableState = createSortState('name', 'asc');
-let isLoading = false;
-let currentPage = 1;
-
+// 编辑工位（可视化回调）
 export async function editWorkstation(id) {
   try {
     const result = await apiGet(`/api/resources/workstations/${id}`);
@@ -43,89 +33,10 @@ export async function editWorkstation(id) {
   }
 }
 
-export async function deleteWorkstation(id) {
-  await handleDelete(id, "/api/resources/workstations", "工位删除成功", loadWorkstationsData);
-}
-
-// 加载工位数据
-export async function loadWorkstationsData(page = 1, sortBy = null, sortOrder = null) {
-  if (isLoading) return;
-  
-  try {
-    isLoading = true;
-    currentPage = page;
-    if (sortBy) tableState.setSort(sortBy, sortOrder);
-    
-    const result = await apiGet(`/api/resources/workstations?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
-    const tbody = document.querySelector("#workstations-table tbody");
-
-    if (!tbody) {
-      console.error("未找到工位表格 tbody 元素");
-      return;
-    }
-
-    tbody.innerHTML = "";
-
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const workstations = data.items || data;
-
-    if (workstations.length > 0) {
-      const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-      
-      let rowIndex = 0;
-
-      for (const workstation of workstations) {
-        const roomName = escapeHtml(workstation.room_name) || "-";
-        const workstationName = escapeHtml(workstation.name);
-
-        const row = document.createElement("tr");
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${roomName}</td>
-                    <td>${workstationName}</td>
-                    <td>-</td>
-                    <td>${escapeHtml(workstation.manager) || "-"}</td>
-                    <td>-</td>
-                    <td>${escapeHtml(workstation.description) || "-"}</td>
-                    <td>${new Date(workstation.created_at).toLocaleString()}</td>
-                    <td>
-                        <button class="btn btn-sm btn-edit" data-id="${workstation.id}">编辑</button>
-                        <button class="btn btn-sm btn-delete" data-id="${workstation.id}">删除</button>
-                    </td>
-                `;
-        tbody.appendChild(row);
-        rowIndex++;
-      }
-
-      if (data.total !== undefined) {
-        appendPaginationToTable("#workstations-table", data, loadWorkstationsData);
-      }
-    } else {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">暂无工位数据</td></tr>';
-    }
-    updateSortIcons("workstations-table", tableState);
-  } catch (error) {
-    console.error("加载工位数据失败:", error);
-    const tbody = document.querySelector("#workstations-table tbody");
-    if (tbody) {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="8" class="text-center">加载失败，请刷新页面重试</td></tr>';
-    }
-  } finally {
-    isLoading = false;
-  }
-}
-
-export function initWorkstationSortEvents() {
-  initSortEvents("workstations-table", tableState, loadWorkstationsData);
-}
-
 // ====== 工位管理模态框 ======
 export async function openWorkstationModal(workstation = null) {
   await openModal("workstation-modal");
-  
-  const modal = elementCache.get("workstation-modal");
+
   const title = elementCache.get("workstation-modal-title");
   const form = elementCache.get("workstation-form");
 
@@ -183,7 +94,6 @@ export async function submitWorkstationForm() {
 
     if (result.success) {
       closeModal("workstation-modal");
-      loadWorkstationsData();
       showToast("工位保存成功", "success");
     } else {
       const errorMsg = result.message || "操作失败，请检查输入信息";

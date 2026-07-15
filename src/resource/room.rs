@@ -1,11 +1,15 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, NetworkInfo, Room, RoomCreate, RoomUpdate, RoomWithNetworks};
+use crate::models::{
+    ApiResponse, CabinetBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate, RoomUpdate,
+    RoomWithNetworks, WorkstationBrief,
+};
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
+use sqlx::Row;
 use std::collections::HashMap;
 use tracing::warn;
 use uuid::Uuid;
@@ -106,12 +110,14 @@ pub async fn get_rooms(
         let room_with_networks = RoomWithNetworks {
             id: room.id,
             name: room.name,
-            room_type: room.room_type,
+            room_type: room.room_type.clone(),
             org_id: room.org_id,
             org_name,
             description: room.description,
             networks: room_networks,
             workstation_count,
+            workstations: None,
+            cabinets: None,
             created_at: room.created_at,
             updated_at: room.updated_at,
         };
@@ -251,6 +257,41 @@ pub async fn get_room(
         None
     };
 
+    let (workstations, cabinets) = if room.room_type == "OFFICE" {
+        let ws_rows = sqlx::query(
+            "SELECT id, name, manager FROM workstations WHERE room_id = $1 ORDER BY name",
+        )
+        .bind(room.id)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
+        let ws_list: Vec<WorkstationBrief> = ws_rows
+            .iter()
+            .map(|r| WorkstationBrief {
+                id: r.get("id"),
+                name: r.get("name"),
+                manager: r.get("manager"),
+            })
+            .collect();
+        (Some(ws_list), None)
+    } else if room.room_type == "DATA_CENTER" {
+        let cab_rows =
+            sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
+                .bind(room.id)
+                .fetch_all(&state.pool()?.get_conn())
+                .await?;
+        let cab_list: Vec<CabinetBrief> = cab_rows
+            .iter()
+            .map(|r| CabinetBrief {
+                id: r.get("id"),
+                name: r.get("name"),
+                capacity: r.get("capacity"),
+            })
+            .collect();
+        (None, Some(cab_list))
+    } else {
+        (None, None)
+    };
+
     let room_with_networks = RoomWithNetworks {
         id: room.id,
         name: room.name,
@@ -260,6 +301,8 @@ pub async fn get_room(
         description: room.description,
         networks: room_networks,
         workstation_count,
+        workstations,
+        cabinets,
         created_at: room.created_at,
         updated_at: room.updated_at,
     };
@@ -461,4 +504,221 @@ pub async fn get_room_networks(
             "房间网段获取成功",
         )),
     )
+}
+
+pub async fn sync_room_children(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    req: web::Json<RoomChildrenSync>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+    (*req).validate()?;
+
+    let room_type: String = sqlx::query_scalar("SELECT room_type FROM rooms WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .ok_or_else(|| AppError::NotFound("房间未找到".to_string()))?;
+
+    let mut tx = state.pool()?.get_conn().begin().await?;
+    let now = Utc::now();
+
+    if room_type == "OFFICE" {
+        let items = req
+            .workstations
+            .as_ref()
+            .ok_or_else(|| AppError::Validation("办公室房间需要工位数据".to_string()))?;
+
+        let existing_ids: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM workstations WHERE room_id = $1")
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?;
+
+        let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+        for existing_id in &existing_ids {
+            if !request_ids.contains(existing_id) {
+                let device_count: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE workstation_id = $1")
+                        .bind(existing_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+                if device_count > 0 {
+                    return Err(AppError::Validation(
+                        "工位已被设备关联，无法删除".to_string(),
+                    ));
+                }
+                sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query("DELETE FROM workstations WHERE id = $1")
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        for item in items {
+            validate_workstation_name(&mut tx, &item.name, id, item.id).await?;
+            if let Some(item_id) = item.id {
+                sqlx::query(
+                    "UPDATE workstations SET name = $1, manager = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+                )
+                .bind(&item.name)
+                .bind(&item.manager)
+                .bind(id)
+                .bind(now)
+                .bind(item_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                let new_id = Uuid::new_v4();
+                sqlx::query(
+                    "INSERT INTO workstations (id, name, room_id, manager, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+                )
+                .bind(new_id)
+                .bind(&item.name)
+                .bind(id)
+                .bind(&item.manager)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+    } else if room_type == "DATA_CENTER" {
+        let items = req
+            .cabinets
+            .as_ref()
+            .ok_or_else(|| AppError::Validation("机房需要机柜数据".to_string()))?;
+
+        let existing_ids: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM cabinets WHERE room_id = $1")
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?;
+
+        let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+        for existing_id in &existing_ids {
+            if !request_ids.contains(existing_id) {
+                let position_count: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
+                        .bind(existing_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+                if position_count > 0 {
+                    return Err(AppError::Validation(
+                        "机柜已被机位关联，无法删除".to_string(),
+                    ));
+                }
+                sqlx::query("DELETE FROM cabinet_layouts WHERE cabinet_id = $1")
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query("DELETE FROM cabinets WHERE id = $1")
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        for item in items {
+            validate_cabinet_name(&mut tx, &item.name, id, item.id).await?;
+            if let Some(item_id) = item.id {
+                sqlx::query(
+                    "UPDATE cabinets SET name = $1, capacity = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+                )
+                .bind(&item.name)
+                .bind(item.capacity)
+                .bind(id)
+                .bind(now)
+                .bind(item_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                let new_id = Uuid::new_v4();
+                sqlx::query(
+                    "INSERT INTO cabinets (id, name, room_id, capacity, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+                )
+                .bind(new_id)
+                .bind(&item.name)
+                .bind(id)
+                .bind(item.capacity)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+    }
+
+    tx.commit().await?;
+
+    let details = serde_json::json!({
+        "room_id": id.to_string(),
+        "room_type": room_type,
+        "workstation_count": req.workstations.as_ref().map(|v| v.len()).unwrap_or(0),
+        "cabinet_count": req.cabinets.as_ref().map(|v| v.len()).unwrap_or(0)
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "sync_children",
+            resource_type: "room",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "房间子项同步成功")))
+}
+
+async fn validate_workstation_name(
+    conn: &mut sqlx::PgConnection,
+    name: &str,
+    room_id: Uuid,
+    exclude_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM workstations WHERE name = $1 AND room_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+    )
+    .bind(name)
+    .bind(room_id)
+    .bind(exclude_id)
+    .fetch_optional(conn)
+    .await?;
+    if existing.is_some() {
+        return Err(AppError::Conflict("工位名称已存在".to_string()));
+    }
+    Ok(())
+}
+
+async fn validate_cabinet_name(
+    conn: &mut sqlx::PgConnection,
+    name: &str,
+    room_id: Uuid,
+    exclude_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+    )
+    .bind(name)
+    .bind(room_id)
+    .bind(exclude_id)
+    .fetch_optional(conn)
+    .await?;
+    if existing.is_some() {
+        return Err(AppError::Conflict("机柜名称已存在".to_string()));
+    }
+    Ok(())
 }

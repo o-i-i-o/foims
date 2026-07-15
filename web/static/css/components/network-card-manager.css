@@ -1,0 +1,174 @@
+/* 网卡管理器样式（网卡 → 网口 → IP） */
+
+.network-card-actions {
+    margin-top: var(--space-sm);
+}
+
+/* ===== 层级标签栏（通用） ===== */
+.card-level-bar,
+.port-level-bar,
+.ip-level-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.level-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #fff;
+    line-height: 1.6;
+}
+
+.level-card {
+    background: var(--color-primary);
+}
+
+.level-port {
+    background: var(--color-info);
+}
+
+.level-ip {
+    background: var(--color-success);
+}
+
+.level-actions {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+/* ===== 网卡层级 ===== */
+.network-card-item {
+    background: var(--color-bg);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-primary);
+    transition: all var(--transition-fast);
+    box-sizing: border-box;
+}
+
+.network-card-item:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgb(102 126 234 / 0.1);
+}
+
+.network-card-item .card-header.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-md);
+    align-items: end;
+    margin: 0;
+}
+
+/* ===== 网口层级 ===== */
+.card-ports-container {
+    margin-left: var(--space-md);
+    margin-top: var(--space-sm);
+    padding-left: var(--space-md);
+    border-left: 2px solid var(--color-border-light);
+}
+
+.port-item {
+    background: var(--color-bg-white);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-info);
+}
+
+.port-item .port-header.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-sm);
+    align-items: end;
+    margin: 0;
+}
+
+/* ===== IP 层级 ===== */
+.port-ips-container {
+    margin-left: var(--space-md);
+    margin-top: var(--space-xs);
+    padding-left: var(--space-md);
+    border-left: 2px solid var(--color-border-light);
+}
+
+.ip-item {
+    background: var(--color-bg);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-success);
+}
+
+.ip-item .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-sm);
+    align-items: end;
+    margin: 0;
+}
+
+.ip-item .form-row + .form-row {
+    margin-top: var(--space-xs);
+}
+
+/* ===== 表单元素通用样式 ===== */
+.network-card-item .form-group,
+.port-item .form-group,
+.ip-item .form-group {
+    margin: 0;
+}
+
+.network-card-item .form-group label,
+.port-item .form-group label,
+.ip-item .form-group label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.network-card-item .form-group input,
+.network-card-item .form-group select,
+.port-item .form-group input,
+.port-item .form-group select,
+.ip-item .form-group input,
+.ip-item .form-group select {
+    min-width: 0;
+    width: 100%;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+    .network-card-item .card-header.form-row,
+    .port-item .port-header.form-row,
+    .ip-item .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .card-ports-container,
+    .port-ips-container {
+        margin-left: 0;
+        padding-left: var(--space-sm);
+    }
+
+    .card-level-bar,
+    .port-level-bar,
+    .ip-level-bar {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+}

@@ -7,111 +7,14 @@ import {
 
 import {
   showToast,
-  handleDelete,
   handleError,
-  appendPaginationToTable,
-  escapeHtml,
-  DEFAULT_PAGE_SIZE,
-  createSortState,
-  updateSortIcons,
-  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
 
-const tableState = createSortState('name', 'asc');
-let isLoading = false;
-let currentPage = 1;
-
-// 加载机位数据
-export async function loadCabinetPositionsData(page = 1, sortBy = null, sortOrder = null) {
-  currentPage = page;
-  if (sortBy) tableState.setSort(sortBy, sortOrder);
-  
-  // 防止重复加载
-  if (isLoading) {
-    return;
-  }
-  try {
-    isLoading = true;
-    const result = await apiGet(`/api/resources/positions?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
-    const tbody = document.querySelector("#cabinet-positions-table tbody");
-
-    // 确保tbody元素存在
-    if (!tbody) {
-      console.error("未找到机位表格 tbody 元素");
-      return;
-    }
-
-    // 先清空表格内容
-    tbody.innerHTML = "";
-
-    const data = result.success ? result.data : { items: [], total: 0 };
-    const positions = data.items || data;
-
-    if (positions.length > 0) {
-      const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
-
-      let rowIndex = 0;
-
-      for (const position of positions) {
-        const cabinetName = escapeHtml(position.cabinet_name) || "-";
-        const positionName = escapeHtml(position.name);
-
-        const row = document.createElement("tr");
-        const roomName = escapeHtml(position.room_name) || "-";
-        const isSwitchPosition = position.device_type === 'switch';
-        const deleteBtnHtml = isSwitchPosition
-          ? `<button class="btn btn-sm btn-delete disabled" data-id="${position.id}" disabled title="该机位由交换机创建，请通过交换机管理删除">删除</button>`
-          : `<button class="btn btn-sm btn-delete" data-id="${position.id}">删除</button>`;
-
-        row.innerHTML = `
-                    <td class="index-column">${startIndex + rowIndex + 1}</td>
-                    <td>${roomName}</td>
-                    <td>${cabinetName}</td>
-                    <td>${positionName}</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>${position.start_u} - ${position.end_u} U</td>
-                    <td>-</td>
-                    <td>${escapeHtml(position.description) || "-"}</td>
-                    <td>${new Date(position.created_at).toLocaleString()}</td>
-                    <td>
-                        <button class="btn btn-sm btn-edit" data-id="${position.id}">编辑</button>
-                        ${deleteBtnHtml}
-                    </td>
-                `;
-        tbody.appendChild(row);
-        rowIndex++;
-      }
-
-      if (data.total !== undefined) {
-        appendPaginationToTable("#cabinet-positions-table", data, loadCabinetPositionsData);
-      }
-    } else {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="9" class="text-center">暂无机位数据</td></tr>';
-    }
-    updateSortIcons("cabinet-positions-table", tableState);
-  } catch (error) {
-    console.error("加载机位数据失败:", error);
-    const tbody = document.querySelector("#cabinet-positions-table tbody");
-    if (tbody) {
-      tbody.innerHTML =
-        '<tr class="empty-row"><td colspan="9" class="text-center">加载失败，请刷新页面重试</td></tr>';
-    }
-  } finally {
-    isLoading = false;
-  }
-}
-
-export function initPositionSortEvents() {
-  initSortEvents("cabinet-positions-table", tableState, loadCabinetPositionsData);
-}
-
-// 编辑机位
+// 编辑机位（可视化回调）
 export async function editCabinetPosition(id) {
   try {
     const result = await apiGet(`/api/resources/positions/${id}`);
@@ -123,11 +26,6 @@ export async function editCabinetPosition(id) {
   } catch (error) {
     handleError(error, "获取机位数据失败");
   }
-}
-
-// 删除机位
-export async function deleteCabinetPosition(id) {
-  await handleDelete(id, "/api/resources/positions", "机位删除成功", loadCabinetPositionsData);
 }
 
 // 提交机柜机位表单
@@ -182,10 +80,9 @@ export async function submitCabinetPositionForm() {
     } else {
       result = await apiPost("/api/resources/positions", positionData);
     }
-    
+
     if (result.success) {
       closeModal("cabinet-position-modal");
-      loadCabinetPositionsData();
       showToast("机位保存成功", "success");
     } else {
       const errorMsg = result.message || "操作失败，请检查输入信息";
@@ -201,8 +98,7 @@ export async function submitCabinetPositionForm() {
 // ====== 机位管理模态框 ======
 export async function openCabinetPositionModal(position = null) {
   await openModal("cabinet-position-modal");
-  
-  const modal = elementCache.get('cabinet-position-modal');
+
   const title = elementCache.get('cabinet-position-modal-title');
   const form = elementCache.get('cabinet-position-form');
 
@@ -212,19 +108,19 @@ export async function openCabinetPositionModal(position = null) {
   // 从 cabinets 数据源只读加载房间选项（去重）
   const loadRoomsFromCabinets = async () => {
     roomSelect.innerHTML = `<option value="">${t('cabinet_position.select_room', '选择房间')}</option>`;
-    
+
     try {
       const result = await apiGet('/api/resources/cabinets');
       if (result.success && result.data) {
         const cabinets = result.data.items || result.data;
         const roomMap = new Map();
-        
+
         cabinets.forEach(cabinet => {
           if (cabinet.room_id && cabinet.room_name && !roomMap.has(cabinet.room_id)) {
             roomMap.set(cabinet.room_id, cabinet.room_name);
           }
         });
-        
+
         roomMap.forEach((roomName, roomId) => {
           const option = document.createElement('option');
           option.value = roomId;
@@ -241,7 +137,7 @@ export async function openCabinetPositionModal(position = null) {
   const handleRoomChange = async () => {
     const roomId = roomSelect.value;
     cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_cabinet', '选择机柜')}</option>`;
-    
+
     if (roomId) {
       try {
         const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}`);

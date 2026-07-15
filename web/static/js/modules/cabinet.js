@@ -2,13 +2,14 @@
 // 导入必要的模块
 import {
   apiGet,
+  apiPost,
+  apiPut,
 } from "../utils/apiClient.js";
 
 import {
   showToast,
   renderTable,
   getElementValue,
-  handleFormSubmit,
   handleDelete,
   handleError,
   appendPaginationToTable,
@@ -19,14 +20,144 @@ import {
   initSortEvents,
 } from "../utils/ui.js";
 
-import { openModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
+import { t } from "../utils/i18n.js";
 
 import {
   loadDataCenterRoomsForSelect,
   loadRoomNetworksForCabinet,
-  loadCabinets
 } from "../utils/resources.js";
+
+// ==========================================
+// 机柜机位动态管理模块
+// ==========================================
+
+class CabinetPositionsManager {
+  constructor() {
+    this.container = null;
+    this.handlers = new WeakMap();
+    this.addHandler = null;
+  }
+
+  init() {
+    this.container = document.getElementById('cabinet-positions-container');
+    if (!this.container) return false;
+
+    this.container.innerHTML = '';
+    this.bindAddButton();
+    this.addItem();
+    return true;
+  }
+
+  bindAddButton() {
+    const addBtn = document.getElementById('add-position-row-btn');
+    if (!addBtn) return;
+    if (this.addHandler) {
+      addBtn.removeEventListener('click', this.addHandler);
+    }
+    this.addHandler = () => this.addItem();
+    addBtn.addEventListener('click', this.addHandler);
+  }
+
+  createRow(data = {}) {
+    const id = data.id || '';
+    const name = data.name || '';
+    const startU = data.start_u ?? 1;
+    const endU = data.end_u ?? 1;
+    const description = data.description || '';
+    const div = document.createElement('div');
+    div.className = 'cabinet-position-item';
+    div.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <input type="hidden" class="position-id" value="${escapeHtml(String(id))}" />
+          <input type="text" class="position-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet_position.name')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <input type="number" class="position-start-u form-control" value="${startU}" min="1" max="48" placeholder="${t('cabinet_position.start_u')}" />
+        </div>
+        <div class="form-group">
+          <input type="number" class="position-end-u form-control" value="${endU}" min="1" max="48" placeholder="${t('cabinet_position.end_u')}" />
+        </div>
+        <div class="form-group">
+          <input type="text" class="position-description form-control" value="${escapeHtml(description)}" placeholder="${t('cabinet_position.description')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <button type="button" class="btn btn-danger btn-sm remove-position-btn">${t('common.delete')}</button>
+        </div>
+      </div>
+    `;
+    this.bindItemEvents(div);
+    return div;
+  }
+
+  addItem(data = {}) {
+    if (!this.container) return;
+    const item = this.createRow(data);
+    this.container.appendChild(item);
+  }
+
+  bindItemEvents(item) {
+    const removeBtn = item.querySelector('.remove-position-btn');
+    if (removeBtn) {
+      const handler = () => this.removeItem(item);
+      this.handlers.set(removeBtn, handler);
+      removeBtn.addEventListener('click', handler);
+    }
+  }
+
+  removeItem(item) {
+    const items = this.container.querySelectorAll('.cabinet-position-item');
+    if (items.length <= 1) {
+      showToast(t('cabinet.at_least_one_position'), 'warning');
+      return;
+    }
+    item.remove();
+  }
+
+  loadExisting(positions) {
+    if (!this.container) {
+      this.container = document.getElementById('cabinet-positions-container');
+    }
+    if (!this.container) return;
+    this.container.innerHTML = '';
+    this.bindAddButton();
+
+    if (positions?.length) {
+      positions.forEach(pos => this.addItem(pos));
+    } else {
+      this.addItem();
+    }
+  }
+
+  collectData() {
+    const items = this.container.querySelectorAll('.cabinet-position-item');
+    const positions = [];
+    for (const item of items) {
+      const idInput = item.querySelector('.position-id');
+      const nameInput = item.querySelector('.position-name');
+      const startUInput = item.querySelector('.position-start-u');
+      const endUInput = item.querySelector('.position-end-u');
+      const descInput = item.querySelector('.position-description');
+      const idValue = idInput?.value?.trim();
+      positions.push({
+        id: idValue || null,
+        name: (nameInput?.value || '').trim(),
+        start_u: parseInt(startUInput?.value || '0', 10),
+        end_u: parseInt(endUInput?.value || '0', 10),
+        description: (descInput?.value || '').trim() || null,
+      });
+    }
+    return { positions };
+  }
+}
+
+export const cabinetPositionsManager = new CabinetPositionsManager();
+
+// ==========================================
+// 机柜管理功能
+// ==========================================
 
 const tableState = createSortState('name', 'asc');
 let currentPage = 1;
@@ -38,7 +169,7 @@ let roomSelectHandler = null;
 export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
-  
+
   try {
     const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
@@ -51,25 +182,88 @@ export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
+        { field: 'capacity', render: (v) => v ?? '-' },
+        { field: 'position_count', render: (v) => v ?? 0 },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-secondary btn-cabinet-positions-list" data-cabinet-id="${v}">${t('cabinet.positions_list') || '列表'}</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: '暂无机柜数据'
+      emptyMessage: t('common.no_data')
     });
+
+    bindCabinetButtonsEvents();
 
     if (data.total !== undefined) {
       appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
     }
     updateSortIcons("cabinets-table", tableState);
   } catch (error) {
-    handleError(error, "加载机柜数据失败", () => {
-      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    handleError(error, t('cabinet.load_failed'), () => {
+      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: t('common.load_failed') });
     });
+  }
+}
+
+let cabinetTableClickHandler = null;
+
+function bindCabinetButtonsEvents() {
+  const table = elementCache.get("cabinets-table");
+  if (!table) return;
+
+  if (cabinetTableClickHandler) {
+    table.removeEventListener("click", cabinetTableClickHandler);
+  }
+
+  cabinetTableClickHandler = async (e) => {
+    const target = e.target;
+    if (target.classList.contains("btn-cabinet-positions-list")) {
+      const cabinetId = target.dataset.cabinetId;
+      if (cabinetId) {
+        await openCabinetPositionsListModal(cabinetId);
+      }
+    }
+  };
+
+  table.addEventListener("click", cabinetTableClickHandler);
+}
+
+export async function openCabinetPositionsListModal(cabinetId) {
+  try {
+    const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
+    if (!result.success || !result.data) {
+      showToast(result.message || t('cabinet.load_failed') || "加载机柜数据失败", "error");
+      return;
+    }
+    const cabinet = result.data;
+    await openModal("cabinet-positions-list-modal");
+
+    const titleEl = document.getElementById('cabinet-positions-list-modal-title');
+    const tbody = document.getElementById('cabinet-positions-list-tbody');
+
+    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t('cabinet.positions_list') || '机位列表'}`;
+
+    const positions = cabinet.positions || [];
+    if (tbody) {
+      if (positions.length === 0) {
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+      } else {
+        tbody.innerHTML = positions.map((pos, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(pos.name || '')}</td>
+            <td>${pos.start_u ?? '-'}</td>
+            <td>${pos.end_u ?? '-'}</td>
+            <td>${escapeHtml(pos.description || '-')}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (error) {
+    handleError(error, t('cabinet.load_failed') || "加载机柜数据失败");
   }
 }
 
@@ -84,16 +278,16 @@ export async function editCabinet(id) {
     if (result.success) {
       openCabinetModal(result.data);
     } else {
-      showToast(`获取机柜数据失败: ${result.message}`, "error");
+      showToast(`${t('cabinet.load_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取机柜数据失败");
+    handleError(error, t('cabinet.load_failed'));
   }
 }
 
 // 删除机柜
 export async function deleteCabinet(id) {
-  await handleDelete(id, "/api/resources/cabinets", "机柜删除成功", loadCabinetsData);
+  await handleDelete(id, "/api/resources/cabinets", t('cabinet.delete_success'), loadCabinetsData);
 }
 
 // ====== 机柜管理模态框 ======
@@ -115,71 +309,76 @@ export async function openCabinetModal(cabinet = null) {
     roomSelect.removeEventListener("change", roomSelectHandler);
   }
 
-  // 创建新的事件监听器 - 使用箭头函数确保this指向正确
+  // 创建新的事件监听器
   roomSelectHandler = async (event) => {
     const roomId = event.target.value;
     await loadRoomNetworksForCabinet(roomId);
   };
 
-  // 添加房间选择事件监听器
   if (roomSelect) {
     roomSelect.addEventListener("change", roomSelectHandler);
   }
 
   if (cabinet) {
     // 编辑模式
-    title.textContent = "编辑机柜";
+    title.textContent = t('cabinet.edit_cabinet');
     elementCache.setValue('cabinet-id', cabinet.id);
     elementCache.setValue('cabinet-name', cabinet.name);
-    // 设置房间选择
     if (cabinet.room_id) {
       elementCache.setValue('cabinet-room', cabinet.room_id);
-      // 加载所选房间的网段配置
       await loadRoomNetworksForCabinet(cabinet.room_id);
     }
     if (capacityInput) capacityInput.value = cabinet.capacity || 42;
     elementCache.setValue('cabinet-description', cabinet.description || "");
+
+    // 加载现有机位
+    cabinetPositionsManager.loadExisting(cabinet.positions || []);
   } else {
     // 添加模式
-    title.textContent = "添加机柜";
+    title.textContent = t('cabinet.add_cabinet');
     if (form) form.reset();
     elementCache.setValue('cabinet-id', '');
-    // 初始化网段显示
     const inheritedNetworksContainer = elementCache.get('cabinet-inherited-networks');
     if (inheritedNetworksContainer) {
-      inheritedNetworksContainer.innerHTML = '<p class="text-muted">请先选择所属房间，将自动继承房间的网段配置</p>';
+      inheritedNetworksContainer.innerHTML = `<p class="text-muted">${t('cabinet.inherited_networks_hint')}</p>`;
     }
+    // 初始化机位管理器为默认空状态
+    cabinetPositionsManager.init();
   }
 }
 
 // 提交机柜表单
 export async function submitCabinetForm() {
-// 使用通用工具函数获取表单数据
-  const id = getElementValue("cabinet-id"); // 直接获取UUID字符串，不转换为数字
+  const id = getElementValue("cabinet-id");
   const name = getElementValue("cabinet-name");
-  const roomId = getElementValue("cabinet-room"); // 获取房间ID
+  const roomId = getElementValue("cabinet-room");
   const capacityStr = getElementValue("cabinet-capacity");
   const capacity = parseInt(capacityStr, 10);
   const description = getElementValue("cabinet-description");
-  
-  // 验证必填字段
+
   if (!name.trim()) {
-    showToast("机柜名称不能为空", "warning");
+    showToast(t('cabinet.name_required'), "warning");
     return;
   }
 
   if (!roomId) {
-    showToast("请选择所属机房", "warning");
+    showToast(t('cabinet.select_room_first'), "warning");
     return;
   }
 
-  // 验证容量
   if (isNaN(capacity) || capacity <= 0) {
-    showToast("机柜容量必须是有效的正数", "warning");
+    showToast(t('cabinet.capacity_invalid'), "warning");
     return;
   }
 
-  // 后端期望的数据格式 - 机柜网络从房间继承，无需单独设置
+  // 收集并校验机位数据
+  const positionsData = cabinetPositionsManager.collectData();
+  const positionsError = validatePositions(positionsData.positions);
+  if (positionsError) {
+    showToast(positionsError, "warning");
+    return;
+  }
+
   const cabinetData = {
     name: name.trim(),
     room_id: roomId,
@@ -187,48 +386,58 @@ export async function submitCabinetForm() {
     description: description.trim() || null,
   };
 
-  // 使用通用表单提交处理函数
-  const success = await handleFormSubmit({
-    formData: cabinetData,
-    id,
-    baseUrl: "/api/resources/cabinets",
-    successMessage: "机柜保存成功",
-    modalId: "cabinet-modal",
-    reloadFunction: loadCabinetsData
-  });
+  try {
+    let cabinetId = id;
+    if (id) {
+      const result = await apiPut(`/api/resources/cabinets/${id}`, cabinetData);
+      if (!result.success) {
+        showToast(result.message || t('cabinet.save_failed'), "error");
+        return;
+      }
+    } else {
+      const result = await apiPost("/api/resources/cabinets", cabinetData);
+      if (!result.success) {
+        showToast(result.message || t('cabinet.save_failed'), "error");
+        return;
+      }
+      cabinetId = result.data?.id;
+      if (!cabinetId) {
+        showToast(t('cabinet.save_failed'), "error");
+        return;
+      }
+      elementCache.setValue('cabinet-id', cabinetId);
+    }
 
-  return success;
+    // 同步机位
+    const syncResult = await apiPut(`/api/resources/cabinets/${cabinetId}/positions`, positionsData);
+    if (!syncResult.success) {
+      showToast(syncResult.message || t('cabinet.positions_save_failed'), "error");
+      await loadCabinetsData();
+      return;
+    }
+
+    showToast(t('cabinet.save_success'), "success");
+    closeModal("cabinet-modal");
+    await loadCabinetsData();
+  } catch (error) {
+    handleError(error, t('cabinet.save_failed'));
+  }
 }
 
-// 加载机柜选项（用于机位模态框）
-export async function loadCabinetsForModalSelect() {
-  try {
-    const cabinets = await loadCabinets();
-    const select = document.getElementById("cabinet-position-cabinet");
-
-    if (select) {
-      // 清空现有选项
-      select.innerHTML = "";
-
-      // 添加默认占位符
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = "选择机柜";
-      select.appendChild(placeholder);
-
-      // 添加新选项
-      cabinets.forEach((cabinet) => {
-        const option = document.createElement("option");
-        option.value = cabinet.id;
-        option.textContent = cabinet.name;
-        select.appendChild(option);
-      });
-
-      return cabinets;
-    }
-    return [];
-  } catch (error) {
-    console.error("加载机柜选项失败:", error);
-    return [];
+// 校验机位数据
+function validatePositions(positions) {
+  if (!positions || positions.length === 0) {
+    return t('cabinet.at_least_one_position');
   }
+  for (const pos of positions) {
+    if (!pos.name) {
+      return t('cabinet.position_name_required');
+    }
+    if (!Number.isInteger(pos.start_u) || pos.start_u < 1 || pos.start_u > 48 ||
+        !Number.isInteger(pos.end_u) || pos.end_u < 1 || pos.end_u > 48 ||
+        pos.end_u < pos.start_u) {
+      return t('cabinet.position_u_invalid');
+    }
+  }
+  return null;
 }

@@ -171,22 +171,4 @@ export class SVGVisualization {
   async deleteLayout() {
     return await this.dataManager.deleteLayout();
   }
-
-  deleteWorkstation(id) {
-    const workstation = this.core.elementsGroup.querySelector(`[data-id="${id}"]`);
-    if (workstation) {
-      workstation.remove();
-      this.core.showToast("工位删除成功", "success");
-      this.saveLayout();
-    }
-  }
-
-  deleteCabinetPosition(id) {
-    const cabinetPosition = this.core.elementsGroup.querySelector(`[data-id="${id}"]`);
-    if (cabinetPosition) {
-      cabinetPosition.remove();
-      this.core.showToast("机位删除成功", "success");
-      this.saveLayout();
-    }
-  }
 }
