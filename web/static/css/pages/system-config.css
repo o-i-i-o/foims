@@ -1,0 +1,197 @@
+/* 系统配置 / SMTP 配置样式 */
+
+.system-config-section,
+.smtp-config-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+    background: var(--color-bg-white);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+}
+
+.system-config-section h3,
+.smtp-config-section h3 {
+    color: var(--color-text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--color-primary-light);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.system-config-section h3::before,
+.smtp-config-section h3::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, #764ba2 100%);
+    border-radius: 2px;
+}
+
+.config-card {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--color-border-light);
+    transition: all var(--transition-fast);
+}
+
+.config-card:hover {
+    border-color: var(--color-primary-light);
+    box-shadow: 0 4px 12px rgb(102 126 234 / 0.1);
+}
+
+.config-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.config-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.config-card-title .icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary-light);
+    border-radius: 50%;
+    color: var(--color-primary);
+    font-size: 0.75rem;
+}
+
+.config-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.config-row:last-child {
+    margin-bottom: 0;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.config-field label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.config-field input,
+.config-field select {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    font-size: 0.9rem;
+    transition: all var(--transition-fast);
+    background: var(--color-bg-white);
+}
+
+.config-field input:focus,
+.config-field select:focus {
+    outline: none;
+    border-color: var(--control-border-focus);
+    box-shadow: var(--control-shadow);
+}
+
+.config-field .hint-text {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.config-hint {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.port-config-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--color-bg-white);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+}
+
+.port-config-row label {
+    min-width: 100px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.port-config-row input[type="number"] {
+    width: 100px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    font-size: 0.9rem;
+}
+
+.config-actions {
+    display: flex;
+    gap: var(--space-md);
+    padding-top: var(--space-lg);
+    margin-top: var(--space-lg);
+    border-top: 1px solid var(--color-border-light);
+    flex-wrap: wrap;
+}
+
+.config-actions .btn {
+    min-width: 120px;
+    padding: 0.65rem 1.5rem;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.config-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.config-actions .btn:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    .config-row {
+        grid-template-columns: 1fr;
+    }
+
+    .port-config-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .config-actions {
+        flex-direction: column;
+    }
+
+    .config-actions .btn {
+        width: 100%;
+    }
+}

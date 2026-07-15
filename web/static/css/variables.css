@@ -84,5 +84,7 @@
     --z-tooltip: 1070;
     --z-toast: 9999;
     --color-bg-hover: #f0f0f0;
+    --color-bg-secondary: #f0f0f0;
     --color-active-bg: #e3f2fd;
+    --shadow-xl: 0 20px 40px rgb(0 0 0 / 0.25);
 }

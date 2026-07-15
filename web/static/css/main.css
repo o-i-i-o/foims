@@ -14,5 +14,10 @@
 @import url('./layouts/sidebar.css');
 @import url('./layouts/main-content.css');
 @import url('./pages/organization.css');
+@import url('./pages/dashboard.css');
+@import url('./pages/charts.css');
+@import url('./pages/system-config.css');
+@import url('./pages/import-export.css');
+@import url('./pages/logs.css');
 @import url('./utilities/animations.css');
 @import url('./responsive.css');
