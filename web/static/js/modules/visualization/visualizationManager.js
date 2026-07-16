@@ -1,4 +1,4 @@
-import { loadModule } from "../../utils/moduleLoader.js";
+import { loadModule } from "../../utils/resourceLoader.js";
 import { loadRoomsForSelect, loadDataCenterRoomsForSelect } from "../../utils/resources.js";
 import { elementCache } from "../../utils/helpers.js";
 import { editWorkstation } from "../workstation.js";

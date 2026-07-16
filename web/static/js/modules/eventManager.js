@@ -3,7 +3,7 @@
  * 处理全局事件绑定和委托
  */
 
-import { loadModule, getCachedModule } from "../utils/moduleLoader.js";
+import { loadModule, getCachedModule } from "../utils/resourceLoader.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modal.js";
 
@@ -39,17 +39,11 @@ const DELETE_FUNCTIONS = {
 /**
  * 预加载模块缓存
  */
-const MODULE_PATHS = {
-  log: "/static/js/modules/log.js",
-  systemManager: "/static/js/modules/systemManager.js",
-  userManager: "/static/js/modules/userManager.js",
-  authManager: "/static/js/modules/authManager.js",
-  i18n: "/static/js/utils/i18n.js",
-};
+const PRELOAD_MODULES = ['log', 'systemManager', 'userManager', 'authManager', 'i18n'];
 
 async function preloadModules() {
   await Promise.all(
-    Object.entries(MODULE_PATHS).map(([name, path]) => loadModule(name, path))
+    PRELOAD_MODULES.map(name => loadModule(name))
   );
 }
 

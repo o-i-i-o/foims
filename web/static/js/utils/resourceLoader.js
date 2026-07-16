@@ -2,7 +2,7 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-export const MODULE_VERSION = '01317';
+export const MODULE_VERSION = '01318';
 
 function withVersion(path) {
     if (!path) return path;
@@ -35,7 +35,7 @@ const MODULE_REGISTRY = {
     'netOutlet': '/static/js/modules/netOutlet.js',
     'userManager': '/static/js/modules/userManager.js',
     'systemManager': '/static/js/modules/systemManager.js',
-    'logViewer': '/static/js/modules/logViewer.js',
+    'log': '/static/js/modules/log.js',
     'ipmanager': '/static/js/modules/ipmanager.js',
     'resourceTabs': '/static/js/modules/resourceTabs.js',
     'eventManager': '/static/js/modules/eventManager.js',

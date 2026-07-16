@@ -3,7 +3,7 @@
  * 处理资源管理页面的标签页切换和数据加载
  */
 
-import { loadModule } from "../utils/moduleLoader.js";
+import { loadModule } from "../utils/resourceLoader.js";
 import { nextFrame, safeAsync } from "../utils/helpers.js";
 
 // ==========================================

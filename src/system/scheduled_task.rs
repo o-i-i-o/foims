@@ -1,6 +1,6 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::ApiResponse;
+use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use ipma_data_manager::DatabaseConfig;
@@ -8,8 +8,6 @@ use ipma_scheduler::{TaskContext, TaskLog, calculate_next_run};
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
-
-use crate::models::{ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 
 pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(

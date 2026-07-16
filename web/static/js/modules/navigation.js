@@ -3,7 +3,7 @@
  * 处理页面导航、URL 哈希和内容加载
  */
 
-import { loadModule } from "../utils/moduleLoader.js";
+import { loadModule } from "../utils/resourceLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 
@@ -58,7 +58,7 @@ async function loadResourcesPage() {
  * 加载组织管理页面
  */
 async function loadOrganizationPage() {
-  const orgModule = await loadModule("organization", "/static/js/modules/organization.js");
+  const orgModule = await loadModule("organization");
   orgModule.initOrganization();
 }
 
@@ -77,7 +77,7 @@ async function loadIpPage() {
  * 加载日志页面
  */
 async function loadLogsPage() {
-  const logModule = await loadModule("log", "/static/js/modules/log.js");
+  const logModule = await loadModule("log");
   logModule.initLogTabs();
 
   whenVisible("#logs .tab-btn.active", () => {
@@ -95,7 +95,7 @@ async function loadLogsPage() {
  * 加载系统管理页面
  */
 async function loadSystemPage() {
-  const systemModule = await loadModule("systemManager", "/static/js/modules/systemManager.js");
+  const systemModule = await loadModule("systemManager");
   systemModule.initSystemTabs();
 
   whenVisible("#system", async () => {

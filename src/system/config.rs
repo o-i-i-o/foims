@@ -2,8 +2,9 @@ use crate::app_state::AppState;
 use crate::config::{Config, I18nConfig, ServerConfig};
 use crate::error::AppError;
 use crate::models::ApiResponse;
-use crate::system::smtp::SmtpConfig;
-use crate::system::smtp::{get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users};
+use crate::system::smtp::{
+    SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
+};
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
 use std::os::unix::fs::PermissionsExt;

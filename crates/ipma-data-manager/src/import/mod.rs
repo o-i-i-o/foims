@@ -1,5 +1,11 @@
-use crate::types::{DataError, DataResult};
+use crate::types::{ApiResponse, DataError, DataProvider, DataResult};
+use actix_web::{HttpResponse, web};
+use futures_util::TryStreamExt;
+use serde_json::json;
 use sqlx::Acquire;
+use std::collections::HashMap;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 pub mod cabinets;
 pub mod network_regions;
@@ -47,14 +53,6 @@ pub(crate) async fn find_network_id(
             .map_err(DataError::from)
     }
 }
-
-use crate::types::{ApiResponse, DataProvider};
-use actix_web::{HttpResponse, web};
-use futures_util::TryStreamExt;
-use serde_json::json;
-use std::collections::HashMap;
-use std::io::{Cursor, Read};
-use std::sync::Arc;
 
 pub async fn import_csv<P: DataProvider>(
     provider: P,
