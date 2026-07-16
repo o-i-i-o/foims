@@ -1,0 +1,25 @@
+/* 通用工具类 */
+
+.flex-1 {
+    flex: 1;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.text-muted {
+    color: var(--color-text-muted);
+}
+
+.text-center {
+    text-align: center;
+}
+
+.d-inline-block {
+    display: inline-block;
+}
+
+.w-auto {
+    width: auto;
+}

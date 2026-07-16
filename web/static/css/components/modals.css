@@ -33,18 +33,6 @@
     position: relative;
 }
 
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(-20px) scale(0.98);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
 .modal-content.modal-lg {
     max-width: 900px;
 }
@@ -67,7 +55,7 @@
 
 .modal-header {
     padding: 1.25rem 1.5rem;
-    background: linear-gradient(135deg, var(--color-primary) 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
     color: #fff;
     display: flex;
     justify-content: space-between;
@@ -277,6 +265,15 @@
 .modal.active .modal-content .modal-body .form-row .form-group label {
     width: auto;
     min-width: 80px;
+}
+
+/* 二级模态框覆盖层（嵌套模态场景，提高后开模态的层叠优先级） */
+.modal + .modal {
+    z-index: var(--z-modal-secondary);
+}
+
+.modal + .modal .modal-content {
+    z-index: calc(var(--z-modal-secondary) + 1);
 }
 
 

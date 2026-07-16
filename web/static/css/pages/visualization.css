@@ -281,15 +281,6 @@
     border-color: var(--color-text) transparent transparent transparent;
 }
 
-/* 二级模态框覆盖层 */
-.modal + .modal {
-    z-index: var(--z-modal-secondary);
-}
-
-.modal + .modal .modal-content {
-    z-index: calc(var(--z-modal-secondary) + 1);
-}
-
 /* ==================== 全局可视化 ==================== */
 
 #global-visualization-container {

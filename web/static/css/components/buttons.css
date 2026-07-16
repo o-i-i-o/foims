@@ -73,6 +73,16 @@
     box-shadow: 0 2px 8px rgb(220 53 69 / 0.3);
 }
 
+.btn-warning {
+    background: var(--color-warning);
+    color: var(--color-warning-text);
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+    box-shadow: 0 2px 8px rgb(255 193 7 / 0.3);
+}
+
 .btn-sm {
     padding: 0 0.9rem;
     font-size: 0.85rem;

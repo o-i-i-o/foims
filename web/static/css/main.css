@@ -20,4 +20,5 @@
 @import url('./pages/import-export.css');
 @import url('./pages/logs.css');
 @import url('./utilities/animations.css');
+@import url('./utilities/helpers.css');
 @import url('./responsive.css');

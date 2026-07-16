@@ -254,20 +254,9 @@
   }
 }
 
-/* 动画 */
+/* 动画（@keyframes orgFadeIn 已统一移至 utilities/animations.css） */
 .org-node-wrapper {
   animation: orgFadeIn var(--transition-slow) ease;
-}
-
-@keyframes orgFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ==========================================

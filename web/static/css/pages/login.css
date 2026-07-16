@@ -1,5 +1,5 @@
 .login-body {
-    background: linear-gradient(135deg, var(--color-primary) 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
     min-height: 100vh;
     display: flex;
     justify-content: center;
@@ -24,14 +24,14 @@
     font-weight: 600;
 }
 
-/* Tabs 样式 */
+/* Tabs 样式 - 作用域限定在 .login-tabs 内，避免与 main-content.css 的 .tab-btn 冲突 */
 .login-tabs {
     display: flex;
     margin-bottom: var(--space-lg);
     border-bottom: 2px solid var(--color-border-light);
 }
 
-.tab-btn {
+.login-tabs .tab-btn {
     flex: 1;
     padding: var(--space-md);
     background: none;
@@ -44,12 +44,12 @@
     position: relative;
 }
 
-.tab-btn.active {
+.login-tabs .tab-btn.active {
     color: var(--color-primary);
     font-weight: 600;
 }
 
-.tab-btn.active::after {
+.login-tabs .tab-btn.active::after {
     content: '';
     position: absolute;
     bottom: -2px;
@@ -59,7 +59,7 @@
     background-color: var(--color-primary);
 }
 
-.tab-btn:hover:not(.active) {
+.login-tabs .tab-btn:hover:not(.active) {
     color: var(--color-text);
 }
 

@@ -12,7 +12,7 @@
 }
 
 .sidebar-header {
-    background: linear-gradient(135deg, var(--color-primary) 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
     color: #fff;
     padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid rgb(255 255 255 / 0.1);
@@ -72,7 +72,8 @@
     margin-top: auto; 
 }
 
-.user-info {
+/* 作用域限定在 .sidebar-footer 内，避免与 logs.css 的 .users-checkbox-list .user-info 冲突 */
+.sidebar-footer .user-info {
     text-align: center;
     padding: var(--space-sm);
     background: #fff;

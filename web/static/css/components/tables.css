@@ -257,3 +257,8 @@
     color: var(--color-text-muted);
     font-size: 0.75rem;
 }
+
+/* 表格容器水平滚动包装（通用工具类，原位于 network-usage.css） */
+.table-responsive {
+    overflow-x: auto;
+}

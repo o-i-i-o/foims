@@ -49,21 +49,22 @@
     border-radius: var(--radius-lg);
 }
 
-.stat-item {
+/* 作用域限定在 .usage-stats 内，避免与 cards.css 的 .stat-value 冲突 */
+.usage-stats .stat-item {
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
     padding: 0.25rem 0;
 }
 
-.stat-label {
+.usage-stats .stat-label {
     font-weight: 500;
     color: var(--color-text-muted);
     font-size: 0.8125rem;
     white-space: nowrap;
 }
 
-.stat-value {
+.usage-stats .stat-value {
     font-weight: 600;
     font-size: 0.875rem;
     color: var(--color-text-light);
@@ -390,11 +391,7 @@
     color: var(--color-text-muted);
 }
 
-.table-responsive {
-    overflow-x: auto;
-}
-
-@media (max-width: 48rem) {
+@media (max-width: 768px) {
     .usage-tabs {
         flex-direction: column;
         border-bottom: none;

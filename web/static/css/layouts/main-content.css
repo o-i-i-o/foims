@@ -90,10 +90,6 @@
     display: block;
 }
 
-.text-center {
-    text-align: center;
-}
-
 .section-header-row {
     display: flex;
     justify-content: space-between;
@@ -121,39 +117,4 @@
     margin-bottom: var(--space-md);
 }
 
-.service-status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--space-md);
-    margin-top: var(--space-md);
-}
 
-.status-item {
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-sm) var(--space-md);
-    background: var(--color-bg);
-    border-radius: var(--radius-sm);
-}
-
-.status-label {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-xs);
-}
-
-.status-value {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--color-text);
-}
-
-.status-active,
-.status-enabled {
-    color: var(--color-success);
-}
-
-.status-inactive,
-.status-disabled {
-    color: var(--color-danger);
-}

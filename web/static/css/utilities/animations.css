@@ -60,6 +60,31 @@
     100% { background-position: -200% 0; }
 }
 
+/* 模态框入场动画（原位于 components/modals.css） */
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* 组织树节点入场动画（原位于 pages/organization.css） */
+@keyframes orgFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .loading {
     display: inline-block;
     width: 16px;
