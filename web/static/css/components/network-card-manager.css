@@ -119,7 +119,7 @@ header.ip-level-bar {
 }
 
 .nc-field .required {
-    color: var(--color-danger, #dc3545);
+    color: var(--color-danger);
     margin-left: 2px;
 }
 

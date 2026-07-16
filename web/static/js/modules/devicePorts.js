@@ -293,7 +293,7 @@ async function showPortGroupsModal(deviceName, portGroups, deviceId) {
 
     ports.forEach(port => {
       const portItem = document.createElement("div");
-      portItem.className = `port-item status-${port.status}`;
+      portItem.className = `viz-port-item status-${port.status}`;
       portItem.dataset.portId = port.id;
       portItem.dataset.deviceId = port.device_id;
       portItem.dataset.portNumber = port.port_number;
@@ -320,7 +320,7 @@ async function showPortGroupsModal(deviceName, portGroups, deviceId) {
   });
 
   container.onclick = (e) => {
-    const portItem = e.target.closest(".port-item");
+    const portItem = e.target.closest(".viz-port-item");
     if (portItem) {
       openPortDetailModal({
         portId: portItem.dataset.portId,

@@ -126,37 +126,37 @@
 
 .org-node-type-badge[data-type="building"] {
   background: rgb(0 123 255 / 0.1);
-  color: #007bff;
+  color: var(--color-blue);
 }
 
 .org-node-type-badge[data-type="floor"] {
   background: rgb(23 162 184 / 0.1);
-  color: #17a2b8;
+  color: var(--color-info);
 }
 
 .org-node-type-badge[data-type="data_center"] {
   background: rgb(220 53 69 / 0.1);
-  color: #dc3545;
+  color: var(--color-danger);
 }
 
 .org-node-type-badge[data-type="office"] {
   background: rgb(40 167 69 / 0.1);
-  color: #28a745;
+  color: var(--color-success);
 }
 
 .org-node-type-badge[data-type="hall"] {
   background: rgb(255 193 7 / 0.1);
-  color: #856404;
+  color: var(--color-warning-text);
 }
 
 .org-node-type-badge[data-type="workstation"] {
   background: rgb(108 117 125 / 0.1);
-  color: #6c757d;
+  color: var(--color-secondary);
 }
 
 .org-node-type-badge[data-type="cabinet"] {
   background: rgb(111 66 193 / 0.1);
-  color: #6f42c1;
+  color: var(--color-ipv6);
 }
 
 .org-node-type-badge[data-type="cabinet_position"] {

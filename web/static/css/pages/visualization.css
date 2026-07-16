@@ -216,7 +216,7 @@
     gap: 8px;
 }
 
-.port-item {
+.viz-port-item {
     width: 40px;
     height: 40px;
     border: 1px solid #ddd;
@@ -231,18 +231,18 @@
     transition: all var(--transition-fast);
 }
 
-.port-item:hover {
+.viz-port-item:hover {
     border-color: #4a90d9;
     background-color: #f0f8ff;
     transform: translateY(-1px);
 }
 
-.port-item.status-up {
+.viz-port-item.status-up {
     border-color: #48bb78;
     background-color: #f0fff4;
 }
 
-.port-item.status-down {
+.viz-port-item.status-down {
     border-color: #f56565;
     background-color: #fff5f5;
 }
@@ -265,7 +265,7 @@
     transition: all var(--transition-fast);
 }
 
-.port-item:hover .port-tooltip {
+.viz-port-item:hover .port-tooltip {
     opacity: 1;
     visibility: visible;
 }
