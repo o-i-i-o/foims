@@ -10,25 +10,18 @@ export function nextFrame(callback) {
 }
 
 export function whenVisible(selector, callback, timeout = 5000) {
-  const element = document.querySelector(selector);
-  
-  if (element && element.offsetParent !== null) {
-    callback(element);
-    return;
-  }
-  
   const startTime = Date.now();
-  
+
   function check() {
     const el = document.querySelector(selector);
-    
+
     if (el && el.offsetParent !== null) {
       callback(el);
     } else if (Date.now() - startTime < timeout) {
       requestAnimationFrame(check);
     }
   }
-  
+
   requestAnimationFrame(check);
 }
 

@@ -86,6 +86,21 @@ async fn static_cache_control_middleware(
     Ok(res)
 }
 
+async fn security_headers_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody + 'static>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let mut res = next.call(req).await?;
+
+    // frame-ancestors 只能通过 HTTP 头设置，不能通过 <meta> 元素传递
+    res.headers_mut().insert(
+        actix_web::http::header::HeaderName::from_static("content-security-policy"),
+        actix_web::http::header::HeaderValue::from_static("frame-ancestors 'none'"),
+    );
+
+    Ok(res)
+}
+
 fn build_cors_middleware(config: &Config) -> Cors {
     let mut allowed_origins = config.server.cors_allowed_origins.clone();
     let allow_localhost = config.server.allow_localhost_cors;
@@ -528,6 +543,7 @@ async fn main() -> std::io::Result<()> {
                 https_rate_limit_enabled,
             ))
             .wrap(actix_middleware::from_fn(static_cache_control_middleware))
+            .wrap(actix_middleware::from_fn(security_headers_middleware))
             .configure(|cfg| configure_app_services(cfg, &https_app_state, true))
     };
 
