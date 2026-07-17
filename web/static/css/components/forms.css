@@ -298,12 +298,9 @@
 
 .cidr-btn-group .cidr-add-btn,
 .cidr-btn-group .cidr-remove-btn {
-    width: 26px;
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
     height: 22px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     font-size: 14px;
-    line-height: 1;
 }

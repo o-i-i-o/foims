@@ -94,6 +94,20 @@
     justify-content: center;
 }
 
+.btn-icon-sm {
+    width: 28px;
+    min-width: 28px;
+    max-width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .button-group {
     display: flex;
     gap: var(--space-md);

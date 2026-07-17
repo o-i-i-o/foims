@@ -775,7 +775,7 @@ function addCidrInputRow(containerId, cidrType, value = '') {
 
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
-  addBtn.className = 'btn btn-sm btn-success cidr-add-btn';
+  addBtn.className = 'btn btn-icon-sm btn-success cidr-add-btn';
   addBtn.textContent = '+';
   addBtn.setAttribute('aria-label', t('common.add', 'Add'));
   addBtn.addEventListener('click', () => {
@@ -784,7 +784,7 @@ function addCidrInputRow(containerId, cidrType, value = '') {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'btn btn-sm btn-danger cidr-remove-btn';
+  removeBtn.className = 'btn btn-icon-sm btn-danger cidr-remove-btn';
   removeBtn.textContent = '−';
   removeBtn.setAttribute('aria-label', t('common.delete', 'Delete'));
   removeBtn.addEventListener('click', () => {
