@@ -11,7 +11,7 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="/static/css/main.css?v=01205" />
+  <link rel="stylesheet" href="/static/css/main.css?v=01207" />
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -594,6 +594,7 @@
           <button class="tab-btn" data-tab="system-smtp" role="tab" aria-selected="false" aria-controls="system-smtp-tab" data-i18n="system.smtp">SMTP Config</button>
           <button class="tab-btn" data-tab="import-export" role="tab" aria-selected="false" aria-controls="import-export-tab" data-i18n="system.import_export">Import/Export</button>
           <button class="tab-btn" data-tab="scheduled-tasks" role="tab" aria-selected="false" aria-controls="scheduled-tasks-tab" data-i18n="system.scheduled_tasks">Scheduled Tasks</button>
+          <button class="tab-btn" data-tab="security" role="tab" aria-selected="false" aria-controls="security-tab" data-i18n="system.security">Security</button>
         </div>
 
         <div id="system-info-tab" class="tab-content active" role="tabpanel">
@@ -1057,10 +1058,97 @@
             </div>
           </article>
         </div>
+
+        <div id="security-tab" class="tab-content" role="tabpanel">
+          <article class="import-export-section">
+            <div class="action-bar">
+              <h2 data-i18n="security.app_fail2ban">Application Fail2ban</h2>
+              <div>
+                <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
+                <button id="app-fail2ban-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
+              </div>
+            </div>
+
+            <!-- 配置 -->
+            <div class="nc-fields" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-top: 1rem;">
+              <div class="nc-field">
+                <label data-i18n="security.enabled">Enabled</label>
+                <select id="app-fail2ban-enabled" class="form-control">
+                  <option value="true" data-i18n="common.yes">Yes</option>
+                  <option value="false" data-i18n="common.no">No</option>
+                </select>
+              </div>
+              <div class="nc-field">
+                <label data-i18n="security.findtime">Find Time (s)</label>
+                <input type="number" id="app-fail2ban-findtime" class="form-control" min="60" max="86400" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="security.maxretry">Max Retry</label>
+                <input type="number" id="app-fail2ban-maxretry" class="form-control" min="1" max="100" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="security.bantime">Ban Time (s)</label>
+                <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800" />
+              </div>
+            </div>
+            <div class="action-bar" style="margin-top: 0.5rem;">
+              <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+            </div>
+
+            <!-- 日志路径提示 -->
+            <div class="info-card info-card-info" style="margin-top: 1rem;">
+              <div class="info-content">
+                <h3 data-i18n="security.os_integration_title">OS Fail2ban Integration</h3>
+                <p id="app-fail2ban-log-path-hint" style="margin-top: 0.5rem; color: var(--text-secondary);"></p>
+              </div>
+            </div>
+
+            <!-- 已封禁 IP -->
+            <h4 style="margin-top: 1rem;" data-i18n="security.banned_ips">Banned IPs</h4>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="security.ip_address">IP Address</th>
+                    <th data-i18n="security.remaining_seconds">Remaining (s)</th>
+                    <th class="th-actions" data-i18n="common.actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="app-fail2ban-banned-tbody">
+                  <tr class="empty-row"><td colspan="3" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 追踪中的 IP -->
+            <h4 style="margin-top: 1rem;" data-i18n="security.tracked_ips">Tracked IPs</h4>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="security.ip_address">IP Address</th>
+                    <th data-i18n="security.failure_count">Failure Count</th>
+                  </tr>
+                </thead>
+                <tbody id="app-fail2ban-tracked-tbody">
+                  <tr class="empty-row"><td colspan="2" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 手动封禁/解封 -->
+            <h4 style="margin-top: 1rem;" data-i18n="security.manual_ban">Manual Ban/Unban</h4>
+            <div class="form-group" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="app-fail2ban-ip-input" class="form-control" placeholder="192.168.1.100" style="width: auto;" />
+              <button type="button" id="app-fail2ban-ban-btn" class="btn btn-danger btn-sm" data-i18n="security.ban_ip">Ban IP</button>
+              <button type="button" id="app-fail2ban-unban-btn" class="btn btn-success btn-sm" data-i18n="security.unban_ip">Unban IP</button>
+            </div>
+          </article>
+        </div>
       </section>
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01202"></script>
+  <script type="module" src="/static/js/app.js?v=01208"></script>
 </body>
 </html>

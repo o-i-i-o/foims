@@ -312,6 +312,11 @@ async fn main() -> std::io::Result<()> {
     info!("[中文] 系统启动时间初始化完成");
     info!("[English] System startup time initialized");
 
+    // 启动应用层 fail2ban 清理任务
+    ipma::system::app_fail2ban::start_cleanup_task();
+    info!("[中文] 应用层 Fail2ban 清理任务已启动");
+    info!("[English] Application fail2ban cleanup task started");
+
     let mut running_scheduler: Option<RunningScheduler> = None;
 
     let task_registry = Arc::new({

@@ -182,6 +182,15 @@ pub async fn login(
 
     req.validate()?;
 
+    // 应用层 fail2ban: 检查 IP 是否被封禁
+    let (client_ip, _) = crate::auth::utils::get_client_info(&http_req);
+    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+        return Err(AppError::Forbidden(format!(
+            "登录尝试过于频繁，IP 已被封禁，请 {remaining} 秒后重试"
+        )));
+    }
+
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool),
@@ -194,6 +203,7 @@ pub async fn login(
     {
         Some(row) => row,
         None => {
+            crate::system::app_fail2ban::record_login_failure(&client_ip, &req.username, "用户未找到");
             if let Err(e) = log_login(&conn, &req.username, &http_req, false, Some("用户未找到")).await {
                 tracing::warn!("记录登录日志失败: {}", e);
             }
@@ -204,6 +214,11 @@ pub async fn login(
     let (id, username, password_hash, email, role, status, two_factor_enabled) = user_row;
 
     if !status {
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "Account disabled",
+        );
         if let Err(e) =
             log_login(&conn, &username, &http_req, false, Some("Account disabled")).await
         {
@@ -219,6 +234,11 @@ pub async fn login(
         .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
         .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "Invalid password",
+        );
         if let Err(e) =
             log_login(&conn, &username, &http_req, false, Some("Invalid password")).await
         {
@@ -265,6 +285,7 @@ pub async fn login(
     if let Err(e) = log_login(&conn, &username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
+    crate::system::app_fail2ban::record_login_success(&client_ip, &username);
     tracing::info!("用户 {} 登录成功", username);
 
     let secure = is_secure_request(&http_req);
@@ -435,6 +456,15 @@ pub async fn login_with_two_factor(
     let user_lang = detect_user_language(&http_req);
     let conn = state.pool()?.get_conn();
 
+    // 应用层 fail2ban: 检查 IP 是否被封禁
+    let (client_ip, _) = crate::auth::utils::get_client_info(&http_req);
+    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+        return Err(AppError::Forbidden(format!(
+            "登录尝试过于频繁，IP 已被封禁，请 {remaining} 秒后重试"
+        )));
+    }
+
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (Uuid, String, String, String, String, bool, bool, Option<String>),
@@ -447,6 +477,7 @@ pub async fn login_with_two_factor(
     {
         Some(row) => row,
         None => {
+            crate::system::app_fail2ban::record_login_failure(&client_ip, &req.username, "用户未找到");
             return Err(AppError::Unauthorized("登录失败".to_string()));
         }
     };
@@ -464,10 +495,20 @@ pub async fn login_with_two_factor(
         .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
         .map_err(|e| AppError::Internal(e.to_string()))?;
     if !valid {
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "Invalid password",
+        );
         return Err(AppError::Unauthorized("登录失败".to_string()));
     }
 
     if !status {
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "Account disabled",
+        );
         return Err(AppError::Unauthorized("账户已禁用".to_string()));
     }
 
@@ -547,6 +588,11 @@ pub async fn login_with_two_factor(
     }
 
     if !verified {
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "Invalid 2FA code",
+        );
         if let Err(e) =
             log_login(&conn, &username, &http_req, false, Some("Invalid 2FA code")).await
         {
@@ -584,6 +630,7 @@ pub async fn login_with_two_factor(
     if let Err(e) = log_login(&conn, &user.username, &http_req, true, None).await {
         tracing::warn!("记录登录日志失败: {}", e);
     }
+    crate::system::app_fail2ban::record_login_success(&client_ip, &user.username);
     tracing::info!("用户 {} 2FA验证登录成功", user.username);
 
     let secure = is_secure_request(&http_req);

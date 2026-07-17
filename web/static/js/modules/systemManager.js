@@ -14,6 +14,7 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { loadModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
+import { initSecurityTab } from "./fail2banManager.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
@@ -51,6 +52,8 @@ export function initSystemTabs() {
           loadLogsStats();
         } else if (tabId === "scheduled-tasks") {
           initScheduledTasksTab();
+        } else if (tabId === "security") {
+          initSecurityTab();
         }
       });
     });

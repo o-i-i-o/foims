@@ -40,6 +40,9 @@ use crate::resource::{
     update_device_interface, update_net_outlet, update_network, update_network_region,
     update_org_template, update_organization, update_room, update_switch_port, update_workstation,
 };
+use crate::system::app_fail2ban::{
+    app_ban_ip, app_unban_ip, get_app_fail2ban_status, update_app_fail2ban_config,
+};
 use crate::system::config::{
     backup_config, disable_init_mode, download_certificate, generate_certificate,
     get_certificate_status, get_dashboard_stats, get_notification_settings,
@@ -473,6 +476,14 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                                 .route("/{id}/toggle", web::post().to(toggle_scheduled_task))
                                 .route("/{id}/run", web::post().to(run_scheduled_task_now))
                                 .route("/logs", web::get().to(get_task_logs)),
+                        )
+                        // Fail2ban 安全管理（应用层）
+                        .service(
+                            web::scope("/fail2ban")
+                                .route("/app/status", web::get().to(get_app_fail2ban_status))
+                                .route("/app/config", web::put().to(update_app_fail2ban_config))
+                                .route("/app/ban", web::post().to(app_ban_ip))
+                                .route("/app/unban", web::post().to(app_unban_ip)),
                         ),
                 ),
         );
