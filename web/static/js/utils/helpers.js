@@ -15,14 +15,18 @@ export function whenVisible(selector, callback, timeout = 5000) {
   function check() {
     const el = document.querySelector(selector);
 
-    if (el && el.offsetParent !== null) {
-      callback(el);
-    } else if (Date.now() - startTime < timeout) {
-      requestAnimationFrame(check);
-    }
+    // 使用 requestAnimationFrame 延迟布局读取，避免 FOUC
+    requestAnimationFrame(() => {
+      if (el && el.offsetParent !== null) {
+        callback(el);
+      } else if (Date.now() - startTime < timeout) {
+        requestAnimationFrame(check);
+      }
+    });
   }
 
-  requestAnimationFrame(check);
+  // 双 requestAnimationFrame 确保浏览器有机会先完成样式计算
+  requestAnimationFrame(() => requestAnimationFrame(check));
 }
 
 class CacheManager {
