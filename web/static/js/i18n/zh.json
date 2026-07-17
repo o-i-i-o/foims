@@ -140,7 +140,19 @@
     "upstream_device": "上级设备",
     "upstream_port": "上级端口",
     "select_upstream_device": "选择设备",
-    "select_upstream_port": "选择端口"
+    "select_upstream_port": "选择端口",
+    "card_type_pcie": "PCIe",
+    "card_type_onboard": "板载",
+    "card_type_usb": "USB",
+    "card_type_virtual": "虚拟网卡",
+    "card_type_wwan": "WWAN",
+    "card_type_wifi": "WiFi",
+    "card_type_other": "其他",
+    "port_type_physical": "物理接口",
+    "port_type_svi": "SVI",
+    "port_type_management": "管理接口",
+    "port_type_loopback": "环回接口",
+    "port_type_wifi": "WiFi"
   },
   "room": {
     "name": "房间名称",

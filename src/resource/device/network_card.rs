@@ -106,18 +106,17 @@ pub async fn apply_network_config(
     for (card_idx, card) in cards_to_insert.iter().enumerate() {
         card.validate()?;
         let card_id = card.id.unwrap_or_else(Uuid::new_v4);
-        let card_type = card.card_type.as_deref().unwrap_or("physical");
+        let card_type = card.card_type.as_deref().unwrap_or("pcie");
         validate_card_type(card_type)?;
 
         sqlx::query(
-            r"INSERT INTO network_cards (id, device_id, name, card_type, mac_address, description, sort_order, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            r"INSERT INTO network_cards (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(card_id)
         .bind(device_id)
         .bind(&card.name)
         .bind(card_type)
-        .bind(&card.mac_address)
         .bind(&card.description)
         .bind(card_idx as i32)
         .bind(now)
@@ -273,8 +272,7 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
     NetworkCardSyncItem {
         id: None,
         name: DEFAULT_CARD_NAME.to_string(),
-        card_type: Some("physical".to_string()),
-        mac_address: None,
+        card_type: Some("pcie".to_string()),
         description: None,
         ports: vec![PortSyncItem {
             id: None,
@@ -294,10 +292,10 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
 fn validate_card_type(card_type: &str) -> Result<(), AppError> {
     if !matches!(
         card_type,
-        "physical" | "management" | "wifi" | "fiber" | "other"
+        "pcie" | "onboard" | "usb" | "virtual" | "wwan" | "wifi" | "other"
     ) {
         return Err(AppError::Validation(
-            "网卡类型必须是physical、management、wifi、fiber或other".to_string(),
+            "网卡类型必须是pcie、onboard、usb、virtual、wwan、wifi或other".to_string(),
         ));
     }
     Ok(())

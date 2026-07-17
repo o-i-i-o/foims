@@ -17,19 +17,21 @@ function generateUniqueId(prefix = 'nc') {
 }
 
 const CARD_TYPES = [
-  { value: 'physical', label: 'physical' },
-  { value: 'management', label: 'management' },
-  { value: 'wifi', label: 'wifi' },
-  { value: 'fiber', label: 'fiber' },
-  { value: 'other', label: 'other' },
+  { value: 'pcie', label: () => t('device.card_type_pcie') || 'PCIe' },
+  { value: 'onboard', label: () => t('device.card_type_onboard') || 'Onboard' },
+  { value: 'usb', label: () => t('device.card_type_usb') || 'USB' },
+  { value: 'virtual', label: () => t('device.card_type_virtual') || 'Virtual' },
+  { value: 'wwan', label: () => t('device.card_type_wwan') || 'WWAN' },
+  { value: 'wifi', label: () => t('device.card_type_wifi') || 'WiFi' },
+  { value: 'other', label: () => t('device.card_type_other') || 'Other' },
 ];
 
 const PORT_TYPES = [
-  { value: 'physical', label: 'physical' },
-  { value: 'svi', label: 'svi' },
-  { value: 'management', label: 'management' },
-  { value: 'loopback', label: 'loopback' },
-  { value: 'wifi', label: 'wifi' },
+  { value: 'physical', label: () => t('device.port_type_physical') || 'Physical' },
+  { value: 'svi', label: () => t('device.port_type_svi') || 'SVI' },
+  { value: 'management', label: () => t('device.port_type_management') || 'Management' },
+  { value: 'loopback', label: () => t('device.port_type_loopback') || 'Loopback' },
+  { value: 'wifi', label: () => t('device.port_type_wifi') || 'WiFi' },
 ];
 
 function isValidIPv4(ip) {
@@ -251,12 +253,8 @@ export class NetworkCardManager {
         <div class="nc-field">
           <label for="${uid}-type">${t('device.network_card_type') || '网卡类型'}</label>
           <select id="${uid}-type" class="card-type nc-input">
-            ${CARD_TYPES.map(opt => `<option value="${opt.value}" ${cardData.card_type === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+            ${CARD_TYPES.map(opt => `<option value="${opt.value}" ${cardData.card_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
           </select>
-        </div>
-        <div class="nc-field">
-          <label for="${uid}-mac">${t('ip.mac_address') || 'MAC地址'}</label>
-          <input id="${uid}-mac" type="text" class="card-mac nc-input" value="${escapeHtml(cardData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
         </div>
         <div class="nc-field">
           <label for="${uid}-desc">${t('common.description') || '描述'}</label>
@@ -321,7 +319,7 @@ export class NetworkCardManager {
         <div class="nc-field">
           <label for="${uid}-type">${t('device.network_port_type') || '网口类型'}</label>
           <select id="${uid}-type" class="port-type nc-input">
-            ${PORT_TYPES.map(opt => `<option value="${opt.value}" ${portData.interface_type === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+            ${PORT_TYPES.map(opt => `<option value="${opt.value}" ${portData.interface_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
           </select>
         </div>
         <div class="nc-field">
@@ -341,7 +339,7 @@ export class NetworkCardManager {
         <div class="nc-field">
           <label for="${uid}-outlet">${t('device.net_outlet') || '信息点'}</label>
           <select id="${uid}-outlet" class="port-outlet nc-input">
-            <option value="">${t('device.select_outlet') || '选择信息点'}</option>
+            <option value="">${t('device.select_net_outlet') || '选择信息点'}</option>
           </select>
         </div>
         <div class="nc-field">
@@ -526,7 +524,7 @@ export class NetworkCardManager {
 
   async loadOutlets(outletSelect, roomId) {
     if (!outletSelect) return;
-    outletSelect.innerHTML = `<option value="">${t('device.select_outlet') || '选择信息点'}</option>`;
+    outletSelect.innerHTML = `<option value="">${t('device.select_net_outlet') || '选择信息点'}</option>`;
     if (!roomId) return;
     try {
       const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
@@ -612,8 +610,7 @@ export class NetworkCardManager {
       const cardNum = cardIdx + 1;
       const cardId = cardEl.querySelector('.card-id')?.value || null;
       const cardName = cardEl.querySelector('.card-name')?.value?.trim() || '';
-      const cardType = cardEl.querySelector('.card-type')?.value || 'physical';
-      const cardMac = cardEl.querySelector('.card-mac')?.value?.trim() || null;
+      const cardType = cardEl.querySelector('.card-type')?.value || 'pcie';
       const cardDesc = cardEl.querySelector('.card-description')?.value?.trim() || null;
 
       if (!cardName) {
@@ -716,7 +713,6 @@ export class NetworkCardManager {
         id: cardId,
         name: cardName,
         card_type: cardType,
-        mac_address: cardMac,
         description: cardDesc,
         ports,
       });

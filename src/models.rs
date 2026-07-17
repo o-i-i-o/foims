@@ -781,8 +781,6 @@ pub struct NetworkCardSyncItem {
     #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
     pub name: String,
     pub card_type: Option<String>,
-    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
-    pub mac_address: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     #[serde(default)]
@@ -894,7 +892,6 @@ pub struct NetworkCard {
     pub device_id: Uuid,
     pub name: String,
     pub card_type: String,
-    pub mac_address: Option<String>,
     pub description: Option<String>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
@@ -906,8 +903,6 @@ pub struct NetworkCardCreate {
     #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
     pub name: String,
     pub card_type: Option<String>,
-    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
-    pub mac_address: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }
@@ -917,8 +912,6 @@ pub struct NetworkCardUpdate {
     #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
     pub name: Option<String>,
     pub card_type: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub mac_address: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub description: Option<Option<String>>,
 }

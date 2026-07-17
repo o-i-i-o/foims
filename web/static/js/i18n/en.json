@@ -140,7 +140,19 @@
     "upstream_device": "Upstream Device",
     "upstream_port": "Upstream Port",
     "select_upstream_device": "Select Device",
-    "select_upstream_port": "Select Port"
+    "select_upstream_port": "Select Port",
+    "card_type_pcie": "PCIe",
+    "card_type_onboard": "Onboard",
+    "card_type_usb": "USB",
+    "card_type_virtual": "Virtual",
+    "card_type_wwan": "WWAN",
+    "card_type_wifi": "WiFi",
+    "card_type_other": "Other",
+    "port_type_physical": "Physical",
+    "port_type_svi": "SVI",
+    "port_type_management": "Management",
+    "port_type_loopback": "Loopback",
+    "port_type_wifi": "WiFi"
   },
   "room": {
     "name": "Room Name",
