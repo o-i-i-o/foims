@@ -104,7 +104,7 @@ export class SVGDataManager {
         let maxX = 0;
         let maxY = 0;
         
-        const doorItem = layoutData.find(item => item.element_type === "door" || item.id === "00000000-0000-0000-0000-000000000001");
+        const doorItem = layoutData.find(item => item.element_type === "door");
         if (doorItem && doorItem.position) {
           const rect = doorElement.querySelector("rect");
           if (rect) {

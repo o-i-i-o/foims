@@ -232,8 +232,8 @@ export class SVGRenderer {
   drawDoor() {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.className.baseVal = "door-element";
-    group.dataset.id = "00000000-0000-0000-0000-000000000001";
-    
+    group.dataset.elementType = "door";
+
     const x = 50;
     const y = 100;
     const width = 40;
