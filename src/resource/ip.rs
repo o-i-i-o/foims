@@ -46,10 +46,10 @@ pub async fn get_ip_managers(
     } else {
         let pattern = format!("%{search}%");
         conditions.push(format!(
-            "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR device_name ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
-            param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6
+            "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR description ILIKE ${} OR device_name ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
+            param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6, param_index + 7
         ));
-        param_index += 7;
+        param_index += 8;
         Some(pattern)
     };
 
@@ -106,7 +106,7 @@ pub async fn get_ip_managers(
     let mut count_sql = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(count_query));
 
     if let Some(ref pattern) = search_param {
-        for _ in 0..7 {
+        for _ in 0..8 {
             count_sql = count_sql.bind(pattern);
         }
     }
@@ -129,7 +129,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -138,7 +138,7 @@ pub async fn get_ip_managers(
     let mut data_sql = sqlx::query_as::<_, IpManagerWithNames>(sqlx::AssertSqlSafe(data_query));
 
     if let Some(ref pattern) = search_param {
-        for _ in 0..7 {
+        for _ in 0..8 {
             data_sql = data_sql.bind(pattern);
         }
     }
@@ -192,7 +192,7 @@ pub async fn get_device_ips(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
+            m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
         FROM ips m
         WHERE m.device_id = $1
@@ -296,8 +296,8 @@ pub async fn create_device_ip(
     };
 
     sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
+        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
     )
     .bind(ip_id)
     .bind(interface_id)
@@ -305,8 +305,7 @@ pub async fn create_device_ip(
     .bind(network_id)
     .bind(&req.ip_address)
     .bind(ip_version)
-    .bind(&req.mac_address)
-    .bind(&req.hostname)
+    .bind(&req.description)
     .bind("active")
     .bind(now)
     .bind(now)
@@ -323,8 +322,9 @@ pub async fn create_device_ip(
         network_id,
         ip_address: req.ip_address.clone(),
         ip_version,
-        mac_address: req.mac_address.clone(),
-        hostname: req.hostname.clone(),
+        mac_address: None,
+        hostname: None,
+        description: req.description.clone(),
         status: "active".to_string(),
         last_seen: now,
         last_mac: None,
@@ -335,8 +335,7 @@ pub async fn create_device_ip(
     let details = serde_json::json!({
         "device_id": id.to_string(),
         "ip_address": mapping.ip_address,
-        "mac_address": mapping.mac_address,
-        "hostname": mapping.hostname
+        "description": mapping.description
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
@@ -550,7 +549,7 @@ pub async fn pull_ip_managers(
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
         r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.status,
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description, m.status,
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
            WHERE m.network_id = $1",
@@ -715,8 +714,7 @@ pub async fn auto_assign_ip(
     let req_network_id = req.network_id;
     let device_id = req.device_id;
     let device_interface_id = req.device_interface_id;
-    let mac_address = req.mac_address.clone();
-    let hostname = req.hostname.clone();
+    let description = req.description.clone();
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -794,8 +792,8 @@ pub async fn auto_assign_ip(
     };
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)"
+        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)"
     )
     .bind(id)
     .bind(interface_id)
@@ -803,8 +801,7 @@ pub async fn auto_assign_ip(
     .bind(req_network_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
-    .bind(&mac_address)
-    .bind(&hostname)
+    .bind(&description)
     .bind("active")
     .bind(now)
     .bind(now)
@@ -833,8 +830,9 @@ pub async fn auto_assign_ip(
         network_id: Some(req_network_id),
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
-        mac_address,
-        hostname,
+        mac_address: None,
+        hostname: None,
+        description,
         status: "active".to_string(),
         last_seen: now,
         last_mac: None,
@@ -845,8 +843,7 @@ pub async fn auto_assign_ip(
     let details = serde_json::json!({
         "device_id": device_id.to_string(),
         "ip_address": mapping.ip_address,
-        "mac_address": mapping.mac_address,
-        "hostname": mapping.hostname,
+        "description": mapping.description,
         "auto_assigned": true
     });
     if let Err(e) = log_system_operation(
@@ -990,8 +987,8 @@ pub async fn batch_create_ip_managers(
         };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
         )
         .bind(*id)
         .bind(interface_id)
@@ -999,8 +996,7 @@ pub async fn batch_create_ip_managers(
         .bind(ip_req.network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
-        .bind(&ip_req.mac_address)
-        .bind(&ip_req.hostname)
+        .bind(&ip_req.description)
         .bind("active")
         .bind(now)
         .bind(now)
@@ -1019,8 +1015,9 @@ pub async fn batch_create_ip_managers(
             network_id: ip_req.network_id,
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,
-            mac_address: ip_req.mac_address.clone(),
-            hostname: ip_req.hostname.clone(),
+            mac_address: None,
+            hostname: None,
+            description: ip_req.description.clone(),
             status: "active".to_string(),
             last_seen: now,
             last_mac: None,

@@ -32,6 +32,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             imm.mac_address,
             imm.last_mac,
             imm.hostname,
+            imm.description,
             imm.status,
             imm.last_seen,
             imm.created_at,

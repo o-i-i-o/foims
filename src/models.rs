@@ -697,6 +697,7 @@ pub struct IpManager {
     pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
+    pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -725,6 +726,7 @@ pub struct IpManagerWithNames {
     pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
+    pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub last_mac: Option<String>,
@@ -739,10 +741,8 @@ pub struct IpManagerCreate {
     pub network_id: Option<Uuid>,
     #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
     pub ip_address: String,
-    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
-    pub mac_address: Option<String>,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
-    pub hostname: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
 }
 
 // ==================== 设备网卡配置同步模型（网卡 → 网口 → IP） ====================
@@ -753,10 +753,8 @@ pub struct IpSyncItem {
     pub network_id: Option<Uuid>,
     #[validate(custom(function = "validate_ip_address", message = "请输入有效的IP地址"))]
     pub ip_address: String,
-    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
-    pub mac_address: Option<String>,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
-    pub hostname: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
@@ -770,6 +768,9 @@ pub struct PortSyncItem {
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
     #[serde(default)]
     pub ips: Vec<IpSyncItem>,
 }
@@ -799,10 +800,8 @@ pub struct AutoAssignIpRequest {
     pub network_id: Uuid,
     pub device_interface_id: Option<Uuid>,
     pub device_id: Uuid,
-    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
-    pub mac_address: Option<String>,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
-    pub hostname: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -816,10 +815,8 @@ pub struct IpManagerUpdate {
     #[serde(default)]
     pub device_interface_id: Option<Option<Uuid>>,
     pub ip_address: Option<String>,
-    #[validate(length(max = 23, message = "请输入有效的MAC地址"))]
-    pub mac_address: Option<String>,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
-    pub hostname: Option<String>,
+    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    pub description: Option<String>,
     #[validate(length(max = 20, message = "状态长度不能超过20个字符"))]
     pub status: Option<String>,
     pub ip_version: Option<i16>,
@@ -938,6 +935,9 @@ pub struct DeviceInterface {
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -954,6 +954,9 @@ pub struct DeviceInterfaceWithDevice {
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -969,6 +972,9 @@ pub struct DeviceInterfaceCreate {
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub switch_id: Option<Uuid>,
+    pub switch_port_id: Option<Uuid>,
+    pub net_outlet_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -981,6 +987,12 @@ pub struct DeviceInterfaceUpdate {
     pub vlan_id: Option<i32>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub switch_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub switch_port_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub net_outlet_id: Option<Option<Uuid>>,
 }
 
 // ==================== 物理链路模型 ====================

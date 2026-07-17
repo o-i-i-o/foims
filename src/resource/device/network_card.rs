@@ -132,8 +132,8 @@ pub async fn apply_network_config(
             validate_interface_type(interface_type)?;
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, network_card_id, name, interface_type, mac_address, vlan_id, description, sort_order, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                r"INSERT INTO device_interfaces (id, device_id, network_card_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_id, sort_order, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             )
             .bind(port_id)
             .bind(device_id)
@@ -143,6 +143,9 @@ pub async fn apply_network_config(
             .bind(&port.mac_address)
             .bind(port.vlan_id)
             .bind(&port.description)
+            .bind(port.switch_id)
+            .bind(port.switch_port_id)
+            .bind(port.net_outlet_id)
             .bind(port_idx as i32)
             .bind(now)
             .bind(now)
@@ -188,8 +191,8 @@ pub async fn apply_network_config(
                 let ip_version = detect_ip_version(&ip.ip_address)?;
 
                 sqlx::query(
-                    "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11, $12)",
+                    "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
                 )
                 .bind(Uuid::new_v4())
                 .bind(port_id)
@@ -197,8 +200,7 @@ pub async fn apply_network_config(
                 .bind(network_id)
                 .bind(&ip.ip_address)
                 .bind(ip_version)
-                .bind(&ip.mac_address)
-                .bind(&ip.hostname)
+                .bind(&ip.description)
                 .bind("active")
                 .bind(now)
                 .bind(now)
@@ -240,7 +242,7 @@ pub async fn fetch_device_network_config(
                 r"SELECT
                     m.id, m.device_interface_id, m.device_id, m.network_id,
                     host(m.ip_address) as ip_address,
-                    m.ip_version, m.mac_address, m.hostname,
+                    m.ip_version, m.mac_address, m.hostname, m.description,
                     m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
                   FROM ips m
                   WHERE m.device_interface_id = $1
@@ -281,6 +283,9 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
             mac_address: None,
             vlan_id: None,
             description: None,
+            switch_id: None,
+            switch_port_id: None,
+            net_outlet_id: None,
             ips: vec![],
         }],
     }

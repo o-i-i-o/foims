@@ -144,6 +144,7 @@ export class NetworkCardManager {
     this.networks = [];
     this.regions = [];
     this.devicesCache = null;
+    this.roomsCache = null;
     this.addHandler = null;
   }
 
@@ -173,6 +174,14 @@ export class NetworkCardManager {
         this.devicesCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
       } else {
         this.devicesCache = [];
+      }
+    }
+    if (this.roomsCache === null) {
+      const result = await apiGet('/api/resources/rooms?page_size=1000');
+      if (result.success && result.data) {
+        this.roomsCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
+      } else {
+        this.roomsCache = [];
       }
     }
   }
@@ -328,6 +337,26 @@ export class NetworkCardManager {
           <input id="${uid}-desc" type="text" class="port-description nc-input" value="${escapeHtml(portData.description || '')}" autocomplete="off" />
         </div>
       </div>
+      <div class="nc-fields">
+        <div class="nc-field">
+          <label for="${uid}-outlet">${t('device.net_outlet') || '信息点'}</label>
+          <select id="${uid}-outlet" class="port-outlet nc-input">
+            <option value="">${t('device.select_outlet') || '选择信息点'}</option>
+          </select>
+        </div>
+        <div class="nc-field">
+          <label for="${uid}-switch">${t('device.upstream_device') || '上级设备'}</label>
+          <select id="${uid}-switch" class="port-switch nc-input">
+            <option value="">${t('device.select_upstream_device') || '选择设备'}</option>
+          </select>
+        </div>
+        <div class="nc-field">
+          <label for="${uid}-port">${t('device.upstream_port') || '上级端口'}</label>
+          <select id="${uid}-port" class="port-port nc-input">
+            <option value="">${t('device.select_upstream_port') || '选择端口'}</option>
+          </select>
+        </div>
+      </div>
       <div class="port-ips-container" aria-label="${t('device.ip_list') || 'IP地址列表'}"></div>
     `;
     return div;
@@ -341,6 +370,28 @@ export class NetworkCardManager {
       ipsContainer.appendChild(ipRow.element);
       await this.bindIpRowEvents(ipRow);
     });
+
+    const outletSelect = port.querySelector('.port-outlet');
+    const switchSelect = port.querySelector('.port-switch');
+    const portSelect = port.querySelector('.port-port');
+
+    const roomId = document.querySelector('#device-room-id')?.value || null;
+    if (roomId && outletSelect) {
+      await this.loadOutlets(outletSelect, roomId);
+    }
+
+    await this.loadSwitches(switchSelect, portSelect);
+
+    if (portData.net_outlet_id && outletSelect) {
+      outletSelect.value = portData.net_outlet_id;
+    }
+    if (portData.switch_id && switchSelect) {
+      switchSelect.value = portData.switch_id;
+      await this.handleSwitchChange(switchSelect, portSelect);
+      if (portData.switch_port_id && portSelect) {
+        portSelect.value = portData.switch_port_id;
+      }
+    }
 
     const ipsContainer = port.querySelector('.port-ips-container');
     const ips = portData.ips || [];
@@ -401,27 +452,9 @@ export class NetworkCardManager {
           <label for="${uid}-address">${t('ip.ip_address') || 'IP地址'}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
           <input id="${uid}-address" type="text" class="ip-address nc-input" value="${escapeHtml(ipData?.ip_address || '')}" placeholder="192.168.1.100" autocomplete="off" required />
         </div>
-      </div>
-      <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-mac">${t('ip.mac_address') || 'MAC地址'}</label>
-          <input id="${uid}-mac" type="text" class="ip-mac nc-input" value="${escapeHtml(ipData?.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
-        </div>
-        <div class="nc-field">
-          <label for="${uid}-hostname">${t('ip.hostname') || '主机名'}</label>
-          <input id="${uid}-hostname" type="text" class="ip-hostname nc-input" value="${escapeHtml(ipData?.hostname || '')}" autocomplete="off" />
-        </div>
-        <div class="nc-field">
-          <label for="${uid}-switch">${t('device.upstream_device') || '上级设备'}</label>
-          <select id="${uid}-switch" class="ip-switch nc-input">
-            <option value="">${t('device.select_upstream_device') || '选择设备'}</option>
-          </select>
-        </div>
-        <div class="nc-field">
-          <label for="${uid}-port">${t('device.upstream_port') || '上级端口'}</label>
-          <select id="${uid}-port" class="ip-port nc-input">
-            <option value="">${t('device.select_upstream_port') || '选择端口'}</option>
-          </select>
+          <label for="${uid}-description">${t('common.description') || '描述'}</label>
+          <input id="${uid}-description" type="text" class="ip-description nc-input" value="${escapeHtml(ipData?.description || '')}" autocomplete="off" />
         </div>
       </div>
     `;
@@ -435,8 +468,6 @@ export class NetworkCardManager {
 
     const regionSelect = element.querySelector('.ip-region');
     const networkSelect = element.querySelector('.ip-network');
-    const switchSelect = element.querySelector('.ip-switch');
-    const portSelect = element.querySelector('.ip-port');
 
     regionSelect?.addEventListener('change', async () => {
       const regionId = regionSelect.value;
@@ -465,8 +496,6 @@ export class NetworkCardManager {
       }
     });
 
-    await this.loadSwitches(switchSelect, portSelect);
-
     if (ipData) {
       if (ipData.network_region_id && regionSelect) {
         regionSelect.value = ipData.network_region_id;
@@ -474,13 +503,6 @@ export class NetworkCardManager {
       }
       if (ipData.network_id && networkSelect) {
         networkSelect.value = ipData.network_id;
-      }
-      if (ipData.switch_id && switchSelect) {
-        switchSelect.value = ipData.switch_id;
-        await this.handleSwitchChange(switchSelect, portSelect);
-        if (ipData.device_interface_id && portSelect) {
-          portSelect.value = ipData.device_interface_id;
-        }
       }
     }
   }
@@ -500,6 +522,26 @@ export class NetworkCardManager {
     const map = new Map(this.networks.map(n => [n.id, n]));
     for (const n of newNetworks) map.set(n.id, n);
     return Array.from(map.values());
+  }
+
+  async loadOutlets(outletSelect, roomId) {
+    if (!outletSelect) return;
+    outletSelect.innerHTML = `<option value="">${t('device.select_outlet') || '选择信息点'}</option>`;
+    if (!roomId) return;
+    try {
+      const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
+      if (result.success && result.data) {
+        const outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
+        outlets.forEach(outlet => {
+          const option = document.createElement('option');
+          option.value = outlet.id;
+          option.textContent = outlet.name || outlet.code || outlet.id;
+          outletSelect.appendChild(option);
+        });
+      }
+    } catch (error) {
+      console.error('加载信息点失败:', error);
+    }
   }
 
   async loadSwitches(switchSelect, portSelect) {
@@ -606,13 +648,10 @@ export class NetworkCardManager {
           const ipNum = ipIdx + 1;
           const networkId = ipEl.querySelector('.ip-network')?.value || null;
           const ipAddress = ipEl.querySelector('.ip-address')?.value?.trim() || '';
-          const ipMac = ipEl.querySelector('.ip-mac')?.value?.trim() || null;
-          const ipHostname = ipEl.querySelector('.ip-hostname')?.value?.trim() || null;
-          const switchId = ipEl.querySelector('.ip-switch')?.value || null;
-          const portId = ipEl.querySelector('.ip-port')?.value || null;
+          const ipDescription = ipEl.querySelector('.ip-description')?.value?.trim() || null;
           const networkRegionId = ipEl.querySelector('.ip-region')?.value || null;
 
-          if (!networkId && !ipAddress && !ipMac) return;
+          if (!networkId && !ipAddress && !ipDescription) return;
 
           if (!networkId) {
             errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.network_required') || '请选择网络'}`);
@@ -641,18 +680,19 @@ export class NetworkCardManager {
           const ipData = {
             network_id: networkId,
             ip_address: ipAddress,
-            mac_address: ipMac,
-            hostname: ipHostname || null,
+            description: ipDescription,
           };
           if (networkRegionId) ipData.network_region_id = networkRegionId;
-          if (switchId) ipData.switch_id = switchId;
-          if (portId) ipData.device_interface_id = portId;
           ips.push(ipData);
         });
 
         if (ips.length === 0) {
           errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ${t('device.at_least_one_ip') || '至少需要保留一个IP'}`);
         }
+
+        const portSwitchId = portEl.querySelector('.port-switch')?.value || null;
+        const portSwitchPortId = portEl.querySelector('.port-port')?.value || null;
+        const portOutletId = portEl.querySelector('.port-outlet')?.value || null;
 
         ports.push({
           id: portId,
@@ -662,6 +702,9 @@ export class NetworkCardManager {
           vlan_id: portVlan,
           description: portDesc,
           ips,
+          switch_id: portSwitchId,
+          switch_port_id: portSwitchPortId,
+          net_outlet_id: portOutletId,
         });
       });
 

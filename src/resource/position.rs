@@ -270,7 +270,7 @@ pub async fn get_cabinet_position(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
+            m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at, m.updated_at,
             n.network_region_id, nr.name as network_region
         FROM ips m
@@ -296,12 +296,13 @@ pub async fn get_cabinet_position(
                 "ip_version": row.get::<i16, _>(5),
                 "mac_address": row.get::<Option<String>, _>(6),
                 "hostname": row.get::<Option<String>, _>(7),
-                "status": row.get::<String, _>(8),
-                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(9),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(10),
-                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(11),
-                "network_region_id": row.get::<Option<Uuid>, _>(12),
-                "network_region": row.get::<Option<String>, _>(13)
+                "description": row.get::<Option<String>, _>(8),
+                "status": row.get::<String, _>(9),
+                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(10),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(11),
+                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
+                "network_region_id": row.get::<Option<Uuid>, _>(13),
+                "network_region": row.get::<Option<String>, _>(14)
             })
         })
         .collect();
@@ -397,7 +398,7 @@ pub async fn update_cabinet_position(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname,
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description,
            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
            FROM ips m JOIN devices d ON m.device_id = d.id WHERE d.position_id = $1",
     )

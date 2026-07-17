@@ -9,6 +9,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             ip_version SMALLINT NOT NULL DEFAULT 4,
             mac_address VARCHAR(20),
             hostname VARCHAR(100),
+            description TEXT,
             status VARCHAR(20) NOT NULL DEFAULT 'active',
             last_seen TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             last_mac VARCHAR(20),

@@ -271,7 +271,7 @@ pub async fn get_workstation(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
+            m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
         FROM ips m
         JOIN devices d ON m.device_id = d.id
@@ -358,7 +358,7 @@ pub async fn update_workstation(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
             host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname,
+            m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
         FROM ips m
         JOIN devices d ON m.device_id = d.id
