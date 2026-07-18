@@ -382,10 +382,20 @@ pub async fn send_mac_change_notification(
     .await
     {
         Ok(()) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
-        Err(e) => error!(
-            "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
-            workstation_name, e
-        ),
+        Err(e) => {
+            let msg = format!("{e}");
+            if msg.contains("SMTP配置未设置") {
+                warn!(
+                    "MAC地址变更邮件通知跳过: 工位={}, 原因: {}",
+                    workstation_name, msg
+                );
+            } else {
+                error!(
+                    "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
+                    workstation_name, msg
+                );
+            }
+        }
     }
 
     Ok(())

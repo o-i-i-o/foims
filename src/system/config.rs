@@ -993,7 +993,10 @@ pub async fn get_smtp_config(
 ) -> Result<HttpResponse, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
-        None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
+        None => {
+            tracing::warn!("SMTP配置未设置");
+            return Err(AppError::NotFound("SMTP配置未设置".to_string()));
+        }
     };
 
     let resp = SmtpConfigResponse {
@@ -1034,7 +1037,10 @@ pub async fn update_smtp_config(
     let password = if req.password.is_empty() {
         let existing = get_smtp_config_from_db(&state.pool()?.get_conn())
             .await
-            .ok_or_else(|| AppError::Internal("SMTP配置未设置，请填写密码".to_string()))?;
+            .ok_or_else(|| {
+                tracing::warn!("SMTP配置未设置，请填写密码");
+                AppError::NotFound("SMTP配置未设置，请填写密码".to_string())
+            })?;
         existing.password
     } else {
         req.password.clone()
@@ -1070,7 +1076,10 @@ pub async fn test_smtp_connection(
 
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
-        None => return Err(AppError::Internal("SMTP配置未设置".to_string())),
+        None => {
+            tracing::warn!("SMTP配置未设置");
+            return Err(AppError::NotFound("SMTP配置未设置".to_string()));
+        }
     };
 
     crate::system::smtp::test_smtp_connection(&config)
@@ -1104,7 +1113,15 @@ pub async fn send_system_email(
         &req.body,
     )
     .await
-    .map_err(|e| AppError::Internal(format!("发送邮件失败: {e}")))?;
+    .map_err(|e| {
+        let msg = format!("{e}");
+        if msg.contains("SMTP配置未设置") {
+            tracing::warn!("{}", msg);
+            AppError::NotFound(msg)
+        } else {
+            AppError::Internal(format!("发送邮件失败: {e}"))
+        }
+    })?;
 
     Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功")))
 }

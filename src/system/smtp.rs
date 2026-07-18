@@ -238,9 +238,10 @@ pub async fn send_email_to_users(
     subject: &str,
     body: &str,
 ) -> Result<()> {
-    let smtp_config = get_smtp_config_from_db(pool)
-        .await
-        .ok_or_else(|| anyhow::anyhow!("SMTP配置未设置"))?;
+    let smtp_config = get_smtp_config_from_db(pool).await.ok_or_else(|| {
+        warn!("SMTP配置未设置");
+        anyhow::anyhow!("SMTP配置未设置")
+    })?;
 
     let users = sqlx::query("SELECT email FROM users WHERE id = ANY($1)")
         .bind(user_ids)
