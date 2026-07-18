@@ -267,6 +267,7 @@
     "enabled": "Enabled",
     "connection_status": "Connection Status",
     "ip_visualization": "IP Visualization",
+    "visualization_too_many_ips": "Too many IP addresses to display. It is not recommended to allocate too many addresses in a single subnet, as it may cause broadcast storms.",
     "ipv4_list": "IPv4 Address List",
     "ipv6_info": "IPv6 Info",
     "ipv6_list": "IPv6 Address List",

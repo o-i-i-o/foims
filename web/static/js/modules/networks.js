@@ -363,7 +363,9 @@ export async function showNetworkUsage(id) {
 function buildIPv4Content(network, networkIps, networkId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
-  const allIpAddresses = generateIpAddresses(cidr);
+  const prefixLength = cidr ? parseInt(cidr.split('/')[1], 10) : 32;
+  // 掩码 < 22 时 IP 数量过多，跳过生成以避免内存浪费
+  const allIpAddresses = prefixLength < 22 ? [] : generateIpAddresses(cidr);
   
   const ipStatusMap = new Map();
   networkIps.forEach(ip => {
@@ -424,20 +426,24 @@ function buildIPv4Content(network, networkIps, networkId) {
     
     <div class="usage-visualization">
       <h5>${t('network.ip_visualization')}</h5>
-      <div class="ip-grid" id="ip-grid">
-        ${allIpAddresses.map(ip => {
-          const isUsed = ipStatusMap.has(ip);
-          const status = ipStatusMap.get(ip) || "unused";
-          const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
-          const tooltipText = `${escapeHtml(ip)} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
-          
-          return `
-            <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
-              <span class="ip-label">${ip.split('.').pop()}</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
+      ${
+        prefixLength < 22
+          ? `<div class="ip-grid-empty" role="alert">${t('network.visualization_too_many_ips')}</div>`
+          : `<div class="ip-grid" id="ip-grid">
+            ${allIpAddresses.map(ip => {
+              const isUsed = ipStatusMap.has(ip);
+              const status = ipStatusMap.get(ip) || "unused";
+              const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
+              const tooltipText = `${escapeHtml(ip)} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
+
+              return `
+                <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
+                  <span class="ip-label">${ip.split('.').pop()}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>`
+      }
     </div>
     
     <div class="usage-ips">
