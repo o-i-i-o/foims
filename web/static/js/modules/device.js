@@ -230,6 +230,191 @@ function setupSaveAsTemplateToggle() {
   });
 }
 
+function setupTemplateManageBtn() {
+  const btn = document.getElementById('device-template-manage-btn');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = 'true';
+  btn.addEventListener('click', () => openDeviceTemplateModal());
+}
+
+const DEVICE_TYPE_OPTIONS = [
+  { value: 'pc', label: () => t('device_type.pc') || 'PC' },
+  { value: 'laptop', label: () => t('device_type.laptop') || '笔记本' },
+  { value: 'printer', label: () => t('device_type.printer') || '打印机' },
+  { value: 'server', label: () => t('device_type.server') || '服务器' },
+  { value: 'network_device', label: () => t('device_type.network_device') || '网络设备' },
+  { value: 'switch', label: () => t('device_type.switch') || '交换机' },
+  { value: 'camera', label: () => t('device_type.camera') || '摄像头' },
+  { value: 'phone', label: () => t('device_type.phone') || '电话' },
+  { value: 'other', label: () => t('device_type.other') || '其他' },
+];
+
+async function openDeviceTemplateModal() {
+  const { default: modalLoader } = await import('../utils/modalLoader.js');
+  const modal = await modalLoader.loadModal('device-template-modal');
+  if (!modal) return;
+
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+
+  await loadDeviceTemplateList();
+}
+
+async function loadDeviceTemplateList() {
+  const listEl = document.getElementById('device-template-list');
+  if (!listEl) return;
+
+  try {
+    const result = await apiGet('/api/resources/device-templates');
+    if (!result.success || !result.data?.items) {
+      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty') || '暂无模板数据'}</p>`;
+      return;
+    }
+
+    const templates = result.data.items;
+    if (templates.length === 0) {
+      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty') || '暂无模板数据'}</p>`;
+      return;
+    }
+
+    listEl.innerHTML = templates.map(tmpl => `
+      <div class="device-template-item" data-id="${escapeHtml(tmpl.id)}">
+        <div class="device-template-info">
+          <span class="device-template-name">${escapeHtml(tmpl.name)}</span>
+          <span class="device-template-meta">
+            <span class="device-template-type">${escapeHtml(DEVICE_TYPE_LABELS[tmpl.device_type] || tmpl.device_type)}</span>
+            ${tmpl.brand ? `<span class="device-template-brand">${escapeHtml(tmpl.brand)}</span>` : ''}
+            ${tmpl.model ? `<span class="device-template-model">${escapeHtml(tmpl.model)}</span>` : ''}
+          </span>
+        </div>
+        <div class="device-template-actions">
+          <button type="button" class="btn btn-secondary btn-sm dt-edit-btn" data-i18n="common.edit">${t('common.edit') || '编辑'}</button>
+          <button type="button" class="btn btn-danger btn-sm dt-delete-btn" data-i18n="common.delete">${t('common.delete') || '删除'}</button>
+        </div>
+      </div>
+    `).join('');
+
+    listEl.querySelectorAll('.dt-edit-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = btn.closest('.device-template-item');
+        const id = item?.dataset.id;
+        if (id) await editDeviceTemplate(id);
+      });
+    });
+
+    listEl.querySelectorAll('.dt-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = btn.closest('.device-template-item');
+        const id = item?.dataset.id;
+        const name = item?.querySelector('.device-template-name')?.textContent;
+        if (id) await deleteDeviceTemplate(id, name);
+      });
+    });
+  } catch (error) {
+    listEl.innerHTML = `<p class="empty-hint">${t('common.load_failed') || '加载失败'}</p>`;
+    handleError(error, t('common.load_failed') || '加载失败');
+  }
+}
+
+async function editDeviceTemplate(id) {
+  try {
+    const result = await apiGet(`/api/resources/device-templates/${id}`);
+    if (!result.success || !result.data) return;
+
+    const tmpl = result.data;
+    const listEl = document.getElementById('device-template-list');
+    const itemEl = listEl?.querySelector(`.device-template-item[data-id="${id}"]`);
+    if (!itemEl) return;
+
+    const typeOptions = DEVICE_TYPE_OPTIONS.map(opt =>
+      `<option value="${opt.value}" ${opt.value === tmpl.device_type ? 'selected' : ''}>${opt.label()}</option>`
+    ).join('');
+
+    itemEl.innerHTML = `
+      <div class="device-template-edit-form" data-id="${escapeHtml(id)}">
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="common.name">${t('common.name') || '名称'}<span class="required">*</span></label>
+            <input type="text" class="dt-edit-name nc-input" value="${escapeHtml(tmpl.name)}" />
+          </div>
+          <div class="form-group">
+            <label data-i18n="device.device_type">${t('device.device_type') || '设备类型'}</label>
+            <select class="dt-edit-type nc-input">${typeOptions}</select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="device.brand">${t('device.brand') || '品牌'}</label>
+            <input type="text" class="dt-edit-brand nc-input" value="${escapeHtml(tmpl.brand || '')}" />
+          </div>
+          <div class="form-group">
+            <label data-i18n="device.model">${t('device.model') || '型号'}</label>
+            <input type="text" class="dt-edit-model nc-input" value="${escapeHtml(tmpl.model || '')}" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label data-i18n="common.description">${t('common.description') || '描述'}</label>
+          <textarea class="dt-edit-desc nc-input" rows="2">${escapeHtml(tmpl.description || '')}</textarea>
+        </div>
+        <div class="device-template-edit-actions">
+          <button type="button" class="btn btn-secondary btn-sm dt-cancel-btn">${t('common.cancel') || '取消'}</button>
+          <button type="button" class="btn btn-primary btn-sm dt-save-btn">${t('common.save') || '保存'}</button>
+        </div>
+      </div>
+    `;
+
+    itemEl.querySelector('.dt-cancel-btn')?.addEventListener('click', () => loadDeviceTemplateList());
+    itemEl.querySelector('.dt-save-btn')?.addEventListener('click', async () => {
+      const name = itemEl.querySelector('.dt-edit-name')?.value?.trim();
+      if (!name) {
+        showToast(t('device_template.name_required') || '模板名称不能为空', 'warning');
+        return;
+      }
+      const data = {
+        name,
+        device_type: itemEl.querySelector('.dt-edit-type')?.value || 'other',
+        brand: itemEl.querySelector('.dt-edit-brand')?.value?.trim() || null,
+        model: itemEl.querySelector('.dt-edit-model')?.value?.trim() || null,
+        description: itemEl.querySelector('.dt-edit-desc')?.value?.trim() || null,
+      };
+      try {
+        const updateResult = await apiPut(`/api/resources/device-templates/${id}`, data);
+        if (updateResult.success) {
+          showToast(t('device_template.update_success') || '模板更新成功', 'success');
+          await loadDeviceTemplateList();
+          await loadDeviceTemplatesForSelect('device-template-id');
+        } else {
+          showToast(updateResult.message || t('common.failed') || '操作失败', 'error');
+        }
+      } catch (error) {
+        handleError(error, t('common.operation_failed') || '操作失败');
+      }
+    });
+  } catch (error) {
+    handleError(error, t('common.load_failed') || '加载失败');
+  }
+}
+
+async function deleteDeviceTemplate(id, name) {
+  const confirmed = await import('../utils/confirm.js').then(m => m.default(
+    t('common.confirm_delete', { name: name || '' }) || `确定要删除此${name || ''}吗？`
+  ));
+  if (!confirmed) return;
+
+  try {
+    const result = await apiDelete(`/api/resources/device-templates/${id}`);
+    if (result.success) {
+      showToast(t('device_template.delete_success') || '模板删除成功', 'success');
+      await loadDeviceTemplateList();
+      await loadDeviceTemplatesForSelect('device-template-id');
+    } else {
+      showToast(result.message || t('common.failed') || '操作失败', 'error');
+    }
+  } catch (error) {
+    handleError(error, t('common.operation_failed') || '操作失败');
+  }
+}
+
 function setupSnmpVersionToggle() {
   const snmpVersionSelect = elementCache.get('device-snmp-version');
   if (!snmpVersionSelect || snmpVersionSelect.dataset.bound) return;
@@ -268,6 +453,7 @@ function ensureDeviceListeners() {
   setupMutualExclusion();
   setupTemplateAutoFill();
   setupSaveAsTemplateToggle();
+  setupTemplateManageBtn();
   setupSnmpVersionToggle();
   setupSnmpButtons();
   setupRoomCascade();

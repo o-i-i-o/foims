@@ -148,6 +148,7 @@
     "select_net_outlet_to_add": "Select outlet to add",
     "select_net_outlet_first": "Please select an outlet first",
     "net_outlets_order": "Outlet connection order",
+    "outlet_must_have_peer": "All outlets except the last one in the chain must have a peer configured",
     "card_type_pcie": "PCIe",
     "card_type_onboard": "Onboard",
     "card_type_usb": "USB",
@@ -160,6 +161,14 @@
     "port_type_management": "Management",
     "port_type_loopback": "Loopback",
     "port_type_wifi": "WiFi"
+  },
+  "device_template": {
+    "title": "Device Template Management",
+    "manage": "Manage Templates",
+    "empty": "No template data available",
+    "name_required": "Template name is required",
+    "update_success": "Template updated successfully",
+    "delete_success": "Template deleted successfully"
   },
   "room": {
     "name": "Room Name",

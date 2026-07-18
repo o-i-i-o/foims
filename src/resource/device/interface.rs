@@ -131,6 +131,73 @@ pub async fn get_all_device_interfaces(
     )))
 }
 
+/// 验证信息点链完整性并推导上级端口。
+/// 规则：多个信息点时，除最后一个外必须有对端（peer_type 不为空）；
+/// 最后一个信息点的对端为 switch_port 时，自动推导 switch_id/switch_port_id。
+pub async fn validate_and_resolve_outlet_chain(
+    executor: &mut sqlx::PgConnection,
+    net_outlet_ids: &[Uuid],
+    switch_id: &mut Option<Uuid>,
+    switch_port_id: &mut Option<Uuid>,
+) -> Result<(), AppError> {
+    if net_outlet_ids.is_empty() {
+        return Ok(());
+    }
+
+    // 批量查询信息点的 peer 信息
+    let outlets: Vec<(Uuid, Option<String>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT id, peer_type, peer_switch_port_id FROM net_outlets WHERE id = ANY($1)",
+    )
+    .bind(net_outlet_ids)
+    .fetch_all(&mut *executor)
+    .await?;
+
+    let outlet_map: std::collections::HashMap<Uuid, (Option<String>, Option<Uuid>)> = outlets
+        .into_iter()
+        .map(|(id, pt, psp)| (id, (pt, psp)))
+        .collect();
+
+    // 验证：非最后信息点必须有对端
+    if net_outlet_ids.len() > 1 {
+        for outlet_id in &net_outlet_ids[..net_outlet_ids.len() - 1] {
+            if let Some((peer_type, _)) = outlet_map.get(outlet_id)
+                && (peer_type.is_none() || peer_type.as_ref().is_some_and(|pt| pt.is_empty()))
+            {
+                return Err(AppError::Validation(
+                    "链路中除最后一个信息点外，其他信息点必须配置对端".to_string(),
+                ));
+            }
+        }
+    }
+
+    // 自动推导：最后一个信息点的对端为 switch_port 时
+    if let Some(last_id) = net_outlet_ids.last()
+        && let Some((peer_type, peer_switch_port_id)) = outlet_map.get(last_id)
+        && peer_type.as_deref() == Some("switch_port")
+        && let Some(sp_id) = peer_switch_port_id
+    {
+        // 从 switch_ports 查 device_id，同时查找对应的 device_interface
+        let resolved: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+            r"SELECT sp.device_id,
+                     (SELECT di.id FROM device_interfaces di
+                      WHERE di.device_id = sp.device_id
+                        AND di.name IN (sp.port_name, sp.port_number)
+                      LIMIT 1) AS iface_id
+                  FROM switch_ports sp WHERE sp.id = $1",
+        )
+        .bind(sp_id)
+        .fetch_optional(&mut *executor)
+        .await?;
+
+        if let Some((dev_id, iface_id)) = resolved {
+            *switch_id = Some(dev_id);
+            *switch_port_id = iface_id;
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn create_device_interface(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
@@ -174,6 +241,18 @@ pub async fn create_device_interface(
         return Err(AppError::Conflict("该接口名已存在".to_string()));
     }
 
+    // 验证信息点链并推导上级端口
+    let mut resolved_switch_id = req.switch_id;
+    let mut resolved_switch_port_id = req.switch_port_id;
+    let mut conn = state.pool()?.get_conn().acquire().await?;
+    validate_and_resolve_outlet_chain(
+        &mut conn,
+        &req.net_outlet_ids,
+        &mut resolved_switch_id,
+        &mut resolved_switch_port_id,
+    )
+    .await?;
+
     let id = Uuid::new_v4();
     let now = Utc::now();
 
@@ -189,8 +268,8 @@ pub async fn create_device_interface(
     .bind(&req.mac_address)
     .bind(req.vlan_id)
     .bind(&req.description)
-    .bind(req.switch_id)
-    .bind(req.switch_port_id)
+    .bind(resolved_switch_id)
+    .bind(resolved_switch_port_id)
     .bind(&req.net_outlet_ids)
     .bind(now)
     .bind(now)
@@ -255,7 +334,7 @@ pub async fn get_device_interface(
 pub async fn update_device_interface(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
-    req: web::Json<DeviceInterfaceUpdate>,
+    web::Json(mut req): web::Json<DeviceInterfaceUpdate>,
     http_req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     let interface_id = path.into_inner();
@@ -274,6 +353,36 @@ pub async fn update_device_interface(
     }
 
     let now = Utc::now();
+
+    // 如果 net_outlet_ids 有更新，验证信息点链并推导上级端口
+    if let Some(ref outlet_ids) = req.net_outlet_ids {
+        // 获取当前或请求中的 switch_id/switch_port_id
+        let current: Option<(Option<Uuid>, Option<Uuid>)> =
+            sqlx::query_as("SELECT switch_id, switch_port_id FROM device_interfaces WHERE id = $1")
+                .bind(interface_id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?;
+
+        let mut sid = match &req.switch_id {
+            Some(Some(id)) => Some(*id),
+            Some(None) => None,
+            None => current.as_ref().and_then(|c| c.0),
+        };
+        let mut spid = match &req.switch_port_id {
+            Some(Some(id)) => Some(*id),
+            Some(None) => None,
+            None => current.as_ref().and_then(|c| c.1),
+        };
+
+        let mut conn = state.pool()?.get_conn().acquire().await?;
+        validate_and_resolve_outlet_chain(&mut conn, outlet_ids, &mut sid, &mut spid).await?;
+
+        // 仅在推导产生值时覆盖请求值，避免把未传字段强制置 NULL
+        if sid.is_some() {
+            req.switch_id = Some(sid);
+            req.switch_port_id = Some(spid);
+        }
+    }
 
     let mut set_clauses: Vec<String> = Vec::new();
     let mut param_index = 1;

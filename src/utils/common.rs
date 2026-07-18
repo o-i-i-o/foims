@@ -17,9 +17,16 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
 
 // ==================== CIDR 验证 ====================
 
+/// 验证 CIDR 格式是否合法（与 PostgreSQL CIDR 类型语义一致）
+/// ipnetwork crate 会自动归一化（如 2001::36/64 → 2001::/64），
+/// 但 PostgreSQL CIDR 要求主机位全为0，因此需额外检查
 #[must_use]
 pub fn validate_cidr(cidr: &str) -> bool {
-    ipnetwork::IpNetwork::from_str(cidr).is_ok()
+    match ipnetwork::IpNetwork::from_str(cidr) {
+        Ok(ipnetwork::IpNetwork::V4(net)) => net.ip() == net.network(),
+        Ok(ipnetwork::IpNetwork::V6(net)) => net.ip() == net.network(),
+        Err(_) => false,
+    }
 }
 
 #[must_use]

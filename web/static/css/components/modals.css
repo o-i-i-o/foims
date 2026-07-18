@@ -276,4 +276,85 @@
     z-index: calc(var(--z-modal-secondary) + 1);
 }
 
+/* 设备模板管理 */
+.device-template-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.device-template-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-white);
+    transition: border-color var(--transition-fast);
+}
+
+.device-template-item:hover {
+    border-color: var(--color-primary);
+}
+
+.device-template-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.device-template-name {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.device-template-meta {
+    display: flex;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.device-template-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.device-template-edit-form {
+    width: 100%;
+}
+
+.device-template-edit-form .form-row {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.device-template-edit-form .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.device-template-edit-form .form-group label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+}
+
+.device-template-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
 

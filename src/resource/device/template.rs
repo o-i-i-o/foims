@@ -1,11 +1,14 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, DeviceTemplate, DeviceTemplateSummary};
+use crate::models::{
+    ApiResponse, DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest,
+};
 use crate::utils::{OperationLogParams, log_system_operation};
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde_json::json;
 use tracing::warn;
 use uuid::Uuid;
+use validator::Validate;
 
 /// 获取所有设备模板
 pub async fn get_device_templates(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
@@ -100,4 +103,66 @@ pub async fn delete_device_template(
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success((), "设备模板删除成功")))
+}
+
+/// 更新设备模板
+pub async fn update_device_template(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+    http_req: HttpRequest,
+    req: web::Json<UpdateDeviceTemplateRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate()?;
+    let id = *id_path;
+
+    let existing: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM device_templates WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?;
+    if existing.is_none() {
+        return Err(AppError::NotFound("设备模板未找到".to_string()));
+    }
+
+    let name_conflict: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM device_templates WHERE name = $1 AND id != $2)",
+    )
+    .bind(&req.name)
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+    if name_conflict {
+        return Err(AppError::Conflict("模板名称已存在".to_string()));
+    }
+
+    sqlx::query(
+        "UPDATE device_templates SET name = $1, device_type = $2, brand = $3, model = $4, description = $5, updated_at = NOW() WHERE id = $6",
+    )
+    .bind(&req.name)
+    .bind(&req.device_type)
+    .bind(&req.brand)
+    .bind(&req.model)
+    .bind(&req.description)
+    .bind(id)
+    .execute(&state.pool()?.get_conn())
+    .await?;
+
+    let details = serde_json::json!({ "template_id": id.to_string(), "name": req.name });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            req: &http_req,
+            action: "update",
+            resource_type: "device_template",
+            resource_id: &id,
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success((), "设备模板更新成功")))
 }

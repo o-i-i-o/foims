@@ -52,6 +52,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    if let Err(e) = sqlx::query("GRANT SELECT ON ip_with_details TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予ip_with_details视图权限失败: {}", e);
+    }
+
     if let Err(e) = sqlx::query("DROP VIEW IF EXISTS mac_comparison CASCADE")
         .execute(pool)
         .await
@@ -80,6 +87,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    if let Err(e) = sqlx::query("GRANT SELECT ON mac_comparison TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予mac_comparison视图权限失败: {}", e);
+    }
 
     if let Err(e) = sqlx::query("DROP VIEW IF EXISTS devices_with_details CASCADE")
         .execute(pool)
@@ -117,6 +131,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    if let Err(e) = sqlx::query("GRANT SELECT ON devices_with_details TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予devices_with_details视图权限失败: {}", e);
+    }
+
     if let Err(e) = sqlx::query("DROP VIEW IF EXISTS net_outlets_with_details CASCADE")
         .execute(pool)
         .await
@@ -148,6 +169,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    if let Err(e) = sqlx::query("GRANT SELECT ON net_outlets_with_details TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予net_outlets_with_details视图权限失败: {}", e);
+    }
 
     if let Err(e) = sqlx::query("DROP VIEW IF EXISTS cable_links_with_details CASCADE")
         .execute(pool)
@@ -183,6 +211,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    if let Err(e) = sqlx::query("GRANT SELECT ON cable_links_with_details TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予cable_links_with_details视图权限失败: {}", e);
+    }
 
     Ok(())
 }

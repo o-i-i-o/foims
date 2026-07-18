@@ -147,6 +147,7 @@ export class NetworkCardManager {
     this.regions = [];
     this.devicesCache = null;
     this.roomsCache = null;
+    this.outletsCache = [];
     this.addHandler = null;
   }
 
@@ -599,6 +600,8 @@ export class NetworkCardManager {
       const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
       if (result.success && result.data) {
         const outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
+        // 缓存信息点数据（含 peer 信息），用于 collectData 验证
+        this.outletsCache = outlets;
         outlets.forEach(outlet => {
           const option = document.createElement('option');
           option.value = outlet.id;
@@ -763,6 +766,20 @@ export class NetworkCardManager {
         // 从有序列表中读取 net_outlet_ids
         const outletItems = portEl.querySelectorAll('.nc-outlet-item');
         const portOutletIds = Array.from(outletItems).map(li => li.dataset.outletId).filter(Boolean);
+
+        // 信息点链验证：非最后信息点必须有对端（peer_type 不为空）
+        // 上级端口的自动推导由后端在保存时根据最后一个信息点的 peer_switch_port_id 完成
+        if (portOutletIds.length > 1) {
+          for (let i = 0; i < portOutletIds.length - 1; i++) {
+            const outletData = this.outletsCache.find(o => o.id === portOutletIds[i]);
+            if (outletData && !outletData.peer_type) {
+              errors.push(
+                `${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ` +
+                `${t('device.outlet_must_have_peer') || '链路中除最后一个信息点外，其他信息点必须配置对端'} (${outletData.name || outletData.id})`
+              );
+            }
+          }
+        }
 
         ports.push({
           id: portId,

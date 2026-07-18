@@ -37,8 +37,9 @@ use crate::resource::{
     sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
     sync_room_children, test_snmp_connection, test_snmp_connection_by_id, trigger_auto_discover,
     update_cabinet, update_cabinet_position, update_cable_link, update_device,
-    update_device_interface, update_net_outlet, update_network, update_network_region,
-    update_org_template, update_organization, update_room, update_switch_port, update_workstation,
+    update_device_interface, update_device_template, update_net_outlet, update_network,
+    update_network_region, update_org_template, update_organization, update_room,
+    update_switch_port, update_workstation,
 };
 use crate::system::app_fail2ban::{
     app_ban_ip, app_unban_ip, get_app_fail2ban_status, update_app_fail2ban_config,
@@ -319,6 +320,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                             web::scope("/device-templates")
                                 .route("", web::get().to(get_device_templates))
                                 .route("/{id}", web::get().to(get_device_template))
+                                .route("/{id}", web::put().to(update_device_template))
                                 .route("/{id}", web::delete().to(delete_device_template)),
                         )
                         // 设备管理（含交换机端口/设备接口/MAC/LLDP/SNMP 功能）

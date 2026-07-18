@@ -148,6 +148,7 @@
     "select_net_outlet_to_add": "选择信息点添加",
     "select_net_outlet_first": "请先选择信息点",
     "net_outlets_order": "信息点连接顺序",
+    "outlet_must_have_peer": "链路中除最后一个信息点外，其他信息点必须配置对端",
     "card_type_pcie": "PCIe",
     "card_type_onboard": "板载",
     "card_type_usb": "USB",
@@ -160,6 +161,14 @@
     "port_type_management": "管理接口",
     "port_type_loopback": "环回接口",
     "port_type_wifi": "WiFi"
+  },
+  "device_template": {
+    "title": "设备模板管理",
+    "manage": "模板管理",
+    "empty": "暂无模板数据",
+    "name_required": "模板名称不能为空",
+    "update_success": "模板更新成功",
+    "delete_success": "模板删除成功"
   },
   "room": {
     "name": "房间名称",

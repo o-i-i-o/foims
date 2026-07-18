@@ -601,7 +601,7 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
         { field: 'id', render: (v, row) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${t('room.children_list') || '列表'}</button>
+          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${(row.room_type || '').toLowerCase() === 'data_center' ? (t('room.cabinets') || '机柜列表') : (t('room.workstations') || '工位列表')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],

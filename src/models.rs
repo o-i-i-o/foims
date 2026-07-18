@@ -1432,6 +1432,17 @@ pub struct DeviceTemplateSummary {
     pub model: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UpdateDeviceTemplateRequest {
+    #[validate(length(min = 1, max = 100, message = "模板名称不能为空且不超过100个字符"))]
+    pub name: String,
+    #[validate(length(min = 1, max = 30, message = "设备类型不能为空"))]
+    pub device_type: String,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub description: Option<String>,
+}
+
 // ==================== 设备模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]

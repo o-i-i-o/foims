@@ -113,6 +113,10 @@
     margin: var(--space-md) 0;
 }
 
+.form-divider {
+    margin: var(--space-md) 0;
+}
+
 .section-subtitle {
     margin-bottom: var(--space-md);
 }
