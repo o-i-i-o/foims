@@ -380,7 +380,7 @@ pub async fn create_organization(
             req: &http_req,
             action: "create",
             resource_type: "organization",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -487,7 +487,7 @@ pub async fn update_organization(
             req: &http_req,
             action: "update",
             resource_type: "organization",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -638,7 +638,7 @@ pub async fn delete_organization(
             req: &http_req,
             action: "delete",
             resource_type: "organization",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -778,6 +778,32 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
     Ok(depth)
 }
 
+/// 获取组织节点关联的房间列表
+pub async fn get_org_rooms(
+    state: web::Data<AppState>,
+    id_path: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let id = *id_path;
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+    if existing.is_none() {
+        return Err(AppError::NotFound("组织节点未找到".to_string()));
+    }
+    let rooms = sqlx::query_as::<_, Room>(
+        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+         FROM rooms WHERE org_id = $1 ORDER BY created_at ASC",
+    )
+    .bind(id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    Ok(HttpResponse::Ok().json(ApiResponse::<Vec<Room>>::success(
+        rooms,
+        "组织节点房间列表获取成功",
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -801,7 +827,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        let tree = build_tree(&[root.clone()]);
+        let tree = build_tree(std::slice::from_ref(&root));
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].name, "总部");
         assert!(tree[0].children.is_empty());
@@ -851,32 +877,6 @@ mod tests {
 
     #[test]
     fn test_hierarchy_depth_limit() {
-        assert!(MAX_DEPTH >= 5);
+        const { assert!(MAX_DEPTH >= 5); }
     }
-}
-
-/// 获取组织节点关联的房间列表
-pub async fn get_org_rooms(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
-    if existing.is_none() {
-        return Err(AppError::NotFound("组织节点未找到".to_string()));
-    }
-    let rooms = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-         FROM rooms WHERE org_id = $1 ORDER BY created_at ASC",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
-    Ok(HttpResponse::Ok().json(ApiResponse::<Vec<Room>>::success(
-        rooms,
-        "组织节点房间列表获取成功",
-    )))
 }

@@ -5,7 +5,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             user_id UUID REFERENCES users(id) ON DELETE SET NULL,
             action VARCHAR(100) NOT NULL,
             resource_type VARCHAR(50) NOT NULL,
-            resource_id UUID NOT NULL,
+            resource_id UUID,
             details JSONB NOT NULL DEFAULT '{}',
             result BOOLEAN NOT NULL,
             ip_address VARCHAR(50) NOT NULL,

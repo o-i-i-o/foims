@@ -21,11 +21,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             cabinet_id UUID REFERENCES cabinets(id) ON DELETE CASCADE,
             start_u INTEGER NOT NULL DEFAULT 1,
             end_u INTEGER NOT NULL DEFAULT 1,
-            device_type VARCHAR(20) DEFAULT 'cabinet_position',
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_position_device_type CHECK (device_type IN ('cabinet_position', 'switch', 'server', 'router', 'other')),
             CONSTRAINT chk_position_u_range CHECK (start_u <= end_u),
             CONSTRAINT uq_positions_cabinet_name UNIQUE (cabinet_id, name)
         )",

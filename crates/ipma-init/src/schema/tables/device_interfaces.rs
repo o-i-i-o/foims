@@ -12,7 +12,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             vlan_id INTEGER,
             description TEXT,
             switch_id UUID REFERENCES devices(id) ON DELETE SET NULL,
-            switch_port_id UUID REFERENCES device_interfaces(id) ON DELETE SET NULL,
+            uplink_interface_id UUID REFERENCES device_interfaces(id) ON DELETE SET NULL,
             net_outlet_ids UUID[] NOT NULL DEFAULT '{}',
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

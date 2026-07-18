@@ -843,7 +843,16 @@ export async function loadSystemInfo() {
 
       elementCache.get("system-name").textContent = systemInfo.name || "IPMA";
       elementCache.get("system-version").textContent = systemInfo.version || "-";
-      elementCache.get("database-status").textContent = systemInfo.database_status || "-";
+      const dbStatus = systemInfo.database_status || "-";
+      let dbStatusText;
+      if (dbStatus === "connected") {
+        dbStatusText = t('system.connected');
+      } else if (dbStatus.startsWith("disconnected")) {
+        dbStatusText = t('system.disconnected');
+      } else {
+        dbStatusText = dbStatus;
+      }
+      elementCache.get("database-status").textContent = dbStatusText;
       elementCache.get("system-time").textContent = systemInfo.timestamp 
         ? new Date(systemInfo.timestamp).toLocaleString() 
         : new Date().toLocaleString();

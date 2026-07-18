@@ -32,30 +32,8 @@
         </div>
         <div class="form-row">
           <div class="form-group network-config-wrapper">
-            <div id="network-configs-container">
-              <div class="network-config-item">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label><span data-i18n="network.region">Network Region</span><span class="required">*</span></label>
-                    <select class="network-region-select" required>
-                      <option value="" data-i18n="network.select_region">Select Network Region</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label><span data-i18n="network.select_network">Network</span><span class="required">*</span></label>
-                    <select class="network-select" required>
-                      <option value="" data-i18n="network.select_network">Select Network</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <button type="button" class="btn btn-danger btn-sm remove-network-config-btn" data-i18n="common.delete">Delete</button>
-                  </div>
-                </div>
-              </div>
-              <div class="network-config-actions">
-                <button type="button" id="add-network-config-btn" class="btn btn-secondary btn-sm" data-i18n="network.add_network_config">Add Network Config</button>
-              </div>
-            </div>
+            <label data-i18n="network.network_config">Network Config</label>
+            <div id="network-configs-container"></div>
           </div>
         </div>
         <!-- 工位/机柜动态管理区域 -->
@@ -63,9 +41,6 @@
           <div class="form-group">
             <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
             <div id="room-children-container"></div>
-            <div class="room-children-actions">
-              <button type="button" id="add-room-child-btn" class="btn btn-secondary btn-sm" data-i18n="room.add_workstation">Add Workstation</button>
-            </div>
           </div>
         </div>
         <div class="form-group">

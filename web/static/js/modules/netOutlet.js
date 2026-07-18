@@ -37,7 +37,6 @@ const OUTLET_TYPE_LABELS = {
 
 const PEER_TYPE_LABELS = {
   outlet: t('net_outlet.peer_type_outlet') || '信息点',
-  patch_panel: t('net_outlet.peer_type_patch_panel') || '配线架',
   switch_port: t('net_outlet.peer_type_switch_port') || '交换机接口',
 };
 
@@ -53,7 +52,7 @@ function buildPeerDisplay(row) {
   if (!row.peer_type) return '-';
   const label = getPeerTypeLabel(row.peer_type);
   let target = '';
-  if (row.peer_type === 'outlet' || row.peer_type === 'patch_panel') {
+  if (row.peer_type === 'outlet') {
     if (row.peer_room_name || row.peer_outlet_name) {
       target = [row.peer_room_name, row.peer_outlet_name].filter(Boolean).map(escapeHtml).join(' / ');
     }

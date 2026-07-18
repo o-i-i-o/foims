@@ -233,7 +233,7 @@ pub struct OperationLogParams<'a> {
     pub req: &'a HttpRequest,
     pub action: &'a str,
     pub resource_type: &'a str,
-    pub resource_id: &'a Uuid,
+    pub resource_id: Option<&'a Uuid>,
     pub details: &'a serde_json::Value,
     pub result: bool,
 }

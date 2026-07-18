@@ -19,7 +19,7 @@ pub use template::*;
 use crate::error::AppError;
 
 /// Valid device types matching the database CHECK constraint
-const VALID_DEVICE_TYPES: [&str; 10] = [
+const VALID_DEVICE_TYPES: [&str; 9] = [
     "pc",
     "laptop",
     "printer",
@@ -28,7 +28,6 @@ const VALID_DEVICE_TYPES: [&str; 10] = [
     "switch",
     "camera",
     "phone",
-    "ap",
     "other",
 ];
 

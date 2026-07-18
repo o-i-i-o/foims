@@ -428,8 +428,8 @@ export class NetworkCardManager {
     if (portData.switch_id && switchSelect) {
       switchSelect.value = portData.switch_id;
       await this.handleSwitchChange(switchSelect, portSelect);
-      if (portData.switch_port_id && portSelect) {
-        portSelect.value = portData.switch_port_id;
+      if (portData.uplink_interface_id && portSelect) {
+        portSelect.value = portData.uplink_interface_id;
       }
     }
 
@@ -762,7 +762,7 @@ export class NetworkCardManager {
         }
 
         const portSwitchId = portEl.querySelector('.port-switch')?.value || null;
-        const portSwitchPortId = portEl.querySelector('.port-port')?.value || null;
+        const portUplinkInterfaceId = portEl.querySelector('.port-port')?.value || null;
         // 从有序列表中读取 net_outlet_ids
         const outletItems = portEl.querySelectorAll('.nc-outlet-item');
         const portOutletIds = Array.from(outletItems).map(li => li.dataset.outletId).filter(Boolean);
@@ -790,7 +790,7 @@ export class NetworkCardManager {
           description: portDesc,
           ips,
           switch_id: portSwitchId,
-          switch_port_id: portSwitchPortId,
+          uplink_interface_id: portUplinkInterfaceId,
           net_outlet_ids: portOutletIds,
         });
       });

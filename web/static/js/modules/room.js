@@ -61,7 +61,7 @@ function updateSelect(select, data, placeholder = '选择选项') {
 // 加载网络区域
 async function loadNetworkRegions(select) {
   if (!select) return [];
-  
+
   const now = Date.now();
   if (networkCache.networkRegions && isCacheValid(networkCache.cacheTime)) {
     updateSelect(select, networkCache.networkRegions, '选择网络区域');
@@ -80,17 +80,17 @@ async function loadNetworkRegions(select) {
   } catch (error) {
     console.error("加载网络区域失败:", error);
   }
-  
+
   return [];
 }
 
 // 加载网段
 async function loadNetworks(regionId, select, excludeIds = []) {
   if (!select) return [];
-  
+
   const cacheKey = regionId || 'all';
   const cached = networkCache.networks.get(cacheKey);
-  
+
   if (cached && isCacheValid(cached.timestamp)) {
     const filtered = cached.data.filter(n => !excludeIds.includes(n.id));
     updateSelect(select, filtered, '选择网段');
@@ -100,7 +100,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
   try {
     const url = regionId ? `/api/resources/networks?region_id=${regionId}&page_size=1000` : '/api/resources/networks?page_size=1000';
     const result = await apiGet(url);
-    
+
     const items = extractItems(result);
     if (items.length > 0) {
       networkCache.networks.set(cacheKey, { data: items, timestamp: Date.now() });
@@ -111,7 +111,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
   } catch (error) {
     console.error("加载网段失败:", error);
   }
-  
+
   return [];
 }
 
@@ -159,34 +159,31 @@ class NetworkConfigManager {
 
     this.container.innerHTML = '';
     await this.addItem();
-    this.updateAddButtons();
     return true;
   }
 
   createItemHTML() {
-    const { regionSelectClass, networkSelectClass, removeBtnClass } = this.options;
-    
+    const { regionSelectClass, networkSelectClass, removeBtnClass, addBtnClass } = this.options;
+
     return `
       <div class="network-config-item">
         <div class="form-row">
           <div class="form-group">
-            <label>网络区域<span class="required">*</span></label>
             <select class="${regionSelectClass}" required>
               <option value="">选择网络区域</option>
             </select>
           </div>
           <div class="form-group">
-            <label>网段选择<span class="required">*</span></label>
             <select class="${networkSelectClass}" required>
               <option value="">选择网段</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group network-config-actions">
             <button type="button" class="btn btn-danger btn-sm ${removeBtnClass}">
               删除
             </button>
-            <button type="button" class="btn btn-secondary btn-sm add-btn" style="display: none;">
-              新增
+            <button type="button" class="btn btn-secondary btn-sm ${addBtnClass}" style="display: none;">
+              ${t('network.add_network_config')}
             </button>
           </div>
         </div>
@@ -213,10 +210,10 @@ class NetworkConfigManager {
 
   updateAddButtons() {
     if (!this.container) return;
-    
+
     const items = this.container.querySelectorAll('.network-config-item');
     items.forEach((item, index) => {
-      const addBtn = item.querySelector('.add-btn');
+      const addBtn = item.querySelector(`.${this.options.addBtnClass}`);
       if (addBtn) {
         addBtn.style.display = index === items.length - 1 ? '' : 'none';
       }
@@ -224,14 +221,14 @@ class NetworkConfigManager {
   }
 
   bindItemEvents(item) {
-    const { regionSelectClass, networkSelectClass, removeBtnClass } = this.options;
-    
+    const { regionSelectClass, networkSelectClass, removeBtnClass, addBtnClass } = this.options;
+
     const removeBtn = item.querySelector(`.${removeBtnClass}`);
     if (removeBtn) {
       this.eventHandler.bind(removeBtn, 'click', () => this.removeItem(item));
     }
 
-    const addBtn = item.querySelector('.add-btn');
+    const addBtn = item.querySelector(`.${addBtnClass}`);
     if (addBtn) {
       this.eventHandler.bind(addBtn, 'click', () => this.addItem());
     }
@@ -256,7 +253,7 @@ class NetworkConfigManager {
       showToast('至少需要保留一个网段配置', 'warning');
       return;
     }
-    
+
     item.remove();
     this.updateAddButtons();
     this.updateNetworkSelects();
@@ -302,43 +299,43 @@ class NetworkConfigManager {
       this.container = document.getElementById(this.options.containerId);
     }
     if (!this.container) return;
-    
+
     if (!networks?.length) {
       await this.init();
       return;
     }
 
     this.container.innerHTML = '';
-    
+
     const networkMap = new Map(allNetworks.map(n => [n.id, n]));
     const selectedIds = networks.map(n => n.id);
-    
+
     await loadNetworkRegions(document.createElement('select'));
-    
+
     networks.forEach((network) => {
       const networkInfo = networkMap.get(network.id);
       if (!networkInfo) return;
-      
+
       const div = document.createElement('div');
       div.innerHTML = this.createItemHTML();
       const item = div.firstElementChild;
-      
+
       const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
       const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
-      
+
       loadNetworkRegions(regionSelect).then(() => {
         regionSelect.value = networkInfo.network_region_id;
-        
+
         const otherIds = selectedIds.filter(id => id !== network.id);
         loadNetworks(networkInfo.network_region_id, networkSelect, otherIds).then(() => {
           networkSelect.value = network.id;
         });
       });
-      
+
       this.container.appendChild(item);
       this.bindItemEvents(item);
     });
-    
+
     this.updateAddButtons();
   }
 
@@ -371,8 +368,8 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
   containerId: "network-configs-container",
   regionSelectClass: "network-region-select",
   networkSelectClass: "network-select",
-  addBtnId: "add-network-config-btn",
-  removeBtnClass: "remove-network-config-btn"
+  removeBtnClass: "remove-network-config-btn",
+  addBtnClass: "add-network-config-btn"
 });
 
 // ==========================================
@@ -393,21 +390,10 @@ class RoomChildrenManager {
     if (!this.container) return false;
 
     this.container.innerHTML = '';
-    this.bindAddButton();
     this.bindTypeChange();
     this.updateLabels();
     this.addItem();
     return true;
-  }
-
-  bindAddButton() {
-    const addBtn = document.getElementById('add-room-child-btn');
-    if (!addBtn) return;
-    if (this.addHandler) {
-      addBtn.removeEventListener('click', this.addHandler);
-    }
-    this.addHandler = () => this.addItem();
-    addBtn.addEventListener('click', this.addHandler);
   }
 
   bindTypeChange() {
@@ -421,7 +407,6 @@ class RoomChildrenManager {
   }
 
   onTypeChange(newType) {
-    const prevType = this.roomType;
     this.roomType = newType;
     this.updateLabels();
     // 类型切换时清空列表
@@ -431,13 +416,10 @@ class RoomChildrenManager {
 
   updateLabels() {
     const label = document.getElementById('room-children-label');
-    const addBtn = document.getElementById('add-room-child-btn');
     if (this.roomType === 'office') {
       if (label) label.textContent = t('room.workstations');
-      if (addBtn) addBtn.textContent = t('room.add_workstation');
     } else {
       if (label) label.textContent = t('room.cabinets');
-      if (addBtn) addBtn.textContent = t('room.add_cabinet');
     }
   }
 
@@ -457,8 +439,9 @@ class RoomChildrenManager {
         <div class="form-group">
           <input type="text" class="child-manager form-control" value="${escapeHtml(manager)}" placeholder="${t('workstation.manager')}" autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="form-group room-children-actions">
           <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t('common.delete')}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-child-btn" style="display: none;">${t('room.add_workstation')}</button>
         </div>
       </div>
     `;
@@ -482,8 +465,9 @@ class RoomChildrenManager {
         <div class="form-group">
           <input type="number" class="child-capacity form-control" value="${capacity}" min="1" max="48" placeholder="${t('cabinet.capacity')}" />
         </div>
-        <div class="form-group">
+        <div class="form-group room-children-actions">
           <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t('common.delete')}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-child-btn" style="display: none;">${t('room.add_cabinet')}</button>
         </div>
       </div>
     `;
@@ -497,6 +481,19 @@ class RoomChildrenManager {
       ? this.createWorkstationRow(data)
       : this.createCabinetRow(data);
     this.container.appendChild(item);
+    this.updateAddButtons();
+  }
+
+  updateAddButtons() {
+    if (!this.container) return;
+    const items = this.container.querySelectorAll('.room-child-item');
+    items.forEach((item, index) => {
+      const addBtn = item.querySelector('.add-child-btn');
+      if (addBtn) {
+        addBtn.style.display = index === items.length - 1 ? '' : 'none';
+        addBtn.textContent = this.roomType === 'office' ? t('room.add_workstation') : t('room.add_cabinet');
+      }
+    });
   }
 
   bindItemEvents(item) {
@@ -505,6 +502,13 @@ class RoomChildrenManager {
       const handler = () => this.removeItem(item);
       this.handlers.set(removeBtn, handler);
       removeBtn.addEventListener('click', handler);
+    }
+
+    const addBtn = item.querySelector('.add-child-btn');
+    if (addBtn) {
+      const handler = () => this.addItem();
+      this.handlers.set(addBtn, handler);
+      addBtn.addEventListener('click', handler);
     }
   }
 
@@ -515,6 +519,7 @@ class RoomChildrenManager {
       return;
     }
     item.remove();
+    this.updateAddButtons();
   }
 
   loadExisting(children) {
@@ -523,7 +528,6 @@ class RoomChildrenManager {
     }
     if (!this.container) return;
     this.container.innerHTML = '';
-    this.bindAddButton();
     this.bindTypeChange();
 
     if (this.roomType === 'office' && children?.workstations?.length) {
@@ -534,6 +538,7 @@ class RoomChildrenManager {
       this.addItem();
     }
     this.updateLabels();
+    this.updateAddButtons();
   }
 
   collectData() {

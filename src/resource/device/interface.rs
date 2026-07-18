@@ -88,7 +88,7 @@ pub async fn get_all_device_interfaces(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
                 di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
+                di.description, di.switch_id, di.uplink_interface_id, di.net_outlet_ids,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
             JOIN devices d ON di.device_id = d.id
@@ -106,7 +106,7 @@ pub async fn get_all_device_interfaces(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
                 di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
+                di.description, di.switch_id, di.uplink_interface_id, di.net_outlet_ids,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
             JOIN devices d ON di.device_id = d.id
@@ -133,12 +133,12 @@ pub async fn get_all_device_interfaces(
 
 /// 验证信息点链完整性并推导上级端口。
 /// 规则：多个信息点时，除最后一个外必须有对端（peer_type 不为空）；
-/// 最后一个信息点的对端为 switch_port 时，自动推导 switch_id/switch_port_id。
+/// 最后一个信息点的对端为 switch_port 时，自动推导 switch_id/uplink_interface_id。
 pub async fn validate_and_resolve_outlet_chain(
     executor: &mut sqlx::PgConnection,
     net_outlet_ids: &[Uuid],
     switch_id: &mut Option<Uuid>,
-    switch_port_id: &mut Option<Uuid>,
+    uplink_interface_id: &mut Option<Uuid>,
 ) -> Result<(), AppError> {
     if net_outlet_ids.is_empty() {
         return Ok(());
@@ -191,7 +191,7 @@ pub async fn validate_and_resolve_outlet_chain(
 
         if let Some((dev_id, iface_id)) = resolved {
             *switch_id = Some(dev_id);
-            *switch_port_id = iface_id;
+            *uplink_interface_id = iface_id;
         }
     }
 
@@ -243,13 +243,13 @@ pub async fn create_device_interface(
 
     // 验证信息点链并推导上级端口
     let mut resolved_switch_id = req.switch_id;
-    let mut resolved_switch_port_id = req.switch_port_id;
+    let mut resolved_uplink_interface_id = req.uplink_interface_id;
     let mut conn = state.pool()?.get_conn().acquire().await?;
     validate_and_resolve_outlet_chain(
         &mut conn,
         &req.net_outlet_ids,
         &mut resolved_switch_id,
-        &mut resolved_switch_port_id,
+        &mut resolved_uplink_interface_id,
     )
     .await?;
 
@@ -258,7 +258,7 @@ pub async fn create_device_interface(
 
     sqlx::query(
         r"INSERT INTO device_interfaces (
-            id, device_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_ids, created_at, updated_at
+            id, device_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, net_outlet_ids, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(id)
@@ -269,7 +269,7 @@ pub async fn create_device_interface(
     .bind(req.vlan_id)
     .bind(&req.description)
     .bind(resolved_switch_id)
-    .bind(resolved_switch_port_id)
+    .bind(resolved_uplink_interface_id)
     .bind(&req.net_outlet_ids)
     .bind(now)
     .bind(now)
@@ -294,7 +294,7 @@ pub async fn create_device_interface(
             req: &http_req,
             action: "create",
             resource_type: "device_interface",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -317,7 +317,7 @@ pub async fn get_device_interface(
         r"SELECT
             di.id, di.device_id, d.name as device_name,
             di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-            di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
+            di.description, di.switch_id, di.uplink_interface_id, di.net_outlet_ids,
             di.sort_order, di.created_at, di.updated_at
         FROM device_interfaces di
         JOIN devices d ON di.device_id = d.id
@@ -356,31 +356,32 @@ pub async fn update_device_interface(
 
     // 如果 net_outlet_ids 有更新，验证信息点链并推导上级端口
     if let Some(ref outlet_ids) = req.net_outlet_ids {
-        // 获取当前或请求中的 switch_id/switch_port_id
-        let current: Option<(Option<Uuid>, Option<Uuid>)> =
-            sqlx::query_as("SELECT switch_id, switch_port_id FROM device_interfaces WHERE id = $1")
-                .bind(interface_id)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
+        // 获取当前或请求中的 switch_id/uplink_interface_id
+        let current: Option<(Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+            "SELECT switch_id, uplink_interface_id FROM device_interfaces WHERE id = $1",
+        )
+        .bind(interface_id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
 
         let mut sid = match &req.switch_id {
             Some(Some(id)) => Some(*id),
             Some(None) => None,
             None => current.as_ref().and_then(|c| c.0),
         };
-        let mut spid = match &req.switch_port_id {
+        let mut uifid = match &req.uplink_interface_id {
             Some(Some(id)) => Some(*id),
             Some(None) => None,
             None => current.as_ref().and_then(|c| c.1),
         };
 
         let mut conn = state.pool()?.get_conn().acquire().await?;
-        validate_and_resolve_outlet_chain(&mut conn, outlet_ids, &mut sid, &mut spid).await?;
+        validate_and_resolve_outlet_chain(&mut conn, outlet_ids, &mut sid, &mut uifid).await?;
 
         // 仅在推导产生值时覆盖请求值，避免把未传字段强制置 NULL
         if sid.is_some() {
             req.switch_id = Some(sid);
-            req.switch_port_id = Some(spid);
+            req.uplink_interface_id = Some(uifid);
         }
     }
 
@@ -428,10 +429,10 @@ pub async fn update_device_interface(
         param_index += 2;
     }
 
-    let switch_port_id_update = req.switch_port_id.is_some();
-    if switch_port_id_update {
+    let uplink_interface_id_update = req.uplink_interface_id.is_some();
+    if uplink_interface_id_update {
         set_clauses.push(format!(
-            "switch_port_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE switch_port_id END",
+            "uplink_interface_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE uplink_interface_id END",
             param_index = param_index,
             param_idx_val = param_index + 1
         ));
@@ -503,11 +504,11 @@ pub async fn update_device_interface(
         }
     }
 
-    if switch_port_id_update {
-        match &req.switch_port_id {
-            Some(Some(spid)) => {
+    if uplink_interface_id_update {
+        match &req.uplink_interface_id {
+            Some(Some(uifid)) => {
                 query = query.bind(true);
-                query = query.bind(spid);
+                query = query.bind(uifid);
             }
             Some(None) => {
                 query = query.bind(true);
@@ -548,7 +549,7 @@ pub async fn update_device_interface(
             req: &http_req,
             action: "update",
             resource_type: "device_interface",
-            resource_id: &interface_id,
+            resource_id: Some(&interface_id),
             details: &details,
             result: true,
         },
@@ -596,7 +597,7 @@ pub async fn delete_device_interface(
             req: &http_req,
             action: "delete",
             resource_type: "device_interface",
-            resource_id: &interface_id,
+            resource_id: Some(&interface_id),
             details: &details,
             result: true,
         },

@@ -552,7 +552,6 @@ pub struct CabinetPosition {
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub device_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -565,7 +564,6 @@ pub struct CabinetPositionWithDetails {
     pub room_name: Option<String>,
     pub start_u: i32,
     pub end_u: i32,
-    pub device_type: Option<String>,
     pub ips: Vec<IpManager>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -774,7 +772,7 @@ pub struct PortSyncItem {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub uplink_interface_id: Option<Uuid>,
     #[serde(default)]
     pub net_outlet_ids: Vec<Uuid>,
     #[serde(default)]
@@ -935,7 +933,7 @@ pub struct DeviceInterface {
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub uplink_interface_id: Option<Uuid>,
     #[serde(default)]
     pub net_outlet_ids: Vec<Uuid>,
     pub sort_order: i32,
@@ -955,7 +953,7 @@ pub struct DeviceInterfaceWithDevice {
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub uplink_interface_id: Option<Uuid>,
     #[serde(default)]
     pub net_outlet_ids: Vec<Uuid>,
     pub sort_order: i32,
@@ -974,7 +972,7 @@ pub struct DeviceInterfaceCreate {
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
-    pub switch_port_id: Option<Uuid>,
+    pub uplink_interface_id: Option<Uuid>,
     #[serde(default)]
     pub net_outlet_ids: Vec<Uuid>,
 }
@@ -992,7 +990,7 @@ pub struct DeviceInterfaceUpdate {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub switch_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub switch_port_id: Option<Option<Uuid>>,
+    pub uplink_interface_id: Option<Option<Uuid>>,
     #[serde(default)]
     pub net_outlet_ids: Option<Vec<Uuid>>,
 }

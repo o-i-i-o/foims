@@ -175,18 +175,18 @@ pub async fn create_net_outlet(
     }
 
     if let Some(peer_type) = req.peer_type.as_deref()
-        && !matches!(peer_type, "outlet" | "patch_panel" | "switch_port")
+        && !matches!(peer_type, "outlet" | "switch_port")
     {
         return Err(AppError::Validation(
-            "对端类型必须是outlet、patch_panel或switch_port".to_string(),
+            "对端类型必须是outlet或switch_port".to_string(),
         ));
     }
 
     if let Some(peer_type) = req.peer_type.as_deref() {
         match peer_type {
-            "outlet" | "patch_panel" if req.peer_outlet_id.is_none() => {
+            "outlet" if req.peer_outlet_id.is_none() => {
                 return Err(AppError::Validation(
-                    "对端类型为信息点或配线架时必须指定对端信息点".to_string(),
+                    "对端类型为信息点时必须指定对端信息点".to_string(),
                 ));
             }
             "switch_port" if req.peer_switch_port_id.is_none() => {
@@ -255,7 +255,7 @@ pub async fn create_net_outlet(
             req: &http_req,
             action: "create",
             resource_type: "net_outlet",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -367,10 +367,10 @@ pub async fn update_net_outlet(
     }
 
     if let Some(Some(ref peer_type)) = req.peer_type
-        && !matches!(peer_type.as_str(), "outlet" | "patch_panel" | "switch_port")
+        && !matches!(peer_type.as_str(), "outlet" | "switch_port")
     {
         return Err(AppError::Validation(
-            "对端类型必须是outlet、patch_panel或switch_port".to_string(),
+            "对端类型必须是outlet或switch_port".to_string(),
         ));
     }
 
@@ -578,7 +578,7 @@ pub async fn update_net_outlet(
             req: &http_req,
             action: "update",
             resource_type: "net_outlet",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -613,6 +613,16 @@ pub async fn delete_net_outlet(
         return Err(AppError::NotFound("信息点未找到".to_string()));
     }
 
+    // net_outlet_ids 数组无外键约束，需手动清理 device_interfaces 中的悬空引用
+    sqlx::query(
+        "UPDATE device_interfaces
+         SET net_outlet_ids = array_remove(net_outlet_ids, $1)
+         WHERE $1 = ANY(net_outlet_ids)",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
     sqlx::query("DELETE FROM net_outlets WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
@@ -627,7 +637,7 @@ pub async fn delete_net_outlet(
             req: &http_req,
             action: "delete",
             resource_type: "net_outlet",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },

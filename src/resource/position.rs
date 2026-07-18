@@ -84,7 +84,7 @@ pub async fn get_positions(
                   (SELECT c2.name FROM cabinets c2 WHERE c2.id = p.cabinet_id) as cabinet_name,
                   c.room_id,
                   (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
-                  p.start_u, p.end_u, p.description, p.device_type,
+                  p.start_u, p.end_u, p.description,
                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
            FROM positions p
            LEFT JOIN cabinets c ON p.cabinet_id = c.id
@@ -125,7 +125,6 @@ pub async fn get_positions(
         let room_name: Option<String> = row.get("room_name");
         let start_u: i32 = row.get("start_u");
         let end_u: i32 = row.get("end_u");
-        let device_type: Option<String> = row.get("device_type");
         let description: Option<String> = row.get("description");
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
@@ -139,7 +138,6 @@ pub async fn get_positions(
             room_name,
             start_u,
             end_u,
-            device_type,
             ips: Vec::new(),
             description,
             created_at,
@@ -186,8 +184,8 @@ pub async fn create_cabinet_position(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', $7, $8)"
+        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
     )
     .bind(id)
     .bind(&req.name)
@@ -210,7 +208,6 @@ pub async fn create_cabinet_position(
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
-        device_type: Some("cabinet_position".to_string()),
     };
 
     let details = serde_json::json!({
@@ -226,7 +223,7 @@ pub async fn create_cabinet_position(
             req: &http_req,
             action: "create",
             resource_type: "cabinet_position",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -251,8 +248,7 @@ pub async fn get_cabinet_position(
     let id = *id_path;
 
     let position_data = sqlx::query(
-        r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description, 
-                  p.device_type,
+        r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description,
                   p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ,
                   c.room_id
            FROM positions p
@@ -263,8 +259,6 @@ pub async fn get_cabinet_position(
     .fetch_optional(&state.pool()?.get_conn())
     .await?
     .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
-
-    let device_type: Option<String> = position_data.get("device_type");
 
     let position_ips = sqlx::query(
         r"SELECT
@@ -326,7 +320,6 @@ pub async fn get_cabinet_position(
         "room_id": position_data.get::<Option<Uuid>, _>("room_id"),
         "start_u": position_data.get::<i32, _>("start_u"),
         "end_u": position_data.get::<i32, _>("end_u"),
-        "device_type": device_type,
         "ips": ips_with_region,
         "description": position_data.get::<Option<String>, _>("description"),
         "created_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
@@ -388,7 +381,7 @@ pub async fn update_cabinet_position(
     tx.commit().await?;
 
     let row = sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.device_type, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
+        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
         FROM positions p 
         LEFT JOIN cabinets c ON p.cabinet_id = c.id 
         LEFT JOIN rooms r ON c.room_id = r.id 
@@ -415,7 +408,6 @@ pub async fn update_cabinet_position(
         room_name: row.get("room_name"),
         start_u: row.get("start_u"),
         end_u: row.get("end_u"),
-        device_type: row.get("device_type"),
         ips,
         description: row.get("description"),
         created_at: row.get("created_at"),
@@ -435,7 +427,7 @@ pub async fn update_cabinet_position(
             req: &http_req,
             action: "update",
             resource_type: "cabinet_position",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
@@ -500,7 +492,7 @@ pub async fn delete_cabinet_position(
             req: &http_req,
             action: "delete",
             resource_type: "cabinet_position",
-            resource_id: &id,
+            resource_id: Some(&id),
             details: &details,
             result: true,
         },
