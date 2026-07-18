@@ -67,6 +67,10 @@ pub struct TopologyConnectionWithPorts {
     pub source_port_name: Option<String>,
     pub target_port_number: Option<String>,
     pub target_port_name: Option<String>,
+    /// 信息点链：源设备的接口到目标设备之间依次经过的信息点
+    /// 每项包含 id、name、outlet_type
+    #[sqlx(json)]
+    pub outlet_chain: Option<Vec<serde_json::Value>>,
 }
 
 // ==================== 处理函数 ====================
@@ -168,7 +172,23 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<HttpResponse, Vis
                  sp.port_number AS source_port_number,
                  sp.port_name AS source_port_name,
                  tp.port_number AS target_port_number,
-                 tp.port_name AS target_port_name
+                 tp.port_name AS target_port_name,
+                 COALESCE(
+                   (
+                     SELECT json_agg(json_build_object('id', no.id, 'name', no.name, 'outlet_type', no.outlet_type) ORDER BY ord.ordinality)
+                     FROM device_interfaces di
+                     CROSS JOIN LATERAL unnest(di.net_outlet_ids) WITH ORDINALITY AS ord(outlet_id, ordinality)
+                     JOIN net_outlets no ON no.id = ord.outlet_id
+                     WHERE di.device_id = tc.source_device_id
+                       AND di.switch_id = tc.target_device_id
+                       AND (
+                         tc.source_switch_port_id IS NULL
+                         OR di.switch_port_id = tc.source_switch_port_id
+                       )
+                     LIMIT 1
+                   ),
+                   '[]'::json
+                 ) AS outlet_chain
           FROM topology_connections tc
           JOIN devices sd ON tc.source_device_id = sd.id
           JOIN devices td ON tc.target_device_id = td.id
@@ -335,7 +355,8 @@ async fn discover_device_pairs_via_cable_links(
           JOIN net_outlets no ON
             (cl.a_endpoint_type = 'net_outlet' AND cl.a_endpoint_id = no.id)
             OR (cl.b_endpoint_type = 'net_outlet' AND cl.b_endpoint_id = no.id)
-          JOIN devices dv ON dv.net_outlet_id = no.id
+          JOIN device_interfaces di ON no.id = ANY(di.net_outlet_ids)
+          JOIN devices dv ON dv.id = di.device_id
           WHERE sp.device_id <> dv.id",
     )
     .fetch_all(pool)

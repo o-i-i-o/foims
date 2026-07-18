@@ -130,12 +130,20 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         SELECT
             ap.id, ap.name, ap.outlet_type, ap.room_id, ap.cabinet_id,
             ap.description,
+            ap.peer_type, ap.peer_room_id, ap.peer_outlet_id, ap.peer_switch_port_id,
             r.name AS room_name,
             cab.name AS cabinet_name,
+            pr.name AS peer_room_name,
+            po.name AS peer_outlet_name,
+            (sp.port_number || ' @ ' || sd.name) AS peer_switch_port_label,
             ap.created_at, ap.updated_at
         FROM net_outlets ap
         LEFT JOIN rooms r ON ap.room_id = r.id
         LEFT JOIN cabinets cab ON ap.cabinet_id = cab.id
+        LEFT JOIN rooms pr ON ap.peer_room_id = pr.id
+        LEFT JOIN net_outlets po ON ap.peer_outlet_id = po.id
+        LEFT JOIN switch_ports sp ON ap.peer_switch_port_id = sp.id
+        LEFT JOIN devices sd ON sp.device_id = sd.id
     ",
     )
     .execute(pool)

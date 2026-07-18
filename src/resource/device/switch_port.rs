@@ -60,6 +60,7 @@ pub async fn get_all_switch_ports(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
+    let room_id = query.get("room_id").cloned();
 
     let search_pattern = if search.is_empty() {
         None
@@ -67,23 +68,52 @@ pub async fn get_all_switch_ports(
         Some(format!("%{search}%"))
     };
 
-    let total: i64 = if let Some(ref pattern) = search_pattern {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id WHERE d.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1"
-        )
-        .bind(pattern)
-        .fetch_one(&state.pool()?.get_conn())
-        .await?
+    let parsed_room_id = room_id
+        .as_ref()
+        .map(|id| {
+            Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的room_id参数".to_string()))
+        })
+        .transpose()?;
+
+    let has_room_filter = parsed_room_id.is_some();
+    let has_search = search_pattern.is_some();
+
+    let mut where_parts: Vec<String> = Vec::new();
+    let mut param_idx = 1;
+
+    if has_search {
+        where_parts.push(format!(
+            "(d.name ILIKE ${param_idx} OR sp.port_number::TEXT ILIKE ${param_idx} OR sp.port_name ILIKE ${param_idx} OR sp.description ILIKE ${param_idx})"
+        ));
+        param_idx += 1;
+    }
+    if has_room_filter {
+        where_parts.push(format!("d.room_id = ${param_idx}"));
+        param_idx += 1;
+    }
+
+    let where_clause = if where_parts.is_empty() {
+        String::new()
     } else {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id",
-        )
-        .fetch_one(&state.pool()?.get_conn())
-        .await?
+        format!("WHERE {}", where_parts.join(" AND "))
     };
 
-    let data = if let Some(ref pattern) = search_pattern {
-        sqlx::query_as::<_, SwitchPortWithDevice>(
+    let total: i64 = {
+        let sql = format!(
+            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id {where_clause}"
+        );
+        let mut q = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql));
+        if has_search {
+            q = q.bind(search_pattern.as_ref().unwrap());
+        }
+        if has_room_filter {
+            q = q.bind(parsed_room_id);
+        }
+        q.fetch_one(&state.pool()?.get_conn()).await?
+    };
+
+    let data = {
+        let sql = format!(
             r"SELECT
                 sp.id, sp.device_id, d.name as device_name,
                 COALESCE(
@@ -94,34 +124,20 @@ pub async fn get_all_switch_ports(
                 sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
             FROM switch_ports sp
             JOIN devices d ON sp.device_id = d.id
-            WHERE d.name ILIKE $1 OR sp.port_number::TEXT ILIKE $1 OR sp.port_name ILIKE $1 OR sp.description ILIKE $1
+            {where_clause}
             ORDER BY d.name, sp.port_number
-            LIMIT $2 OFFSET $3"
-        )
-        .bind(pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-    } else {
-        sqlx::query_as::<_, SwitchPortWithDevice>(
-            r"SELECT
-                sp.id, sp.device_id, d.name as device_name,
-                COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
-                    ''
-                ) as device_ip,
-                sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
-                sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
-            FROM switch_ports sp
-            JOIN devices d ON sp.device_id = d.id
-            ORDER BY d.name, sp.port_number
-            LIMIT $1 OFFSET $2",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
+            LIMIT ${param_idx} OFFSET ${}",
+            param_idx + 1
+        );
+        let mut q = sqlx::query_as::<_, SwitchPortWithDevice>(sqlx::AssertSqlSafe(sql));
+        if has_search {
+            q = q.bind(search_pattern.as_ref().unwrap());
+        }
+        if has_room_filter {
+            q = q.bind(parsed_room_id);
+        }
+        q = q.bind(page_size).bind(offset);
+        q.fetch_all(&state.pool()?.get_conn()).await?
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(

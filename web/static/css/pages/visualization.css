@@ -408,6 +408,36 @@
     dominant-baseline: middle;
 }
 
+/* 信息点链中间节点（设备 → 信息点 → ... → 目标设备） */
+.topology-outlet-node {
+    cursor: help;
+}
+
+.topology-outlet-node circle {
+    transition: fill var(--transition-fast), stroke var(--transition-fast);
+}
+
+.topology-outlet-node:hover circle {
+    fill: #ffe0b2;
+    stroke: #e65100;
+}
+
+.topology-outlet-label {
+    font-size: 9px;
+    fill: #e65100;
+    font-weight: 600;
+    dominant-baseline: middle;
+    pointer-events: none;
+}
+
+.topology-outlet-index {
+    font-size: 8px;
+    fill: #5d4037;
+    font-weight: 700;
+    dominant-baseline: middle;
+    pointer-events: none;
+}
+
 .temp-connection {
     fill: none;
     stroke: #ff9800;

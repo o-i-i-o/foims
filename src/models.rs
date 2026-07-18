@@ -770,7 +770,8 @@ pub struct PortSyncItem {
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    #[serde(default)]
+    pub net_outlet_ids: Vec<Uuid>,
     #[serde(default)]
     pub ips: Vec<IpSyncItem>,
 }
@@ -930,7 +931,8 @@ pub struct DeviceInterface {
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    #[serde(default)]
+    pub net_outlet_ids: Vec<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -949,7 +951,8 @@ pub struct DeviceInterfaceWithDevice {
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    #[serde(default)]
+    pub net_outlet_ids: Vec<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -967,7 +970,8 @@ pub struct DeviceInterfaceCreate {
     pub description: Option<String>,
     pub switch_id: Option<Uuid>,
     pub switch_port_id: Option<Uuid>,
-    pub net_outlet_id: Option<Uuid>,
+    #[serde(default)]
+    pub net_outlet_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -984,8 +988,8 @@ pub struct DeviceInterfaceUpdate {
     pub switch_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub switch_port_id: Option<Option<Uuid>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub net_outlet_id: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub net_outlet_ids: Option<Vec<Uuid>>,
 }
 
 // ==================== 物理链路模型 ====================
@@ -1342,6 +1346,10 @@ pub struct NetOutlet {
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
     pub description: Option<String>,
+    pub peer_type: Option<String>,
+    pub peer_room_id: Option<Uuid>,
+    pub peer_outlet_id: Option<Uuid>,
+    pub peer_switch_port_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1356,6 +1364,13 @@ pub struct NetOutletWithDetails {
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
     pub description: Option<String>,
+    pub peer_type: Option<String>,
+    pub peer_room_id: Option<Uuid>,
+    pub peer_outlet_id: Option<Uuid>,
+    pub peer_switch_port_id: Option<Uuid>,
+    pub peer_room_name: Option<String>,
+    pub peer_outlet_name: Option<String>,
+    pub peer_switch_port_label: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1369,6 +1384,10 @@ pub struct NetOutletCreate {
     pub cabinet_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    pub peer_type: Option<String>,
+    pub peer_room_id: Option<Uuid>,
+    pub peer_outlet_id: Option<Uuid>,
+    pub peer_switch_port_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -1380,6 +1399,14 @@ pub struct NetOutletUpdate {
     pub cabinet_id: Option<Option<Uuid>>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub peer_type: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub peer_room_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub peer_outlet_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub peer_switch_port_id: Option<Option<Uuid>>,
 }
 
 // ==================== 设备模板模型 ====================

@@ -131,7 +131,7 @@ pub async fn apply_network_config(
             validate_interface_type(interface_type)?;
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, network_card_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_id, sort_order, created_at, updated_at)
+                r"INSERT INTO device_interfaces (id, device_id, network_card_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_ids, sort_order, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             )
             .bind(port_id)
@@ -144,7 +144,7 @@ pub async fn apply_network_config(
             .bind(&port.description)
             .bind(port.switch_id)
             .bind(port.switch_port_id)
-            .bind(port.net_outlet_id)
+            .bind(&port.net_outlet_ids)
             .bind(port_idx as i32)
             .bind(now)
             .bind(now)
@@ -283,7 +283,7 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
             description: None,
             switch_id: None,
             switch_port_id: None,
-            net_outlet_id: None,
+            net_outlet_ids: vec![],
             ips: vec![],
         }],
     }

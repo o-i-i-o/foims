@@ -158,6 +158,12 @@ export class TopologyRenderer {
     );
     if (targetLabel) g.appendChild(targetLabel);
 
+    // 渲染信息点链（设备 → 信息点[0] → 信息点[1] → ... → 目标设备）
+    const chain = Array.isArray(connection.outlet_chain) ? connection.outlet_chain : [];
+    if (chain.length > 0) {
+      this._drawOutletChain(g, sourceAnchor, targetAnchor, chain, parallelOffset);
+    }
+
     path.addEventListener("click", (e) => {
       e.stopPropagation();
       if (this.core.callbacks.onConnectionClick) {
@@ -167,6 +173,52 @@ export class TopologyRenderer {
 
     this.core.connectionsGroup.appendChild(g);
     return g;
+  }
+
+  /// 在连接线上绘制信息点链的中间节点
+  /// 沿着 sourceAnchor → targetAnchor 的直线路径均匀分布
+  _drawOutletChain(group, sourceAnchor, targetAnchor, chain, parallelOffset = 0) {
+    const n = chain.length;
+    // 在 source 和 target 之间均匀分布 n 个点
+    for (let i = 0; i < n; i++) {
+      const t = (i + 1) / (n + 1);
+      const x = sourceAnchor.x + (targetAnchor.x - sourceAnchor.x) * t;
+      const y = sourceAnchor.y + (targetAnchor.y - sourceAnchor.y) * t + parallelOffset;
+
+      const node = document.createElementNS(SVG_NS, "g");
+      node.classList.add("topology-outlet-node");
+
+      const circle = document.createElementNS(SVG_NS, "circle");
+      circle.setAttribute("cx", x);
+      circle.setAttribute("cy", y);
+      circle.setAttribute("r", 8);
+      circle.setAttribute("fill", "#fff3e0");
+      circle.setAttribute("stroke", "#f57c00");
+      circle.setAttribute("stroke-width", 1.5);
+      node.appendChild(circle);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.classList.add("topology-outlet-label");
+      const outletName = chain[i].name || chain[i].id || '';
+      label.textContent = outletName;
+      label.setAttribute("x", x);
+      label.setAttribute("y", y - 14);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("dominant-baseline", "middle");
+      node.appendChild(label);
+
+      const indexLabel = document.createElementNS(SVG_NS, "text");
+      indexLabel.classList.add("topology-outlet-index");
+      indexLabel.textContent = String(i + 1);
+      indexLabel.setAttribute("x", x);
+      indexLabel.setAttribute("y", y + 3);
+      indexLabel.setAttribute("text-anchor", "middle");
+      indexLabel.setAttribute("dominant-baseline", "middle");
+      node.appendChild(indexLabel);
+
+      node.dataset.tooltip = `${outletName} (${chain[i].outlet_type || 'outlet'}) - 链路顺序: ${i + 1}/${n}`;
+      group.appendChild(node);
+    }
   }
 
   _getPairKey(id1, id2) {

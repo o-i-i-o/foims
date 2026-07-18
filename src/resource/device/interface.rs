@@ -88,7 +88,7 @@ pub async fn get_all_device_interfaces(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
                 di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.switch_port_id, di.net_outlet_id,
+                di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
             JOIN devices d ON di.device_id = d.id
@@ -106,7 +106,7 @@ pub async fn get_all_device_interfaces(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
                 di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.switch_port_id, di.net_outlet_id,
+                di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
             JOIN devices d ON di.device_id = d.id
@@ -179,7 +179,7 @@ pub async fn create_device_interface(
 
     sqlx::query(
         r"INSERT INTO device_interfaces (
-            id, device_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_id, created_at, updated_at
+            id, device_id, name, interface_type, mac_address, vlan_id, description, switch_id, switch_port_id, net_outlet_ids, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(id)
@@ -191,7 +191,7 @@ pub async fn create_device_interface(
     .bind(&req.description)
     .bind(req.switch_id)
     .bind(req.switch_port_id)
-    .bind(req.net_outlet_id)
+    .bind(&req.net_outlet_ids)
     .bind(now)
     .bind(now)
     .execute(&state.pool()?.get_conn())
@@ -238,7 +238,7 @@ pub async fn get_device_interface(
         r"SELECT
             di.id, di.device_id, d.name as device_name,
             di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
-            di.description, di.switch_id, di.switch_port_id, di.net_outlet_id,
+            di.description, di.switch_id, di.switch_port_id, di.net_outlet_ids,
             di.sort_order, di.created_at, di.updated_at
         FROM device_interfaces di
         JOIN devices d ON di.device_id = d.id
@@ -329,14 +329,10 @@ pub async fn update_device_interface(
         param_index += 2;
     }
 
-    let net_outlet_id_update = req.net_outlet_id.is_some();
-    if net_outlet_id_update {
-        set_clauses.push(format!(
-            "net_outlet_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE net_outlet_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
+    let net_outlet_ids_update = req.net_outlet_ids.is_some();
+    if net_outlet_ids_update {
+        set_clauses.push(format!("net_outlet_ids = ${param_index}"));
+        param_index += 1;
     }
 
     set_clauses.push(format!("updated_at = ${param_index}"));
@@ -412,18 +408,8 @@ pub async fn update_device_interface(
         }
     }
 
-    if net_outlet_id_update {
-        match &req.net_outlet_id {
-            Some(Some(noid)) => {
-                query = query.bind(true);
-                query = query.bind(noid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
-        }
+    if net_outlet_ids_update {
+        query = query.bind(&req.net_outlet_ids);
     }
 
     query = query.bind(now);
