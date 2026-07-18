@@ -480,7 +480,7 @@ pub async fn get_cabinet_networks(
            JOIN network_cidrs n ON rn.network_id = n.id 
            JOIN network_regions nr ON n.network_region_id = nr.id 
            WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-           AND r.room_type = 'DATA_CENTER'",
+           AND r.room_type IN ('DATA_CENTER', 'TELECOM_CLOSET')",
     )
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())

@@ -228,6 +228,7 @@ async fn export_rooms(
         let room_type_display = match room_type.as_str() {
             "OFFICE" => "办公室",
             "DATA_CENTER" => "数据中心",
+            "TELECOM_CLOSET" => "弱电井",
             _ => &room_type,
         };
 

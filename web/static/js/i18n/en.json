@@ -175,6 +175,7 @@
     "type": "Room Type",
     "type_office": "Office",
     "type_datacenter": "Data Center",
+    "type_telecom_closet": "Telecom Closet",
     "networks": "Networks",
     "add_room": "Add Room",
     "name_required": "Room name is required",
@@ -306,6 +307,7 @@
       "hall": "Hall",
       "office": "Office",
       "data_center": "Data Center",
+      "telecom_closet": "Telecom Closet",
       "workstation": "Workstation",
       "cabinet": "Cabinet",
       "cabinet_position": "Cabinet Position"

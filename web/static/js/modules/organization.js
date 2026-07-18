@@ -24,6 +24,7 @@ const ORG_TYPE_ICONS = {
   hall: "🚪",
   office: "🏠",
   data_center: "🖥️",
+  telecom_closet: "📡",
   workstation: "💺",
   cabinet: "🗄️",
   cabinet_position: "📦",
@@ -68,6 +69,7 @@ function getNodeIcon(orgType) {
     厅: "🚪", hall: "🚪",
     办公: "🏠", office: "🏠",
     机房: "🖥️", 数据中心: "🖥️", data_center: "🖥️",
+    弱电: "📡", 电信间: "📡", telecom_closet: "📡",
     工位: "💺", workstation: "💺",
     机柜: "🗄️", cabinet: "🗄️",
     机位: "📦", cabinet_position: "📦",
@@ -479,7 +481,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
 
 function populateTypeSelect(select, currentValue, disabled) {
   select.innerHTML = "";
-  const types = ["headquarters", "building", "floor", "hall", "office", "data_center", "workstation", "cabinet", "cabinet_position"];
+  const types = ["headquarters", "building", "floor", "hall", "office", "data_center", "telecom_closet", "workstation", "cabinet", "cabinet_position"];
   types.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;

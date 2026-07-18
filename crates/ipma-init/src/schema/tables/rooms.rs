@@ -8,7 +8,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT chk_room_type CHECK (room_type IN ('OFFICE', 'DATA_CENTER')),
+            CONSTRAINT chk_room_type CHECK (room_type IN ('OFFICE', 'DATA_CENTER', 'TELECOM_CLOSET')),
             CONSTRAINT uq_rooms_name UNIQUE (name)
         )",
     )

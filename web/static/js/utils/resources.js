@@ -102,7 +102,7 @@ export async function loadRoomsForSelect(selectId = "workstation-room", options 
 
       rooms.forEach((room) => {
         const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-        if (roomTypeLower !== 'data_center') {
+        if (roomTypeLower !== 'data_center' && roomTypeLower !== 'telecom_closet') {
           const option = document.createElement("option");
           option.value = room.id;
           option.textContent = room.name;
@@ -139,7 +139,7 @@ export async function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
 
       rooms.forEach((room) => {
         const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-        if (roomTypeLower === "data_center") {
+        if (roomTypeLower === "data_center" || roomTypeLower === "telecom_closet") {
           const option = document.createElement("option");
           option.value = room.id;
           option.textContent = room.name;

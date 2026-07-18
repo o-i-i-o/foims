@@ -528,7 +528,7 @@ class RoomChildrenManager {
 
     if (this.roomType === 'office' && children?.workstations?.length) {
       children.workstations.forEach(ws => this.addItem(ws));
-    } else if (this.roomType === 'data_center' && children?.cabinets?.length) {
+    } else if ((this.roomType === 'data_center' || this.roomType === 'telecom_closet') && children?.cabinets?.length) {
       children.cabinets.forEach(cab => this.addItem(cab));
     } else {
       this.addItem();
@@ -593,17 +593,23 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
         { field: 'name', render: (v) => escapeHtml(v) },
         { field: 'room_type', render: (v) => {
           const roomTypeLower = v ? v.toLowerCase() : '';
-          return roomTypeLower === "office" ? t('room.type_office') : roomTypeLower === "data_center" ? t('room.type_datacenter') : v || '-';
+          if (roomTypeLower === "office") return t('room.type_office');
+          if (roomTypeLower === "data_center") return t('room.type_datacenter');
+          if (roomTypeLower === "telecom_closet") return t('room.type_telecom_closet');
+          return v || '-';
         }},
         { field: 'org_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${n.name} (${n.network_region})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
-        { field: 'id', render: (v, row) => `
+        { field: 'id', render: (v, row) => {
+          const isCabinetRoom = (row.room_type || '').toLowerCase() === 'data_center' || (row.room_type || '').toLowerCase() === 'telecom_closet';
+          return `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${(row.room_type || '').toLowerCase() === 'data_center' ? (t('room.cabinets') || '机柜列表') : (t('room.workstations') || '工位列表')}</button>
+          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${isCabinetRoom ? (t('room.cabinets') || '机柜列表') : (t('room.workstations') || '工位列表')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
-        ` }
+        `;
+        } }
       ],
       emptyMessage: t('common.no_data')
     });
@@ -676,7 +682,7 @@ export async function openRoomChildrenListModal(roomId) {
           `).join('');
         }
       }
-    } else if (roomType === 'data_center') {
+    } else if (roomType === 'data_center' || roomType === 'telecom_closet') {
       if (titleEl) titleEl.textContent = `${room.name} - ${t('room.cabinets') || '机柜列表'}`;
       if (extraTh) extraTh.textContent = t('cabinet.capacity') || '容量(U)';
       const cabinets = room.cabinets || [];
@@ -764,6 +770,8 @@ export async function submitRoomForm() {
     formattedRoomType = "OFFICE";
   } else if (roomType === "data_center") {
     formattedRoomType = "DATA_CENTER";
+  } else if (roomType === "telecom_closet") {
+    formattedRoomType = "TELECOM_CLOSET";
   } else {
     formattedRoomType = roomType;
   }
@@ -829,7 +837,7 @@ function validateRoomChildren(childrenData, roomType) {
         return t('room.child_name_required');
       }
     }
-  } else if (roomType === "data_center") {
+  } else if (roomType === "data_center" || roomType === "telecom_closet") {
     const cabinets = childrenData.cabinets || [];
     if (cabinets.length === 0) {
       return t('room.at_least_one_child');

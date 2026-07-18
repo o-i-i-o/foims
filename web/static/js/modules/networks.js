@@ -227,6 +227,45 @@ export function generateIpAddresses(cidr) {
   }
 }
 
+// 生成 /22 或 /23 网段划分为 /24 的子网列表
+export function generateSubnet24List(cidr) {
+  if (!cidr) return [];
+  const parts = cidr.split('/');
+  if (parts.length !== 2) return [];
+  const prefixLength = parseInt(parts[1], 10);
+  if (prefixLength !== 22 && prefixLength !== 23) return [];
+
+  const ip = parts[0];
+  const ipParts = ip.split('.').map(Number);
+  if (ipParts.length !== 4 || ipParts.some(p => isNaN(p))) return [];
+
+  // /22 掩码第三段 252，/23 掩码第三段 254
+  const maskThird = prefixLength === 22 ? 252 : 254;
+  const networkThird = ipParts[2] & maskThird;
+  const subnetCount = prefixLength === 22 ? 4 : 2;
+
+  const subnets = [];
+  for (let i = 0; i < subnetCount; i++) {
+    subnets.push(`${ipParts[0]}.${ipParts[1]}.${networkThird + i}.0/24`);
+  }
+  return subnets;
+}
+
+// 渲染 IP 可视化块
+function renderIpBlocks(ipAddresses, ipStatusMap) {
+  return ipAddresses.map(ip => {
+    const isUsed = ipStatusMap.has(ip);
+    const status = ipStatusMap.get(ip) || "unused";
+    const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
+    const tooltipText = `${escapeHtml(ip)} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
+    return `
+      <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
+        <span class="ip-label">${ip.split('.').pop()}</span>
+      </div>
+    `;
+  }).join('');
+}
+
 // 显示网段使用情况
 export async function showNetworkUsage(id) {
   try {
@@ -364,8 +403,14 @@ function buildIPv4Content(network, networkIps, networkId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
   const prefixLength = cidr ? parseInt(cidr.split('/')[1], 10) : 32;
-  // 掩码 < 22 时 IP 数量过多，跳过生成以避免内存浪费
-  const allIpAddresses = prefixLength < 22 ? [] : generateIpAddresses(cidr);
+
+  // 掩码 < 22：IP 数量过多，不生成
+  // 掩码 22/23：划分为 /24 子网，默认显示第一个子网
+  // 掩码 >= 24：直接生成
+  const subnet24List = (prefixLength === 22 || prefixLength === 23) ? generateSubnet24List(cidr) : [];
+  const activeSubnet24 = subnet24List[0] || null;
+  const displayCidr = activeSubnet24 || cidr;
+  const allIpAddresses = prefixLength < 22 ? [] : generateIpAddresses(displayCidr);
   
   const ipStatusMap = new Map();
   networkIps.forEach(ip => {
@@ -429,20 +474,18 @@ function buildIPv4Content(network, networkIps, networkId) {
       ${
         prefixLength < 22
           ? `<div class="ip-grid-empty" role="alert">${t('network.visualization_too_many_ips')}</div>`
-          : `<div class="ip-grid" id="ip-grid">
-            ${allIpAddresses.map(ip => {
-              const isUsed = ipStatusMap.has(ip);
-              const status = ipStatusMap.get(ip) || "unused";
-              const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
-              const tooltipText = `${escapeHtml(ip)} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
-
-              return `
-                <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
-                  <span class="ip-label">${ip.split('.').pop()}</span>
-                </div>
-              `;
-            }).join('')}
-          </div>`
+          : subnet24List.length > 0
+            ? `<div class="subnet-24-tabs" role="tablist">
+                ${subnet24List.map((sub, idx) => `
+                  <button type="button" class="subnet-24-btn${idx === 0 ? ' active' : ''}" data-cidr="${escapeHtml(sub)}" role="tab">${escapeHtml(sub)}</button>
+                `).join('')}
+              </div>
+              <div class="ip-grid" id="ip-grid" data-active-cidr="${escapeHtml(activeSubnet24 || '')}">
+                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
+              </div>`
+            : `<div class="ip-grid" id="ip-grid">
+                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
+              </div>`
       }
     </div>
     
@@ -583,7 +626,31 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
   const filterSelect = modalContainer.querySelector('#ip-status-filter');
   const ipGrid = modalContainer.querySelector('#ip-grid');
   const ipListBody = modalContainer.querySelector('#ipv4-list-body');
-  
+
+  // 构建 IP 状态映射，供子网切换时使用（刷新后会被替换为最新数据）
+  let ipStatusMap = new Map();
+  networkIps.forEach(ip => {
+    ipStatusMap.set(ip.ip_address, ip.status || "inactive");
+  });
+
+  // /24 子网切换
+  const subnet24Buttons = modalContainer.querySelectorAll('.subnet-24-btn');
+  if (subnet24Buttons.length > 0 && ipGrid) {
+    subnet24Buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const subCidr = btn.dataset.cidr;
+        if (!subCidr) return;
+        const subIps = generateIpAddresses(subCidr);
+        subnet24Buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ipGrid.dataset.activeCidr = subCidr;
+        ipGrid.innerHTML = renderIpBlocks(subIps, ipStatusMap);
+        // 重置过滤器
+        if (filterSelect) filterSelect.value = 'all';
+      });
+    });
+  }
+
   if (filterSelect && ipGrid) {
     filterSelect.addEventListener('change', () => {
       const filterValue = filterSelect.value;
@@ -623,6 +690,8 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
           refreshedNetworkIps.forEach(ip => {
             newIpStatusMap.set(ip.ip_address, ip.status || "inactive");
           });
+          // 更新闭包内的 ipStatusMap，使后续子网切换使用最新数据
+          ipStatusMap = newIpStatusMap;
           
           if (ipGrid) {
             const ipBlocks = ipGrid.querySelectorAll('.ip-block');

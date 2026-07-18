@@ -22,10 +22,15 @@ fn validate_device_type_option(device_type: &&String) -> Result<(), ValidationEr
 
 pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError> {
     let room_type_lower = room_type.to_lowercase();
-    if room_type_lower == "office" || room_type_lower == "data_center" {
+    if room_type_lower == "office"
+        || room_type_lower == "data_center"
+        || room_type_lower == "telecom_closet"
+    {
         Ok(())
     } else {
-        Err(ValidationError::new("房间类型必须是office或data_center"))
+        Err(ValidationError::new(
+            "房间类型必须是office、data_center或telecom_closet",
+        ))
     }
 }
 
@@ -461,7 +466,7 @@ pub struct RoomCreate {
     pub name: String,
     #[validate(custom(
         function = "validate_room_type_string",
-        message = "房间类型必须是office或data_center"
+        message = "房间类型必须是office、data_center或telecom_closet"
     ))]
     pub room_type: String,
     pub org_id: Option<Uuid>,
@@ -476,7 +481,7 @@ pub struct RoomUpdate {
     pub name: Option<String>,
     #[validate(custom(
         function = "validate_room_type_option",
-        message = "房间类型必须是office或data_center"
+        message = "房间类型必须是office、data_center或telecom_closet"
     ))]
     pub room_type: Option<String>,
     pub org_id: Option<Option<Uuid>>,

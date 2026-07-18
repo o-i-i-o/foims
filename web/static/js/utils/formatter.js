@@ -26,8 +26,9 @@ export function getDeviceTypeName(type) {
 
 export function getRoomTypeName(type) {
   const typeNames = {
-    'OFFICE': t('room.office', '办公室'),
-    'DATA_CENTER': t('room.data_center', '数据中心')
+    'OFFICE': t('room.type_office', '办公室'),
+    'DATA_CENTER': t('room.type_datacenter', '机房'),
+    'TELECOM_CLOSET': t('room.type_telecom_closet', '弱电井')
   };
   return typeNames[type] || type || '-';
 }

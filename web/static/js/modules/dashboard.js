@@ -383,13 +383,15 @@ function renderRoomTypeChart(roomTypes) {
   }
   
   const typeNames = {
-    'office': t('room.office', '办公室'),
-    'data_center': t('room.data_center', '机房')
+    'office': t('room.type_office', '办公室'),
+    'data_center': t('room.type_datacenter', '机房'),
+    'telecom_closet': t('room.type_telecom_closet', '弱电井')
   };
   
   const colors = {
     'office': '#17a2b8',
-    'data_center': '#fd7e14'
+    'data_center': '#fd7e14',
+    'telecom_closet': '#6f42c1'
   };
   
   let html = '<div class="chart-donut">';

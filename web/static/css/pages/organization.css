@@ -139,6 +139,11 @@
   color: var(--color-danger);
 }
 
+.org-node-type-badge[data-type="telecom_closet"] {
+  background: rgb(111 66 193 / 0.1);
+  color: var(--color-ipv6);
+}
+
 .org-node-type-badge[data-type="office"] {
   background: rgb(40 167 69 / 0.1);
   color: var(--color-success);

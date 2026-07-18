@@ -41,6 +41,7 @@ pub async fn import_rooms(
         let room_type = match room_type_str {
             "办公室" | "OFFICE" | "office" | "" => "OFFICE",
             "数据中心" | "DATA_CENTER" | "data_center" => "DATA_CENTER",
+            "弱电井" | "TELECOM_CLOSET" | "telecom_closet" => "TELECOM_CLOSET",
             _ => {
                 results.push(format!(
                     "第{line_num}行跳过: 房间 '{name}' - 无效的类型 '{room_type_str}'"

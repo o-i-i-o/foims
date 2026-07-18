@@ -273,7 +273,7 @@ pub async fn get_room(
             })
             .collect();
         (Some(ws_list), None)
-    } else if room.room_type == "DATA_CENTER" {
+    } else if room.room_type == "DATA_CENTER" || room.room_type == "TELECOM_CLOSET" {
         let cab_rows =
             sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
                 .bind(room.id)
@@ -589,7 +589,7 @@ pub async fn sync_room_children(
                 .await?;
             }
         }
-    } else if room_type == "DATA_CENTER" {
+    } else if room_type == "DATA_CENTER" || room_type == "TELECOM_CLOSET" {
         let items = req
             .cabinets
             .as_ref()
