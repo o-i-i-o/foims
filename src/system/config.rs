@@ -390,29 +390,6 @@ exec "$2"
     )))
 }
 
-pub async fn restart_os(
-    _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg("sleep 2 && sudo reboot")
-        .output()
-        .await
-        .map_err(|e| AppError::Internal(format!("执行重启命令失败: {e}")))?;
-
-    if !output.status.success() {
-        let error_message = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::Internal(format!(
-            "操作系统重启失败: {error_message}"
-        )));
-    }
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
-        (),
-        "操作系统重启命令已发送，系统将在2秒后重启",
-    )))
-}
-
 #[derive(Debug, Serialize)]
 pub struct CertificateStatus {
     pub has_imported_cert: bool,

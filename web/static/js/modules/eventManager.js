@@ -174,14 +174,6 @@ const BUTTON_EVENT_BINDINGS = [
     },
   },
   {
-    id: "restart-os-btn",
-    event: "click",
-    handler: () => {
-      const { restartOs } = getModule("systemManager");
-      restartOs();
-    },
-  },
-  {
     id: "add-user-btn",
     event: "click",
     handler: () => {

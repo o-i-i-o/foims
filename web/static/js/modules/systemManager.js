@@ -10,7 +10,7 @@ import {
   escapeHtml,
 } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modal.js";
+import { openModal } from "../utils/modal.js";
 import { loadModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
@@ -74,57 +74,6 @@ export function initSystemTabs() {
     });
   }
 
-  const autoHttpsToggle = elementCache.get("auto-https");
-  if (autoHttpsToggle) {
-    autoHttpsToggle.addEventListener("change", handleAutoHttpsChange);
-  }
-
-  const httpEnabledToggle = elementCache.get("http-enabled");
-  if (httpEnabledToggle) {
-    httpEnabledToggle.addEventListener("change", handlePortDisable);
-  }
-
-  const httpsEnabledToggle = elementCache.get("https-enabled");
-  if (httpsEnabledToggle) {
-    httpsEnabledToggle.addEventListener("change", handlePortDisable);
-  }
-
-  const certTypeSelect = elementCache.get("cert-type");
-  if (certTypeSelect) {
-    certTypeSelect.addEventListener("change", handleCertTypeChange);
-  }
-
-  const updateCertBtn = elementCache.get("update-cert-btn");
-  if (updateCertBtn) {
-    updateCertBtn.addEventListener("click", showCertGenerateModal);
-  }
-
-  const importCertBtn = elementCache.get("import-cert-btn");
-  if (importCertBtn) {
-    importCertBtn.addEventListener("click", showCertImportModal);
-  }
-
-  const downloadCaBtn = elementCache.get("download-ca-btn");
-  if (downloadCaBtn) {
-    downloadCaBtn.addEventListener("click", downloadCertificate);
-  }
-
-  const certGenerateForm = elementCache.get("cert-generate-form");
-  if (certGenerateForm) {
-    certGenerateForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      await generateSelfSignedCert();
-    });
-  }
-
-  const certImportForm = elementCache.get("cert-import-form");
-  if (certImportForm) {
-    certImportForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      await importCertificate();
-    });
-  }
-
   const systemConfigTab = document.querySelector('[data-tab="system-config"]');
   if (systemConfigTab) {
     systemConfigTab.addEventListener("click", async () => {
@@ -180,46 +129,8 @@ let currentServerConfig = null;
 
 async function saveSystemConfig() {
   try {
-    const httpEnabled = elementCache.getChecked("http-enabled");
-    const httpsEnabled = elementCache.getChecked("https-enabled");
-    
-    if (!httpEnabled && !httpsEnabled) {
-      showToast("至少需要开启一个端口（HTTP或HTTPS）", "warning");
-      return;
-    }
-
-    const hostIpv4 = elementCache.getValue("server-host").trim();
-    const hostIpv6 = elementCache.getValue("server-host-ipv6").trim();
-    
-    if (!hostIpv4 && !hostIpv6) {
-      showToast("至少需要配置一个监听地址（IPv4或IPv6）", "warning");
-      return;
-    }
-
-    const ipv4Regex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|::|(::[0-9a-fA-F]{1,4}){1,7}|([0-9a-fA-F]{1,4}::){1,7}|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(:[0-9a-fA-F]{1,4}){1,6}|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
-    
-    if (hostIpv4 && !ipv4Regex.test(hostIpv4)) {
-      showToast("IPv4地址格式无效", "warning");
-      return;
-    }
-    
-    if (hostIpv6 && !ipv6Regex.test(hostIpv6)) {
-      showToast("IPv6地址格式无效", "warning");
-      return;
-    }
-
     const serverConfig = {
       ...currentServerConfig,
-      host: hostIpv4,
-      host_ipv6: hostIpv6 || null,
-      http_enabled: httpEnabled,
-      http_port: parseInt(elementCache.getValue("http-port")) || 80,
-      https_enabled: httpsEnabled,
-      https_port: parseInt(elementCache.getValue("https-port")) || 443,
-      auto_https: elementCache.getChecked("auto-https"),
-      http_version: elementCache.getValue("http-version") || "http1.1",
-      cert_type: elementCache.getValue("cert-type") || "self_signed",
       page_timeout: parseInt(elementCache.getValue("page-timeout")) || 30,
       public_url: elementCache.getValue("public-url") || ""
     };
@@ -278,19 +189,6 @@ export async function loadSystemConfig() {
       
       currentServerConfig = config.server;
       
-      elementCache.setValue("server-host", config.server.host);
-      elementCache.setValue("server-host-ipv6", config.server.host_ipv6 || "");
-
-      elementCache.get("http-enabled").checked = config.server.http_enabled || false;
-      elementCache.setValue("http-port", config.server.http_port || 80);
-      elementCache.get("https-enabled").checked = config.server.https_enabled || false;
-      elementCache.setValue("https-port", config.server.https_port || 443);
-      elementCache.get("auto-https").checked = config.server.auto_https || false;
-      elementCache.setValue("http-version", config.server.http_version || "http1.1");
-      
-      const certType = config.server.cert_type || "self_signed";
-      elementCache.setValue("cert-type", certType);
-      
       elementCache.setValue("page-timeout", config.server.page_timeout || 30);
       elementCache.setValue("public-url", config.server.public_url || "");
       
@@ -305,190 +203,12 @@ export async function loadSystemConfig() {
         elementCache.setValue("rate-limit-email-window", config.rate_limit.email_window_secs || 3600);
       }
       
-      handleCertTypeChange();
-      checkImportedCertificate();
-      updateCertificateSectionVisibility();
       checkConfigUpdateRestartPrompt();
       
       checkServiceStatus();
     }
   } catch (error) {
     console.error("加载系统配置失败:", error);
-  }
-}
-
-// 检查是否有导入的证书
-async function checkImportedCertificate() {
-  try {
-    const result = await apiGet("/api/system/certificate/status");
-    if (result.success) {
-      const hasImportedCert = result.data.has_imported_cert;
-      const importBtn = elementCache.get("import-cert-btn");
-      if (importBtn) {
-        importBtn.textContent = hasImportedCert ? "更新" : "导入";
-      }
-    }
-  } catch (error) {
-    console.error("检查证书状态失败:", error);
-  }
-}
-
-// 更新证书管理区域的显示
-function updateCertificateSectionVisibility() {
-  const httpsEnabled = elementCache.get("https-enabled").checked;
-  const certificateSection = elementCache.get("certificate-section");
-  
-  if (certificateSection) {
-    certificateSection.style.display = httpsEnabled ? "block" : "none";
-  }
-}
-
-// 处理自动 HTTPS 功能
-function handleAutoHttpsChange() {
-  const autoHttps = elementCache.getChecked("auto-https");
-  
-  if (autoHttps) {
-    // 自动启用 HTTP 和 HTTPS 端口
-    elementCache.setChecked("http-enabled", true);
-    elementCache.setChecked("https-enabled", true);
-    updateCertificateSectionVisibility();
-  }
-}
-
-// 处理 HTTP 或 HTTPS 端口禁用
-function handlePortDisable(e) {
-  const httpEnabled = elementCache.getChecked("http-enabled");
-  const httpsEnabled = elementCache.getChecked("https-enabled");
-  
-  // 确保至少有一个端口处于开启状态
-  if (!httpEnabled && !httpsEnabled) {
-    // 如果用户尝试同时禁用两个端口，恢复之前的状态
-    if (e && e.target) {
-      // 恢复被禁用的端口
-      e.target.checked = true;
-      showToast("至少需要开启一个端口（HTTP或HTTPS）", "warning");
-    }
-    return;
-  }
-  
-  if (!httpEnabled || !httpsEnabled) {
-    // 如果任一端口被禁用，取消自动 HTTPS
-    elementCache.setChecked("auto-https", false);
-  }
-  
-  updateCertificateSectionVisibility();
-}
-
-// 处理证书类型切换
-function handleCertTypeChange() {
-  const certType = elementCache.getValue("cert-type");
-  const updateCertBtn = elementCache.get("update-cert-btn");
-  const importCertBtn = elementCache.get("import-cert-btn");
-  const downloadCaBtn = elementCache.get("download-ca-btn");
-  
-  if (certType === "self_signed") {
-    // 自签名证书模式
-    updateCertBtn.style.display = "inline-block";
-    downloadCaBtn.style.display = "inline-block"; // 显示下载CA按钮
-    importCertBtn.style.display = "none";
-  } else if (certType === "imported") {
-    // 导入证书模式
-    updateCertBtn.style.display = "none";
-    downloadCaBtn.style.display = "none"; // 隐藏下载CA按钮
-    importCertBtn.style.display = "inline-block";
-    // 检查是否已有导入的证书，更新按钮文字
-    checkImportedCertificate();
-  }
-}
-
-// 显示证书生成模态框
-async function showCertGenerateModal() {
-  await openModal("cert-generate-modal");
-}
-
-// 显示证书导入模态框
-async function showCertImportModal() {
-  await openModal("cert-import-modal");
-}
-
-// 下载证书
-async function downloadCertificate() {
-  try {
-    const result = await apiRequest("/api/system/certificate/download");
-
-    if (!result.success) {
-      showToast("下载证书失败: " + result.message, "error");
-      return;
-    }
-
-    if (result.isBlob) {
-      const url = window.URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.filename || "ca.pem";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    }
-  } catch (error) {
-    console.error("下载证书失败:", error);
-    showToast("下载证书失败: " + error.message, "error");
-  }
-}
-
-// 生成自签名证书
-async function generateSelfSignedCert() {
-try {
-    const form = elementCache.get("cert-generate-form");
-    const formData = new FormData(form);
-    
-    const certData = {
-      common_name: formData.get("common_name"),
-      organization: formData.get("organization"),
-      organizational_unit: formData.get("organizational_unit"),
-      country: formData.get("country"),
-      state: formData.get("state"),
-      locality: formData.get("locality"),
-      validity: parseInt(formData.get("validity")) || 365
-    };
-
-    const result = await apiPost("/api/system/certificate/generate", certData);
-    if (result.success) {
-      showToast("自签名证书生成成功", "success");
-      closeModal("cert-generate-modal");
-      form.reset();
-    } else {
-      showToast("证书生成失败: " + result.message, "error");
-    }
-  } catch (error) {
-    console.error("生成证书失败:", error);
-    showToast("证书生成失败: " + error.message, "error");
-  }
-}
-
-// 导入证书
-async function importCertificate() {
-  try {
-    const form = elementCache.get("cert-import-form");
-    const formData = new FormData(form);
-
-    const result = await apiRequest("/api/system/certificate/import", {
-      method: "POST",
-      body: formData,
-    });
-    if (result.success) {
-      showToast("证书导入成功", "success");
-      closeModal("cert-import-modal");
-      form.reset();
-      // 更新导入按钮文字
-      elementCache.get("import-cert-btn").textContent = "更新";
-    } else {
-      showToast("证书导入失败: " + result.message, "error");
-    }
-  } catch (error) {
-    console.error("导入证书失败:", error);
-    showToast("证书导入失败: " + error.message, "error");
   }
 }
 
@@ -629,32 +349,6 @@ async function checkIfRunningAsService() {
     return false;
   }
 }
-
-// 重启操作系统
-export async function restartOs() {
-  const confirmed = await showConfirm(t('system.confirm_restart_os'));
-  if (confirmed) {
-    clearConfigUpdateFlag();
-    
-    try {
-      const result = await apiPost("/api/system/restart-os", {});
-      if (result.success) {
-        showToast("操作系统重启命令已发送", "success");
-        showToast("操作系统正在重启，请稍候...", "info");
-        // 5秒后刷新页面
-        setTimeout(() => {
-          location.reload();
-        }, 5000);
-      } else {
-        showToast("重启操作系统失败: " + result.message, "error");
-      }
-    } catch (error) {
-      console.error("重启操作系统失败:", error);
-      showToast("重启操作系统失败: " + error.message, "error");
-    }
-  }
-}
-
 
 
 // 加载SMTP配置

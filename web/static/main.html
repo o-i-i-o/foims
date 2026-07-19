@@ -670,73 +670,6 @@
               <div class="config-card">
                 <div class="config-card-header">
                   <div class="config-card-title">
-                    <span class="icon">🌐</span>
-                    <span data-i18n="config.server_settings">Server Settings</span>
-                  </div>
-                </div>
-                <div class="config-row">
-                  <div class="config-field">
-                    <label for="server-host" data-i18n="config.server_ipv4">Server Address (IPv4)</label>
-                    <input type="text" id="server-host" name="host" data-i18n-placeholder="config.ipv4_placeholder" placeholder="IPv4 address, leave empty to disable IPv4" aria-label="Server IPv4 address" />
-                  </div>
-                  <div class="config-field">
-                    <label for="server-host-ipv6" data-i18n="config.server_ipv6">Server Address (IPv6)</label>
-                    <input type="text" id="server-host-ipv6" name="host_ipv6" data-i18n-placeholder="config.ipv6_placeholder" placeholder="IPv6 address, leave empty to disable IPv6" aria-label="Server IPv6 address" />
-                  </div>
-                  <div class="config-field">
-                    <label for="http-version" data-i18n="config.http_version">HTTP Protocol Version</label>
-                    <select id="http-version" name="http_version" class="form-control" aria-label="HTTP protocol version">
-                      <option value="http1.1">HTTP/1.1</option>
-                      <option value="http2">HTTP/2</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="config-card">
-                <div class="config-card-header">
-                  <div class="config-card-title">
-                    <span class="icon">🔒</span>
-                    <span data-i18n="config.ssl_settings">SSL/HTTPS Settings</span>
-                  </div>
-                </div>
-                <div class="toggle-with-label toggle-with-label-spacing">
-                  <input type="checkbox" id="auto-https" name="auto_https" />
-                  <label for="auto-https" class="toggle-label">
-                    <span class="toggle-inner"></span>
-                    <span class="toggle-switch"></span>
-                  </label>
-                  <span class="toggle-description" data-i18n="config.auto_https_desc">Enable HTTP to HTTPS auto redirect</span>
-                </div>
-                <div class="config-row">
-                  <div class="port-config">
-                    <label for="http-enabled" data-i18n="config.http_port">HTTP Port</label>
-                    <input type="number" id="http-port" name="http_port" placeholder="80" aria-label="HTTP port" min="1" max="65535" />
-                    <div class="toggle-group">
-                      <input type="checkbox" id="http-enabled" name="http_enabled" />
-                      <label for="http-enabled" class="toggle-label">
-                        <span class="toggle-inner"></span>
-                        <span class="toggle-switch"></span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="port-config">
-                    <label for="https-enabled" data-i18n="config.https_port">HTTPS Port</label>
-                    <input type="number" id="https-port" name="https_port" placeholder="443" aria-label="HTTPS port" min="1" max="65535" />
-                    <div class="toggle-group">
-                      <input type="checkbox" id="https-enabled" name="https_enabled" />
-                      <label for="https-enabled" class="toggle-label">
-                        <span class="toggle-inner"></span>
-                        <span class="toggle-switch"></span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="config-card">
-                <div class="config-card-header">
-                  <div class="config-card-title">
                     <span class="icon">⏱️</span>
                     <span data-i18n="config.session_settings">Session Settings</span>
                   </div>
@@ -811,39 +744,12 @@
                 </div>
               </div>
 
-              <div class="config-card" id="certificate-section">
-                <div class="config-card-header">
-                  <div class="config-card-title">
-                    <span class="icon">📜</span>
-                    <span data-i18n="config.cert_settings">Certificate Settings</span>
-                  </div>
-                </div>
-                <div class="config-row">
-                  <div class="config-field">
-                    <label for="cert-type" data-i18n="config.cert_type">Certificate Type</label>
-                    <select id="cert-type" name="cert_type" class="form-control">
-                      <option value="self_signed" data-i18n="config.self_signed">Self-signed Certificate</option>
-                      <option value="imported" data-i18n="config.imported">Imported Certificate</option>
-                    </select>
-                  </div>
-                  <div class="config-field">
-                    <label>&nbsp;</label>
-                    <div class="button-group">
-                      <button type="button" id="update-cert-btn" class="btn btn-secondary" data-i18n="config.update_cert">Update Certificate</button>
-                      <button type="button" id="download-ca-btn" class="btn btn-secondary" data-i18n="config.download_ca">Download CA</button>
-                      <button type="button" id="import-cert-btn" class="btn btn-secondary hidden" data-i18n="config.import_cert">Import Certificate</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div id="service-status-info" class="service-status-container"></div>
 
               <div class="config-actions">
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
                 <button type="button" id="register-service-btn" class="btn btn-secondary" data-i18n="system.register_service">Register as Service</button>
                 <button type="button" id="restart-app-btn" class="btn btn-warning" data-i18n="system.restart_application">Restart Application</button>
-                <button type="button" id="restart-os-btn" class="btn btn-danger" data-i18n="system.restart_os">Restart OS</button>
               </div>
             </form>
           </div>

@@ -49,7 +49,7 @@ use crate::system::config::{
     get_certificate_status, get_dashboard_stats, get_notification_settings,
     get_page_timeout_config, get_service_status, get_session_timeout_config, get_smtp_config,
     get_supported_languages, get_system_config, get_system_info, import_certificate,
-    register_service, restart_application, restart_os, restore_config, send_system_email,
+    register_service, restart_application, restore_config, send_system_email,
     test_smtp_connection as test_smtp, update_language_setting, update_notification_settings,
     update_page_timeout_config, update_session_timeout_config, update_smtp_config,
     update_system_config,
@@ -410,8 +410,6 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                         .route("/dashboard-stats", web::get().to(get_dashboard_stats))
                         // 重启应用系统
                         .route("/restart-application", web::post().to(restart_application))
-                        // 重启操作系统
-                        .route("/restart-os", web::post().to(restart_os))
                         // 关闭初始化模式
                         .route("/disable-init", web::post().to(disable_init_mode))
                         // SMTP配置
