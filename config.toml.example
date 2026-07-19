@@ -14,13 +14,16 @@ slow_query_threshold_ms = 1000
 health_check_interval_secs = 30
 
 [server]
-host = "0.0.0.0"
-host_ipv6 = "::"
-http_enabled = true
-http_port = 80
-https_enabled = true
+# 兼容性字段（保留用于公共 URL 解析，不再用于实际监听）
+host = "127.0.0.1"
+host_ipv6 = ""
+# 以下字段在 UDS 架构下已不使用，TLS 由 nginx 处理
+# 保留字段以兼容前端配置 API
+http_enabled = false
+http_port = 8080
+https_enabled = false
 https_port = 443
-auto_https = true
+auto_https = false
 http_version = "http2"
 cert_type = "self_signed"
 public_url = "localhost/"
@@ -28,6 +31,27 @@ public_url = "localhost/"
 # 建议设置为 30-60 分钟，应大于 access_token_expiry
 page_timeout = 30
 cors_allowed_origins = []
+
+# 监听配置（仅 UDS 模式）
+# 架构说明：
+# - actix-web 监听 Unix Domain Socket，由 nginx 反代（deploy/nginx/ipma.conf）
+# - 静态文件由 nginx 直接托管，actix 仅服务 API
+# - 调试时手动启动 actix 即可，无需安装 systemd 服务
+#   示例：sudo IPMA_WEB_DIR=/path/to/ipma/web ./target/release/ipma
+# - nginx 与 actix 通过 UDS 通信，性能优于 TCP loopback
+[server.listen]
+# UDS socket 文件路径，需与 nginx upstream 配置一致
+# 调试：/tmp/ipma-dev.sock（避免权限问题）
+# 生产：/run/ipma/api.sock（systemd RuntimeDirectory 管理）
+uds_path = "/tmp/ipma-dev.sock"
+# 是否由 actix 托管静态文件
+# - false（推荐）：静态文件由 nginx 直接服务，actix 仅 API
+# - true：actix 同时托管静态文件和 API（不推荐，与 nginx 重复）
+serve_static = false
+# 调试 TCP 端口（可选，便于 curl 直连测试 API，0=禁用）
+# 启用后会在 UDS 之外额外监听该端口，例如 debug_tcp_port = 8080
+# 然后 curl http://127.0.0.1:8080/api/... 可直连测试
+debug_tcp_port = 0
 
 [jwt]
 # 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）

@@ -1,7 +1,7 @@
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::body::MessageBody;
-use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::dev::{ServerHandle, ServiceRequest, ServiceResponse};
 use actix_web::middleware as actix_middleware;
 use actix_web::middleware::Compress;
 use actix_web::middleware::Next;
@@ -9,6 +9,7 @@ use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{SocketAddr, TcpListener};
+use std::os::unix::net::UnixListener;
 use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,7 +20,6 @@ use ipma::log::setup_logging;
 use ipma::routes::static_files::{
     get_web_dir, https_redirect_handler, json_error_handler, serve_json,
 };
-use ipma::system::cert::{load_rustls_config, prepare_server_certificate};
 
 use ipma::config::Config;
 use ipma::db::DbPool;
@@ -184,46 +184,33 @@ fn create_tcp_listener(addr: &str, port: u16) -> std::io::Result<TcpListener> {
     Ok(socket.into())
 }
 
-async fn bind_with_retry(addr: &str, port: u16, max_retries: u32) -> std::io::Result<TcpListener> {
-    for attempt in 0..=max_retries {
-        match create_tcp_listener(addr, port) {
-            Ok(listener) => {
-                if attempt > 0 {
-                    info!(
-                        "端口 {}:{} 已成功绑定 (第{}次尝试)",
-                        addr,
-                        port,
-                        attempt + 1
-                    );
-                }
-                return Ok(listener);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-                if attempt < max_retries {
-                    warn!(
-                        "端口 {}:{} 已被占用，等待释放... ({}/{})",
-                        addr,
-                        port,
-                        attempt + 1,
-                        max_retries
-                    );
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                } else {
-                    error!(
-                        "端口 {}:{} 绑定失败，已重试{}次，程序退出",
-                        addr, port, max_retries
-                    );
-                    return Err(e);
-                }
-            }
-            Err(e) => return Err(e),
-        }
+/// 创建 UDS 监听器
+///
+/// - 自动创建父目录
+/// - 清理已存在的 socket 文件，避免 "Address already in use"
+/// - 设置 socket 文件权限 0666，允许 nginx (www-data) 等其他用户进程访问
+///   安全考虑：socket 文件本身不存储敏感数据，应用层有 JWT 认证保护，
+///   且内核保证 bind 路径不可被重新 bind，因此 0666 不会导致劫持风险
+///   生产环境若需更严格权限，可通过 systemd SocketUser/SocketGroup 实现
+fn create_uds_listener(path: &str) -> std::io::Result<UnixListener> {
+    let socket_path = Path::new(path);
+
+    // 确保父目录存在
+    if let Some(parent) = socket_path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::AddrInUse,
-        format!("绑定端口 {}:{} 失败: 重试次数耗尽", addr, port),
-    ))
+    // 清理已存在的 socket 文件
+    if socket_path.exists() {
+        std::fs::remove_file(socket_path)?;
+    }
+
+    let listener = UnixListener::bind(path)?;
+    // 设置 socket 文件权限 0666：允许 nginx 等其他用户进程访问
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))?;
+
+    Ok(listener)
 }
 
 fn validate_html_path(path: &str) -> Option<PathBuf> {
@@ -263,11 +250,6 @@ async fn serve_html_file(path: &str) -> actix_web::HttpResponse {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     setup_panic_handler();
-
-    if let Err(e) = rustls::crypto::ring::default_provider().install_default() {
-        tracing::error!("初始化TLS密码学提供者失败: {:?}", e);
-        std::process::exit(1);
-    }
 
     setup_logging();
 
@@ -432,70 +414,36 @@ async fn main() -> std::io::Result<()> {
         );
     }
 
-    let server_host_raw = config.server.host.trim().to_string();
-    let server_host_ipv6_raw = config
-        .server
-        .host_ipv6
-        .as_ref()
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
-
-    fn validate_ip_address(addr: &str) -> Result<String, String> {
-        if addr.is_empty() {
-            return Ok(String::new());
-        }
-        if addr.parse::<std::net::IpAddr>().is_ok() {
-            Ok(addr.to_string())
-        } else {
-            Err(format!("无效的IP地址格式: {}", addr))
-        }
-    }
-
-    let validated_ipv4 = validate_ip_address(&server_host_raw).map_err(std::io::Error::other)?;
-    let validated_ipv6 =
-        validate_ip_address(&server_host_ipv6_raw).map_err(std::io::Error::other)?;
-
-    let (server_host, server_host_ipv6) = if validated_ipv4.is_empty() && validated_ipv6.is_empty()
-    {
-        error!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
-        panic!("配置错误：IPv4和IPv6监听地址均为空，至少需要配置一个监听地址");
-    } else {
-        (
-            validated_ipv4,
-            if validated_ipv6.is_empty() {
-                None
-            } else {
-                Some(validated_ipv6)
-            },
-        )
-    };
-
-    let http_enabled = config.server.http_enabled.unwrap_or(true);
-    let http_port = config.server.http_port.unwrap_or(80);
+    let uds_path = config.server.listen.uds_path.clone();
+    let serve_static = config.server.listen.serve_static;
+    let debug_tcp_port = config.server.listen.debug_tcp_port;
 
     let web_dir = get_web_dir();
-    if !Path::new(web_dir).exists() {
+    if serve_static && !Path::new(web_dir).exists() {
         info!("创建web目录: {}", web_dir);
         fs::create_dir_all(web_dir)?;
     }
 
     let init_enabled = config.init.enabled;
-    let auto_https = config.server.auto_https.unwrap_or(false);
 
     if init_enabled {
         log_bilingual("system.init_mode_enabled");
     } else {
         log_bilingual("system.init_mode_disabled");
-        if auto_https {
-            log_bilingual("system.auto_https_enabled");
-        }
     }
 
-    let http_version = config
-        .server
-        .http_version
-        .clone()
-        .unwrap_or_else(|| "http2".to_string());
+    info!("监听方式: UDS ({})", uds_path);
+    info!(
+        "静态文件托管: {}",
+        if serve_static {
+            "启用（actix 直接服务）"
+        } else {
+            "禁用（由 nginx 托管）"
+        }
+    );
+    if debug_tcp_port > 0 {
+        info!("调试 TCP 端口: {} (curl 直连测试用)", debug_tcp_port);
+    }
 
     let app_state = Data::new(
         AppState::new(config.clone(), pool.clone(), task_registry.clone())
@@ -506,50 +454,32 @@ async fn main() -> std::io::Result<()> {
         .jwt_utils
         .start_cache_cleanup_task(shutdown.subscribe());
 
-    let http_rate_limiter = rate_limiter.clone();
-    let http_rate_limit_enabled = rate_limit_enabled;
-    let http_app_state = app_state.clone();
-    let create_http_app = move || {
-        let auto_https = http_app_state.config.server.auto_https.unwrap_or(false);
-        let enable_normal_routes = !auto_https;
-
+    let app_rate_limiter = rate_limiter.clone();
+    let app_rate_limit_enabled = rate_limit_enabled;
+    let app_state_for_app = app_state.clone();
+    let create_app = move || {
         let mut app = App::new()
             .wrap(Compress::default())
             .wrap(actix_web::middleware::Logger::default())
-            .wrap(build_cors_middleware(&http_app_state.config))
+            .wrap(build_cors_middleware(&app_state_for_app.config))
             .wrap(RateLimitMiddleware::new(
-                http_rate_limiter.clone(),
-                http_rate_limit_enabled,
+                app_rate_limiter.clone(),
+                app_rate_limit_enabled,
             ))
             .wrap(actix_middleware::from_fn(static_cache_control_middleware))
+            .wrap(actix_middleware::from_fn(security_headers_middleware))
             .configure(|cfg| {
-                configure_app_services(cfg, &http_app_state, enable_normal_routes);
+                configure_app_services(cfg, &app_state_for_app, serve_static);
             });
 
-        if !http_app_state.config.init.enabled && auto_https {
+        // init 模式下保留 https_redirect_handler 作为默认服务（用于 auto_https 兼容旧配置）
+        if !app_state_for_app.config.init.enabled
+            && app_state_for_app.config.server.auto_https.unwrap_or(false)
+        {
             app = app.default_service(web::route().to(https_redirect_handler));
         }
 
         app
-    };
-
-    let https_rate_limiter = rate_limiter.clone();
-    let https_rate_limit_enabled = rate_limit_enabled;
-    let https_app_state = app_state.clone();
-    let https_port = config.server.https_port.unwrap_or(443);
-    let create_https_app = move || {
-        App::new()
-            .wrap(Compress::default())
-            .wrap(actix_web::middleware::Logger::default())
-            .wrap(ipma::utils::hsts::hsts_middleware())
-            .wrap(build_cors_middleware(&https_app_state.config))
-            .wrap(RateLimitMiddleware::new(
-                https_rate_limiter.clone(),
-                https_rate_limit_enabled,
-            ))
-            .wrap(actix_middleware::from_fn(static_cache_control_middleware))
-            .wrap(actix_middleware::from_fn(security_headers_middleware))
-            .configure(|cfg| configure_app_services(cfg, &https_app_state, true))
     };
 
     let local_set = tokio::task::LocalSet::new();
@@ -562,119 +492,39 @@ async fn main() -> std::io::Result<()> {
     let shutdown_clone = shutdown.clone();
     local_set
         .run_until(async move {
-            let mut all_server_handles: Vec<actix_web::dev::ServerHandle> = Vec::new();
+            let mut all_server_handles: Vec<ServerHandle> = Vec::new();
             let mut all_server_join_handles: Vec<tokio::task::JoinHandle<std::io::Result<()>>> =
                 Vec::new();
 
-            if http_enabled || auto_https {
-                let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
-                let ipv4_address = server_host.as_str();
+            let workers = std::cmp::max(2, num_cpus::get());
+            let keep_alive = std::time::Duration::from_secs(5);
 
-                if !ipv4_address.is_empty() {
-                    let http_listener_ipv4 = bind_with_retry(ipv4_address, http_port, 3).await?;
-                    let server_ipv4 = HttpServer::new(create_http_app.clone())
-                        .workers(std::cmp::max(2, num_cpus::get()))
-                        .keep_alive(std::time::Duration::from_secs(5))
-                        .disable_signals()
-                        .listen(http_listener_ipv4)?
-                        .run();
-                    let handle_ipv4 = server_ipv4.handle();
+            // UDS 主监听器
+            let uds_listener = create_uds_listener(&uds_path)?;
+            let server_uds = HttpServer::new(create_app.clone())
+                .workers(workers)
+                .keep_alive(keep_alive)
+                .disable_signals()
+                .listen_uds(uds_listener)?
+                .run();
+            let handle_uds = server_uds.handle();
+            info!("UDS 服务器启动: {}", uds_path);
+            all_server_handles.push(handle_uds);
+            all_server_join_handles.push(tokio::task::spawn_local(server_uds));
 
-                    info!(
-                        "HTTP IPv4服务器运行在 http://{}:{}",
-                        ipv4_address, http_port
-                    );
-                    info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-
-                    all_server_handles.push(handle_ipv4);
-                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
-                }
-
-                if !ipv6_address.is_empty() {
-                    let http_listener_ipv6 = bind_with_retry(ipv6_address, http_port, 3).await?;
-                    let server_ipv6 = HttpServer::new(create_http_app)
-                        .workers(std::cmp::max(2, num_cpus::get()))
-                        .keep_alive(std::time::Duration::from_secs(5))
-                        .disable_signals()
-                        .listen(http_listener_ipv6)?
-                        .run();
-                    let handle_ipv6 = server_ipv6.handle();
-
-                    info!(
-                        "HTTP IPv6服务器运行在 http://[{}]:{}",
-                        ipv6_address, http_port
-                    );
-                    info!("HTTP版本: HTTP/1.1 (HTTP/2需要HTTPS)");
-
-                    all_server_handles.push(handle_ipv6);
-                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
-                }
-            }
-
-            let https_enabled = config.server.https_enabled.unwrap_or(true);
-
-            if https_enabled {
-                let cert_type = config.server.cert_type.as_deref().unwrap_or("self_signed");
-                let (cert_path, key_path) = prepare_server_certificate(&config).await?;
-
-                let ipv6_address = server_host_ipv6.as_deref().unwrap_or("");
-                let ipv4_address = server_host.as_str();
-
-                if !ipv4_address.is_empty() {
-                    let https_listener_ipv4 = bind_with_retry(ipv4_address, https_port, 3).await?;
-                    let tls_config_ipv4 = load_rustls_config(&cert_path, &key_path).await?;
-
-                    info!(
-                        "HTTPS IPv4服务器运行在 https://{}:{}",
-                        ipv4_address, https_port
-                    );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                    info!("证书类型: {}", cert_type);
-
-                    let server_ipv4 = HttpServer::new(create_https_app.clone())
-                        .workers(std::cmp::max(2, num_cpus::get()))
-                        .keep_alive(std::time::Duration::from_secs(5))
-                        .disable_signals()
-                        .listen_rustls_0_23(https_listener_ipv4, tls_config_ipv4)
-                        .map_err(|e| {
-                            error!("创建HTTPS IPv4服务器失败: {:?}", e);
-                            e
-                        })?
-                        .run();
-                    let handle_ipv4 = server_ipv4.handle();
-
-                    all_server_handles.push(handle_ipv4);
-                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv4));
-                }
-
-                if !ipv6_address.is_empty() {
-                    let https_listener_ipv6 = bind_with_retry(ipv6_address, https_port, 3).await?;
-                    let tls_config_ipv6 = load_rustls_config(&cert_path, &key_path).await?;
-
-                    info!(
-                        "HTTPS IPv6服务器运行在 https://[{}]:{}",
-                        ipv6_address, https_port
-                    );
-                    info!("HTTP版本: {} (支持HTTP/1.1和HTTP/2)", http_version);
-                    info!("证书类型: {}", cert_type);
-
-                    let server_ipv6 = HttpServer::new(create_https_app)
-                        .workers(std::cmp::max(2, num_cpus::get()))
-                        .keep_alive(std::time::Duration::from_secs(5))
-                        .disable_signals()
-                        .listen_rustls_0_23(https_listener_ipv6, tls_config_ipv6)
-                        .map_err(|e| {
-                            error!("创建HTTPS IPv6服务器失败: {:?}", e);
-                            e
-                        })?
-                        .run();
-                    let handle_ipv6 = server_ipv6.handle();
-
-                    all_server_handles.push(handle_ipv6);
-                    all_server_join_handles.push(tokio::task::spawn_local(server_ipv6));
-                }
-            } else {
-                info!("HTTPS服务器已禁用");
+            // 可选 TCP 调试端口（便于 curl 直连测试 API）
+            if debug_tcp_port > 0 {
+                let tcp_listener = create_tcp_listener("127.0.0.1", debug_tcp_port)?;
+                let server_tcp = HttpServer::new(create_app)
+                    .workers(2)
+                    .keep_alive(keep_alive)
+                    .disable_signals()
+                    .listen(tcp_listener)?
+                    .run();
+                let handle_tcp = server_tcp.handle();
+                info!("调试 TCP 服务器启动: http://127.0.0.1:{}", debug_tcp_port);
+                all_server_handles.push(handle_tcp);
+                all_server_join_handles.push(tokio::task::spawn_local(server_tcp));
             }
 
             info!("系统启动完成，等待请求...");
@@ -751,7 +601,7 @@ async fn main() -> std::io::Result<()> {
 fn configure_app_services(
     cfg: &mut web::ServiceConfig,
     app_state: &Data<AppState>,
-    enable_normal_routes: bool,
+    serve_static: bool,
 ) {
     cfg.app_data(app_state.clone());
     cfg.app_data(
@@ -816,30 +666,36 @@ fn configure_app_services(
                     web::get().to(ipma_init::get_verification_code),
                 )
                 .route("/check-pgsql", web::get().to(ipma_init::check_pgsql)),
-        )
-        .route(
-            "/init_index.html",
-            web::get().to(|| async {
-                let web_dir = get_web_dir();
-                let path = format!("{web_dir}/static/init_index.html");
-                serve_html_file(&path).await
-            }),
-        )
-        .service(
-            Files::new("/static", format!("{}/static", get_web_dir()))
-                .prefer_utf8(true)
-                .use_etag(true)
-                .use_last_modified(true),
-        )
-        .route(
-            "/",
-            web::get().to(|| async {
-                actix_web::HttpResponse::Found()
-                    .insert_header((actix_web::http::header::LOCATION, "/init_index.html"))
-                    .finish()
-            }),
         );
-    } else if enable_normal_routes {
+
+        // 仅在 serve_static=true 时托管前端文件
+        // 生产模式（UDS + nginx）应禁用，由 nginx 直接服务静态资源
+        if serve_static {
+            cfg.route(
+                "/init_index.html",
+                web::get().to(|| async {
+                    let web_dir = get_web_dir();
+                    let path = format!("{web_dir}/static/init_index.html");
+                    serve_html_file(&path).await
+                }),
+            )
+            .service(
+                Files::new("/static", format!("{}/static", get_web_dir()))
+                    .prefer_utf8(true)
+                    .use_etag(true)
+                    .use_last_modified(true),
+            )
+            .route(
+                "/",
+                web::get().to(|| async {
+                    actix_web::HttpResponse::Found()
+                        .insert_header((actix_web::http::header::LOCATION, "/init_index.html"))
+                        .finish()
+                }),
+            );
+        }
+    } else if serve_static {
+        // 开发模式：actix 直接托管静态文件 + main.html
         let static_path = format!("{}/static", get_web_dir());
         cfg.service(
             Files::new("/static", &static_path)
@@ -869,5 +725,8 @@ fn configure_app_services(
                     .finish()
             }),
         );
+    } else {
+        // 生产模式：仅注册 API 路由，静态文件由 nginx 托管
+        cfg.configure(init_routes);
     }
 }

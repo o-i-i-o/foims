@@ -89,10 +89,53 @@ const fn default_health_check_interval() -> u64 {
     30
 }
 
+/// 监听配置（仅 UDS 模式）
+///
+/// 架构说明：
+/// - actix-web 监听 Unix Domain Socket，由 nginx 反代
+/// - 静态文件由 nginx 直接托管，actix 仅服务 API
+/// - 调试时手动启动 actix 即可，无需安装 systemd 服务
+/// - nginx 与 actix 通过 UDS 通信，性能优于 TCP loopback
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct ListenConfig {
+    /// UDS socket 文件路径，默认 /run/ipma/api.sock
+    /// 调试时可改为 /tmp/ipma-dev.sock 避免权限问题
+    #[serde(default = "default_uds_path")]
+    pub uds_path: String,
+    /// 是否托管静态文件
+    /// - false（默认）：由 nginx 托管静态文件，actix 仅服务 API（生产模式）
+    /// - true：actix 同时托管静态文件和 API（调试模式，可用 curl 验证）
+    #[serde(default = "default_serve_static")]
+    pub serve_static: bool,
+    /// TCP 调试端口（仅 serve_static=true 时启用，作为辅助调试手段）
+    /// 启用后会在 UDS 之外额外监听 TCP 端口，便于 curl 直连测试 API
+    /// 默认 0 表示禁用
+    #[serde(default)]
+    pub debug_tcp_port: u16,
+}
+
+fn default_uds_path() -> String {
+    "/run/ipma/api.sock".to_string()
+}
+
+const fn default_serve_static() -> bool {
+    false
+}
+
+impl Default for ListenConfig {
+    fn default() -> Self {
+        Self {
+            uds_path: default_uds_path(),
+            serve_static: default_serve_static(),
+            debug_tcp_port: 0,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ServerConfig {
-    pub host: String,              // IPv4地址
-    pub host_ipv6: Option<String>, // IPv6地址
+    pub host: String,              // IPv4地址（保留用于公共 URL 解析）
+    pub host_ipv6: Option<String>, // IPv6地址（保留用于公共 URL 解析）
     pub http_enabled: Option<bool>,
     pub http_port: Option<u16>,
     pub https_enabled: Option<bool>,
@@ -107,6 +150,9 @@ pub struct ServerConfig {
     pub cors_allowed_origins: Vec<String>, // CORS允许的源列表
     #[serde(default)]
     pub allow_localhost_cors: bool, // 是否允许localhost/127.0.0.1/[::1]跨域（仅开发环境启用）
+    /// 监听配置（UDS 模式）
+    #[serde(default)]
+    pub listen: ListenConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

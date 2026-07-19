@@ -259,7 +259,7 @@ pub async fn create_organization(
 
         // 获取模板定义
         let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
-            "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+            "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
              FROM org_templates WHERE id = $1",
         )
         .bind(parent_template_id)
@@ -313,7 +313,7 @@ pub async fn create_organization(
             .ok_or_else(|| AppError::Validation("创建根节点时必须指定模板".to_string()))?;
 
         let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
-            "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+            "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
              FROM org_templates WHERE id = $1",
         )
         .bind(template_id)
@@ -521,7 +521,7 @@ async fn validate_org_type_change(
         .ok_or_else(|| AppError::Validation("该节点未关联模板，无法校验类型".to_string()))?;
 
     let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
-        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
     )
     .bind(template_id)
@@ -672,7 +672,7 @@ pub async fn get_allowed_child_types(
         .ok_or_else(|| AppError::Validation("该节点未关联模板".to_string()))?;
 
     let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
-        "SELECT id, name, levels, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
     )
     .bind(template_id)
@@ -877,6 +877,8 @@ mod tests {
 
     #[test]
     fn test_hierarchy_depth_limit() {
-        const { assert!(MAX_DEPTH >= 5); }
+        const {
+            assert!(MAX_DEPTH >= 5);
+        }
     }
 }
