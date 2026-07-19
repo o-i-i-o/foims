@@ -468,7 +468,8 @@
     "rate_limit_email": "邮件发送限制(次/小时)",
     "rate_limit_email_desc": "每个IP每小时最大邮件发送次数(登录验证码、找回密码)",
     "rate_limit_email_window": "邮件限制窗口(秒)",
-    "rate_limit_email_window_desc": "邮件发送速率限制的时间窗口"
+    "rate_limit_email_window_desc": "邮件发送速率限制的时间窗口",
+    "rate_limit_saved": "限流配置保存成功"
   },
   "smtp": {
     "host": "SMTP服务器",

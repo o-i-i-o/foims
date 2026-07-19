@@ -688,62 +688,6 @@
                 </div>
               </div>
 
-              <div class="config-card" id="rate-limit-section">
-                <div class="config-card-header">
-                  <div class="config-card-title">
-                    <span class="icon">🛡️</span>
-                    <span data-i18n="config.rate_limit_settings">Rate Limit Settings</span>
-                  </div>
-                </div>
-                <div class="config-row">
-                  <div class="config-field">
-                    <label data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
-                    <div class="toggle-group">
-                      <input type="checkbox" id="rate-limit-enabled" name="rate_limit_enabled" checked />
-                      <label for="rate-limit-enabled" class="toggle-label">
-                        <span class="toggle-inner"></span>
-                        <span class="toggle-switch"></span>
-                      </label>
-                    </div>
-                    <span class="hint-text" data-i18n="config.rate_limit_enabled_desc">Limit request frequency to prevent abuse</span>
-                  </div>
-                </div>
-                <div class="config-row">
-                  <div class="config-field">
-                    <label for="rate-limit-ip" data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
-                    <input type="number" id="rate-limit-ip" name="rate_limit_ip" min="1" max="10000" value="100" aria-label="IP rate limit" />
-                    <span class="hint-text" data-i18n="config.rate_limit_ip_desc">Max requests per IP per minute</span>
-                  </div>
-                  <div class="config-field">
-                    <label for="rate-limit-user" data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
-                    <input type="number" id="rate-limit-user" name="rate_limit_user" min="1" max="10000" value="200" aria-label="User rate limit" />
-                    <span class="hint-text" data-i18n="config.rate_limit_user_desc">Max requests per authenticated user per minute</span>
-                  </div>
-                </div>
-                <div class="config-row">
-                  <div class="config-field">
-                    <label for="rate-limit-login" data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
-                    <input type="number" id="rate-limit-login" name="rate_limit_login" min="1" max="100" value="5" aria-label="Login rate limit" />
-                    <span class="hint-text" data-i18n="config.rate_limit_login_desc">Max login attempts per IP per minute</span>
-                  </div>
-                  <div class="config-field">
-                    <label for="rate-limit-window" data-i18n="config.rate_limit_window">Time Window (seconds)</label>
-                    <input type="number" id="rate-limit-window" name="rate_limit_window" min="10" max="3600" value="60" aria-label="Rate limit window" />
-                    <span class="hint-text" data-i18n="config.rate_limit_window_desc">Time window for rate limiting</span>
-                  </div>
-                  <div class="config-field">
-                    <label for="rate-limit-email" data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
-                    <input type="number" id="rate-limit-email" name="rate_limit_email" min="1" max="100" value="5" aria-label="Email rate limit" />
-                    <span class="hint-text" data-i18n="config.rate_limit_email_desc">Max email sends per IP per hour (login codes, password reset)</span>
-                  </div>
-                  <div class="config-field">
-                    <label for="rate-limit-email-window" data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
-                    <input type="number" id="rate-limit-email-window" name="rate_limit_email_window" min="60" max="86400" value="3600" aria-label="Email rate limit window" />
-                    <span class="hint-text" data-i18n="config.rate_limit_email_window_desc">Time window for email rate limiting</span>
-                  </div>
-                </div>
-              </div>
-
               <div class="config-actions">
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </div>
@@ -965,6 +909,49 @@
         <div id="security-tab" class="tab-content" role="tabpanel">
           <article class="import-export-section">
             <div class="action-bar">
+              <h2 data-i18n="config.rate_limit_settings">Rate Limit Settings</h2>
+            </div>
+
+            <div class="nc-fields" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-top: 1rem;">
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
+                <select id="rate-limit-enabled" class="form-control">
+                  <option value="true" data-i18n="common.yes">Yes</option>
+                  <option value="false" data-i18n="common.no">No</option>
+                </select>
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
+                <input type="number" id="rate-limit-ip" class="form-control" min="1" max="10000" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
+                <input type="number" id="rate-limit-user" class="form-control" min="1" max="10000" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
+                <input type="number" id="rate-limit-login" class="form-control" min="1" max="100" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_window">Time Window (seconds)</label>
+                <input type="number" id="rate-limit-window" class="form-control" min="10" max="3600" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
+                <input type="number" id="rate-limit-email" class="form-control" min="1" max="100" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
+                <input type="number" id="rate-limit-email-window" class="form-control" min="60" max="86400" />
+              </div>
+            </div>
+            <div class="action-bar" style="margin-top: 0.5rem;">
+              <button id="rate-limit-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+            </div>
+          </article>
+
+          <article class="import-export-section">
+            <div class="action-bar">
               <h2 data-i18n="security.app_fail2ban">Application Fail2ban</h2>
               <div>
                 <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
@@ -1052,6 +1039,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01225"></script>
+  <script type="module" src="/static/js/app.js?v=01226"></script>
 </body>
 </html>

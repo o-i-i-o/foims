@@ -12,6 +12,7 @@ export function initSecurityTab() {
     bindEvents();
     securityTabInitialized = true;
   }
+  loadRateLimitConfig();
   loadAppFail2banStatus();
 }
 
@@ -21,6 +22,7 @@ function bindEvents() {
   elementCache.get("app-fail2ban-save-config-btn")?.addEventListener("click", saveAppFail2banConfig);
   elementCache.get("app-fail2ban-ban-btn")?.addEventListener("click", handleBanIp);
   elementCache.get("app-fail2ban-unban-btn")?.addEventListener("click", handleUnbanIp);
+  elementCache.get("rate-limit-save-config-btn")?.addEventListener("click", saveRateLimitConfig);
 }
 
 // 加载应用层 fail2ban 状态
@@ -181,5 +183,50 @@ async function doUnbanIp(ip) {
   } catch (err) {
     console.error("unbanIp error:", err);
     showToast(t("security.unban_failed") || "Unban failed", "error");
+  }
+}
+
+// 加载限流配置
+async function loadRateLimitConfig() {
+  try {
+    const result = await apiGet("/api/system/config");
+    if (result.success && result.data.rate_limit) {
+      const rateLimit = result.data.rate_limit;
+
+      elementCache.setValue("rate-limit-enabled", String(rateLimit.enabled !== false));
+      elementCache.setValue("rate-limit-ip", rateLimit.ip_limit || 100);
+      elementCache.setValue("rate-limit-user", rateLimit.user_limit || 200);
+      elementCache.setValue("rate-limit-login", rateLimit.login_limit || 5);
+      elementCache.setValue("rate-limit-window", rateLimit.window_secs || 60);
+      elementCache.setValue("rate-limit-email", rateLimit.email_limit || 5);
+      elementCache.setValue("rate-limit-email-window", rateLimit.email_window_secs || 3600);
+    }
+  } catch (err) {
+    console.error("loadRateLimitConfig error:", err);
+  }
+}
+
+// 保存限流配置
+async function saveRateLimitConfig() {
+  const rateLimitConfig = {
+    enabled: elementCache.getValue("rate-limit-enabled") === "true",
+    ip_limit: parseInt(elementCache.getValue("rate-limit-ip")) || 100,
+    user_limit: parseInt(elementCache.getValue("rate-limit-user")) || 200,
+    login_limit: parseInt(elementCache.getValue("rate-limit-login")) || 5,
+    window_secs: parseInt(elementCache.getValue("rate-limit-window")) || 60,
+    email_limit: parseInt(elementCache.getValue("rate-limit-email")) || 5,
+    email_window_secs: parseInt(elementCache.getValue("rate-limit-email-window")) || 3600
+  };
+
+  try {
+    const result = await apiPut("/api/system/config", { rate_limit: rateLimitConfig });
+    if (result.success) {
+      showToast(t("config.rate_limit_saved") || "Rate limit config saved", "success");
+    } else {
+      showToast(result.error || t("common.save_failed") || "Save failed", "error");
+    }
+  } catch (err) {
+    console.error("saveRateLimitConfig error:", err);
+    showToast(t("common.save_failed") || "Save failed", "error");
   }
 }

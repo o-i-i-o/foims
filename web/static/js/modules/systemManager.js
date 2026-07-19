@@ -134,23 +134,10 @@ async function saveSystemConfig() {
       public_url: elementCache.getValue("public-url") || ""
     };
 
-    const rateLimitConfig = {
-      enabled: elementCache.getChecked("rate-limit-enabled"),
-      ip_limit: parseInt(elementCache.getValue("rate-limit-ip")) || 100,
-      user_limit: parseInt(elementCache.getValue("rate-limit-user")) || 200,
-      login_limit: parseInt(elementCache.getValue("rate-limit-login")) || 5,
-      window_secs: parseInt(elementCache.getValue("rate-limit-window")) || 60,
-      email_limit: parseInt(elementCache.getValue("rate-limit-email")) || 5,
-      email_window_secs: parseInt(elementCache.getValue("rate-limit-email-window")) || 3600
-    };
-
-    const config = { 
-      server: serverConfig,
-      rate_limit: rateLimitConfig 
-    };
+    const config = { server: serverConfig };
 
     const result = await apiPut("/api/system/config", config);
-    
+
     if (result.success) {
       await loadSystemConfig();
       showToast("系统配置保存成功", "success");
@@ -185,23 +172,12 @@ export async function loadSystemConfig() {
     const result = await apiGet("/api/system/config");
     if (result.success) {
       const config = result.data;
-      
+
       currentServerConfig = config.server;
-      
+
       elementCache.setValue("page-timeout", config.server.page_timeout || 30);
       elementCache.setValue("public-url", config.server.public_url || "");
-      
-      // 加载速率限制配置
-      if (config.rate_limit) {
-        elementCache.get("rate-limit-enabled").checked = config.rate_limit.enabled !== false;
-        elementCache.setValue("rate-limit-ip", config.rate_limit.ip_limit || 100);
-        elementCache.setValue("rate-limit-user", config.rate_limit.user_limit || 200);
-        elementCache.setValue("rate-limit-login", config.rate_limit.login_limit || 5);
-        elementCache.setValue("rate-limit-window", config.rate_limit.window_secs || 60);
-        elementCache.setValue("rate-limit-email", config.rate_limit.email_limit || 5);
-        elementCache.setValue("rate-limit-email-window", config.rate_limit.email_window_secs || 3600);
-      }
-      
+
       checkConfigUpdateRestartPrompt();
     }
   } catch (error) {

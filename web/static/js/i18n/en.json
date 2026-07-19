@@ -468,7 +468,8 @@
     "rate_limit_email": "Email Limit (per hour)",
     "rate_limit_email_desc": "Max email sends per IP per hour (login codes, password reset)",
     "rate_limit_email_window": "Email Window (seconds)",
-    "rate_limit_email_window_desc": "Time window for email rate limiting"
+    "rate_limit_email_window_desc": "Time window for email rate limiting",
+    "rate_limit_saved": "Rate limit config saved successfully"
   },
   "smtp": {
     "host": "SMTP Server",
