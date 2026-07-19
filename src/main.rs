@@ -7,8 +7,6 @@ use actix_web::middleware::Compress;
 use actix_web::middleware::Next;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use std::net::{SocketAddr, TcpListener};
 use std::os::unix::net::UnixListener;
 use std::panic;
 use std::path::{Path, PathBuf};
@@ -17,9 +15,7 @@ use tracing::{error, info, warn};
 
 use ipma::app_state::AppState;
 use ipma::log::setup_logging;
-use ipma::routes::static_files::{
-    get_web_dir, https_redirect_handler, json_error_handler, serve_json,
-};
+use ipma::routes::static_files::{get_web_dir, json_error_handler, serve_json};
 
 use ipma::config::Config;
 use ipma::db::DbPool;
@@ -152,37 +148,6 @@ fn build_cors_middleware(config: &Config) -> Cors {
 }
 
 use std::fs;
-
-fn parse_socket_addr(addr: &str, port: u16) -> std::io::Result<SocketAddr> {
-    if addr.contains(':') {
-        format!("[{addr}]:{port}")
-    } else {
-        format!("{addr}:{port}")
-    }
-    .parse()
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
-}
-
-fn create_tcp_listener(addr: &str, port: u16) -> std::io::Result<TcpListener> {
-    let socket_addr = parse_socket_addr(addr, port)?;
-
-    let domain = match socket_addr {
-        SocketAddr::V6(_) => Domain::IPV6,
-        SocketAddr::V4(_) => Domain::IPV4,
-    };
-
-    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
-    socket.set_reuse_address(true)?;
-
-    if socket_addr.is_ipv6() {
-        socket.set_only_v6(true)?;
-    }
-
-    socket.bind(&SockAddr::from(socket_addr))?;
-    socket.listen(2048)?;
-
-    Ok(socket.into())
-}
 
 /// 创建 UDS 监听器
 ///
@@ -416,7 +381,6 @@ async fn main() -> std::io::Result<()> {
 
     let uds_path = config.server.listen.uds_path.clone();
     let serve_static = config.server.listen.serve_static;
-    let debug_tcp_port = config.server.listen.debug_tcp_port;
 
     let web_dir = get_web_dir();
     if serve_static && !Path::new(web_dir).exists() {
@@ -441,9 +405,6 @@ async fn main() -> std::io::Result<()> {
             "禁用（由 nginx 托管）"
         }
     );
-    if debug_tcp_port > 0 {
-        info!("调试 TCP 端口: {} (curl 直连测试用)", debug_tcp_port);
-    }
 
     let app_state = Data::new(
         AppState::new(config.clone(), pool.clone(), task_registry.clone())
@@ -458,7 +419,7 @@ async fn main() -> std::io::Result<()> {
     let app_rate_limit_enabled = rate_limit_enabled;
     let app_state_for_app = app_state.clone();
     let create_app = move || {
-        let mut app = App::new()
+        App::new()
             .wrap(Compress::default())
             .wrap(actix_web::middleware::Logger::default())
             .wrap(build_cors_middleware(&app_state_for_app.config))
@@ -470,16 +431,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_middleware::from_fn(security_headers_middleware))
             .configure(|cfg| {
                 configure_app_services(cfg, &app_state_for_app, serve_static);
-            });
-
-        // init 模式下保留 https_redirect_handler 作为默认服务（用于 auto_https 兼容旧配置）
-        if !app_state_for_app.config.init.enabled
-            && app_state_for_app.config.server.auto_https.unwrap_or(false)
-        {
-            app = app.default_service(web::route().to(https_redirect_handler));
-        }
-
-        app
+            })
     };
 
     let local_set = tokio::task::LocalSet::new();
@@ -501,7 +453,7 @@ async fn main() -> std::io::Result<()> {
 
             // UDS 主监听器
             let uds_listener = create_uds_listener(&uds_path)?;
-            let server_uds = HttpServer::new(create_app.clone())
+            let server_uds = HttpServer::new(create_app)
                 .workers(workers)
                 .keep_alive(keep_alive)
                 .disable_signals()
@@ -511,21 +463,6 @@ async fn main() -> std::io::Result<()> {
             info!("UDS 服务器启动: {}", uds_path);
             all_server_handles.push(handle_uds);
             all_server_join_handles.push(tokio::task::spawn_local(server_uds));
-
-            // 可选 TCP 调试端口（便于 curl 直连测试 API）
-            if debug_tcp_port > 0 {
-                let tcp_listener = create_tcp_listener("127.0.0.1", debug_tcp_port)?;
-                let server_tcp = HttpServer::new(create_app)
-                    .workers(2)
-                    .keep_alive(keep_alive)
-                    .disable_signals()
-                    .listen(tcp_listener)?
-                    .run();
-                let handle_tcp = server_tcp.handle();
-                info!("调试 TCP 服务器启动: http://127.0.0.1:{}", debug_tcp_port);
-                all_server_handles.push(handle_tcp);
-                all_server_join_handles.push(tokio::task::spawn_local(server_tcp));
-            }
 
             info!("系统启动完成，等待请求...");
 

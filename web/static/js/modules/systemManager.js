@@ -10,7 +10,6 @@ import {
   escapeHtml,
 } from "../utils/ui.js";
 
-import { openModal } from "../utils/modal.js";
 import { loadModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
@@ -204,152 +203,11 @@ export async function loadSystemConfig() {
       }
       
       checkConfigUpdateRestartPrompt();
-      
-      checkServiceStatus();
     }
   } catch (error) {
     console.error("加载系统配置失败:", error);
   }
 }
-
-// 检查服务状态
-async function checkServiceStatus() {
-  try {
-    const result = await apiGet("/api/system/service-status");
-    if (result.success) {
-      const data = result.data;
-      const registerBtn = elementCache.get("register-service-btn");
-      const restartBtn = elementCache.get("restart-app-btn");
-      const serviceStatusEl = elementCache.get("service-status-info");
-      
-      if (data.registered) {
-        registerBtn.disabled = true;
-        registerBtn.textContent = "已注册为服务";
-        registerBtn.classList.add("btn-success");
-        registerBtn.classList.remove("btn-secondary");
-      } else {
-        registerBtn.disabled = false;
-        registerBtn.textContent = "注册为服务";
-        registerBtn.classList.add("btn-secondary");
-        registerBtn.classList.remove("btn-success");
-      }
-      
-      if (serviceStatusEl) {
-        let statusHtml = '<div class="service-status-grid">';
-        
-        statusHtml += `
-          <div class="status-item">
-            <span class="status-label">运行模式:</span>
-            <span class="status-value">${data.running_as_service ? '系统服务' : '独立进程'}</span>
-          </div>
-        `;
-        
-        if (data.service_file_exists) {
-          statusHtml += `
-            <div class="status-item">
-              <span class="status-label">服务状态:</span>
-              <span class="status-value ${data.active ? 'status-active' : 'status-inactive'}">
-                ${escapeHtml(data.status || (data.active ? '运行中' : '已停止'))}
-              </span>
-            </div>
-          `;
-          
-          if (data.active && data.uptime_seconds) {
-            const uptime = formatUptime(data.uptime_seconds);
-            statusHtml += `
-              <div class="status-item">
-                <span class="status-label">运行时间:</span>
-                <span class="status-value">${uptime}</span>
-              </div>
-            `;
-          }
-          
-          statusHtml += `
-            <div class="status-item">
-              <span class="status-label">开机自启:</span>
-              <span class="status-value ${data.enabled ? 'status-enabled' : 'status-disabled'}">
-                ${data.enabled ? '已启用' : '已禁用'}
-              </span>
-            </div>
-          `;
-        }
-        
-        statusHtml += '</div>';
-        serviceStatusEl.innerHTML = statusHtml;
-      }
-      
-      if (restartBtn) {
-        if (data.running_as_service) {
-          restartBtn.textContent = "重启服务";
-        } else {
-          restartBtn.textContent = "重启程序";
-        }
-      }
-    }
-  } catch (error) {
-    console.error("检查服务状态失败:", error);
-  }
-}
-
-// 注册为服务
-export async function registerService() {
-  const confirmed = await showConfirm(t('system.confirm_register_service'));
-  if (confirmed) {
-    try {
-      const result = await apiPost("/api/system/register-service", {});
-      if (result.success) {
-        showToast("注册为服务成功", "success");
-        // 注册成功后更新服务状态
-        checkServiceStatus();
-      } else {
-        showToast("注册为服务失败: " + result.message, "error");
-      }
-    } catch (error) {
-      console.error("注册为服务失败:", error);
-      showToast("注册为服务失败: " + error.message, "error");
-    }
-  }
-}
-
-// 重启应用系统
-export async function restartApplication() {
-  const isService = await checkIfRunningAsService();
-  const confirmMsg = isService 
-    ? t('system.confirm_restart_service')
-    : t('system.confirm_restart_app');
-
-  const confirmed = await showConfirm(confirmMsg);
-  if (confirmed) {
-    clearConfigUpdateFlag();
-    
-    try {
-      const result = await apiPost("/api/system/restart-application", {});
-      if (result.success) {
-        const successMsg = isService ? "服务重启命令已发送" : "程序重启命令已发送";
-        showToast(successMsg, "success");
-        showToast("正在重启，请稍候...", "info");
-        setTimeout(() => {
-          location.reload();
-        }, 5000);
-      } else {
-        showToast("重启失败: " + result.message, "error");
-      }
-    } catch (error) {
-      console.error("重启失败:", error);
-      showToast("重启失败: " + error.message, "error");
-    }
-  }
-}
-
-async function checkIfRunningAsService() {
-  try {
-    const result = await apiGet("/api/system/service-status");
-    return result.success && result.data.running_as_service;
-  } catch {
-    return false;
-  }
-}
-
 
 // 加载SMTP配置
 async function loadSmtpConfig() {

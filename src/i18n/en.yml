@@ -7,12 +7,6 @@ system:
   db_pool_created: "Database connection pool created successfully"
   init_mode_enabled: "Initialization mode enabled: only initialization routes available"
   init_mode_disabled: "Initialization mode disabled: full application routes available"
-  auto_https_enabled: "Auto HTTPS enabled: redirect HTTP to HTTPS automatically"
-  http_server_started: "HTTP server running on http://{{address}}:{{port}}"
-  https_server_started: "HTTPS server running on https://{{address}}:{{port}}"
-  http_version: "HTTP version: {{version}}"
-  cert_type: "Certificate type: {{type}}"
-  cert_generated: "Self-signed certificate generated successfully"
   connection_error: "Connection error: {{error}}"
   stream_error: "Stream error: {{error}}"
 

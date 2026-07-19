@@ -389,8 +389,6 @@
     "config": "系统配置",
     "smtp": "SMTP配置",
     "import_export": "数据管理",
-    "restart_application": "重启应用",
-    "register_service": "注册为服务",
     "system_name": "系统名称",
     "version": "系统版本",
     "database_status": "数据库状态",

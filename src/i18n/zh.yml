@@ -7,12 +7,6 @@ system:
   db_pool_created: "数据库连接池创建成功"
   init_mode_enabled: "初始化模式已启用: 仅初始化路由可用"
   init_mode_disabled: "初始化模式已禁用: 完整应用路由可用"
-  auto_https_enabled: "自动HTTPS已启用: 自动将HTTP重定向到HTTPS"
-  http_server_started: "HTTP服务器运行在 http://{{address}}:{{port}}"
-  https_server_started: "HTTPS服务器运行在 https://{{address}}:{{port}}"
-  http_version: "HTTP版本: {{version}}"
-  cert_type: "证书类型: {{type}}"
-  cert_generated: "自签名证书生成成功"
   connection_error: "连接错误: {{error}}"
   stream_error: "流错误: {{error}}"
 

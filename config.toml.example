@@ -17,15 +17,6 @@ health_check_interval_secs = 30
 # 兼容性字段（保留用于公共 URL 解析，不再用于实际监听）
 host = "127.0.0.1"
 host_ipv6 = ""
-# 以下字段在 UDS 架构下已不使用，TLS 由 nginx 处理
-# 保留字段以兼容前端配置 API
-http_enabled = false
-http_port = 8080
-https_enabled = false
-https_port = 443
-auto_https = false
-http_version = "http2"
-cert_type = "self_signed"
 public_url = "localhost/"
 # 页面无操作超时时间（分钟）：用户无操作超过此时间后强制重新登录
 # 建议设置为 30-60 分钟，应大于 access_token_expiry
@@ -48,10 +39,6 @@ uds_path = "/tmp/ipma-dev.sock"
 # - false（推荐）：静态文件由 nginx 直接服务，actix 仅 API
 # - true：actix 同时托管静态文件和 API（不推荐，与 nginx 重复）
 serve_static = false
-# 调试 TCP 端口（可选，便于 curl 直连测试 API，0=禁用）
-# 启用后会在 UDS 之外额外监听该端口，例如 debug_tcp_port = 8080
-# 然后 curl http://127.0.0.1:8080/api/... 可直连测试
-debug_tcp_port = 0
 
 [jwt]
 # 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）

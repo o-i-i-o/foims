@@ -7,7 +7,6 @@ use crate::system::smtp::{
 };
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
-use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
@@ -15,13 +14,6 @@ use uuid::Uuid;
 use validator::Validate;
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
-
-/// 将文件权限设置为 0600,用于保护 TLS 私钥等敏感文件
-async fn secure_file_permissions(path: &str) {
-    if let Err(e) = tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await {
-        tracing::warn!("设置文件权限失败 {}: {}", path, e);
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendEmailRequest {
@@ -42,19 +34,6 @@ pub struct UpdateSystemConfigRequest {
     pub init: Option<crate::config::InitConfig>,
     pub rate_limit: Option<crate::config::RateLimitConfig>,
     pub snmp: Option<crate::config::SnmpConfig>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct GenerateCertRequest {
-    #[validate(length(min = 1, message = "通用名称不能为空"))]
-    pub common_name: String,
-    pub organization: Option<String>,
-    pub organizational_unit: Option<String>,
-    pub country: Option<String>,
-    pub state: Option<String>,
-    pub locality: Option<String>,
-    pub validity: Option<i32>,
-    pub subject_alt_names: Option<Vec<String>>,
 }
 
 pub fn record_start_time() {
@@ -152,29 +131,6 @@ pub async fn update_system_config(
     }
 
     if let Some(server) = &req.server {
-        let host = server.host.trim();
-        let host_ipv6 = server.host_ipv6.as_ref().map(|s| s.trim()).unwrap_or("");
-
-        fn validate_ip(addr: &str) -> Result<(), String> {
-            if addr.is_empty() {
-                return Ok(());
-            }
-            if addr.parse::<std::net::IpAddr>().is_ok() {
-                Ok(())
-            } else {
-                Err(format!("无效的IP地址格式: {}", addr))
-            }
-        }
-
-        validate_ip(host).map_err(AppError::Validation)?;
-        validate_ip(host_ipv6).map_err(AppError::Validation)?;
-
-        if host.is_empty() && host_ipv6.is_empty() {
-            return Err(AppError::Validation(
-                "至少需要配置一个监听地址（IPv4或IPv6）".to_string(),
-            ));
-        }
-
         new_config.server = server.clone();
     }
 
@@ -390,304 +346,6 @@ exec "$2"
     )))
 }
 
-#[derive(Debug, Serialize)]
-pub struct CertificateStatus {
-    pub has_imported_cert: bool,
-    pub has_self_signed_cert: bool,
-    pub cert_type: String,
-}
-
-async fn check_certificate_exists(dir: &str, cert_type: &str) -> bool {
-    if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if let Some(filename_os) = path.file_name()
-                && let Some(filename) = filename_os.to_str()
-                && ((cert_type == "import" && filename.starts_with("import_"))
-                    || (cert_type == "create" && filename.starts_with("create_")))
-            {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-pub async fn get_certificate_status() -> Result<HttpResponse, AppError> {
-    let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{app_name}/certs");
-
-    let has_imported_cert = check_certificate_exists(&certs_dir, "import").await;
-
-    let has_self_signed_cert = check_certificate_exists(&certs_dir, "create").await;
-
-    let cert_type = match tokio::task::spawn_blocking(Config::load)
-        .await
-        .unwrap_or(Err(config::ConfigError::Message(
-            "spawn_blocking failed".into(),
-        ))) {
-        Ok(config) => config
-            .server
-            .cert_type
-            .unwrap_or_else(|| "self_signed".to_string()),
-        Err(_) => "self_signed".to_string(),
-    };
-
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
-        CertificateStatus {
-            has_imported_cert,
-            has_self_signed_cert,
-            cert_type,
-        },
-        "证书状态获取成功",
-    )))
-}
-
-pub async fn generate_certificate(
-    state: web::Data<AppState>,
-    _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<GenerateCertRequest>,
-) -> Result<HttpResponse, AppError> {
-    req.validate()?;
-
-    let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{app_name}/certs");
-
-    if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
-        tokio::fs::create_dir_all(&certs_dir)
-            .await
-            .map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
-    }
-
-    let timestamp = chrono::Utc::now().timestamp();
-    let base_name = format!("create_{timestamp}_cert");
-    let cert_path = format!("{certs_dir}/{base_name}.pem");
-    let key_path = format!("{certs_dir}/{base_name}.key");
-
-    let cert_path_clone = cert_path.clone();
-    let key_path_clone = key_path.clone();
-    let req_clone = req.into_inner();
-    let config = state.config.clone();
-    tokio::task::spawn_blocking(move || {
-        generate_self_signed_cert(&cert_path_clone, &key_path_clone, &req_clone, &config)
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("生成证书任务失败: {e}")))?
-    .map_err(|e| AppError::Internal(format!("生成证书失败: {e:?}")))?;
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书生成成功")))
-}
-
-pub async fn import_certificate(
-    _state: web::Data<AppState>,
-    _admin: crate::auth::extractor::AdminUser,
-    req: actix_multipart::Multipart,
-) -> Result<HttpResponse, AppError> {
-    use futures_util::stream::StreamExt;
-
-    let mut cert_data = Vec::new();
-    let mut key_data = Vec::new();
-
-    let mut multipart = req;
-
-    while let Some(item) = multipart.next().await {
-        if let Ok(mut field) = item {
-            let name = field.name().unwrap_or("").to_string();
-
-            while let Some(chunk) = field.next().await {
-                if let Ok(data) = chunk {
-                    if name == "cert" {
-                        cert_data.extend_from_slice(&data);
-                    } else if name == "key" {
-                        key_data.extend_from_slice(&data);
-                    }
-                }
-            }
-        }
-    }
-
-    if cert_data.is_empty() || key_data.is_empty() {
-        return Err(AppError::Validation("缺少证书文件或私钥文件".to_string()));
-    }
-
-    let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{app_name}/certs");
-
-    if !tokio::fs::try_exists(&certs_dir).await.unwrap_or(false) {
-        tokio::fs::create_dir_all(&certs_dir)
-            .await
-            .map_err(|e| AppError::Internal(format!("创建证书目录失败: {e}")))?;
-    }
-
-    let timestamp = chrono::Utc::now().timestamp();
-    let base_name = format!("import_{timestamp}_cert");
-    let cert_path = format!("{certs_dir}/{base_name}.pem");
-    let key_path = format!("{certs_dir}/{base_name}.key");
-
-    tokio::fs::write(&cert_path, cert_data)
-        .await
-        .map_err(|e| AppError::Internal(format!("保存证书文件失败: {e}")))?;
-
-    tokio::fs::write(&key_path, key_data)
-        .await
-        .map_err(|e| AppError::Internal(format!("保存私钥文件失败: {e}")))?;
-    secure_file_permissions(&key_path).await;
-
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "证书导入成功")))
-}
-
-pub async fn download_certificate(
-    _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
-    let app_name = env!("CARGO_PKG_NAME");
-    let certs_dir = format!("/etc/{app_name}/certs");
-
-    let cert_type = match tokio::task::spawn_blocking(Config::load)
-        .await
-        .unwrap_or(Err(config::ConfigError::Message(
-            "spawn_blocking failed".into(),
-        ))) {
-        Ok(config) => config
-            .server
-            .cert_type
-            .unwrap_or_else(|| "self_signed".to_string()),
-        Err(_) => "self_signed".to_string(),
-    };
-
-    let prefix = if cert_type == "imported" {
-        "import"
-    } else {
-        "create"
-    };
-
-    let mut latest_cert: Option<(String, SystemTime)> = None;
-
-    if let Ok(mut entries) = tokio::fs::read_dir(&certs_dir).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if let Some(filename) = path.file_name().and_then(|f| f.to_str())
-                && filename.starts_with(prefix)
-                && filename.ends_with(".pem")
-                && let Ok(metadata) = entry.metadata().await
-                && let Ok(modified) = metadata.modified()
-            {
-                if let Some((_, latest_time)) = latest_cert {
-                    if modified > latest_time {
-                        latest_cert = Some((path.to_string_lossy().to_string(), modified));
-                    }
-                } else {
-                    latest_cert = Some((path.to_string_lossy().to_string(), modified));
-                }
-            }
-        }
-    }
-
-    if let Some((path, _)) = latest_cert {
-        let content = tokio::fs::read(&path)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-        let filename = std::path::Path::new(&path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("certificate.pem");
-
-        Ok(HttpResponse::Ok()
-            .content_type("application/x-pem-file")
-            .append_header((
-                actix_web::http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{filename}\""),
-            ))
-            .body(content))
-    } else {
-        Err(AppError::Validation("未找到证书文件".to_string()))
-    }
-}
-
-fn generate_self_signed_cert(
-    cert_path: &str,
-    key_path: &str,
-    req: &GenerateCertRequest,
-    config: &Config,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use rcgen::{
-        CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, KeyPair,
-        KeyUsagePurpose, SanType,
-    };
-    use std::convert::TryInto;
-
-    let key_pair = KeyPair::generate()?;
-
-    let mut params = CertificateParams::default();
-
-    let now = time::OffsetDateTime::now_utc();
-    params.not_before = now;
-    params.not_after = now + time::Duration::days(3650);
-
-    if let Some(days) = req.validity {
-        params.not_after = now + time::Duration::days(i64::from(days));
-    }
-
-    let mut dn = DistinguishedName::new();
-    dn.push(DnType::CommonName, &req.common_name);
-    if let Some(org) = &req.organization {
-        dn.push(DnType::OrganizationName, org);
-    }
-    if let Some(ou) = &req.organizational_unit {
-        dn.push(DnType::OrganizationalUnitName, ou);
-    }
-    if let Some(country) = &req.country {
-        dn.push(DnType::CountryName, country);
-    }
-    if let Some(state) = &req.state {
-        dn.push(DnType::StateOrProvinceName, state);
-    }
-    if let Some(locality) = &req.locality {
-        dn.push(DnType::LocalityName, locality);
-    }
-    params.distinguished_name = dn;
-
-    let mut sans = Vec::new();
-
-    if !config.server.public_url.is_empty() {
-        let public_url = &config.server.public_url;
-        let host = public_url
-            .trim_start_matches("http://")
-            .trim_start_matches("https://");
-        let host = host.split('/').next().unwrap_or(host);
-        let host = host.split(':').next().unwrap_or(host);
-
-        if !host.is_empty() {
-            if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-                sans.push(SanType::IpAddress(ip));
-            } else if let Ok(dns_name) = host.try_into() {
-                sans.push(SanType::DnsName(dns_name));
-            }
-        }
-    }
-
-    if sans.is_empty() {
-        if let Ok(ip) = req.common_name.parse::<std::net::IpAddr>() {
-            sans.push(SanType::IpAddress(ip));
-        } else if let Ok(dns_name) = req.common_name.as_str().try_into() {
-            sans.push(SanType::DnsName(dns_name));
-        }
-    }
-    params.subject_alt_names = sans;
-
-    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-
-    params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
-
-    let cert = params.self_signed(&key_pair)?;
-    let cert_pem = cert.pem();
-    let key_pem = key_pair.serialize_pem();
-
-    std::fs::write(cert_path, cert_pem)?;
-    std::fs::write(key_path, key_pem)?;
-
-    Ok(())
-}
-
 pub async fn disable_init_mode(
     state: web::Data<AppState>,
     _admin: crate::auth::extractor::AdminUser,
@@ -751,15 +409,6 @@ pub async fn restore_config(
     }
     if new_config.jwt.secret == "***" {
         new_config.jwt.secret = state.config.jwt.secret.clone();
-    }
-
-    let http_enabled = new_config.server.http_enabled.unwrap_or(false);
-    let https_enabled = new_config.server.https_enabled.unwrap_or(false);
-
-    if !http_enabled && !https_enabled {
-        return Err(AppError::Validation(
-            "至少需要开启一个端口（HTTP或HTTPS）".to_string(),
-        ));
     }
 
     let config_path = crate::config::get_config_file_path();

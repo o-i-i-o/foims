@@ -107,11 +107,6 @@ pub struct ListenConfig {
     /// - true：actix 同时托管静态文件和 API（调试模式，可用 curl 验证）
     #[serde(default = "default_serve_static")]
     pub serve_static: bool,
-    /// TCP 调试端口（仅 serve_static=true 时启用，作为辅助调试手段）
-    /// 启用后会在 UDS 之外额外监听 TCP 端口，便于 curl 直连测试 API
-    /// 默认 0 表示禁用
-    #[serde(default)]
-    pub debug_tcp_port: u16,
 }
 
 fn default_uds_path() -> String {
@@ -127,22 +122,14 @@ impl Default for ListenConfig {
         Self {
             uds_path: default_uds_path(),
             serve_static: default_serve_static(),
-            debug_tcp_port: 0,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ServerConfig {
-    pub host: String,              // IPv4地址（保留用于公共 URL 解析）
-    pub host_ipv6: Option<String>, // IPv6地址（保留用于公共 URL 解析）
-    pub http_enabled: Option<bool>,
-    pub http_port: Option<u16>,
-    pub https_enabled: Option<bool>,
-    pub https_port: Option<u16>,
-    pub auto_https: Option<bool>,
-    pub http_version: Option<String>,
-    pub cert_type: Option<String>,
+    pub host: String,                 // IPv4地址（保留用于公共 URL 解析）
+    pub host_ipv6: Option<String>,    // IPv6地址（保留用于公共 URL 解析）
     pub public_url: String,           // 服务器公共URL，用于构建重置链接等
     pub session_timeout: Option<u64>, // 会话超时时间（分钟）
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）

@@ -7,7 +7,7 @@ edition = "2024"
 
 [workspace.dependencies]
 # Actix Web
-actix-web = { version = "4.14.0", features = ["rustls-0_23"] }
+actix-web = { version = "4.14.0" }
 actix-multipart = "0.8.0"
 
 # SQLx
@@ -90,11 +90,7 @@ async-trait = { workspace = true }
 actix-files = "0.6.10"
 actix-cors = "0.7.1"
 
-rustls = { version = "0.23.41", features = ["ring"] }
-rustls-pki-types = "1.15.0"
-pem = "3.0.6"
-tokio-rustls = "0.26.4"
-rcgen = "0.14.8"
+
 
 regex = "1.13.0"
 
@@ -114,7 +110,6 @@ async-snmp = "0.13.0"
 config = { version = "0.15.25", features = ["toml"] }
 toml = "1.1.2"
 
-socket2 = "0.6"
 anyhow = "1.0.103"
 num_cpus = "1.17.0"
 dashmap = "6.2.1"

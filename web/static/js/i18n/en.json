@@ -389,8 +389,6 @@
     "config": "System Config",
     "smtp": "SMTP Config",
     "import_export": "Data Management",
-    "restart_application": "Restart Application",
-    "register_service": "Register as Service",
     "system_name": "System Name",
     "version": "System Version",
     "database_status": "Database Status",

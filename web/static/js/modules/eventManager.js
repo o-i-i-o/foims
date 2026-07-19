@@ -158,22 +158,6 @@ const BUTTON_EVENT_BINDINGS = [
     },
   },
   {
-    id: "register-service-btn",
-    event: "click",
-    handler: () => {
-      const { registerService } = getModule("systemManager");
-      registerService();
-    },
-  },
-  {
-    id: "restart-app-btn",
-    event: "click",
-    handler: () => {
-      const { restartApplication } = getModule("systemManager");
-      restartApplication();
-    },
-  },
-  {
     id: "add-user-btn",
     event: "click",
     handler: () => {
