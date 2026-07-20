@@ -926,7 +926,7 @@ pub struct NetworkCardUpdate {
 pub struct DeviceInterface {
     pub id: Uuid,
     pub device_id: Uuid,
-    pub network_card_id: Option<Uuid>,
+    pub nic_id: Option<Uuid>,
     pub name: String,
     pub interface_type: String,
     pub mac_address: Option<String>,
@@ -946,7 +946,7 @@ pub struct DeviceInterfaceWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
     pub device_name: String,
-    pub network_card_id: Option<Uuid>,
+    pub nic_id: Option<Uuid>,
     pub name: String,
     pub interface_type: String,
     pub mac_address: Option<String>,

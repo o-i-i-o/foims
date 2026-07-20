@@ -91,7 +91,7 @@ pub async fn apply_network_config(
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM network_cards WHERE device_id = $1")
+    sqlx::query("DELETE FROM nics WHERE device_id = $1")
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
@@ -110,7 +110,7 @@ pub async fn apply_network_config(
         validate_card_type(card_type)?;
 
         sqlx::query(
-            r"INSERT INTO network_cards (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
+            r"INSERT INTO nics (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(card_id)
@@ -142,7 +142,7 @@ pub async fn apply_network_config(
             .await?;
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, network_card_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, net_outlet_ids, sort_order, created_at, updated_at)
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, net_outlet_ids, sort_order, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             )
             .bind(port_id)
@@ -229,17 +229,16 @@ pub async fn fetch_device_network_config(
     pool: &PgPool,
     device_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, AppError> {
-    let cards: Vec<NetworkCard> = sqlx::query_as(
-        "SELECT * FROM network_cards WHERE device_id = $1 ORDER BY sort_order, name",
-    )
-    .bind(device_id)
-    .fetch_all(pool)
-    .await?;
+    let cards: Vec<NetworkCard> =
+        sqlx::query_as("SELECT * FROM nics WHERE device_id = $1 ORDER BY sort_order, name")
+            .bind(device_id)
+            .fetch_all(pool)
+            .await?;
 
     let mut result = Vec::new();
     for card in cards {
         let ports: Vec<DeviceInterface> = sqlx::query_as(
-            "SELECT * FROM device_interfaces WHERE device_id = $1 AND network_card_id = $2 ORDER BY sort_order, name",
+            "SELECT * FROM device_interfaces WHERE device_id = $1 AND nic_id = $2 ORDER BY sort_order, name",
         )
         .bind(device_id)
         .bind(card.id)

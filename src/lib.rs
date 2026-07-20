@@ -1,4 +1,4 @@
-// IPMA - IP/MAC Address Management System
+// IPMA - IP/DEVICE Address Management System
 // Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
 // SPDX-License-Identifier: MIT
 
