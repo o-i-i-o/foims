@@ -569,24 +569,35 @@ pub async fn delete_device_interface(
 ) -> Result<HttpResponse, AppError> {
     let interface_id = path.into_inner();
 
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // 先删除相关的 IP 地址
+    sqlx::query("DELETE FROM ips WHERE device_interface_id = $1")
+        .bind(interface_id)
+        .execute(&mut *tx)
+        .await?;
+
+    // 删除相关的电缆链接
+    sqlx::query(
+        r"DELETE FROM cable_links
+         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id = $1)
+            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id = $1)",
+    )
+    .bind(interface_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // 删除接口
     let result = sqlx::query("DELETE FROM device_interfaces WHERE id = $1")
         .bind(interface_id)
-        .execute(&state.pool()?.get_conn())
-        .await
-        .map_err(|e| {
-            if let sqlx::Error::Database(db_err) = &e
-                && db_err.is_foreign_key_violation()
-            {
-                return AppError::Validation(
-                    "该接口已被 cable_links 或 ips 引用，无法删除".to_string(),
-                );
-            }
-            AppError::from(e)
-        })?;
+        .execute(&mut *tx)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("接口不存在".to_string()));
     }
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "interface_id": interface_id

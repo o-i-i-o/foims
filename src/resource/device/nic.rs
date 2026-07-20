@@ -82,11 +82,20 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // 删除现有数据（顺序：IP → 网口 → 网卡）
+    // 删除现有数据（顺序：IP → cable_links → 网口 → 网卡）
     sqlx::query("DELETE FROM ips WHERE device_id = $1")
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
+    // 删除与设备接口相关的电缆链接
+    sqlx::query(
+        r"DELETE FROM cable_links
+         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))
+            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))",
+    )
+    .bind(device_id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM device_interfaces WHERE device_id = $1")
         .bind(device_id)
         .execute(&mut *tx)
