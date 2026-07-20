@@ -316,7 +316,7 @@ pub async fn get_device_interface(
     let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(
         r"SELECT
             di.id, di.device_id, d.name as device_name,
-            di.network_card_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
+            di.nic_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
             di.description, di.switch_id, di.uplink_interface_id, di.net_outlet_ids,
             di.sort_order, di.created_at, di.updated_at
         FROM device_interfaces di

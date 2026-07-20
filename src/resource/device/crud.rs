@@ -310,7 +310,7 @@ pub async fn create_device(
 
     // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
     let cards = req.cards.clone().unwrap_or_default();
-    super::network_card::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
+    super::nic::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
     let ip_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE device_id = $1")
         .bind(id)
         .fetch_one(&mut *tx)
@@ -432,8 +432,7 @@ pub async fn get_device(
     .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
 
     // Fetch associated network cards (with nested ports and IPs)
-    let cards =
-        super::network_card::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
+    let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&device)
         .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
@@ -606,7 +605,7 @@ pub async fn update_device(
     // Handle network config replacement if cards are provided
     if let Some(cards) = &req.cards {
         let room_id = req.room_id.unwrap_or(current_room_id);
-        super::network_card::apply_network_config(&mut tx, id, room_id, cards, now).await?;
+        super::nic::apply_network_config(&mut tx, id, room_id, cards, now).await?;
     }
 
     if req.save_as_template == Some(true) {
@@ -693,8 +692,7 @@ pub async fn update_device(
     .await?;
 
     // Fetch updated network cards (with nested ports and IPs)
-    let cards =
-        super::network_card::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
+    let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&updated_device)
         .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
