@@ -312,9 +312,9 @@ class NetworkConfigManager {
 
     await loadNetworkRegions(document.createElement('select'));
 
-    networks.forEach((network) => {
+    for (const network of networks) {
       const networkInfo = networkMap.get(network.id);
-      if (!networkInfo) return;
+      if (!networkInfo) continue;
 
       const div = document.createElement('div');
       div.innerHTML = this.createItemHTML();
@@ -323,18 +323,16 @@ class NetworkConfigManager {
       const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
       const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
 
-      loadNetworkRegions(regionSelect).then(() => {
-        regionSelect.value = networkInfo.network_region_id;
+      await loadNetworkRegions(regionSelect);
+      regionSelect.value = networkInfo.network_region_id;
 
-        const otherIds = selectedIds.filter(id => id !== network.id);
-        loadNetworks(networkInfo.network_region_id, networkSelect, otherIds).then(() => {
-          networkSelect.value = network.id;
-        });
-      });
+      const otherIds = selectedIds.filter(id => id !== network.id);
+      await loadNetworks(networkInfo.network_region_id, networkSelect, otherIds);
+      networkSelect.value = network.id;
 
       this.container.appendChild(item);
       this.bindItemEvents(item);
-    });
+    }
 
     this.updateAddButtons();
   }
