@@ -129,5 +129,29 @@ function initResourcePreloading() {
   preloadModalsOnIdle();
 }
 
+// 等待所有样式表加载完成，避免 FOUC
+function waitForStylesheets() {
+  const links = document.querySelectorAll('link[rel="stylesheet"]');
+  const promises = Array.from(links).map(link => {
+    if (link.sheet) {
+      try {
+        link.sheet.cssRules;
+        return Promise.resolve();
+      } catch {
+        // cross-origin stylesheet, treat as loaded
+        return Promise.resolve();
+      }
+    }
+    return new Promise(resolve => {
+      link.addEventListener('load', resolve, { once: true });
+      link.addEventListener('error', resolve, { once: true });
+    });
+  });
+  return Promise.all(promises);
+}
+
 // 启动应用
-document.addEventListener("DOMContentLoaded", initApp);
+document.addEventListener("DOMContentLoaded", async () => {
+  await waitForStylesheets();
+  initApp();
+});

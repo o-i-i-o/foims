@@ -10,23 +10,34 @@ export function nextFrame(callback) {
 }
 
 export function whenVisible(selector, callback, timeout = 5000) {
-  const startTime = Date.now();
-
-  function check() {
-    const el = document.querySelector(selector);
-
-    // 使用 requestAnimationFrame 延迟布局读取，避免 FOUC
-    requestAnimationFrame(() => {
-      if (el && el.offsetParent !== null) {
-        callback(el);
-      } else if (Date.now() - startTime < timeout) {
-        requestAnimationFrame(check);
-      }
-    });
+  const el = document.querySelector(selector);
+  if (!el) {
+    callback(null);
+    return;
   }
 
-  // 双 requestAnimationFrame 确保浏览器有机会先完成样式计算
-  requestAnimationFrame(() => requestAnimationFrame(check));
+  let observer = null;
+  const timer = setTimeout(() => {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    callback(el);
+  }, timeout);
+
+  observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        clearTimeout(timer);
+        observer.disconnect();
+        observer = null;
+        callback(el);
+        break;
+      }
+    }
+  }, { threshold: 0 });
+
+  observer.observe(el);
 }
 
 class CacheManager {

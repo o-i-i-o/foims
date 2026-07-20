@@ -1,25 +1,3 @@
-@import url('./variables.css?v=01251');
-@import url('./base/reset.css?v=01247');
-@import url('./components/buttons.css?v=01247');
-@import url('./components/forms.css?v=01247');
-@import url('./components/modals.css?v=01247');
-@import url('./components/tables.css?v=01247');
-@import url('./components/cards.css?v=01247');
-@import url('./components/badges.css?v=01247');
-@import url('./components/toasts.css?v=01247');
-@import url('./components/toggles.css?v=01247');
-@import url('./components/network-config.css?v=01247');
-@import url('./components/network-usage.css?v=01247');
-@import url('./components/network-card-manager.css?v=01247');
-@import url('./modals/unified-device-ports.css?v=01247');
-@import url('./layouts/sidebar.css?v=01247');
-@import url('./layouts/main-content.css?v=01247');
-@import url('./pages/organization.css?v=01247');
-@import url('./pages/dashboard.css?v=01247');
-@import url('./pages/charts.css?v=01247');
-@import url('./pages/system-config.css?v=01247');
-@import url('./pages/import-export.css?v=01247');
-@import url('./pages/logs.css?v=01247');
-@import url('./utilities/animations.css?v=01247');
-@import url('./utilities/helpers.css?v=01247');
-@import url('./responsive.css?v=01247');
+/* IPMA Main Stylesheet */
+/* CSS files are now loaded via <link> tags in main.html for parallel loading */
+/* This file is kept for reference only */
