@@ -336,7 +336,6 @@
     "levels": "层级结构",
     "add_child_type": "新增下级",
     "save_as_preset": "保存为预设模板",
-    "save_preset_hint": "预设模板保存在浏览器中，可通过快捷填充复用",
     "type_placeholder": "类型名称",
     "quick_fill": "快捷填充",
     "select_quick_fill": "选择预设模板...",

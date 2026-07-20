@@ -20,9 +20,6 @@ import {
 // 常量定义
 // ==========================================
 
-/** localStorage 键名：用户自建的预设模板 */
-const PRESET_STORAGE_KEY = "org_template_presets";
-
 /** 模板图标缓存 { type_name: icon } */
 let templateIconsMap = {};
 
@@ -49,30 +46,7 @@ function getOrgTypeLabel(orgType) {
   return translated === key ? orgType : translated;
 }
 
-/** 从 localStorage 读取用户预设模板 */
-function loadPresets() {
-  try {
-    const data = localStorage.getItem(PRESET_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** 保存预设模板到 localStorage */
-function savePreset(preset) {
-  const presets = loadPresets();
-  // 同名预设覆盖
-  const idx = presets.findIndex((p) => p.name === preset.name);
-  if (idx >= 0) {
-    presets[idx] = preset;
-  } else {
-    presets.push(preset);
-  }
-  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
-}
-
-/** 从 levels 映射中找到根类型（不出现在任何子级列表中的类型） */
+/** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
 function findRootType(levels) {
   if (!levels || typeof levels !== "object" || Array.isArray(levels)) return null;
   const allChildren = new Set();
@@ -694,33 +668,24 @@ async function openTemplateEditor(template = null) {
     });
   }
 
-  // 快捷填充
+  // 快捷填充（从数据库模板加载）
   const quickFill = document.getElementById("org-template-quick-fill");
   if (quickFill) {
-    populateQuickFill(quickFill);
+    populateQuickFillFromDB(quickFill);
     if (!quickFill.dataset.bound) {
       quickFill.dataset.bound = "true";
-      quickFill.addEventListener("change", () => {
+      quickFill.addEventListener("change", async () => {
         if (!quickFill.value) return;
-        const presets = loadPresets();
-        const preset = presets.find((p) => p.name === quickFill.value);
-        if (preset) {
-          loadMappingIntoTree(treeContainer, preset.levels, preset.icons || {});
+        try {
+          const templates = await getTemplates();
+          const template = templates.find((t) => t.name === quickFill.value);
+          if (template) {
+            loadMappingIntoTree(treeContainer, template.levels, template.icons || {});
+          }
+        } catch (error) {
+          handleError(error, t("common.load_failed"));
         }
         quickFill.value = "";
-      });
-    }
-  }
-
-  // 保存为预设复选框 — 控制提示文字显示
-  const savePresetCheckbox = document.getElementById("org-template-save-preset");
-  const savePresetHint = document.querySelector(".org-template-save-preset-hint");
-  if (savePresetCheckbox && savePresetHint) {
-    savePresetHint.classList.toggle("visible", savePresetCheckbox.checked);
-    if (!savePresetCheckbox.dataset.bound) {
-      savePresetCheckbox.dataset.bound = "true";
-      savePresetCheckbox.addEventListener("change", () => {
-        savePresetHint.classList.toggle("visible", savePresetCheckbox.checked);
       });
     }
   }
@@ -947,17 +912,21 @@ function collectIcons(container) {
 }
 
 /**
- * 填充快捷填充下拉框（从 localStorage 加载用户预设）
+ * 填充快捷填充下拉框（从数据库加载模板）
  */
-function populateQuickFill(select) {
-  select.innerHTML = `<option value="">${t("org_template.select_quick_fill")}</option>`;
-  const presets = loadPresets();
-  presets.forEach((preset) => {
-    const option = document.createElement("option");
-    option.value = preset.name;
-    option.textContent = preset.name;
-    select.appendChild(option);
-  });
+async function populateQuickFillFromDB(select) {
+  try {
+    select.innerHTML = `<option value="">${t("org_template.select_quick_fill")}</option>`;
+    const templates = await getTemplates();
+    templates.forEach((template) => {
+      const option = document.createElement("option");
+      option.value = template.name;
+      option.textContent = template.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error("加载快捷填充列表失败:", error);
+  }
 }
 
 async function deleteTemplate(id, name) {
@@ -984,7 +953,6 @@ export async function submitOrgTemplateForm() {
   const name = document.getElementById("org-template-editor-name")?.value;
   const description = document.getElementById("org-template-editor-description")?.value;
   const treeContainer = document.getElementById("org-template-editor-levels-container");
-  const savePresetCheckbox = document.getElementById("org-template-save-preset");
 
   if (!name) {
     showToast(t("org_template.name_required"), "warning");
@@ -1005,11 +973,6 @@ export async function submitOrgTemplateForm() {
     icons: Object.keys(icons).length > 0 ? icons : null,
     description: description || null,
   };
-
-  // 如果勾选了"保存为预设模板"，同步保存到 localStorage
-  if (savePresetCheckbox?.checked) {
-    savePreset({ name: name.trim(), levels, icons });
-  }
 
   try {
     let result;
