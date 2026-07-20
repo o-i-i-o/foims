@@ -2,7 +2,7 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-export const MODULE_VERSION = '01226';
+export const MODULE_VERSION = '01228';
 
 function withVersion(path) {
     if (!path) return path;
@@ -43,6 +43,7 @@ const MODULE_REGISTRY = {
     'authManager': '/static/js/modules/authManager.js',
     'device': '/static/js/modules/device.js',
     'devicePorts': '/static/js/modules/devicePorts.js',
+    'unifiedDevicePorts': '/static/js/modules/unifiedDevicePorts.js',
     'deviceMacLldp': '/static/js/modules/deviceMacLldp.js',
     'deviceSnmp': '/static/js/modules/deviceSnmp.js',
     'visualizationManager': '/static/js/modules/visualization/visualizationManager.js',

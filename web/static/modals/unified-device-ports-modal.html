@@ -1,0 +1,46 @@
+<template id="unified-device-ports-modal-template">
+<div id="unified-device-ports-modal" class="modal">
+  <div class="modal-content modal-xl">
+    <header class="modal-header">
+      <h3 class="modal-title" id="unified-device-ports-modal-title" data-i18n="device.unified_ports">Device Ports</h3>
+      <span class="close" data-modal-id="unified-device-ports-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <!-- 普通设备端口区域 -->
+      <div id="normal-device-ports-section" class="ports-section" style="display: none;">
+        <div class="section-header">
+          <h4 data-i18n="device.network_interfaces">网络接口</h4>
+        </div>
+        <div class="nic-interfaces-container"></div>
+      </div>
+
+      <!-- 网络设备端口区域 -->
+      <div id="network-device-ports-section" class="ports-section" style="display: none;">
+        <!-- 3层口板块 -->
+        <div class="layer3-ports-board">
+          <div class="section-header">
+            <h4 data-i18n="device.layer3_ports">三层接口（NIC）</h4>
+            <button type="button" class="btn btn-sm btn-secondary" id="add-nic-interface-btn" data-i18n="device.add_nic_interface">添加网卡接口</button>
+          </div>
+          <div class="nic-interfaces-container"></div>
+        </div>
+
+        <!-- 2层口板块 -->
+        <div class="layer2-ports-board" style="margin-top: 20px;">
+          <div class="section-header">
+            <h4 data-i18n="device.layer2_ports">二层端口（Switch）</h4>
+            <div class="header-buttons">
+              <button type="button" class="btn btn-sm btn-primary" id="add-switch-port-btn" data-i18n="device.add_switch_port">添加交换机端口</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="sync-snmp-ports-btn" data-i18n="device.sync_snmp_ports">从SNMP获取端口</button>
+            </div>
+          </div>
+          <div class="switch-ports-container"></div>
+        </div>
+      </div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="unified-device-ports-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

@@ -1,0 +1,170 @@
+/* 统一设备端口管理样式 */
+
+.modal-xl {
+    width: 90%;
+    max-width: 1400px;
+}
+
+.ports-section {
+    padding: 10px 0;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color, #e0e0e0);
+}
+
+.section-header h4 {
+    margin: 0;
+    color: var(--text-primary, #333);
+    font-size: 1.2em;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* 3层口和2层口板块 */
+.layer3-ports-board,
+.layer2-ports-board {
+    background: var(--bg-light, #f9f9f9);
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.layer3-ports-board {
+    border-left: 4px solid var(--primary-color, #2196F3);
+}
+
+.layer2-ports-board {
+    border-left: 4px solid var(--secondary-color, #FF9800);
+}
+
+/* 网卡接口容器 */
+.nic-interfaces-container {
+    min-height: 100px;
+}
+
+/* 交换机端口分组容器 */
+.switch-ports-container {
+    min-height: 100px;
+}
+
+.port-group {
+    margin-bottom: 20px;
+}
+
+.port-group-title {
+    color: var(--text-secondary, #666);
+    font-size: 1em;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+/* 端口网格布局 */
+.port-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    padding: 10px 0;
+}
+
+/* 单个端口项 */
+.viz-port-item {
+    position: relative;
+    width: 60px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: white;
+}
+
+.viz-port-item.status-up {
+    background-color: var(--success-color, #4CAF50);
+}
+
+.viz-port-item.status-down {
+    background-color: var(--danger-color, #F44336);
+}
+
+.viz-port-item.status-disabled {
+    background-color: var(--text-disabled, #9E9E9E);
+}
+
+.viz-port-item:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* 端口悬停提示 */
+.port-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+.viz-port-item:hover .port-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 空消息样式 */
+.empty-message,
+.error-message {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-secondary, #666);
+}
+
+.error-message {
+    color: var(--danger-color, #F44336);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .modal-xl {
+        width: 95%;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .header-buttons {
+        flex-wrap: wrap;
+    }
+
+    .port-grid {
+        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    }
+
+    .viz-port-item {
+        width: 50px;
+        height: 35px;
+        font-size: 12px;
+    }
+}

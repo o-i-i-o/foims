@@ -35,7 +35,7 @@ import {
   testSnmpConnection,
   getDeviceInfoFromSnmp,
 } from "./deviceSnmp.js";
-import { manageDevicePorts } from "./devicePorts.js";
+import { manageUnifiedDevicePorts } from "./unifiedDevicePorts.js";
 import { viewArpTable, viewLldpNeighbors } from "./deviceMacLldp.js";
 
 const tableState = createSortState('name', 'asc');
@@ -139,7 +139,7 @@ function bindDeviceButtonsEvents() {
     const id = target.dataset.id;
 
     if (target.classList.contains("btn-device-ports") && deviceId) {
-      manageDevicePorts(deviceId, deviceName || "");
+      manageUnifiedDevicePorts(deviceId, deviceName || "");
     } else if (target.classList.contains("btn-device-mac") && deviceId) {
       viewArpTable(deviceId);
     } else if (target.classList.contains("btn-device-lldp") && deviceId) {
@@ -493,6 +493,7 @@ export async function submitDeviceForm() {
   const location = getElementValue("device-location");
   const serialNumber = getElementValue("device-serial-number");
   const templateId = getElementValue("device-template-id");
+  const roomId = getElementValue("device-room-id");
   const workstationId = getElementValue("device-workstation-id");
   const positionId = getElementValue("device-position-id");
   const netOutletId = getElementValue("device-net-outlet-id");

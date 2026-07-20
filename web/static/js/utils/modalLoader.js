@@ -14,6 +14,7 @@ const MODAL_REGISTRY = {
     'cabinet-position-modal': '/static/modals/cabinet-position-modal.html',
     'device-ports-group-modal': '/static/modals/device-ports-group-modal.html',
     'device-port-detail-modal': '/static/modals/device-port-detail-modal.html',
+    'unified-device-ports-modal': '/static/modals/unified-device-ports-modal.html',
     'user-modal': '/static/modals/user-modal.html',
     'two-factor-modal': '/static/modals/two-factor-modal.html',
     'import-result-modal': '/static/modals/import-result-modal.html',
