@@ -158,7 +158,7 @@ export async function loadOrganizationTree() {
     }
 
     if (treeResult.success && treeResult.data) {
-      renderOrgTree(container, treeResult.data);
+      await renderOrgTree(container, treeResult.data);
     } else {
       renderEmptyState(container);
     }
@@ -182,7 +182,7 @@ async function getTemplates() {
 // 树形渲染
 // ==========================================
 
-function renderOrgTree(container, treeData) {
+async function renderOrgTree(container, treeData) {
   if (!treeData || treeData.length === 0) {
     renderEmptyState(container);
     return;
@@ -191,14 +191,14 @@ function renderOrgTree(container, treeData) {
   container.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
-  treeData.forEach((node) => {
-    fragment.appendChild(renderTreeNode(node, 0));
-  });
+  for (const node of treeData) {
+    fragment.appendChild(await renderTreeNode(node, 0));
+  }
 
   container.appendChild(fragment);
 }
 
-function renderTreeNode(node, depth) {
+async function renderTreeNode(node, depth) {
   const wrapper = document.createElement("div");
   wrapper.className = "org-node-wrapper";
   wrapper.dataset.nodeId = node.id;
@@ -208,7 +208,7 @@ function renderTreeNode(node, depth) {
   nodeEl.style.paddingLeft = `${depth * 24 + 16}px`;
 
   const hasChildren = node.children && node.children.length > 0;
-  const icon = getNodeIcon(node.org_type);
+  const icon = await getNodeIcon(node.org_type);
   const typeLabel = getOrgTypeLabel(node.org_type);
 
   const toggleBtn = hasChildren
@@ -240,9 +240,9 @@ function renderTreeNode(node, depth) {
     if (!allExpanded) {
       childrenContainer.style.display = "none";
     }
-    node.children.forEach((child) => {
-      childrenContainer.appendChild(renderTreeNode(child, depth + 1));
-    });
+    for (const child of node.children) {
+      childrenContainer.appendChild(await renderTreeNode(child, depth + 1));
+    }
     wrapper.appendChild(childrenContainer);
   }
 
@@ -742,11 +742,12 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
     row.appendChild(rootBadge);
   }
 
-  // 图标选择按钮
+  // 图标选择按钮（同步获取默认图标）
   const iconBtn = document.createElement("button");
   iconBtn.type = "button";
   iconBtn.className = "org-template-icon-btn";
-  iconBtn.dataset.icon = icon || getNodeIcon(type);
+  // 如果没有提供图标，使用默认图标（同步）
+  iconBtn.dataset.icon = icon || "📁";
   iconBtn.textContent = iconBtn.dataset.icon;
   iconBtn.title = t("org_template.select_icon") || "选择图标";
   iconBtn.addEventListener("click", (e) => {

@@ -516,21 +516,38 @@
   text-overflow: ellipsis;
 }
 
-/* 保存为预设模板 */
+/* 组织模板编辑器 - 复选框样式优化 */
+#org-template-save-preset {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+}
+
+#org-template-editor-form .checkbox-label {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+#org-template-editor-form .checkbox-label span {
+  white-space: nowrap;
+}
+
 .org-template-save-preset-hint {
-  flex-basis: 100%;
   display: block;
+  margin-top: var(--space-xs);
+  margin-left: 28px;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+  line-height: 1.5;
   max-height: 0;
   opacity: 0;
   overflow: hidden;
-  transition: max-height 0.25s ease, opacity 0.25s ease, margin-top 0.25s ease;
+  transition: max-height 0.25s ease, opacity 0.25s ease;
 }
 
 .org-template-save-preset-hint.visible {
-  max-height: 40px;
+  max-height: 60px;
   opacity: 1;
-  margin-top: var(--space-xs);
-  margin-bottom: var(--space-sm);
 }
