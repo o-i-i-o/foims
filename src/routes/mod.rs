@@ -23,7 +23,7 @@ use crate::resource::{
     delete_organization, delete_positions_layout, delete_room, delete_switch_port,
     delete_topology_connection, delete_topology_node, delete_workstation,
     get_all_device_interfaces, get_all_switch_ports, get_allowed_child_types, get_available_ips,
-    get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
+    get_available_org_types, get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
     get_cabinets_by_network_region, get_cable_link, get_cable_links, get_cable_path, get_children,
     get_device, get_device_info_snmp, get_device_interface, get_device_interfaces, get_device_ips,
     get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db,
@@ -290,6 +290,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                             web::scope("/org-templates")
                                 .route("", web::get().to(get_org_templates))
                                 .route("", web::post().to(create_org_template))
+                                .route("/available-types", web::get().to(get_available_org_types))
                                 .route("/{id}", web::get().to(get_org_template))
                                 .route("/{id}", web::put().to(update_org_template))
                                 .route("/{id}", web::delete().to(delete_org_template)),

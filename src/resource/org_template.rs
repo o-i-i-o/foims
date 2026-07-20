@@ -11,6 +11,60 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
+/// 获取所有可用的组织类型配置（从所有模板中提取）
+pub async fn get_available_org_types(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    // 获取所有模板
+    let templates: Vec<OrgTemplate> = sqlx::query_as(
+        "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+         FROM org_templates ORDER BY created_at ASC",
+    )
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+
+    // 提取所有唯一的组织类型
+    let mut all_types: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut all_icons: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+    for template in &templates {
+        // 从levels中提取所有类型
+        if let Some(levels_obj) = template.levels.as_object() {
+            // 添加父类型
+            for parent_type in levels_obj.keys() {
+                all_types.insert(parent_type.clone());
+            }
+            // 添加子类型
+            for children in levels_obj.values() {
+                if let Some(children_arr) = children.as_array() {
+                    for child in children_arr {
+                        if let Some(child_str) = child.as_str() {
+                            all_types.insert(child_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 合并icons配置
+        if let Some(icons_obj) = template.icons.as_object() {
+            for (type_name, icon) in icons_obj {
+                all_icons.insert(type_name.clone(), icon.clone());
+            }
+        }
+    }
+
+    // 构建返回数据
+    let types: Vec<String> = all_types.into_iter().collect();
+    let icons = serde_json::Value::Object(all_icons);
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(
+        json!({
+            "types": types,
+            "icons": icons
+        }),
+        "获取组织类型配置成功",
+    )))
+}
+
 /// 校验 levels 映射格式并返回根类型
 /// levels 格式: { "type_a": ["type_b"], "type_b": ["type_c", "type_d"], ... }
 pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, AppError> {

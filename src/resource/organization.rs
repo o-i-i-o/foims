@@ -37,61 +37,91 @@ pub async fn get_organizations(
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
 
-    let mut conditions: Vec<String> = Vec::new();
-    let mut param_idx = 1;
+    // 构建计数查询
+    let mut count_qb = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM organizations");
+    let mut has_where = false;
 
     if !search.is_empty() {
-        conditions.push(format!("name ILIKE ${param_idx}"));
-        param_idx += 1;
-    }
-    if parent_id.is_some() {
-        conditions.push(format!("parent_id = ${param_idx}"));
-        param_idx += 1;
-    } else if root_only {
-        conditions.push("parent_id IS NULL".to_string());
-    }
-    if org_type.is_some() {
-        conditions.push(format!("org_type = ${param_idx}"));
-        param_idx += 1;
+        count_qb.push(" WHERE name ILIKE ");
+        count_qb.push_bind(format!("%{}%", search));
+        has_where = true;
     }
 
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", conditions.join(" AND "))
-    };
-
-    let search_pattern = format!("%{search}%");
-
-    let count_sql = format!("SELECT COUNT(*) FROM organizations {where_clause}");
-    let mut count_query = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(count_sql));
-
-    let list_sql = format!(
-        "SELECT id, name, org_type, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-         FROM organizations {where_clause}
-         ORDER BY created_at ASC LIMIT ${param_idx} OFFSET ${}",
-        param_idx + 1
-    );
-    let mut list_query = sqlx::query_as::<_, Organization>(sqlx::AssertSqlSafe(list_sql));
-
-    if !search.is_empty() {
-        count_query = count_query.bind(&search_pattern);
-        list_query = list_query.bind(&search_pattern);
-    }
     if let Some(pid) = parent_id {
-        count_query = count_query.bind(pid);
-        list_query = list_query.bind(pid);
+        if has_where {
+            count_qb.push(" AND parent_id = ");
+        } else {
+            count_qb.push(" WHERE parent_id = ");
+            has_where = true;
+        }
+        count_qb.push_bind(pid);
+    } else if root_only {
+        if has_where {
+            count_qb.push(" AND parent_id IS NULL");
+        } else {
+            count_qb.push(" WHERE parent_id IS NULL");
+        }
     }
+
     if let Some(ref ot) = org_type {
-        count_query = count_query.bind(ot);
-        list_query = list_query.bind(ot);
+        if has_where {
+            count_qb.push(" AND org_type = ");
+        } else {
+            count_qb.push(" WHERE org_type = ");
+        }
+        count_qb.push_bind(ot);
     }
 
-    let total: i64 = count_query.fetch_one(&state.pool()?.get_conn()).await?;
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-    let organizations = list_query
-        .bind(page_size)
-        .bind(offset)
+    // 构建列表查询
+    let mut list_qb = sqlx::QueryBuilder::new(
+        "SELECT id, name, org_type, parent_id, description, template_id, level_index, \
+         created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM organizations",
+    );
+    has_where = false;
+
+    if !search.is_empty() {
+        list_qb.push(" WHERE name ILIKE ");
+        list_qb.push_bind(format!("%{}%", search));
+        has_where = true;
+    }
+
+    if let Some(pid) = parent_id {
+        if has_where {
+            list_qb.push(" AND parent_id = ");
+        } else {
+            list_qb.push(" WHERE parent_id = ");
+            has_where = true;
+        }
+        list_qb.push_bind(pid);
+    } else if root_only {
+        if has_where {
+            list_qb.push(" AND parent_id IS NULL");
+        } else {
+            list_qb.push(" WHERE parent_id IS NULL");
+        }
+    }
+
+    if let Some(ref ot) = org_type {
+        if has_where {
+            list_qb.push(" AND org_type = ");
+        } else {
+            list_qb.push(" WHERE org_type = ");
+        }
+        list_qb.push_bind(ot);
+    }
+
+    list_qb.push(" ORDER BY created_at ASC LIMIT ");
+    list_qb.push_bind(page_size);
+    list_qb.push(" OFFSET ");
+    list_qb.push_bind(offset);
+
+    let organizations = list_qb
+        .build_query_as::<Organization>()
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
@@ -125,20 +155,35 @@ pub async fn get_organization_tree(state: web::Data<AppState>) -> Result<HttpRes
     )
 }
 
-/// 从扁平列表构建树形结构
+/// 从扁平列表构建树形结构（优化版本）
 fn build_tree(all_orgs: &[Organization]) -> Vec<OrganizationTreeNode> {
-    let mut children_map: HashMap<Option<Uuid>, Vec<&Organization>> = HashMap::new();
+    // 先按 parent_id 分组
+    let mut children_map: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    let mut node_map: HashMap<Uuid, &Organization> = HashMap::new();
+
     for org in all_orgs {
-        children_map.entry(org.parent_id).or_default().push(org);
+        node_map.insert(org.id, org);
+        if let Some(parent_id) = org.parent_id {
+            children_map.entry(parent_id).or_default().push(org.id);
+        }
     }
 
+    // 递归构建节点
     fn build_node(
-        org: &Organization,
-        children_map: &HashMap<Option<Uuid>, Vec<&Organization>>,
+        org_id: Uuid,
+        node_map: &HashMap<Uuid, &Organization>,
+        children_map: &HashMap<Uuid, Vec<Uuid>>,
     ) -> OrganizationTreeNode {
+        let org = node_map.get(&org_id).expect("Organization must exist");
+
         let children: Vec<OrganizationTreeNode> = children_map
-            .get(&Some(org.id))
-            .map(|childs| childs.iter().map(|c| build_node(c, children_map)).collect())
+            .get(&org_id)
+            .map(|child_ids| {
+                child_ids
+                    .iter()
+                    .map(|id| build_node(*id, node_map, children_map))
+                    .collect()
+            })
             .unwrap_or_default();
 
         OrganizationTreeNode {
@@ -155,15 +200,12 @@ fn build_tree(all_orgs: &[Organization]) -> Vec<OrganizationTreeNode> {
         }
     }
 
-    children_map
-        .get(&None)
-        .map(|roots| {
-            roots
-                .iter()
-                .map(|org| build_node(org, &children_map))
-                .collect()
-        })
-        .unwrap_or_default()
+    // 构建根节点
+    all_orgs
+        .iter()
+        .filter(|org| org.parent_id.is_none())
+        .map(|org| build_node(org.id, &node_map, &children_map))
+        .collect()
 }
 
 /// 获取单个组织节点（含子节点）

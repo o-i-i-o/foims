@@ -9,6 +9,12 @@ import { showToast, handleError, escapeHtml, debounce } from "../utils/ui.js";
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
+import {
+  AVAILABLE_ICONS,
+  getOrgIcon,
+  getAllOrgTypes,
+  loadOrgTypesFromAPI,
+} from "../config/org-config.js";
 
 // ==========================================
 // 常量定义
@@ -16,33 +22,6 @@ import { elementCache } from "../utils/helpers.js";
 
 /** localStorage 键名：用户自建的预设模板 */
 const PRESET_STORAGE_KEY = "org_template_presets";
-
-const ORG_TYPE_ICONS = {
-  headquarters: "🏢",
-  building: "🏬",
-  floor: "📐",
-  hall: "🚪",
-  office: "🏠",
-  data_center: "🖥️",
-  telecom_closet: "📡",
-  workstation: "💺",
-  cabinet: "🗄️",
-  cabinet_position: "📦",
-};
-
-/** 可选图标列表（用于模板编辑器图标选择器） */
-const AVAILABLE_ICONS = [
-  "🏢", "🏬", "🏠", "🏗️", "🏫", "🏭", "🏛️", "⛪",
-  "📐", "🔬", "💡", "🖥️", "💻", "📋", "🗂️", "🗄️",
-  "🚪", "🛗", "🪜", "📶", "🌐", "📡", "🔌", "🔒",
-  "💺", "📦", "🗄️", "🧯", "🚰", "⚡",
-];
-
-function getOrgTypeLabel(orgType) {
-  const key = `organization.types.${orgType}`;
-  const translated = t(key);
-  return translated === key ? orgType : translated;
-}
 
 /** 模板图标缓存 { type_name: icon } */
 let templateIconsMap = {};
@@ -58,26 +37,16 @@ function buildTemplateIconsMap(templates) {
   templateIconsMap = map;
 }
 
-/** 获取节点图标：优先模板 icons → ORG_TYPE_ICONS → 模糊匹配 → 默认 */
-function getNodeIcon(orgType) {
-  if (templateIconsMap[orgType]) return templateIconsMap[orgType];
-  if (ORG_TYPE_ICONS[orgType]) return ORG_TYPE_ICONS[orgType];
-  const iconMap = {
-    总部: "🏢", headquarters: "🏢",
-    楼: "🏬", building: "🏬",
-    层: "📐", floor: "📐",
-    厅: "🚪", hall: "🚪",
-    办公: "🏠", office: "🏠",
-    机房: "🖥️", 数据中心: "🖥️", data_center: "🖥️",
-    弱电: "📡", 电信间: "📡", telecom_closet: "📡",
-    工位: "💺", workstation: "💺",
-    机柜: "🗄️", cabinet: "🗄️",
-    机位: "📦", cabinet_position: "📦",
-  };
-  for (const [keyword, icon] of Object.entries(iconMap)) {
-    if (orgType.includes(keyword)) return icon;
-  }
-  return "📁";
+/** 获取节点图标：优先模板 icons → API icons → 默认 */
+async function getNodeIcon(orgType) {
+  return await getOrgIcon(orgType, templateIconsMap);
+}
+
+/** 获取组织类型标签（从i18n获取）*/
+function getOrgTypeLabel(orgType) {
+  const key = `organization.types.${orgType}`;
+  const translated = t(key);
+  return translated === key ? orgType : translated;
 }
 
 /** 从 localStorage 读取用户预设模板 */
@@ -479,9 +448,9 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
   }
 }
 
-function populateTypeSelect(select, currentValue, disabled) {
+async function populateTypeSelect(select, currentValue, disabled) {
   select.innerHTML = "";
-  const types = ["headquarters", "building", "floor", "hall", "office", "data_center", "telecom_closet", "workstation", "cabinet", "cabinet_position"];
+  const types = await getAllOrgTypes();
   types.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;
