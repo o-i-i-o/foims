@@ -116,6 +116,14 @@ function bindOrgEvents() {
 // 数据加载
 // ==========================================
 
+/**
+ * 性能优化建议：
+ * - 当组织节点数量 > 1000 时，建议实现虚拟滚动或分页加载
+ * - 可采用懒加载策略：仅加载可见区域的节点
+ * - 或采用"按需展开"策略：初始只加载根节点，点击展开时动态加载子节点
+ * - 当前实现适用于中小规模组织树（< 1000节点）
+ */
+
 export async function loadOrganizationTree() {
   const container = document.getElementById("organization-tree-container");
   if (!container) return;

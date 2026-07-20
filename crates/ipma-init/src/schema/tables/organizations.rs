@@ -10,7 +10,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT uq_organizations_parent_name UNIQUE (parent_id, name)
+            CONSTRAINT uq_organizations_parent_name UNIQUE (parent_id, name),
+            CONSTRAINT chk_organizations_child_has_template CHECK (parent_id IS NULL OR template_id IS NOT NULL)
         )",
     )
     .execute(pool)
@@ -28,6 +29,41 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_organizations_template_id ON organizations(template_id)",
+    )
+    .execute(pool)
+    .await?;
+
+    // 触发器：确保level_index一致性
+    sqlx::query(
+        r"
+        CREATE OR REPLACE FUNCTION trg_organizations_level_index()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.parent_id IS NULL THEN
+                NEW.level_index := 0;
+            ELSE
+                SELECT level_index + 1 INTO NEW.level_index
+                FROM organizations WHERE id = NEW.parent_id;
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'Parent organization not found';
+                END IF;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"
+        CREATE OR REPLACE TRIGGER organizations_level_index_trigger
+        BEFORE INSERT OR UPDATE OF parent_id ON organizations
+        FOR EACH ROW
+        WHEN (pg_trigger_depth() = 0)
+        EXECUTE FUNCTION trg_organizations_level_index();
+        ",
     )
     .execute(pool)
     .await?;

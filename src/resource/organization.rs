@@ -37,40 +37,52 @@ pub async fn get_organizations(
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
 
+    // 辅助函数：构建WHERE子句
+    fn build_where_clause(
+        qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
+        search: &str,
+        parent_id: Option<Uuid>,
+        org_type: &Option<String>,
+        root_only: bool,
+    ) {
+        let mut conditions = Vec::new();
+
+        if !search.is_empty() {
+            qb.push(" WHERE name ILIKE ");
+            qb.push_bind(format!("%{}%", search));
+            conditions.push("search");
+        }
+
+        if let Some(pid) = parent_id {
+            if !conditions.is_empty() {
+                qb.push(" AND parent_id = ");
+            } else {
+                qb.push(" WHERE parent_id = ");
+            }
+            qb.push_bind(pid);
+            conditions.push("parent_id");
+        } else if root_only {
+            if !conditions.is_empty() {
+                qb.push(" AND parent_id IS NULL");
+            } else {
+                qb.push(" WHERE parent_id IS NULL");
+            }
+            conditions.push("root_only");
+        }
+
+        if let Some(ot) = org_type {
+            if !conditions.is_empty() {
+                qb.push(" AND org_type = ");
+            } else {
+                qb.push(" WHERE org_type = ");
+            }
+            qb.push_bind(ot);
+        }
+    }
+
     // 构建计数查询
     let mut count_qb = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM organizations");
-    let mut has_where = false;
-
-    if !search.is_empty() {
-        count_qb.push(" WHERE name ILIKE ");
-        count_qb.push_bind(format!("%{}%", search));
-        has_where = true;
-    }
-
-    if let Some(pid) = parent_id {
-        if has_where {
-            count_qb.push(" AND parent_id = ");
-        } else {
-            count_qb.push(" WHERE parent_id = ");
-            has_where = true;
-        }
-        count_qb.push_bind(pid);
-    } else if root_only {
-        if has_where {
-            count_qb.push(" AND parent_id IS NULL");
-        } else {
-            count_qb.push(" WHERE parent_id IS NULL");
-        }
-    }
-
-    if let Some(ref ot) = org_type {
-        if has_where {
-            count_qb.push(" AND org_type = ");
-        } else {
-            count_qb.push(" WHERE org_type = ");
-        }
-        count_qb.push_bind(ot);
-    }
+    build_where_clause(&mut count_qb, &search, parent_id, &org_type, root_only);
 
     let total: i64 = count_qb
         .build_query_scalar()
@@ -82,38 +94,7 @@ pub async fn get_organizations(
         "SELECT id, name, org_type, parent_id, description, template_id, level_index, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM organizations",
     );
-    has_where = false;
-
-    if !search.is_empty() {
-        list_qb.push(" WHERE name ILIKE ");
-        list_qb.push_bind(format!("%{}%", search));
-        has_where = true;
-    }
-
-    if let Some(pid) = parent_id {
-        if has_where {
-            list_qb.push(" AND parent_id = ");
-        } else {
-            list_qb.push(" WHERE parent_id = ");
-            has_where = true;
-        }
-        list_qb.push_bind(pid);
-    } else if root_only {
-        if has_where {
-            list_qb.push(" AND parent_id IS NULL");
-        } else {
-            list_qb.push(" WHERE parent_id IS NULL");
-        }
-    }
-
-    if let Some(ref ot) = org_type {
-        if has_where {
-            list_qb.push(" AND org_type = ");
-        } else {
-            list_qb.push(" WHERE org_type = ");
-        }
-        list_qb.push_bind(ot);
-    }
+    build_where_clause(&mut list_qb, &search, parent_id, &org_type, root_only);
 
     list_qb.push(" ORDER BY created_at ASC LIMIT ");
     list_qb.push_bind(page_size);
@@ -168,20 +149,37 @@ fn build_tree(all_orgs: &[Organization]) -> Vec<OrganizationTreeNode> {
         }
     }
 
-    // 递归构建节点
+    // 递归构建节点（带深度检查）
     fn build_node(
         org_id: Uuid,
         node_map: &HashMap<Uuid, &Organization>,
         children_map: &HashMap<Uuid, Vec<Uuid>>,
+        depth: usize,
     ) -> OrganizationTreeNode {
         let org = node_map.get(&org_id).expect("Organization must exist");
+
+        // 深度安全检查（虽然数据库已有触发器保护，但作为防御性编程）
+        if depth > MAX_DEPTH {
+            return OrganizationTreeNode {
+                id: org.id,
+                name: org.name.clone(),
+                org_type: org.org_type.clone(),
+                parent_id: org.parent_id,
+                description: org.description.clone(),
+                template_id: org.template_id,
+                level_index: org.level_index,
+                children: vec![], // 超过深度限制，不构建子节点
+                created_at: org.created_at,
+                updated_at: org.updated_at,
+            };
+        }
 
         let children: Vec<OrganizationTreeNode> = children_map
             .get(&org_id)
             .map(|child_ids| {
                 child_ids
                     .iter()
-                    .map(|id| build_node(*id, node_map, children_map))
+                    .map(|id| build_node(*id, node_map, children_map, depth + 1))
                     .collect()
             })
             .unwrap_or_default();
@@ -204,7 +202,7 @@ fn build_tree(all_orgs: &[Organization]) -> Vec<OrganizationTreeNode> {
     all_orgs
         .iter()
         .filter(|org| org.parent_id.is_none())
-        .map(|org| build_node(org.id, &node_map, &children_map))
+        .map(|org| build_node(org.id, &node_map, &children_map, 0))
         .collect()
 }
 
@@ -283,9 +281,10 @@ pub async fn create_organization(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let (template_id, level_index) = if let Some(parent_id) = req.parent_id {
+        // 使用FOR UPDATE锁定父节点，防止并发修改
         let parent: Organization = sqlx::query_as::<_, Organization>(
             "SELECT id, name, org_type, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-             FROM organizations WHERE id = $1",
+             FROM organizations WHERE id = $1 FOR UPDATE",
         )
         .bind(parent_id)
         .fetch_optional(&mut *tx)
