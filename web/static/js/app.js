@@ -20,10 +20,11 @@ import {
   initLogout,
   checkLoginStatus
 } from "./modules/authManager.js";
-import { 
+import {
   prefetchModules,
   schedulePreload,
-  lazyLoad
+  lazyLoad,
+  loadModule
 } from "./utils/resourceLoader.js";
 
 // ==========================================
@@ -75,7 +76,12 @@ async function initApp() {
  * @returns {Object}
  */
 function getResourceCallbacks() {
-  const createCallback = (module, method) => () => import(`./modules/${module}.js`).then((m) => m[method]());
+  // 统一使用 loadModule 加载模块，确保与 eventManager 等其他调用方使用同一个模块实例
+  // 避免原生 import() 不带版本号导致浏览器加载两份模块，产生两个独立单例
+  const createCallback = (module, method) => async () => {
+    const m = await loadModule(module);
+    return m[method]();
+  };
   
   return {
     openNetworkTypeModal: createCallback('networks', 'openNetworkTypeModal'),

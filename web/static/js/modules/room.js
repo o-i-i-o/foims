@@ -295,9 +295,8 @@ class NetworkConfigManager {
   }
 
   async loadExistingNetworks(networks, allNetworks) {
-    if (!this.container) {
-      this.container = document.getElementById(this.options.containerId);
-    }
+    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
+    this.container = document.getElementById(this.options.containerId);
     if (!this.container) return;
 
     if (!networks?.length) {
@@ -521,9 +520,8 @@ class RoomChildrenManager {
   }
 
   loadExisting(children) {
-    if (!this.container) {
-      this.container = document.getElementById('room-children-container');
-    }
+    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
+    this.container = document.getElementById('room-children-container');
     if (!this.container) return;
     this.container.innerHTML = '';
     this.bindTypeChange();
