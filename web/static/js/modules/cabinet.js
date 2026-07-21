@@ -46,7 +46,7 @@ class CabinetPositionsManager {
 
     this.container.innerHTML = '';
     this.bindAddButton();
-    this.addItem();
+    this.updateEmptyState();
     return true;
   }
 
@@ -58,6 +58,26 @@ class CabinetPositionsManager {
     }
     this.addHandler = () => this.addItem();
     addBtn.addEventListener('click', this.addHandler);
+  }
+
+  updateEmptyState() {
+    if (!this.container) return;
+    const existing = this.container.querySelector('.cabinet-position-empty');
+    const items = this.container.querySelectorAll('.cabinet-position-item');
+    if (items.length === 0 && !existing) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'cabinet-position-empty';
+      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-position-empty-btn">${t('cabinet.add_position') || '添加机位'}</button>`;
+      const addBtn = emptyDiv.querySelector('.add-position-empty-btn');
+      if (addBtn) {
+        const handler = () => this.addItem();
+        this.handlers.set(addBtn, handler);
+        addBtn.addEventListener('click', handler);
+      }
+      this.container.appendChild(emptyDiv);
+    } else if (items.length > 0 && existing) {
+      existing.remove();
+    }
   }
 
   createRow(data = {}) {
@@ -94,6 +114,9 @@ class CabinetPositionsManager {
 
   addItem(data = {}) {
     if (!this.container) return;
+    // 移除空状态提示
+    const emptyState = this.container.querySelector('.cabinet-position-empty');
+    if (emptyState) emptyState.remove();
     const item = this.createRow(data);
     this.container.appendChild(item);
   }
@@ -108,30 +131,25 @@ class CabinetPositionsManager {
   }
 
   removeItem(item) {
-    const items = this.container.querySelectorAll('.cabinet-position-item');
-    if (items.length <= 1) {
-      showToast(t('cabinet.at_least_one_position'), 'warning');
-      return;
-    }
     item.remove();
+    this.updateEmptyState();
   }
 
   loadExisting(positions) {
-    if (!this.container) {
-      this.container = document.getElementById('cabinet-positions-container');
-    }
+    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
+    this.container = document.getElementById('cabinet-positions-container');
     if (!this.container) return;
     this.container.innerHTML = '';
     this.bindAddButton();
 
     if (positions?.length) {
       positions.forEach(pos => this.addItem(pos));
-    } else {
-      this.addItem();
     }
+    this.updateEmptyState();
   }
 
   collectData() {
+    if (!this.container) return { positions: [] };
     const items = this.container.querySelectorAll('.cabinet-position-item');
     const positions = [];
     for (const item of items) {
@@ -427,7 +445,7 @@ export async function submitCabinetForm() {
 // 校验机位数据
 function validatePositions(positions) {
   if (!positions || positions.length === 0) {
-    return t('cabinet.at_least_one_position');
+    return null;
   }
   for (const pos of positions) {
     if (!pos.name) {

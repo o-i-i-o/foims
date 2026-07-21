@@ -41,44 +41,32 @@ pub fn resolve_type_name(levels: &serde_json::Value, type_path: &str) -> Result<
         return Err(AppError::Validation("类型路径不能为空".to_string()));
     }
 
-    // 第一个索引：在根层级中的位置
     // 找到根节点（不被任何其他节点的子级列表引用的节点）
     let root = find_root_in_levels(levels_map)?;
 
-    // 如果只有一个索引且为0，说明是根节点本身
-    if indices.len() == 1 && indices[0] == 0 {
-        // 检查是否是根节点（type_path="0"）
-        // 根节点名称就是根的 key
+    // type_path 语义：
+    //   "0"     → 根节点
+    //   "0.x"   → 根节点的第 x 个子级
+    //   "0.x.y" → 根节点的第 x 个子级的第 y 个子级
+    // 第一个 "0" 是根锚点，后续索引逐级导航子级
+
+    if indices.len() == 1 {
         return Ok(root.to_string());
     }
 
-    // 从根的子级开始逐级查找
+    // 从根的子级开始，跳过第一个锚点索引
     let mut current_type = root;
-    for (depth, &idx) in indices.iter().enumerate() {
-        if depth == 0 {
-            // 第一个索引指向根的子级列表
-            let children = levels_map
-                .get(current_type)
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+    for &idx in &indices[1..] {
+        let children = levels_map
+            .get(current_type)
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
 
-            current_type = children.get(idx).and_then(|v| v.as_str()).ok_or_else(|| {
-                AppError::Validation(format!(
-                    "类型路径「{type_path}」在模板中不存在（索引 {idx} 超出范围）"
-                ))
-            })?;
-        } else {
-            let children = levels_map
-                .get(current_type)
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
-
-            current_type = children.get(idx).and_then(|v| v.as_str()).ok_or_else(|| {
-                AppError::Validation(format!(
-                    "类型路径「{type_path}」在模板中不存在（索引 {idx} 超出范围）"
-                ))
-            })?;
-        }
+        current_type = children.get(idx).and_then(|v| v.as_str()).ok_or_else(|| {
+            AppError::Validation(format!(
+                "类型路径「{type_path}」在模板中不存在（索引 {idx} 超出范围）"
+            ))
+        })?;
     }
 
     Ok(current_type.to_string())
