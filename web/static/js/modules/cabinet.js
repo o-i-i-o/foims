@@ -40,12 +40,21 @@ class CabinetPositionsManager {
     this.addHandler = null;
   }
 
+  ensureContainer() {
+    if (!this.container || !document.contains(this.container)) {
+      this.container = document.getElementById('cabinet-positions-container');
+    }
+    return this.container;
+  }
+
   init() {
-    this.container = document.getElementById('cabinet-positions-container');
+    this.ensureContainer();
+    // 无论 container 是否找到，都要绑定底部"添加机位"按钮
+    this.bindAddButton();
+
     if (!this.container) return false;
 
     this.container.innerHTML = '';
-    this.bindAddButton();
     this.updateEmptyState();
     return true;
   }
@@ -61,19 +70,13 @@ class CabinetPositionsManager {
   }
 
   updateEmptyState() {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
     const existing = this.container.querySelector('.cabinet-position-empty');
     const items = this.container.querySelectorAll('.cabinet-position-item');
     if (items.length === 0 && !existing) {
       const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'cabinet-position-empty';
-      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-position-empty-btn">${t('cabinet.add_position') || '添加机位'}</button>`;
-      const addBtn = emptyDiv.querySelector('.add-position-empty-btn');
-      if (addBtn) {
-        const handler = () => this.addItem();
-        this.handlers.set(addBtn, handler);
-        addBtn.addEventListener('click', handler);
-      }
+      emptyDiv.className = 'cabinet-position-empty text-muted';
+      emptyDiv.textContent = t('cabinet.no_positions_hint') || '暂无机位，点击下方按钮添加';
       this.container.appendChild(emptyDiv);
     } else if (items.length > 0 && existing) {
       existing.remove();
@@ -113,7 +116,7 @@ class CabinetPositionsManager {
   }
 
   addItem(data = {}) {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
     // 移除空状态提示
     const emptyState = this.container.querySelector('.cabinet-position-empty');
     if (emptyState) emptyState.remove();
@@ -136,11 +139,13 @@ class CabinetPositionsManager {
   }
 
   loadExisting(positions) {
-    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
-    this.container = document.getElementById('cabinet-positions-container');
+    // closeModal 会移除模态框 DOM，需重新获取 container
+    this.ensureContainer();
+    // 无论 container 是否找到，都要绑定底部"添加机位"按钮
+    this.bindAddButton();
+
     if (!this.container) return;
     this.container.innerHTML = '';
-    this.bindAddButton();
 
     if (positions?.length) {
       positions.forEach(pos => this.addItem(pos));
@@ -149,7 +154,7 @@ class CabinetPositionsManager {
   }
 
   collectData() {
-    if (!this.container) return { positions: [] };
+    if (!this.ensureContainer()) return { positions: [] };
     const items = this.container.querySelectorAll('.cabinet-position-item');
     const positions = [];
     for (const item of items) {

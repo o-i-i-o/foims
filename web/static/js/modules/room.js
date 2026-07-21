@@ -150,8 +150,15 @@ class NetworkConfigManager {
     this.eventHandler = new EventHandler(this);
   }
 
+  ensureContainer() {
+    if (!this.container || !document.contains(this.container)) {
+      this.container = document.getElementById(this.options.containerId);
+    }
+    return this.container;
+  }
+
   async init() {
-    this.container = document.getElementById(this.options.containerId);
+    this.ensureContainer();
     if (!this.container) {
       console.error(`未找到${this.options.containerId}元素`);
       return false;
@@ -192,7 +199,7 @@ class NetworkConfigManager {
   }
 
   async addItem() {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
 
     const div = document.createElement('div');
     div.innerHTML = this.createItemHTML();
@@ -209,7 +216,7 @@ class NetworkConfigManager {
   }
 
   updateAddButtons() {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
 
     const items = this.container.querySelectorAll('.network-config-item');
     items.forEach((item, index) => {
@@ -248,6 +255,7 @@ class NetworkConfigManager {
   }
 
   removeItem(item) {
+    if (!this.ensureContainer()) return;
     const items = this.container.querySelectorAll('.network-config-item');
     if (items.length <= 1) {
       showToast('至少需要保留一个网段配置', 'warning');
@@ -272,6 +280,7 @@ class NetworkConfigManager {
   }
 
   async updateNetworkSelects() {
+    if (!this.ensureContainer()) return;
     const selectedIds = this.getSelectedNetworkIds();
     const items = this.container.querySelectorAll('.network-config-item');
     
@@ -290,13 +299,14 @@ class NetworkConfigManager {
   }
 
   getSelectedNetworkIds() {
+    if (!this.ensureContainer()) return [];
     const selects = this.container.querySelectorAll(`.${this.options.networkSelectClass}`);
     return Array.from(selects).map(s => s.value).filter(Boolean);
   }
 
   async loadExistingNetworks(networks, allNetworks) {
-    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
-    this.container = document.getElementById(this.options.containerId);
+    // closeModal 会移除模态框 DOM，需重新获取 container
+    this.ensureContainer();
     if (!this.container) return;
 
     if (!networks?.length) {
@@ -337,7 +347,7 @@ class NetworkConfigManager {
   }
 
   collectData() {
-    if (!this.container) return { networkIds: [], hasEmpty: false };
+    if (!this.ensureContainer()) return { networkIds: [], hasEmpty: false };
     
     const selects = this.container.querySelectorAll(`.${this.options.networkSelectClass}`);
     const networkIds = [];
@@ -382,8 +392,15 @@ class RoomChildrenManager {
     this.typeChangeHandler = null;
   }
 
+  ensureContainer() {
+    if (!this.container || !document.contains(this.container)) {
+      this.container = document.getElementById('room-children-container');
+    }
+    return this.container;
+  }
+
   init() {
-    this.container = document.getElementById('room-children-container');
+    this.ensureContainer();
     if (!this.container) return false;
 
     this.container.innerHTML = '';
@@ -407,8 +424,10 @@ class RoomChildrenManager {
     this.roomType = newType;
     this.updateLabels();
     // 类型切换时清空列表
-    this.container.innerHTML = '';
-    this.updateEmptyState();
+    if (this.ensureContainer()) {
+      this.container.innerHTML = '';
+      this.updateEmptyState();
+    }
   }
 
   updateLabels() {
@@ -421,7 +440,7 @@ class RoomChildrenManager {
   }
 
   updateEmptyState() {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
     const existing = this.container.querySelector('.room-child-empty');
     const items = this.container.querySelectorAll('.room-child-item');
     if (items.length === 0 && !existing) {
@@ -494,7 +513,7 @@ class RoomChildrenManager {
   }
 
   addItem(data = {}) {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
     // 移除空状态提示
     const emptyState = this.container.querySelector('.room-child-empty');
     if (emptyState) emptyState.remove();
@@ -506,7 +525,7 @@ class RoomChildrenManager {
   }
 
   updateAddButtons() {
-    if (!this.container) return;
+    if (!this.ensureContainer()) return;
     const items = this.container.querySelectorAll('.room-child-item');
     items.forEach((item, index) => {
       const addBtn = item.querySelector('.add-child-btn');
@@ -535,13 +554,14 @@ class RoomChildrenManager {
 
   removeItem(item) {
     item.remove();
+    this.ensureContainer();
     this.updateEmptyState();
     this.updateAddButtons();
   }
 
   loadExisting(children) {
-    // closeModal 会移除模态框 DOM，需重新获取 container，避免引用已失效的旧节点
-    this.container = document.getElementById('room-children-container');
+    // closeModal 会移除模态框 DOM，需重新获取 container
+    this.ensureContainer();
     if (!this.container) return;
     this.container.innerHTML = '';
     this.bindTypeChange();
@@ -557,6 +577,7 @@ class RoomChildrenManager {
   }
 
   collectData() {
+    if (!this.ensureContainer()) return this.roomType === 'office' ? { workstations: [] } : { cabinets: [] };
     const items = this.container.querySelectorAll('.room-child-item');
     if (this.roomType === 'office') {
       const workstations = [];
