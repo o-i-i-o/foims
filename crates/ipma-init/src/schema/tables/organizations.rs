@@ -3,7 +3,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS organizations (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(100) NOT NULL,
-            org_type VARCHAR(50) NOT NULL,
+            type_path VARCHAR(50) NOT NULL DEFAULT '0',
             parent_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
             template_id UUID REFERENCES org_templates(id) ON DELETE SET NULL,
             level_index INT NOT NULL DEFAULT 0,
@@ -23,9 +23,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_organizations_org_type ON organizations(org_type)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_organizations_type_path ON organizations(type_path)",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_organizations_template_id ON organizations(template_id)",

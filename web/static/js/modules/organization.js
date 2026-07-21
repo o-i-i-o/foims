@@ -361,10 +361,18 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
     title.textContent = t("organization.edit");
     elementCache.setValue("org-id", org.id);
     elementCache.setValue("org-name", org.name);
-    elementCache.setValue("org-type", org.org_type);
+    elementCache.setValue("org-type", org.type_path || org.org_type || "");
     elementCache.setValue("org-description", org.description || "");
     elementCache.setValue("org-parent-id", org.parent_id || "");
-    populateTypeSelect(typeSelect, org.org_type, true);
+    // 编辑时类型不可修改，显示从模板派生的名称
+    typeSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = org.type_path || org.org_type || "";
+    option.textContent = getOrgTypeLabel(org.org_type || org.type_path || "");
+    option.dataset.typeName = org.org_type || "";
+    option.selected = true;
+    typeSelect.appendChild(option);
+    typeSelect.disabled = true;
     if (parentInfo) parentInfo.style.display = "none";
     if (templateSelectContainer) templateSelectContainer.style.display = "none";
   } else if (parentId) {
@@ -412,13 +420,21 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
             templateSelect.appendChild(option);
           });
 
-          // 模板选择变化时，自动设置根节点类型
+          // 模板选择变化时，自动设置根节点类型（type_path="0"）
           templateSelect.onchange = () => {
             const selectedTpl = templates.find((tpl) => tpl.id === templateSelect.value);
             if (selectedTpl && selectedTpl.levels) {
               const rootType = findRootType(selectedTpl.levels);
               if (rootType) {
-                populateTypeSelect(typeSelect, rootType, true);
+                // 根节点 type_path 固定为 "0"
+                typeSelect.innerHTML = "";
+                const option = document.createElement("option");
+                option.value = "0";
+                option.textContent = getOrgTypeLabel(rootType);
+                option.dataset.typeName = rootType;
+                option.selected = true;
+                typeSelect.appendChild(option);
+                typeSelect.disabled = true;
               }
             }
           };
@@ -430,25 +446,13 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
   }
 }
 
-async function populateTypeSelect(select, currentValue, disabled) {
-  select.innerHTML = "";
-  const types = await getAllOrgTypes();
-  types.forEach((value) => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = getOrgTypeLabel(value);
-    if (value === currentValue) option.selected = true;
-    select.appendChild(option);
-  });
-  select.disabled = disabled;
-}
-
 function populateTypeSelectWithOptions(select, options, presetType) {
   select.innerHTML = `<option value="">${t("organization.select_type")}</option>`;
   options.forEach((opt) => {
     const option = document.createElement("option");
-    option.value = opt.type;
+    option.value = opt.type_path || opt.type;
     option.textContent = opt.label || getOrgTypeLabel(opt.type);
+    option.dataset.typeName = opt.type;
     if (presetType && opt.type === presetType) option.selected = true;
     select.appendChild(option);
   });
@@ -490,7 +494,8 @@ export async function deleteOrganization(id, name) {
 export async function submitOrgForm() {
   const id = elementCache.getValue("org-id");
   const name = elementCache.getValue("org-name");
-  const orgType = elementCache.getValue("org-type");
+  const typeSelect = elementCache.get("org-type");
+  const typePath = typeSelect?.value || "";
   const description = elementCache.getValue("org-description");
   const parentId = elementCache.getValue("org-parent-id");
   const templateSelect = document.getElementById("org-template-select");
@@ -501,7 +506,7 @@ export async function submitOrgForm() {
     return;
   }
 
-  if (!orgType) {
+  if (!typePath) {
     showToast(t("organization.type_required"), "warning");
     return;
   }
@@ -515,17 +520,16 @@ export async function submitOrgForm() {
   try {
     let result;
     if (id) {
-      // 编辑模式：仅更新 name / org_type / description，不修改结构性字段
+      // 编辑模式：仅更新 name / description，type_path 由模板决定不可修改
       result = await apiPut(`/api/resources/organizations/${id}`, {
         name: name.trim(),
-        org_type: orgType,
         description: description || null,
       });
     } else {
       // 新增模式：需要 parent_id（子节点）或 template_id（根节点）
       const orgData = {
         name: name.trim(),
-        org_type: orgType,
+        type_path: typePath,
         parent_id: parentId || null,
         description: description || null,
       };

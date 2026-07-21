@@ -1256,7 +1256,7 @@ pub struct OrgTemplateUpdate {
 pub struct Organization {
     pub id: Uuid,
     pub name: String,
-    pub org_type: String,
+    pub type_path: String,
     pub parent_id: Option<Uuid>,
     pub description: Option<String>,
     pub template_id: Option<Uuid>,
@@ -1296,30 +1296,29 @@ pub struct OrganizationWithChildren {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 校验组织类型字符串：非空（trim 后）且长度不超过 50
-pub fn validate_org_type_string(org_type: &str) -> Result<(), ValidationError> {
-    if org_type.trim().is_empty() {
-        return Err(ValidationError::new("组织类型不能为空"));
+/// 校验类型路径：非空且格式合法（点分隔的数字索引）
+pub fn validate_type_path(type_path: &str) -> Result<(), ValidationError> {
+    if type_path.trim().is_empty() {
+        return Err(ValidationError::new("类型路径不能为空"));
     }
-    if org_type.len() > 50 {
-        return Err(ValidationError::new("组织类型长度不能超过50个字符"));
+    for segment in type_path.split('.') {
+        if segment.parse::<usize>().is_err() {
+            return Err(ValidationError::new("类型路径格式错误"));
+        }
     }
     Ok(())
 }
 
-fn validate_org_type_option(org_type: &&String) -> Result<(), ValidationError> {
-    validate_org_type_string(org_type)
+fn validate_type_path_option(type_path: &&String) -> Result<(), ValidationError> {
+    validate_type_path(type_path)
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct OrganizationCreate {
     #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
     pub name: String,
-    #[validate(custom(
-        function = "validate_org_type_string",
-        message = "组织类型长度必须在1到50个字符之间且不能为空"
-    ))]
-    pub org_type: String,
+    #[validate(custom(function = "validate_type_path", message = "类型路径格式错误"))]
+    pub type_path: String,
     pub parent_id: Option<Uuid>,
     pub template_id: Option<Uuid>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
@@ -1330,11 +1329,8 @@ pub struct OrganizationCreate {
 pub struct OrganizationUpdate {
     #[validate(length(min = 1, max = 100, message = "组织名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
-    #[validate(custom(
-        function = "validate_org_type_option",
-        message = "组织类型长度必须在1到50个字符之间且不能为空"
-    ))]
-    pub org_type: Option<String>,
+    #[validate(custom(function = "validate_type_path_option", message = "类型路径格式错误"))]
+    pub type_path: Option<String>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
 }

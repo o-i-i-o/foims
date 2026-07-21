@@ -220,6 +220,93 @@ pub fn validate_icons_mapping(
     Ok(())
 }
 
+/// 比较两个 levels 的树形拓扑结构是否相同（忽略类型名称）
+/// 只比较：层级深度、每个节点的子节点数量
+pub fn levels_structure_equals(
+    old_levels: &serde_json::Value,
+    new_levels: &serde_json::Value,
+) -> bool {
+    compute_type_name_mapping(old_levels, new_levels).is_some()
+}
+
+/// 计算两个 levels 之间的类型名称映射（old_name → new_name）
+/// 仅在结构相同时有效；结构不同返回 None
+pub fn compute_type_name_mapping(
+    old_levels: &serde_json::Value,
+    new_levels: &serde_json::Value,
+) -> Option<std::collections::HashMap<String, String>> {
+    let old_map = old_levels.as_object()?;
+    let new_map = new_levels.as_object()?;
+
+    if old_map.len() != new_map.len() {
+        return None;
+    }
+
+    let old_root = find_root(old_map)?;
+    let new_root = find_root(new_map)?;
+
+    let mut mapping = std::collections::HashMap::new();
+
+    fn collect_mapping<'a>(
+        old_key: &str,
+        old_map: &'a serde_json::Map<String, serde_json::Value>,
+        new_key: &str,
+        new_map: &'a serde_json::Map<String, serde_json::Value>,
+        mapping: &mut std::collections::HashMap<String, String>,
+    ) -> bool {
+        mapping.insert(old_key.to_string(), new_key.to_string());
+
+        let old_children = match old_map.get(old_key).and_then(|v| v.as_array()) {
+            Some(c) => c,
+            None => return false,
+        };
+        let new_children = match new_map.get(new_key).and_then(|v| v.as_array()) {
+            Some(c) => c,
+            None => return false,
+        };
+
+        if old_children.len() != new_children.len() {
+            return false;
+        }
+
+        for (old_child, new_child) in old_children.iter().zip(new_children.iter()) {
+            let old_child_str = match old_child.as_str() {
+                Some(s) => s,
+                None => return false,
+            };
+            let new_child_str = match new_child.as_str() {
+                Some(s) => s,
+                None => return false,
+            };
+            if !collect_mapping(old_child_str, old_map, new_child_str, new_map, mapping) {
+                return false;
+            }
+        }
+        true
+    }
+
+    if !collect_mapping(old_root, old_map, new_root, new_map, &mut mapping) {
+        return None;
+    }
+    Some(mapping)
+}
+
+fn find_root(map: &serde_json::Map<String, serde_json::Value>) -> Option<&str> {
+    let mut child_types: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for value in map.values() {
+        if let Some(arr) = value.as_array() {
+            for child in arr {
+                if let Some(s) = child.as_str() {
+                    child_types.insert(s);
+                }
+            }
+        }
+    }
+    map.keys()
+        .find(|key| !child_types.contains(key.as_str()))
+        .map(|v| v.as_str())
+}
+
 /// 从 levels 映射中获取指定类型的允许子级类型
 pub fn get_allowed_children(
     levels: &serde_json::Value,
@@ -391,13 +478,15 @@ pub async fn update_org_template(
             .fetch_one(&mut *tx)
             .await?;
 
-    // 如果有节点在使用且 levels 发生了变化，需要校验兼容性
+    // 如果有节点在使用且 levels 发生了变化，需要校验结构兼容性
+    // 允许修改类型名称（如 b1公司 → bb公司），但不允许改变层级结构（增删层级或子节点数量）
     if usage_count > 0
         && let Some(ref new_levels) = req.levels
         && new_levels != &existing.levels
+        && !levels_structure_equals(&existing.levels, new_levels)
     {
         return Err(AppError::Validation(format!(
-            "有 {usage_count} 个组织节点正在使用此模板，且 levels 发生了变化，不允许修改。请先删除或迁移相关节点"
+            "有 {usage_count} 个组织节点正在使用此模板，且层级结构发生了变化（增删了层级或子节点），不允许修改。仅允许修改类型名称"
         )));
     }
 

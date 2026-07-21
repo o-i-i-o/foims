@@ -572,7 +572,7 @@ pub async fn sync_cabinet_positions(
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, device_type, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'cabinet_position', $7, $8)",
+                "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             )
             .bind(new_id)
             .bind(&item.name)
