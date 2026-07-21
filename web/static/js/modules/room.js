@@ -389,7 +389,7 @@ class RoomChildrenManager {
     this.container.innerHTML = '';
     this.bindTypeChange();
     this.updateLabels();
-    this.addItem();
+    this.updateEmptyState();
     return true;
   }
 
@@ -408,7 +408,7 @@ class RoomChildrenManager {
     this.updateLabels();
     // 类型切换时清空列表
     this.container.innerHTML = '';
-    this.addItem();
+    this.updateEmptyState();
   }
 
   updateLabels() {
@@ -417,6 +417,27 @@ class RoomChildrenManager {
       if (label) label.textContent = t('room.workstations');
     } else {
       if (label) label.textContent = t('room.cabinets');
+    }
+  }
+
+  updateEmptyState() {
+    if (!this.container) return;
+    const existing = this.container.querySelector('.room-child-empty');
+    const items = this.container.querySelectorAll('.room-child-item');
+    if (items.length === 0 && !existing) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'room-child-empty';
+      const addLabel = this.roomType === 'office' ? t('room.add_workstation') : t('room.add_cabinet');
+      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-child-btn">${addLabel}</button>`;
+      const addBtn = emptyDiv.querySelector('.add-child-btn');
+      if (addBtn) {
+        const handler = () => this.addItem();
+        this.handlers.set(addBtn, handler);
+        addBtn.addEventListener('click', handler);
+      }
+      this.container.appendChild(emptyDiv);
+    } else if (items.length > 0 && existing) {
+      existing.remove();
     }
   }
 
@@ -474,6 +495,9 @@ class RoomChildrenManager {
 
   addItem(data = {}) {
     if (!this.container) return;
+    // 移除空状态提示
+    const emptyState = this.container.querySelector('.room-child-empty');
+    if (emptyState) emptyState.remove();
     const item = this.roomType === 'office'
       ? this.createWorkstationRow(data)
       : this.createCabinetRow(data);
@@ -510,12 +534,8 @@ class RoomChildrenManager {
   }
 
   removeItem(item) {
-    const items = this.container.querySelectorAll('.room-child-item');
-    if (items.length <= 1) {
-      showToast(t('room.at_least_one_child'), 'warning');
-      return;
-    }
     item.remove();
+    this.updateEmptyState();
     this.updateAddButtons();
   }
 
@@ -530,10 +550,9 @@ class RoomChildrenManager {
       children.workstations.forEach(ws => this.addItem(ws));
     } else if ((this.roomType === 'data_center' || this.roomType === 'telecom_closet') && children?.cabinets?.length) {
       children.cabinets.forEach(cab => this.addItem(cab));
-    } else {
-      this.addItem();
     }
     this.updateLabels();
+    this.updateEmptyState();
     this.updateAddButtons();
   }
 
@@ -830,9 +849,6 @@ export async function submitRoomForm() {
 function validateRoomChildren(childrenData, roomType) {
   if (roomType === "office") {
     const workstations = childrenData.workstations || [];
-    if (workstations.length === 0) {
-      return t('room.at_least_one_child');
-    }
     for (const ws of workstations) {
       if (!ws.name) {
         return t('room.child_name_required');
@@ -840,9 +856,6 @@ function validateRoomChildren(childrenData, roomType) {
     }
   } else if (roomType === "data_center" || roomType === "telecom_closet") {
     const cabinets = childrenData.cabinets || [];
-    if (cabinets.length === 0) {
-      return t('room.at_least_one_child');
-    }
     for (const cab of cabinets) {
       if (!cab.name) {
         return t('room.child_name_required');
