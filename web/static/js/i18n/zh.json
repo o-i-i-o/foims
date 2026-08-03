@@ -261,7 +261,7 @@
     "usage": "使用情况",
     "add_network": "添加网络",
     "add_region": "添加网络区域",
-    "add_network_config": "添加区域",
+    "add_network_config": "添加网段",
     "network_config": "网络配置",
     "select_region": "选择网络区域",
     "select_network": "选择网络",
