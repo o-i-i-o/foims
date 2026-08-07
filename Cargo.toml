@@ -7,7 +7,7 @@ edition = "2024"
 
 [workspace.dependencies]
 # Axum (替代 actix-web)
-axum = { version = "0.8.4", features = ["macros", "multipart", "ws"] }
+axum = { version = "0.8.4", features = ["macros", "multipart", "ws", "http2"] }
 tower = { version = "0.5.2", features = ["util"] }
 tower-http = { version = "0.6.6", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
 axum-extra = { version = "0.10.1", features = ["cookie", "typed-header"] }
@@ -55,7 +55,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.14.7"
+version = "0.14.8"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"

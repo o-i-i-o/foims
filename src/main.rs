@@ -539,7 +539,7 @@ async fn main() -> std::io::Result<()> {
         rate_limit_state,
     );
 
-    info!("UDS 服务器启动: {}", uds_path);
+    info!("UDS 服务器启动 (h2c): {}", uds_path);
     info!("系统启动完成，等待请求...");
 
     // 启动服务器（使用 oneshot 通道在收到第一次信号时通知主任务）
@@ -550,6 +550,7 @@ async fn main() -> std::io::Result<()> {
         let _ = signal_tx.send(());
     };
 
+    // axum 0.8 启用 http2 feature 后，serve() 内部使用 auto::Builder 自动检测 HTTP/1 和 h2c
     let serve = axum::serve(uds_listener, app);
     let server_task = tokio::spawn(async move {
         if let Err(e) = serve.with_graceful_shutdown(graceful_shutdown).await {

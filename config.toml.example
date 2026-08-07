@@ -23,13 +23,14 @@ public_url = "localhost/"
 page_timeout = 30
 cors_allowed_origins = []
 
-# 监听配置（仅 UDS 模式）
+# 监听配置（UDS + h2c 模式）
 # 架构说明：
-# - axum 监听 Unix Domain Socket，由 nginx 反代（deploy/nginx/ipma.conf）
+# - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
+# - nginx 通过 proxy_http_version 2.0 以 h2c 反代到 axum（deploy/nginx/ipma.conf）
 # - 静态文件由 nginx 直接托管，axum 仅服务 API
 # - 调试时手动启动 axum 即可，无需安装 systemd 服务
 #   示例：sudo IPMA_WEB_DIR=/path/to/ipma/web ./target/release/ipma
-# - nginx 与 axum 通过 UDS 通信，性能优于 TCP loopback
+# - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
 [server.listen]
 # UDS socket 文件路径，需与 nginx upstream 配置一致
 # 调试：/tmp/ipma-dev.sock（避免权限问题）

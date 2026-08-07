@@ -89,13 +89,14 @@ const fn default_health_check_interval() -> u64 {
     30
 }
 
-/// 监听配置（仅 UDS 模式）
+/// 监听配置（UDS + h2c 模式）
 ///
 /// 架构说明：
-/// - axum 监听 Unix Domain Socket，由 nginx 反代
+/// - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
+/// - nginx 通过 `proxy_http_version 2.0` 以 h2c 反代到 axum
 /// - 静态文件由 nginx 直接托管，axum 仅服务 API
 /// - 调试时手动启动 axum 即可，无需安装 systemd 服务
-/// - nginx 与 axum 通过 UDS 通信，性能优于 TCP loopback
+/// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ListenConfig {
     /// UDS socket 文件路径，默认 /run/ipma/api.sock
