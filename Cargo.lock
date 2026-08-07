@@ -1810,7 +1810,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.14.6"
+version = "0.14.7"
 dependencies = [
  "aes-gcm",
  "anyhow",

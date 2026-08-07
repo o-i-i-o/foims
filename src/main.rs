@@ -157,7 +157,13 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
             Method::PATCH,
             Method::OPTIONS,
         ])
-        .allow_headers(tower_http::cors::Any)
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::ACCEPT_LANGUAGE,
+            header::ORIGIN,
+        ])
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(3600))
         .allow_origin(allow_origin)
