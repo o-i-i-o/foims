@@ -1,14 +1,16 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use actix_web::{HttpResponse, web};
 use async_snmp::{Client, oid};
+use axum::extract::{Path, State};
+use axum::response::Response;
 use chrono::Utc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, ArpEntry, DeviceMac};
+use crate::models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
     SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error,
@@ -420,10 +422,9 @@ pub async fn get_all_arp_entries(
 }
 
 pub async fn get_device_mac_table(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let (switch, ip_address) = get_device_snmp_config(&conn, &device_id).await?;
@@ -510,14 +511,13 @@ pub async fn get_device_mac_table(
         format!("同步 {upserted_count} 条 MAC 记录")
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_macs, &message)))
+    Ok(crate::error::ok_json(saved_macs, &message))
 }
 
 pub async fn get_device_macs_from_db(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
@@ -541,5 +541,5 @@ pub async fn get_device_macs_from_db(
         AppError::Database("查询MAC表失败".to_string())
     })?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(macs, "获取MAC表成功")))
+    Ok(crate::error::ok_json(macs, "获取MAC表成功"))
 }

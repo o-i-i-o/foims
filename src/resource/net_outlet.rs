@@ -1,22 +1,24 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails,
-};
+use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_net_outlets(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -125,7 +127,7 @@ pub async fn get_net_outlets(
         q.fetch_all(&state.pool()?.get_conn()).await?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": net_outlets,
             "total": total,
@@ -134,15 +136,15 @@ pub async fn get_net_outlets(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "信息点列表获取成功",
-    )))
+    ))
 }
 
 pub async fn create_net_outlet(
-    state: web::Data<AppState>,
-    req: web::Json<NetOutletCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetOutletCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(req.room_id)
@@ -252,7 +254,8 @@ pub async fn create_net_outlet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "net_outlet",
             resource_id: Some(&id),
@@ -265,18 +268,13 @@ pub async fn create_net_outlet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<NetOutlet>::success(
-        net_outlet,
-        "信息点创建成功",
-    )))
+    Ok(crate::error::ok_json(net_outlet, "信息点创建成功"))
 }
 
 pub async fn get_net_outlet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
         "SELECT id, name, outlet_type, room_id, room_name, \
          cabinet_id, cabinet_name, \
@@ -291,22 +289,16 @@ pub async fn get_net_outlet(
     .await?
     .ok_or_else(|| AppError::NotFound("信息点未找到".to_string()))?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
-            net_outlet,
-            "信息点获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(net_outlet, "信息点获取成功"))
 }
 
 pub async fn update_net_outlet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<NetOutletUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetOutletUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -575,7 +567,8 @@ pub async fn update_net_outlet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "net_outlet",
             resource_id: Some(&id),
@@ -588,21 +581,14 @@ pub async fn update_net_outlet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<NetOutletWithDetails>::success(
-            net_outlet,
-            "信息点更新成功",
-        )),
-    )
+    Ok(crate::error::ok_json(net_outlet, "信息点更新成功"))
 }
 
 pub async fn delete_net_outlet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM net_outlets WHERE id = $1")
@@ -634,7 +620,8 @@ pub async fn delete_net_outlet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "net_outlet",
             resource_id: Some(&id),
@@ -647,5 +634,5 @@ pub async fn delete_net_outlet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "信息点删除成功")))
+    Ok(crate::error::ok_json((), "信息点删除成功"))
 }

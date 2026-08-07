@@ -74,7 +74,7 @@ pub fn setup_logging() -> String {
         .with(
             tracing_subscriber::filter::Targets::new()
                 .with_target("ipma", LevelFilter::INFO)
-                .with_target("actix_web", LevelFilter::WARN)
+                .with_target("axum", LevelFilter::WARN)
                 .with_default(LevelFilter::WARN),
         )
         .init();

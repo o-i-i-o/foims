@@ -1,4 +1,6 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -39,18 +41,25 @@ impl InitError {
     }
 }
 
-impl ResponseError for InitError {
-    fn status_code(&self) -> StatusCode {
-        self.status_code()
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(crate::ApiResponse::<()> {
+impl IntoResponse for InitError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let body = Json(crate::ApiResponse::<()> {
             success: false,
             message: self.to_string(),
             data: None,
-        })
+        });
+        (status, body).into_response()
     }
+}
+
+/// 构造成功 JSON 响应
+pub fn ok_json<T: serde::Serialize>(data: T, message: &str) -> Response {
+    (
+        StatusCode::OK,
+        Json(crate::ApiResponse::success(data, message)),
+    )
+        .into_response()
 }
 
 impl From<sqlx::Error> for InitError {

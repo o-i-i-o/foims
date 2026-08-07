@@ -1,15 +1,15 @@
-use actix_multipart::Multipart;
-use actix_web::{HttpResponse, web};
-use futures_util::TryStreamExt;
+use std::sync::Arc;
+
+use axum::extract::{Json, Multipart, State};
+use axum::response::Response;
 use sqlx::PgPool;
 use std::path::PathBuf;
 use tracing::{info, warn};
 
-use crate::ApiResponse;
 use crate::check::{check_has_data, validate_table_columns};
 use crate::connection::ensure_database_and_schema;
 use crate::context::InitContext;
-use crate::error::InitError;
+use crate::error::{InitError, ok_json};
 use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::schema::create_tables;
 use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest};
@@ -17,9 +17,9 @@ use crate::utils::PgPassFile;
 use crate::verification::verify_code;
 
 pub async fn create_database_api(
-    ctx: web::Data<InitContext>,
-    req: web::Json<CreateDatabaseRequest>,
-) -> Result<HttpResponse, InitError> {
+    State(ctx): State<Arc<InitContext>>,
+    Json(req): Json<CreateDatabaseRequest>,
+) -> Result<Response, InitError> {
     if !ctx.init_enabled {
         return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
@@ -105,19 +105,19 @@ pub async fn create_database_api(
     }
 
     info!("数据库创建成功");
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(ok_json(
         CreateDatabaseResponse {
             backup_file,
             message: "数据库创建成功".to_string(),
         },
         "数据库创建成功",
-    )))
+    ))
 }
 
 pub async fn import_database_api(
-    ctx: web::Data<InitContext>,
-    req: web::Json<ImportDatabaseRequest>,
-) -> Result<HttpResponse, InitError> {
+    State(ctx): State<Arc<InitContext>>,
+    Json(req): Json<ImportDatabaseRequest>,
+) -> Result<Response, InitError> {
     if !ctx.init_enabled {
         return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
@@ -209,19 +209,19 @@ pub async fn import_database_api(
     }
 
     info!("数据库导入成功");
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(ok_json(
         CreateDatabaseResponse {
             backup_file,
             message: "数据库导入成功".to_string(),
         },
         "数据库导入成功",
-    )))
+    ))
 }
 
 pub async fn import_database_from_file(
-    ctx: web::Data<InitContext>,
+    State(ctx): State<Arc<InitContext>>,
     mut payload: Multipart,
-) -> Result<HttpResponse, InitError> {
+) -> Result<Response, InitError> {
     if !ctx.init_enabled {
         return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
@@ -233,26 +233,29 @@ pub async fn import_database_from_file(
         .await
         .map_err(|e| InitError::Internal(format!("创建临时目录失败: {e}")))?;
 
+    const VERIFICATION_MAX: usize = 10 * 1024 * 1024;
+    const SQL_FILE_MAX: usize = 100 * 1024 * 1024;
+
     while let Some(mut field) = payload
-        .try_next()
+        .next_field()
         .await
         .map_err(|e| InitError::Validation(e.to_string()))?
     {
-        let content_disposition = field.content_disposition();
-        let field_name = content_disposition
-            .map(|cd| cd.get_name().unwrap_or("").to_string())
-            .unwrap_or_default();
+        let field_name = field.name().unwrap_or("").to_string();
 
         if field_name == "verification" {
             let data = field
-                .bytes(10 * 1024 * 1024)
+                .bytes()
                 .await
-                .map_err(|e| InitError::Validation(e.to_string()))?
                 .map_err(|e| InitError::Validation(e.to_string()))?;
+            if data.len() > VERIFICATION_MAX {
+                return Err(InitError::Validation("验证码字段超过10MB限制".to_string()));
+            }
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
         } else if field_name == "sql_file" {
-            let raw_filename = content_disposition
-                .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string))
+            let raw_filename = field
+                .file_name()
+                .map(std::string::ToString::to_string)
                 .unwrap_or_else(|| "import.sql".to_string());
             let safe_name = raw_filename
                 .split(['/', '\\'])
@@ -266,11 +269,19 @@ pub async fn import_database_from_file(
             };
             let filepath = PathBuf::from(format!("/tmp/ipma_import/{safe_name}"));
 
-            let data = field
-                .bytes(100 * 1024 * 1024)
+            let mut data = Vec::new();
+            while let Some(chunk) = field
+                .chunk()
                 .await
                 .map_err(|e| InitError::Validation(e.to_string()))?
-                .map_err(|e| InitError::Validation(e.to_string()))?;
+            {
+                data.extend_from_slice(&chunk);
+                if data.len() > SQL_FILE_MAX {
+                    return Err(InitError::Validation(
+                        "SQL文件大小超过100MB限制".to_string(),
+                    ));
+                }
+            }
             tokio::fs::write(&filepath, &data)
                 .await
                 .map_err(|e| InitError::Internal(format!("写入文件失败: {e}")))?;
@@ -408,19 +419,19 @@ pub async fn import_database_from_file(
     }
 
     info!("数据库从文件导入成功");
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(ok_json(
         CreateDatabaseResponse {
             backup_file,
             message: "数据库导入成功".to_string(),
         },
         "数据库导入成功",
-    )))
+    ))
 }
 
 pub async fn clear_database(
-    ctx: web::Data<InitContext>,
-    req: web::Json<serde_json::Value>,
-) -> Result<HttpResponse, InitError> {
+    State(ctx): State<Arc<InitContext>>,
+    Json(req): Json<serde_json::Value>,
+) -> Result<Response, InitError> {
     if !ctx.init_enabled {
         return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
     }
@@ -447,5 +458,5 @@ pub async fn clear_database(
     }
 
     tracing::info!("通过API清空数据库成功");
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库清空成功")))
+    Ok(ok_json((), "数据库清空成功"))
 }

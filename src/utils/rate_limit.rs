@@ -1,23 +1,23 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use actix_web::{
-    HttpResponse, ResponseError,
-    body::EitherBody,
-    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
-};
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::http::header::AUTHORIZATION;
+use axum::http::request::Parts;
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use dashmap::DashMap;
-use futures_util::future::LocalBoxFuture;
 use serde_json::json;
 
-use crate::utils::get_real_ip_from_request;
-use actix_web::http::header::AUTHORIZATION;
+use crate::utils::{get_real_ip_from_parts, normalize_ipv4_address};
 
 const DEFAULT_EMAIL_LIMIT: u32 = 5;
 const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
 
-fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
-    let auth_header = req.headers().get(AUTHORIZATION)?.to_str().ok()?;
+fn extract_user_id_from_parts(parts: &Parts) -> Option<String> {
+    let auth_header = parts.headers.get(AUTHORIZATION)?.to_str().ok()?;
 
     if !auth_header.starts_with("Bearer ") {
         return None;
@@ -25,13 +25,13 @@ fn extract_user_id_from_token(req: &ServiceRequest) -> Option<String> {
 
     let token = auth_header.strip_prefix("Bearer ")?;
 
-    let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 {
+    let jwt_parts: Vec<&str> = token.split('.').collect();
+    if jwt_parts.len() != 3 {
         return None;
     }
 
     use base64::Engine;
-    let payload = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]) {
+    let payload = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(jwt_parts[1]) {
         Ok(p) => p,
         Err(e) => {
             tracing::trace!("Base64解码JWT payload失败: {}", e);
@@ -64,16 +64,20 @@ impl std::fmt::Display for RateLimitError {
     }
 }
 
-impl ResponseError for RateLimitError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::TooManyRequests()
-            .insert_header(("Retry-After", self.retry_after.to_string()))
-            .json(json!({
+impl RateLimitError {
+    /// 构造 429 速率限制响应（带 Retry-After 头）
+    fn into_response(self) -> Response {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            [("Retry-After", self.retry_after.to_string())],
+            Json(json!({
                 "success": false,
                 "message": &self.message,
                 "error_type": "rate_limit_exceeded",
                 "retry_after": self.retry_after
-            }))
+            })),
+        )
+            .into_response()
     }
 }
 
@@ -267,135 +271,94 @@ impl RateLimiter {
     }
 }
 
-pub struct RateLimitMiddleware {
-    limiter: RateLimiter,
-    enabled: bool,
+/// 速率限制中间件状态
+#[derive(Clone)]
+pub struct RateLimitState {
+    pub limiter: RateLimiter,
+    pub enabled: bool,
 }
 
-impl RateLimitMiddleware {
+impl RateLimitState {
     #[must_use]
     pub const fn new(limiter: RateLimiter, enabled: bool) -> Self {
         Self { limiter, enabled }
     }
 }
 
-impl<S, B> Transform<S, ServiceRequest> for RateLimitMiddleware
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<EitherBody<B>>;
-    type Error = actix_web::Error;
-    type Transform = RateLimitMiddlewareService<S>;
-    type InitError = ();
-    type Future = LocalBoxFuture<'static, Result<Self::Transform, Self::InitError>>;
-
-    fn new_transform(&self, service: S) -> Self::Future {
-        let limiter = self.limiter.clone();
-        let enabled = self.enabled;
-        Box::pin(async move {
-            Ok(RateLimitMiddlewareService {
-                service,
-                limiter,
-                enabled,
-            })
-        })
-    }
+fn is_strict_path(path: &str) -> bool {
+    let strict_paths = [
+        "/api/auth/login",
+        "/api/auth/login/email",
+        "/api/auth/login/two-factor",
+        "/api/auth/login/send-code",
+        "/api/auth/login/send-2fa-code",
+        "/api/auth/forgot-password",
+        "/api/auth/reset-password",
+    ];
+    strict_paths.contains(&path)
 }
 
-pub struct RateLimitMiddlewareService<S> {
-    service: S,
-    limiter: RateLimiter,
-    enabled: bool,
+fn is_email_path(path: &str) -> bool {
+    let email_paths = [
+        "/api/auth/login/send-code",
+        "/api/auth/login/send-2fa-code",
+        "/api/auth/forgot-password",
+    ];
+    email_paths.contains(&path)
 }
 
-impl<S> RateLimitMiddlewareService<S> {
-    fn is_strict_path(path: &str) -> bool {
-        let strict_paths = [
-            "/api/auth/login",
-            "/api/auth/login/email",
-            "/api/auth/login/two-factor",
-            "/api/auth/login/send-code",
-            "/api/auth/login/send-2fa-code",
-            "/api/auth/forgot-password",
-            "/api/auth/reset-password",
-        ];
-        strict_paths.contains(&path)
+/// 速率限制中间件（axum from_fn_with_state 风格）
+///
+/// 用法：`.route_layer(middleware::from_fn_with_state(rate_limit_state, rate_limit_middleware))`
+pub async fn rate_limit_middleware(
+    State(state): State<RateLimitState>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    if !state.enabled {
+        return next.run(req).await;
     }
 
-    fn is_email_path(path: &str) -> bool {
-        let email_paths = [
-            "/api/auth/login/send-code",
-            "/api/auth/login/send-2fa-code",
-            "/api/auth/forgot-password",
-        ];
-        email_paths.contains(&path)
+    let (parts, body) = req.into_parts();
+    let path = parts.uri.path().to_string();
+    let method = parts.method.clone();
+
+    let is_strict = is_strict_path(&path);
+    let is_email = is_email_path(&path);
+
+    let direct_ip = get_real_ip_from_parts(&parts);
+
+    let ip = if state.limiter.is_trusted_proxy(&direct_ip) {
+        direct_ip
+    } else {
+        normalize_ipv4_address(&direct_ip)
+    };
+
+    let user_id = if is_strict {
+        None
+    } else {
+        extract_user_id_from_parts(&parts)
+    };
+
+    if let Err(e) = state
+        .limiter
+        .check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email)
+    {
+        tracing::warn!(
+            "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
+            method,
+            path,
+            ip,
+            user_id.as_deref().unwrap_or("-"),
+            is_strict,
+            is_email,
+            e.retry_after
+        );
+        return e.into_response();
     }
-}
 
-impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<EitherBody<B>>;
-    type Error = actix_web::Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    forward_ready!(service);
-
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let limiter = self.limiter.clone();
-        let enabled = self.enabled;
-        let is_strict = Self::is_strict_path(req.path());
-        let is_email = Self::is_email_path(req.path());
-
-        let direct_ip = req
-            .connection_info()
-            .realip_remote_addr()
-            .unwrap_or("unknown")
-            .to_string();
-
-        let ip = if limiter.is_trusted_proxy(&direct_ip) {
-            get_real_ip_from_request(req.request())
-        } else {
-            crate::utils::normalize_ipv4_address(&direct_ip)
-        };
-
-        let user_id = if is_strict {
-            None
-        } else {
-            extract_user_id_from_token(&req)
-        };
-
-        let path = req.path().to_string();
-        let method = req.method().to_string();
-
-        if enabled
-            && let Err(e) = limiter.check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email)
-        {
-            tracing::warn!(
-                "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
-                method,
-                path,
-                ip,
-                user_id.as_deref().unwrap_or("-"),
-                is_strict,
-                is_email,
-                e.retry_after
-            );
-            return Box::pin(async move { Err(e.into()) });
-        }
-
-        let fut = self.service.call(req);
-
-        Box::pin(async move {
-            let res = fut.await?;
-            Ok(res.map_into_left_body())
-        })
-    }
+    let req = axum::extract::Request::from_parts(parts, body);
+    next.run(req).await
 }
 
 pub fn start_cleanup_task(

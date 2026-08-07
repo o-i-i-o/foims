@@ -1,25 +1,27 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-use chrono::Utc;
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
+use chrono::Utc;
 use uuid::Uuid;
 use validator::Validate;
 
 use super::snmp::{SwitchForSnmp, get_switch_ports_via_snmp};
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithDevice,
-};
+use crate::models::{SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithDevice};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
 pub async fn get_switch_ports(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -39,7 +41,7 @@ pub async fn get_switch_ports(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "items": data,
             "total": total,
@@ -48,13 +50,13 @@ pub async fn get_switch_ports(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "获取端口列表成功",
-    )))
+    ))
 }
 
 pub async fn get_all_switch_ports(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -140,7 +142,7 @@ pub async fn get_all_switch_ports(
         q.fetch_all(&state.pool()?.get_conn()).await?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "items": data,
             "total": total,
@@ -149,17 +151,15 @@ pub async fn get_all_switch_ports(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "获取所有端口列表成功",
-    )))
+    ))
 }
 
 pub async fn create_switch_port(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    req: web::Json<SwitchPortCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<SwitchPortCreate>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let device_exists =
@@ -222,7 +222,8 @@ pub async fn create_switch_port(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "switch_port",
             resource_id: Some(&id),
@@ -235,15 +236,13 @@ pub async fn create_switch_port(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "创建端口成功")))
+    Ok(crate::error::ok_json(data, "创建端口成功"))
 }
 
 pub async fn get_switch_port(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let port_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(port_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let data = sqlx::query_as::<_, SwitchPortWithDevice>(
         r"SELECT
             sp.id, sp.device_id, d.name as device_name,
@@ -262,17 +261,15 @@ pub async fn get_switch_port(
     .await?
     .ok_or_else(|| AppError::NotFound("端口不存在".to_string()))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "获取端口成功")))
+    Ok(crate::error::ok_json(data, "获取端口成功"))
 }
 
 pub async fn update_switch_port(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    req: web::Json<SwitchPortUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let port_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(port_id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<SwitchPortUpdate>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let now = Utc::now();
@@ -320,7 +317,8 @@ pub async fn update_switch_port(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "switch_port",
             resource_id: Some(&port_id),
@@ -333,16 +331,14 @@ pub async fn update_switch_port(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(data, "更新端口成功")))
+    Ok(crate::error::ok_json(data, "更新端口成功"))
 }
 
 pub async fn delete_switch_port(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let port_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(port_id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let result = sqlx::query("DELETE FROM switch_ports WHERE id = $1")
         .bind(port_id)
         .execute(&state.pool()?.get_conn())
@@ -366,7 +362,8 @@ pub async fn delete_switch_port(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "switch_port",
             resource_id: Some(&port_id),
@@ -379,15 +376,13 @@ pub async fn delete_switch_port(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "删除端口成功")))
+    Ok(crate::error::ok_json((), "删除端口成功"))
 }
 
 pub async fn sync_ports_from_snmp(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
@@ -495,5 +490,5 @@ pub async fn sync_ports_from_snmp(
         "未获取到端口信息".to_string()
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_ports, &message)))
+    Ok(crate::error::ok_json(saved_ports, &message))
 }

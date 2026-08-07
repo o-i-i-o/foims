@@ -309,20 +309,20 @@ impl JwtUtils {
     }
 }
 
-// 从请求中提取令牌（优先从 Cookie，其次从 Authorization 头）
+// 从 axum 请求 parts 中提取令牌（优先从 Cookie，其次从 Authorization 头）
 #[must_use]
-pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String> {
+pub fn extract_token_from_parts(parts: &axum::http::request::Parts) -> Option<String> {
     // 优先从 Cookie 中获取 access_token
-    if let Some(cookie) = req.cookie("access_token") {
-        let token = cookie.value();
-        if !token.is_empty() {
-            return Some(token.to_string());
-        }
+    if let Some(token) = extract_cookie_from_parts(parts, "access_token")
+        && !token.is_empty()
+    {
+        return Some(token);
     }
 
     // 回退到 Authorization 头（用于向后兼容或 API 调用）
-    req.headers()
-        .get("Authorization")
+    parts
+        .headers
+        .get(axum::http::header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok())
         .and_then(|auth_str| {
             if auth_str.starts_with("Bearer ") {
@@ -333,39 +333,29 @@ pub fn extract_token_from_request(req: &actix_web::HttpRequest) -> Option<String
         })
 }
 
-// 从请求中获取客户端信息
-pub fn get_client_info(req: &actix_web::HttpRequest) -> (String, String) {
-    let ip_address = req
-        .connection_info()
-        .realip_remote_addr()
-        .unwrap_or("unknown")
-        .to_string();
-
-    let user_agent = req
-        .headers()
-        .get(actix_web::http::header::USER_AGENT)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("unknown")
-        .to_string();
-
-    (
-        crate::utils::normalize_ipv4_address(&ip_address),
-        user_agent,
-    )
+/// 从 axum 请求 parts 中按名称提取 Cookie 值
+#[must_use]
+pub fn extract_cookie_from_parts(parts: &axum::http::request::Parts, name: &str) -> Option<String> {
+    let cookie_header = parts.headers.get(axum::http::header::COOKIE)?;
+    let cookie_str = cookie_header.to_str().ok()?;
+    let prefix = format!("{name}=");
+    for cookie_pair in cookie_str.split(';') {
+        let pair = cookie_pair.trim();
+        if let Some(rest) = pair.strip_prefix(&prefix) {
+            let value = rest.trim();
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
-// 从ServiceRequest中提取令牌
-#[must_use]
-pub fn extract_token_from_service_request(req: &actix_web::dev::ServiceRequest) -> Option<String> {
-    extract_token_from_request(req.request())
-}
-
-// 从ServiceRequest中获取客户端信息
-#[must_use]
-pub fn get_client_info_from_service_request(
-    req: &actix_web::dev::ServiceRequest,
-) -> (String, String) {
-    get_client_info(req.request())
+// 从 axum 请求 parts 中获取客户端信息（IP、User-Agent）
+pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String, String) {
+    let ip_address = crate::utils::common::get_real_ip_from_parts(parts);
+    let user_agent = crate::utils::common::get_user_agent_from_parts(parts);
+    (ip_address, user_agent)
 }
 
 // 异步密码哈希函数，使用 spawn_blocking 避免阻塞 tokio 线程

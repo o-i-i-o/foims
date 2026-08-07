@@ -1,7 +1,10 @@
-use crate::app_state::AppState;
-use crate::error::AppError;
-use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
-use actix_web::{HttpResponse, web};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use ipma_data_manager::DatabaseConfig;
 use ipma_scheduler::{TaskContext, TaskLog, calculate_next_run};
@@ -9,7 +12,12 @@ use serde_json;
 use uuid::Uuid;
 use validator::Validate;
 
-pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+use crate::app_state::AppState;
+use crate::error::AppError;
+use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
+use crate::routes::static_files::AppJson;
+
+pub async fn get_scheduled_tasks(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks ORDER BY created_at DESC"
     )
@@ -17,15 +25,13 @@ pub async fn get_scheduled_tasks(state: web::Data<AppState>) -> Result<HttpRespo
     .await
     ?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(tasks, "获取定时任务列表成功")))
+    Ok(crate::error::ok_json(tasks, "获取定时任务列表成功"))
 }
 
 pub async fn get_scheduled_task(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let task: Option<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
@@ -34,15 +40,15 @@ pub async fn get_scheduled_task(
     .await?;
 
     match task {
-        Some(t) => Ok(HttpResponse::Ok().json(ApiResponse::success(t, "获取定时任务成功"))),
+        Some(t) => Ok(crate::error::ok_json(t, "获取定时任务成功")),
         None => Err(AppError::NotFound("定时任务不存在".to_string())),
     }
 }
 
 pub async fn create_scheduled_task(
-    state: web::Data<AppState>,
-    req: web::Json<ScheduledTaskCreate>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<ScheduledTaskCreate>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
@@ -76,17 +82,20 @@ pub async fn create_scheduled_task(
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
-    Ok(HttpResponse::Created().json(ApiResponse::success(task, "创建定时任务成功")))
+    Ok((
+        StatusCode::CREATED,
+        Json(ApiResponse::success(task, "创建定时任务成功")),
+    )
+        .into_response())
 }
 
 pub async fn update_scheduled_task(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    req: web::Json<ScheduledTaskUpdate>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    AppJson(req): AppJson<ScheduledTaskUpdate>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
-    let id = path.into_inner();
     let now = Utc::now();
     let conn = state.pool()?.get_conn();
     let mut tx = conn.begin().await?;
@@ -142,32 +151,29 @@ pub async fn update_scheduled_task(
 
     tx.commit().await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(task, "更新定时任务成功")))
+    Ok(crate::error::ok_json(task, "更新定时任务成功"))
 }
 
 pub async fn delete_scheduled_task(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
         .bind(id)
         .execute(&state.pool()?.get_conn())
         .await?;
 
     if result.rows_affected() > 0 {
-        Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "删除定时任务成功")))
+        Ok(crate::error::ok_json((), "删除定时任务成功"))
     } else {
         Err(AppError::NotFound("定时任务不存在".to_string()))
     }
 }
 
 pub async fn toggle_scheduled_task(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let result = sqlx::query(
@@ -186,17 +192,16 @@ pub async fn toggle_scheduled_task(
         .fetch_one(&conn)
         .await?;
 
-        Ok(HttpResponse::Ok().json(ApiResponse::success(task, "切换定时任务状态成功")))
+        Ok(crate::error::ok_json(task, "切换定时任务状态成功"))
     } else {
         Err(AppError::NotFound("定时任务不存在".to_string()))
     }
 }
 
 pub async fn run_scheduled_task_now(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let pool = state.pool()?;
 
     // 使用事务级 advisory lock 防止同一任务并发执行
@@ -321,16 +326,16 @@ pub async fn run_scheduled_task_now(
         tracing::warn!("释放任务锁失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({"result": result.map_err(|e| e.to_string())}),
         "执行定时任务成功",
-    )))
+    ))
 }
 
 pub async fn get_task_logs(
-    state: web::Data<AppState>,
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let task_name = query.get("task_name").cloned();
     let limit: i64 = query
         .get("limit")
@@ -357,5 +362,5 @@ pub async fn get_task_logs(
         ?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(logs, "获取任务日志成功")))
+    Ok(crate::error::ok_json(logs, "获取任务日志成功"))
 }

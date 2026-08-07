@@ -1,36 +1,38 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest,
-};
+use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, State};
+use axum::response::Response;
 use serde_json::json;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 /// 获取所有设备模板
-pub async fn get_device_templates(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_device_templates(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
     let templates = sqlx::query_as::<_, DeviceTemplateSummary>(
         "SELECT id, name, device_type, brand, model FROM device_templates ORDER BY created_at ASC",
     )
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({ "items": templates }),
         "设备模板列表获取成功",
-    )))
+    ))
 }
 
 /// 获取单个设备模板
 pub async fn get_device_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let template = sqlx::query_as::<_, DeviceTemplate>(
         "SELECT id, name, device_type, brand, model, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM device_templates WHERE id = $1",
@@ -40,22 +42,15 @@ pub async fn get_device_template(
     .await?
     .ok_or_else(|| AppError::NotFound("设备模板未找到".to_string()))?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<DeviceTemplate>::success(
-            template,
-            "设备模板获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(template, "设备模板获取成功"))
 }
 
 /// 删除设备模板
 pub async fn delete_device_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> =
@@ -89,7 +84,8 @@ pub async fn delete_device_template(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "device_template",
             resource_id: Some(&id),
@@ -102,18 +98,17 @@ pub async fn delete_device_template(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "设备模板删除成功")))
+    Ok(crate::error::ok_json((), "设备模板删除成功"))
 }
 
 /// 更新设备模板
 pub async fn update_device_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-    req: web::Json<UpdateDeviceTemplateRequest>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<UpdateDeviceTemplateRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
-    let id = *id_path;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM device_templates WHERE id = $1")
@@ -151,7 +146,8 @@ pub async fn update_device_template(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "device_template",
             resource_id: Some(&id),
@@ -164,5 +160,5 @@ pub async fn update_device_template(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "设备模板更新成功")))
+    Ok(crate::error::ok_json((), "设备模板更新成功"))
 }

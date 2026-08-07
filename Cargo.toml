@@ -6,9 +6,11 @@ resolver = "2"
 edition = "2024"
 
 [workspace.dependencies]
-# Actix Web
-actix-web = { version = "4.14.0" }
-actix-multipart = "0.8.0"
+# Axum (替代 actix-web)
+axum = { version = "0.8.4", features = ["macros", "multipart", "ws"] }
+tower = { version = "0.5.2", features = ["util"] }
+tower-http = { version = "0.6.6", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
+axum-extra = { version = "0.10.1", features = ["cookie", "typed-header"] }
 
 # SQLx
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
@@ -53,10 +55,10 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.14.1"
+version = "0.14.6"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "IP/MAC Address Management System based on Rust Actix-web and PostgreSQL"
+description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
 license = "MIT"
 
 [dependencies]
@@ -67,8 +69,10 @@ ipma-data-manager = { path = "crates/ipma-data-manager" }
 ipma-scheduler = { path = "crates/ipma-scheduler" }
 
 # Workspace dependencies (使用共享版本)
-actix-web = { workspace = true }
-actix-multipart = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+axum-extra = { workspace = true }
 sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -87,10 +91,6 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 
 # 主项目特有依赖
-actix-files = "0.6.10"
-actix-cors = "0.7.1"
-
-
 
 regex = "1.13.0"
 
@@ -111,7 +111,6 @@ config = { version = "0.15.25", features = ["toml"] }
 toml = "1.1.2"
 
 anyhow = "1.0.103"
-num_cpus = "1.17.0"
 dashmap = "6.2.1"
 arc-swap = "1.9.2"
 lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
@@ -122,7 +121,6 @@ rust-i18n = "4.2.0"
 time = "0.3.53"
 
 [dev-dependencies]
-actix-rt = "2.11.0"
 tokio = { workspace = true }
 
 [features]

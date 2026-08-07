@@ -1,13 +1,18 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::extract::{Query, State};
+use axum::response::Response;
+
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, LoginLog};
+use crate::models::LoginLog;
 use crate::utils::pagination::Pagination;
-use actix_web::{HttpResponse, web};
 
 pub async fn get_login_logs(
-    state: web::Data<AppState>,
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -51,7 +56,7 @@ pub async fn get_login_logs(
         (total, logs)
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "items": logs,
             "total": total,
@@ -60,5 +65,5 @@ pub async fn get_login_logs(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "登录日志获取成功",
-    )))
+    ))
 }

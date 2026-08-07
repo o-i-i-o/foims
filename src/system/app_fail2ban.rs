@@ -1,12 +1,13 @@
-use crate::error::AppError;
-use crate::models::ApiResponse;
-use actix_web::{HttpResponse, web};
+use axum::response::Response;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use validator::Validate;
+
+use crate::error::AppError;
+use crate::routes::static_files::AppJson;
 
 /// 应用层 Fail2ban 日志文件路径（供 OS fail2ban 监控）
 const AUTH_LOG_PATH: &str = "/var/log/ipma/auth.log";
@@ -285,7 +286,7 @@ pub struct UnbanIpRequest {
 /// 获取应用层 fail2ban 状态（仅管理员）
 pub async fn get_app_fail2ban_status(
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let store = app_fail2ban();
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
 
@@ -315,7 +316,7 @@ pub async fn get_app_fail2ban_status(
     banned_ips.sort_by_key(|a| a.remaining_seconds);
     tracked_ips.sort_by_key(|b| std::cmp::Reverse(b.failure_count));
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         AppFail2banStatus {
             enabled: config.enabled,
             findtime: config.findtime,
@@ -326,14 +327,14 @@ pub async fn get_app_fail2ban_status(
             tracked_ips,
         },
         "success",
-    )))
+    ))
 }
 
 /// 更新应用层 fail2ban 配置（仅管理员）
 pub async fn update_app_fail2ban_config(
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<UpdateFail2banConfigRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<UpdateFail2banConfigRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
     let store = app_fail2ban();
 
@@ -352,17 +353,17 @@ pub async fn update_app_fail2ban_config(
         }
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({"message": "配置已更新"}),
         "success",
-    )))
+    ))
 }
 
 /// 手动解封 IP（仅管理员）
 pub async fn app_unban_ip(
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<UnbanIpRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<UnbanIpRequest>,
+) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
     if ip.parse::<std::net::IpAddr>().is_err() {
         return Err(AppError::Validation(format!("无效的IP地址: {ip}")));
@@ -376,17 +377,17 @@ pub async fn app_unban_ip(
         record.failures.clear();
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({"message": format!("IP {ip} 已解封"), "ip": ip}),
         "success",
-    )))
+    ))
 }
 
 /// 手动封禁 IP（仅管理员）
 pub async fn app_ban_ip(
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<BanIpRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<BanIpRequest>,
+) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
     if ip.parse::<std::net::IpAddr>().is_err() {
         return Err(AppError::Validation(format!("无效的IP地址: {ip}")));
@@ -400,8 +401,8 @@ pub async fn app_ban_ip(
         record.banned_until = Some(Instant::now() + Duration::from_secs(config.bantime));
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({"message": format!("IP {ip} 已封禁 {} 秒", config.bantime), "ip": ip}),
         "success",
-    )))
+    ))
 }

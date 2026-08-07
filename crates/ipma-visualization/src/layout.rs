@@ -1,4 +1,6 @@
-use actix_web::HttpResponse;
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sqlx::PgPool;
@@ -24,19 +26,23 @@ pub enum VisualizationError {
     Internal(String),
 }
 
-impl actix_web::ResponseError for VisualizationError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ApiResponse::<()>::error(self.to_string()))
-    }
-
-    fn status_code(&self) -> actix_web::http::StatusCode {
+impl VisualizationError {
+    pub fn status_code(&self) -> StatusCode {
         match self {
-            VisualizationError::Database(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            VisualizationError::NotFound(_) => actix_web::http::StatusCode::NOT_FOUND,
-            VisualizationError::Validation(_) => actix_web::http::StatusCode::BAD_REQUEST,
-            VisualizationError::Conflict(_) => actix_web::http::StatusCode::CONFLICT,
-            VisualizationError::Internal(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            VisualizationError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            VisualizationError::NotFound(_) => StatusCode::NOT_FOUND,
+            VisualizationError::Validation(_) => StatusCode::BAD_REQUEST,
+            VisualizationError::Conflict(_) => StatusCode::CONFLICT,
+            VisualizationError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+}
+
+impl IntoResponse for VisualizationError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let body = Json(ApiResponse::<()>::error(self.to_string()));
+        (status, body).into_response()
     }
 }
 
@@ -109,6 +115,11 @@ impl<T> ApiResponse<T> {
     }
 }
 
+/// 构造成功 JSON 响应
+pub fn ok_json<T: Serialize>(data: T, message: &str) -> Response {
+    (StatusCode::OK, Json(ApiResponse::success(data, message))).into_response()
+}
+
 // ==================== 布局模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -163,7 +174,7 @@ pub struct LayoutItem {
 pub async fn save_layout(
     pool: &PgPool,
     req: LayoutSaveRequest,
-) -> Result<HttpResponse, VisualizationError> {
+) -> Result<Response, VisualizationError> {
     if req.r#type == "workstation" {
         let Some(room_id) = req.room_id else {
             return Err(VisualizationError::Validation("房间ID不能为空".to_string()));
@@ -184,10 +195,10 @@ pub async fn save_layout(
 
         for item in &workstation_items {
             sqlx::query(
-                "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation) 
+                "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation)
                  VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (workstation_id) 
-                 DO UPDATE SET 
+                 ON CONFLICT (workstation_id)
+                 DO UPDATE SET
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
                      width = EXCLUDED.width,
@@ -207,9 +218,9 @@ pub async fn save_layout(
 
         for item in &element_items {
             sqlx::query(
-                "INSERT INTO element_layouts (room_id, element_type, x, y, width, height, rotation) 
+                "INSERT INTO element_layouts (room_id, element_type, x, y, width, height, rotation)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT DO NOTHING"
+                 ON CONFLICT DO NOTHING",
             )
             .bind(room_id)
             .bind(&item.element_type)
@@ -218,12 +229,13 @@ pub async fn save_layout(
             .bind(item.position.width_i32())
             .bind(item.position.height_i32())
             .bind(item.position.rotation_i32())
-            .execute(&mut *tx).await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
 
-        Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位布局保存成功")))
+        Ok(ok_json((), "工位布局保存成功"))
     } else if req.r#type == "cabinet" {
         let Some(room_id) = req.room_id else {
             return Err(VisualizationError::Validation("房间ID不能为空".to_string()));
@@ -247,10 +259,10 @@ pub async fn save_layout(
 
         for item in &req.layout {
             sqlx::query(
-                "INSERT INTO cabinet_layouts (cabinet_id, x, y, width, height, rotation) 
+                "INSERT INTO cabinet_layouts (cabinet_id, x, y, width, height, rotation)
                  VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (cabinet_id) 
-                 DO UPDATE SET 
+                 ON CONFLICT (cabinet_id)
+                 DO UPDATE SET
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
                      width = EXCLUDED.width,
@@ -270,7 +282,7 @@ pub async fn save_layout(
 
         tx.commit().await?;
 
-        Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局保存成功")))
+        Ok(ok_json((), "机柜布局保存成功"))
     } else {
         Err(VisualizationError::Validation(
             "不支持的布局类型".to_string(),
@@ -278,12 +290,9 @@ pub async fn save_layout(
     }
 }
 
-pub async fn delete_layout(
-    pool: &PgPool,
-    room_id: Uuid,
-) -> Result<HttpResponse, VisualizationError> {
+pub async fn delete_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, VisualizationError> {
     sqlx::query(
-        r"DELETE FROM workstation_layouts 
+        r"DELETE FROM workstation_layouts
          WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)",
     )
     .bind(room_id)
@@ -295,13 +304,13 @@ pub async fn delete_layout(
         .execute(pool)
         .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "布局删除成功")))
+    Ok(ok_json((), "布局删除成功"))
 }
 
 pub async fn delete_positions_layout(
     pool: &PgPool,
     room_id: Uuid,
-) -> Result<HttpResponse, VisualizationError> {
+) -> Result<Response, VisualizationError> {
     sqlx::query(
         "DELETE FROM cabinet_layouts WHERE cabinet_id IN (SELECT id FROM cabinets WHERE room_id = $1)"
     )
@@ -309,17 +318,17 @@ pub async fn delete_positions_layout(
     .execute(pool)
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜布局删除成功")))
+    Ok(ok_json((), "机柜布局删除成功"))
 }
 
-pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<HttpResponse, VisualizationError> {
+pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, VisualizationError> {
     let workstation_layouts = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
         r"SELECT workstation_id,
                   json_build_object(
-                      'x', x, 
-                      'y', y, 
-                      'width', width, 
-                      'height', height, 
+                      'x', x,
+                      'y', y,
+                      'width', width,
+                      'height', height,
                       'rotation', rotation
                   ) as position
            FROM workstation_layouts
@@ -332,10 +341,10 @@ pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<HttpResponse, Vi
     let element_layouts = sqlx::query_as::<_, (String, serde_json::Value)>(
         r"SELECT element_type,
                   json_build_object(
-                      'x', x, 
-                      'y', y, 
-                      'width', width, 
-                      'height', height, 
+                      'x', x,
+                      'y', y,
+                      'width', width,
+                      'height', height,
                       'rotation', rotation
                   ) as position
            FROM element_layouts
@@ -364,18 +373,13 @@ pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<HttpResponse, Vi
         })
     }));
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(
-            layout_data,
-            "布局获取成功",
-        )),
-    )
+    Ok(ok_json(layout_data, "布局获取成功"))
 }
 
 pub async fn get_positions_layout(
     pool: &PgPool,
     room_id: Uuid,
-) -> Result<HttpResponse, VisualizationError> {
+) -> Result<Response, VisualizationError> {
     let rows = sqlx::query_as::<_, (Uuid, i32, i32, i32, i32, i32)>(
         r"SELECT cl.cabinet_id, cl.x, cl.y, cl.width, cl.height, cl.rotation
           FROM cabinet_layouts cl
@@ -403,13 +407,13 @@ pub async fn get_positions_layout(
         })
         .collect();
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(items, "获取机柜布局成功")))
+    Ok(ok_json(items, "获取机柜布局成功"))
 }
 
 pub async fn get_room_cabinets_with_positions(
     pool: &PgPool,
     room_id: Uuid,
-) -> Result<HttpResponse, VisualizationError> {
+) -> Result<Response, VisualizationError> {
     let cabinets = sqlx::query_as::<_, (Uuid, String, Uuid, i32, Option<String>)>(
         "SELECT id, name, room_id, capacity, description FROM cabinets WHERE room_id = $1 ORDER BY name",
     )
@@ -462,5 +466,5 @@ pub async fn get_room_cabinets_with_positions(
         }));
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(result, "获取房间机柜数据成功")))
+    Ok(ok_json(result, "获取房间机柜数据成功"))
 }

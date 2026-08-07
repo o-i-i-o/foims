@@ -1,14 +1,18 @@
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
-use crate::models::{ApiResponse, Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
+use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
@@ -16,9 +20,9 @@ use validator::Validate;
 use super::validate_device_type;
 
 pub async fn get_devices(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -159,7 +163,7 @@ pub async fn get_devices(
         })
         .collect::<Result<Vec<_>, AppError>>()?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": items,
             "total": total,
@@ -168,15 +172,15 @@ pub async fn get_devices(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "设备列表获取成功",
-    )))
+    ))
 }
 
 pub async fn create_device(
-    state: web::Data<AppState>,
-    req: web::Json<DeviceCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<DeviceCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let device_type = match &req.device_type {
         Some(dt) => {
@@ -389,7 +393,8 @@ pub async fn create_device(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "device",
             resource_id: Some(&id),
@@ -402,15 +407,13 @@ pub async fn create_device(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Device>::success(device, "设备创建成功")))
+    Ok(crate::error::ok_json(device, "设备创建成功"))
 }
 
 pub async fn get_device(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
@@ -452,22 +455,16 @@ pub async fn get_device(
     result["snmp_priv_password"] = serde_json::to_value(decrypted_priv)
         .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(
-            result,
-            "设备获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(result, "设备获取成功"))
 }
 
 pub async fn update_device(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<DeviceUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<DeviceUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     // Validate device_type if provided
     if let Some(ref dt) = req.device_type {
@@ -709,7 +706,8 @@ pub async fn update_device(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "device",
             resource_id: Some(&id),
@@ -722,21 +720,14 @@ pub async fn update_device(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(
-            result,
-            "设备更新成功",
-        )),
-    )
+    Ok(crate::error::ok_json(result, "设备更新成功"))
 }
 
 pub async fn delete_device(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> =
@@ -762,7 +753,8 @@ pub async fn delete_device(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "device",
             resource_id: Some(&id),
@@ -775,5 +767,5 @@ pub async fn delete_device(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "设备删除成功")))
+    Ok(crate::error::ok_json((), "设备删除成功"))
 }

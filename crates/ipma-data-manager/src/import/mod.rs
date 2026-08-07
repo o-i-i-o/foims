@@ -1,6 +1,6 @@
-use crate::types::{ApiResponse, DataError, DataProvider, DataResult};
-use actix_web::{HttpResponse, web};
-use futures_util::TryStreamExt;
+use crate::types::{DataError, DataProvider, DataResult, ok_json};
+use axum::extract::{Multipart, Query};
+use axum::response::Response;
 use serde_json::json;
 use sqlx::Acquire;
 use std::collections::HashMap;
@@ -56,9 +56,9 @@ pub(crate) async fn find_network_id(
 
 pub async fn import_csv<P: DataProvider>(
     provider: P,
-    mut payload: actix_multipart::Multipart,
-    query: web::Query<HashMap<String, String>>,
-) -> DataResult<HttpResponse> {
+    mut payload: Multipart,
+    query: Query<HashMap<String, String>>,
+) -> DataResult<Response> {
     let mode = query
         .get("mode")
         .cloned()
@@ -70,17 +70,15 @@ pub async fn import_csv<P: DataProvider>(
     const MAX_UPLOAD_SIZE: usize = 50 * 1024 * 1024;
 
     while let Some(mut field) = payload
-        .try_next()
+        .next_field()
         .await
         .map_err(|e| DataError::Internal(format!("读取文件失败: {e}")))?
     {
         if field.name() == Some("file") {
-            filename = field
-                .content_disposition()
-                .and_then(|cd| cd.get_filename().map(std::string::ToString::to_string));
+            filename = field.file_name().map(std::string::ToString::to_string);
             let mut data = Vec::new();
             while let Some(chunk) = field
-                .try_next()
+                .chunk()
                 .await
                 .map_err(|e| DataError::Internal(format!("读取文件块失败: {e}")))?
             {
@@ -174,10 +172,7 @@ pub async fn import_csv<P: DataProvider>(
         }
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
-        json!({ "results": results }),
-        "导入完成",
-    )))
+    Ok(ok_json(json!({ "results": results }), "导入完成"))
 }
 
 async fn process_csv_by_filename(

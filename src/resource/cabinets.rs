@@ -1,12 +1,18 @@
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks,
-    NetworkInfo, PositionBrief, PositionSyncItem,
+    Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
+    PositionBrief, PositionSyncItem,
 };
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
@@ -16,9 +22,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_cabinets(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -146,7 +152,7 @@ pub async fn get_cabinets(
         cabinets_with_networks.push(cabinet_with_networks);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": cabinets_with_networks,
             "total": total,
@@ -155,16 +161,14 @@ pub async fn get_cabinets(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "机柜获取成功",
-    )))
+    ))
 }
 
 pub async fn get_cabinets_by_network_region(
-    state: web::Data<AppState>,
-    path: web::Path<String>,
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
-    let region_id_str = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(region_id_str): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let Ok(region_id) = Uuid::parse_str(&region_id_str) else {
         return Err(AppError::Validation("无效的网络区域ID".to_string()));
     };
@@ -200,15 +204,15 @@ pub async fn get_cabinets_by_network_region(
         .await?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(cabinets, "机柜获取成功")))
+    Ok(crate::error::ok_json(cabinets, "机柜获取成功"))
 }
 
 pub async fn create_cabinet(
-    state: web::Data<AppState>,
-    req: web::Json<CabinetCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing_cabinet =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE name = $1 AND room_id = $2")
@@ -257,7 +261,8 @@ pub async fn create_cabinet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "cabinet",
             resource_id: Some(&id),
@@ -270,15 +275,13 @@ pub async fn create_cabinet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜创建成功")))
+    Ok(crate::error::ok_json(cabinet, "机柜创建成功"))
 }
 
 pub async fn get_cabinet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let cabinet = sqlx::query_as::<_, Cabinet>(
         "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
@@ -326,23 +329,16 @@ pub async fn get_cabinet(
         updated_at: cabinet.updated_at,
     };
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<CabinetWithNetworks>::success(
-            cabinet_with_networks,
-            "机柜获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(cabinet_with_networks, "机柜获取成功"))
 }
 
 pub async fn update_cabinet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<CabinetUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
         .bind(id)
@@ -387,7 +383,8 @@ pub async fn update_cabinet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "cabinet",
             resource_id: Some(&id),
@@ -400,16 +397,14 @@ pub async fn update_cabinet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Cabinet>::success(cabinet, "机柜更新成功")))
+    Ok(crate::error::ok_json(cabinet, "机柜更新成功"))
 }
 
 pub async fn delete_cabinet(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -442,7 +437,8 @@ pub async fn delete_cabinet(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "cabinet",
             resource_id: Some(&id),
@@ -455,15 +451,13 @@ pub async fn delete_cabinet(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机柜删除成功")))
+    Ok(crate::error::ok_json((), "机柜删除成功"))
 }
 
 pub async fn get_cabinet_networks(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -486,22 +480,16 @@ pub async fn get_cabinet_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<NetworkInfo>>::success(
-            cabinet_networks,
-            "机柜网段获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(cabinet_networks, "机柜网段获取成功"))
 }
 
 pub async fn sync_cabinet_positions(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<CabinetPositionsSync>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetPositionsSync>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let cabinet_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
@@ -596,7 +584,8 @@ pub async fn sync_cabinet_positions(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "sync_positions",
             resource_type: "cabinet",
             resource_id: Some(&id),
@@ -609,5 +598,5 @@ pub async fn sync_cabinet_positions(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机位同步成功")))
+    Ok(crate::error::ok_json((), "机位同步成功"))
 }

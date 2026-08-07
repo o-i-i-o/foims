@@ -2,9 +2,12 @@ use std::str::FromStr;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use hex::encode;
+use axum::extract::ConnectInfo;
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use std::net::SocketAddr;
 
-use actix_web::{HttpMessage, HttpRequest};
+use hex::encode;
 
 #[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
@@ -227,10 +230,51 @@ pub async fn cleanup_old_token_usage(
     Ok(deleted_count)
 }
 
+// ==================== 请求元信息提取器 ====================
+
+/// 请求元信息：从请求 parts 中提取 IP、语言、User-Agent、JWT claims、是否 HTTPS
+/// 用于操作日志记录、语言检测、IP 提取等场景
+#[derive(Clone, Debug, Default)]
+pub struct RequestMeta {
+    pub ip_address: String,
+    pub user_lang: String,
+    pub user_agent: String,
+    pub is_secure: bool,
+    pub claims: Option<crate::auth::utils::JwtClaims>,
+}
+
+impl RequestMeta {
+    /// 从 JWT claims 解析用户 ID
+    #[must_use]
+    pub fn user_id(&self) -> Option<Uuid> {
+        self.claims
+            .as_ref()
+            .and_then(|c| Uuid::parse_str(&c.sub).ok())
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for RequestMeta {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(RequestMeta {
+            ip_address: get_real_ip_from_parts(parts),
+            user_lang: detect_user_language_from_parts(parts),
+            user_agent: get_user_agent_from_parts(parts),
+            is_secure: is_secure_from_parts(parts),
+            claims: parts
+                .extensions
+                .get::<crate::auth::utils::JwtClaims>()
+                .cloned(),
+        })
+    }
+}
+
 // ==================== 操作日志 ====================
 
 pub struct OperationLogParams<'a> {
-    pub req: &'a HttpRequest,
+    pub ip_address: &'a str,
+    pub user_id: Option<Uuid>,
     pub action: &'a str,
     pub resource_type: &'a str,
     pub resource_id: Option<&'a Uuid>,
@@ -242,16 +286,8 @@ pub async fn log_system_operation(
     pool: &sqlx::PgPool,
     params: OperationLogParams<'_>,
 ) -> Result<(), sqlx::Error> {
-    let claims = {
-        let extensions = params.req.extensions();
-        let claims_opt = extensions.get::<crate::auth::utils::JwtClaims>();
-        claims_opt.cloned()
-    };
-
-    let user_id: Option<Uuid> = claims.and_then(|c| Uuid::parse_str(&c.sub).ok());
-
     // 检查用户是否存在，不存在则使用 NULL
-    let valid_user_id = if let Some(uid) = user_id {
+    let valid_user_id = if let Some(uid) = params.user_id {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
             .bind(uid)
             .fetch_one(pool)
@@ -270,7 +306,7 @@ pub async fn log_system_operation(
         .bind(params.resource_id)
         .bind(params.details)
         .bind(params.result)
-        .bind(get_real_ip_from_request(params.req))
+        .bind(params.ip_address)
         .bind(chrono::Utc::now())
         .execute(pool)
         .await?;
@@ -279,15 +315,25 @@ pub async fn log_system_operation(
 
 // ==================== HTTP 请求处理 ====================
 
+/// 从 axum 请求 parts 中获取真实客户端 IP
+///
+/// 优先级：
+/// 1. 若 peer 是可信代理（或 UDS 无 peer 信息，默认视为可信），使用 X-Forwarded-For
+/// 2. 其次使用 X-Real-IP
+/// 3. 否则使用 peer IP（TCP）或 "unknown"（UDS 无转发头）
 #[must_use]
-pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
-    let peer_trusted = req
-        .peer_addr()
-        .map(|addr| is_trusted_proxy(&addr.ip()))
-        .unwrap_or(false);
+pub fn get_real_ip_from_parts(parts: &Parts) -> String {
+    // 从 extensions 获取 ConnectInfo（TCP 监听时可用）
+    let peer_info: Option<std::net::IpAddr> = parts
+        .extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ci| ci.0.ip());
+
+    // UDS 场景无 peer IP，默认视为可信代理（即位于 nginx 之后）
+    let peer_trusted = peer_info.map(|ip| is_trusted_proxy(&ip)).unwrap_or(true);
 
     if peer_trusted {
-        if let Some(xff) = req.headers().get("X-Forwarded-For")
+        if let Some(xff) = parts.headers.get("X-Forwarded-For")
             && let Ok(xff_str) = xff.to_str()
             && let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string())
             && !real_ip.is_empty()
@@ -295,7 +341,7 @@ pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
             return normalize_ipv4_address(&real_ip);
         }
 
-        if let Some(x_real_ip) = req.headers().get("X-Real-IP")
+        if let Some(x_real_ip) = parts.headers.get("X-Real-IP")
             && let Ok(real_ip_str) = x_real_ip.to_str()
             && !real_ip_str.trim().is_empty()
         {
@@ -303,12 +349,49 @@ pub fn get_real_ip_from_request(req: &HttpRequest) -> String {
         }
     }
 
-    let ip = req
-        .peer_addr()
-        .map(|addr| addr.ip().to_string())
+    let ip = peer_info
+        .map(|ip| ip.to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
     normalize_ipv4_address(&ip)
+}
+
+/// 从 axum 请求 parts 中检测用户语言
+#[must_use]
+pub fn detect_user_language_from_parts(parts: &Parts) -> String {
+    if let Some(accept_language) = parts.headers.get("Accept-Language")
+        && let Ok(accept_language_str) = accept_language.to_str()
+        && let Some(lang) = accept_language_str.split(',').next()
+    {
+        let lang_code = lang.split('-').next().unwrap_or("").trim();
+        if lang_code == "zh" || lang_code == "en" {
+            return lang_code.to_string();
+        }
+    }
+
+    "zh".to_string()
+}
+
+/// 从 axum 请求 parts 中获取 User-Agent
+#[must_use]
+pub fn get_user_agent_from_parts(parts: &Parts) -> String {
+    parts
+        .headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// 判断请求是否为 HTTPS（基于 X-Forwarded-Proto 头，适用于反代后的 UDS 部署）
+#[must_use]
+pub fn is_secure_from_parts(parts: &Parts) -> bool {
+    parts
+        .headers
+        .get("X-Forwarded-Proto")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.eq_ignore_ascii_case("https"))
+        .unwrap_or(false)
 }
 
 fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
@@ -321,21 +404,6 @@ fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
 fn is_ipv6_ula(v6: &std::net::Ipv6Addr) -> bool {
     let segments = v6.segments();
     (segments[0] & 0xfe00) == 0xfc00
-}
-
-#[must_use]
-pub fn detect_user_language(req: &HttpRequest) -> String {
-    if let Some(accept_language) = req.headers().get("Accept-Language")
-        && let Ok(accept_language_str) = accept_language.to_str()
-        && let Some(lang) = accept_language_str.split(',').next()
-    {
-        let lang_code = lang.split('-').next().unwrap_or("").trim();
-        if lang_code == "zh" || lang_code == "en" {
-            return lang_code.to_string();
-        }
-    }
-
-    "zh".to_string()
 }
 
 // ==================== 通知与告警 ====================

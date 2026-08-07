@@ -1,24 +1,27 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate,
-    NetworkUpdate,
+    Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate, NetworkUpdate,
 };
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::parse_network_from_row;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_networks(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -235,7 +238,7 @@ pub async fn get_networks(
         .collect::<Result<_, _>>()?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": networks,
             "total": total,
@@ -244,15 +247,15 @@ pub async fn get_networks(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "网络获取成功",
-    )))
+    ))
 }
 
 pub async fn create_network(
-    state: web::Data<AppState>,
-    req: web::Json<NetworkCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetworkCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
@@ -407,7 +410,8 @@ pub async fn create_network(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "network",
             resource_id: Some(&id),
@@ -437,15 +441,13 @@ pub async fn create_network(
         updated_at: now,
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络创建成功")))
+    Ok(crate::error::ok_json(network, "网络创建成功"))
 }
 
 pub async fn get_network(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let row = sqlx::query(
         r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
                   n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
@@ -465,18 +467,16 @@ pub async fn get_network(
 
     let network = parse_network_from_row(&row)?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络获取成功")))
+    Ok(crate::error::ok_json(network, "网络获取成功"))
 }
 
 pub async fn update_network(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<NetworkUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetworkUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing_network =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
@@ -680,7 +680,8 @@ pub async fn update_network(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "network",
             resource_id: Some(&id),
@@ -694,16 +695,14 @@ pub async fn update_network(
     }
     tracing::info!("网络 {} 更新成功, ID: {}", network.name, id);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Network>::success(network, "网络更新成功")))
+    Ok(crate::error::ok_json(network, "网络更新成功"))
 }
 
 pub async fn delete_network(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let existing_network =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
             .bind(id)
@@ -762,7 +761,8 @@ pub async fn delete_network(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "network",
             resource_id: Some(&id),
@@ -776,13 +776,13 @@ pub async fn delete_network(
     }
     tracing::info!("网络删除成功, ID: {}", id);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络删除成功")))
+    Ok(crate::error::ok_json((), "网络删除成功"))
 }
 
 pub async fn get_network_regions(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -829,7 +829,7 @@ pub async fn get_network_regions(
         .await?
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": network_regions,
             "total": total,
@@ -838,15 +838,15 @@ pub async fn get_network_regions(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "网络区域获取成功",
-    )))
+    ))
 }
 
 pub async fn create_network_region(
-    state: web::Data<AppState>,
-    req: web::Json<NetworkRegionCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetworkRegionCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE name = $1")
@@ -892,7 +892,8 @@ pub async fn create_network_region(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "network_region",
             resource_id: Some(&id),
@@ -905,20 +906,13 @@ pub async fn create_network_region(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<NetworkRegion>::success(
-            network_region,
-            "网络区域创建成功",
-        )),
-    )
+    Ok(crate::error::ok_json(network_region, "网络区域创建成功"))
 }
 
 pub async fn get_network_region(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
                 (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
@@ -928,23 +922,16 @@ pub async fn get_network_region(
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound("网络区域未找到".to_string()))?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<NetworkRegion>::success(
-            network_region,
-            "网络区域获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(network_region, "网络区域获取成功"))
 }
 
 pub async fn update_network_region(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<NetworkRegionUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<NetworkRegionUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
@@ -1005,7 +992,8 @@ pub async fn update_network_region(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "network_region",
             resource_id: Some(&id),
@@ -1018,21 +1006,14 @@ pub async fn update_network_region(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<NetworkRegion>::success(
-            network_region,
-            "网络区域更新成功",
-        )),
-    )
+    Ok(crate::error::ok_json(network_region, "网络区域更新成功"))
 }
 
 pub async fn delete_network_region(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
             .bind(id)
@@ -1067,7 +1048,8 @@ pub async fn delete_network_region(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "network_region",
             resource_id: Some(&id),
@@ -1080,5 +1062,5 @@ pub async fn delete_network_region(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "网络区域删除成功")))
+    Ok(crate::error::ok_json((), "网络区域删除成功"))
 }

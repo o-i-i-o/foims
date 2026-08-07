@@ -92,10 +92,10 @@ const fn default_health_check_interval() -> u64 {
 /// 监听配置（仅 UDS 模式）
 ///
 /// 架构说明：
-/// - actix-web 监听 Unix Domain Socket，由 nginx 反代
-/// - 静态文件由 nginx 直接托管，actix 仅服务 API
-/// - 调试时手动启动 actix 即可，无需安装 systemd 服务
-/// - nginx 与 actix 通过 UDS 通信，性能优于 TCP loopback
+/// - axum 监听 Unix Domain Socket，由 nginx 反代
+/// - 静态文件由 nginx 直接托管，axum 仅服务 API
+/// - 调试时手动启动 axum 即可，无需安装 systemd 服务
+/// - nginx 与 axum 通过 UDS 通信，性能优于 TCP loopback
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ListenConfig {
     /// UDS socket 文件路径，默认 /run/ipma/api.sock
@@ -103,8 +103,8 @@ pub struct ListenConfig {
     #[serde(default = "default_uds_path")]
     pub uds_path: String,
     /// 是否托管静态文件
-    /// - false（默认）：由 nginx 托管静态文件，actix 仅服务 API（生产模式）
-    /// - true：actix 同时托管静态文件和 API（调试模式，可用 curl 验证）
+    /// - false（默认）：由 nginx 托管静态文件，axum 仅服务 API（生产模式）
+    /// - true：axum 同时托管静态文件和 API（调试模式，可用 curl 验证）
     #[serde(default = "default_serve_static")]
     pub serve_static: bool,
 }

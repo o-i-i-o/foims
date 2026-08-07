@@ -1,24 +1,26 @@
-use actix_web::{HttpResponse, web};
+use std::sync::Arc;
+
+use axum::extract::{Json, State};
+use axum::response::Response;
 use tracing::info;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::ApiResponse;
 use crate::check::check_required_tables_exist;
 use crate::config::update_config_enabled;
 use crate::connection::ensure_database_and_schema;
 use crate::context::InitContext;
-use crate::error::InitError;
+use crate::error::{InitError, ok_json};
 use crate::schema::create_tables;
 use crate::types::InitRequest;
 use crate::utils::hash_password;
 use crate::verification::verify_code;
 
 pub async fn init_system(
-    ctx: web::Data<InitContext>,
-    req: web::Json<InitRequest>,
-) -> Result<HttpResponse, InitError> {
-    (*req).validate()?;
+    State(ctx): State<Arc<InitContext>>,
+    Json(req): Json<InitRequest>,
+) -> Result<Response, InitError> {
+    req.validate()?;
 
     if !ctx.init_enabled {
         return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
@@ -103,10 +105,10 @@ pub async fn init_system(
         req.username
     );
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统初始化成功")))
+    Ok(ok_json((), "系统初始化成功"))
 }
 
-pub async fn init_db(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
@@ -125,5 +127,5 @@ pub async fn init_db(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitEr
         info!("数据库表结构初始化成功");
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "数据库初始化成功")))
+    Ok(ok_json((), "数据库初始化成功"))
 }

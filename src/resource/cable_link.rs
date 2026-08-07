@@ -3,14 +3,18 @@
 //
 //
 
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
+
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode,
-};
+use crate::models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
@@ -58,9 +62,9 @@ fn sort_endpoints(
 }
 
 pub async fn get_cable_links(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -128,7 +132,7 @@ pub async fn get_cable_links(
     data_query = data_query.bind(page_size as i32).bind(offset as i32);
     let links = data_query.fetch_all(&state.pool()?.get_conn()).await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": links,
             "total": total,
@@ -137,15 +141,15 @@ pub async fn get_cable_links(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "物理链路列表获取成功",
-    )))
+    ))
 }
 
 pub async fn create_cable_link(
-    state: web::Data<AppState>,
-    req: web::Json<CableLinkCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CableLinkCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     validate_endpoint_type(&req.a_endpoint_type)?;
     validate_endpoint_type(&req.b_endpoint_type)?;
@@ -213,7 +217,8 @@ pub async fn create_cable_link(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "cable_link",
             resource_id: Some(&id),
@@ -226,15 +231,13 @@ pub async fn create_cable_link(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(link, "物理链路创建成功")))
+    Ok(crate::error::ok_json(link, "物理链路创建成功"))
 }
 
 pub async fn get_cable_link(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let link = sqlx::query_as::<_, CableLinkWithDetails>(
         "SELECT cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
          cl.b_endpoint_type, cl.b_endpoint_id, cl.b_endpoint_label, \
@@ -247,17 +250,16 @@ pub async fn get_cable_link(
     .await?
     .ok_or_else(|| AppError::NotFound("物理链路未找到".to_string()))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(link, "物理链路获取成功")))
+    Ok(crate::error::ok_json(link, "物理链路获取成功"))
 }
 
 pub async fn update_cable_link(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<CableLinkUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CableLinkUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     if let Some(ref lt) = req.link_type {
         validate_link_type(lt)?;
@@ -379,7 +381,8 @@ pub async fn update_cable_link(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "cable_link",
             resource_id: Some(&id),
@@ -392,16 +395,14 @@ pub async fn update_cable_link(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(link, "物理链路更新成功")))
+    Ok(crate::error::ok_json(link, "物理链路更新成功"))
 }
 
 pub async fn delete_cable_link(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM cable_links WHERE id = $1")
@@ -423,7 +424,8 @@ pub async fn delete_cable_link(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "cable_link",
             resource_id: Some(&id),
@@ -436,7 +438,7 @@ pub async fn delete_cable_link(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "物理链路删除成功")))
+    Ok(crate::error::ok_json((), "物理链路删除成功"))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -448,11 +450,9 @@ pub struct CablePathQuery {
 }
 
 pub async fn get_cable_path(
-    state: web::Data<AppState>,
-    query: web::Query<CablePathQuery>,
-) -> Result<HttpResponse, AppError> {
-    let q = query.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<CablePathQuery>,
+) -> Result<Response, AppError> {
     validate_endpoint_type(&q.from_type)?;
     validate_endpoint_type(&q.to_type)?;
 
@@ -484,8 +484,8 @@ pub async fn get_cable_path(
         return Err(AppError::NotFound("未找到连接路径".to_string()));
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({ "path": path, "hop_count": path.len() }),
         "链路路径查询成功",
-    )))
+    ))
 }

@@ -1,17 +1,22 @@
-use crate::app_state::AppState;
-use crate::config::{Config, I18nConfig, ServerConfig};
-use crate::error::AppError;
-use crate::models::ApiResponse;
-use crate::system::smtp::{
-    SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
-};
-use actix_web::{HttpResponse, web};
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use uuid::Uuid;
 use validator::Validate;
+
+use crate::app_state::AppState;
+use crate::config::{Config, I18nConfig, ServerConfig};
+use crate::error::AppError;
+use crate::routes::static_files::AppJson;
+use crate::system::smtp::{
+    SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
+};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
@@ -67,7 +72,7 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-pub async fn get_system_info(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_system_info(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let database_status = match sqlx::query("SELECT 1")
         .execute(&state.pool()?.get_conn())
         .await
@@ -101,24 +106,24 @@ pub async fn get_system_info(state: web::Data<AppState>) -> Result<HttpResponse,
         }
     });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(system_info, "系统信息获取成功")))
+    Ok(crate::error::ok_json(system_info, "系统信息获取成功"))
 }
 
 pub async fn get_system_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
-    Ok(HttpResponse::Ok().json(ApiResponse::success(config, "系统配置获取成功")))
+    Ok(crate::error::ok_json(config, "系统配置获取成功"))
 }
 
 pub async fn update_system_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<UpdateSystemConfigRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<UpdateSystemConfigRequest>,
+) -> Result<Response, AppError> {
     let mut new_config = state.config.clone();
 
     if let Some(database) = &req.database {
@@ -168,10 +173,10 @@ pub async fn update_system_config(
         .map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
     tracing::info!("配置已保存到: {}", config_path);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(new_config, "配置更新成功")))
+    Ok(crate::error::ok_json(new_config, "配置更新成功"))
 }
 
-pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
+pub async fn trigger_service_restart() -> Result<Response, AppError> {
     let service_name = "ipma.service";
 
     let is_running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
@@ -220,10 +225,10 @@ pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
 
                 if output.status.success() {
                     tracing::info!("systemctl restart 执行成功");
-                    return Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
+                    return Ok(crate::error::ok_json(
                         (),
                         "服务重启命令已发送，服务正在重启...",
-                    )));
+                    ));
                 }
 
                 if stderr.contains("Access denied")
@@ -258,12 +263,12 @@ pub async fn trigger_service_restart() -> Result<HttpResponse, AppError> {
 
 pub async fn restart_application(
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     tracing::info!("收到重启应用请求");
     trigger_service_restart().await
 }
 
-fn restart_by_exit() -> Result<HttpResponse, AppError> {
+fn restart_by_exit() -> Result<Response, AppError> {
     tracing::info!("使用进程退出方式触发重启（systemd Restart=always 会自动重启）");
 
     tokio::spawn(async {
@@ -272,7 +277,7 @@ fn restart_by_exit() -> Result<HttpResponse, AppError> {
         std::process::exit(0);
     });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "服务正在重启...")))
+    Ok(crate::error::ok_json((), "服务正在重启..."))
 }
 
 fn check_if_running_as_service() -> bool {
@@ -289,7 +294,7 @@ fn check_if_running_as_service() -> bool {
     std::path::Path::new("/etc/systemd/system/ipma.service").exists()
 }
 
-async fn restart_standalone_process() -> Result<HttpResponse, AppError> {
+async fn restart_standalone_process() -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
 
@@ -340,16 +345,16 @@ exec "$2"
         std::process::exit(0);
     });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success(
+    Ok(crate::error::ok_json(
         (),
         "服务重启命令已发送，服务正在重启",
-    )))
+    ))
 }
 
 pub async fn disable_init_mode(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     tracing::info!("收到关闭初始化模式请求");
 
     let mut new_config = state.config.clone();
@@ -369,33 +374,41 @@ pub async fn disable_init_mode(
 }
 
 pub async fn backup_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
     let config_json = serde_json::to_string_pretty(&config)
         .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .append_header((
-            actix_web::http::header::CONTENT_DISPOSITION,
-            format!(
-                "attachment; filename=ipma_config_backup_{}.json",
-                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    Ok((
+        StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/json".to_string(),
             ),
-        ))
-        .body(config_json))
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=ipma_config_backup_{}.json",
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                ),
+            ),
+        ],
+        config_json,
+    )
+        .into_response())
 }
 
 pub async fn restore_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-    payload: web::Json<Config>,
-) -> Result<HttpResponse, AppError> {
-    let mut new_config = payload.into_inner();
+    AppJson(payload): AppJson<Config>,
+) -> Result<Response, AppError> {
+    let mut new_config = payload;
 
     if new_config.init.enabled {
         return Err(AppError::Validation(
@@ -419,7 +432,7 @@ pub async fn restore_config(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "系统配置恢复成功")))
+    Ok(crate::error::ok_json((), "系统配置恢复成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -439,20 +452,20 @@ pub struct UpdatePageTimeoutRequest {
 }
 
 pub async fn get_session_timeout_config(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "session_timeout": state.config.server.session_timeout
         }),
         "会话超时配置获取成功",
-    )))
+    ))
 }
 
 pub async fn update_session_timeout_config(
-    req: web::Json<UpdateSessionTimeoutRequest>,
-    _state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+    State(_state): State<Arc<AppState>>,
+    AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
+) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
@@ -468,10 +481,10 @@ pub async fn update_session_timeout_config(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "会话超时配置更新成功")))
+    Ok(crate::error::ok_json((), "会话超时配置更新成功"))
 }
 
-pub async fn get_supported_languages() -> Result<HttpResponse, AppError> {
+pub async fn get_supported_languages() -> Result<Response, AppError> {
     let supported_languages = vec![
         serde_json::json!({
             "code": "en",
@@ -485,16 +498,16 @@ pub async fn get_supported_languages() -> Result<HttpResponse, AppError> {
         }),
     ];
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         supported_languages,
         "获取支持的语言列表成功",
-    )))
+    ))
 }
 
 pub async fn update_language_setting(
-    _state: web::Data<AppState>,
-    req: web::Json<UpdateLanguageRequest>,
-) -> Result<HttpResponse, AppError> {
+    State(_state): State<Arc<AppState>>,
+    AppJson(req): AppJson<UpdateLanguageRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let language = req.language.to_lowercase();
@@ -522,22 +535,24 @@ pub async fn update_language_setting(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "语言设置更新成功")))
+    Ok(crate::error::ok_json((), "语言设置更新成功"))
 }
 
-pub async fn get_page_timeout_config(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+pub async fn get_page_timeout_config(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "page_timeout": state.config.server.page_timeout
         }),
         "页面超时配置获取成功",
-    )))
+    ))
 }
 
 pub async fn update_page_timeout_config(
-    req: web::Json<UpdatePageTimeoutRequest>,
-    _state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+    State(_state): State<Arc<AppState>>,
+    AppJson(req): AppJson<UpdatePageTimeoutRequest>,
+) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
@@ -553,7 +568,7 @@ pub async fn update_page_timeout_config(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "页面超时配置更新成功")))
+    Ok(crate::error::ok_json((), "页面超时配置更新成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -562,8 +577,8 @@ pub struct NotificationSettings {
 }
 
 pub async fn get_notification_settings(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
     let recipients = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
@@ -576,18 +591,18 @@ pub async fn get_notification_settings(
         _ => Vec::new(),
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         NotificationSettings {
             email_recipients: recipients,
         },
         "通知设置获取成功",
-    )))
+    ))
 }
 
 pub async fn update_notification_settings(
-    state: web::Data<AppState>,
-    req: web::Json<NotificationSettings>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<NotificationSettings>,
+) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
         .map_err(|e| AppError::Internal(format!("序列化失败: {e}")))?;
 
@@ -600,7 +615,7 @@ pub async fn update_notification_settings(
     .await
     .map_err(|e| AppError::Internal(format!("数据库操作失败: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知设置更新成功")))
+    Ok(crate::error::ok_json((), "通知设置更新成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -614,9 +629,9 @@ pub struct SmtpConfigResponse {
 }
 
 pub async fn get_smtp_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
         None => {
@@ -634,7 +649,7 @@ pub async fn get_smtp_config(
         has_password: !config.password.is_empty(),
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(resp, "SMTP配置获取成功")))
+    Ok(crate::error::ok_json(resp, "SMTP配置获取成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -652,10 +667,10 @@ pub struct UpdateSmtpConfigRequest {
 }
 
 pub async fn update_smtp_config(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<UpdateSmtpConfigRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<UpdateSmtpConfigRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
     if req.port == 0 {
         return Err(AppError::Validation("SMTP端口不能为0".to_string()));
@@ -685,7 +700,7 @@ pub async fn update_smtp_config(
         .await
         .map_err(|e| AppError::Internal(format!("保存SMTP配置失败: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP配置更新成功")))
+    Ok(crate::error::ok_json((), "SMTP配置更新成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -695,9 +710,9 @@ pub struct TestSmtpRequest {
 }
 
 pub async fn test_smtp_connection(
-    state: web::Data<AppState>,
-    req: web::Json<TestSmtpRequest>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<TestSmtpRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
@@ -712,7 +727,7 @@ pub async fn test_smtp_connection(
         .await
         .map_err(|e| AppError::Internal(format!("SMTP测试失败: {e}")))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "SMTP连接测试成功")))
+    Ok(crate::error::ok_json((), "SMTP连接测试成功"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -726,10 +741,10 @@ pub struct SendSystemEmailRequest {
 }
 
 pub async fn send_system_email(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<SendSystemEmailRequest>,
-) -> Result<HttpResponse, AppError> {
+    AppJson(req): AppJson<SendSystemEmailRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     send_email_to_users(
@@ -749,7 +764,7 @@ pub async fn send_system_email(
         }
     })?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "邮件发送成功")))
+    Ok(crate::error::ok_json((), "邮件发送成功"))
 }
 
 #[derive(Debug, Serialize)]
@@ -763,7 +778,7 @@ pub struct ServiceStatus {
     pub uptime_seconds: Option<u64>,
 }
 
-pub async fn get_service_status() -> Result<HttpResponse, AppError> {
+pub async fn get_service_status() -> Result<Response, AppError> {
     let running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
         .await
         .unwrap_or(false);
@@ -828,7 +843,7 @@ pub async fn get_service_status() -> Result<HttpResponse, AppError> {
         (false, None, false, None)
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         ServiceStatus {
             registered: service_file_exists,
             running_as_service,
@@ -839,12 +854,12 @@ pub async fn get_service_status() -> Result<HttpResponse, AppError> {
             uptime_seconds,
         },
         "服务状态获取成功",
-    )))
+    ))
 }
 
 pub async fn register_service(
     _admin: crate::auth::extractor::AdminUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
     let exe_path_str = exe_path
@@ -905,7 +920,7 @@ WantedBy=multi-user.target
 
     match start_output {
         Ok(output) if output.status.success() => {
-            Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "服务注册并启动成功")))
+            Ok(crate::error::ok_json((), "服务注册并启动成功"))
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -918,7 +933,7 @@ WantedBy=multi-user.target
     }
 }
 
-pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let networks_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
         .fetch_one(&state.pool()?.get_conn())
         .await?;
@@ -976,5 +991,5 @@ pub async fn get_dashboard_stats(state: web::Data<AppState>) -> Result<HttpRespo
         }
     });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(stats, "仪表盘统计获取成功")))
+    Ok(crate::error::ok_json(stats, "仪表盘统计获取成功"))
 }

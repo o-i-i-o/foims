@@ -1,5 +1,7 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
 use async_trait::async_trait;
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use thiserror::Error;
@@ -61,14 +63,17 @@ impl DataError {
     }
 }
 
-impl ResponseError for DataError {
-    fn status_code(&self) -> StatusCode {
-        self.status_code()
+impl IntoResponse for DataError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let body = Json(ApiResponse::<()>::error(self.to_string()));
+        (status, body).into_response()
     }
+}
 
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ApiResponse::<()>::error(self.to_string()))
-    }
+/// 构造成功 JSON 响应
+pub fn ok_json<T: Serialize>(data: T, message: &str) -> Response {
+    (StatusCode::OK, Json(ApiResponse::success(data, message))).into_response()
 }
 
 impl From<sqlx::Error> for DataError {

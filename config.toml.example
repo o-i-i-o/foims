@@ -25,19 +25,19 @@ cors_allowed_origins = []
 
 # 监听配置（仅 UDS 模式）
 # 架构说明：
-# - actix-web 监听 Unix Domain Socket，由 nginx 反代（deploy/nginx/ipma.conf）
-# - 静态文件由 nginx 直接托管，actix 仅服务 API
-# - 调试时手动启动 actix 即可，无需安装 systemd 服务
+# - axum 监听 Unix Domain Socket，由 nginx 反代（deploy/nginx/ipma.conf）
+# - 静态文件由 nginx 直接托管，axum 仅服务 API
+# - 调试时手动启动 axum 即可，无需安装 systemd 服务
 #   示例：sudo IPMA_WEB_DIR=/path/to/ipma/web ./target/release/ipma
-# - nginx 与 actix 通过 UDS 通信，性能优于 TCP loopback
+# - nginx 与 axum 通过 UDS 通信，性能优于 TCP loopback
 [server.listen]
 # UDS socket 文件路径，需与 nginx upstream 配置一致
 # 调试：/tmp/ipma-dev.sock（避免权限问题）
 # 生产：/run/ipma/api.sock（systemd RuntimeDirectory 管理）
 uds_path = "/tmp/ipma-dev.sock"
-# 是否由 actix 托管静态文件
-# - false（推荐）：静态文件由 nginx 直接服务，actix 仅 API
-# - true：actix 同时托管静态文件和 API（不推荐，与 nginx 重复）
+# 是否由 axum 托管静态文件
+# - false（推荐）：静态文件由 nginx 直接服务，axum 仅 API
+# - true：axum 同时托管静态文件和 API（不推荐，与 nginx 重复）
 serve_static = false
 
 [jwt]

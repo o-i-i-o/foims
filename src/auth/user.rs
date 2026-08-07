@@ -1,21 +1,27 @@
-use crate::app_state::AppState;
-use crate::auth::utils::hash_password;
-use crate::error::AppError;
-use crate::models::{ApiResponse, User, UserCreate, UserUpdate};
-use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
-use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::app_state::AppState;
+use crate::auth::utils::hash_password;
+use crate::error::AppError;
+use crate::models::{User, UserCreate, UserUpdate};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
+use crate::utils::pagination::Pagination;
+use crate::utils::{OperationLogParams, log_system_operation};
+
 pub async fn get_users(
     _admin: crate::auth::extractor::AdminUser,
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -59,7 +65,7 @@ pub async fn get_users(
         (total, users)
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": users,
             "total": total,
@@ -68,16 +74,16 @@ pub async fn get_users(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "用户获取成功",
-    )))
+    ))
 }
 
 pub async fn create_user(
-    state: web::Data<AppState>,
-    http_req: HttpRequest,
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
     _admin: crate::auth::extractor::AdminUser,
-    req: web::Json<UserCreate>,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    AppJson(req): AppJson<UserCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let conn = state.pool()?.get_conn();
 
@@ -123,7 +129,8 @@ pub async fn create_user(
     if let Err(e) = log_system_operation(
         &conn,
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create_user",
             resource_type: "user",
             resource_id: Some(&id),
@@ -149,15 +156,14 @@ pub async fn create_user(
         updated_at: now,
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户创建成功")))
+    Ok(crate::error::ok_json(user, "用户创建成功"))
 }
 
 pub async fn get_user(
     _admin: crate::auth::extractor::AdminUser,
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let user = sqlx::query_as::<_, User>(
@@ -168,19 +174,17 @@ pub async fn get_user(
     .await?
     .ok_or_else(|| AppError::NotFound("用户未找到".to_string()))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户获取成功")))
+    Ok(crate::error::ok_json(user, "用户获取成功"))
 }
 
 pub async fn update_user(
-    state: web::Data<AppState>,
-    http_req: HttpRequest,
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
     _admin: crate::auth::extractor::AdminUser,
-    id_path: web::Path<Uuid>,
-    req: web::Json<UserUpdate>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    Path(id): Path<Uuid>,
+    AppJson(req): AppJson<UserUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let conn = state.pool()?.get_conn();
 
@@ -215,7 +219,8 @@ pub async fn update_user(
     if let Err(e) = log_system_operation(
         &conn,
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update_user",
             resource_type: "user",
             resource_id: Some(&id),
@@ -236,16 +241,15 @@ pub async fn update_user(
     .fetch_one(&conn)
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<User>::success(user, "用户更新成功")))
+    Ok(crate::error::ok_json(user, "用户更新成功"))
 }
 
 pub async fn delete_user(
-    state: web::Data<AppState>,
-    http_req: HttpRequest,
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
     _admin: crate::auth::extractor::AdminUser,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
@@ -272,7 +276,8 @@ pub async fn delete_user(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete_user",
             resource_type: "user",
             resource_id: Some(&id),
@@ -286,5 +291,5 @@ pub async fn delete_user(
     }
     tracing::info!("用户删除成功, ID: {}", id);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "用户删除成功")))
+    Ok(crate::error::ok_json((), "用户删除成功"))
 }

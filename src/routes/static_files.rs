@@ -1,7 +1,10 @@
 use std::sync::OnceLock;
 
-use actix_web::error::{ErrorBadRequest, JsonPayloadError};
-use actix_web::{Error, HttpRequest, HttpResponse};
+use axum::Json;
+use axum::extract::{FromRequest, Request};
+use serde::de::DeserializeOwned;
+
+use crate::error::AppError;
 
 pub const WEB_DIR_PATHS: [&str; 2] = ["/opt/ipma/web", "/usr/share/ipma/web"];
 
@@ -27,54 +30,11 @@ pub fn get_web_dir() -> &'static str {
     })
 }
 
-async fn validate_static_path(file_path: &str, base_dir: &str) -> Option<std::path::PathBuf> {
-    let resolved = std::path::PathBuf::from(file_path);
-    let canonical = match tokio::fs::canonicalize(&resolved).await {
-        Ok(c) => c,
-        Err(_) => return None,
-    };
-    let canonical_base = match tokio::fs::canonicalize(base_dir).await {
-        Ok(c) => c,
-        Err(_) => return None,
-    };
-    if canonical.starts_with(&canonical_base) {
-        Some(canonical)
-    } else {
-        None
-    }
-}
+// ==================== JSON 提取器包装器 ====================
 
-pub async fn serve_json(req: HttpRequest) -> Result<HttpResponse, Error> {
-    let path = req.path();
-    let file_path = path.trim_start_matches("/static/");
-    if file_path.contains("..") {
-        return Ok(HttpResponse::NotFound().finish());
-    }
-    let web_dir = get_web_dir();
-    let full_path = format!("{web_dir}/static/{file_path}");
-    let validated = match validate_static_path(&full_path, web_dir).await {
-        Some(p) => p,
-        None => return Ok(HttpResponse::NotFound().finish()),
-    };
-
-    let content = match tokio::fs::read_to_string(&validated).await {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(HttpResponse::NotFound().finish());
-        }
-        Err(e) => {
-            tracing::error!("读取静态文件失败: {} - {}", full_path, e);
-            return Err(actix_web::error::ErrorInternalServerError("无法读取文件"));
-        }
-    };
-
-    Ok(HttpResponse::Ok()
-        .content_type("application/json; charset=utf-8")
-        .body(content))
-}
-
-pub fn json_error_handler(err: JsonPayloadError, _req: &HttpRequest) -> Error {
-    let err_str = err.to_string();
+/// 将 axum `JsonRejection` 转换为带友好中文提示的 `AppError`
+fn map_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> AppError {
+    let err_str = rejection.to_string();
     let friendly_message = if err_str.contains("missing field") {
         let field_name = err_str.split('`').nth(1).unwrap_or("");
         format!("缺少必填字段: {field_name}")
@@ -85,7 +45,26 @@ pub fn json_error_handler(err: JsonPayloadError, _req: &HttpRequest) -> Error {
         format!("JSON格式错误: {err_str}")
     };
 
-    ErrorBadRequest(
-        serde_json::json!({"success": false, "message": friendly_message, "data": null}),
-    )
+    AppError::Validation(friendly_message)
+}
+
+/// JSON 请求体提取器（带友好的中文错误提示）
+///
+/// 替代 actix-web 中的 `web::JsonConfig::error_handler` 配置。
+/// 所有需要解析 JSON 请求体的 handler 应使用 `AppJson<T>` 而不是 `Json<T>`。
+pub struct AppJson<T>(pub T);
+
+impl<T, S> FromRequest<S> for AppJson<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let json = Json::<T>::from_request(req, state)
+            .await
+            .map_err(map_json_rejection)?;
+        Ok(AppJson(json.0))
+    }
 }

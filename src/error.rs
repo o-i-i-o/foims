@@ -1,4 +1,6 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use thiserror::Error;
 use tracing::error;
 
@@ -44,25 +46,29 @@ impl AppError {
     }
 }
 
-impl ResponseError for AppError {
-    fn status_code(&self) -> StatusCode {
-        self.status_code()
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        match self {
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let body = match self {
             AppError::Internal(msg) => {
                 error!("内部错误详情: {}", msg);
-                HttpResponse::build(self.status_code()).json(
-                    crate::models::ApiResponse::<()>::error(
-                        "服务器内部错误，请稍后重试".to_string(),
-                    ),
-                )
+                Json(crate::models::ApiResponse::<()>::error(
+                    "服务器内部错误，请稍后重试".to_string(),
+                ))
             }
-            _ => HttpResponse::build(self.status_code())
-                .json(crate::models::ApiResponse::<()>::error(self.to_string())),
-        }
+            other => Json(crate::models::ApiResponse::<()>::error(other.to_string())),
+        };
+        (status, body).into_response()
     }
+}
+
+/// 构造成功 JSON 响应
+pub fn ok_json<T: serde::Serialize>(data: T, message: &str) -> Response {
+    (
+        StatusCode::OK,
+        Json(crate::models::ApiResponse::success(data, message)),
+    )
+        .into_response()
 }
 
 impl From<sqlx::Error> for AppError {

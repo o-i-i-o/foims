@@ -1,24 +1,27 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, IpManager, Workstation, WorkstationCreate, WorkstationUpdate,
-    WorkstationWithDetails,
+    IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_workstations(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -164,7 +167,7 @@ pub async fn get_workstations(
         workstations_with_details.push(workstation_with_details);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": workstations_with_details,
             "total": total,
@@ -173,15 +176,15 @@ pub async fn get_workstations(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "工位获取成功",
-    )))
+    ))
 }
 
 pub async fn create_workstation(
-    state: web::Data<AppState>,
-    req: web::Json<WorkstationCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<WorkstationCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -236,7 +239,8 @@ pub async fn create_workstation(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "workstation",
             resource_id: Some(&id),
@@ -249,18 +253,13 @@ pub async fn create_workstation(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Workstation>::success(
-        workstation,
-        "工位创建成功",
-    )))
+    Ok(crate::error::ok_json(workstation, "工位创建成功"))
 }
 
 pub async fn get_workstation(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let workstation = sqlx::query_as::<_, Workstation>(
         "SELECT w.id, w.name, w.room_id, r.name as room_name, w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ FROM workstations w LEFT JOIN rooms r ON w.room_id = r.id WHERE w.id = $1"
     ).bind(id)
@@ -294,23 +293,19 @@ pub async fn get_workstation(
         updated_at: workstation.updated_at,
     };
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
-            workstation_with_details,
-            "工位获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(
+        workstation_with_details,
+        "工位获取成功",
+    ))
 }
 
 pub async fn update_workstation(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<WorkstationUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<WorkstationUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -390,7 +385,8 @@ pub async fn update_workstation(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "workstation",
             resource_id: Some(&id),
@@ -403,21 +399,14 @@ pub async fn update_workstation(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<WorkstationWithDetails>::success(
-            result,
-            "工位更新成功",
-        )),
-    )
+    Ok(crate::error::ok_json(result, "工位更新成功"))
 }
 
 pub async fn delete_workstation(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing_workstation: Option<Uuid> =
@@ -448,7 +437,8 @@ pub async fn delete_workstation(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "workstation",
             resource_id: Some(&id),
@@ -461,5 +451,5 @@ pub async fn delete_workstation(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "工位删除成功")))
+    Ok(crate::error::ok_json((), "工位删除成功"))
 }

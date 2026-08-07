@@ -1,4 +1,9 @@
-use actix_web::{HttpResponse, web};
+use std::sync::Arc;
+
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use sqlx::PgPool;
 use tracing::info;
 
@@ -7,11 +12,15 @@ use crate::connection::ensure_database_and_schema;
 use crate::context::InitContext;
 use crate::error::InitError;
 
-pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+fn json_ok(value: serde_json::Value) -> Response {
+    (StatusCode::OK, Json(value)).into_response()
+}
+
+pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(json_ok(serde_json::json!({
                 "success": true,
                 "data": {
                     "connected": false,
@@ -42,7 +51,7 @@ pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse
         false
     };
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({
+    Ok(json_ok(serde_json::json!({
         "success": true,
         "data": {
             "connected": true,
@@ -53,9 +62,9 @@ pub async fn check_db_status(ctx: web::Data<InitContext>) -> Result<HttpResponse
     })))
 }
 
-pub async fn check_init_status(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     let Ok(pool) = ensure_database_and_schema(&ctx.db_config).await else {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
+        return Ok(json_ok(serde_json::json!({
             "initialized": false,
             "version": env!("CARGO_PKG_VERSION"),
         })));
@@ -69,23 +78,23 @@ pub async fn check_init_status(ctx: web::Data<InitContext>) -> Result<HttpRespon
         Err(_) => false,
     };
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({
+    Ok(json_ok(serde_json::json!({
         "initialized": initialized,
         "version": env!("CARGO_PKG_VERSION"),
     })))
 }
 
-pub async fn restart_program(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     info!("收到重启程序请求，正在准备重启...");
     (ctx.restart_fn)().await.map_err(InitError::Internal)?;
-    Ok(HttpResponse::Ok().json(crate::ApiResponse::<()> {
-        success: true,
-        message: "服务重启命令已发送，服务正在重启...".to_string(),
-        data: None,
-    }))
+    Ok(json_ok(serde_json::json!({
+        "success": true,
+        "message": "服务重启命令已发送，服务正在重启...",
+        "data": null,
+    })))
 }
 
-pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, InitError> {
+pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     let installed = match tokio::process::Command::new("which")
         .arg("psql")
         .status()
@@ -99,7 +108,7 @@ pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, In
     };
 
     if !installed {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
+        return Ok(json_ok(serde_json::json!({
             "installed": false,
             "running": false,
             "error": "PostgreSQL is not installed. Please install PostgreSQL first."
@@ -112,7 +121,7 @@ pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, In
     );
 
     match PgPool::connect(&url).await {
-        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
+        Ok(_) => Ok(json_ok(serde_json::json!({
             "installed": true,
             "running": true,
             "message": "PostgreSQL is running and connection is successful."
@@ -123,7 +132,7 @@ pub async fn check_pgsql(ctx: web::Data<InitContext>) -> Result<HttpResponse, In
                 && !error_str.contains("timeout")
                 && !error_str.contains("refused");
 
-            Ok(HttpResponse::Ok().json(serde_json::json!({
+            Ok(json_ok(serde_json::json!({
                 "installed": true,
                 "running": running,
                 "error": error_str

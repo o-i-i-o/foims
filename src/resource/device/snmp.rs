@@ -1,10 +1,12 @@
+use std::sync::Arc;
 use std::time::Duration;
 
-use actix_web::{HttpResponse, web};
 use async_snmp::{
     Auth, Client, Error, oid,
     v3::{AuthProtocol, PrivProtocol},
 };
+use axum::extract::{Path, State};
+use axum::response::Response;
 use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
@@ -12,7 +14,8 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
-use crate::models::{ApiResponse, SnmpTestRequest, SwitchPortCreate};
+use crate::models::{SnmpTestRequest, SwitchPortCreate};
+use crate::routes::static_files::AppJson;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SwitchForSnmp {
@@ -496,20 +499,19 @@ pub async fn get_switch_ports_via_snmp(
 }
 
 pub async fn test_snmp_connection_by_id(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    req: web::Json<SnmpTestRequest>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-    let mut test_req = req.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+    AppJson(req): AppJson<SnmpTestRequest>,
+) -> Result<Response, AppError> {
+    let mut test_req = req;
     test_req.device_id = Some(device_id);
-    test_snmp_connection(state, web::Json(test_req)).await
+    test_snmp_connection(State(state), AppJson(test_req)).await
 }
 
 pub async fn test_snmp_connection(
-    state: web::Data<AppState>,
-    req: web::Json<SnmpTestRequest>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<SnmpTestRequest>,
+) -> Result<Response, AppError> {
     tracing::info!(
         "[test_snmp] 测试连接: device_id={:?}, ip={:?}, snmp_version={:?}",
         req.device_id,
@@ -619,20 +621,18 @@ pub async fn test_snmp_connection(
     );
 
     match test_snmp(&snmp_params, 5).await {
-        Ok(sys_descr) => Ok(HttpResponse::Ok().json(ApiResponse::success(
+        Ok(sys_descr) => Ok(crate::error::ok_json(
             serde_json::json!({ "sysDescr": sys_descr }),
             "SNMP连接测试成功",
-        ))),
+        )),
         Err(e) => Err(AppError::Snmp(format!("SNMP连接测试失败: {e}"))),
     }
 }
 
 pub async fn get_device_info_snmp(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let (switch, ip_address) =
         get_device_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
@@ -642,20 +642,18 @@ pub async fn get_device_info_snmp(
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_info_via_snmp(&snmp_params).await {
-        Ok((vendor, model)) => Ok(HttpResponse::Ok().json(ApiResponse::success(
+        Ok((vendor, model)) => Ok(crate::error::ok_json(
             serde_json::json!({ "vendor": vendor, "model": model }),
             "获取交换机信息成功",
-        ))),
+        )),
         Err(e) => Err(AppError::Snmp(format!("获取交换机信息失败: {e}"))),
     }
 }
 
 pub async fn get_device_ports_snmp(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let (switch, ip_address) =
         get_device_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
@@ -665,9 +663,7 @@ pub async fn get_device_ports_snmp(
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_switch_ports_via_snmp(&snmp_params).await {
-        Ok(ports) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success(ports, "获取交换机端口信息成功")))
-        }
+        Ok(ports) => Ok(crate::error::ok_json(ports, "获取交换机端口信息成功")),
         Err(e) => Err(AppError::Snmp(format!("获取交换机端口信息失败: {e}"))),
     }
 }

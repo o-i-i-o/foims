@@ -1,5 +1,5 @@
-use crate::types::{ApiResponse, ClearLogsRequest, DataError, DataProvider, DataResult};
-use actix_web::{HttpResponse, web};
+use crate::types::{ClearLogsRequest, DataError, DataProvider, DataResult, ok_json};
+use axum::response::Response;
 use serde_json::json;
 use sqlx::PgPool;
 use validator::Validate;
@@ -108,22 +108,21 @@ pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataRe
 /// API 端点：清理日志
 pub async fn clear_logs<P: DataProvider>(
     provider: P,
-    req: web::Json<ClearLogsRequest>,
-) -> DataResult<HttpResponse> {
-    let req = req.into_inner();
+    req: ClearLogsRequest,
+) -> DataResult<Response> {
     req.validate()?;
     let days = req.days.unwrap_or(0);
     let pool = provider.pool()?;
 
     let deleted = clear_logs_core(&pool, days, &req.log_type).await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(ok_json(
         json!({ "deleted": deleted }),
         &format!("成功清理 {deleted} 条日志记录"),
-    )))
+    ))
 }
 
-pub async fn get_logs_stats<P: DataProvider>(provider: P) -> DataResult<HttpResponse> {
+pub async fn get_logs_stats<P: DataProvider>(provider: P) -> DataResult<Response> {
     let pool = provider.pool()?;
 
     let operation_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_logs")
@@ -155,12 +154,12 @@ pub async fn get_logs_stats<P: DataProvider>(provider: P) -> DataResult<HttpResp
     .await
     .map_err(DataError::from)?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(ok_json(
         json!({
             "operation_logs": { "count": operation_count, "oldest": operation_oldest },
             "login_logs": { "count": login_count, "oldest": login_oldest },
             "notifications": { "count": notification_count }
         }),
         "日志统计获取成功",
-    )))
+    ))
 }

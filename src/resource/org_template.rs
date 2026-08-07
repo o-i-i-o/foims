@@ -1,18 +1,22 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{
-    ApiResponse, OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate,
-};
+use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 /// 获取所有可用的组织类型配置（从所有模板中提取）
-pub async fn get_available_org_types(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_available_org_types(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
     // 获取所有模板
     let templates: Vec<OrgTemplate> = sqlx::query_as(
         "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
@@ -56,13 +60,13 @@ pub async fn get_available_org_types(state: web::Data<AppState>) -> Result<HttpR
     let types: Vec<String> = all_types.into_iter().collect();
     let icons = serde_json::Value::Object(all_icons);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "types": types,
             "icons": icons
         }),
         "获取组织类型配置成功",
-    )))
+    ))
 }
 
 /// 校验 levels 映射格式并返回根类型
@@ -333,26 +337,24 @@ pub fn get_allowed_children(
 }
 
 /// 获取所有模板
-pub async fn get_org_templates(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_org_templates(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let templates = sqlx::query_as::<_, OrgTemplateSummary>(
         "SELECT id, name, levels, icons, description FROM org_templates ORDER BY created_at ASC",
     )
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({ "items": templates }),
         "模板列表获取成功",
-    )))
+    ))
 }
 
 /// 获取单个模板
 pub async fn get_org_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let template = sqlx::query_as::<_, OrgTemplate>(
         "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates WHERE id = $1",
@@ -362,19 +364,16 @@ pub async fn get_org_template(
     .await?
     .ok_or_else(|| AppError::NotFound("模板未找到".to_string()))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<OrgTemplate>::success(
-        template,
-        "模板获取成功",
-    )))
+    Ok(crate::error::ok_json(template, "模板获取成功"))
 }
 
 /// 创建模板
 pub async fn create_org_template(
-    state: web::Data<AppState>,
-    req: web::Json<OrgTemplateCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<OrgTemplateCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     // 校验 levels 映射格式
     let _root_type = validate_levels_mapping(&req.levels)?;
@@ -426,7 +425,8 @@ pub async fn create_org_template(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "org_template",
             resource_id: Some(&id),
@@ -439,21 +439,17 @@ pub async fn create_org_template(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<OrgTemplate>::success(
-        template,
-        "模板创建成功",
-    )))
+    Ok(crate::error::ok_json(template, "模板创建成功"))
 }
 
 /// 更新模板
 pub async fn update_org_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<OrgTemplateUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<OrgTemplateUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     // 如果更新了 levels，需要校验
     if let Some(ref levels_val) = req.levels {
@@ -542,7 +538,8 @@ pub async fn update_org_template(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "org_template",
             resource_id: Some(&id),
@@ -555,20 +552,15 @@ pub async fn update_org_template(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<OrgTemplate>::success(
-        template,
-        "模板更新成功",
-    )))
+    Ok(crate::error::ok_json(template, "模板更新成功"))
 }
 
 /// 删除模板
 pub async fn delete_org_template(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1")
@@ -601,7 +593,8 @@ pub async fn delete_org_template(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "org_template",
             resource_id: Some(&id),
@@ -614,5 +607,5 @@ pub async fn delete_org_template(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "模板删除成功")))
+    Ok(crate::error::ok_json((), "模板删除成功"))
 }

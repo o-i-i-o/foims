@@ -1,4 +1,7 @@
-use actix_web::{HttpRequest, HttpResponse, web};
+use std::sync::Arc;
+
+use axum::extract::{Path, State};
+use axum::response::Response;
 use chrono::{DateTime, Utc};
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -7,10 +10,12 @@ use validator::Validate;
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard,
-    NetworkCardSyncItem, PortSyncItem,
+    DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
+    PortSyncItem,
 };
 use crate::resource::ip::detect_ip_version;
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
@@ -21,13 +26,12 @@ pub const DEFAULT_PORT_NAME: &str = "eth0";
 
 /// 同步设备的网卡配置（网卡 → 网口 → IP），整体替换
 pub async fn sync_device_network_config(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-    req: web::Json<DeviceNetworkConfigSync>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<DeviceNetworkConfigSync>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -56,7 +60,8 @@ pub async fn sync_device_network_config(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "sync",
             resource_type: "device_network_config",
             resource_id: Some(&device_id),
@@ -70,7 +75,7 @@ pub async fn sync_device_network_config(
     }
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), device_id).await?;
-    Ok(HttpResponse::Ok().json(ApiResponse::success(cards, "网卡配置同步成功")))
+    Ok(crate::error::ok_json(cards, "网卡配置同步成功"))
 }
 
 /// 应用网卡配置：先删除设备下所有 IP/网口/网卡，再按 cards 重建。

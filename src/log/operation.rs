@@ -1,14 +1,19 @@
-use crate::app_state::AppState;
-use crate::error::AppError;
-use crate::models::{ApiResponse, OperationLog};
-use crate::utils::pagination::Pagination;
-use actix_web::{HttpResponse, web};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::extract::{Query, State};
+use axum::response::Response;
 use uuid::Uuid;
 
+use crate::app_state::AppState;
+use crate::error::AppError;
+use crate::models::OperationLog;
+use crate::utils::pagination::Pagination;
+
 pub async fn get_operation_logs(
-    state: web::Data<AppState>,
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let resource_type = query.get("resource_type").cloned().unwrap_or_default();
     let resource_id = query.get("resource_id").cloned().unwrap_or_default();
     let user_id = query.get("user_id").cloned().unwrap_or_default();
@@ -100,7 +105,7 @@ pub async fn get_operation_logs(
         (total, logs)
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "data": logs,
             "total": total,
@@ -109,5 +114,5 @@ pub async fn get_operation_logs(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "操作日志获取成功",
-    )))
+    ))
 }

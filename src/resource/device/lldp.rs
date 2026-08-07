@@ -1,13 +1,15 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use actix_web::{HttpResponse, web};
 use async_snmp::{Client, VarBind, oid};
+use axum::extract::{Path, State};
+use axum::response::Response;
 use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{ApiResponse, DeviceLldp, LldpNeighbor};
+use crate::models::{DeviceLldp, LldpNeighbor};
 
 use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
 
@@ -378,10 +380,9 @@ fn format_mac_address(bytes: &[u8]) -> String {
 }
 
 pub async fn get_device_lldp_neighbors(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
@@ -400,14 +401,13 @@ pub async fn get_device_lldp_neighbors(
     .fetch_all(&conn)
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(lldps, "获取LLDP邻居成功")))
+    Ok(crate::error::ok_json(lldps, "获取LLDP邻居成功"))
 }
 
 pub async fn sync_lldp_from_snmp(
-    state: web::Data<AppState>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let device_id = path.into_inner();
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let neighbors = get_lldp_neighbors(&conn, &device_id)
@@ -505,5 +505,5 @@ pub async fn sync_lldp_from_snmp(
         "LLDP 数据无变化".to_string()
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(saved_lldps, &message)))
+    Ok(crate::error::ok_json(saved_lldps, &message))
 }

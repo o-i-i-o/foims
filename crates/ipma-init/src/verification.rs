@@ -1,12 +1,14 @@
-use actix_web::{HttpResponse, web};
-use rand::RngExt;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+
+use axum::extract::State;
+use axum::response::Response;
+use rand::RngExt;
 use tracing::info;
 
-use crate::ApiResponse;
 use crate::context::InitContext;
-use crate::error::InitError;
+use crate::error::{InitError, ok_json};
 use crate::types::{VERIFICATION_CODE_EXPIRY_SECS, VerificationCode};
 
 static VERIFICATION_CODE: OnceLock<Mutex<VerificationCode>> = OnceLock::new();
@@ -79,16 +81,13 @@ pub fn verify_code(provided_code: &str) -> Result<(), String> {
 }
 
 pub async fn get_verification_code(
-    _ctx: web::Data<InitContext>,
-) -> Result<HttpResponse, InitError> {
+    State(_ctx): State<Arc<InitContext>>,
+) -> Result<Response, InitError> {
     let verification_code = generate_and_print_verification_code();
 
     if let Ok(mut lock) = get_verification_code_storage().lock() {
         *lock = verification_code;
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
-        (),
-        "验证码生成成功，请检查服务器控制台。",
-    )))
+    Ok(ok_json((), "验证码生成成功，请检查服务器控制台。"))
 }

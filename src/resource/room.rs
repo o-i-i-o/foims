@@ -1,24 +1,28 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, CabinetBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate, RoomUpdate,
-    RoomWithNetworks, WorkstationBrief,
+    CabinetBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate, RoomUpdate, RoomWithNetworks,
+    WorkstationBrief,
 };
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_rooms(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -125,7 +129,7 @@ pub async fn get_rooms(
         rooms_with_networks.push(room_with_networks);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": rooms_with_networks,
             "total": total,
@@ -134,15 +138,15 @@ pub async fn get_rooms(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "房间获取成功",
-    )))
+    ))
 }
 
 pub async fn create_room(
-    state: web::Data<AppState>,
-    req: web::Json<RoomCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<RoomCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE name = $1")
         .bind(&req.name)
@@ -203,7 +207,8 @@ pub async fn create_room(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "room",
             resource_id: Some(&id),
@@ -216,15 +221,13 @@ pub async fn create_room(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Room>::success(room, "房间创建成功")))
+    Ok(crate::error::ok_json(room, "房间创建成功"))
 }
 
 pub async fn get_room(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let room = sqlx::query_as::<_, Room>(
         "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
@@ -307,23 +310,16 @@ pub async fn get_room(
         updated_at: room.updated_at,
     };
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<RoomWithNetworks>::success(
-            room_with_networks,
-            "房间获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(room_with_networks, "房间获取成功"))
 }
 
 pub async fn update_room(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<RoomUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<RoomUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
@@ -389,7 +385,8 @@ pub async fn update_room(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "room",
             resource_id: Some(&id),
@@ -402,16 +399,14 @@ pub async fn update_room(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<Room>::success(room, "房间更新成功")))
+    Ok(crate::error::ok_json(room, "房间更新成功"))
 }
 
 pub async fn delete_room(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -456,7 +451,8 @@ pub async fn delete_room(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "room",
             resource_id: Some(&id),
@@ -469,15 +465,13 @@ pub async fn delete_room(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "房间删除成功")))
+    Ok(crate::error::ok_json((), "房间删除成功"))
 }
 
 pub async fn get_room_networks(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -498,22 +492,16 @@ pub async fn get_room_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<NetworkInfo>>::success(
-            room_networks,
-            "房间网段获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(room_networks, "房间网段获取成功"))
 }
 
 pub async fn sync_room_children(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<RoomChildrenSync>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<RoomChildrenSync>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let room_type: String = sqlx::query_scalar("SELECT room_type FROM rooms WHERE id = $1")
         .bind(id)
@@ -667,7 +655,8 @@ pub async fn sync_room_children(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "sync_children",
             resource_type: "room",
             resource_id: Some(&id),
@@ -680,7 +669,7 @@ pub async fn sync_room_children(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "房间子项同步成功")))
+    Ok(crate::error::ok_json((), "房间子项同步成功"))
 }
 
 async fn validate_workstation_name(

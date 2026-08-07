@@ -1,16 +1,19 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode,
-    OrganizationUpdate, Room,
+    OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
 };
 use crate::resource::org_template::get_allowed_children;
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
@@ -169,9 +172,9 @@ async fn load_template_levels(
 
 /// 获取组织列表（支持按 parent_id 筛选）
 pub async fn get_organizations(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -246,7 +249,7 @@ pub async fn get_organizations(
     // 解析 org_type
     let items = resolve_org_list_types(&state, &organizations).await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": items,
             "total": total,
@@ -255,11 +258,13 @@ pub async fn get_organizations(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "组织列表获取成功",
-    )))
+    ))
 }
 
 /// 获取组织树形结构
-pub async fn get_organization_tree(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+pub async fn get_organization_tree(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
     let all_orgs = sqlx::query_as::<_, Organization>(
         "SELECT id, name, type_path, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM organizations ORDER BY created_at ASC",
@@ -279,12 +284,7 @@ pub async fn get_organization_tree(state: web::Data<AppState>) -> Result<HttpRes
     }
 
     let tree = build_tree(&all_orgs, &template_levels_map);
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<Vec<OrganizationTreeNode>>::success(
-            tree,
-            "组织树获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(tree, "组织树获取成功"))
 }
 
 /// 从扁平列表构建树形结构（优化版本）
@@ -372,11 +372,9 @@ fn build_tree(
 
 /// 获取单个组织节点（含子节点）
 pub async fn get_organization(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let org = sqlx::query_as::<_, Organization>(
         "SELECT id, name, type_path, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM organizations WHERE id = $1",
@@ -431,16 +429,16 @@ pub async fn get_organization(
         "updated_at": org.updated_at,
     });
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(result, "组织节点获取成功")))
+    Ok(crate::error::ok_json(result, "组织节点获取成功"))
 }
 
 /// 创建组织节点
 pub async fn create_organization(
-    state: web::Data<AppState>,
-    req: web::Json<OrganizationCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<OrganizationCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -595,7 +593,8 @@ pub async fn create_organization(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "organization",
             resource_id: Some(&id),
@@ -608,7 +607,7 @@ pub async fn create_organization(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "id": id,
             "name": req.name,
@@ -622,7 +621,7 @@ pub async fn create_organization(
             "updated_at": now,
         }),
         "组织节点创建成功",
-    )))
+    ))
 }
 
 /// 更新组织节点
@@ -630,13 +629,12 @@ pub async fn create_organization(
 /// 仅支持更新 name / description。
 /// type_path 由模板结构决定，不允许通过此接口修改。
 pub async fn update_organization(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<OrganizationUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<OrganizationUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -713,7 +711,8 @@ pub async fn update_organization(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "organization",
             resource_id: Some(&id),
@@ -726,7 +725,7 @@ pub async fn update_organization(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "id": org.id,
             "name": org.name,
@@ -740,17 +739,15 @@ pub async fn update_organization(
             "updated_at": org.updated_at,
         }),
         "组织节点更新成功",
-    )))
+    ))
 }
 
 /// 删除组织节点
 pub async fn delete_organization(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
@@ -795,7 +792,8 @@ pub async fn delete_organization(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "organization",
             resource_id: Some(&id),
@@ -808,16 +806,14 @@ pub async fn delete_organization(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success((), "组织节点删除成功")))
+    Ok(crate::error::ok_json((), "组织节点删除成功"))
 }
 
 /// 获取指定节点的下级类型信息（基于模板）
 pub async fn get_allowed_child_types(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let org = sqlx::query_as::<_, Organization>(
         "SELECT id, name, type_path, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM organizations WHERE id = $1",
@@ -858,7 +854,7 @@ pub async fn get_allowed_child_types(
     let levels_map = template.levels.as_object();
     let type_count = levels_map.as_ref().map(|m| m.len()).unwrap_or(0);
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "parent_id": id,
             "parent_name": org.name,
@@ -870,16 +866,14 @@ pub async fn get_allowed_child_types(
             "allowed_child_types": allowed
         }),
         "允许的下级类型获取成功",
-    )))
+    ))
 }
 
 /// 获取指定父节点的子节点列表
 pub async fn get_children(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -898,14 +892,14 @@ pub async fn get_children(
 
     let items = resolve_org_list_types(&state, &children).await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(items, "子节点列表获取成功")))
+    Ok(crate::error::ok_json(items, "子节点列表获取成功"))
 }
 
 // ==================== 内部辅助函数 ====================
 
 /// 批量解析组织列表的 org_type
 async fn resolve_org_list_types(
-    state: &web::Data<AppState>,
+    state: &Arc<AppState>,
     orgs: &[Organization],
 ) -> Result<Vec<serde_json::Value>, AppError> {
     let mut template_levels_map: HashMap<Uuid, serde_json::Value> = HashMap::new();
@@ -979,10 +973,9 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
 
 /// 获取组织节点关联的房间列表
 pub async fn get_org_rooms(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -997,10 +990,7 @@ pub async fn get_org_rooms(
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
-    Ok(HttpResponse::Ok().json(ApiResponse::<Vec<Room>>::success(
-        rooms,
-        "组织节点房间列表获取成功",
-    )))
+    Ok(crate::error::ok_json(rooms, "组织节点房间列表获取成功"))
 }
 
 #[cfg(test)]

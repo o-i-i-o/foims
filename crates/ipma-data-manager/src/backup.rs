@@ -1,5 +1,6 @@
 use crate::types::{DataError, DataProvider, DataResult};
-use actix_web::HttpResponse;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 
 pub struct PgPassFile {
     path: std::path::PathBuf,
@@ -154,21 +155,26 @@ pub fn cleanup_old_backup_files(backup_dir: &str, keep_days: u64) -> DataResult<
 }
 
 /// 导出数据库为 HTTP 响应（API 端点使用）
-pub async fn export_database<P: DataProvider>(provider: P) -> DataResult<HttpResponse> {
+pub async fn export_database<P: DataProvider>(provider: P) -> DataResult<Response> {
     let db_config = provider.database_config();
 
     let sql_content = tokio::task::spawn_blocking(move || pg_dump_raw(&db_config))
         .await
         .map_err(|e| DataError::Internal(format!("pg_dump 任务失败: {e}")))??;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/sql")
-        .append_header((
-            actix_web::http::header::CONTENT_DISPOSITION,
-            format!(
-                "attachment; filename=ipma_backup_{}.sql",
-                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/sql".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=ipma_backup_{}.sql",
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                ),
             ),
-        ))
-        .body(sql_content))
+        ],
+        sql_content,
+    )
+        .into_response())
 }

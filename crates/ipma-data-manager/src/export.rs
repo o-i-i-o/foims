@@ -1,5 +1,7 @@
 use crate::types::{DataError, DataProvider, DataResult};
-use actix_web::{HttpResponse, web};
+use axum::extract::Query;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
@@ -16,8 +18,8 @@ fn escape_csv_field(field: &str) -> String {
 
 pub async fn export_csv<P: DataProvider>(
     provider: P,
-    type_param: web::Query<HashMap<String, String>>,
-) -> DataResult<HttpResponse> {
+    type_param: Query<HashMap<String, String>>,
+) -> DataResult<Response> {
     let pool = provider.pool()?;
     let mut conn = pool.acquire().await.map_err(DataError::from)?;
 
@@ -83,17 +85,22 @@ pub async fn export_csv<P: DataProvider>(
     .await
     .map_err(|e| DataError::Internal(format!("ZIP压缩任务失败: {e}")))??;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/zip")
-        .append_header((
-            actix_web::http::header::CONTENT_DISPOSITION,
-            format!(
-                "attachment; filename=ipma_export_{}_{}.zip",
-                export_type,
-                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/zip".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=ipma_export_{}_{}.zip",
+                    export_type,
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                ),
             ),
-        ))
-        .body(buf))
+        ],
+        buf,
+    )
+        .into_response())
 }
 
 async fn export_network_regions(
@@ -515,9 +522,7 @@ async fn export_ip_managers(
     Ok(("ip_managers.csv", csv))
 }
 
-pub async fn download_template(
-    type_param: web::Query<HashMap<String, String>>,
-) -> DataResult<HttpResponse> {
+pub async fn download_template(type_param: Query<HashMap<String, String>>) -> DataResult<Response> {
     let template_type = type_param
         .get("type")
         .cloned()
@@ -602,14 +607,19 @@ pub async fn download_template(
             .map_err(|e| DataError::Internal(format!("完成ZIP文件失败: {e}")))?;
     }
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/zip")
-        .append_header((
-            actix_web::http::header::CONTENT_DISPOSITION,
-            format!(
-                "attachment; filename=ipma_import_template_{}.zip",
-                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/zip".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=ipma_import_template_{}.zip",
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                ),
             ),
-        ))
-        .body(buf.into_inner()))
+        ],
+        buf.into_inner(),
+    )
+        .into_response())
 }

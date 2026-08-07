@@ -8,13 +8,12 @@ The following is a list of the open source components used in this project:
 Rust Dependencies (Cargo.toml)
 ================================================================================
 
-Actix Web Framework
-  - actix-web (Apache-2.0 OR MIT)
-  - actix-rt (Apache-2.0 OR MIT)
-  - actix-multipart (Apache-2.0 OR MIT)
-  - actix-files (Apache-2.0 OR MIT)
-  - actix-cors (Apache-2.0 OR MIT)
-  https://actix.rs/
+Axum Web Framework
+  - axum (MIT)
+  - axum-extra (MIT)
+  - tower (MIT)
+  - tower-http (MIT)
+  https://github.com/tokio-rs/axum
 
 SQLx PostgreSQL Driver
   - sqlx (Apache-2.0 OR MIT)
@@ -73,10 +72,7 @@ Utilities
   - thiserror (Apache-2.0 OR MIT)
   - chrono (Apache-2.0 OR MIT)
   - uuid (Apache-2.0 OR MIT)
-  - lazy_static (Apache-2.0 OR MIT)
-  - num_cpus (Apache-2.0 OR MIT)
   - csv (Apache-2.0 OR MIT)
-  - lru (Apache-2.0 OR MIT)
   - base64 (Apache-2.0 OR MIT)
   - rand (Apache-2.0 OR MIT)
 

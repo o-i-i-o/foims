@@ -1,12 +1,18 @@
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate,
-    CabinetPositionWithDetails, IpManager,
+    CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
+    IpManager,
 };
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
-use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
@@ -16,9 +22,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 pub async fn get_positions(
-    state: web::Data<AppState>,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let page = pagination.page;
     let page_size = pagination.page_size;
@@ -147,7 +153,7 @@ pub async fn get_positions(
         positions_with_details.push(position_with_details);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": positions_with_details,
             "total": total,
@@ -156,15 +162,15 @@ pub async fn get_positions(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "机位获取成功",
-    )))
+    ))
 }
 
 pub async fn create_cabinet_position(
-    state: web::Data<AppState>,
-    req: web::Json<CabinetPositionCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetPositionCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -220,7 +226,8 @@ pub async fn create_cabinet_position(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create",
             resource_type: "cabinet_position",
             resource_id: Some(&id),
@@ -233,20 +240,13 @@ pub async fn create_cabinet_position(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<CabinetPosition>::success(
-            position,
-            "机位创建成功",
-        )),
-    )
+    Ok(crate::error::ok_json(position, "机位创建成功"))
 }
 
 pub async fn get_cabinet_position(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let position_data = sqlx::query(
         r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description,
                   p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ,
@@ -326,23 +326,16 @@ pub async fn get_cabinet_position(
         "updated_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
     });
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(
-            position_with_details,
-            "机位获取成功",
-        )),
-    )
+    Ok(crate::error::ok_json(position_with_details, "机位获取成功"))
 }
 
 pub async fn update_cabinet_position(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<CabinetPositionUpdate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetPositionUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -424,7 +417,8 @@ pub async fn update_cabinet_position(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "update",
             resource_type: "cabinet_position",
             resource_id: Some(&id),
@@ -437,21 +431,14 @@ pub async fn update_cabinet_position(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(
-        HttpResponse::Ok().json(ApiResponse::<CabinetPositionWithDetails>::success(
-            result,
-            "机位更新成功",
-        )),
-    )
+    Ok(crate::error::ok_json(result, "机位更新成功"))
 }
 
 pub async fn delete_cabinet_position(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing_position: Option<Uuid> =
@@ -489,7 +476,8 @@ pub async fn delete_cabinet_position(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "delete",
             resource_type: "cabinet_position",
             resource_id: Some(&id),
@@ -502,5 +490,5 @@ pub async fn delete_cabinet_position(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "机位删除成功")))
+    Ok(crate::error::ok_json((), "机位删除成功"))
 }

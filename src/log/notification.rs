@@ -1,18 +1,22 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
+use serde_json::json;
+use uuid::Uuid;
+
 use crate::app_state::AppState;
 use crate::auth::extractor::AuthUser;
 use crate::error::AppError;
-use crate::models::{ApiResponse, Notification};
+use crate::models::Notification;
 use crate::utils::pagination::Pagination;
-use actix_web::{HttpResponse, web};
-use serde_json::json;
-use std::collections::HashMap;
-use uuid::Uuid;
 
 pub async fn get_notifications(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     auth: AuthUser,
-    query: web::Query<HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let user_id =
         Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
     let pagination = Pagination::from_query(&query);
@@ -50,7 +54,7 @@ pub async fn get_notifications(
     .fetch_all(&conn)
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         json!({
             "items": notifications,
             "total": total,
@@ -59,17 +63,16 @@ pub async fn get_notifications(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "通知列表获取成功",
-    )))
+    ))
 }
 
 pub async fn mark_notification_read(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     auth: AuthUser,
-    id: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
+    Path(notification_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let user_id =
         Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
-    let notification_id = *id;
     let conn = state.pool()?.get_conn();
 
     let existing_notification = sqlx::query_scalar::<_, Uuid>(
@@ -90,13 +93,13 @@ pub async fn mark_notification_read(
         .execute(&conn)
         .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "通知已标记为已读")))
+    Ok(crate::error::ok_json((), "通知已标记为已读"))
 }
 
 pub async fn mark_all_notifications_read(
-    state: web::Data<AppState>,
+    State(state): State<Arc<AppState>>,
     auth: AuthUser,
-) -> Result<HttpResponse, AppError> {
+) -> Result<Response, AppError> {
     let user_id =
         Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
     let conn = state.pool()?.get_conn();
@@ -106,7 +109,7 @@ pub async fn mark_all_notifications_read(
         .execute(&conn)
         .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::<()>::success((), "所有通知已标记为已读")))
+    Ok(crate::error::ok_json((), "所有通知已标记为已读"))
 }
 
 pub async fn create_notification(

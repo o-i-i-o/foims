@@ -1,9 +1,9 @@
-use std::future::Ready;
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 
-use actix_web::{FromRequest, HttpMessage, HttpRequest, dev::Payload};
-
-use crate::auth::utils::JwtClaims;
+use crate::auth::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
 use crate::error::AppError;
+use crate::utils::common::is_secure_from_parts;
 
 pub struct AuthUser {
     pub sub: String,
@@ -13,21 +13,19 @@ pub struct AuthUser {
     pub ip_address: Option<String>,
 }
 
-impl FromRequest for AuthUser {
-    type Error = AppError;
-    type Future = Ready<Result<Self, Self::Error>>;
+impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
+    type Rejection = AppError;
 
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let extensions = req.extensions();
-        match extensions.get::<JwtClaims>() {
-            Some(c) => std::future::ready(Ok(AuthUser {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) => Ok(AuthUser {
                 sub: c.sub.clone(),
                 username: c.username.clone(),
                 role: c.role.clone(),
                 device_fingerprint: c.device_fingerprint.clone(),
                 ip_address: c.ip_address.clone(),
-            })),
-            None => std::future::ready(Err(AppError::Unauthorized("未授权访问".to_string()))),
+            }),
+            None => Err(AppError::Unauthorized("未授权访问".to_string())),
         }
     }
 }
@@ -37,19 +35,52 @@ pub struct AdminUser {
     pub username: String,
 }
 
-impl FromRequest for AdminUser {
-    type Error = AppError;
-    type Future = Ready<Result<Self, Self::Error>>;
+impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
+    type Rejection = AppError;
 
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let extensions = req.extensions();
-        match extensions.get::<JwtClaims>() {
-            Some(c) if c.role == "admin" => std::future::ready(Ok(AdminUser {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" => Ok(AdminUser {
                 sub: c.sub.clone(),
                 username: c.username.clone(),
-            })),
-            Some(_) => std::future::ready(Err(AppError::Forbidden("需要管理员权限".to_string()))),
-            None => std::future::ready(Err(AppError::Unauthorized("未授权访问".to_string()))),
+            }),
+            Some(_) => Err(AppError::Forbidden("需要管理员权限".to_string())),
+            None => Err(AppError::Unauthorized("未授权访问".to_string())),
         }
+    }
+}
+
+/// 提取 access_token（优先 Cookie `access_token`，其次 Authorization: Bearer 头）
+pub struct AccessToken(pub Option<String>);
+
+impl<S: Send + Sync> FromRequestParts<S> for AccessToken {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(AccessToken(extract_token_from_parts(parts)))
+    }
+}
+
+/// 提取 refresh_token（优先 Cookie `refresh_token`，其次回退到 access_token 提取逻辑）
+pub struct RefreshToken(pub Option<String>);
+
+impl<S: Send + Sync> FromRequestParts<S> for RefreshToken {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let token = extract_cookie_from_parts(parts, "refresh_token")
+            .or_else(|| extract_token_from_parts(parts));
+        Ok(RefreshToken(token))
+    }
+}
+
+/// 提取请求是否为 HTTPS（基于 X-Forwarded-Proto 头）
+pub struct SecureFlag(pub bool);
+
+impl<S: Send + Sync> FromRequestParts<S> for SecureFlag {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(SecureFlag(is_secure_from_parts(parts)))
     }
 }

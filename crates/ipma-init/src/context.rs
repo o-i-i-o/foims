@@ -6,6 +6,7 @@ use crate::types::DatabaseConfig;
 
 pub type RestartFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
 
+#[derive(Clone)]
 pub struct InitContext {
     pub db_config: DatabaseConfig,
     pub config_path: String,

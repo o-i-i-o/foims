@@ -1,12 +1,20 @@
+use std::sync::Arc;
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
+use crate::routes::static_files::AppJson;
+use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{
     OperationLogParams, get_room_id_by_position, get_room_id_by_workstation, log_system_operation,
     validate_network_in_room,
 };
-use actix_web::{HttpRequest, HttpResponse, web};
 use chrono::Utc;
 use sqlx::Row;
 use std::net::IpAddr;
@@ -18,9 +26,9 @@ use validator::Validate;
 type IpMacCurrentInfo = (Option<String>, Uuid);
 
 pub async fn get_ip_managers(
-    state: web::Data<AppState>,
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let search = query.get("search").map_or("", std::string::String::as_str);
     let status = query.get("status").map_or("", std::string::String::as_str);
     let device_name = query
@@ -161,7 +169,7 @@ pub async fn get_ip_managers(
 
     let mappings = data_sql.fetch_all(&state.pool()?.get_conn()).await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "data": mappings,
             "total": total,
@@ -170,15 +178,13 @@ pub async fn get_ip_managers(
             "total_pages": (total + page_size - 1) / page_size
         }),
         "IP获取成功",
-    )))
+    ))
 }
 
 pub async fn get_device_ips(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
         .bind(id)
         .fetch_one(&state.pool()?.get_conn())
@@ -202,20 +208,19 @@ pub async fn get_device_ips(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({ "items": ips }),
         "设备IP列表获取成功",
-    )))
+    ))
 }
 
 pub async fn create_device_ip(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<IpManagerCreate>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let id = *id_path;
-    (*req).validate()?;
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<IpManagerCreate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -340,7 +345,8 @@ pub async fn create_device_ip(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "create_device_ip",
             resource_type: "device",
             resource_id: Some(&id),
@@ -353,7 +359,7 @@ pub async fn create_device_ip(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "设备IP创建成功")))
+    Ok(crate::error::ok_json(mapping, "设备IP创建成功"))
 }
 
 struct MacSyncResult {
@@ -524,27 +530,27 @@ async fn sync_switch_macs(
 }
 
 pub async fn pull_ip_managers(
-    state: web::Data<AppState>,
-    req: web::Json<crate::models::PullIpManagersRequest>,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<crate::models::PullIpManagersRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let result = sync_switch_macs(&state.pool()?.get_conn(), req.device_id, req.network_id).await?;
 
     if result.switch_macs_empty {
         if result.total_macs_on_switch == 0 {
-            return Ok(
-                HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::error(
+            return Ok((
+                StatusCode::OK,
+                Json(ApiResponse::<Vec<IpManager>>::error(
                     "该设备暂无MAC数据，请先在设备管理中同步MAC表",
                 )),
-            );
+            )
+                .into_response());
         }
-        return Ok(
-            HttpResponse::Ok().json(ApiResponse::<Vec<IpManager>>::success(
-                vec![],
-                "未发现属于该网段的已管理IP地址",
-            )),
-        );
+        return Ok(crate::error::ok_json(
+            Vec::<IpManager>::new(),
+            "未发现属于该网段的已管理IP地址",
+        ));
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
@@ -575,7 +581,7 @@ pub async fn pull_ip_managers(
         message_parts.join("，")
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(results, &message)))
+    Ok(crate::error::ok_json(results, &message))
 }
 
 pub async fn pull_ip_managers_internal(
@@ -653,11 +659,9 @@ pub fn find_available_ips_in_cidr(
 }
 
 pub async fn get_available_ips(
-    state: web::Data<AppState>,
-    network_id_path: web::Path<Uuid>,
-) -> Result<HttpResponse, AppError> {
-    let network_id = *network_id_path;
-
+    State(state): State<Arc<AppState>>,
+    Path(network_id): Path<Uuid>,
+) -> Result<Response, AppError> {
     let network = sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(network_id)
         .fetch_optional(&state.pool()?.get_conn())
@@ -693,7 +697,7 @@ pub async fn get_available_ips(
         ));
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "network_id": network_id,
             "network_name": network.name,
@@ -701,14 +705,14 @@ pub async fn get_available_ips(
             "available_ips": available_ips
         }),
         "获取可用IP列表成功",
-    )))
+    ))
 }
 
 pub async fn auto_assign_ip(
-    state: web::Data<AppState>,
-    req: web::Json<crate::models::AutoAssignIpRequest>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<crate::models::AutoAssignIpRequest>,
+) -> Result<Response, AppError> {
     req.validate()?;
 
     let req_network_id = req.network_id;
@@ -849,7 +853,8 @@ pub async fn auto_assign_ip(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "auto_assign_ip",
             resource_type: "ip_manager",
             resource_id: Some(&id),
@@ -862,25 +867,25 @@ pub async fn auto_assign_ip(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(mapping, "IP地址自动分配成功")))
+    Ok(crate::error::ok_json(mapping, "IP地址自动分配成功"))
 }
 
 pub async fn auto_assign_device_ip(
-    state: web::Data<AppState>,
-    id_path: web::Path<Uuid>,
-    req: web::Json<crate::models::AutoAssignIpRequest>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
-    let mut req = req.into_inner();
-    req.device_id = *id_path;
-    auto_assign_ip(state, web::Json(req), http_req).await
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<crate::models::AutoAssignIpRequest>,
+) -> Result<Response, AppError> {
+    let mut req = req;
+    req.device_id = id;
+    auto_assign_ip(State(state), meta, AppJson(req)).await
 }
 
 pub async fn batch_create_ip_managers(
-    state: web::Data<AppState>,
-    req: web::Json<Vec<IpManagerCreate>>,
-    http_req: HttpRequest,
-) -> Result<HttpResponse, AppError> {
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<Vec<IpManagerCreate>>,
+) -> Result<Response, AppError> {
     let now = Utc::now();
     let mut valid_requests: Vec<(usize, &IpManagerCreate, Uuid, i16)> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
@@ -1038,7 +1043,8 @@ pub async fn batch_create_ip_managers(
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
         OperationLogParams {
-            req: &http_req,
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
             action: "batch_create",
             resource_type: "ip_manager",
             resource_id: None,
@@ -1051,7 +1057,7 @@ pub async fn batch_create_ip_managers(
         warn!("记录操作日志失败: {}", e);
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(
+    Ok(crate::error::ok_json(
         serde_json::json!({
             "created": created_ips,
             "created_count": created_ips.len(),
@@ -1063,5 +1069,5 @@ pub async fn batch_create_ip_managers(
             created_ips.len(),
             errors.len()
         ),
-    )))
+    ))
 }
