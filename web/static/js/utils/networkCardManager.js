@@ -148,6 +148,10 @@ export class NetworkCardManager {
     this.devicesCache = null;
     this.roomsCache = null;
     this.outletsCache = [];
+    this.outletsCacheByRoom = new Map();
+    this.networksByRegionCache = new Map();
+    this.switchInterfacesCache = new Map();
+    this.optionsLoaded = false;
     this.addHandler = null;
   }
 
@@ -165,35 +169,44 @@ export class NetworkCardManager {
   }
 
   async ensureOptionsLoaded() {
-    if (this.regions.length === 0) {
-      const result = await apiGet('/api/resources/network-regions?page_size=1000');
-      if (result.success && result.data) {
-        this.regions = result.data.items || result.data || [];
-      }
-    }
-    if (this.devicesCache === null) {
-      const result = await apiGet('/api/resources/devices?page_size=1000');
-      if (result.success && result.data) {
-        this.devicesCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
-      } else {
-        this.devicesCache = [];
-      }
-    }
-    if (this.roomsCache === null) {
-      const result = await apiGet('/api/resources/rooms?page_size=1000');
-      if (result.success && result.data) {
-        this.roomsCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
-      } else {
-        this.roomsCache = [];
-      }
-    }
+    if (this.optionsLoaded) return;
+
+    const promises = [
+      apiGet('/api/resources/network-regions?page_size=1000').then(result => {
+        if (result.success && result.data) {
+          this.regions = result.data.items || result.data || [];
+        }
+      }).catch(() => {}),
+      apiGet('/api/resources/devices?page_size=1000').then(result => {
+        if (result.success && result.data) {
+          this.devicesCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
+        } else {
+          this.devicesCache = [];
+        }
+      }).catch(() => { this.devicesCache = []; }),
+      apiGet('/api/resources/rooms?page_size=1000').then(result => {
+        if (result.success && result.data) {
+          this.roomsCache = Array.isArray(result.data) ? result.data : (result.data.items || []);
+        } else {
+          this.roomsCache = [];
+        }
+      }).catch(() => { this.roomsCache = []; }),
+    ];
+
+    await Promise.all(promises);
+    this.optionsLoaded = true;
   }
 
   async loadNetworksByRegion(regionId) {
     if (!regionId) return [];
+    if (this.networksByRegionCache.has(regionId)) {
+      return this.networksByRegionCache.get(regionId);
+    }
     const result = await apiGet(`/api/resources/networks?region_id=${regionId}&page_size=1000`);
     if (!result.success || !result.data) return [];
-    return Array.isArray(result.data) ? result.data : (result.data.items || []);
+    const networks = Array.isArray(result.data) ? result.data : (result.data.items || []);
+    this.networksByRegionCache.set(regionId, networks);
+    return networks;
   }
 
   getNetworkCidr(networkId, ipAddress) {
@@ -596,24 +609,34 @@ export class NetworkCardManager {
     const placeholder = `<option value="">${t('device.select_net_outlet_to_add') || '选择信息点添加'}</option>`;
     outletAvailableSelect.innerHTML = placeholder;
     if (!roomId) return [];
-    try {
-      const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
-      if (result.success && result.data) {
-        const outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
-        // 缓存信息点数据（含 peer 信息），用于 collectData 验证
-        this.outletsCache = outlets;
-        outlets.forEach(outlet => {
-          const option = document.createElement('option');
-          option.value = outlet.id;
-          option.textContent = outlet.name || outlet.code || outlet.id;
-          outletAvailableSelect.appendChild(option);
-        });
-        return outlets;
+
+    let outlets;
+    if (this.outletsCacheByRoom.has(roomId)) {
+      outlets = this.outletsCacheByRoom.get(roomId);
+    } else {
+      try {
+        const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
+        if (result.success && result.data) {
+          outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
+          this.outletsCacheByRoom.set(roomId, outlets);
+        } else {
+          outlets = [];
+        }
+      } catch (error) {
+        console.error('加载信息点失败:', error);
+        outlets = [];
       }
-    } catch (error) {
-      console.error('加载信息点失败:', error);
     }
-    return [];
+
+    // 缓存信息点数据（含 peer 信息），用于 collectData 验证
+    this.outletsCache = outlets;
+    outlets.forEach(outlet => {
+      const option = document.createElement('option');
+      option.value = outlet.id;
+      option.textContent = outlet.name || outlet.code || outlet.id;
+      outletAvailableSelect.appendChild(option);
+    });
+    return outlets;
   }
 
   async loadSwitches(switchSelect, portSelect) {
@@ -639,21 +662,32 @@ export class NetworkCardManager {
     const deviceId = switchSelect.value;
     portSelect.innerHTML = `<option value="">${t('device.select_upstream_port') || '选择端口'}</option>`;
     if (!deviceId) return;
-    try {
-      const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces`);
-      if (result.success && result.data) {
-        const interfaces = Array.isArray(result.data) ? result.data : (result.data.items || []);
-        interfaces.forEach(iface => {
-          const option = document.createElement('option');
-          option.value = iface.id;
-          const typeMark = iface.interface_type ? `[${iface.interface_type}]` : '';
-          option.textContent = `${iface.name}${typeMark}`;
-          portSelect.appendChild(option);
-        });
+
+    let interfaces;
+    if (this.switchInterfacesCache.has(deviceId)) {
+      interfaces = this.switchInterfacesCache.get(deviceId);
+    } else {
+      try {
+        const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces`);
+        if (result.success && result.data) {
+          interfaces = Array.isArray(result.data) ? result.data : (result.data.items || []);
+          this.switchInterfacesCache.set(deviceId, interfaces);
+        } else {
+          interfaces = [];
+        }
+      } catch (error) {
+        console.error('加载设备接口失败:', error);
+        interfaces = [];
       }
-    } catch (error) {
-      console.error('加载设备接口失败:', error);
     }
+
+    interfaces.forEach(iface => {
+      const option = document.createElement('option');
+      option.value = iface.id;
+      const typeMark = iface.interface_type ? `[${iface.interface_type}]` : '';
+      option.textContent = `${iface.name}${typeMark}`;
+      portSelect.appendChild(option);
+    });
   }
 
   async loadExisting(cards) {
@@ -661,15 +695,86 @@ export class NetworkCardManager {
     if (!container) return;
     container.innerHTML = '';
     this.bindAddButton();
-    await this.ensureOptionsLoaded();
 
     if (!cards || cards.length === 0) {
+      await this.ensureOptionsLoaded();
       await this.addCard();
       return;
     }
 
+    // 并行预取所有依赖数据：基础选项（区域/设备/房间）+ 网卡专属数据（信息点/接口/网络）
+    await Promise.all([
+      this.ensureOptionsLoaded(),
+      this.prefetchCardData(cards),
+    ]);
+
     for (const cardData of cards) {
       await this.addCard(cardData);
+    }
+  }
+
+  /// 并行预取渲染所需的所有外部数据
+  async prefetchCardData(cards) {
+    const roomId = document.querySelector('#device-room-id')?.value || null;
+    const switchIds = new Set();
+    const regionIds = new Set();
+
+    for (const card of cards) {
+      for (const port of (card.ports || [])) {
+        if (port.switch_id) switchIds.add(port.switch_id);
+        for (const ip of (port.ips || [])) {
+          if (ip.network_region_id) regionIds.add(ip.network_region_id);
+        }
+      }
+    }
+
+    const promises = [];
+
+    if (roomId && !this.outletsCacheByRoom.has(roomId)) {
+      promises.push(
+        apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000')
+          .then(result => {
+            if (result.success && result.data) {
+              const outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
+              this.outletsCacheByRoom.set(roomId, outlets);
+            }
+          })
+          .catch(error => console.error('预加载信息点失败:', error))
+      );
+    }
+
+    for (const switchId of switchIds) {
+      if (!this.switchInterfacesCache.has(switchId)) {
+        promises.push(
+          apiGet(`/api/resources/devices/${switchId}/interfaces`)
+            .then(result => {
+              if (result.success && result.data) {
+                const interfaces = Array.isArray(result.data) ? result.data : (result.data.items || []);
+                this.switchInterfacesCache.set(switchId, interfaces);
+              }
+            })
+            .catch(error => console.error('预加载设备接口失败:', error))
+        );
+      }
+    }
+
+    for (const regionId of regionIds) {
+      if (!this.networksByRegionCache.has(regionId)) {
+        promises.push(
+          apiGet(`/api/resources/networks?region_id=${regionId}&page_size=1000`)
+            .then(result => {
+              if (result.success && result.data) {
+                const networks = Array.isArray(result.data) ? result.data : (result.data.items || []);
+                this.networksByRegionCache.set(regionId, networks);
+              }
+            })
+            .catch(error => console.error('预加载网络失败:', error))
+        );
+      }
+    }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
     }
   }
 

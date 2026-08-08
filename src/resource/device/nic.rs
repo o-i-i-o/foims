@@ -297,16 +297,17 @@ pub async fn get_device_nics(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM devices WHERE id = $1")
+    let device_type: String = sqlx::query_scalar("SELECT device_type FROM devices WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
-        .await?;
-    if exists.is_none() {
-        return Err(AppError::NotFound("设备未找到".to_string()));
-    }
+        .await?
+        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
-    Ok(crate::error::ok_json(cards, "网卡配置获取成功"))
+    Ok(crate::error::ok_json(
+        serde_json::json!({ "device_type": device_type, "cards": cards }),
+        "网卡配置获取成功",
+    ))
 }
 
 fn default_card_sync_item() -> NetworkCardSyncItem {

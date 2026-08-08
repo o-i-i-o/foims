@@ -53,14 +53,15 @@ function getCurrentDevice() {
  */
 export async function manageUnifiedDevicePorts(deviceId, deviceName) {
   try {
-    // 获取设备完整信息
-    const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
-    if (!deviceResult.success) {
+    // 直接调 /nics 获取网卡数据 + 设备类型（一次请求拿到全部所需数据）
+    const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
+    if (!result.success || !result.data) {
       showToast(t('device.load_failed') || "获取设备信息失败", "error");
       return;
     }
 
-    setCurrentDevice(deviceResult.data);
+    const { device_type, cards } = result.data;
+    setCurrentDevice({ id: deviceId, name: deviceName, device_type });
     const device = getCurrentDevice();
 
     // 打开统一端口管理模态框
@@ -73,9 +74,9 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
 
     // 根据设备类型显示不同的端口结构
     if (device.isNetworkDevice) {
-      await showNetworkDevicePorts(device);
+      await showNetworkDevicePorts(device, cards);
     } else {
-      await showNormalDevicePorts(device);
+      await showNormalDevicePorts(device, cards);
     }
   } catch (error) {
     handleError(error, t('device.port_management_failed') || "端口管理失败");
@@ -85,7 +86,7 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
 /**
  * 显示普通设备的端口（按网卡分组）
  */
-async function showNormalDevicePorts(device) {
+async function showNormalDevicePorts(device, cards = null) {
   const normalSection = document.getElementById("normal-device-ports-section");
   const networkSection = document.getElementById("network-device-ports-section");
 
@@ -93,13 +94,13 @@ async function showNormalDevicePorts(device) {
   if (networkSection) networkSection.style.display = "none";
 
   // 加载设备的网卡和接口配置
-  await loadDeviceNicInterfaces(device.id);
+  await loadDeviceNicInterfaces(device.id, cards);
 }
 
 /**
  * 显示网络设备的端口（分板块显示2层和3层）
  */
-async function showNetworkDevicePorts(device) {
+async function showNetworkDevicePorts(device, cards = null) {
   const normalSection = document.getElementById("normal-device-ports-section");
   const networkSection = document.getElementById("network-device-ports-section");
 
@@ -108,7 +109,7 @@ async function showNetworkDevicePorts(device) {
 
   // 并行加载3层口和2层口
   await Promise.all([
-    loadDeviceNicInterfaces(device.id),
+    loadDeviceNicInterfaces(device.id, cards),
     loadSwitchPorts(device.id),
   ]);
 
@@ -118,20 +119,27 @@ async function showNetworkDevicePorts(device) {
 
 /**
  * 加载设备的网卡接口（3层口）
+ * @param {string} deviceId - 设备ID
+ * @param {Array|null} cards - 已获取的网卡数据，为 null 时自动请求 /nics
  */
-async function loadDeviceNicInterfaces(deviceId) {
+async function loadDeviceNicInterfaces(deviceId, cards = null) {
   try {
-    const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
     const container = document.querySelector(".nic-interfaces-container");
-
     if (!container) return;
 
-    if (!result.success || !result.data) {
+    if (cards === null) {
+      const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
+      if (!result.success || !result.data) {
+        container.innerHTML = `<p class="empty-message">${t('device.no_nic_interfaces') || '暂无网卡接口数据'}</p>`;
+        return;
+      }
+      cards = result.data.cards || [];
+    }
+
+    if (!Array.isArray(cards) || cards.length === 0) {
       container.innerHTML = `<p class="empty-message">${t('device.no_nic_interfaces') || '暂无网卡接口数据'}</p>`;
       return;
     }
-
-    const cards = Array.isArray(result.data) ? result.data : [];
 
     // 使用网卡管理器渲染（按网卡分组）
     const cardManager = getNetworkCardManager();
