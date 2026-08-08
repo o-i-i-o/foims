@@ -131,9 +131,11 @@ async function loadDeviceNicInterfaces(deviceId) {
       return;
     }
 
+    const cards = Array.isArray(result.data) ? result.data : [];
+
     // 使用网卡管理器渲染（按网卡分组）
     const cardManager = getNetworkCardManager();
-    await cardManager.loadExisting(result.data);
+    await cardManager.loadExisting(cards);
   } catch (error) {
     console.error("加载网卡接口失败:", error);
     const container = document.querySelector(".nic-interfaces-container");

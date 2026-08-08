@@ -292,6 +292,23 @@ pub async fn fetch_device_network_config(
     Ok(result)
 }
 
+/// 获取设备的网卡配置（含嵌套网口、IP）—— GET /api/resources/devices/{id}/nics
+pub async fn get_device_nics(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
+    let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM devices WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+    if exists.is_none() {
+        return Err(AppError::NotFound("设备未找到".to_string()));
+    }
+
+    let cards = fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
+    Ok(crate::error::ok_json(cards, "网卡配置获取成功"))
+}
+
 fn default_card_sync_item() -> NetworkCardSyncItem {
     NetworkCardSyncItem {
         id: None,

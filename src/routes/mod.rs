@@ -35,7 +35,7 @@ use crate::resource::{
     get_available_org_types, get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
     get_cabinets_by_network_region, get_cable_link, get_cable_links, get_cable_path, get_children,
     get_device, get_device_info_snmp, get_device_interface, get_device_interfaces, get_device_ips,
-    get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db,
+    get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db, get_device_nics,
     get_device_ports_snmp, get_device_template, get_device_templates, get_devices, get_ip_managers,
     get_layout, get_net_outlet, get_net_outlets, get_network, get_network_region,
     get_network_regions, get_networks, get_org_rooms, get_org_template, get_org_templates,
@@ -379,6 +379,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/devices/{id}",
             get(get_device).put(update_device).delete(delete_device),
         )
+        .route("/api/resources/devices/{id}/nics", get(get_device_nics))
         .route("/api/resources/devices/{id}/ips", get(get_device_ips))
         .route("/api/resources/devices/{id}/ips", post(create_device_ip))
         .route(
