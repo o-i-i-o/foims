@@ -1,134 +1,955 @@
+/* ============================================================
+   IPMA 登录页样式
+   - 设计来源: example-files/animatedlogin.html (双栏 + 动画角色)
+   - 自包含: 不依赖 variables.css / buttons.css / modals.css / forms.css
+   - 作用域: 选择器挂在 .login-body / #login-page / .login-* / .modal 下，
+            避免污染 main.html
+   ============================================================ */
+
+/* ============ 基础重置（仅登录页 body） ============ */
+.login-body,
+.login-body *,
+.login-body *::before,
+.login-body *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .login-body {
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  background: #1a1a2e;
+  overflow: hidden;
+  height: 100vh;
+  color: #1a1a2e;
 }
 
-.login-container {
-    background: #fff;
-    padding: 2.5rem;
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    width: 100%;
-    max-width: 450px;
+/* 无障碍：屏幕阅读器可见，视觉隐藏 */
+.login-body .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.login-container h1 {
-    text-align: center;
-    color: var(--color-text);
-    margin-bottom: var(--space-lg);
-    font-size: 1.8rem;
-    font-weight: 600;
+/* ============ LOGIN PAGE 双栏布局 ============ */
+#login-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100vh;
 }
 
-/* Tabs 样式 - 作用域限定在 .login-tabs 内，避免与 main-content.css 的 .tab-btn 冲突 */
+/* ---- 左面板 ---- */
+.left-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 40px;
+  background: linear-gradient(135deg, #d4d0dc 0%, #c8c4d0 50%, #bbb7c5 100%);
+  padding: 40px 48px;
+  overflow: hidden;
+}
+
+.left-panel .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  z-index: 10;
+  position: relative;
+  letter-spacing: 0.5px;
+}
+
+.left-panel .logo svg {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(8px);
+  padding: 5px;
+  border-radius: 8px;
+}
+
+.characters-wrapper {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 420px;
+}
+
+.left-panel .footer-links {
+  display: flex;
+  gap: 28px;
+  font-size: 13px;
+  color: rgba(80, 70, 90, 0.7);
+  z-index: 10;
+  position: relative;
+}
+
+.left-panel .footer-links a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.left-panel .footer-links a:hover {
+  color: #333;
+}
+
+/* 装饰光斑 */
+.left-panel::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  right: 15%;
+  width: 260px;
+  height: 260px;
+  background: rgba(180, 170, 200, 0.25);
+  border-radius: 50%;
+  filter: blur(80px);
+}
+
+.left-panel::before {
+  content: "";
+  position: absolute;
+  bottom: 15%;
+  left: 10%;
+  width: 350px;
+  height: 350px;
+  background: rgba(200, 195, 210, 0.2);
+  border-radius: 50%;
+  filter: blur(100px);
+}
+
+/* ---- 右面板 ---- */
+.right-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.form-container {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* 右面板系统名称（原 sparkle 图标位置） */
+.brand-name {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #1a1a2e;
+}
+
+.sparkle-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.form-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.form-header h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+
+.form-header p {
+  font-size: 14px;
+  color: #888;
+}
+
+/* ============ 登录模式 Tabs（用户名密码 / 邮箱验证码） ============ */
 .login-tabs {
-    display: flex;
-    margin-bottom: var(--space-lg);
-    border-bottom: 2px solid var(--color-border-light);
+  display: flex;
+  gap: 8px;
+  background: #f4f4f5;
+  border-radius: 25px;
+  padding: 4px;
+  margin-bottom: 24px;
 }
 
 .login-tabs .tab-btn {
-    flex: 1;
-    padding: var(--space-md);
-    background: none;
-    border: none;
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    position: relative;
+  flex: 1;
+  height: 40px;
+  border: none;
+  background: transparent;
+  border-radius: 21px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.25s ease;
 }
 
 .login-tabs .tab-btn.active {
-    color: var(--color-primary);
-    font-weight: 600;
-}
-
-.login-tabs .tab-btn.active::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background-color: var(--color-primary);
+  background: #fff;
+  color: #1a1a2e;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .login-tabs .tab-btn:hover:not(.active) {
-    color: var(--color-text);
+  color: #333;
 }
 
-/* 视图切换样式 */
+/* ============ 视图切换（登录视图 ↔ 2FA 视图） ============ */
 .login-views {
-    position: relative;
-    overflow: hidden;
+  position: relative;
 }
 
 .view {
-    display: none;
-    animation: fadeInUp var(--transition-fast) forwards;
+  display: none;
+  animation: fadeInUp 0.3s ease forwards;
 }
 
 .view.active {
-    display: block;
+  display: block;
 }
 
 .view-header {
-    text-align: center;
-    margin-bottom: var(--space-lg);
+  text-align: center;
+  margin-bottom: 24px;
 }
 
 .view-header h3 {
-    margin-bottom: var(--space-sm);
-    color: var(--color-text);
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 6px;
 }
 
 .view-desc {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
+  font-size: 14px;
+  color: #888;
 }
 
+/* 登录区段切换（用户名密码区 / 邮箱验证码区） */
 .login-section {
-    display: none;
+  display: none;
 }
 
 .login-section.active {
-    display: block;
+  display: block;
 }
 
-.back-to-login {
-    margin-top: var(--space-lg);
-    text-align: center;
+/* ============ 表单字段 ============ */
+.form-group {
+  margin-bottom: 20px;
 }
 
-.back-to-login a {
-    color: var(--color-primary);
-    text-decoration: none;
-    font-weight: 500;
-    transition: color var(--transition-fast);
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
 }
 
-.back-to-login a:hover {
-    color: var(--color-primary-hover);
-    text-decoration: underline;
+.form-group label.error-label {
+  color: #dc2626;
 }
 
-/* 2FA 相关样式保留但适配新布局 */
-.verification-code {
-    display: block;
-    padding: 0.75rem;
-    background: var(--color-border-light);
-    border-radius: var(--radius-md);
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 1.1rem;
-    color: var(--color-text-light);
-    word-break: break-all;
-    margin-bottom: 0.75rem;
-    text-align: center;
-    font-weight: 600;
+.form-group .input-wrapper {
+  position: relative;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"] {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-bottom: 1.5px solid #e0e0e0;
+  padding: 0 40px 0 0;
+  font-size: 15px;
+  font-family: inherit;
+  color: #1a1a2e;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  border-bottom-color: #5b21b6;
+}
+
+.form-group input::placeholder {
+  color: #ccc;
+}
+
+.form-group input[type="password"]:not(:placeholder-shown) {
+  letter-spacing: 2px;
+}
+
+/* Edge 浏览器密码框自带的显示/清除按钮 */
+.form-group input[type="password"]::-ms-reveal,
+.form-group input[type="password"]::-ms-clear {
+  display: none;
+}
+
+.form-group input.error {
+  border-bottom-color: #dc2626;
+}
+
+/* 密码可见性切换 */
+.toggle-password {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 6px;
+  transition: color 0.2s;
+}
+
+.toggle-password:hover {
+  color: #333;
+}
+
+/* 邮箱验证码：输入框 + 发送按钮并排 */
+.form-inline-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.form-inline-group input {
+  flex: 1;
+}
+
+.form-inline-group .btn-send-code {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 14px;
+  border: 1.5px solid #5b21b6;
+  background: transparent;
+  color: #5b21b6;
+  border-radius: 19px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.form-inline-group .btn-send-code:hover:not(:disabled) {
+  background: #5b21b6;
+  color: #fff;
+}
+
+.form-inline-group .btn-send-code:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 提示文本 */
+.password-hint,
+.hint-text {
+  display: block;
+  font-size: 12px;
+  color: #999;
+}
+
+/* ============ 记住我 & 忘记密码 ============ */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #5b21b6;
+  cursor: pointer;
+}
+
+/* form-group 形式的记住我 */
+.form-group.remember-me {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.form-group.remember-me .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.form-group.forgot-password {
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.form-group.forgot-password .link-text,
+.form-group.forgot-password a {
+  font-size: 13px;
+  color: #5b21b6;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.form-group.forgot-password .link-text:hover {
+  opacity: 0.8;
+}
+
+.forgot-link {
+  font-size: 13px;
+  color: #5b21b6;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.forgot-link:hover {
+  opacity: 0.8;
+}
+
+/* ============ 按钮（主登录按钮 / 邮箱登录按钮） ============ */
+/* 主登录按钮：hover 滑动箭头动画（源自示例 .btn-login） */
+.btn-login {
+  position: relative;
+  width: 100%;
+  height: 50px;
+  border-radius: 25px;
+  border: 1.5px solid #1a1a2e;
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  margin-bottom: 14px;
+  transition: all 0.3s;
+}
+
+.btn-login .btn-text {
+  display: inline-block;
+  transition: all 0.3s;
+}
+
+.btn-login .btn-hover-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #5b21b6;
+  color: #fff;
+  opacity: 0;
+  transition: all 0.3s;
+  border-radius: 25px;
+}
+
+.btn-login:hover .btn-text {
+  transform: translateX(40px);
+  opacity: 0;
+}
+
+.btn-login:hover .btn-hover-content {
+  opacity: 1;
+}
+
+.btn-login:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* 邮箱验证码登录按钮（复用原 Google 按钮样式） */
+.btn-google {
+  position: relative;
+  width: 100%;
+  height: 50px;
+  border-radius: 25px;
+  border: 1.5px solid #e0e0e0;
+  background: #f5f5f5;
+  color: #333;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.btn-google .btn-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.3s;
+}
+
+.btn-google .btn-hover-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #5b21b6;
+  color: #fff;
+  opacity: 0;
+  transition: all 0.3s;
+  border-radius: 25px;
+}
+
+.btn-google:hover .btn-text {
+  transform: translateX(40px);
+  opacity: 0;
+}
+
+.btn-google:hover .btn-hover-content {
+  opacity: 1;
+}
+
+.btn-google:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.email-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* 返回账号登录按钮（2FA 视图） */
+.btn-text-full {
+  width: 100%;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: color 0.2s;
+}
+
+.btn-text-full:hover {
+  color: #1a1a2e;
+}
+
+/* ============ 错误 / 成功消息 ============ */
+.error-message {
+  display: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.error-message.show {
+  display: block;
+}
+
+.success-message {
+  display: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #155724;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.success-message.show {
+  display: block;
+}
+
+/* ============================================================
+   动画角色（4 个几何角色，鼠标追踪 / 眨眼 / 输入互动 / 错误摇头）
+   ============================================================ */
+.characters-scene {
+  position: relative;
+  width: 480px;
+  height: 360px;
+}
+
+.character {
+  position: absolute;
+  bottom: 0;
+  transition: all 0.7s ease-in-out;
+  transform-origin: bottom center;
+}
+
+/* 紫色矩形 */
+.char-purple {
+  left: 60px;
+  width: 170px;
+  height: 370px;
+  background: #6c3ff5;
+  border-radius: 10px 10px 0 0;
+  z-index: 1;
+}
+
+/* 黑色矩形 */
+.char-black {
+  left: 220px;
+  width: 115px;
+  height: 290px;
+  background: #2d2d2d;
+  border-radius: 8px 8px 0 0;
+  z-index: 2;
+}
+
+/* 橙色半圆 */
+.char-orange {
+  left: 0;
+  width: 230px;
+  height: 190px;
+  background: #ff9b6b;
+  border-radius: 115px 115px 0 0;
+  z-index: 3;
+}
+
+/* 黄色圆角 */
+.char-yellow {
+  left: 290px;
+  width: 135px;
+  height: 215px;
+  background: #e8d754;
+  border-radius: 68px 68px 0 0;
+  z-index: 4;
+}
+
+/* 眼睛容器 */
+.eyes {
+  position: absolute;
+  display: flex;
+  transition: all 0.7s ease-in-out;
+}
+
+/* 眼球（白色 + 瞳孔） */
+.eyeball {
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: height 0.15s ease;
+  overflow: hidden;
+}
+
+.pupil {
+  border-radius: 50%;
+  background: #2d2d2d;
+  transition: transform 0.1s ease-out;
+}
+
+/* 裸瞳孔（无白色眼球） */
+.bare-pupil {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2d2d2d;
+  transition: transform 0.7s ease-in-out;
+}
+
+/* 黄色嘴 */
+.yellow-mouth {
+  position: absolute;
+  width: 50px;
+  height: 4px;
+  background: #2d2d2d;
+  border-radius: 2px;
+  transition: all 0.7s ease-in-out;
+}
+
+/* 橙色难过嘴（登录失败时显示） */
+.orange-mouth {
+  position: absolute;
+  width: 28px;
+  height: 14px;
+  border: 3px solid #2d2d2d;
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  opacity: 0;
+  transition: all 0.7s ease-in-out;
+}
+
+.orange-mouth.visible {
+  opacity: 1;
+}
+
+/* 摇头动画：脸部部件左右摆动 */
+@keyframes shakeHead {
+
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  10% {
+    translate: -9px 0;
+  }
+
+  20% {
+    translate: 7px 0;
+  }
+
+  30% {
+    translate: -6px 0;
+  }
+
+  40% {
+    translate: 5px 0;
+  }
+
+  50% {
+    translate: -4px 0;
+  }
+
+  60% {
+    translate: 3px 0;
+  }
+
+  70% {
+    translate: -2px 0;
+  }
+
+  80% {
+    translate: 1px 0;
+  }
+
+  90% {
+    translate: -0.5px 0;
+  }
+}
+
+.eyes.shake-head,
+.yellow-mouth.shake-head,
+.orange-mouth.shake-head {
+  animation: shakeHead 0.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* ============ 忘记密码模态框（自包含） ============ */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1050;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalFadeIn 0.25s ease;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.modal .close {
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1;
+  color: #999;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.modal .close:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-body .form-group {
+  margin-bottom: 16px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #eee;
+  justify-content: flex-end;
+}
+
+.modal-footer .btn-secondary,
+.modal-footer .btn-primary {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+}
+
+.modal-footer .btn-secondary {
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+  color: #555;
+}
+
+.modal-footer .btn-secondary:hover {
+  background: #eee;
+}
+
+.modal-footer .btn-primary {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.modal-footer .btn-primary:hover {
+  background: #5b21b6;
+}
+
+.modal-footer .btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ============ 通用动画 ============ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 900px) {
+  #login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .left-panel {
+    display: none;
+  }
+
+  .right-panel {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .right-panel {
+    padding: 16px;
+    align-items: flex-start;
+  }
+
+  .form-container {
+    max-width: 100%;
+  }
+
+  .form-header h1 {
+    font-size: 22px;
+  }
+
+  .form-inline-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .form-inline-group .btn-send-code {
+    width: 100%;
+  }
 }
