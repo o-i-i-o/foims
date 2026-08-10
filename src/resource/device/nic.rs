@@ -144,20 +144,9 @@ pub async fn apply_network_config(
             let interface_type = port.interface_type.as_deref().unwrap_or("physical");
             validate_interface_type(interface_type)?;
 
-            // 验证信息点链并推导上级端口
-            let mut resolved_switch_id = port.switch_id;
-            let mut resolved_uplink_interface_id = port.uplink_interface_id;
-            super::interface::validate_and_resolve_outlet_chain(
-                &mut *tx,
-                &port.net_outlet_ids,
-                &mut resolved_switch_id,
-                &mut resolved_uplink_interface_id,
-            )
-            .await?;
-
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, net_outlet_ids, sort_order, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, sort_order, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
             )
             .bind(port_id)
             .bind(device_id)
@@ -167,9 +156,8 @@ pub async fn apply_network_config(
             .bind(&port.mac_address)
             .bind(port.vlan_id)
             .bind(&port.description)
-            .bind(resolved_switch_id)
-            .bind(resolved_uplink_interface_id)
-            .bind(&port.net_outlet_ids)
+            .bind(port.switch_id)
+            .bind(port.uplink_interface_id)
             .bind(port_idx as i32)
             .bind(now)
             .bind(now)
@@ -325,7 +313,6 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
             description: None,
             switch_id: None,
             uplink_interface_id: None,
-            net_outlet_ids: vec![],
             ips: vec![],
         }],
     }

@@ -16,6 +16,7 @@ const TAB_CONFIG = {
   networks: { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworksData" },
   cabinets: { module: "cabinet", initFn: "initCabinetSortEvents", loadFn: "loadCabinetsData" },
   "net-outlets": { module: "netOutlet", initFn: "initNetOutletSortEvents", loadFn: "loadNetOutletsData" },
+  "cable-links": { module: "cableLink", initFn: "initCableLinkSortEvents", loadFn: "loadCableLinksData" },
   devices: { module: "device", initFn: "initDeviceSortEvents", loadFn: "loadDevicesData" },
 };
 

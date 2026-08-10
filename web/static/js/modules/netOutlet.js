@@ -251,10 +251,6 @@ export async function submitNetOutletForm() {
   const roomId = getElementValue("net-outlet-room-id");
   const cabinetId = getElementValue("net-outlet-cabinet-id");
   const description = getElementValue("net-outlet-description");
-  const peerType = getElementValue("net-outlet-peer-type");
-  const peerRoomId = getElementValue("net-outlet-peer-room-id");
-  const peerOutletId = getElementValue("net-outlet-peer-outlet-id");
-  const peerSwitchPortId = getElementValue("net-outlet-peer-switch-port-id");
 
   if (!name?.trim()) {
     showToast(t('net_outlet.name_required'), "warning");
@@ -266,29 +262,12 @@ export async function submitNetOutletForm() {
     return;
   }
 
-  // 校验对端字段
-  if (peerType === 'outlet' || peerType === 'patch_panel') {
-    if (!peerOutletId) {
-      showToast(t('net_outlet.peer_outlet_required'), "warning");
-      return;
-    }
-  } else if (peerType === 'switch_port') {
-    if (!peerSwitchPortId) {
-      showToast(t('net_outlet.peer_switch_port_required'), "warning");
-      return;
-    }
-  }
-
   const outletData = {
     name: name.trim(),
     outlet_type: outletType || 'other',
     room_id: roomId,
     cabinet_id: cabinetId || null,
     description: description?.trim() || null,
-    peer_type: peerType || null,
-    peer_room_id: peerRoomId || null,
-    peer_outlet_id: (peerType === 'outlet' || peerType === 'patch_panel') ? (peerOutletId || null) : null,
-    peer_switch_port_id: peerType === 'switch_port' ? (peerSwitchPortId || null) : null,
   };
 
   const success = await handleFormSubmit({

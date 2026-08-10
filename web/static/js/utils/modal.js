@@ -7,6 +7,7 @@ const BUTTON_CALLBACK_MAP = {
   "add-cabinet-btn": "openCabinetModal",
   "add-user-btn": "openUserModal",
   "add-net-outlet-btn": "openNetOutletModal",
+  "add-cable-link-btn": "openCableLinkModal",
   "add-device-btn": "openDeviceModal",
 };
 
@@ -22,6 +23,7 @@ const FORM_CALLBACK_MAP = {
   "organization-form": "submitOrgForm",
   "org-template-editor-form": "submitOrgTemplateForm",
   "net-outlet-form": "submitNetOutletForm",
+  "cable-link-form": "submitCableLinkForm",
   "device-form": "submitDeviceForm",
 };
 

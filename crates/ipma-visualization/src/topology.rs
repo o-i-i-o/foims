@@ -176,17 +176,22 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
                  tp.port_name AS target_port_name,
                  COALESCE(
                    (
-                     SELECT json_agg(json_build_object('id', no.id, 'name', no.name, 'outlet_type', no.outlet_type) ORDER BY ord.ordinality)
-                     FROM device_interfaces di
-                     CROSS JOIN LATERAL unnest(di.net_outlet_ids) WITH ORDINALITY AS ord(outlet_id, ordinality)
-                     JOIN net_outlets no ON no.id = ord.outlet_id
-                     WHERE di.device_id = tc.source_device_id
-                       AND di.switch_id = tc.target_device_id
-                       AND (
-                         tc.source_switch_port_id IS NULL
-                         OR di.switch_port_id = tc.source_switch_port_id
-                       )
-                     LIMIT 1
+                     SELECT json_agg(json_build_object('id', no.id, 'name', no.name, 'outlet_type', no.outlet_type))
+                     FROM net_outlets no
+                     WHERE no.id IN (
+                       SELECT CASE WHEN cl1.a_endpoint_type = 'net_outlet' THEN cl1.a_endpoint_id ELSE cl1.b_endpoint_id END AS outlet_id
+                       FROM cable_links cl1
+                       JOIN device_interfaces di ON
+                         (cl1.a_endpoint_type = 'device_interface' AND cl1.a_endpoint_id = di.id)
+                         OR (cl1.b_endpoint_type = 'device_interface' AND cl1.b_endpoint_id = di.id)
+                       WHERE di.device_id = tc.source_device_id
+                     )
+                     AND no.id IN (
+                       SELECT CASE WHEN cl2.a_endpoint_type = 'net_outlet' THEN cl2.a_endpoint_id ELSE cl2.b_endpoint_id END AS outlet_id
+                       FROM cable_links cl2
+                       WHERE (cl2.a_endpoint_type = 'switch_port' AND cl2.a_endpoint_id = tc.target_switch_port_id)
+                          OR (cl2.b_endpoint_type = 'switch_port' AND cl2.b_endpoint_id = tc.target_switch_port_id)
+                     )
                    ),
                    '[]'::json
                  ) AS outlet_chain
@@ -344,19 +349,26 @@ async fn discover_device_pairs_via_cable_links(
         });
     }
 
+    // 通过 cable_links 发现设备对：交换机端口 ↔ 信息点 ↔ 设备接口
+    // 即一台设备的 device_interface 通过若干 net_outlet 连到某交换机的 switch_port
     let outlet_rows = sqlx::query_as::<_, (Uuid, Option<Uuid>, Uuid)>(
         r"SELECT DISTINCT
             sp.device_id AS switch_device_id,
-            CASE WHEN cl.a_endpoint_type = 'switch_port' THEN cl.a_endpoint_id ELSE cl.b_endpoint_id END AS switch_port_id,
+            CASE WHEN cl_sp.a_endpoint_type = 'switch_port' THEN cl_sp.a_endpoint_id ELSE cl_sp.b_endpoint_id END AS switch_port_id,
             dv.id AS device_id
-          FROM cable_links cl
+          FROM cable_links cl_sp
           JOIN switch_ports sp ON
-            (cl.a_endpoint_type = 'switch_port' AND cl.a_endpoint_id = sp.id)
-            OR (cl.b_endpoint_type = 'switch_port' AND cl.b_endpoint_id = sp.id)
+            (cl_sp.a_endpoint_type = 'switch_port' AND cl_sp.a_endpoint_id = sp.id)
+            OR (cl_sp.b_endpoint_type = 'switch_port' AND cl_sp.b_endpoint_id = sp.id)
           JOIN net_outlets no ON
-            (cl.a_endpoint_type = 'net_outlet' AND cl.a_endpoint_id = no.id)
-            OR (cl.b_endpoint_type = 'net_outlet' AND cl.b_endpoint_id = no.id)
-          JOIN device_interfaces di ON no.id = ANY(di.net_outlet_ids)
+            (cl_sp.a_endpoint_type = 'net_outlet' AND cl_sp.a_endpoint_id = no.id)
+            OR (cl_sp.b_endpoint_type = 'net_outlet' AND cl_sp.b_endpoint_id = no.id)
+          JOIN cable_links cl_di ON
+            (cl_di.a_endpoint_type = 'net_outlet' AND cl_di.a_endpoint_id = no.id)
+            OR (cl_di.b_endpoint_type = 'net_outlet' AND cl_di.b_endpoint_id = no.id)
+          JOIN device_interfaces di ON
+            (cl_di.a_endpoint_type = 'device_interface' AND cl_di.a_endpoint_id = di.id)
+            OR (cl_di.b_endpoint_type = 'device_interface' AND cl_di.b_endpoint_id = di.id)
           JOIN devices dv ON dv.id = di.device_id
           WHERE sp.device_id <> dv.id",
     )

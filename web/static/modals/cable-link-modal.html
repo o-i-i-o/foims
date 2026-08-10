@@ -1,0 +1,74 @@
+<template id="cable-link-modal-template">
+<div id="cable-link-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="cable-link-modal-title" data-i18n="cable_link.add">Add Cable Link</h3>
+      <span class="close" data-modal-id="cable-link-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cable-link-form">
+        <input type="hidden" id="cable-link-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cable-link-a-type"><span data-i18n="cable_link.a_endpoint">A Endpoint Type</span><span class="required">*</span></label>
+            <select id="cable-link-a-type" name="a_endpoint_type" required>
+              <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
+              <option value="switch_port" data-i18n="cable_link.endpoint_switch_port">Switch Port</option>
+              <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cable-link-a-id"><span data-i18n="cable_link.a_endpoint_id">A Endpoint</span><span class="required">*</span></label>
+            <select id="cable-link-a-id" name="a_endpoint_id" required></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cable-link-b-type"><span data-i18n="cable_link.b_endpoint">B Endpoint Type</span><span class="required">*</span></label>
+            <select id="cable-link-b-type" name="b_endpoint_type" required>
+              <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
+              <option value="switch_port" data-i18n="cable_link.endpoint_switch_port">Switch Port</option>
+              <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cable-link-b-id"><span data-i18n="cable_link.b_endpoint_id">B Endpoint</span><span class="required">*</span></label>
+            <select id="cable-link-b-id" name="b_endpoint_id" required></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cable-link-link-type"><span data-i18n="cable_link.link_type">Link Type</span></label>
+            <select id="cable-link-link-type" name="link_type">
+              <option value="ethernet" data-i18n="cable_link.link_type_ethernet">Ethernet</option>
+              <option value="fiber" data-i18n="cable_link.link_type_fiber">Fiber</option>
+              <option value="console" data-i18n="cable_link.link_type_console">Console</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cable-link-cable-label"><span data-i18n="cable_link.cable_label">Cable Label</span></label>
+            <input type="text" id="cable-link-cable-label" name="cable_label" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cable-link-length"><span data-i18n="cable_link.length_m">Length (m)</span></label>
+            <input type="number" id="cable-link-length" name="length_m" step="0.1" min="0" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="cable-link-tested"><span data-i18n="cable_link.tested">Tested</span></label>
+            <select id="cable-link-tested" name="tested">
+              <option value="0" data-i18n="cable_link.tested_no">No</option>
+              <option value="1" data-i18n="cable_link.tested_yes">Yes</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cable-link-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cable-link-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

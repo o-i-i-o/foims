@@ -611,6 +611,231 @@ class RoomChildrenManager {
 export const roomChildrenManager = new RoomChildrenManager();
 
 // ==========================================
+// 房间信息点管理模块 - 所有房型通用
+// ==========================================
+
+class RoomNetOutletsManager {
+  constructor() {
+    this.container = null;
+    this.handlers = new WeakMap();
+    this.addHandler = null;
+    this.typeChangeHandler = null;
+    this.roomId = null;
+    this.cabinets = []; // 当前房间的机柜选项 [{id, name}]
+  }
+
+  ensureContainer() {
+    if (!this.container || !document.contains(this.container)) {
+      this.container = document.getElementById('room-net-outlets-container');
+    }
+    return this.container;
+  }
+
+  init(roomId = null) {
+    this.roomId = roomId;
+    this.ensureContainer();
+    if (!this.container) return false;
+
+    this.container.innerHTML = '';
+    this.updateEmptyState();
+    return true;
+  }
+
+  async loadCabinets(roomId) {
+    this.roomId = roomId;
+    if (!roomId) {
+      this.cabinets = [];
+      return;
+    }
+    try {
+      const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}&page_size=1000`);
+      const data = result.success ? result.data : {};
+      this.cabinets = (data.items || data || []).map(c => ({ id: c.id, name: c.name }));
+    } catch (e) {
+      this.cabinets = [];
+    }
+  }
+
+  // 刷新所有已存在行的机柜下拉选项
+  refreshCabinetOptions() {
+    if (!this.ensureContainer()) return;
+    const rows = this.container.querySelectorAll('.room-net-outlet-item');
+    const opts = this.cabinetOptionsHtml();
+    rows.forEach(row => {
+      const sel = row.querySelector('.net-outlet-cabinet');
+      const current = sel?.dataset.value || '';
+      if (sel) {
+        sel.innerHTML = `<option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>` + opts;
+        if (current) sel.value = current;
+      }
+    });
+  }
+
+  cabinetOptionsHtml() {
+    return this.cabinets.map(c =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
+    ).join('');
+  }
+
+  updateEmptyState() {
+    if (!this.ensureContainer()) return;
+    const existing = this.container.querySelector('.room-net-outlet-empty');
+    const items = this.container.querySelectorAll('.room-net-outlet-item');
+    if (items.length === 0 && !existing) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'room-net-outlet-empty';
+      const addLabel = t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
+      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn">${addLabel}</button>`;
+      const addBtn = emptyDiv.querySelector('.add-net-outlet-btn');
+      if (addBtn) {
+        const handler = () => this.addItem();
+        this.handlers.set(addBtn, handler);
+        addBtn.addEventListener('click', handler);
+      }
+      this.container.appendChild(emptyDiv);
+    } else if (items.length > 0 && existing) {
+      existing.remove();
+    }
+  }
+
+  outletTypeOptionsHtml() {
+    const types = [
+      { value: 'wall_socket', label: t('net_outlet.type_wall_socket') || '墙面插座' },
+      { value: 'patch_panel', label: t('net_outlet.type_patch_panel') || '配线架' },
+      { value: 'wifi_ap', label: t('net_outlet.type_wifi_ap') || '无线AP' },
+      { value: 'other', label: t('net_outlet.type_other') || '其他' },
+    ];
+    return types.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  }
+
+  createRow(data = {}) {
+    const id = data.id || '';
+    const name = data.name || '';
+    const outletType = data.outlet_type || 'wall_socket';
+    const cabinetId = data.cabinet_id || '';
+    const description = data.description || '';
+    const div = document.createElement('div');
+    div.className = 'room-net-outlet-item';
+    div.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <input type="hidden" class="net-outlet-id" value="${escapeHtml(id)}" />
+          <input type="text" class="net-outlet-name form-control" value="${escapeHtml(name)}" placeholder="${t('net_outlet.name') || '信息点名称'}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <select class="net-outlet-type form-control">
+            ${this.outletTypeOptionsHtml()}
+          </select>
+        </div>
+        <div class="form-group">
+          <select class="net-outlet-cabinet form-control" data-value="${escapeHtml(cabinetId)}">
+            <option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>
+            ${this.cabinetOptionsHtml()}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" class="net-outlet-description form-control" value="${escapeHtml(description)}" placeholder="${t('common.description') || '描述'}" autocomplete="off" />
+        </div>
+        <div class="form-group room-net-outlets-actions">
+          <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete') || '删除'}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${t('room.add_net_outlet') || '添加信息点'}</button>
+        </div>
+      </div>
+    `;
+    // 设置类型和机柜的选中值
+    const typeSel = div.querySelector('.net-outlet-type');
+    if (typeSel) typeSel.value = outletType;
+    const cabSel = div.querySelector('.net-outlet-cabinet');
+    if (cabSel && cabinetId) cabSel.value = cabinetId;
+    this.bindItemEvents(div);
+    return div;
+  }
+
+  addItem(data = {}) {
+    if (!this.ensureContainer()) return;
+    const emptyState = this.container.querySelector('.room-net-outlet-empty');
+    if (emptyState) emptyState.remove();
+    const item = this.createRow(data);
+    this.container.appendChild(item);
+    this.updateAddButtons();
+    this.updateEmptyState();
+  }
+
+  updateAddButtons() {
+    if (!this.ensureContainer()) return;
+    const items = this.container.querySelectorAll('.room-net-outlet-item');
+    items.forEach((item, index) => {
+      const addBtn = item.querySelector('.add-net-outlet-btn');
+      if (addBtn) {
+        addBtn.style.display = index === items.length - 1 ? '' : 'none';
+        addBtn.textContent = t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
+      }
+    });
+  }
+
+  bindItemEvents(item) {
+    const removeBtn = item.querySelector('.remove-net-outlet-btn');
+    if (removeBtn) {
+      const handler = () => this.removeItem(item);
+      this.handlers.set(removeBtn, handler);
+      removeBtn.addEventListener('click', handler);
+    }
+    const addBtn = item.querySelector('.add-net-outlet-btn');
+    if (addBtn) {
+      const handler = () => this.addItem();
+      this.handlers.set(addBtn, handler);
+      addBtn.addEventListener('click', handler);
+    }
+  }
+
+  removeItem(item) {
+    item.remove();
+    this.ensureContainer();
+    this.updateEmptyState();
+    this.updateAddButtons();
+  }
+
+  async loadExisting(room) {
+    this.ensureContainer();
+    if (!this.container) return;
+    this.container.innerHTML = '';
+
+    // 加载该房间的机柜选项（信息点行内的机柜下拉需要）
+    if (room?.id) {
+      await this.loadCabinets(room.id);
+    }
+
+    const netOutlets = room?.net_outlets || [];
+    netOutlets.forEach(no => this.addItem(no));
+    this.updateEmptyState();
+    this.updateAddButtons();
+  }
+
+  collectData() {
+    if (!this.ensureContainer()) return [];
+    const items = this.container.querySelectorAll('.room-net-outlet-item');
+    const netOutlets = [];
+    for (const item of items) {
+      const idInput = item.querySelector('.net-outlet-id');
+      const nameInput = item.querySelector('.net-outlet-name');
+      const typeSel = item.querySelector('.net-outlet-type');
+      const cabSel = item.querySelector('.net-outlet-cabinet');
+      const descInput = item.querySelector('.net-outlet-description');
+      netOutlets.push({
+        id: idInput?.value || null,
+        name: (nameInput?.value || '').trim(),
+        outlet_type: typeSel?.value || 'wall_socket',
+        cabinet_id: cabSel?.value || null,
+        description: (descInput?.value || '').trim() || null,
+      });
+    }
+    return netOutlets;
+  }
+}
+
+export const roomNetOutletsManager = new RoomNetOutletsManager();
+
+// ==========================================
 // 房间管理功能
 // ==========================================
 
@@ -648,6 +873,7 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
           return `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
           <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${isCabinetRoom ? (t('room.cabinets') || '机柜列表') : (t('room.workstations') || '工位列表')}</button>
+          <button class="btn btn-sm btn-secondary btn-room-net-outlets-list" data-room-id="${v}">${t('room.net_outlets') || '信息点列表'}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         `;
         } }
@@ -684,6 +910,11 @@ function bindRoomButtonsEvents() {
       const roomId = target.dataset.roomId;
       if (roomId) {
         await openRoomChildrenListModal(roomId);
+      }
+    } else if (target.classList.contains("btn-room-net-outlets-list")) {
+      const roomId = target.dataset.roomId;
+      if (roomId) {
+        await openRoomNetOutletsListModal(roomId);
       }
     }
   };
@@ -744,6 +975,52 @@ export async function openRoomChildrenListModal(roomId) {
   } catch (error) {
     handleError(error, t('room.load_failed') || "加载房间数据失败");
   }
+}
+
+export async function openRoomNetOutletsListModal(roomId) {
+  try {
+    const result = await apiGet(`/api/resources/rooms/${roomId}`);
+    if (!result.success || !result.data) {
+      showToast(result.message || t('room.load_failed') || "加载房间数据失败", "error");
+      return;
+    }
+    const room = result.data;
+    await openModal("room-net-outlets-list-modal");
+
+    const titleEl = document.getElementById('room-net-outlets-list-modal-title');
+    const tbody = document.getElementById('room-net-outlets-list-tbody');
+
+    if (titleEl) titleEl.textContent = `${room.name} - ${t('room.net_outlets') || '信息点列表'}`;
+
+    const netOutlets = room.net_outlets || [];
+    if (tbody) {
+      if (netOutlets.length === 0) {
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+      } else {
+        tbody.innerHTML = netOutlets.map((no, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(no.name || '')}</td>
+            <td>${escapeHtml(outletTypeLabel(no.outlet_type))}</td>
+            <td>${escapeHtml(no.cabinet_name || '-')}</td>
+            <td>${escapeHtml(no.description || '-')}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (error) {
+    handleError(error, t('room.load_failed') || "加载房间数据失败");
+  }
+}
+
+function outletTypeLabel(type) {
+  const map = {
+    wall_socket: t('net_outlet.type_wall_socket') || '墙面插座',
+    patch_panel: t('net_outlet.type_patch_panel') || '配线架',
+    wifi_ap: t('net_outlet.type_wifi_ap') || '无线AP',
+    other: t('net_outlet.type_other') || '其他',
+  };
+  return map[type] || type || '-';
 }
 
 export function initRoomSortEvents() {
@@ -858,6 +1135,15 @@ export async function submitRoomForm() {
       return;
     }
 
+    // 同步信息点（所有房型通用）
+    const netOutletsData = roomNetOutletsManager.collectData();
+    const noSyncResult = await apiPut(`/api/resources/rooms/${roomId}/net-outlets`, { net_outlets: netOutletsData });
+    if (!noSyncResult.success) {
+      showToast(noSyncResult.message || t('room.net_outlets_save_failed') || "信息点保存失败", "error");
+      await loadRoomsData();
+      return;
+    }
+
     showToast("房间保存成功", "success");
     closeModal("room-modal");
     await loadRoomsData();
@@ -911,6 +1197,9 @@ export async function openRoomModal(room = null) {
     // 初始化子项管理器并加载现有工位/机柜
     roomChildrenManager.roomType = (room.room_type || "OFFICE").toLowerCase();
     roomChildrenManager.loadExisting(room);
+
+    // 初始化信息点管理器并加载现有信息点
+    await roomNetOutletsManager.loadExisting(room);
   } else {
     title.textContent = "添加房间";
     if (form) form.reset();
@@ -920,6 +1209,9 @@ export async function openRoomModal(room = null) {
     // 初始化子项管理器为默认空状态
     roomChildrenManager.roomType = 'office';
     roomChildrenManager.init();
+
+    // 初始化信息点管理器为默认空状态
+    roomNetOutletsManager.init();
   }
 }
 

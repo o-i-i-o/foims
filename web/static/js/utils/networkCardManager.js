@@ -147,8 +147,6 @@ export class NetworkCardManager {
     this.regions = [];
     this.devicesCache = null;
     this.roomsCache = null;
-    this.outletsCache = [];
-    this.outletsCacheByRoom = new Map();
     this.networksByRegionCache = new Map();
     this.switchInterfacesCache = new Map();
     this.optionsLoaded = false;
@@ -350,20 +348,6 @@ export class NetworkCardManager {
         </div>
       </div>
       <div class="nc-fields">
-        <div class="nc-field nc-outlet-picker-field">
-          <label>${t('device.net_outlets') || '信息点（多选，按顺序连接）'}</label>
-          <div class="nc-outlet-picker">
-            <div class="nc-outlet-add-row">
-              <select class="port-outlet-available nc-input">
-                <option value="">${t('device.select_net_outlet_to_add') || '选择信息点添加'}</option>
-              </select>
-              <button type="button" class="btn btn-secondary btn-sm nc-outlet-add-btn">${t('common.add') || '添加'}</button>
-            </div>
-            <ul class="nc-outlet-list" aria-label="${t('device.net_outlets_order') || '信息点连接顺序'}"></ul>
-          </div>
-        </div>
-      </div>
-      <div class="nc-fields">
         <div class="nc-field">
           <label for="${uid}-switch">${t('device.upstream_device') || '上级设备'}</label>
           <select id="${uid}-switch" class="port-switch nc-input">
@@ -391,50 +375,8 @@ export class NetworkCardManager {
       await this.bindIpRowEvents(ipRow);
     });
 
-    const outletAvailableSelect = port.querySelector('.port-outlet-available');
-    const outletList = port.querySelector('.nc-outlet-list');
-    const outletAddBtn = port.querySelector('.nc-outlet-add-btn');
     const switchSelect = port.querySelector('.port-switch');
     const portSelect = port.querySelector('.port-port');
-
-    const roomId = document.querySelector('#device-room-id')?.value || null;
-
-    // 加载信息点到"可添加"下拉
-    const availableOutlets = (roomId && outletAvailableSelect)
-      ? await this.loadOutlets(outletAvailableSelect, roomId)
-      : [];
-
-    // 绑定"添加"按钮
-    if (outletAddBtn && outletAvailableSelect && outletList) {
-      outletAddBtn.addEventListener('click', () => {
-        const selectedId = outletAvailableSelect.value;
-        if (!selectedId) {
-          showToast(t('device.select_net_outlet_first') || '请先选择信息点', 'warning');
-          return;
-        }
-        const selectedOption = outletAvailableSelect.options[outletAvailableSelect.selectedIndex];
-        const outletName = selectedOption ? selectedOption.textContent : selectedId;
-        this.addOutletItem(outletList, selectedId, outletName);
-        // 从下拉中移除已添加项
-        outletAvailableSelect.removeChild(selectedOption);
-        outletAvailableSelect.value = '';
-      });
-    }
-
-    // 按顺序回填已选信息点
-    if (outletList && Array.isArray(portData.net_outlet_ids)) {
-      for (const outletId of portData.net_outlet_ids) {
-        // 从已加载的 available 列表中查找名称
-        const matched = availableOutlets.find(o => o.id === outletId);
-        const outletName = matched ? (matched.name || outletId) : outletId;
-        this.addOutletItem(outletList, outletId, outletName);
-        // 从下拉中移除已回填项
-        if (outletAvailableSelect) {
-          const optToRemove = Array.from(outletAvailableSelect.options).find(o => o.value === outletId);
-          if (optToRemove) outletAvailableSelect.removeChild(optToRemove);
-        }
-      }
-    }
 
     await this.loadSwitches(switchSelect, portSelect);
 
@@ -459,32 +401,6 @@ export class NetworkCardManager {
       ipsContainer.appendChild(ipRow.element);
       await this.bindIpRowEvents(ipRow);
     }
-  }
-
-  addOutletItem(outletList, outletId, outletName) {
-    const li = document.createElement('li');
-    li.className = 'nc-outlet-item';
-    li.dataset.outletId = outletId;
-    li.innerHTML = `
-      <span class="nc-outlet-item-name">${escapeHtml(outletName)}</span>
-      <span class="nc-outlet-item-actions">
-        <button type="button" class="btn-icon-sm nc-outlet-up-btn" aria-label="${t('common.move_up') || '上移'}">↑</button>
-        <button type="button" class="btn-icon-sm nc-outlet-down-btn" aria-label="${t('common.move_down') || '下移'}">↓</button>
-        <button type="button" class="btn-icon-sm nc-outlet-remove-btn" aria-label="${t('common.remove') || '移除'}">×</button>
-      </span>
-    `;
-    li.querySelector('.nc-outlet-up-btn')?.addEventListener('click', () => {
-      const prev = li.previousElementSibling;
-      if (prev) outletList.insertBefore(li, prev);
-    });
-    li.querySelector('.nc-outlet-down-btn')?.addEventListener('click', () => {
-      const next = li.nextElementSibling;
-      if (next) outletList.insertBefore(next, li);
-    });
-    li.querySelector('.nc-outlet-remove-btn')?.addEventListener('click', () => {
-      li.remove();
-    });
-    outletList.appendChild(li);
   }
 
   removePort(port) {
@@ -603,42 +519,6 @@ export class NetworkCardManager {
     return Array.from(map.values());
   }
 
-  async loadOutlets(outletAvailableSelect, roomId) {
-    if (!outletAvailableSelect) return [];
-    // 保留占位项
-    const placeholder = `<option value="">${t('device.select_net_outlet_to_add') || '选择信息点添加'}</option>`;
-    outletAvailableSelect.innerHTML = placeholder;
-    if (!roomId) return [];
-
-    let outlets;
-    if (this.outletsCacheByRoom.has(roomId)) {
-      outlets = this.outletsCacheByRoom.get(roomId);
-    } else {
-      try {
-        const result = await apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000');
-        if (result.success && result.data) {
-          outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
-          this.outletsCacheByRoom.set(roomId, outlets);
-        } else {
-          outlets = [];
-        }
-      } catch (error) {
-        console.error('加载信息点失败:', error);
-        outlets = [];
-      }
-    }
-
-    // 缓存信息点数据（含 peer 信息），用于 collectData 验证
-    this.outletsCache = outlets;
-    outlets.forEach(outlet => {
-      const option = document.createElement('option');
-      option.value = outlet.id;
-      option.textContent = outlet.name || outlet.code || outlet.id;
-      outletAvailableSelect.appendChild(option);
-    });
-    return outlets;
-  }
-
   async loadSwitches(switchSelect, portSelect) {
     if (!switchSelect || !portSelect) return;
     await this.ensureOptionsLoaded();
@@ -715,7 +595,6 @@ export class NetworkCardManager {
 
   /// 并行预取渲染所需的所有外部数据
   async prefetchCardData(cards) {
-    const roomId = document.querySelector('#device-room-id')?.value || null;
     const switchIds = new Set();
     const regionIds = new Set();
 
@@ -729,19 +608,6 @@ export class NetworkCardManager {
     }
 
     const promises = [];
-
-    if (roomId && !this.outletsCacheByRoom.has(roomId)) {
-      promises.push(
-        apiGet('/api/resources/net-outlets?room_id=' + roomId + '&page_size=1000')
-          .then(result => {
-            if (result.success && result.data) {
-              const outlets = Array.isArray(result.data) ? result.data : (result.data.items || []);
-              this.outletsCacheByRoom.set(roomId, outlets);
-            }
-          })
-          .catch(error => console.error('预加载信息点失败:', error))
-      );
-    }
 
     for (const switchId of switchIds) {
       if (!this.switchInterfacesCache.has(switchId)) {
@@ -868,23 +734,6 @@ export class NetworkCardManager {
 
         const portSwitchId = portEl.querySelector('.port-switch')?.value || null;
         const portUplinkInterfaceId = portEl.querySelector('.port-port')?.value || null;
-        // 从有序列表中读取 net_outlet_ids
-        const outletItems = portEl.querySelectorAll('.nc-outlet-item');
-        const portOutletIds = Array.from(outletItems).map(li => li.dataset.outletId).filter(Boolean);
-
-        // 信息点链验证：非最后信息点必须有对端（peer_type 不为空）
-        // 上级端口的自动推导由后端在保存时根据最后一个信息点的 peer_switch_port_id 完成
-        if (portOutletIds.length > 1) {
-          for (let i = 0; i < portOutletIds.length - 1; i++) {
-            const outletData = this.outletsCache.find(o => o.id === portOutletIds[i]);
-            if (outletData && !outletData.peer_type) {
-              errors.push(
-                `${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ` +
-                `${t('device.outlet_must_have_peer') || '链路中除最后一个信息点外，其他信息点必须配置对端'} (${outletData.name || outletData.id})`
-              );
-            }
-          }
-        }
 
         ports.push({
           id: portId,
@@ -896,7 +745,6 @@ export class NetworkCardManager {
           ips,
           switch_id: portSwitchId,
           uplink_interface_id: portUplinkInterfaceId,
-          net_outlet_ids: portOutletIds,
         });
       });
 

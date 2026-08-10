@@ -17,6 +17,7 @@ const EDIT_FUNCTIONS = {
   "rooms-table": { module: "room", fn: "editRoom" },
   "cabinets-table": { module: "cabinet", fn: "editCabinet" },
   "net-outlets-table": { module: "netOutlet", fn: "editNetOutlet" },
+  "cable-links-table": { module: "cableLink", fn: "editCableLink" },
   "devices-table": { module: "device", fn: "editDevice" },
   "users-table": { module: "userManager", fn: "openUserModal" },
 };
@@ -27,6 +28,7 @@ const DELETE_FUNCTIONS = {
   "rooms-table": { module: "room", fn: "deleteRoom" },
   "cabinets-table": { module: "cabinet", fn: "deleteCabinet" },
   "net-outlets-table": { module: "netOutlet", fn: "deleteNetOutlet" },
+  "cable-links-table": { module: "cableLink", fn: "deleteCableLink" },
   "devices-table": { module: "device", fn: "deleteDevice" },
   "device-ports-table": { module: "devicePorts", fn: "deleteDevicePort" },
   "users-table": { module: "userManager", fn: "deleteUser" },

@@ -91,8 +91,6 @@ pub async fn get_net_outlets(
         "SELECT ap.id, ap.name, ap.outlet_type, ap.room_id, ap.room_name, \
          ap.cabinet_id, ap.cabinet_name, \
          ap.description, \
-         ap.peer_type, ap.peer_room_id, ap.peer_outlet_id, ap.peer_switch_port_id, \
-         ap.peer_room_name, ap.peer_outlet_name, ap.peer_switch_port_label, \
          ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET ${}",
         param_idx + 1
@@ -176,36 +174,12 @@ pub async fn create_net_outlet(
         ));
     }
 
-    if let Some(peer_type) = req.peer_type.as_deref()
-        && !matches!(peer_type, "outlet" | "switch_port")
-    {
-        return Err(AppError::Validation(
-            "对端类型必须是outlet或switch_port".to_string(),
-        ));
-    }
-
-    if let Some(peer_type) = req.peer_type.as_deref() {
-        match peer_type {
-            "outlet" if req.peer_outlet_id.is_none() => {
-                return Err(AppError::Validation(
-                    "对端类型为信息点时必须指定对端信息点".to_string(),
-                ));
-            }
-            "switch_port" if req.peer_switch_port_id.is_none() => {
-                return Err(AppError::Validation(
-                    "对端类型为交换机接口时必须指定对端交换机接口".to_string(),
-                ));
-            }
-            _ => {}
-        }
-    }
-
     let id = Uuid::new_v4();
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, description, peer_type, peer_room_id, peer_outlet_id, peer_switch_port_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
@@ -213,10 +187,6 @@ pub async fn create_net_outlet(
     .bind(req.room_id)
     .bind(req.cabinet_id)
     .bind(&req.description)
-    .bind(&req.peer_type)
-    .bind(req.peer_room_id)
-    .bind(req.peer_outlet_id)
-    .bind(req.peer_switch_port_id)
     .bind(now)
     .bind(now)
     .execute(&state.pool()?.get_conn())
@@ -237,10 +207,6 @@ pub async fn create_net_outlet(
         room_id: req.room_id,
         cabinet_id: req.cabinet_id,
         description: req.description.clone(),
-        peer_type: req.peer_type.clone(),
-        peer_room_id: req.peer_room_id,
-        peer_outlet_id: req.peer_outlet_id,
-        peer_switch_port_id: req.peer_switch_port_id,
         created_at: now,
         updated_at: now,
     };
@@ -279,8 +245,6 @@ pub async fn get_net_outlet(
         "SELECT id, name, outlet_type, room_id, room_name, \
          cabinet_id, cabinet_name, \
          description, \
-         peer_type, peer_room_id, peer_outlet_id, peer_switch_port_id, \
-         peer_room_name, peer_outlet_name, peer_switch_port_label, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -358,14 +322,6 @@ pub async fn update_net_outlet(
         ));
     }
 
-    if let Some(Some(ref peer_type)) = req.peer_type
-        && !matches!(peer_type.as_str(), "outlet" | "switch_port")
-    {
-        return Err(AppError::Validation(
-            "对端类型必须是outlet或switch_port".to_string(),
-        ));
-    }
-
     let now = Utc::now();
 
     let mut set_clauses: Vec<String> = Vec::new();
@@ -396,46 +352,6 @@ pub async fn update_net_outlet(
         "description = COALESCE(${param_index}, description)"
     ));
     param_index += 1;
-
-    let peer_type_update = req.peer_type.is_some();
-    if peer_type_update {
-        set_clauses.push(format!(
-            "peer_type = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_type END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    let peer_room_id_update = req.peer_room_id.is_some();
-    if peer_room_id_update {
-        set_clauses.push(format!(
-            "peer_room_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_room_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    let peer_outlet_id_update = req.peer_outlet_id.is_some();
-    if peer_outlet_id_update {
-        set_clauses.push(format!(
-            "peer_outlet_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_outlet_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    let peer_switch_port_id_update = req.peer_switch_port_id.is_some();
-    if peer_switch_port_id_update {
-        set_clauses.push(format!(
-            "peer_switch_port_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE peer_switch_port_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
 
     set_clauses.push(format!("updated_at = ${param_index}"));
     param_index += 1;
@@ -475,62 +391,6 @@ pub async fn update_net_outlet(
 
     query = query.bind(&req.description);
 
-    if peer_type_update {
-        match &req.peer_type {
-            Some(Some(pt)) => {
-                query = query.bind(true);
-                query = query.bind(pt);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<String>::None);
-            }
-            None => unreachable!(),
-        }
-    }
-
-    if peer_room_id_update {
-        match &req.peer_room_id {
-            Some(Some(rid)) => {
-                query = query.bind(true);
-                query = query.bind(rid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
-        }
-    }
-
-    if peer_outlet_id_update {
-        match &req.peer_outlet_id {
-            Some(Some(oid)) => {
-                query = query.bind(true);
-                query = query.bind(oid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
-        }
-    }
-
-    if peer_switch_port_id_update {
-        match &req.peer_switch_port_id {
-            Some(Some(spid)) => {
-                query = query.bind(true);
-                query = query.bind(spid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
-        }
-    }
-
     query = query.bind(now);
     query = query.bind(id);
 
@@ -549,8 +409,6 @@ pub async fn update_net_outlet(
         "SELECT id, name, outlet_type, room_id, room_name, \
          cabinet_id, cabinet_name, \
          description, \
-         peer_type, peer_room_id, peer_outlet_id, peer_switch_port_id, \
-         peer_room_name, peer_outlet_name, peer_switch_port_label, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -598,16 +456,6 @@ pub async fn delete_net_outlet(
     if existing.is_none() {
         return Err(AppError::NotFound("信息点未找到".to_string()));
     }
-
-    // net_outlet_ids 数组无外键约束，需手动清理 device_interfaces 中的悬空引用
-    sqlx::query(
-        "UPDATE device_interfaces
-         SET net_outlet_ids = array_remove(net_outlet_ids, $1)
-         WHERE $1 = ANY(net_outlet_ids)",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
 
     sqlx::query("DELETE FROM net_outlets WHERE id = $1")
         .bind(id)

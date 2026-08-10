@@ -318,7 +318,6 @@
   "description": null,
   "switch_id": null,             // 上级交换机设备 ID
   "uplink_interface_id": null,   // 上级接口 ID
-  "net_outlet_ids": [],          // 信息点 ID 列表
   "ips": [ IpSyncItem, ... ]
 }
 ```
@@ -373,7 +372,6 @@
         "description": null,
         "switch_id": null,
         "uplink_interface_id": null,
-        "net_outlet_ids": [],
         "sort_order": 0,
         "created_at": "...",
         "updated_at": "...",
@@ -452,8 +450,7 @@
   "vlan_id": null,
   "description": null,
   "switch_id": null,
-  "uplink_interface_id": null,
-  "net_outlet_ids": []           // 信息点 ID 列表
+  "uplink_interface_id": null
 }
 ```
 
@@ -461,7 +458,7 @@
 
 **业务逻辑：**
 - 同设备下接口名唯一，冲突返回 409
-- 调用 [`validate_and_resolve_outlet_chain`](file:///media/oi-io/AA709DF48A7AD5C2/ipma/src/resource/device/interface.rs#L140-L202)：链路中除最后一个信息点外必须有对端；最后一个信息点的对端为 `switch_port` 时，自动推导 `switch_id` 和 `uplink_interface_id`
+- 信息点与交换机端口/设备接口之间的物理连线通过"线路"（cable_links）模块表达，不再在设备接口上维护信息点链
 
 ### 4.4 获取接口详情
 
@@ -491,8 +488,7 @@
   "vlan_id": null,
   "description": null,             // Option<Option<String>>
   "switch_id": null,               // Option<Option<Uuid>>
-  "uplink_interface_id": null,     // Option<Option<Uuid>>
-  "net_outlet_ids": null           // Option<Vec<Uuid>>：提供时验证链路
+  "uplink_interface_id": null      // Option<Option<Uuid>>
 }
 ```
 

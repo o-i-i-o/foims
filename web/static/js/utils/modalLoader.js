@@ -24,9 +24,11 @@ const MODAL_REGISTRY = {
     'org-template-modal': '/static/modals/org-template-modal.html',
     'org-template-editor-modal': '/static/modals/org-template-editor-modal.html',
     'net-outlet-modal': '/static/modals/net-outlet-modal.html',
+    'cable-link-modal': '/static/modals/cable-link-modal.html',
     'device-modal': '/static/modals/device-modal.html',
     'device-template-modal': '/static/modals/device-template-modal.html',
     'room-children-list-modal': '/static/modals/room-children-list-modal.html',
+    'room-net-outlets-list-modal': '/static/modals/room-net-outlets-list-modal.html',
     'cabinet-positions-list-modal': '/static/modals/cabinet-positions-list-modal.html',
 };
 

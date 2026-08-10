@@ -496,7 +496,6 @@ export async function submitDeviceForm() {
   const roomId = getElementValue("device-room-id");
   const workstationId = getElementValue("device-workstation-id");
   const positionId = getElementValue("device-position-id");
-  const netOutletId = getElementValue("device-net-outlet-id");
   const description = getElementValue("device-description");
 
   if (!name?.trim()) {

@@ -44,7 +44,8 @@ use crate::resource::{
     get_switch_port, get_switch_ports, get_topology_connections, get_topology_nodes,
     get_workstation, get_workstations, pull_ip_managers, save_layout, save_topology_nodes,
     sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
-    sync_room_children, test_snmp_connection, test_snmp_connection_by_id, trigger_auto_discover,
+    sync_room_children, sync_room_net_outlets, test_snmp_connection,
+    test_snmp_connection_by_id, trigger_auto_discover,
     update_cabinet, update_cabinet_position, update_cable_link, update_device,
     update_device_interface, update_device_template, update_net_outlet, update_network,
     update_network_region, update_org_template, update_organization, update_room,
@@ -201,6 +202,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route(
             "/api/resources/rooms/{id}/children",
             put(sync_room_children),
+        )
+        .route(
+            "/api/resources/rooms/{id}/net-outlets",
+            put(sync_room_net_outlets),
         )
         // 机柜管理
         .route(

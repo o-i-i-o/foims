@@ -34,6 +34,7 @@ const MODULE_REGISTRY = {
     'cabinet': '/static/js/modules/cabinet.js',
     'position': '/static/js/modules/position.js',
     'netOutlet': '/static/js/modules/netOutlet.js',
+    'cableLink': '/static/js/modules/cableLink.js',
     'userManager': '/static/js/modules/userManager.js',
     'systemManager': '/static/js/modules/systemManager.js',
     'log': '/static/js/modules/log.js',
