@@ -129,9 +129,6 @@
                     </div>
                   </div>
 
-                  <div class="form-group forgot-password">
-                    <a href="#" id="forgot-password-link" class="link-text" data-i18n="login.forgot_password">忘记密码？</a>
-                  </div>
                 </div>
 
                 <!-- 邮箱验证码登录区域 -->
@@ -182,12 +179,13 @@
                   </div>
                 </button>
 
-                <!-- 记住我 -->
-                <div class="form-group remember-me">
-                  <label for="remember-me" class="checkbox-label">
+                <!-- 保持登录 + 忘记密码（同一行） -->
+                <div class="form-options">
+                  <label class="remember-me">
                     <input type="checkbox" name="remember" id="remember-me" aria-label="保持登录" />
                     <span data-i18n="login.remember_me">保持登录</span>
                   </label>
+                  <a href="#" id="forgot-password-link" class="forgot-link" data-i18n="login.forgot_password">忘记密码？</a>
                 </div>
               </form>
             </div>

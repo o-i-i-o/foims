@@ -15,6 +15,7 @@ const MODAL_REGISTRY = {
     'device-ports-group-modal': '/static/modals/device-ports-group-modal.html',
     'device-port-detail-modal': '/static/modals/device-port-detail-modal.html',
     'unified-device-ports-modal': '/static/modals/unified-device-ports-modal.html',
+    'port-conflict-modal': '/static/modals/port-conflict-modal.html',
     'user-modal': '/static/modals/user-modal.html',
     'two-factor-modal': '/static/modals/two-factor-modal.html',
     'import-result-modal': '/static/modals/import-result-modal.html',
