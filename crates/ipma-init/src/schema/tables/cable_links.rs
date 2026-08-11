@@ -38,32 +38,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_device_ports_device_id ON device_ports(device_id)")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_device_ports_port_number ON device_ports(port_number)",
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_device_interfaces_device_id ON device_interfaces(device_id)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_device_interfaces_mac ON device_interfaces(mac_address) WHERE mac_address IS NOT NULL",
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_ips_device_interface_id ON ips(device_interface_id)",
-    )
-    .execute(pool)
-    .await?;
-
     create_triggers(pool).await?;
     create_path_function(pool).await?;
 

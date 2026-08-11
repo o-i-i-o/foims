@@ -129,6 +129,18 @@ async fn health_check() -> Response {
     crate::error::ok_json(serde_json::json!({"status": "ok"}), "Success")
 }
 
+/// 公开的初始化状态查询（不需要认证）
+/// 供前端登录页判断：当 init_enabled=true 时跳转到初始化页 /init_index.html
+/// 仅返回 init_enabled 一个布尔字段，避免泄露系统是否已初始化等额外信息。
+pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
+    crate::error::ok_json(
+        serde_json::json!({
+            "init_enabled": state.config.init.enabled,
+        }),
+        "Success",
+    )
+}
+
 // 初始化相关路由将根据配置动态添加（在 main.rs 中）
 // 这里只定义基础路由
 pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {

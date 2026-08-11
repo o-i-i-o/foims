@@ -21,6 +21,7 @@ use ipma::db::DbPool;
 use ipma::log::setup_logging;
 use ipma::routes::init_routes;
 use ipma::routes::static_files::get_web_dir;
+use ipma::routes::get_init_status;
 use ipma::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use ipma::system::config::init_start_time;
 use ipma::system::task_executors::{
@@ -288,7 +289,7 @@ fn configure_app_services(
         }
     } else {
         // API 路由
-        let api_router = init_routes(app_state.clone()).with_state(app_state);
+        let api_router = init_routes(app_state.clone()).with_state(app_state.clone());
 
         let router = Router::new().merge(api_router);
 
@@ -310,7 +311,14 @@ fn configure_app_services(
         }
     };
 
+    // 始终注册的公开路由（初始化模式与正常模式都可用）
+    // 让前端登录页能查询初始化开关，决定是否跳转到 /init_index.html
+    let always_on_routes = Router::new()
+        .route("/api/auth/init-status", get(get_init_status))
+        .with_state(app_state.clone());
+
     router
+        .merge(always_on_routes)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())

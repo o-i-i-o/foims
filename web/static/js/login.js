@@ -5,7 +5,7 @@
 // 动画: 鼠标追踪、眨眼、密码可见偷看、输入互看、登录失败摇头+难过表情
 
 // ES模块导入
-import { apiPost, refreshToken } from "./utils/apiClient.js";
+import { apiGet, apiPost, refreshToken } from "./utils/apiClient.js";
 import { closeModal, openModal } from "./utils/modal.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n } from "./utils/i18n.js";
@@ -96,6 +96,11 @@ class LoginManager {
    */
   async init() {
     await initI18n();
+
+    // 检查是否处于初始化模式（config.toml [init].enabled = true）
+    // 若是，则跳转到初始化页，不继续登录流程
+    if (await this.checkInitMode()) return;
+
     this.cleanUrlParams();
     this.checkLoginStatus();
 
@@ -555,6 +560,24 @@ class LoginManager {
       btn.disabled = false;
       btn.textContent = originalText;
     }
+  }
+
+  /**
+   * 检查是否处于初始化模式
+   * 后端 config.toml [init].enabled = true 时，前端跳转到初始化页
+   * @returns {Promise<boolean>} true 表示已跳转（初始化模式），调用方应中止登录流程
+   */
+  async checkInitMode() {
+    try {
+      const result = await apiGet("/api/auth/init-status");
+      if (result.success && result.data && result.data.init_enabled) {
+        window.location.href = "/init_index.html";
+        return true;
+      }
+    } catch (e) {
+      // 接口不可用时按非初始化模式处理（保持登录页可用）
+    }
+    return false;
   }
 
   async checkLoginStatus() {

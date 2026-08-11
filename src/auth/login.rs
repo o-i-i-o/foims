@@ -146,19 +146,22 @@ pub async fn auth_middleware(
 pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
     let (parts, body) = req.into_parts();
 
-    // UDS 场景无 peer IP，检查 X-Forwarded-For 是否为 loopback；无则视为本地（UDS 仅本地访问）
-    let is_localhost = if let Some(xff) = parts.headers.get("X-Forwarded-For")
-        && let Ok(xff_str) = xff.to_str()
-        && let Some(first_ip) = xff_str.split(',').next()
-    {
-        first_ip
-            .trim()
-            .parse::<std::net::IpAddr>()
-            .map(|addr| addr.is_loopback())
-            .unwrap_or(false)
-    } else {
-        true
-    };
+    // UDS 场景无 peer IP，需依赖反代传入的来源 IP 头判断是否本地访问。
+    // 安全要点：
+    //   1. 只信任 X-Real-IP —— nginx 用 `proxy_set_header X-Real-IP $remote_addr;`
+    //      覆盖式设置，客户端无法伪造（$remote_addr 取自 TCP 对端）。
+    //      切勿使用 X-Forwarded-For：其经 `$proxy_add_x_forwarded_for` 会保留客户端
+    //      伪造的首段值（如 "127.0.0.1, <真实IP>"），而取首段判断即可被绕过。
+    //   2. fail-close：缺失可信来源 IP 头时默认拒绝（旧实现为 fail-open 默认放行）。
+    let is_localhost = parts
+        .headers
+        .get("X-Real-IP")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        .map(|addr| addr.is_loopback())
+        .unwrap_or(false);
 
     if !is_localhost {
         let user_lang = detect_user_language_from_parts(&parts);
