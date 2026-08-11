@@ -28,7 +28,7 @@ use crate::models::{
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, detect_user_language_from_parts};
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret};
 
 type TotpReplayStore =
     std::sync::Mutex<std::collections::HashMap<Uuid, (String, std::time::Instant)>>;
@@ -563,8 +563,8 @@ pub async fn login_with_two_factor(
         let secret = decrypt_password_async(encrypted_secret)
             .await
             .map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
-        let secret_bytes = match Secret::Encoded(secret.clone()).to_bytes() {
-            Ok(bytes) => bytes,
+        let secret = match Secret::try_from_base32(&secret) {
+            Ok(s) => s,
             Err(e) => {
                 if let Err(e) = log_login(
                     &conn,
@@ -581,7 +581,14 @@ pub async fn login_with_two_factor(
                 return Err(AppError::Internal(format!("2FA密钥格式错误: {e}")));
             }
         };
-        match TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes, None, String::new()) {
+        match Builder::new()
+            .with_algorithm(Algorithm::SHA1)
+            .with_digits(6)
+            .with_skew(1)
+            .with_step_duration(30)
+            .with_secret(secret)
+            .build()
+        {
             Ok(totp) => {
                 let code = req.two_factor_code.clone();
                 if is_totp_code_replayed(id, &code) {
@@ -603,10 +610,11 @@ pub async fn login_with_two_factor(
                 }
                 let code_for_check = code.clone();
                 let valid =
-                    tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
+                    tokio::task::spawn_blocking(move || {
+                        totp.check_current(&code_for_check).is_some()
+                    })
                         .await
-                        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
-                        .map_err(|e| AppError::Internal(e.to_string()))?;
+                        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
                 if valid {
                     record_totp_usage(id, &code);
                     verified = true;
@@ -1031,22 +1039,19 @@ pub async fn init_two_factor(
         rand::rng().fill_bytes(&mut bytes);
         bytes
     };
-    let secret = Secret::Raw(secret_bytes);
-    let secret_base32 = secret.to_encoded().to_string();
+    let secret = Secret::from(secret_bytes);
+    let secret_base32 = secret.to_base32();
 
-    let secret_bytes_for_totp = secret
-        .to_bytes()
-        .map_err(|e| AppError::Internal(format!("TOTP密钥转换失败: {e}")))?;
-    let totp = TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret_bytes_for_totp,
-        Some("IPMA".to_string()),
-        target_username.clone(),
-    )
-    .map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
+    let totp = Builder::new()
+        .with_algorithm(Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .with_issuer(Some("IPMA"))
+        .with_account_name(target_username.clone())
+        .build()
+        .map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
 
     let encrypted_secret = encrypt_password_async(secret_base32).await?;
     sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
@@ -1055,10 +1060,12 @@ pub async fn init_two_factor(
         .execute(&conn)
         .await?;
 
-    let otpauth_url = totp.get_url();
+    let otpauth_url = totp
+        .to_url()
+        .map_err(|e| AppError::Internal(format!("生成otpauth URL失败: {e}")))?;
     let totp_for_qr = totp;
     let qr_code_base64 =
-        tokio::task::spawn_blocking(move || totp_for_qr.get_qr_base64().unwrap_or_default())
+        tokio::task::spawn_blocking(move || totp_for_qr.to_qr_base64().unwrap_or_default())
             .await
             .map_err(|e| AppError::Internal(format!("QR码生成任务失败: {e}")))?;
 
@@ -1124,20 +1131,19 @@ pub async fn enable_two_factor(
             }
         };
 
-    let secret_bytes = Secret::Encoded(secret.clone())
-        .to_bytes()
+    let secret = Secret::try_from_base32(&secret)
         .map_err(|_| AppError::Validation("密钥格式错误".to_string()))?;
 
-    let totp = TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret_bytes,
-        Some("IPMA".to_string()),
-        target_username,
-    )
-    .map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
+    let totp = Builder::new()
+        .with_algorithm(Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .with_issuer(Some("IPMA"))
+        .with_account_name(target_username)
+        .build()
+        .map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
 
     let code = req.code.clone();
     if is_totp_code_replayed(target_user_id, &code) {
@@ -1146,10 +1152,9 @@ pub async fn enable_two_factor(
         ));
     }
     let code_for_check = code.clone();
-    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
+    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
         .await
-        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
     if !valid {
         return Err(AppError::Validation("验证码错误".to_string()));
     }
@@ -1214,19 +1219,18 @@ pub async fn disable_two_factor(
         let secret = decrypt_password_async(encrypted_secret)
             .await
             .map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
-        let secret_bytes = Secret::Encoded(secret)
-            .to_bytes()
+        let secret = Secret::try_from_base32(&secret)
             .map_err(|e| AppError::Internal(format!("2FA密钥格式错误: {e}")))?;
-        let totp = TOTP::new(
-            Algorithm::SHA1,
-            6,
-            1,
-            30,
-            secret_bytes,
-            Some("IPMA".to_string()),
-            target_username,
-        )
-        .map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
+        let totp = Builder::new()
+            .with_algorithm(Algorithm::SHA1)
+            .with_digits(6)
+            .with_skew(1)
+            .with_step_duration(30)
+            .with_secret(secret)
+            .with_issuer(Some("IPMA"))
+            .with_account_name(target_username)
+            .build()
+            .map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
         let code = req.code.clone();
         if is_totp_code_replayed(target_user_id, &code) {
             return Err(AppError::Validation(
@@ -1234,10 +1238,9 @@ pub async fn disable_two_factor(
             ));
         }
         let code_for_check = code.clone();
-        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check))
+        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
             .await
-            .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+            .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
         if valid {
             record_totp_usage(target_user_id, &code);
             verified = true;

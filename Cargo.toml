@@ -6,35 +6,35 @@ resolver = "2"
 edition = "2024"
 
 [workspace.dependencies]
-# Axum (替代 actix-web)
-axum = { version = "0.8.4", features = ["macros", "multipart", "ws", "http2"] }
-tower = { version = "0.5.2", features = ["util"] }
-tower-http = { version = "0.6.6", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
-axum-extra = { version = "0.10.1", features = ["cookie", "typed-header"] }
+# Axum
+axum = { version = "0.8.9", features = ["macros", "multipart", "ws", "http2"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.0", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
 
 # SQLx
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
 
 # Serialization
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 
 # Validation
-validator = { version = "0.20.0", features = ["derive"] }
+validator = { version = "0.21.0", features = ["derive"] }
 
 # CSV and ZIP
 csv = "1.4.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 # Async
-tokio = { version = "1.52.3", features = ["full"] }
-futures-util = "0.3.32"
+tokio = { version = "1.53.1", features = ["full"] }
+futures-util = "0.3.34"
 
 # Date/Time
 chrono = { version = "0.4.45", features = ["serde"] }
 
 # UUID
-uuid = { version = "1.23.5", features = ["v4", "serde"] }
+uuid = { version = "1.24.0", features = ["v4", "serde"] }
 
 # Logging
 tracing = "0.1.44"
@@ -42,20 +42,20 @@ tracing = "0.1.44"
 # Crypto (AES)
 aes-gcm = "0.11.0"
 hex = "0.4.3"
-base64 = "0.22.1"
+base64 = "0.23.1"
 
 # Error handling
-thiserror = "2.0.18"
+thiserror = "2.0.20"
 
 # Async trait
-async-trait = "0.1.89"
+async-trait = "0.1.92"
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.14.10"
+version = "0.15.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -92,10 +92,10 @@ async-trait = { workspace = true }
 
 # 主项目特有依赖
 
-regex = "1.13.0"
+regex = "1.13.1"
 
-bcrypt = "0.19.2"
-jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
+bcrypt = "0.19.3"
+jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
 rand = "0.10.2"
 
@@ -105,23 +105,24 @@ ipnetwork = "0.21.1"
 macaddr = "1.0.1"
 pnet = "0.35"
 
-async-snmp = "0.13.0"
+async-snmp = "0.17.0"
 
 config = { version = "0.15.25", features = ["toml"] }
-toml = "1.1.2"
+toml = "1.1.4"
 
-anyhow = "1.0.103"
+anyhow = "1.0.104"
 dashmap = "6.2.1"
 arc-swap = "1.9.2"
-lettre = { version = "0.11.22", features = ["tokio1", "tokio1-native-tls"] }
-totp-rs = { version = "5.7.2", features = ["qr", "gen_secret"] }
+lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
+totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 
 
-rust-i18n = "4.2.0"
-time = "0.3.53"
+rust-i18n = "4.2.1"
+time = "0.3.55"
 
 [dev-dependencies]
 tokio = { workspace = true }
 
 [features]
 default = []
+

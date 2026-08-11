@@ -225,38 +225,39 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                 .username
                 .as_deref()
                 .ok_or_else(|| "SNMPv3需要用户名".to_string())?;
-            let mut auth = Auth::usm(username);
+            let usm = Auth::usm(username);
 
-            if let (Some(proto), Some(pass)) =
-                (params.auth_proto.as_deref(), params.auth_pass.as_deref())
-            {
-                let auth_protocol = match proto {
-                    "MD5" => AuthProtocol::Md5,
-                    "SHA" | "SHA-1" | "SHA1" => AuthProtocol::Sha1,
-                    "SHA-224" => AuthProtocol::Sha224,
-                    "SHA-256" => AuthProtocol::Sha256,
-                    "SHA-384" => AuthProtocol::Sha384,
-                    "SHA-512" => AuthProtocol::Sha512,
-                    _ => return Err(format!("不支持的认证协议: {proto}")),
-                };
-                auth = auth.auth(auth_protocol, pass);
-
-                if let (Some(proto), Some(pass)) =
-                    (params.priv_proto.as_deref(), params.priv_pass.as_deref())
-                {
-                    let priv_protocol = match proto {
-                        "DES" => PrivProtocol::Des,
-                        "3DES" | "DES3" => PrivProtocol::Des3,
-                        "AES" | "AES-128" | "AES128" => PrivProtocol::Aes128,
-                        "AES-192" | "AES192" => PrivProtocol::Aes192,
-                        "AES-256" | "AES256" => PrivProtocol::Aes256,
-                        _ => return Err(format!("不支持的隐私协议: {proto}")),
+            let usm = match (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
+                (Some(proto), Some(auth_pass)) => {
+                    let auth_protocol = match proto {
+                        "MD5" => AuthProtocol::Md5,
+                        "SHA" | "SHA-1" | "SHA1" => AuthProtocol::Sha1,
+                        "SHA-224" => AuthProtocol::Sha224,
+                        "SHA-256" => AuthProtocol::Sha256,
+                        "SHA-384" => AuthProtocol::Sha384,
+                        "SHA-512" => AuthProtocol::Sha512,
+                        _ => return Err(format!("不支持的认证协议: {proto}")),
                     };
-                    auth = auth.privacy(priv_protocol, pass);
-                }
-            }
 
-            Ok(auth.into())
+                    match (params.priv_proto.as_deref(), params.priv_pass.as_deref()) {
+                        (Some(proto), Some(priv_pass)) => {
+                            let priv_protocol = match proto {
+                                "DES" => PrivProtocol::Des,
+                                "3DES" | "DES3" => PrivProtocol::Des3,
+                                "AES" | "AES-128" | "AES128" => PrivProtocol::Aes128,
+                                "AES-192" | "AES192" => PrivProtocol::Aes192,
+                                "AES-256" | "AES256" => PrivProtocol::Aes256,
+                                _ => return Err(format!("不支持的隐私协议: {proto}")),
+                            };
+                            usm.auth_priv(auth_protocol, auth_pass, priv_protocol, priv_pass)
+                        }
+                        _ => usm.auth(auth_protocol, auth_pass),
+                    }
+                }
+                _ => usm,
+            };
+
+            Ok(usm.into())
         }
         _ => Err(format!("不支持的SNMP版本: {}", params.version)),
     }
