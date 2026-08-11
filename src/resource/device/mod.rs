@@ -4,7 +4,7 @@ pub mod lldp;
 pub mod mac;
 pub mod nic;
 pub mod snmp;
-pub mod switch_port;
+pub mod device_port;
 pub mod template;
 
 pub use crud::*;
@@ -13,7 +13,7 @@ pub use lldp::*;
 pub use mac::*;
 pub use nic::*;
 pub use snmp::*;
-pub use switch_port::*;
+pub use device_port::*;
 pub use template::*;
 
 use crate::error::AppError;

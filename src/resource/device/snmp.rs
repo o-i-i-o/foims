@@ -14,11 +14,11 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
-use crate::models::{SnmpTestRequest, SwitchPortCreate};
+use crate::models::{SnmpTestRequest, DevicePortCreate};
 use crate::routes::static_files::AppJson;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SwitchForSnmp {
+pub struct DeviceForSnmp {
     pub id: Uuid,
     pub name: String,
     pub snmp_version: String,
@@ -32,7 +32,7 @@ pub struct SwitchForSnmp {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SwitchForSnmpWithNetwork {
+pub struct DeviceForSnmpWithNetwork {
     pub id: Uuid,
     pub name: String,
     pub network_id: Option<Uuid>,
@@ -46,7 +46,7 @@ pub struct SwitchForSnmpWithNetwork {
     pub snmp_port: i32,
 }
 
-impl SwitchForSnmp {
+impl DeviceForSnmp {
     pub async fn to_snmp_params_async(
         &self,
         ip_address: &str,
@@ -67,7 +67,7 @@ impl SwitchForSnmp {
     }
 }
 
-impl SwitchForSnmpWithNetwork {
+impl DeviceForSnmpWithNetwork {
     pub async fn to_snmp_params_async(
         &self,
         ip_address: &str,
@@ -96,7 +96,7 @@ pub struct DecryptedSnmpCredentials {
 }
 
 impl DecryptedSnmpCredentials {
-    pub async fn from_device_snmp_async(switch: &SwitchForSnmp) -> Result<Self, AppError> {
+    pub async fn from_device_snmp_async(switch: &DeviceForSnmp) -> Result<Self, AppError> {
         let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
         let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
         let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;
@@ -108,7 +108,7 @@ impl DecryptedSnmpCredentials {
     }
 
     pub async fn from_device_snmp_with_network_async(
-        switch: &SwitchForSnmpWithNetwork,
+        switch: &DeviceForSnmpWithNetwork,
     ) -> Result<Self, AppError> {
         let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
         let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
@@ -159,8 +159,8 @@ impl From<SwitchConfigError> for SnmpError {
 pub async fn get_device_snmp_config(
     pool: &sqlx::PgPool,
     device_id: &Uuid,
-) -> Result<(SwitchForSnmp, Option<String>), SwitchConfigError> {
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
+) -> Result<(DeviceForSnmp, Option<String>), SwitchConfigError> {
+    let switch = sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
             snmp_username, snmp_auth_protocol,
@@ -441,9 +441,9 @@ fn extract_model(sys_descr: &str) -> String {
     }
 }
 
-pub async fn get_switch_ports_via_snmp(
+pub async fn get_device_ports_via_snmp(
     params: &SnmpParamsLegacy,
-) -> Result<Vec<SwitchPortCreate>, SnmpError> {
+) -> Result<Vec<DevicePortCreate>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
 
@@ -483,7 +483,7 @@ pub async fn get_switch_ports_via_snmp(
             .as_str()
             .map_or_else(|| if_index.clone(), std::string::ToString::to_string);
 
-        ports.push(SwitchPortCreate {
+        ports.push(DevicePortCreate {
             port_number: port_number.clone(),
             port_name: None,
             port_type: None,
@@ -662,7 +662,7 @@ pub async fn get_device_ports_snmp(
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
-    match get_switch_ports_via_snmp(&snmp_params).await {
+    match get_device_ports_via_snmp(&snmp_params).await {
         Ok(ports) => Ok(crate::error::ok_json(ports, "获取交换机端口信息成功")),
         Err(e) => Err(AppError::Snmp(format!("获取交换机端口信息失败: {e}"))),
     }

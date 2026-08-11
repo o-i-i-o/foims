@@ -27,8 +27,8 @@ pub struct TopologyNodesRequest {
 pub struct TopologyConnectionRequest {
     pub source_device_id: Uuid,
     pub target_device_id: Uuid,
-    pub source_switch_port_id: Option<Uuid>,
-    pub target_switch_port_id: Option<Uuid>,
+    pub source_device_port_id: Option<Uuid>,
+    pub target_device_port_id: Option<Uuid>,
     pub label: Option<String>,
 }
 
@@ -58,8 +58,8 @@ pub struct TopologyConnectionWithPorts {
     pub id: Uuid,
     pub source_device_id: Uuid,
     pub target_device_id: Uuid,
-    pub source_switch_port_id: Option<Uuid>,
-    pub target_switch_port_id: Option<Uuid>,
+    pub source_device_port_id: Option<Uuid>,
+    pub target_device_port_id: Option<Uuid>,
     pub label: Option<String>,
     pub auto_discovered: bool,
     pub source_device_name: Option<String>,
@@ -167,7 +167,7 @@ pub async fn delete_topology_node(
 pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, VisualizationError> {
     let connections = sqlx::query_as::<_, TopologyConnectionWithPorts>(
         r"SELECT tc.id, tc.source_device_id, tc.target_device_id,
-                 tc.source_switch_port_id, tc.target_switch_port_id, tc.label, tc.auto_discovered,
+                 tc.source_device_port_id, tc.target_device_port_id, tc.label, tc.auto_discovered,
                  sd.name AS source_device_name,
                  td.name AS target_device_name,
                  sp.port_number AS source_port_number,
@@ -189,8 +189,8 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
                      AND no.id IN (
                        SELECT CASE WHEN cl2.a_endpoint_type = 'net_outlet' THEN cl2.a_endpoint_id ELSE cl2.b_endpoint_id END AS outlet_id
                        FROM cable_links cl2
-                       WHERE (cl2.a_endpoint_type = 'switch_port' AND cl2.a_endpoint_id = tc.target_switch_port_id)
-                          OR (cl2.b_endpoint_type = 'switch_port' AND cl2.b_endpoint_id = tc.target_switch_port_id)
+                       WHERE (cl2.a_endpoint_type = 'device_port' AND cl2.a_endpoint_id = tc.target_device_port_id)
+                          OR (cl2.b_endpoint_type = 'device_port' AND cl2.b_endpoint_id = tc.target_device_port_id)
                      )
                    ),
                    '[]'::json
@@ -198,8 +198,8 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
           FROM topology_connections tc
           JOIN devices sd ON tc.source_device_id = sd.id
           JOIN devices td ON tc.target_device_id = td.id
-          LEFT JOIN switch_ports sp ON tc.source_switch_port_id = sp.id
-          LEFT JOIN switch_ports tp ON tc.target_switch_port_id = tp.id
+          LEFT JOIN device_ports sp ON tc.source_device_port_id = sp.id
+          LEFT JOIN device_ports tp ON tc.target_device_port_id = tp.id
           ORDER BY tc.created_at",
     )
     .fetch_all(pool)
@@ -217,14 +217,14 @@ pub async fn create_topology_connection(
     }
 
     let row = sqlx::query_as::<_, (Uuid,)>(
-        r"INSERT INTO topology_connections (source_device_id, target_device_id, source_switch_port_id, target_switch_port_id, label)
+        r"INSERT INTO topology_connections (source_device_id, target_device_id, source_device_port_id, target_device_port_id, label)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id",
     )
     .bind(req.source_device_id)
     .bind(req.target_device_id)
-    .bind(req.source_switch_port_id)
-    .bind(req.target_switch_port_id)
+    .bind(req.source_device_port_id)
+    .bind(req.target_device_port_id)
     .bind(&req.label)
     .fetch_one(pool)
     .await?;
@@ -265,8 +265,8 @@ pub struct AutoDiscoverResult {
 pub struct DiscoveredDevicePair {
     pub source_device_id: Uuid,
     pub target_device_id: Uuid,
-    pub source_switch_port_id: Option<Uuid>,
-    pub target_switch_port_id: Option<Uuid>,
+    pub source_device_port_id: Option<Uuid>,
+    pub target_device_port_id: Option<Uuid>,
 }
 
 pub async fn auto_discover_all_topology(
@@ -298,8 +298,8 @@ pub async fn auto_discover_all_topology(
             pool,
             p.source_device_id,
             p.target_device_id,
-            p.source_switch_port_id,
-            p.target_switch_port_id,
+            p.source_device_port_id,
+            p.target_device_port_id,
         )
         .await?
         {
@@ -316,8 +316,8 @@ pub async fn auto_discover_all_topology(
 /// 扫描 cable_links 表，推导出设备间的拓扑连接关系
 ///
 /// 处理两类典型链路：
-/// 1. (switch_port ↔ device_interface): 直接得到交换机设备 ↔ 接口所属设备
-/// 2. (switch_port ↔ net_outlet): 交换机设备 ↔ 使用该信息点的设备
+/// 1. (device_port ↔ device_interface): 直接得到交换机设备 ↔ 接口所属设备
+/// 2. (device_port ↔ net_outlet): 交换机设备 ↔ 使用该信息点的设备
 async fn discover_device_pairs_via_cable_links(
     pool: &PgPool,
 ) -> Result<Vec<DiscoveredDevicePair>, VisualizationError> {
@@ -326,12 +326,12 @@ async fn discover_device_pairs_via_cable_links(
     let iface_rows = sqlx::query_as::<_, (Uuid, Option<Uuid>, Uuid)>(
         r"SELECT DISTINCT
             sp.device_id AS switch_device_id,
-            CASE WHEN cl.a_endpoint_type = 'switch_port' THEN cl.a_endpoint_id ELSE cl.b_endpoint_id END AS switch_port_id,
+            CASE WHEN cl.a_endpoint_type = 'device_port' THEN cl.a_endpoint_id ELSE cl.b_endpoint_id END AS device_port_id,
             di.device_id AS iface_device_id
           FROM cable_links cl
-          JOIN switch_ports sp ON
-            (cl.a_endpoint_type = 'switch_port' AND cl.a_endpoint_id = sp.id)
-            OR (cl.b_endpoint_type = 'switch_port' AND cl.b_endpoint_id = sp.id)
+          JOIN device_ports sp ON
+            (cl.a_endpoint_type = 'device_port' AND cl.a_endpoint_id = sp.id)
+            OR (cl.b_endpoint_type = 'device_port' AND cl.b_endpoint_id = sp.id)
           JOIN device_interfaces di ON
             (cl.a_endpoint_type = 'device_interface' AND cl.a_endpoint_id = di.id)
             OR (cl.b_endpoint_type = 'device_interface' AND cl.b_endpoint_id = di.id)
@@ -340,26 +340,26 @@ async fn discover_device_pairs_via_cable_links(
     .fetch_all(pool)
     .await?;
 
-    for (switch_device_id, switch_port_id, iface_device_id) in iface_rows {
+    for (switch_device_id, device_port_id, iface_device_id) in iface_rows {
         pairs.push(DiscoveredDevicePair {
             source_device_id: switch_device_id,
-            source_switch_port_id: switch_port_id,
+            source_device_port_id: device_port_id,
             target_device_id: iface_device_id,
-            target_switch_port_id: None,
+            target_device_port_id: None,
         });
     }
 
     // 通过 cable_links 发现设备对：交换机端口 ↔ 信息点 ↔ 设备接口
-    // 即一台设备的 device_interface 通过若干 net_outlet 连到某交换机的 switch_port
+    // 即一台设备的 device_interface 通过若干 net_outlet 连到某交换机的 device_port
     let outlet_rows = sqlx::query_as::<_, (Uuid, Option<Uuid>, Uuid)>(
         r"SELECT DISTINCT
             sp.device_id AS switch_device_id,
-            CASE WHEN cl_sp.a_endpoint_type = 'switch_port' THEN cl_sp.a_endpoint_id ELSE cl_sp.b_endpoint_id END AS switch_port_id,
+            CASE WHEN cl_sp.a_endpoint_type = 'device_port' THEN cl_sp.a_endpoint_id ELSE cl_sp.b_endpoint_id END AS device_port_id,
             dv.id AS device_id
           FROM cable_links cl_sp
-          JOIN switch_ports sp ON
-            (cl_sp.a_endpoint_type = 'switch_port' AND cl_sp.a_endpoint_id = sp.id)
-            OR (cl_sp.b_endpoint_type = 'switch_port' AND cl_sp.b_endpoint_id = sp.id)
+          JOIN device_ports sp ON
+            (cl_sp.a_endpoint_type = 'device_port' AND cl_sp.a_endpoint_id = sp.id)
+            OR (cl_sp.b_endpoint_type = 'device_port' AND cl_sp.b_endpoint_id = sp.id)
           JOIN net_outlets no ON
             (cl_sp.a_endpoint_type = 'net_outlet' AND cl_sp.a_endpoint_id = no.id)
             OR (cl_sp.b_endpoint_type = 'net_outlet' AND cl_sp.b_endpoint_id = no.id)
@@ -375,12 +375,12 @@ async fn discover_device_pairs_via_cable_links(
     .fetch_all(pool)
     .await?;
 
-    for (switch_device_id, switch_port_id, device_id) in outlet_rows {
+    for (switch_device_id, device_port_id, device_id) in outlet_rows {
         pairs.push(DiscoveredDevicePair {
             source_device_id: switch_device_id,
-            source_switch_port_id: switch_port_id,
+            source_device_port_id: device_port_id,
             target_device_id: device_id,
-            target_switch_port_id: None,
+            target_device_port_id: None,
         });
     }
 
@@ -425,18 +425,18 @@ async fn ensure_topology_connection(
     pool: &PgPool,
     source_device_id: Uuid,
     target_device_id: Uuid,
-    source_switch_port_id: Option<Uuid>,
-    target_switch_port_id: Option<Uuid>,
+    source_device_port_id: Option<Uuid>,
+    target_device_port_id: Option<Uuid>,
 ) -> Result<bool, VisualizationError> {
     let result = sqlx::query(
-        r"INSERT INTO topology_connections (source_device_id, target_device_id, source_switch_port_id, target_switch_port_id, auto_discovered)
+        r"INSERT INTO topology_connections (source_device_id, target_device_id, source_device_port_id, target_device_port_id, auto_discovered)
          VALUES ($1, $2, $3, $4, true)
-         ON CONFLICT (source_device_id, target_device_id, source_switch_port_id, target_switch_port_id) DO NOTHING",
+         ON CONFLICT (source_device_id, target_device_id, source_device_port_id, target_device_port_id) DO NOTHING",
     )
     .bind(source_device_id)
     .bind(target_device_id)
-    .bind(source_switch_port_id)
-    .bind(target_switch_port_id)
+    .bind(source_device_port_id)
+    .bind(target_device_port_id)
     .execute(pool)
     .await?;
 

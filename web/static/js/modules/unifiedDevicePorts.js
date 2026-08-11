@@ -16,7 +16,7 @@ import { showConfirm } from "../utils/confirm.js";
 import { t } from "../utils/i18n.js";
 
 /**
- * 设备端口管理（以 2026年5月版 switch-ports-group-modal 布局为准）
+ * 设备端口管理（以 2026年5月版 device-ports-group-modal 布局为准）
  *
  * 组织结构：
  *   - 设备模态框手动管理的网口（NIC 接口）→ 渲染为一个或多个端口分组（蓝色调）
@@ -107,12 +107,12 @@ async function renderAllPortGroups(device, cards) {
 
   // 2. 二层端口分组（端口模态框自身管理）—— 仅网络设备
   if (device.isNetworkDevice) {
-    await loadAndRenderSwitchPorts(device.id, container);
+    await loadAndRenderDevicePorts(device.id, container);
   }
 
   // 若两类都为空，显示空提示
   if (!container.children.length) {
-    container.innerHTML = `<p class="empty-message">${t('device.no_switch_ports') || '暂无端口数据'}</p>`;
+    container.innerHTML = `<p class="empty-message">${t('device.no_device_ports') || '暂无端口数据'}</p>`;
   }
 }
 
@@ -181,25 +181,25 @@ function createNicPortItem(card, iface) {
 /**
  * 加载并渲染二层端口（按端口名前缀分组）
  */
-async function loadAndRenderSwitchPorts(deviceId, container) {
+async function loadAndRenderDevicePorts(deviceId, container) {
   try {
-    const result = await apiGet(`/api/resources/devices/${deviceId}/switch-ports?page_size=1000`);
+    const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
     if (!result.success || !result.data) return;
 
     const ports = Array.isArray(result.data) ? result.data : (result.data.items || []);
     if (ports.length === 0) return;
 
     const portGroups = groupPorts(ports);
-    renderSwitchPortGroups(container, portGroups);
+    renderDevicePortGroups(container, portGroups);
   } catch (error) {
-    console.error("加载交换机端口失败:", error);
+    console.error("加载设备端口失败:", error);
   }
 }
 
 /**
  * 渲染二层端口分组（追加到 container）
  */
-function renderSwitchPortGroups(container, portGroups) {
+function renderDevicePortGroups(container, portGroups) {
   Object.entries(portGroups).forEach(([groupName, ports]) => {
     const groupElement = document.createElement("div");
     groupElement.className = "port-group is-switch-group";
@@ -212,7 +212,7 @@ function renderSwitchPortGroups(container, portGroups) {
     portGrid.className = "port-grid";
 
     ports.sort((a, b) => extractPortNumber(a.port_number) - extractPortNumber(b.port_number));
-    ports.forEach(port => portGrid.appendChild(createSwitchPortItem(port)));
+    ports.forEach(port => portGrid.appendChild(createDevicePortItem(port)));
 
     groupElement.appendChild(portGrid);
     container.appendChild(groupElement);
@@ -222,7 +222,7 @@ function renderSwitchPortGroups(container, portGroups) {
 /**
  * 创建二层端口项（可点击编辑）
  */
-function createSwitchPortItem(port) {
+function createDevicePortItem(port) {
   const portItem = document.createElement("div");
   portItem.className = `port-item status-${port.status}`;
   portItem.dataset.kind = "switch";
@@ -391,9 +391,9 @@ async function submitPortForm() {
   try {
     let result;
     if (id) {
-      result = await apiPut(`/api/resources/devices/switch-ports/${id}`, payload);
+      result = await apiPut(`/api/resources/devices/device-ports/${id}`, payload);
     } else {
-      result = await apiPost(`/api/resources/devices/${deviceId}/switch-ports`, payload);
+      result = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, payload);
     }
 
     if (result.success) {
@@ -432,7 +432,7 @@ async function deletePort() {
   }
 
   try {
-    const result = await apiDelete(`/api/resources/devices/switch-ports/${id}`);
+    const result = await apiDelete(`/api/resources/devices/device-ports/${id}`);
     if (result.success) {
       closeModal("device-port-detail-modal");
       showToast(t('device.port_delete_success') || "端口删除成功", "success");
@@ -466,7 +466,7 @@ async function refreshModalView(deviceId) {
 // SNMP 拉取 + 端口名称冲突处理（覆盖 / 跳过 / 全部覆盖 / 全部跳过）
 // 流程：
 //   1. GET /snmp-ports 拿到 SNMP 实时端口（不落库）
-//   2. GET /switch-ports 拿到现有端口
+//   2. GET /device-ports 拿到现有端口
 //   3. 对比 port_number（忽略大小写），找出冲突项
 //   4. 若有冲突 → 弹出 port-conflict-modal 供用户逐项选择或一键全部
 //   5. 按决策走 POST（新增）/ PUT（覆盖），跳过的项不处理
@@ -491,7 +491,7 @@ async function startSnmpSync(deviceId) {
     const newPorts = snmpResult.data;
 
     // 2. 拉取现有端口
-    const existingResult = await apiGet(`/api/resources/devices/${deviceId}/switch-ports?page_size=1000`);
+    const existingResult = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
     const existingPorts = existingResult.success
       ? (Array.isArray(existingResult.data) ? existingResult.data : (existingResult.data?.items || []))
       : [];
@@ -647,7 +647,7 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
 
   for (const p of toAdd) {
     try {
-      const r = await apiPost(`/api/resources/devices/${deviceId}/switch-ports`, buildPayload(p));
+      const r = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, buildPayload(p));
       if (r.success) added++; else failed++;
     } catch { failed++; }
   }
@@ -657,13 +657,13 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
     const existing = conflictState.existingMap.get(key);
     if (!existing) {
       try {
-        const r = await apiPost(`/api/resources/devices/${deviceId}/switch-ports`, buildPayload(p));
+        const r = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, buildPayload(p));
         if (r.success) added++; else failed++;
       } catch { failed++; }
       continue;
     }
     try {
-      const r = await apiPut(`/api/resources/devices/switch-ports/${existing.id}`, buildPayload(p));
+      const r = await apiPut(`/api/resources/devices/device-ports/${existing.id}`, buildPayload(p));
       if (r.success) overwritten++; else failed++;
     } catch { failed++; }
   }

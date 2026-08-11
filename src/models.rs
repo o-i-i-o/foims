@@ -853,7 +853,7 @@ pub struct IpManagerUpdate {
 // ==================== 交换机端口模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchPort {
+pub struct DevicePort {
     pub id: Uuid,
     pub device_id: Uuid,
     pub port_number: String,
@@ -868,7 +868,7 @@ pub struct SwitchPort {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct SwitchPortWithDevice {
+pub struct DevicePortWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
     pub device_name: String,
@@ -885,7 +885,7 @@ pub struct SwitchPortWithDevice {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchPortCreate {
+pub struct DevicePortCreate {
     #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
     pub port_number: String,
     #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
@@ -900,7 +900,7 @@ pub struct SwitchPortCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SwitchPortUpdate {
+pub struct DevicePortUpdate {
     #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
     pub port_number: Option<String>,
     #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]

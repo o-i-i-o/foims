@@ -180,9 +180,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"
         CREATE VIEW cable_links_with_details AS
         WITH endpoint_labels AS (
-            SELECT sp.id, 'switch_port'::VARCHAR AS etype,
+            SELECT sp.id, 'device_port'::VARCHAR AS etype,
                    (sp.port_number || ' @ ' || d.name) AS label
-            FROM switch_ports sp JOIN devices d ON sp.device_id = d.id
+            FROM device_ports sp JOIN devices d ON sp.device_id = d.id
             UNION ALL
             SELECT id, 'net_outlet'::VARCHAR, name::text FROM net_outlets
             UNION ALL

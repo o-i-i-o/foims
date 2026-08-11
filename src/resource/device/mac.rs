@@ -13,7 +13,7 @@ use crate::error::AppError;
 use crate::models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
-    SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error,
+    SnmpError, SnmpParamsLegacy, DeviceForSnmp, build_auth, format_snmp_error,
     get_device_ip_address, get_device_snmp_config,
 };
 
@@ -267,7 +267,7 @@ pub async fn batch_get_mac_via_snmp(
     let mut results: HashMap<String, Option<String>> = HashMap::new();
     results.reserve(ips.len());
 
-    let switches = match sqlx::query_as::<_, SwitchForSnmp>(
+    let switches = match sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
             snmp_username, snmp_auth_protocol,
@@ -347,7 +347,7 @@ pub async fn batch_get_mac_via_snmp(
 
 async fn fetch_switch_arp(
     pool: &sqlx::PgPool,
-    switch: &SwitchForSnmp,
+    switch: &DeviceForSnmp,
     arp_entries: &mut HashMap<String, String>,
 ) -> Result<(), SnmpError> {
     let ip_address = get_device_ip_address(pool, &switch.id).await?;

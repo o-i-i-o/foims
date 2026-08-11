@@ -137,10 +137,9 @@
     "layer3_ports": "三层接口（NIC）",
     "layer2_ports": "二层端口（Switch）",
     "add_nic_interface": "添加网卡接口",
-    "add_switch_port": "添加交换机端口",
+    "add_device_port": "添加设备端口",
     "sync_snmp_ports": "从SNMP获取端口",
     "no_nic_interfaces": "暂无网卡接口数据",
-    "no_switch_ports": "暂无交换机端口数据",
     "port_management_failed": "端口管理失败",
     "mac_table": "MAC表",
     "lldp": "LLDP",
@@ -200,7 +199,8 @@
     "port_type_svi": "SVI",
     "port_type_management": "管理接口",
     "port_type_loopback": "环回接口",
-    "port_type_wifi": "WiFi"
+    "port_type_wifi": "WiFi",
+    "no_device_ports": "暂无设备端口数据"
   },
   "device_template": {
     "title": "设备模板管理",
@@ -616,9 +616,6 @@
       "create_switch": "创建交换机",
       "update_switch": "更新交换机",
       "delete_switch": "删除交换机",
-      "create_switch_port": "创建交换机端口",
-      "update_switch_port": "更新交换机端口",
-      "delete_switch_port": "删除交换机端口",
       "create_device_interface": "创建设备接口",
       "update_device_interface": "更新设备接口",
       "delete_device_interface": "删除设备接口",
@@ -634,7 +631,10 @@
       "auto_assign_ip": "自动分配IP",
       "login": "登录",
       "logout": "登出",
-      "send_email": "发送邮件"
+      "send_email": "发送邮件",
+      "create_device_port": "创建设备端口",
+      "update_device_port": "更新设备端口",
+      "delete_device_port": "删除设备端口"
     },
     "resource_types": {
       "user": "用户",
@@ -648,12 +648,12 @@
       "cabinet": "机柜",
       "cabinet_position": "机位",
       "switch": "交换机",
-      "switch_port": "交换机端口",
       "device_interface": "设备接口",
       "cable_link": "线缆连接",
       "layout": "布局",
       "config": "配置",
-      "email": "邮件"
+      "email": "邮件",
+      "device_port": "设备端口"
     }
   },
   "notifications": {
@@ -669,7 +669,7 @@
   "ip": {
     "ip_address": "IP地址",
     "mac_address": "MAC地址",
-    "hostname": "交换机端口",
+    "hostname": "设备端口",
     "status": "状态",
     "device_name": "设备名称",
     "device_type": "设备类型",
@@ -802,7 +802,10 @@
     "room_required": "请选择房间",
     "save_success": "信息点保存成功",
     "delete_success": "信息点删除成功",
-    "load_failed": "加载信息点数据失败"
+    "load_failed": "加载信息点数据失败",
+    "peer_type_device_port": "设备端口",
+    "peer_device_port": "对端设备端口",
+    "select_peer_device_port": "选择对端设备端口"
   },
   "cable_link": {
     "name": "线路",
@@ -813,7 +816,6 @@
     "b_endpoint": "B 端点",
     "b_endpoint_id": "B 端点对象",
     "endpoint_net_outlet": "信息点",
-    "endpoint_switch_port": "交换机接口",
     "endpoint_device_interface": "设备接口",
     "select_endpoint": "选择端点",
     "link_type": "链路类型",
@@ -830,7 +832,8 @@
     "save_success": "线路保存成功",
     "save_failed": "线路保存失败",
     "delete_success": "线路删除成功",
-    "load_failed": "加载线路数据失败"
+    "load_failed": "加载线路数据失败",
+    "endpoint_device_port": "设备端口"
   },
   "device_type": {
     "pc": "PC",

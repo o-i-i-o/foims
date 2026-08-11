@@ -13,7 +13,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "positions",
         "device_macs",
         "device_lldps",
-        "switch_ports",
+        "device_ports",
         "device_interfaces",
         "cable_links",
         "ips",
@@ -151,7 +151,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "switch_ports",
+        "device_ports",
         vec![
             "id",
             "device_id",

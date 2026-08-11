@@ -4,9 +4,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS cable_links (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('switch_port','net_outlet','device_interface')),
+            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface')),
             a_endpoint_id   UUID NOT NULL,
-            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('switch_port','net_outlet','device_interface')),
+            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface')),
             b_endpoint_id   UUID NOT NULL,
             link_type   VARCHAR(20) NOT NULL DEFAULT 'ethernet' CHECK (link_type IN ('ethernet','fiber','console')),
             cable_label VARCHAR(50),
@@ -38,11 +38,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_switch_ports_device_id ON switch_ports(device_id)")
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_device_ports_device_id ON device_ports(device_id)")
         .execute(pool)
         .await?;
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_switch_ports_port_number ON switch_ports(port_number)",
+        "CREATE INDEX IF NOT EXISTS idx_device_ports_port_number ON device_ports(port_number)",
     )
     .execute(pool)
     .await?;
@@ -78,8 +78,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             iface_type VARCHAR(20);
         BEGIN
             CASE NEW.a_endpoint_type
-                WHEN 'switch_port' THEN
-                    SELECT EXISTS(SELECT 1 FROM switch_ports WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
+                WHEN 'device_port' THEN
+                    SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
@@ -100,8 +100,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             endpoint_exists := FALSE;
             iface_type := NULL;
             CASE NEW.b_endpoint_type
-                WHEN 'switch_port' THEN
-                    SELECT EXISTS(SELECT 1 FROM switch_ports WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
+                WHEN 'device_port' THEN
+                    SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
@@ -140,14 +140,14 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        r"CREATE OR REPLACE FUNCTION prevent_switch_port_deletion_if_linked() RETURNS TRIGGER AS $$
+        r"CREATE OR REPLACE FUNCTION prevent_device_port_deletion_if_linked() RETURNS TRIGGER AS $$
         BEGIN
             IF EXISTS(
                 SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='switch_port' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='switch_port' AND b_endpoint_id = OLD.id)
+                WHERE (a_endpoint_type='device_port' AND a_endpoint_id = OLD.id)
+                   OR (b_endpoint_type='device_port' AND b_endpoint_id = OLD.id)
             ) THEN
-                RAISE EXCEPTION '交换机端口 % 被 cable_links 引用，不能删除', OLD.id;
+                RAISE EXCEPTION '设备端口 % 被 cable_links 引用，不能删除', OLD.id;
             END IF;
             RETURN OLD;
         END;
@@ -155,11 +155,11 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS trg_switch_ports_prevent_delete_linked ON switch_ports")
+    sqlx::query("DROP TRIGGER IF EXISTS trg_device_ports_prevent_delete_linked ON device_ports")
         .execute(pool)
         .await?;
     sqlx::query(
-        "CREATE TRIGGER trg_switch_ports_prevent_delete_linked BEFORE DELETE ON switch_ports FOR EACH ROW EXECUTE FUNCTION prevent_switch_port_deletion_if_linked()"
+        "CREATE TRIGGER trg_device_ports_prevent_delete_linked BEFORE DELETE ON device_ports FOR EACH ROW EXECUTE FUNCTION prevent_device_port_deletion_if_linked()"
     )
     .execute(pool)
     .await?;
@@ -246,9 +246,9 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         SELECT b_endpoint_id, b_endpoint_type, a_endpoint_id, a_endpoint_type, id, cable_label, 'cable'::VARCHAR
         FROM cable_links
         UNION ALL
-        SELECT sp1.id, 'switch_port', sp2.id, 'switch_port', NULL::UUID, NULL::VARCHAR, 'internal'::VARCHAR
-        FROM switch_ports sp1
-        JOIN switch_ports sp2 ON sp1.device_id = sp2.device_id AND sp1.id <> sp2.id
+        SELECT sp1.id, 'device_port', sp2.id, 'device_port', NULL::UUID, NULL::VARCHAR, 'internal'::VARCHAR
+        FROM device_ports sp1
+        JOIN device_ports sp2 ON sp1.device_id = sp2.device_id AND sp1.id <> sp2.id
     ),
     path_cte AS (
         SELECT
@@ -279,7 +279,7 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         p.node_type,
         p.node_id,
         CASE p.node_type
-            WHEN 'switch_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM switch_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = p.node_id)
+            WHEN 'device_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM device_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = p.node_id)
             WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = p.node_id)
             WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = p.node_id)
         END AS node_label,

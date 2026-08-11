@@ -11,13 +11,13 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DeviceLldp, LldpNeighbor};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, SwitchForSnmp, build_auth, format_snmp_error};
+use super::snmp::{SnmpError, SnmpParamsLegacy, DeviceForSnmp, build_auth, format_snmp_error};
 
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
     device_id: &Uuid,
 ) -> Result<Vec<LldpNeighbor>, SnmpError> {
-    let switch = sqlx::query_as::<_, SwitchForSnmp>(
+    let switch = sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
             snmp_username, snmp_auth_protocol,

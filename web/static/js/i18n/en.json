@@ -137,10 +137,9 @@
     "layer3_ports": "Layer 3 Interfaces (NIC)",
     "layer2_ports": "Layer 2 Ports (Switch)",
     "add_nic_interface": "Add NIC Interface",
-    "add_switch_port": "Add Switch Port",
+    "add_device_port": "Add Device Port",
     "sync_snmp_ports": "Sync Ports from SNMP",
     "no_nic_interfaces": "No NIC interface data",
-    "no_switch_ports": "No switch port data",
     "port_management_failed": "Port management failed",
     "mac_table": "MAC Table",
     "lldp": "LLDP",
@@ -200,7 +199,8 @@
     "port_type_svi": "SVI",
     "port_type_management": "Management",
     "port_type_loopback": "Loopback",
-    "port_type_wifi": "WiFi"
+    "port_type_wifi": "WiFi",
+    "no_device_ports": "No device port data"
   },
   "device_template": {
     "title": "Device Template Management",
@@ -616,9 +616,6 @@
       "create_switch": "Create Switch",
       "update_switch": "Update Switch",
       "delete_switch": "Delete Switch",
-      "create_switch_port": "Create Switch Port",
-      "update_switch_port": "Update Switch Port",
-      "delete_switch_port": "Delete Switch Port",
       "create_device_interface": "Create Device Interface",
       "update_device_interface": "Update Device Interface",
       "delete_device_interface": "Delete Device Interface",
@@ -634,7 +631,10 @@
       "auto_assign_ip": "Auto Assign IP",
       "login": "Login",
       "logout": "Logout",
-      "send_email": "Send Email"
+      "send_email": "Send Email",
+      "create_device_port": "Create Device Port",
+      "update_device_port": "Update Device Port",
+      "delete_device_port": "Delete Device Port"
     },
     "resource_types": {
       "user": "User",
@@ -648,12 +648,12 @@
       "cabinet": "Cabinet",
       "cabinet_position": "Cabinet Position",
       "switch": "Switch",
-      "switch_port": "Switch Port",
       "device_interface": "Device Interface",
       "cable_link": "Cable Link",
       "layout": "Layout",
       "config": "Configuration",
-      "email": "Email"
+      "email": "Email",
+      "device_port": "Device Port"
     }
   },
   "notifications": {
@@ -669,7 +669,7 @@
   "ip": {
     "ip_address": "IP Address",
     "mac_address": "MAC Address",
-    "hostname": "Switch Port",
+    "hostname": "Device Port",
     "status": "Status",
     "device_name": "Device Name",
     "device_type": "Device Type",
@@ -802,7 +802,10 @@
     "room_required": "Please select a room",
     "save_success": "Network outlet saved successfully",
     "delete_success": "Network outlet deleted successfully",
-    "load_failed": "Failed to load network outlet data"
+    "load_failed": "Failed to load network outlet data",
+    "peer_type_device_port": "Device Port",
+    "peer_device_port": "Peer Device Port",
+    "select_peer_device_port": "Select Peer Device Port"
   },
   "cable_link": {
     "name": "Cable Link",
@@ -813,7 +816,6 @@
     "b_endpoint": "B Endpoint",
     "b_endpoint_id": "B Endpoint Object",
     "endpoint_net_outlet": "Network Outlet",
-    "endpoint_switch_port": "Switch Port",
     "endpoint_device_interface": "Device Interface",
     "select_endpoint": "Select Endpoint",
     "link_type": "Link Type",
@@ -830,7 +832,8 @@
     "save_success": "Cable link saved successfully",
     "save_failed": "Failed to save cable link",
     "delete_success": "Cable link deleted successfully",
-    "load_failed": "Failed to load cable link data"
+    "load_failed": "Failed to load cable link data",
+    "endpoint_device_port": "Device Port"
   },
   "device_type": {
     "pc": "PC",

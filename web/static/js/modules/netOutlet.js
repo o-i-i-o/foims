@@ -37,7 +37,7 @@ const OUTLET_TYPE_LABELS = {
 
 const PEER_TYPE_LABELS = {
   outlet: t('net_outlet.peer_type_outlet') || '信息点',
-  switch_port: t('net_outlet.peer_type_switch_port') || '交换机接口',
+  device_port: t('net_outlet.peer_type_device_port') || '设备端口',
 };
 
 function getOutletTypeName(type) {
@@ -56,9 +56,9 @@ function buildPeerDisplay(row) {
     if (row.peer_room_name || row.peer_outlet_name) {
       target = [row.peer_room_name, row.peer_outlet_name].filter(Boolean).map(escapeHtml).join(' / ');
     }
-  } else if (row.peer_type === 'switch_port') {
-    if (row.peer_room_name || row.peer_switch_port_label) {
-      target = [row.peer_room_name, row.peer_switch_port_label].filter(Boolean).map(escapeHtml).join(' / ');
+  } else if (row.peer_type === 'device_port') {
+    if (row.peer_room_name || row.peer_device_port_label) {
+      target = [row.peer_room_name, row.peer_device_port_label].filter(Boolean).map(escapeHtml).join(' / ');
     }
   }
   return target ? `${escapeHtml(label)}（${target}）` : escapeHtml(label);
@@ -154,18 +154,18 @@ async function loadCabinetsForRoom(roomId, selectedCabinetId = null) {
 
 function updatePeerFieldVisibility(peerType) {
   const outletGroup = document.getElementById('net-outlet-peer-outlet-group');
-  const switchPortGroup = document.getElementById('net-outlet-peer-switch-port-group');
-  if (!outletGroup || !switchPortGroup) return;
+  const devicePortGroup = document.getElementById('net-outlet-peer-device-port-group');
+  if (!outletGroup || !devicePortGroup) return;
 
   if (peerType === 'outlet' || peerType === 'patch_panel') {
     outletGroup.style.display = '';
-    switchPortGroup.style.display = 'none';
-  } else if (peerType === 'switch_port') {
+    devicePortGroup.style.display = 'none';
+  } else if (peerType === 'device_port') {
     outletGroup.style.display = 'none';
-    switchPortGroup.style.display = '';
+    devicePortGroup.style.display = '';
   } else {
     outletGroup.style.display = 'none';
-    switchPortGroup.style.display = 'none';
+    devicePortGroup.style.display = 'none';
   }
 }
 
@@ -214,17 +214,17 @@ async function loadPeerOutlets(peerRoomId, peerType, selectedPeerOutletId = null
   }
 }
 
-async function loadPeerSwitchPorts(peerRoomId, selectedPeerSwitchPortId = null) {
-  const peerSwitchPortSelect = elementCache.get('net-outlet-peer-switch-port-id');
-  if (!peerSwitchPortSelect) return;
+async function loadPeerDevicePorts(peerRoomId, selectedPeerDevicePortId = null) {
+  const peerDevicePortSelect = elementCache.get('net-outlet-peer-device-port-id');
+  if (!peerDevicePortSelect) return;
 
-  const placeholder = t('net_outlet.select_peer_switch_port') || '选择对端交换机接口';
-  peerSwitchPortSelect.innerHTML = `<option value="">${placeholder}</option>`;
+  const placeholder = t('net_outlet.select_peer_device_port') || '选择对端设备端口';
+  peerDevicePortSelect.innerHTML = `<option value="">${placeholder}</option>`;
 
   if (!peerRoomId) return;
 
   try {
-    const result = await apiGet(`/api/devices/switch-ports?room_id=${peerRoomId}&page_size=1000`);
+    const result = await apiGet(`/api/resources/devices/device-ports?room_id=${peerRoomId}&page_size=1000`);
     if (result.success && result.data) {
       const ports = result.data.items || result.data;
       ports.forEach(port => {
@@ -232,11 +232,11 @@ async function loadPeerSwitchPorts(peerRoomId, selectedPeerSwitchPortId = null) 
         option.value = port.id;
         const parts = [port.device_name, port.port_name || port.port_number];
         option.textContent = parts.filter(Boolean).map(escapeHtml).join(' / ');
-        peerSwitchPortSelect.appendChild(option);
+        peerDevicePortSelect.appendChild(option);
       });
 
-      if (selectedPeerSwitchPortId) {
-        peerSwitchPortSelect.value = selectedPeerSwitchPortId;
+      if (selectedPeerDevicePortId) {
+        peerDevicePortSelect.value = selectedPeerDevicePortId;
       }
     }
   } catch (error) {
@@ -322,8 +322,8 @@ export async function openNetOutletModal(netOutlet = null) {
     const peerRoomId = peerRoomSelect?.value;
     if (peerType === 'outlet' || peerType === 'patch_panel') {
       await loadPeerOutlets(peerRoomId, peerType);
-    } else if (peerType === 'switch_port') {
-      await loadPeerSwitchPorts(peerRoomId);
+    } else if (peerType === 'device_port') {
+      await loadPeerDevicePorts(peerRoomId);
     }
   };
 
@@ -332,8 +332,8 @@ export async function openNetOutletModal(netOutlet = null) {
     const peerRoomId = peerRoomSelect?.value;
     if (peerType === 'outlet' || peerType === 'patch_panel') {
       await loadPeerOutlets(peerRoomId, peerType);
-    } else if (peerType === 'switch_port') {
-      await loadPeerSwitchPorts(peerRoomId);
+    } else if (peerType === 'device_port') {
+      await loadPeerDevicePorts(peerRoomId);
     }
   };
 
@@ -363,8 +363,8 @@ export async function openNetOutletModal(netOutlet = null) {
     updatePeerFieldVisibility(peerType);
     if (peerType === 'outlet' || peerType === 'patch_panel') {
       await loadPeerOutlets(netOutlet.peer_room_id, peerType, netOutlet.peer_outlet_id);
-    } else if (peerType === 'switch_port') {
-      await loadPeerSwitchPorts(netOutlet.peer_room_id, netOutlet.peer_switch_port_id);
+    } else if (peerType === 'device_port') {
+      await loadPeerDevicePorts(netOutlet.peer_room_id, netOutlet.peer_device_port_id);
     }
   } else {
     title.textContent = t('net_outlet.add');

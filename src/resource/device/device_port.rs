@@ -7,17 +7,17 @@ use chrono::Utc;
 use uuid::Uuid;
 use validator::Validate;
 
-use super::snmp::{SwitchForSnmp, get_switch_ports_via_snmp};
+use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::models::{SwitchPort, SwitchPortCreate, SwitchPortUpdate, SwitchPortWithDevice};
+use crate::models::{DevicePort, DevicePortCreate, DevicePortUpdate, DevicePortWithDevice};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
 use crate::utils::pagination::Pagination;
 use crate::utils::{OperationLogParams, log_system_operation};
 use tracing::warn;
 
-pub async fn get_switch_ports(
+pub async fn get_device_ports(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
     Query(query): Query<HashMap<String, String>>,
@@ -27,13 +27,13 @@ pub async fn get_switch_ports(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
 
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM switch_ports WHERE device_id = $1")
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM device_ports WHERE device_id = $1")
         .bind(device_id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-    let data = sqlx::query_as::<_, SwitchPort>(
-        r"SELECT * FROM switch_ports WHERE device_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
+    let data = sqlx::query_as::<_, DevicePort>(
+        r"SELECT * FROM device_ports WHERE device_id = $1 ORDER BY port_number LIMIT $2 OFFSET $3",
     )
     .bind(device_id)
     .bind(page_size)
@@ -53,7 +53,7 @@ pub async fn get_switch_ports(
     ))
 }
 
-pub async fn get_all_switch_ports(
+pub async fn get_all_device_ports(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -102,7 +102,7 @@ pub async fn get_all_switch_ports(
 
     let total: i64 = {
         let sql = format!(
-            "SELECT COUNT(*) FROM switch_ports sp JOIN devices d ON sp.device_id = d.id {where_clause}"
+            "SELECT COUNT(*) FROM device_ports sp JOIN devices d ON sp.device_id = d.id {where_clause}"
         );
         let mut q = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql));
         if has_search {
@@ -124,14 +124,14 @@ pub async fn get_all_switch_ports(
                 ) as device_ip,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
                 sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
-            FROM switch_ports sp
+            FROM device_ports sp
             JOIN devices d ON sp.device_id = d.id
             {where_clause}
             ORDER BY d.name, sp.port_number
             LIMIT ${param_idx} OFFSET ${}",
             param_idx + 1
         );
-        let mut q = sqlx::query_as::<_, SwitchPortWithDevice>(sqlx::AssertSqlSafe(sql));
+        let mut q = sqlx::query_as::<_, DevicePortWithDevice>(sqlx::AssertSqlSafe(sql));
         if has_search {
             q = q.bind(search_pattern.as_ref().unwrap());
         }
@@ -154,11 +154,11 @@ pub async fn get_all_switch_ports(
     ))
 }
 
-pub async fn create_switch_port(
+pub async fn create_device_port(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
     meta: RequestMeta,
-    AppJson(req): AppJson<SwitchPortCreate>,
+    AppJson(req): AppJson<DevicePortCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
@@ -173,7 +173,7 @@ pub async fn create_switch_port(
     }
 
     let port_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE device_id = $1 AND port_number = $2)",
+        "SELECT EXISTS(SELECT 1 FROM device_ports WHERE device_id = $1 AND port_number = $2)",
     )
     .bind(device_id)
     .bind(&req.port_number)
@@ -188,7 +188,7 @@ pub async fn create_switch_port(
     let now = Utc::now();
 
     sqlx::query(
-        r"INSERT INTO switch_ports (
+        r"INSERT INTO device_ports (
             id, device_id, port_number, port_name, port_type, vlan_id,
             status, speed, description, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -207,7 +207,7 @@ pub async fn create_switch_port(
     .execute(&state.pool()?.get_conn())
     .await?;
 
-    let data = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
+    let data = sqlx::query_as::<_, DevicePort>("SELECT * FROM device_ports WHERE id = $1")
         .bind(id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
@@ -225,7 +225,7 @@ pub async fn create_switch_port(
             ip_address: &meta.ip_address,
             user_id: meta.user_id(),
             action: "create",
-            resource_type: "switch_port",
+            resource_type: "device_port",
             resource_id: Some(&id),
             details: &details,
             result: true,
@@ -239,11 +239,11 @@ pub async fn create_switch_port(
     Ok(crate::error::ok_json(data, "创建端口成功"))
 }
 
-pub async fn get_switch_port(
+pub async fn get_device_port(
     State(state): State<Arc<AppState>>,
     Path(port_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let data = sqlx::query_as::<_, SwitchPortWithDevice>(
+    let data = sqlx::query_as::<_, DevicePortWithDevice>(
         r"SELECT
             sp.id, sp.device_id, d.name as device_name,
             COALESCE(
@@ -252,7 +252,7 @@ pub async fn get_switch_port(
             ) as device_ip,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
-        FROM switch_ports sp
+        FROM device_ports sp
         JOIN devices d ON sp.device_id = d.id
         WHERE sp.id = $1",
     )
@@ -264,18 +264,18 @@ pub async fn get_switch_port(
     Ok(crate::error::ok_json(data, "获取端口成功"))
 }
 
-pub async fn update_switch_port(
+pub async fn update_device_port(
     State(state): State<Arc<AppState>>,
     Path(port_id): Path<Uuid>,
     meta: RequestMeta,
-    AppJson(req): AppJson<SwitchPortUpdate>,
+    AppJson(req): AppJson<DevicePortUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
     let now = Utc::now();
 
     let result = sqlx::query(
-        r"UPDATE switch_ports SET
+        r"UPDATE device_ports SET
             port_number = COALESCE($1, port_number),
             port_name = COALESCE($2, port_name),
             port_type = COALESCE($3, port_type),
@@ -302,7 +302,7 @@ pub async fn update_switch_port(
         return Err(AppError::NotFound("端口不存在".to_string()));
     }
 
-    let data = sqlx::query_as::<_, SwitchPort>("SELECT * FROM switch_ports WHERE id = $1")
+    let data = sqlx::query_as::<_, DevicePort>("SELECT * FROM device_ports WHERE id = $1")
         .bind(port_id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
@@ -320,7 +320,7 @@ pub async fn update_switch_port(
             ip_address: &meta.ip_address,
             user_id: meta.user_id(),
             action: "update",
-            resource_type: "switch_port",
+            resource_type: "device_port",
             resource_id: Some(&port_id),
             details: &details,
             result: true,
@@ -334,12 +334,12 @@ pub async fn update_switch_port(
     Ok(crate::error::ok_json(data, "更新端口成功"))
 }
 
-pub async fn delete_switch_port(
+pub async fn delete_device_port(
     State(state): State<Arc<AppState>>,
     Path(port_id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
-    let result = sqlx::query("DELETE FROM switch_ports WHERE id = $1")
+    let result = sqlx::query("DELETE FROM device_ports WHERE id = $1")
         .bind(port_id)
         .execute(&state.pool()?.get_conn())
         .await
@@ -365,7 +365,7 @@ pub async fn delete_switch_port(
             ip_address: &meta.ip_address,
             user_id: meta.user_id(),
             action: "delete",
-            resource_type: "switch_port",
+            resource_type: "device_port",
             resource_id: Some(&port_id),
             details: &details,
             result: true,
@@ -383,7 +383,7 @@ pub async fn sync_ports_from_snmp(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let switch_data = sqlx::query_as::<_, SwitchForSnmp>(
+    let switch_data = sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
             snmp_username, snmp_auth_protocol,
@@ -414,7 +414,7 @@ pub async fn sync_ports_from_snmp(
 
     let snmp_params = switch_data.to_snmp_params_async(ip_address).await?;
 
-    let ports = get_switch_ports_via_snmp(&snmp_params)
+    let ports = get_device_ports_via_snmp(&snmp_params)
         .await
         .map_err(|e| AppError::Snmp(format!("获取设备端口信息失败: {e}")))?;
 
@@ -424,7 +424,7 @@ pub async fn sync_ports_from_snmp(
 
     for port in &ports {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM switch_ports WHERE device_id = $1 AND port_number = $2)",
+            "SELECT EXISTS(SELECT 1 FROM device_ports WHERE device_id = $1 AND port_number = $2)",
         )
         .bind(device_id)
         .bind(&port.port_number)
@@ -444,7 +444,7 @@ pub async fn sync_ports_from_snmp(
         let now = Utc::now();
 
         let result = sqlx::query(
-            r"INSERT INTO switch_ports (
+            r"INSERT INTO device_ports (
                 id, device_id, port_number, port_name, port_type, vlan_id,
                 status, speed, description, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -471,8 +471,8 @@ pub async fn sync_ports_from_snmp(
         }
     }
 
-    let saved_ports = sqlx::query_as::<_, SwitchPort>(
-        "SELECT * FROM switch_ports WHERE device_id = $1 ORDER BY port_number",
+    let saved_ports = sqlx::query_as::<_, DevicePort>(
+        "SELECT * FROM device_ports WHERE device_id = $1 ORDER BY port_number",
     )
     .bind(device_id)
     .fetch_all(&state.pool()?.get_conn())

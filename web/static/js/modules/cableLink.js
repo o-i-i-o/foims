@@ -28,7 +28,7 @@ let currentPage = 1;
 
 const ENDPOINT_TYPE_LABELS = {
   net_outlet: t('cable_link.endpoint_net_outlet') || t('net_outlet.name') || '信息点',
-  switch_port: t('cable_link.endpoint_switch_port') || '交换机接口',
+  device_port: t('cable_link.endpoint_device_port') || '设备端口',
   device_interface: t('cable_link.endpoint_device_interface') || '设备接口',
 };
 
@@ -125,8 +125,8 @@ async function loadEndpointOptions(endpointType, selectId, selectedId = null) {
       const result = await apiGet('/api/resources/net-outlets?page_size=1000');
       const data = result.success ? result.data : {};
       items = (data.items || data || []).map(o => ({ id: o.id, label: o.name }));
-    } else if (endpointType === 'switch_port') {
-      const result = await apiGet('/api/resources/devices/switch-ports?page_size=1000');
+    } else if (endpointType === 'device_port') {
+      const result = await apiGet('/api/resources/devices/device-ports?page_size=1000');
       const data = result.success ? result.data : {};
       items = (data.items || data || []).map(sp => ({
         id: sp.id,
