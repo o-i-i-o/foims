@@ -106,11 +106,15 @@
     .stat-card {
         padding: 1rem;
     }
-    
-    .stat-value {
+
+    .stat-card .stat-value {
         font-size: 1.75rem;
     }
-    
+
+    .stat-card .stat-icon {
+        font-size: 2rem;
+    }
+
     /* 表格响应式 */
     .table-container {
         margin: 0 -1rem;
@@ -313,7 +317,7 @@
         font-size: 0.8rem;
     }
     
-    .stat-value {
+    .stat-card .stat-value {
         font-size: 1.5rem;
     }
     

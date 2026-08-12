@@ -179,15 +179,7 @@
     .dashboard-stats {
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     }
-    
-    .stat-value {
-        font-size: 1.5rem;
-    }
-    
-    .stat-icon {
-        font-size: 2rem;
-    }
-    
+
     .dashboard-grid {
         grid-template-columns: 1fr;
     }

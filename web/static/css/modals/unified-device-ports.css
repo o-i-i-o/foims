@@ -1,10 +1,5 @@
 /* 统一设备端口管理样式（以 2026年5月版本 端口分组模态框 样式为准） */
 
-.modal-xl {
-    width: 90%;
-    max-width: 1400px;
-}
-
 /* ============ 端口分组容器（5月版 .port-groups-container） ============ */
 .port-groups-container {
     display: flex;
@@ -132,26 +127,14 @@
     border-color: var(--color-text, #333) transparent transparent transparent;
 }
 
-/* 二级模态框覆盖层（5月版：端口详情/冲突弹窗叠在分组模态框之上） */
-.modal + .modal {
-    z-index: var(--z-modal-secondary, 1100);
-}
+/* 二级模态框覆盖层由 components/modals.css 统一提供，此处不再重复定义 */
 
-.modal + .modal .modal-content {
-    z-index: calc(var(--z-modal-secondary, 1100) + 1);
-}
-
-/* ============ 空消息 / 错误消息 ============ */
-.empty-message,
-.error-message {
+/* ============ 空消息（限定在端口分组容器内，避免污染全局 .error-message） ============ */
+.port-groups-container .empty-message {
     text-align: center;
     padding: 20px;
     color: var(--color-text-muted, #666);
     width: 100%;
-}
-
-.error-message {
-    color: var(--color-danger, #F44336);
 }
 
 /* ============ SNMP 端口冲突确认对话框 ============ */
@@ -217,10 +200,6 @@
 
 /* ============ 响应式 ============ */
 @media (max-width: 768px) {
-    .modal-xl {
-        width: 95%;
-    }
-
     .port-grid {
         grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
     }

@@ -1,14 +1,11 @@
 const loadedStyles = new Set();
 const loadingStyles = new Map();
 
+// dashboard.css / organization.css 已在 main.html 静态引入，无需动态加载；
+// 仅 visualization.css 未静态引入，按页面按需加载。
 const PAGE_STYLES = {
-  dashboard: ['/static/css/pages/dashboard.css'],
-  resources: ['/static/css/pages/dashboard.css', '/static/css/pages/visualization.css'],
-  organization: ['/static/css/pages/organization.css'],
-  ip: ['/static/css/pages/dashboard.css'],
-  visualization: ['/static/css/pages/visualization.css'],
-  logs: ['/static/css/pages/dashboard.css'],
-  system: ['/static/css/pages/dashboard.css']
+  resources: ['/static/css/pages/visualization.css'],
+  visualization: ['/static/css/pages/visualization.css']
 };
 
 async function loadStyle(href) {
