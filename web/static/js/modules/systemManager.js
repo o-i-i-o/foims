@@ -14,7 +14,7 @@ import { loadModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
 import { initSecurityTab } from "./fail2banManager.js";
-import { elementCache } from "../utils/helpers.js";
+import { elementCache, setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
 // 初始化系统管理标签页
@@ -29,6 +29,7 @@ export function initSystemTabs() {
     tabBtns.forEach((btn) => {
       btn.addEventListener("click", function () {
         const tabId = this.getAttribute("data-tab");
+        setActiveSubtab("system", tabId);
 
         tabBtns.forEach((b) => b.classList.remove("active"));
         this.classList.add("active");
@@ -57,6 +58,15 @@ export function initSystemTabs() {
       });
     });
     systemContainer.dataset.tabsInitialized = "true";
+  }
+
+  // 刷新后恢复上次记住的子标签（仅当与当前激活项不同时切换）
+  const savedSystemTabId = getActiveSubtab("system");
+  const savedSystemTabBtn = savedSystemTabId
+    ? systemContainer.querySelector(`.tab-btn[data-tab="${CSS.escape(savedSystemTabId)}"]`)
+    : null;
+  if (savedSystemTabBtn && !savedSystemTabBtn.classList.contains("active")) {
+    savedSystemTabBtn.click();
   }
 
   if (systemContainer.dataset.eventsInitialized === "true") return;

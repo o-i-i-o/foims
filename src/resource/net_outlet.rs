@@ -65,7 +65,7 @@ pub async fn get_net_outlets(
 
     if has_search {
         where_parts.push(format!(
-            "(ap.name ILIKE ${param_idx} OR ap.description ILIKE ${param_idx} OR ap.outlet_type ILIKE ${param_idx})"
+            "(ap.name ILIKE ${param_idx} OR ap.outlet_type ILIKE ${param_idx})"
         ));
         param_idx += 1;
     }
@@ -90,7 +90,6 @@ pub async fn get_net_outlets(
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT ap.id, ap.name, ap.outlet_type, ap.room_id, ap.room_name, \
          ap.cabinet_id, ap.cabinet_name, \
-         ap.description, \
          ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET ${}",
         param_idx + 1
@@ -178,15 +177,14 @@ pub async fn create_net_outlet(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(outlet_type)
     .bind(req.room_id)
     .bind(req.cabinet_id)
-    .bind(&req.description)
     .bind(now)
     .bind(now)
     .execute(&state.pool()?.get_conn())
@@ -206,7 +204,6 @@ pub async fn create_net_outlet(
         outlet_type: outlet_type.to_string(),
         room_id: req.room_id,
         cabinet_id: req.cabinet_id,
-        description: req.description.clone(),
         created_at: now,
         updated_at: now,
     };
@@ -214,8 +211,7 @@ pub async fn create_net_outlet(
     let details = serde_json::json!({
         "name": net_outlet.name,
         "outlet_type": net_outlet.outlet_type,
-        "room_id": net_outlet.room_id,
-        "description": net_outlet.description
+        "room_id": net_outlet.room_id
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),
@@ -244,7 +240,6 @@ pub async fn get_net_outlet(
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
         "SELECT id, name, outlet_type, room_id, room_name, \
          cabinet_id, cabinet_name, \
-         description, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -348,11 +343,6 @@ pub async fn update_net_outlet(
         param_index += 2;
     }
 
-    set_clauses.push(format!(
-        "description = COALESCE(${param_index}, description)"
-    ));
-    param_index += 1;
-
     set_clauses.push(format!("updated_at = ${param_index}"));
     param_index += 1;
 
@@ -389,8 +379,6 @@ pub async fn update_net_outlet(
         }
     }
 
-    query = query.bind(&req.description);
-
     query = query.bind(now);
     query = query.bind(id);
 
@@ -408,7 +396,6 @@ pub async fn update_net_outlet(
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
         "SELECT id, name, outlet_type, room_id, room_name, \
          cabinet_id, cabinet_name, \
-         description, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -419,8 +406,7 @@ pub async fn update_net_outlet(
     let details = serde_json::json!({
         "name": net_outlet.name,
         "outlet_type": net_outlet.outlet_type,
-        "room_id": net_outlet.room_id,
-        "description": net_outlet.description
+        "room_id": net_outlet.room_id
     });
     if let Err(e) = log_system_operation(
         &state.pool()?.get_conn(),

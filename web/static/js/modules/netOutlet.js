@@ -83,7 +83,6 @@ export async function loadNetOutletsData(page = 1, sortBy = null, sortOrder = nu
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'cabinet_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'peer_type', render: (v, row) => buildPeerDisplay(row) },
-        { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'id', render: (v) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
@@ -250,7 +249,6 @@ export async function submitNetOutletForm() {
   const outletType = getElementValue("net-outlet-type");
   const roomId = getElementValue("net-outlet-room-id");
   const cabinetId = getElementValue("net-outlet-cabinet-id");
-  const description = getElementValue("net-outlet-description");
 
   if (!name?.trim()) {
     showToast(t('net_outlet.name_required'), "warning");
@@ -267,7 +265,6 @@ export async function submitNetOutletForm() {
     outlet_type: outletType || 'other',
     room_id: roomId,
     cabinet_id: cabinetId || null,
-    description: description?.trim() || null,
   };
 
   const success = await handleFormSubmit({
@@ -353,7 +350,6 @@ export async function openNetOutletModal(netOutlet = null) {
     elementCache.setValue('net-outlet-name', netOutlet.name);
     elementCache.setValue('net-outlet-type', netOutlet.outlet_type || 'other');
     elementCache.setValue('net-outlet-room-id', netOutlet.room_id);
-    elementCache.setValue('net-outlet-description', netOutlet.description || "");
     elementCache.setValue('net-outlet-peer-type', netOutlet.peer_type || "");
     elementCache.setValue('net-outlet-peer-room-id', netOutlet.peer_room_id || "");
 

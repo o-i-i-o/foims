@@ -150,7 +150,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW net_outlets_with_details AS
         SELECT
             ap.id, ap.name, ap.outlet_type, ap.room_id, ap.cabinet_id,
-            ap.description,
             r.name AS room_name,
             cab.name AS cabinet_name,
             ap.created_at, ap.updated_at

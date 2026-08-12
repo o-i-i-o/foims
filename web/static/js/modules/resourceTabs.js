@@ -4,7 +4,7 @@
  */
 
 import { loadModule } from "../utils/resourceLoader.js";
-import { nextFrame, safeAsync } from "../utils/helpers.js";
+import { nextFrame, safeAsync, setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
 
 // ==========================================
 // 常量定义
@@ -62,6 +62,7 @@ function bindTabClickHandlers(container) {
       const tabId = this.getAttribute("data-tab");
 
       updateActiveTab(tabBtns, tabContents, this, tabId);
+      setActiveSubtab(container.id, tabId);
       loadTabData(tabId);
     });
   });
@@ -127,14 +128,27 @@ function markAsInitialized(container) {
 
 /**
  * 加载默认标签页数据
+ * 优先恢复上次记住的子标签（刷新后仍停留在原标签），否则使用 HTML 默认激活项
  * @param {HTMLElement} container - 容器元素
  */
 function loadDefaultTabData(container) {
-  const activeTabBtn = container.querySelector(".tab-btn.active");
-  const defaultTabBtn = activeTabBtn || container.querySelector(".tab-btn");
+  const tabBtns = container.querySelectorAll(".tab-btn");
+  const tabContents = container.querySelectorAll(".tab-content");
 
-  if (defaultTabBtn) {
-    const tabId = defaultTabBtn.getAttribute("data-tab");
+  // 优先恢复上次记住的子标签
+  const savedTabId = getActiveSubtab(container.id);
+  let targetBtn = savedTabId
+    ? container.querySelector(`.tab-btn[data-tab="${CSS.escape(savedTabId)}"]`)
+    : null;
+
+  // 回退到 HTML 默认激活项或第一个标签
+  if (!targetBtn) {
+    targetBtn = container.querySelector(".tab-btn.active") || container.querySelector(".tab-btn");
+  }
+
+  if (targetBtn) {
+    const tabId = targetBtn.getAttribute("data-tab");
+    updateActiveTab(tabBtns, tabContents, targetBtn, tabId);
     loadTabData(tabId);
   }
 }

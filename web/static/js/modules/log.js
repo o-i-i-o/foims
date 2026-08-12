@@ -14,6 +14,7 @@ import {
 
 import { t } from "../utils/i18n.js";
 import { showConfirm } from "../utils/confirm.js";
+import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
 
 // 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
@@ -63,6 +64,7 @@ export function initLogTabs() {
     tabBtns.forEach((btn) => {
       btn.addEventListener("click", function () {
         const tabId = this.getAttribute("data-tab");
+        setActiveSubtab("logs", tabId);
 
         // 检查是否已经是激活状态
         if (this.classList.contains("active")) {
@@ -125,6 +127,17 @@ export function initLogTabs() {
       }
     }
   } else {
+    // 优先恢复上次记住的子标签（刷新后停留在原标签）
+    const savedTabId = getActiveSubtab("logs");
+    const savedTabBtn = savedTabId
+      ? document.querySelector(`#logs [data-tab="${CSS.escape(savedTabId)}"]`)
+      : null;
+    if (savedTabBtn && !savedTabBtn.classList.contains("active")) {
+      // 复用点击逻辑完成激活与数据加载
+      savedTabBtn.click();
+      return;
+    }
+
     // 如果URL中没有指定子标签，为默认选中的标签加载数据
     // 找到默认选中的标签按钮（通常是第一个或带有active类的）
     let defaultTabBtn = document.querySelector("#logs .tab-btn.active");

@@ -713,7 +713,6 @@ class RoomNetOutletsManager {
     const name = data.name || '';
     const outletType = data.outlet_type || 'wall_socket';
     const cabinetId = data.cabinet_id || '';
-    const description = data.description || '';
     const div = document.createElement('div');
     div.className = 'room-net-outlet-item';
     div.innerHTML = `
@@ -732,9 +731,6 @@ class RoomNetOutletsManager {
             <option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>
             ${this.cabinetOptionsHtml()}
           </select>
-        </div>
-        <div class="form-group">
-          <input type="text" class="net-outlet-description form-control" value="${escapeHtml(description)}" placeholder="${t('common.description') || '描述'}" autocomplete="off" />
         </div>
         <div class="form-group room-net-outlets-actions">
           <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete') || '删除'}</button>
@@ -820,13 +816,11 @@ class RoomNetOutletsManager {
       const nameInput = item.querySelector('.net-outlet-name');
       const typeSel = item.querySelector('.net-outlet-type');
       const cabSel = item.querySelector('.net-outlet-cabinet');
-      const descInput = item.querySelector('.net-outlet-description');
       netOutlets.push({
         id: idInput?.value || null,
         name: (nameInput?.value || '').trim(),
         outlet_type: typeSel?.value || 'wall_socket',
         cabinet_id: cabSel?.value || null,
-        description: (descInput?.value || '').trim() || null,
       });
     }
     return netOutlets;
@@ -995,7 +989,7 @@ export async function openRoomNetOutletsListModal(roomId) {
     const netOutlets = room.net_outlets || [];
     if (tbody) {
       if (netOutlets.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="4" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
       } else {
         tbody.innerHTML = netOutlets.map((no, idx) => `
           <tr>
@@ -1003,7 +997,6 @@ export async function openRoomNetOutletsListModal(roomId) {
             <td>${escapeHtml(no.name || '')}</td>
             <td>${escapeHtml(outletTypeLabel(no.outlet_type))}</td>
             <td>${escapeHtml(no.cabinet_name || '-')}</td>
-            <td>${escapeHtml(no.description || '-')}</td>
           </tr>
         `).join('');
       }

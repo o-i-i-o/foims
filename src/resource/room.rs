@@ -298,7 +298,7 @@ pub async fn get_room(
 
     // 信息点：所有房型都支持
     let no_rows = sqlx::query(
-        "SELECT no.id, no.name, no.outlet_type, no.cabinet_id, cab.name AS cabinet_name, no.description \
+        "SELECT no.id, no.name, no.outlet_type, no.cabinet_id, cab.name AS cabinet_name \
          FROM net_outlets no \
          LEFT JOIN cabinets cab ON no.cabinet_id = cab.id \
          WHERE no.room_id = $1 ORDER BY no.name",
@@ -314,7 +314,6 @@ pub async fn get_room(
             outlet_type: r.get("outlet_type"),
             cabinet_id: r.get("cabinet_id"),
             cabinet_name: r.get("cabinet_name"),
-            description: r.get("description"),
         })
         .collect();
 
@@ -789,12 +788,11 @@ pub async fn sync_room_net_outlets(
         let outlet_type = item.outlet_type.as_deref().unwrap_or("wall_socket");
         if let Some(item_id) = item.id {
             sqlx::query(
-                "UPDATE net_outlets SET name = $1, outlet_type = $2, cabinet_id = $3, description = $4, room_id = $5, updated_at = $6 WHERE id = $7",
+                "UPDATE net_outlets SET name = $1, outlet_type = $2, cabinet_id = $3, room_id = $4, updated_at = $5 WHERE id = $6",
             )
             .bind(&item.name)
             .bind(outlet_type)
             .bind(item.cabinet_id)
-            .bind(&item.description)
             .bind(id)
             .bind(now)
             .bind(item_id)
@@ -803,14 +801,13 @@ pub async fn sync_room_net_outlets(
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
             )
             .bind(new_id)
             .bind(&item.name)
             .bind(outlet_type)
             .bind(id)
             .bind(item.cabinet_id)
-            .bind(&item.description)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)

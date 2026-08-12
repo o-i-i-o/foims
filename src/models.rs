@@ -673,8 +673,6 @@ pub struct NetOutletSyncItem {
     pub name: String,
     pub outlet_type: Option<String>,
     pub cabinet_id: Option<Uuid>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -689,7 +687,6 @@ pub struct NetOutletBrief {
     pub outlet_type: String,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -1362,7 +1359,6 @@ pub struct NetOutlet {
     pub outlet_type: String,
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
-    pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1376,7 +1372,6 @@ pub struct NetOutletWithDetails {
     pub room_name: Option<String>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
-    pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1388,8 +1383,6 @@ pub struct NetOutletCreate {
     pub outlet_type: Option<String>,
     pub room_id: Uuid,
     pub cabinet_id: Option<Uuid>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -1399,8 +1392,6 @@ pub struct NetOutletUpdate {
     pub outlet_type: Option<String>,
     pub room_id: Option<Uuid>,
     pub cabinet_id: Option<Option<Uuid>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
-    pub description: Option<String>,
 }
 
 // ==================== 设备模板模型 ====================

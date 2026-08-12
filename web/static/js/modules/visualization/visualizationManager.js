@@ -1,6 +1,6 @@
 import { loadModule } from "../../utils/resourceLoader.js";
 import { loadRoomsForSelect, loadDataCenterRoomsForSelect } from "../../utils/resources.js";
-import { elementCache } from "../../utils/helpers.js";
+import { elementCache, setActiveSubtab, getActiveSubtab } from "../../utils/helpers.js";
 import { editWorkstation } from "../workstation.js";
 import { editCabinet } from "../cabinet.js";
 import { editCabinetPosition } from "../position.js";
@@ -32,6 +32,7 @@ function initTabSwitching() {
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", function () {
       const tabId = this.getAttribute("data-tab");
+      setActiveSubtab("visualization", tabId);
 
       tabBtns.forEach((b) => b.classList.remove("active"));
       this.classList.add("active");
@@ -274,7 +275,16 @@ export async function initVisualization() {
     bindTopologyEvents();
     loadInitialData();
     loadDeviceOptions();
-    
+
+    // 刷新后恢复上次记住的子标签（在可视化对象初始化完成后切换）
+    const savedVizTabId = getActiveSubtab("visualization");
+    const savedVizTabBtn = savedVizTabId
+      ? document.querySelector(`#visualization .tab-btn[data-tab="${CSS.escape(savedVizTabId)}"]`)
+      : null;
+    if (savedVizTabBtn && !savedVizTabBtn.classList.contains("active")) {
+      savedVizTabBtn.click();
+    }
+
     visualizationInitialized = true;
   } catch (error) {
     console.error("初始化可视化模块失败:", error);

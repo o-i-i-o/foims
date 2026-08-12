@@ -327,3 +327,37 @@ export function escapeHtml(text) {
 }
 
 export const elementCache = new ElementCache();
+
+// ==========================================
+// 子标签页持久化（刷新后停留在当前子标签）
+// ==========================================
+
+const SUBTAB_STORAGE_PREFIX = "ipma_subtab_";
+
+/**
+ * 记住某个页面当前激活的子标签
+ * @param {string} pageId - 顶层页面 ID（如 "resources"、"logs"）
+ * @param {string} tabId - 子标签 ID（如 "devices"）
+ */
+export function setActiveSubtab(pageId, tabId) {
+  if (!pageId || !tabId) return;
+  try {
+    localStorage.setItem(SUBTAB_STORAGE_PREFIX + pageId, tabId);
+  } catch (e) {
+    // 忽略 localStorage 不可用的情况
+  }
+}
+
+/**
+ * 读取某个页面上次记住的子标签
+ * @param {string} pageId - 顶层页面 ID
+ * @returns {string|null} 子标签 ID，未记录或不可用时返回 null
+ */
+export function getActiveSubtab(pageId) {
+  if (!pageId) return null;
+  try {
+    return localStorage.getItem(SUBTAB_STORAGE_PREFIX + pageId);
+  } catch (e) {
+    return null;
+  }
+}
