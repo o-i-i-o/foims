@@ -23,7 +23,7 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
-const VALID_ENDPOINT_TYPES: [&str; 3] = ["device_port", "net_outlet", "device_interface"];
+const VALID_ENDPOINT_TYPES: [&str; 4] = ["device_port", "net_outlet", "device_interface", "patch_panel"];
 const VALID_LINK_TYPES: [&str; 3] = ["ethernet", "fiber", "console"];
 
 fn validate_endpoint_type(endpoint_type: &str) -> Result<(), AppError> {

@@ -296,12 +296,12 @@ pub async fn get_room(
         (None, None)
     };
 
-    // 信息点：所有房型都支持
+    // 信息点：所有房型都支持（配线架由机柜管理，这里不返回）
     let no_rows = sqlx::query(
         "SELECT no.id, no.name, no.outlet_type, no.cabinet_id, cab.name AS cabinet_name \
          FROM net_outlets no \
          LEFT JOIN cabinets cab ON no.cabinet_id = cab.id \
-         WHERE no.room_id = $1 ORDER BY no.name",
+         WHERE no.room_id = $1 AND no.outlet_type != 'patch_panel' ORDER BY no.name",
     )
     .bind(room.id)
     .fetch_all(&state.pool()?.get_conn())
@@ -754,7 +754,7 @@ pub async fn sync_room_net_outlets(
     }
 
     let existing_ids: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM net_outlets WHERE room_id = $1")
+        sqlx::query_scalar("SELECT id FROM net_outlets WHERE room_id = $1 AND outlet_type != 'patch_panel'")
             .bind(id)
             .fetch_all(&mut *tx)
             .await?;

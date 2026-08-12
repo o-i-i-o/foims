@@ -439,7 +439,12 @@
     "position_u_invalid": "U位必须是有效正整数且结束U不小于起始U",
     "positions_save_success": "机位保存成功",
     "positions_save_failed": "机位保存失败",
-    "positions_list": "机位列表"
+    "positions_list": "机位列表",
+    "patch_panels": "配线架",
+    "add_patch_panel": "添加配线架",
+    "no_patch_panels_hint": "暂无配线架，点击下方按钮添加",
+    "patch_panel_name": "配线架名称",
+    "patch_panels_save_failed": "配线架保存失败"
   },
   "cabinet_position": {
     "name": "机位名称",
@@ -817,6 +822,13 @@
     "b_endpoint_id": "B 端点对象",
     "endpoint_net_outlet": "信息点",
     "endpoint_device_interface": "设备接口",
+    "endpoint_patch_panel": "配线架",
+    "scope_room": "房间",
+    "scope_device": "设备",
+    "scope_cabinet": "机柜",
+    "select_room": "选择房间",
+    "select_device": "选择设备",
+    "select_cabinet": "选择机柜",
     "select_endpoint": "选择端点",
     "link_type": "链路类型",
     "link_type_ethernet": "网线",

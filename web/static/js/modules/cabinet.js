@@ -176,7 +176,129 @@ class CabinetPositionsManager {
   }
 }
 
+// ==========================================
+// 机柜配线架动态管理模块（参照房间信息点逻辑）
+// ==========================================
+
+class CabinetPatchPanelsManager {
+  constructor() {
+    this.container = null;
+    this.handlers = new WeakMap();
+    this.addHandler = null;
+  }
+
+  ensureContainer() {
+    if (!this.container || !document.contains(this.container)) {
+      this.container = document.getElementById('cabinet-patch-panels-container');
+    }
+    return this.container;
+  }
+
+  init() {
+    this.ensureContainer();
+    this.bindAddButton();
+    if (!this.container) return false;
+    this.container.innerHTML = '';
+    this.updateEmptyState();
+    return true;
+  }
+
+  bindAddButton() {
+    const addBtn = document.getElementById('add-patch-panel-row-btn');
+    if (!addBtn) return;
+    if (this.addHandler) {
+      addBtn.removeEventListener('click', this.addHandler);
+    }
+    this.addHandler = () => this.addItem();
+    addBtn.addEventListener('click', this.addHandler);
+  }
+
+  updateEmptyState() {
+    if (!this.ensureContainer()) return;
+    const existing = this.container.querySelector('.cabinet-patch-panel-empty');
+    const items = this.container.querySelectorAll('.cabinet-patch-panel-item');
+    if (items.length === 0 && !existing) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'cabinet-patch-panel-empty text-muted';
+      emptyDiv.textContent = t('cabinet.no_patch_panels_hint') || '暂无配线架，点击下方按钮添加';
+      this.container.appendChild(emptyDiv);
+    } else if (items.length > 0 && existing) {
+      existing.remove();
+    }
+  }
+
+  createRow(data = {}) {
+    const id = data.id || '';
+    const name = data.name || '';
+    const div = document.createElement('div');
+    div.className = 'cabinet-patch-panel-item';
+    div.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <input type="hidden" class="patch-panel-id" value="${escapeHtml(String(id))}" />
+          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet.patch_panel_name') || t('net_outlet.name') || '配线架名称'}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <button type="button" class="btn btn-danger btn-sm remove-patch-panel-btn">${t('common.delete')}</button>
+        </div>
+      </div>
+    `;
+    this.bindItemEvents(div);
+    return div;
+  }
+
+  addItem(data = {}) {
+    if (!this.ensureContainer()) return;
+    const emptyState = this.container.querySelector('.cabinet-patch-panel-empty');
+    if (emptyState) emptyState.remove();
+    const item = this.createRow(data);
+    this.container.appendChild(item);
+  }
+
+  bindItemEvents(item) {
+    const removeBtn = item.querySelector('.remove-patch-panel-btn');
+    if (removeBtn) {
+      const handler = () => this.removeItem(item);
+      this.handlers.set(removeBtn, handler);
+      removeBtn.addEventListener('click', handler);
+    }
+  }
+
+  removeItem(item) {
+    item.remove();
+    this.updateEmptyState();
+  }
+
+  loadExisting(patchPanels) {
+    this.ensureContainer();
+    this.bindAddButton();
+    if (!this.container) return;
+    this.container.innerHTML = '';
+    if (patchPanels?.length) {
+      patchPanels.forEach(pp => this.addItem(pp));
+    }
+    this.updateEmptyState();
+  }
+
+  collectData() {
+    if (!this.ensureContainer()) return [];
+    const items = this.container.querySelectorAll('.cabinet-patch-panel-item');
+    const patchPanels = [];
+    for (const item of items) {
+      const idInput = item.querySelector('.patch-panel-id');
+      const nameInput = item.querySelector('.patch-panel-name');
+      const idValue = idInput?.value?.trim();
+      patchPanels.push({
+        id: idValue || null,
+        name: (nameInput?.value || '').trim(),
+      });
+    }
+    return patchPanels;
+  }
+}
+
 export const cabinetPositionsManager = new CabinetPositionsManager();
+export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 
 // ==========================================
 // 机柜管理功能
@@ -356,6 +478,8 @@ export async function openCabinetModal(cabinet = null) {
 
     // 加载现有机位
     cabinetPositionsManager.loadExisting(cabinet.positions || []);
+    // 加载现有配线架
+    cabinetPatchPanelsManager.loadExisting(cabinet.patch_panels || []);
   } else {
     // 添加模式
     title.textContent = t('cabinet.add_cabinet');
@@ -367,6 +491,8 @@ export async function openCabinetModal(cabinet = null) {
     }
     // 初始化机位管理器为默认空状态
     cabinetPositionsManager.init();
+    // 初始化配线架管理器为默认空状态
+    cabinetPatchPanelsManager.init();
   }
 }
 
@@ -435,6 +561,15 @@ export async function submitCabinetForm() {
     const syncResult = await apiPut(`/api/resources/cabinets/${cabinetId}/positions`, positionsData);
     if (!syncResult.success) {
       showToast(syncResult.message || t('cabinet.positions_save_failed'), "error");
+      await loadCabinetsData();
+      return;
+    }
+
+    // 同步配线架
+    const patchPanelsData = cabinetPatchPanelsManager.collectData();
+    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/net-outlets`, { patch_panels: patchPanelsData });
+    if (!ppResult.success) {
+      showToast(ppResult.message || (t('cabinet.patch_panels_save_failed') || t('cabinet.save_failed')), "error");
       await loadCabinetsData();
       return;
     }

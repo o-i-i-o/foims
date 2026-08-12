@@ -221,8 +221,8 @@
           <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Network Segments</button>
           <button class="tab-btn" data-tab="rooms" role="tab" aria-selected="false" aria-controls="rooms-tab" data-i18n="resources.rooms">Rooms</button>
           <button class="tab-btn" data-tab="cabinets" role="tab" aria-selected="false" aria-controls="cabinets-tab" data-i18n="resources.cabinets">Cabinets</button>
-          <button class="tab-btn" data-tab="cable-links" role="tab" aria-selected="false" aria-controls="cable-links-tab" data-i18n="resources.cable_links">Cable Links</button>
           <button class="tab-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devices-tab" data-i18n="resources.devices">Devices</button>
+          <button class="tab-btn" data-tab="cable-links" role="tab" aria-selected="false" aria-controls="cable-links-tab" data-i18n="resources.cable_links">Cable Links</button>
         </div>
 
         <div id="network-regions-tab" class="tab-content active" role="tabpanel">
@@ -342,33 +342,6 @@
           </div>
         </div>
 
-        <div id="cable-links-tab" class="tab-content" role="tabpanel">
-          <div class="table-container">
-            <table id="cable-links-table" class="data-table">
-              <thead>
-                <tr>
-                  <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="cable_link.a_endpoint">A Endpoint</th>
-                  <th data-i18n="cable_link.b_endpoint">B Endpoint</th>
-                  <th data-i18n="cable_link.link_type">Link Type</th>
-                  <th data-i18n="cable_link.cable_label">Cable Label</th>
-                  <th data-i18n="cable_link.length_m">Length (m)</th>
-                  <th data-i18n="cable_link.tested">Tested</th>
-                  <th class="th-actions">
-                    <span data-i18n="common.actions">Actions</span>
-                    <button id="add-cable-link-btn" class="btn btn-primary btn-sm" data-i18n="cable_link.add">Add Cable Link</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="empty-row">
-                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         <div id="devices-tab" class="tab-content" role="tabpanel">
           <div class="table-container">
             <table id="devices-table" class="data-table">
@@ -392,6 +365,33 @@
               <tbody>
                 <tr class="empty-row">
                   <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="cable-links-tab" class="tab-content" role="tabpanel">
+          <div class="table-container">
+            <table id="cable-links-table" class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="cable_link.a_endpoint">A Endpoint</th>
+                  <th data-i18n="cable_link.b_endpoint">B Endpoint</th>
+                  <th data-i18n="cable_link.link_type">Link Type</th>
+                  <th data-i18n="cable_link.cable_label">Cable Label</th>
+                  <th data-i18n="cable_link.length_m">Length (m)</th>
+                  <th data-i18n="cable_link.tested">Tested</th>
+                  <th class="th-actions">
+                    <span data-i18n="common.actions">Actions</span>
+                    <button id="add-cable-link-btn" class="btn btn-primary btn-sm" data-i18n="cable_link.add">Add Cable Link</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -1063,6 +1063,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01268"></script>
+  <script type="module" src="/static/js/app.js?v=01269"></script>
 </body>
 </html>

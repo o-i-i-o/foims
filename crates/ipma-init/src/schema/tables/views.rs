@@ -187,6 +187,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             UNION ALL
             SELECT di.id, 'device_interface'::VARCHAR, (di.name || ' @ ' || d.name)
             FROM device_interfaces di JOIN devices d ON di.device_id = d.id
+            UNION ALL
+            SELECT no.id, 'patch_panel'::VARCHAR, no.name::text
+            FROM net_outlets no WHERE no.outlet_type = 'patch_panel'
         )
         SELECT
             cl.id, cl.link_type, cl.cable_label, cl.length_m, cl.tested,

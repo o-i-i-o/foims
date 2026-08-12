@@ -25,6 +25,7 @@ pub async fn get_net_outlets(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
+    let cabinet_id = query.get("cabinet_id").cloned();
     let outlet_type = query.get("outlet_type").cloned();
     let sort_by = query
         .get("sort_by")
@@ -46,6 +47,12 @@ pub async fn get_net_outlets(
             Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的room_id参数".to_string()))
         })
         .transpose()?;
+    let parsed_cabinet_id = cabinet_id
+        .as_ref()
+        .map(|id| {
+            Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的cabinet_id参数".to_string()))
+        })
+        .transpose()?;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY ap.name DESC",
@@ -57,6 +64,7 @@ pub async fn get_net_outlets(
     };
 
     let has_room_filter = parsed_room_id.is_some();
+    let has_cabinet_filter = parsed_cabinet_id.is_some();
     let has_type_filter = !outlet_type.as_ref().is_none_or(|t| t.is_empty());
     let has_search = !search.is_empty();
 
@@ -71,6 +79,10 @@ pub async fn get_net_outlets(
     }
     if has_room_filter {
         where_parts.push(format!("ap.room_id = ${param_idx}"));
+        param_idx += 1;
+    }
+    if has_cabinet_filter {
+        where_parts.push(format!("ap.cabinet_id = ${param_idx}"));
         param_idx += 1;
     }
     if has_type_filter {
@@ -103,6 +115,9 @@ pub async fn get_net_outlets(
         if has_room_filter {
             q = q.bind(parsed_room_id);
         }
+        if has_cabinet_filter {
+            q = q.bind(parsed_cabinet_id);
+        }
         if has_type_filter {
             q = q.bind(&outlet_type);
         }
@@ -116,6 +131,9 @@ pub async fn get_net_outlets(
         }
         if has_room_filter {
             q = q.bind(parsed_room_id);
+        }
+        if has_cabinet_filter {
+            q = q.bind(parsed_cabinet_id);
         }
         if has_type_filter {
             q = q.bind(&outlet_type);

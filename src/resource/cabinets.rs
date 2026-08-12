@@ -6,8 +6,8 @@ use axum::response::Response;
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
-    Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
-    PositionBrief, PositionSyncItem,
+    Cabinet, CabinetCreate, CabinetPatchPanelsSync, CabinetPositionsSync, CabinetUpdate,
+    CabinetWithNetworks, NetOutletBrief, NetworkInfo, PositionBrief, PositionSyncItem,
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
@@ -144,6 +144,7 @@ pub async fn get_cabinets(
             capacity: cabinet.capacity,
             position_count,
             positions: None,
+            patch_panels: None,
             description: cabinet.description,
             created_at: cabinet.created_at,
             updated_at: cabinet.updated_at,
@@ -316,6 +317,28 @@ pub async fn get_cabinet(
         })
         .collect();
 
+    // 加载该机柜下的配线架（net_outlets 中 outlet_type='patch_panel' 的行）
+    let pp_rows = sqlx::query(
+        "SELECT no.id, no.name, no.outlet_type, no.cabinet_id, cab.name AS cabinet_name \
+         FROM net_outlets no \
+         LEFT JOIN cabinets cab ON no.cabinet_id = cab.id \
+         WHERE no.cabinet_id = $1 AND no.outlet_type = 'patch_panel' \
+         ORDER BY no.name",
+    )
+    .bind(cabinet.id)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    let patch_panels: Vec<NetOutletBrief> = pp_rows
+        .iter()
+        .map(|r| NetOutletBrief {
+            id: r.get("id"),
+            name: r.get("name"),
+            outlet_type: r.get("outlet_type"),
+            cabinet_id: r.get("cabinet_id"),
+            cabinet_name: r.get("cabinet_name"),
+        })
+        .collect();
+
     let cabinet_with_networks = CabinetWithNetworks {
         id: cabinet.id,
         name: cabinet.name,
@@ -324,6 +347,7 @@ pub async fn get_cabinet(
         capacity: cabinet.capacity,
         position_count,
         positions: Some(positions),
+        patch_panels: Some(patch_panels),
         description: cabinet.description,
         created_at: cabinet.created_at,
         updated_at: cabinet.updated_at,
@@ -599,4 +623,125 @@ pub async fn sync_cabinet_positions(
     }
 
     Ok(crate::error::ok_json((), "机位同步成功"))
+}
+
+/// 同步机柜下的配线架（net_outlets 中 outlet_type='patch_panel' 的行）
+/// 参照 room.rs::sync_room_net_outlets 实现，范围为当前机柜的配线架
+pub async fn sync_cabinet_net_outlets(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<CabinetPatchPanelsSync>,
+) -> Result<Response, AppError> {
+    req.validate()?;
+
+    // 取机柜及其所在房间（配线架的 room_id 必须取自机柜所在房间）
+    let cabinet_row = sqlx::query("SELECT id, room_id FROM cabinets WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?;
+    let room_id: Uuid = cabinet_row
+        .ok_or_else(|| AppError::NotFound("机柜未找到".to_string()))?
+        .get("room_id");
+
+    let items = &req.patch_panels;
+    let mut tx = state.pool()?.get_conn().begin().await?;
+    let now = Utc::now();
+
+    // 既有配线架 id 范围（仅本机柜的）
+    let existing_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM net_outlets WHERE cabinet_id = $1 AND outlet_type = 'patch_panel'")
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+
+    let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+    // 删除请求中不存在的配线架（cable_links 的删除保护触发器会阻止被引用的删除）
+    for existing_id in &existing_ids {
+        if !request_ids.contains(existing_id) {
+            sqlx::query("DELETE FROM net_outlets WHERE id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    if let sqlx::Error::Database(db_err) = &e {
+                        let msg = db_err.message();
+                        if msg.contains("cable_links") {
+                            return AppError::Validation(
+                                "配线架已被线路引用，无法删除".to_string(),
+                            );
+                        }
+                    }
+                    AppError::from(e)
+                })?;
+        }
+    }
+
+    // 新增或更新（强制 outlet_type='patch_panel'、cabinet_id=机柜、room_id=机柜房间）
+    for item in items {
+        // 名称唯一性（UNIQUE(room_id, name)）：在整个房间范围内唯一
+        let dup: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM net_outlets WHERE room_id = $1 AND name = $2 AND ($3::uuid IS NULL OR id != $3)",
+        )
+        .bind(room_id)
+        .bind(&item.name)
+        .bind(item.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if dup.is_some() {
+            return Err(AppError::Conflict("配线架名称在该房间内已存在".to_string()));
+        }
+
+        if let Some(item_id) = item.id {
+            sqlx::query(
+                "UPDATE net_outlets SET name = $1, outlet_type = 'patch_panel', cabinet_id = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+            )
+            .bind(&item.name)
+            .bind(id)
+            .bind(room_id)
+            .bind(now)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            let new_id = Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, created_at, updated_at) VALUES ($1, $2, 'patch_panel', $3, $4, $5, $6)",
+            )
+            .bind(new_id)
+            .bind(&item.name)
+            .bind(room_id)
+            .bind(id)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
+    tx.commit().await?;
+
+    let details = serde_json::json!({
+        "cabinet_id": id.to_string(),
+        "patch_panel_count": items.len()
+    });
+    if let Err(e) = log_system_operation(
+        &state.pool()?.get_conn(),
+        OperationLogParams {
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
+            action: "sync_net_outlets",
+            resource_type: "cabinet",
+            resource_id: Some(&id),
+            details: &details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+
+    Ok(crate::error::ok_json((), "机柜配线架同步成功"))
 }

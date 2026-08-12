@@ -13,10 +13,16 @@
             <label for="cable-link-a-type"><span data-i18n="cable_link.a_endpoint">A Endpoint Type</span><span class="required">*</span></label>
             <select id="cable-link-a-type" name="a_endpoint_type" required>
               <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
-              <option value="device_port" data-i18n="cable_link.endpoint_device_port">Device Port</option>
               <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+              <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
             </select>
           </div>
+          <div class="form-group cable-link-scope-group" id="cable-link-a-scope-group">
+            <label for="cable-link-a-scope"><span id="cable-link-a-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
+            <select id="cable-link-a-scope"></select>
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="cable-link-a-id"><span data-i18n="cable_link.a_endpoint_id">A Endpoint</span><span class="required">*</span></label>
             <select id="cable-link-a-id" name="a_endpoint_id" required></select>
@@ -27,10 +33,16 @@
             <label for="cable-link-b-type"><span data-i18n="cable_link.b_endpoint">B Endpoint Type</span><span class="required">*</span></label>
             <select id="cable-link-b-type" name="b_endpoint_type" required>
               <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
-              <option value="device_port" data-i18n="cable_link.endpoint_device_port">Device Port</option>
               <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+              <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
             </select>
           </div>
+          <div class="form-group cable-link-scope-group" id="cable-link-b-scope-group">
+            <label for="cable-link-b-scope"><span id="cable-link-b-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
+            <select id="cable-link-b-scope"></select>
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="cable-link-b-id"><span data-i18n="cable_link.b_endpoint_id">B Endpoint</span><span class="required">*</span></label>
             <select id="cable-link-b-id" name="b_endpoint_id" required></select>

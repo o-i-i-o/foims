@@ -439,7 +439,12 @@
     "position_u_invalid": "U values must be positive integers and end U must be >= start U",
     "positions_save_success": "Positions saved successfully",
     "positions_save_failed": "Failed to save positions",
-    "positions_list": "Positions List"
+    "positions_list": "Positions List",
+    "patch_panels": "Patch Panels",
+    "add_patch_panel": "Add Patch Panel",
+    "no_patch_panels_hint": "No patch panels yet, click the button below to add",
+    "patch_panel_name": "Patch Panel Name",
+    "patch_panels_save_failed": "Failed to save patch panels"
   },
   "cabinet_position": {
     "name": "Position Name",
@@ -817,6 +822,13 @@
     "b_endpoint_id": "B Endpoint Object",
     "endpoint_net_outlet": "Network Outlet",
     "endpoint_device_interface": "Device Interface",
+    "endpoint_patch_panel": "Patch Panel",
+    "scope_room": "Room",
+    "scope_device": "Device",
+    "scope_cabinet": "Cabinet",
+    "select_room": "Select Room",
+    "select_device": "Select Device",
+    "select_cabinet": "Select Cabinet",
     "select_endpoint": "Select Endpoint",
     "link_type": "Link Type",
     "link_type_ethernet": "Ethernet",

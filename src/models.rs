@@ -515,6 +515,8 @@ pub struct CabinetWithNetworks {
     pub position_count: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub positions: Option<Vec<PositionBrief>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub patch_panels: Option<Vec<NetOutletBrief>>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -711,6 +713,18 @@ pub struct RoomChildrenSync {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetPositionsSync {
     pub positions: Vec<PositionSyncItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct PatchPanelSyncItem {
+    pub id: Option<Uuid>,
+    #[validate(length(min = 1, max = 100, message = "配线架名称长度必须在1到100个字符之间"))]
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CabinetPatchPanelsSync {
+    pub patch_panels: Vec<PatchPanelSyncItem>,
 }
 
 // ==================== IP 管理模型 ====================

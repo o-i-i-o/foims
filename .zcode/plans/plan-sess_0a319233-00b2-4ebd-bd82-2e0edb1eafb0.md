@@ -1,52 +1,50 @@
-## 任务 1：彻底删除「信息点(net_outlets)」的 description 字段（代码 + 数据库）
+## 总体方案（已确认：复用 net_outlets；配线架仅名称）
 
-数据库列 `net_outlets.description` 同时被「房间模态框」和「独立信息点模态框(网络出口)」共用。按确认的方案彻底删除该列并清理所有引用。**注意：该列已有数据将被删除（不可恢复）。**
-
-### 数据库 / Schema（Rust）
-- `crates/ipma-init/src/schema/tables/net_outlets.rs`：CREATE TABLE 中移除 `description TEXT,`；新增 `ALTER TABLE net_outlets DROP COLUMN IF EXISTS description`（保证已有数据库在服务重启时自动迁移）。
-- `crates/ipma-init/src/schema/tables/views.rs`：`net_outlets_with_details` 视图 SELECT 中移除 `ap.description,`（视图在 `create_all_tables` 中每次启动重建，顺序在 net_outlets 之后，安全）。
-
-### 后端 handler
-- `src/resource/room.rs`：
-  - `sync_room_net_outlets`：UPDATE/INSERT 语句移除 `description` 占位符与 `.bind(&item.description)`。
-  - `get_room`：信息点 SELECT 移除 `no.description`，`NetOutletBrief` 映射移除 description 字段。
-- `src/resource/net_outlet.rs`：
-  - `get_net_outlets`：SELECT 移除 `ap.description`；搜索 ILIKE 子句移除 `ap.description`。
-  - `create_net_outlet`：INSERT 移除 description 列与 bind；日志 details 移除 description。
-  - `get_net_outlet` / `update_net_outlet` 末尾 SELECT 移除 description；update 中移除 description set 子句、bind 与日志 details。
-
-### Models（`src/models.rs`）
-移除 `description` 字段：`NetOutletSyncItem`、`NetOutletBrief`、`NetOutlet`、`NetOutletWithDetails`、`NetOutletCreate`、`NetOutletUpdate`（含对应 `#[validate]` 注解）。
-
-### 前端
-- `web/static/js/modules/room.js`：`createRow` 移除描述 `<input class="net-outlet-description">` 的 `<div class="form-group">`；`collectData` 移除 `descInput` 读取与 `description` 字段。
-- `web/static/modals/net-outlet-modal.html`：移除 `net-outlet-description` 的 `<div class="form-group">`（label+textarea）。
-- `web/static/js/modules/netOutlet.js`：列表表格移除 description 列；`submitNetOutletForm` 移除 description 读取与字段；`openNetOutletModal` 移除 `setValue('net-outlet-description', ...)`。
-
-### 应用 & 验证
-- `cargo build`（release）重建服务，重启后 `create_all_tables` 自动执行 `DROP COLUMN`。
-- 用 ipma/admin123 连接数据库确认 `net_outlets` 表已无 description 列。
+配线架 = `net_outlets`(outlet_type='patch_panel', cabinet_id=机柜)。按 outlet_type 划分归属：**房间信息点管理器只管非 patch_panel；机柜管 patch_panel**。线路里"配线架"端点在后端仍存为 `net_outlet` 类型。**因此无需任何 DB DDL 迁移**（patch_panel outlet_type 与 cabinet_id 列已存在），只改查询过滤 + 新增同步接口 + 前端。
 
 ---
 
-## 任务 2：刷新浏览器后停留在当前子标签页（覆盖全部子标签系统）
+### A. 标签页顺序（main.html）
+把"线缆链路"标签按钮 + 其 tab-content 面板，从"机柜"之后移到"设备"之后。
+新顺序：网络区域 → 网段 → 房间 → 机柜 → **设备 → 线缆链路**。
 
-顶层页面已用 URL hash 持久化，刷新后页面正确；问题在子标签（仅 DOM 内存态、默认硬编码）。方案：用 localStorage 记住每个页面的子标签，初始化时恢复。**副作用：从侧边栏进入某页面时也会回到上次子标签（符合"记住上次位置"的预期）。**
+### B. 机柜配线架（参考房间信息点内联模式）
+- **cabinet-modal.html**：在"机位"区与"描述"之间，新增配线架区：`#cabinet-patch-panels-container` + `#add-patch-panel-row-btn`。
+- **cabinet.js**：新增 `CabinetPatchPanelsManager` 类（仿 `CabinetPositionsManager`，但每行仅一个名称输入框 + 删除按钮）；`openCabinetModal` 编辑时 `loadExisting(cabinet.patch_panels)`、新增时 `init()`；`submitCabinetForm` 在同步机位后再 `PUT /api/resources/cabinets/{id}/patch-panels`。
+- **room.js**：`outletTypeOptionsHtml` 去掉 `patch_panel` 选项（配线架改由机柜管理）。
 
-### 实现
-- `web/static/js/utils/helpers.js`：新增 `setActiveSubtab(pageId, tabId)` / `getActiveSubtab(pageId)`，localStorage key `ipma_subtab_<pageId>`。
-- 在 4 个子标签系统中接入：
-  - `web/static/js/modules/resourceTabs.js`（#resources）：`bindTabClickHandlers` 点击时保存；`loadDefaultTabData` 改为先读 storage，命中且按钮存在则激活它，否则沿用原默认。
-  - `web/static/js/modules/log.js`（#logs）：点击处理函数保存；初始化末尾的默认分支改为先读 storage（保留现有 `?tab=` URL 参数逻辑作为更高优先级，不破坏既有跳转）。
-  - `web/static/js/modules/systemManager.js`（#system）：点击保存；初始化默认分支改为先读 storage。
-  - `web/static/js/modules/visualization/visualizationManager.js`（#visualization）：`initTabSwitching` 点击保存；初始化时先读 storage 激活对应按钮。
-- 与现有 dashboard 跨级导航（`dashboard.js` 模拟点击 `.tab-btn`）兼容：模拟点击会触发点击处理函数从而写入 storage，行为一致。
+### C. 后端
+- **room.rs `get_room`**：信息点 SELECT 加 `AND no.outlet_type != 'patch_panel'`（房间模态不再显示机柜配线架）。
+- **room.rs `sync_room_net_outlets`**：existing-ids 查询加 `AND outlet_type != 'patch_panel'`，使房间同步只作用于非配线架信息点（不会误删机柜配线架）。
+- **cabinets.rs `get_cabinet`**：返回 `patch_panels`（`SELECT id,name FROM net_outlets WHERE cabinet_id=$1 AND outlet_type='patch_panel'`）。
+- **cabinets.rs 新增 `sync_cabinet_patch_panels`**：`PUT /api/resources/cabinets/{id}/patch-panels`，body `{patch_panels:[{id?,name}]}`。查 cabinet 的 room_id（net_outlets.room_id 非空），existing=`WHERE cabinet_id=$1 AND outlet_type='patch_panel'`；删请求中不存在的（cable_links 触发器拦截→友好报错）；逐条 UPDATE/INSERT（固定 outlet_type='patch_panel'、cabinet_id=本机柜、room_id=机柜房间）；唯一约束 `UNIQUE(room_id,name)` 冲突→友好报错。仿 `sync_cabinet_positions`。
+- **net_outlet.rs `get_net_outlets`**：新增 `cabinet_id` 查询过滤（供线路模态"配线架→机柜"级联用）。
+- **models.rs**：新增 `PatchPanelBrief{id,name}`、`PatchPanelSyncItem{id:Option<Uuid>,name:String}`、`CabinetPatchPanelsSync{patch_panels:Vec<PatchPanelSyncItem>}`；`get_cabinet` 返回结构体加 `patch_panels: Option<Vec<PatchPanelBrief>>`。
+- **routes/mod.rs**：注册 `PUT /api/resources/cabinets/{id}/patch-panels`。
+- **views.rs `cable_links_with_details`**：endpoint_labels CTE 对 net_outlets 一行多带 `outlet_type`，视图新增 `a_endpoint_outlet_type`/`b_endpoint_outlet_type`（供前端区分信息点/配线架）。相应 `CableLinkWithDetails` 加两个 `Option<String>` 字段。
 
-### 验证
-浏览器进入资源管理→切到"设备"→F5 刷新，应仍停留在"设备"而非"网络区域"；其它页面同理。
+### D. 线路模态框重构（cable-link-modal.html + cableLink.js）
+端点类型收敛为 3 个（UI 值）：`net_outlet`(信息点) / `device`(设备接口) / `patch_panel`(配线架)。
+- **HTML**：A/B 各自一行 = 类型 select + 范围 select(`cable-link-a-scope`/`-b-scope`) + 端点 select。范围框由 JS 按 类型 显示/隐藏与填充。
+- **JS 级联**：
+  - 类型=信息点 → 范围=房间(rooms)；端点=`GET /net-outlets?room_id=X`，前端过滤掉 patch_panel；每项 `data-et="net_outlet"`。
+  - 类型=设备接口 → 范围=设备(devices)；端点=合并该设备的 `device-ports` + `interfaces`(仅 physical/wifi)，用 `<optgroup>` 分"端口/接口"两组；每项 `data-et="device_port"` 或 `"device_interface"`。
+  - 类型=配线架 → 范围=机柜(cabinets)；端点=`GET /net-outlets?cabinet_id=X&outlet_type=patch_panel`；每项 `data-et="net_outlet"`。
+- **提交**：读取所选端点 option 的 `dataset.et` 作为后端 `*_endpoint_type`，value 作为 id（设备接口项按实际子类型 device_port/device_interface 提交；配线架提交 net_outlet）。**后端 cable_links 仍只存 device_port/net_outlet/device_interface，无需改 CHECK/触发器/视图语义。**
+- **编辑态**（端点不可改）：后端类型映射回 UI 类型（device_port/device_interface→设备接口；net_outlet 看 `a_endpoint_outlet_type` 区分信息点/配线架）；范围框隐藏，端点框只读显示已存 label。
+- **列表显示**：device_port/device_interface → "设备接口"；net_outlet 看 outlet_type → 信息点/配线架。
+- ENDPOINT_TYPE_LABELS 同步更新。
 
----
+### E. i18n + 缓存
+- zh.json/en.json 新增键：`cable_link.endpoint_device`(设备接口)、`cable_link.endpoint_patch_panel`(配线架)、`cable_link.scope`/scope_room/scope_device/scope_cabinet、`cabinet.patch_panels`/add_patch_panel/no_patch_panels_hint 等。
+- 缓存版本 `01268 → 01269`（resourceLoader.js + main.html app.js?v=）。
 
-### 风险与回滚
-- 任务1 删列不可逆：迁移前我会先确认现有数据是否需要备份；可通过 git 还原代码，但 DB 列数据需手动备份。
-- 任务2 纯前端、可安全回滚。
+### F. 构建与验证
+- `cargo build --release` → 重启服务（init.enabled=false，但本方案无 DDL，无需手动迁移；仅需重启加载新代码）。
+- API 验证：创建带配线架的机柜并 GET 回显；线路分别用信息点/设备接口/配线架三种端点创建并列表回显。
+- 浏览器：硬刷新后验证（上一轮已把 nginx 开发环境改 no-store）。
+
+### 风险/注意
+- 约束 `UNIQUE(room_id,name)`：同一房间内不同机柜的配线架不能重名，冲突时给清晰提示。
+- 房间信息点查询加 `outlet_type != 'patch_panel'` 过滤；若库里已有"通过房间创建的 patch_panel 且 cabinet_id 为空"的历史数据，会变得不可见——实施时会先查库，若有则报告处理。
+- 设备接口收敛是纯前端 UI（后端仍区分 device_port/device_interface），不影响既有数据与拓扑发现。

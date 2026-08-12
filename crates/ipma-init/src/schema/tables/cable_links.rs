@@ -4,9 +4,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS cable_links (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface')),
+            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel')),
             a_endpoint_id   UUID NOT NULL,
-            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface')),
+            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel')),
             b_endpoint_id   UUID NOT NULL,
             link_type   VARCHAR(20) NOT NULL DEFAULT 'ethernet' CHECK (link_type IN ('ethernet','fiber','console')),
             cable_label VARCHAR(50),
@@ -20,6 +20,35 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 (a_endpoint_type = b_endpoint_type AND a_endpoint_id < b_endpoint_id)
             )
         )",
+    )
+    .execute(pool)
+    .await?;
+
+    // 兼容旧库：将端点类型 CHECK 约束扩展为包含 patch_panel
+    // （CREATE TABLE IF NOT EXISTS 不会修改已存在表的列级约束，需显式重建）
+    sqlx::query("ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS cable_links_a_endpoint_type_check")
+        .execute(pool)
+        .await?;
+    sqlx::query("ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS cable_links_b_endpoint_type_check")
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS chk_cl_a_type",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS chk_cl_b_type",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "ALTER TABLE cable_links ADD CONSTRAINT chk_cl_a_type CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel'))",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "ALTER TABLE cable_links ADD CONSTRAINT chk_cl_b_type CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel'))",
     )
     .execute(pool)
     .await?;
@@ -63,6 +92,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                         RAISE EXCEPTION 'A 端点 device_interface 类型必须为 physical/wifi，实际为 % (id=%)',
                             iface_type, NEW.a_endpoint_id;
                     END IF;
+                WHEN 'patch_panel' THEN
+                    SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.a_endpoint_id AND outlet_type = 'patch_panel') INTO endpoint_exists;
                 ELSE
                     RAISE EXCEPTION '未知的 a_endpoint_type: %', NEW.a_endpoint_type;
             END CASE;
@@ -85,6 +116,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                         RAISE EXCEPTION 'B 端点 device_interface 类型必须为 physical/wifi，实际为 % (id=%)',
                             iface_type, NEW.b_endpoint_id;
                     END IF;
+                WHEN 'patch_panel' THEN
+                    SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.b_endpoint_id AND outlet_type = 'patch_panel') INTO endpoint_exists;
                 ELSE
                     RAISE EXCEPTION '未知的 b_endpoint_type: %', NEW.b_endpoint_type;
             END CASE;
@@ -143,8 +176,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         BEGIN
             IF EXISTS(
                 SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='net_outlet' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='net_outlet' AND b_endpoint_id = OLD.id)
+                WHERE (a_endpoint_type IN ('net_outlet','patch_panel') AND a_endpoint_id = OLD.id)
+                   OR (b_endpoint_type IN ('net_outlet','patch_panel') AND b_endpoint_id = OLD.id)
             ) THEN
                 RAISE EXCEPTION '信息点 % 被 cable_links 引用，不能删除', OLD.id;
             END IF;
@@ -256,6 +289,7 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             WHEN 'device_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM device_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = p.node_id)
             WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = p.node_id)
             WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = p.node_id)
+            WHEN 'patch_panel'      THEN (SELECT name FROM net_outlets WHERE id = p.node_id AND outlet_type = 'patch_panel')
         END AS node_label,
         p.cable_id,
         p.cable_label,
