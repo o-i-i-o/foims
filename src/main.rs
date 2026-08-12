@@ -536,6 +536,28 @@ async fn main() -> std::io::Result<()> {
 
     let rate_limit_state = RateLimitState::new(rate_limiter.clone(), rate_limit_enabled);
 
+    // 单实例保护：若已有进程在监听该 UDS，则拒绝启动，避免 remove_file 偷删
+    // 正在服务的 socket 文件后出现「两个进程、孤儿 listener」的隐患。
+    if Path::new(&uds_path).exists() {
+        match tokio::net::UnixStream::connect(&uds_path).await {
+            Ok(_) => {
+                tracing::error!(
+                    "UDS socket {} 已被另一个 IPMA 进程占用，拒绝启动以避免重复实例",
+                    uds_path
+                );
+                eprintln!(
+                    "Error: 另一个 IPMA 进程已在监听 {}，请先停止旧进程再启动",
+                    uds_path
+                );
+                std::process::exit(1);
+            }
+            Err(_) => {
+                // 文件存在但无人监听（上次进程异常退出残留）→ 安全清理
+                tracing::info!("检测到残留 socket 文件（无监听者），清理后继续: {}", uds_path);
+            }
+        }
+    }
+
     // 创建 UDS 监听器
     let uds_listener = create_uds_listener(&uds_path)?;
 

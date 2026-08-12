@@ -7,6 +7,7 @@
     <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/variables.css">
     <link rel="stylesheet" href="/static/css/components/toasts.css">
     <script type="module">
         import { showToast } from '/static/js/utils/ui.js';
@@ -45,6 +46,28 @@
                 }, 5000);
             };
 
+            // 安全解析 JSON 响应：后端返回空 body / 非 JSON / 网络中断时给出可读错误，
+            // 而不是抛 "Unexpected end of JSON input" 这类让用户困惑的消息。
+            const parseJsonResponse = async (response) => {
+                const text = await response.text();
+                if (!text || !text.trim()) {
+                    const msg = response.ok
+                        ? '服务器返回了空响应'
+                        : `请求失败（HTTP ${response.status}），且响应体为空`;
+                    return { success: false, message: msg, data: null };
+                }
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    return {
+                        success: false,
+                        message: `响应解析失败（HTTP ${response.status}）：服务端未返回有效的 JSON`,
+                        data: null,
+                        _raw: text.slice(0, 200),
+                    };
+                }
+            };
+
             const showLoading = () => {
                 document.getElementById('loading').style.display = 'flex';
             };
@@ -62,7 +85,7 @@
                         headers: { 'Content-Type': 'application/json' }
                     });
                     
-                    const result = await response.json();
+                    const result = await parseJsonResponse(response);
                     hideLoading();
                     
                     const pgStatusElement = document.getElementById('pg-status');
@@ -109,7 +132,7 @@
                         headers: { 'Content-Type': 'application/json' }
                     });
                     
-                    const result = await response.json();
+                    const result = await parseJsonResponse(response);
                     hideLoading();
                     
                     if (result.success) {
@@ -198,7 +221,7 @@
                                 body: formData
                             });
                             
-                            const result = await response.json();
+                            const result = await parseJsonResponse(response);
                             hideLoading();
                             
                             if (result.success) {
@@ -226,7 +249,7 @@
                         body: JSON.stringify(requestBody)
                     });
                     
-                    const result = await response.json();
+                    const result = await parseJsonResponse(response);
                     hideLoading();
                     
                     if (result.success) {
@@ -280,7 +303,7 @@
                         body: JSON.stringify(initConfig)
                     });
                     
-                    const result = await response.json();
+                    const result = await parseJsonResponse(response);
                     hideLoading();
                     
                     if (result.success) {
@@ -333,7 +356,7 @@
                         headers: { 'Content-Type': 'application/json' }
                     });
                     
-                    const result = await response.json();
+                    const result = await parseJsonResponse(response);
                     hideLoading();
                     
                     if (result.success) {
