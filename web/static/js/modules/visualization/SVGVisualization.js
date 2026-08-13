@@ -1,6 +1,7 @@
 import { SVGCore } from "./SVGCore.js";
 import { SVGRenderer } from "./SVGRenderer.js";
 import { SVGDataManager } from "./SVGDataManager.js";
+import { t } from "../../utils/i18n.js";
 
 export class SVGVisualization {
   constructor(containerId, type, callbacks = {}) {
@@ -47,7 +48,7 @@ export class SVGVisualization {
       }
 
       if (workstations.length === 0) {
-        this.core.showToast("该房间下暂无工位数据", "info");
+        this.core.showToast(t("viz.no_workstation_data"), "info");
         return;
       }
 
@@ -94,7 +95,7 @@ export class SVGVisualization {
       }, 500);
     } catch (error) {
       console.error("自动绘制工位失败:", error);
-      this.core.showToast("自动绘制工位失败，请重试", "error");
+      this.core.showToast(t("viz.auto_draw_workstation_failed"), "error");
     }
   }
 
@@ -110,7 +111,7 @@ export class SVGVisualization {
       const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
       
       if (cabinets.length === 0) {
-        this.core.showToast("该房间下暂无机柜数据", "info");
+        this.core.showToast(t("viz.no_cabinet_data"), "info");
         return;
       }
 
@@ -156,7 +157,7 @@ export class SVGVisualization {
       this.core.svg.setAttribute("height", "100%");
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
-      this.core.showToast("绘制机位图失败: " + error.message, "error");
+      this.core.showToast(`${t("viz.draw_positions_failed")}: ${error.message}`, "error");
     }
   }
 

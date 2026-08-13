@@ -8,7 +8,7 @@
 import { apiGet, apiPost, refreshToken } from "./utils/apiClient.js";
 import { closeModal, openModal } from "./utils/modal.js";
 import { loginUser } from "./modules/authManager.js";
-import { t, initI18n } from "./utils/i18n.js";
+import { t, initI18n, changeLanguage } from "./utils/i18n.js";
 import { hasSession, clearSession } from "./utils/sessionManager.js";
 
 /**
@@ -96,6 +96,11 @@ class LoginManager {
    */
   async init() {
     await initI18n();
+
+    // 语言切换：项目约定先按浏览器语言应用，再由页面上的语言按钮切换。
+    document.getElementById("language-selector")?.addEventListener("change", (e) => {
+      changeLanguage(e.target.value);
+    });
 
     // 检查是否处于初始化模式（config.toml [init].enabled = true）
     // 若是，则跳转到初始化页，不继续登录流程
@@ -208,7 +213,7 @@ class LoginManager {
       const username = this.dom.usernameInput.value.trim();
       const password = this.dom.passwordInput.value;
       if (!username || !password) {
-        this.showError("请输入用户名和密码");
+        this.showError(t('login.username_password_required'));
         return;
       }
       await this.submitPasswordLogin(username, password, rememberMe);
@@ -216,7 +221,7 @@ class LoginManager {
       const email = this.dom.emailInput.value.trim();
       const code = this.dom.emailCodeInput.value.trim();
       if (!email || !code) {
-        this.showError("请输入邮箱和验证码");
+        this.showError(t('login.email_code_required'));
         return;
       }
       await this.submitEmailLogin(email, code, rememberMe);
@@ -318,7 +323,7 @@ class LoginManager {
 
     const code = this.dom.twoFactorCodeInput.value.trim();
     if (!code) {
-      this.showError("请输入验证码");
+      this.showError(t('login.code_required'));
       return;
     }
 
@@ -342,7 +347,7 @@ class LoginManager {
       if (result.success) {
         loginUser(result.data, rememberMe);
       } else {
-        this.showError(result.message || "2FA验证失败");
+        this.showError(result.message || t('login.two_factor_failed'));
       }
     } catch (error) {
       this.handleNetworkError(error);
@@ -357,7 +362,7 @@ class LoginManager {
   async handleSendLoginCode() {
     const email = this.dom.emailInput.value.trim();
     if (!email) {
-      this.showError("请输入邮箱地址");
+      this.showError(t("login.email_required_error"));
       return;
     }
 
@@ -373,7 +378,7 @@ class LoginManager {
       if (result.success) {
         this.startCountdown(this.dom.sendLoginCodeBtn, 60);
       } else {
-        this.showError(result.message || "发送失败");
+        this.showError(result.message || t('login.send_failed'));
         this.setLoadingState(this.dom.sendLoginCodeBtn, false);
       }
     } catch (error) {
@@ -387,7 +392,7 @@ class LoginManager {
    */
   startCountdown(btn, seconds) {
     let countdown = seconds;
-    btn.textContent = `已发送(${countdown})`;
+    btn.textContent = `${t('login.code_sent')}(${countdown})`;
     btn.disabled = true;
 
     const timer = setInterval(() => {
@@ -396,7 +401,7 @@ class LoginManager {
         clearInterval(timer);
         this.setLoadingState(btn, false);
       } else {
-        btn.textContent = `已发送(${countdown})`;
+        btn.textContent = `${t('login.code_sent')}(${countdown})`;
       }
     }, 1000);
   }
@@ -407,11 +412,11 @@ class LoginManager {
   setLoadingState(btn, isLoading) {
     if (isLoading) {
       btn.dataset.originalText = btn.textContent;
-      btn.textContent = "发送中...";
+      btn.textContent = t('login.sending');
       btn.disabled = true;
       this.clearError();
     } else {
-      btn.textContent = "发送验证码"; // 恢复默认文本
+      btn.textContent = t('login.send_code'); // 恢复默认文本
       btn.disabled = false;
     }
   }
@@ -430,7 +435,7 @@ class LoginManager {
 
     // 重置 2FA 表单
     this.dom.twoFactorCodeInput.value = "";
-    this.resetButtonContent(this.dom.twoFactorSubmitBtn, "验证并登录");
+    this.resetButtonContent(this.dom.twoFactorSubmitBtn, t('login.verify_and_sign_in'));
     this.dom.twoFactorSubmitBtn.disabled = false;
   }
 
@@ -442,19 +447,19 @@ class LoginManager {
       this.currentState = this.State.SUBMITTING;
       if (this.dom.twoFactorView.classList.contains("active")) {
         this.dom.twoFactorSubmitBtn.disabled = true;
-        this.setButtonLoadingContent(this.dom.twoFactorSubmitBtn, "处理中...");
+        this.setButtonLoadingContent(this.dom.twoFactorSubmitBtn, t('common.processing'));
       } else {
         this.dom.submitBtn.disabled = true;
-        this.setButtonLoadingContent(this.dom.submitBtn, "处理中...");
+        this.setButtonLoadingContent(this.dom.submitBtn, t('common.processing'));
       }
     } else {
       this.currentState = this.dom.twoFactorView.classList.contains("active") ? this.State.TWO_FACTOR : this.State.INIT;
 
       this.dom.twoFactorSubmitBtn.disabled = false;
-      this.resetButtonContent(this.dom.twoFactorSubmitBtn, "验证并登录");
+      this.resetButtonContent(this.dom.twoFactorSubmitBtn, t('login.verify_and_sign_in'));
 
       this.dom.submitBtn.disabled = false;
-      this.resetButtonContent(this.dom.submitBtn, "登录");
+      this.resetButtonContent(this.dom.submitBtn, t('login.sign_in'));
     }
   }
 
@@ -479,7 +484,7 @@ class LoginManager {
   }
 
   formatErrorMessage(message) {
-    if (!message) return t("api.failed") || "操作失败";
+    if (!message) return t("api.failed");
 
     // 尝试使用 i18n 翻译
     if (message.includes(".")) {
@@ -487,10 +492,10 @@ class LoginManager {
       if (translated !== message) return translated;
     }
 
-    if (message.includes("账户已禁用")) return t("api.account_disabled") || "您的账户已被禁用，请联系管理员";
-    if (message.includes("失败次数过多")) return "登录失败次数过多，请5分钟后再试";
-    if (message.includes("系统未初始化")) return "系统未初始化，请联系管理员";
-    if (message.includes("SMTP未配置")) return "系统邮件服务未配置，无法发送验证码";
+    if (message.includes("账户已禁用")) return t("api.account_disabled");
+    if (message.includes("失败次数过多")) return t('login.too_many_attempts');
+    if (message.includes("系统未初始化")) return t('login.system_not_init');
+    if (message.includes("SMTP未配置")) return t('login.email_service_not_configed');
 
     return message;
   }
@@ -510,11 +515,11 @@ class LoginManager {
   }
 
   handleNetworkError(error) {
-    let msg = "请求失败，请检查网络连接";
+    let msg = t('login.network_error');
     if (error.message && error.message.includes("Network")) {
-      msg = "网络连接失败，请检查您的网络设置";
+      msg = t('login.network_failed');
     } else if (error.message && error.message.includes("timeout")) {
-      msg = "请求超时，请稍后再试";
+      msg = t('login.timeout');
     }
     this.showError(msg);
   }
@@ -534,13 +539,13 @@ class LoginManager {
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "发送中...";
+    btn.textContent = t('login.sending');
 
     try {
       const result = await apiPost("/api/auth/forgot-password", { email }, { skipAuthCheck: true });
 
       if (result.success) {
-        forgotPasswordSuccess.textContent = "密码重置邮件已发送，请查收您的邮箱";
+        forgotPasswordSuccess.textContent = t('login.reset_email_sent');
         forgotPasswordSuccess.classList.add("show");
         e.target.reset();
         setTimeout(() => {
@@ -548,12 +553,12 @@ class LoginManager {
           forgotPasswordSuccess.classList.remove("show");
         }, 3000);
       } else {
-        forgotPasswordError.textContent = result.message || "发送失败，请稍后重试";
+        forgotPasswordError.textContent = result.message || t('login.send_failed');
         forgotPasswordError.classList.add("show");
       }
     } catch (error) {
-      let msg = "发送失败，请稍后重试";
-      if (error.message && error.message.includes("Network")) msg = "网络连接失败";
+      let msg = t('login.send_failed');
+      if (error.message && error.message.includes("Network")) msg = t('login.network_failed');
       forgotPasswordError.textContent = msg;
       forgotPasswordError.classList.add("show");
     } finally {

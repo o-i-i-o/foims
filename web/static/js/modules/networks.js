@@ -54,11 +54,11 @@ export async function loadNetworkTypesData(page = 1) {
         }},
         { field: 'created_at', render: (v) => formatDateTime(v) },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: '暂无网络区域数据'
+      emptyMessage: t('network.no_region_data')
     });
 
     if (data.total !== undefined) {
@@ -69,7 +69,7 @@ export async function loadNetworkTypesData(page = 1) {
     renderTable("#network-types-table", {
       data: [],
       columns: [],
-      emptyMessage: "加载失败，请刷新页面重试"
+      emptyMessage: t('common.load_failed_retry')
     });
   }
 }
@@ -115,20 +115,20 @@ export async function loadNetworksData(page = 1, filters = currentFilters) {
         { field: 'ipv6_cidr', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-secondary btn-usage" data-id="${v}">使用情况</button>
-          <button class="btn btn-sm btn-edit" data-id="${v}">编辑</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">删除</button>
+          <button class="btn btn-sm btn-secondary btn-usage" data-id="${v}">${t('network.usage')}</button>
+          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
+          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: '没有找到匹配的网段数据'
+      emptyMessage: t('network.no_match_data')
     });
 
     if (data.total !== undefined) {
       appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, filters));
     }
   } catch (error) {
-    handleError(error, "加载网络数据失败", () => {
-      renderTable("#networks-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    handleError(error, t('network.load_failed'), () => {
+      renderTable("#networks-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
     });
   }
 }
@@ -676,7 +676,7 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
   const refreshButton = modalContainer.querySelector('#refresh-ipv4-usage');
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
-      refreshButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 刷新中...';
+      refreshButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${t('common.refreshing')}`;
       refreshButton.disabled = true;
       
       try {
@@ -700,7 +700,7 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
               const isUsed = newIpStatusMap.has(ip);
               const status = newIpStatusMap.get(ip) || "unused";
               const statusClass = isUsed ? (status === "active" ? "ip-used-active" : "ip-used-inactive") : "ip-unused";
-              const tooltipText = `${ip} (${isUsed ? status === "active" ? "活跃" : "非活跃" : "未使用"})`;
+              const tooltipText = `${ip} (${isUsed ? status === "active" ? t('status.active') : t('status.inactive') : t('network.unused')})`;
               
               block.className = `ip-block ${statusClass}`;
               block.dataset.status = isUsed ? status : "unused";
@@ -721,16 +721,16 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
                 <td>${escapeHtml(ip.mac_address || "-")}</td>
                 <td>${escapeHtml(ip.hostname || "-")}</td>
               </tr>
-            `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv4地址记录</td></tr>';
+            `).join('') : `<tr><td colspan="5" class="text-center">${t('network.no_ipv4_records')}</td></tr>`;
           }
-          
-          showToast("IPv4使用情况已更新", "success");
+
+          showToast(t('network.ipv4_usage_updated'), "success");
         }
       } catch (error) {
         console.error("刷新IPv4使用情况失败:", error);
-        showToast("刷新失败，请重试", "error");
+        showToast(t('common.refresh_failed'), "error");
       } finally {
-        refreshButton.innerHTML = '刷新';
+        refreshButton.innerHTML = t('common.refresh');
         refreshButton.disabled = false;
       }
     });
@@ -743,7 +743,7 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
   
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
-      refreshButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 刷新中...';
+      refreshButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${t('common.refreshing')}`;
       refreshButton.disabled = true;
       
       try {
@@ -766,26 +766,26 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
                 <td>${escapeHtml(ip.mac_address || "-")}</td>
                 <td>${escapeHtml(ip.hostname || "-")}</td>
               </tr>
-            `).join('') : '<tr><td colspan="5" class="text-center">暂无IPv6地址记录</td></tr>';
+            `).join('') : `<tr><td colspan="5" class="text-center">${t('network.no_ipv6_records')}</td></tr>`;
           }
-          
+
           const activeIps = refreshedNetworkIps.filter(ip => ip.status === "active").length;
           const inactiveIps = refreshedNetworkIps.filter(ip => ip.status !== "active").length;
-          
+
           const statCards = modalContainer.querySelectorAll('.ipv6-stat-card');
           if (statCards.length >= 3) {
             statCards[0].querySelector('.stat-number').textContent = refreshedNetworkIps.length;
             statCards[1].querySelector('.stat-number').textContent = activeIps;
             statCards[2].querySelector('.stat-number').textContent = inactiveIps;
           }
-          
-          showToast("IPv6使用情况已更新", "success");
+
+          showToast(t('network.ipv6_usage_updated'), "success");
         }
       } catch (error) {
         console.error("刷新IPv6使用情况失败:", error);
-        showToast("刷新失败，请重试", "error");
+        showToast(t('common.refresh_failed'), "error");
       } finally {
-        refreshButton.innerHTML = '刷新';
+        refreshButton.innerHTML = t('common.refresh');
         refreshButton.disabled = false;
       }
     });
@@ -801,16 +801,16 @@ export async function editNetwork(id) {
       // 打开编辑模态框
       openNetworkModal(result.data);
     } else {
-      showToast(`获取网络数据失败: ${result.message}`, "error");
+      showToast(`${t('network.fetch_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取网络数据失败");
+    handleError(error, t('network.fetch_failed'));
   }
 }
 
 // 删除网络
 export async function deleteNetwork(id) {
-  await handleDelete(id, "/api/resources/networks", "网络删除成功", loadNetworksData);
+  await handleDelete(id, "/api/resources/networks", t('network.delete_success'), loadNetworksData);
 }
 // 编辑网络区域
 export async function editNetworkType(id) {
@@ -819,16 +819,16 @@ export async function editNetworkType(id) {
     if (result.success) {
       openNetworkTypeModal(result.data);
     } else {
-      showToast(`获取网络区域数据失败: ${result.message}`, "error");
+      showToast(`${t('network.fetch_region_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取网络区域数据失败");
+    handleError(error, t('network.fetch_region_failed'));
   }
 }
 
 // 删除网络区域
 export async function deleteNetworkType(id) {
-  await handleDelete(id, "/api/resources/network-regions", "网络区域删除成功", loadNetworkTypesData);
+  await handleDelete(id, "/api/resources/network-regions", t('network.region_delete_success'), loadNetworkTypesData);
 }
 
 // ====== CIDR 动态输入框管理 ======
@@ -843,7 +843,7 @@ function addCidrInputRow(containerId, cidrType, value = '') {
   input.type = 'text';
   input.className = 'cidr-input';
   input.value = value;
-  input.placeholder = cidrType === 'ipv4' ? '例如: 10.0.0.0/8' : '例如: 2001:db8::/32';
+  input.placeholder = cidrType === 'ipv4' ? t('network.cidr_ipv4_example') : t('network.cidr_ipv6_example');
 
   const btnGroup = document.createElement('div');
   btnGroup.className = 'cidr-btn-group';
@@ -852,7 +852,7 @@ function addCidrInputRow(containerId, cidrType, value = '') {
   addBtn.type = 'button';
   addBtn.className = 'btn btn-icon-sm btn-success cidr-add-btn';
   addBtn.textContent = '+';
-  addBtn.setAttribute('aria-label', t('common.add', 'Add'));
+  addBtn.setAttribute('aria-label', t('common.add'));
   addBtn.addEventListener('click', () => {
     addCidrInputRow(containerId, cidrType);
   });
@@ -861,7 +861,7 @@ function addCidrInputRow(containerId, cidrType, value = '') {
   removeBtn.type = 'button';
   removeBtn.className = 'btn btn-icon-sm btn-danger cidr-remove-btn';
   removeBtn.textContent = '−';
-  removeBtn.setAttribute('aria-label', t('common.delete', 'Delete'));
+  removeBtn.setAttribute('aria-label', t('common.delete'));
   removeBtn.addEventListener('click', () => {
     if (container.children.length > 1) {
       row.remove();
@@ -904,7 +904,7 @@ export async function submitNetworkTypeForm() {
   const ipv6_cidrs = getCidrValues('network-type-ipv6-cidrs-list');
 
   if (!name) {
-    showToast("网络区域名称不能为空", "warning");
+    showToast(t('network.region_name_required'), "warning");
     return;
   }
 
@@ -919,7 +919,7 @@ export async function submitNetworkTypeForm() {
     formData: networkTypeData,
     id,
     baseUrl: "/api/resources/network-regions",
-    successMessage: "网络区域保存成功",
+    successMessage: t('network.region_save_success'),
     modalId: "network-type-modal",
     reloadFunction: () => {
       loadNetworkTypesData();
@@ -944,17 +944,17 @@ export async function submitNetworkForm() {
   const description = getElementValue("network-description");
 
   if (!name) {
-    showToast("网络名称不能为空", "warning");
+    showToast(t('network.name_required'), "warning");
     return;
   }
 
   if (!networkType) {
-    showToast("请选择网络区域", "warning");
+    showToast(t('network.region_required'), "warning");
     return;
   }
 
   if (!ipv4_cidr && !ipv6_cidr) {
-    showToast("至少需要提供一个有效的IPv4或IPv6 CIDR", "warning");
+    showToast(t('network.cidr_required'), "warning");
     return;
   }
 
@@ -962,7 +962,7 @@ export async function submitNetworkForm() {
     if (!dnsStr || !dnsStr.trim()) return null;
     const dnsList = dnsStr.split(/[,\s]+/).map(dns => dns.trim()).filter(dns => dns.length > 0);
     if (dnsList.length > 5) {
-      showToast("DNS服务器数量不能超过5个", "warning");
+      showToast(t('network.dns_limit'), "warning");
       return null;
     }
     return dnsList;
@@ -990,7 +990,7 @@ export async function submitNetworkForm() {
     formData: networkData,
     id,
     baseUrl: "/api/resources/networks",
-    successMessage: "网络保存成功",
+    successMessage: t('network.save_success'),
     modalId: "network-modal",
     reloadFunction: loadNetworksData
   });
@@ -1009,7 +1009,7 @@ export async function openNetworkTypeModal(networkType = null) {
   clearCidrInputs('network-type-ipv6-cidrs-list');
 
   if (networkType) {
-    title.textContent = "编辑网络区域";
+    title.textContent = t('network.edit_region');
     elementCache.setValue('network-type-id', networkType.id);
     elementCache.setValue('network-type-name', networkType.name);
     elementCache.setValue('network-type-description', networkType.description || "");
@@ -1029,7 +1029,7 @@ export async function openNetworkTypeModal(networkType = null) {
       addCidrInputRow('network-type-ipv6-cidrs-list', 'ipv6');
     }
   } else {
-    title.textContent = "添加网络区域";
+    title.textContent = t('network.add_region');
     if (form) form.reset();
     elementCache.setValue('network-type-id', '');
     addCidrInputRow('network-type-ipv4-cidrs-list', 'ipv4');
@@ -1047,7 +1047,7 @@ export async function openNetworkModal(network = null) {
   await loadNetworkTypeOptions();
 
   if (network) {
-    title.textContent = "编辑网络";
+    title.textContent = t('network.edit_network');
     elementCache.setValue('network-id', network.id);
     elementCache.setValue('network-name', network.name);
     elementCache.setValue('network-type', network.network_region_id);
@@ -1059,7 +1059,7 @@ export async function openNetworkModal(network = null) {
     elementCache.setValue('network-ipv6-dns', Array.isArray(network.ipv6_dns) ? network.ipv6_dns.join(', ') : (network.ipv6_dns || ""));
     elementCache.setValue('network-description', network.description || "");
   } else {
-    title.textContent = "添加网络";
+    title.textContent = t('network.add_network');
     if (form) form.reset();
     elementCache.setValue('network-id', '');
   }

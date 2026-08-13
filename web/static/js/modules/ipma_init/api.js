@@ -9,6 +9,7 @@
  *   - 控制台验证码获取
  */
 import { showToast, escapeHtml } from '../../utils/ui.js';
+import { t } from '../../utils/i18n.js';
 import { state } from './state.js';
 import { goToStep, showError, showLoading, hideLoading } from './ui.js';
 
@@ -18,8 +19,8 @@ const parseJsonResponse = async (response) => {
     const text = await response.text();
     if (!text || !text.trim()) {
         const msg = response.ok
-            ? '服务器返回了空响应'
-            : `请求失败（HTTP ${response.status}），且响应体为空`;
+            ? t('init.empty_response')
+            : `${t('init.parse_empty', { status: response.status })}`;
         return { success: false, message: msg, data: null };
     }
     try {
@@ -27,7 +28,7 @@ const parseJsonResponse = async (response) => {
     } catch (e) {
         return {
             success: false,
-            message: `响应解析失败（HTTP ${response.status}）：服务端未返回有效的 JSON`,
+            message: `${t('init.parse_invalid_json', { status: response.status })}`,
             data: null,
             _raw: text.slice(0, 200),
         };
@@ -53,20 +54,20 @@ export const checkPostgreSQL = async () => {
         if (result.installed && result.running) {
             pgStatusElement.innerHTML = `
                 <div class="status-success">✓</div>
-                <h3>PostgreSQL 已安装并运行</h3>
-                <p>${escapeHtml(result.message || 'PostgreSQL 连接成功')}</p>
+                <h3>${t('init.pg_running')}</h3>
+                <p>${escapeHtml(result.message || t('init.pg_connected'))}</p>
             `;
             pgStatusElement.classList.add('status-success');
             nextButton.disabled = false;
         } else {
             pgStatusElement.innerHTML = `
                 <div class="status-error">✗</div>
-                <h3>PostgreSQL 检查失败</h3>
-                <p>${escapeHtml(result.error || '未知错误')}</p>
+                <h3>${t('init.pg_check_failed')}</h3>
+                <p>${escapeHtml(result.error || t('init.unknown_error'))}</p>
                 <div class="error-guide">
-                    <h4>解决建议：</h4>
+                    <h4>${t('init.pg_suggestion')}</h4>
                     <ul>
-                        ${!result.installed ? '<li>请先安装 PostgreSQL 数据库</li>' : ''}
+                        ${!result.installed ? `<li>${t('init.pg_install_hint')}</li>` : ''}
                         ${result.installed && !result.running ? '<li>请启动 PostgreSQL 服务</li>' : ''}
                         <li>确保数据库配置正确</li>
                         <li>检查网络连接和防火墙设置</li>
@@ -78,7 +79,7 @@ export const checkPostgreSQL = async () => {
         }
     } catch (error) {
         hideLoading();
-        showError(`网络错误: ${error.message}`);
+        showError(`${t('init.network_error')}: ${error.message}`);
     }
 };
 
@@ -107,25 +108,25 @@ export const checkDatabaseStatus = async () => {
                 if (dbStatus.has_data) {
                     dbStatusElement.innerHTML = `
                             <div class="status-warning">⚠</div>
-                            <h3>数据库状态</h3>
-                            <p>数据库已连接，表结构完整，且包含数据。</p>
-                            <p class="warning-text">初始化将备份并清空现有数据，请选择初始化方式。</p>
+                            <h3>${t('init.db_status_title')}</h3>
+                            <p>${t('init.db_schema_ok')}</p>
+                            <p class="warning-text">${t('init.db_will_reset')}</p>
                         `;
                     dbStatusElement.classList.add('status-warning');
                 } else if (!dbStatus.required_tables_exist) {
                     dbStatusElement.innerHTML = `
                             <div class="status-warning">⚠</div>
-                            <h3>数据库状态</h3>
-                            <p>数据库已连接，但表结构不完整。</p>
-                            <p>请选择初始化方式创建完整的表结构。</p>
+                            <h3>${t('init.db_status_title')}</h3>
+                            <p>${t('init.db_schema_incomplete')}</p>
+                            <p>${t('init.select_init_method_full')}</p>
                         `;
                     dbStatusElement.classList.add('status-warning');
                 } else {
                     dbStatusElement.innerHTML = `
                             <div class="status-success">✓</div>
-                            <h3>数据库状态</h3>
-                            <p>数据库已连接，表结构完整，且为空。</p>
-                            <p>请选择初始化方式。</p>
+                            <h3>${t('init.db_status_title')}</h3>
+                            <p>${t('init.db_schema_ok')}</p>
+                            <p>${t('init.select_init_method')}</p>
                         `;
                     dbStatusElement.classList.add('status-success');
                 }
@@ -133,19 +134,19 @@ export const checkDatabaseStatus = async () => {
             } else {
                 dbStatusElement.innerHTML = `
                     <div class="status-error">✗</div>
-                    <h3>数据库连接失败</h3>
-                    <p>无法连接到数据库: ${escapeHtml(dbStatus.error || '未知错误')}</p>
-                    <p>系统将尝试自动创建数据库。</p>
+                    <h3>${t('init.db_connect_failed')}</h3>
+                    <p>${t('init.db_connect_error')}: ${escapeHtml(dbStatus.error || t('init.unknown_error'))}</p>
+                    <p>${t('init.will_auto_create_db')}</p>
                 `;
                 dbStatusElement.classList.add('status-error');
                 nextButton.disabled = false;
             }
         } else {
-            showError('检查数据库状态失败');
+            showError(t('init.check_db_status_failed'));
         }
     } catch (error) {
         hideLoading();
-        showError(`网络错误: ${error.message}`);
+        showError(`${t('init.network_error')}: ${error.message}`);
     }
 };
 
@@ -158,7 +159,7 @@ export const handleInitModeSubmit = async (e) => {
 
     const verificationCode = document.getElementById('verification-step2').value;
     if (!verificationCode) {
-        showError('请输入验证码');
+        showError(t('init.enter_captcha'));
         nextButton.disabled = false;
         return;
     }
@@ -187,16 +188,16 @@ export const handleInitModeSubmit = async (e) => {
                 hideLoading();
 
                 if (result.success) {
-                    let message = '数据库初始化成功';
+                    let message = t('init.db_init_success');
                     if (result.data && result.data.backup_file) {
-                        message += `\n备份文件: ${result.data.backup_file}`;
+                        message += `\n${t('init.backup_file')} ${result.data.backup_file}`;
                     }
                     showToast(message);
                     setTimeout(() => {
                         goToStep(3);
                     }, 1000);
                 } else {
-                    showError(`操作失败: ${result.message || '未知错误'}`);
+                    showError(`${t('init.operation_failed')}: ${result.message || t('init.unknown_error')}`);
                     nextButton.disabled = false;
                 }
                 return;
@@ -215,21 +216,21 @@ export const handleInitModeSubmit = async (e) => {
         hideLoading();
 
         if (result.success) {
-            let message = '数据库初始化成功';
+            let message = t('init.db_init_success');
             if (result.data && result.data.backup_file) {
-                message += `\n备份文件: ${result.data.backup_file}`;
+                message += `\n${t('init.backup_file')} ${result.data.backup_file}`;
             }
             showToast(message);
             setTimeout(() => {
                 goToStep(3);
             }, 1000);
         } else {
-            showError(`操作失败: ${result.message || '未知错误'}`);
+            showError(`${t('init.operation_failed')}: ${result.message || t('init.unknown_error')}`);
             nextButton.disabled = false;
         }
     } catch (error) {
         hideLoading();
-        showError(`网络错误: ${error.message}`);
+        showError(`${t('init.network_error')}: ${error.message}`);
         nextButton.disabled = false;
     }
 };
@@ -245,7 +246,7 @@ export const handleAdminAccountSubmit = async (e) => {
     const confirmPassword = formData.get('confirm_password');
 
     if (password !== confirmPassword) {
-        showError('两次输入的密码不一致');
+        showError(t('init.password_mismatch'));
         return;
     }
 
@@ -284,11 +285,11 @@ export const handleAdminAccountSubmit = async (e) => {
                 }, 2000);
             }, 3000);
         } else {
-            showError(`系统初始化失败: ${result.message || '未知错误'}`);
+            showError(`${t('init.init_failed')}: ${result.message || t('init.unknown_error')}`);
         }
     } catch (error) {
         hideLoading();
-        showError(`网络错误: ${error.message}`);
+        showError(`${t('init.network_error')}: ${error.message}`);
     }
 };
 
@@ -308,10 +309,10 @@ export const getVerificationCode = async () => {
         if (result.success) {
             showToast(result.message);
         } else {
-            showError(`获取验证码失败: ${result.message || '未知错误'}`);
+            showError(`${t('init.captcha_failed')}: ${result.message || t('init.unknown_error')}`);
         }
     } catch (error) {
         hideLoading();
-        showError(`网络错误: ${error.message}`);
+        showError(`${t('init.network_error')}: ${error.message}`);
     }
 };

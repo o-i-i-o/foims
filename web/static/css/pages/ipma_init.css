@@ -49,6 +49,27 @@
     color: #fff;
     padding: 40px 30px;
     text-align: center;
+    position: relative;
+}
+
+.init-lang-switch {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+}
+
+.init-lang-switch select {
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.init-lang-switch select option {
+    color: #1f2937;
 }
 
 .init-header h1 {

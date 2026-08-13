@@ -68,7 +68,7 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
     // /nics 同时返回 device_type 和 cards（网卡→网口→IP 树）
     const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
     if (!result.success || !result.data) {
-      showToast(t('device.load_failed') || "获取设备信息失败", "error");
+      showToast(t('device.load_failed'), "error");
       return;
     }
 
@@ -81,7 +81,7 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
 
     const title = elementCache.get("unified-device-ports-modal-title");
     if (title) {
-      title.textContent = `${deviceName} - ${t('device.unified_ports') || '设备端口'}`;
+      title.textContent = `${deviceName} - ${t('device.unified_ports')}`;
     }
 
     // 渲染：先把 NIC 作为分组渲染，网络设备再追加二层端口分组
@@ -90,7 +90,7 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
     // 绑定底部按钮（添加端口 / 从SNMP获取 / 端口项点击）
     bindModalButtons(device.id);
   } catch (error) {
-    handleError(error, t('device.port_management_failed') || "端口管理失败");
+    handleError(error, t('device.port_management_failed'));
   }
 }
 
@@ -112,7 +112,7 @@ async function renderAllPortGroups(device, cards) {
 
   // 若两类都为空，显示空提示
   if (!container.children.length) {
-    container.innerHTML = `<p class="empty-message">${t('device.no_device_ports') || '暂无端口数据'}</p>`;
+    container.innerHTML = `<p class="empty-message">${t('device.no_device_ports')}</p>`;
   }
 }
 
@@ -131,7 +131,7 @@ function renderNicPortGroups(container, cards) {
     groupElement.className = "port-group is-nic-group";
 
     const groupTitle = document.createElement("h4");
-    const cardName = card.name || t('device.network_card') || '网卡';
+    const cardName = card.name || t('device.network_card');
     groupTitle.textContent = `${cardName} (${ports.length})`;
     groupElement.appendChild(groupTitle);
 
@@ -284,7 +284,7 @@ function bindModalButtons(deviceId) {
       if (!portItem) return;
 
       if (portItem.dataset.kind === "nic") {
-        showToast(t('device.nic_managed_by_device_modal') || "网口由设备编辑模态框管理", "info");
+        showToast(t('device.nic_managed_by_device_modal'), "info");
         return;
       }
 
@@ -316,8 +316,8 @@ async function openPortDetailModal(portData) {
 
   if (title) {
     title.textContent = isNewPort
-      ? (t('device.add_port') || "新增端口")
-      : `${t('device.port_detail') || '端口详情'} - ${portData.portNumber}`;
+      ? (t('device.add_port'))
+      : `${t('device.port_detail')} - ${portData.portNumber}`;
   }
 
   // 填充表单
@@ -367,7 +367,7 @@ async function submitPortForm() {
   const { id, deviceId, port_number } = data;
 
   if (!port_number) {
-    showToast(t('device.port_number_required') || "请填写端口号", "warning");
+    showToast(t('device.port_number_required'), "warning");
     return;
   }
 
@@ -385,7 +385,7 @@ async function submitPortForm() {
   const originalText = saveBtn?.textContent;
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.textContent = t('common.saving') || "保存中...";
+    saveBtn.textContent = t('common.saving');
   }
 
   try {
@@ -398,13 +398,13 @@ async function submitPortForm() {
 
     if (result.success) {
       closeModal("device-port-detail-modal");
-      showToast(id ? (t('device.port_update_success') || "端口更新成功") : (t('device.port_add_success') || "端口添加成功"), "success");
+      showToast(id ? (t('device.port_update_success')) : (t('device.port_add_success')), "success");
       await refreshModalView(deviceId);
     } else {
-      showToast((t('device.port_save_failed') || "端口保存失败") + ": " + (result.message || ""), "error");
+      showToast((t('device.port_save_failed')) + ": " + (result.message || ""), "error");
     }
   } catch (error) {
-    handleError(error, t('device.port_save_failed') || "端口保存失败");
+    handleError(error, t('device.port_save_failed'));
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
@@ -421,27 +421,27 @@ async function deletePort() {
   const { id, deviceId } = data;
   if (!id) return;
 
-  const confirmed = await showConfirm(t('device.confirm_delete_port') || "确定删除该端口吗？");
+  const confirmed = await showConfirm(t('device.confirm_delete_port'));
   if (!confirmed) return;
 
   const deleteBtn = elementCache.get("delete-port-btn");
   const originalText = deleteBtn?.textContent;
   if (deleteBtn) {
     deleteBtn.disabled = true;
-    deleteBtn.textContent = t('common.deleting') || "删除中...";
+    deleteBtn.textContent = t('common.deleting');
   }
 
   try {
     const result = await apiDelete(`/api/resources/devices/device-ports/${id}`);
     if (result.success) {
       closeModal("device-port-detail-modal");
-      showToast(t('device.port_delete_success') || "端口删除成功", "success");
+      showToast(t('device.port_delete_success'), "success");
       await refreshModalView(deviceId);
     } else {
-      showToast((t('device.port_delete_failed') || "端口删除失败") + ": " + (result.message || ""), "error");
+      showToast((t('device.port_delete_failed')) + ": " + (result.message || ""), "error");
     }
   } catch (error) {
-    handleError(error, t('device.port_delete_failed') || "端口删除失败");
+    handleError(error, t('device.port_delete_failed'));
   } finally {
     if (deleteBtn) {
       deleteBtn.disabled = false;
@@ -479,13 +479,13 @@ async function startSnmpSync(deviceId) {
   try {
     if (syncBtn) {
       syncBtn.disabled = true;
-      syncBtn.textContent = t('device.fetching_snmp') || "获取中...";
+      syncBtn.textContent = t('device.fetching_snmp');
     }
 
     // 1. 拉取 SNMP 实时端口
     const snmpResult = await apiGet(`/api/resources/devices/${deviceId}/snmp-ports`);
     if (!snmpResult.success || !Array.isArray(snmpResult.data) || snmpResult.data.length === 0) {
-      showToast(t('device.snmp_no_ports') || "未获取到端口信息", "warning");
+      showToast(t('device.snmp_no_ports'), "warning");
       return;
     }
     const newPorts = snmpResult.data;
@@ -527,7 +527,7 @@ async function startSnmpSync(deviceId) {
 
     await showConflictModal(deviceId, toAdd, conflicts);
   } catch (error) {
-    handleError(error, t('device.port_sync_failed') || '端口同步失败');
+    handleError(error, t('device.port_sync_failed'));
   } finally {
     if (syncBtn) {
       syncBtn.disabled = false;
@@ -546,7 +546,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
   const listEl = document.getElementById("port-conflict-list");
 
   if (summaryEl) {
-    const tmpl = t('device.conflict_summary') || '检测到 {conflict} 个端口名称已存在，{add} 个为新端口。请选择冲突端口的处理方式。';
+    const tmpl = t('device.conflict_summary');
     summaryEl.textContent = tmpl
       .replace('{conflict}', conflicts.length)
       .replace('{add}', toAdd.length);
@@ -566,14 +566,14 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
       detail.className = "conflict-port-detail";
       const oldName = c.existingPort.port_name || '-';
       const newName = c.snmpPort.port_name || '-';
-      detail.textContent = `${t('device.conflict_existing') || '现名'}: ${oldName} → ${t('device.conflict_new') || '新名'}: ${newName}`;
+      detail.textContent = `${t('device.conflict_existing')}: ${oldName} → ${t('device.conflict_new')}: ${newName}`;
 
       const select = document.createElement("select");
       select.className = "conflict-select";
       select.dataset.portNumber = c.snmpPort.port_number;
       select.innerHTML = `
-        <option value="skip">${t('device.conflict_skip') || '跳过'}</option>
-        <option value="overwrite">${t('device.conflict_overwrite') || '覆盖'}</option>
+        <option value="skip">${t('device.conflict_skip')}</option>
+        <option value="overwrite">${t('device.conflict_overwrite')}</option>
       `;
       select.value = conflictState.decisions[c.snmpPort.port_number] || 'skip';
       select.addEventListener("change", () => {
@@ -669,13 +669,13 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
   }
 
   const parts = [];
-  if (added) parts.push(`${t('device.sync_added') || '新增'} ${added}`);
-  if (overwritten) parts.push(`${t('device.sync_overwritten') || '覆盖'} ${overwritten}`);
+  if (added) parts.push(`${t('device.sync_added')} ${added}`);
+  if (overwritten) parts.push(`${t('device.sync_overwritten')} ${overwritten}`);
   const skipped = (conflictState.newPorts.length - toAdd.length - toOverwrite.length);
-  if (skipped > 0) parts.push(`${t('device.sync_skipped') || '跳过'} ${skipped}`);
-  if (failed) parts.push(`${t('device.sync_failed') || '失败'} ${failed}`);
+  if (skipped > 0) parts.push(`${t('device.sync_skipped')} ${skipped}`);
+  if (failed) parts.push(`${t('device.sync_failed')} ${failed}`);
 
-  showToast((t('device.sync_result') || '同步完成') + ': ' + parts.join('，'),
+  showToast((t('device.sync_result')) + ': ' + parts.join('，'),
     failed > 0 ? "warning" : "success");
 
   await refreshModalView(deviceId);
@@ -704,7 +704,7 @@ function groupPorts(ports) {
 
   ports.forEach(port => {
     const portNumber = port.port_number;
-    let groupKey = t('device.port_group_other') || "其他";
+    let groupKey = t('device.port_group_other');
 
     for (const { regex, subGroup } of portTypePatterns) {
       const match = portNumber.match(regex);
@@ -734,7 +734,7 @@ function groupPorts(ports) {
   });
 
   if (smallGroupPorts.length > 0) {
-    const otherKey = t('device.port_group_other') || "其他";
+    const otherKey = t('device.port_group_other');
     if (finalGroups[otherKey]) {
       finalGroups[otherKey].push(...smallGroupPorts);
     } else {

@@ -25,13 +25,14 @@ import { elementCache } from "../utils/helpers.js";
 
 const tableState = createSortState('updated_at', 'desc');
 let currentPage = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
 
 const ENDPOINT_TYPE_LABELS = {
-  net_outlet: t('cable_link.endpoint_net_outlet') || t('net_outlet.name') || '信息点',
+  net_outlet: t('cable_link.endpoint_net_outlet') || t('net_outlet.name'),
   // 设备端口与设备接口在前端整合为「设备接口」，列表统一显示
-  device_port: t('cable_link.endpoint_device_interface') || '设备接口',
-  device_interface: t('cable_link.endpoint_device_interface') || '设备接口',
-  patch_panel: t('cable_link.endpoint_patch_panel') || t('net_outlet.type_patch_panel') || '配线架',
+  device_port: t('cable_link.endpoint_device_interface'),
+  device_interface: t('cable_link.endpoint_device_interface'),
+  patch_panel: t('cable_link.endpoint_patch_panel') || t('net_outlet.type_patch_panel'),
 };
 
 // 各端点类型对应的级联「范围」选择器配置
@@ -48,9 +49,9 @@ const MERGED_TYPE_PREFIX = {
 };
 
 const LINK_TYPE_LABELS = {
-  ethernet: t('cable_link.link_type_ethernet') || '网线',
-  fiber: t('cable_link.link_type_fiber') || '光纤',
-  console: t('cable_link.link_type_console') || 'Console',
+  ethernet: t('cable_link.link_type_ethernet'),
+  fiber: t('cable_link.link_type_fiber'),
+  console: t('cable_link.link_type_console'),
 };
 
 function getEndpointTypeLabel(type) {
@@ -67,15 +68,15 @@ function buildEndpointDisplay(type, label) {
   return `${typeLabel}：<br><small>${lbl}</small>`;
 }
 
-export async function loadCableLinksData(page = 1, sortBy = null, sortOrder = null) {
+export async function loadCableLinksData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/cable-links?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await apiGet(`/api/resources/cable-links?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#cable-links-table", {
       data: items,
@@ -86,7 +87,7 @@ export async function loadCableLinksData(page = 1, sortBy = null, sortOrder = nu
         { field: 'link_type', render: (v) => getLinkTypeLabel(v) },
         { field: 'cable_label', render: (v) => escapeHtml(v) || '-' },
         { field: 'length_m', render: (v) => (v != null ? `${v}m` : '-') },
-        { field: 'tested', render: (v) => v ? (t('cable_link.tested_yes') || '已测') : (t('cable_link.tested_no') || '未测') },
+        { field: 'tested', render: (v) => v ? (t('cable_link.tested_yes')) : (t('cable_link.tested_no')) },
         { field: 'id', render: (v) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
@@ -96,7 +97,10 @@ export async function loadCableLinksData(page = 1, sortBy = null, sortOrder = nu
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#cable-links-table", data, loadCableLinksData);
+      appendPaginationToTable("#cable-links-table", data, loadCableLinksData, {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => { currentPageSize = size; loadCableLinksData(1); },
+      });
     }
     updateSortIcons("cable-links-table", tableState);
   } catch (error) {
@@ -161,17 +165,17 @@ async function loadScopeOptions(scopeType, scopeSelectId) {
   let items = [];
   try {
     if (scopeType === 'room') {
-      placeholder = t('cable_link.select_room') || '选择房间';
+      placeholder = t('cable_link.select_room');
       const result = await apiGet('/api/resources/rooms?page_size=1000');
       const data = result.success ? result.data : {};
       items = (data.items || data || []).map(r => ({ id: r.id, label: r.name }));
     } else if (scopeType === 'device') {
-      placeholder = t('cable_link.select_device') || '选择设备';
+      placeholder = t('cable_link.select_device');
       const result = await apiGet('/api/resources/devices?page_size=1000');
       const data = result.success ? result.data : {};
       items = (data.items || data || []).map(d => ({ id: d.id, label: d.name || d.id }));
     } else if (scopeType === 'cabinet') {
-      placeholder = t('cable_link.select_cabinet') || '选择机柜';
+      placeholder = t('cable_link.select_cabinet');
       const result = await apiGet('/api/resources/cabinets?page_size=1000');
       const data = result.success ? result.data : {};
       items = (data.items || data || []).map(c => ({ id: c.id, label: c.name }));
@@ -189,7 +193,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
   const select = elementCache.get(selectId);
   if (!select) return;
 
-  select.innerHTML = `<option value="">${t('cable_link.select_endpoint') || '选择端点'}</option>`;
+  select.innerHTML = `<option value="">${t('cable_link.select_endpoint')}</option>`;
   if (!scopeValue) return;
 
   try {
@@ -215,7 +219,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
 
       if (ifaces.length) {
         const og = document.createElement('optgroup');
-        og.label = t('cable_link.endpoint_device_interface') || '设备接口';
+        og.label = t('cable_link.endpoint_device_interface');
         ifaces.forEach(i => {
           const o = document.createElement('option');
           o.value = `${MERGED_TYPE_PREFIX.device_interface}${i.id}`;
@@ -226,7 +230,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
       }
       if (ports.length) {
         const og = document.createElement('optgroup');
-        og.label = t('cable_link.endpoint_device_port') || '设备端口';
+        og.label = t('cable_link.endpoint_device_port');
         ports.forEach(p => {
           const o = document.createElement('option');
           o.value = `${MERGED_TYPE_PREFIX.device_port}${p.id}`;
@@ -257,7 +261,7 @@ async function onTypeChange(side) {
   const scopeSelect = elementCache.get(ids.scopeSelect);
   const idSelect = elementCache.get(ids.idSelect);
 
-  if (idSelect) idSelect.innerHTML = `<option value="">${t('cable_link.select_endpoint') || '选择端点'}</option>`;
+  if (idSelect) idSelect.innerHTML = `<option value="">${t('cable_link.select_endpoint')}</option>`;
   if (scopeSelect) scopeSelect.value = '';
 
   const cfg = type ? ENDPOINT_SCOPE[type] : null;
@@ -382,14 +386,14 @@ export async function submitCableLinkForm() {
     try {
       const result = await apiPut(`/api/resources/cable-links/${id}`, payload);
       if (result.success) {
-        showToast(t('cable_link.save_success') || "线路保存成功", "success");
+        showToast(t('cable_link.save_success'), "success");
         closeModal("cable-link-modal");
         await loadCableLinksData();
       } else {
-        showToast(result.message || (t('cable_link.save_failed') || "线路保存失败"), "error");
+        showToast(result.message || (t('cable_link.save_failed')), "error");
       }
     } catch (error) {
-      handleError(error, t('cable_link.save_failed') || "线路保存失败");
+      handleError(error, t('cable_link.save_failed'));
     }
     return;
   }
@@ -404,11 +408,11 @@ export async function submitCableLinkForm() {
   const b = decodeEndpoint(bType, bRawId);
 
   if (!a.type || !a.id || !b.type || !b.id) {
-    showToast(t('cable_link.endpoint_required') || "请选择两端端点", "warning");
+    showToast(t('cable_link.endpoint_required'), "warning");
     return;
   }
   if (a.type === b.type && a.id === b.id) {
-    showToast(t('cable_link.no_self_link') || "不允许自连接", "warning");
+    showToast(t('cable_link.no_self_link'), "warning");
     return;
   }
 
@@ -426,13 +430,13 @@ export async function submitCableLinkForm() {
   try {
     const result = await apiPost("/api/resources/cable-links", payload);
     if (result.success) {
-      showToast(t('cable_link.save_success') || "线路创建成功", "success");
+      showToast(t('cable_link.save_success'), "success");
       closeModal("cable-link-modal");
       await loadCableLinksData();
     } else {
-      showToast(result.message || (t('cable_link.save_failed') || "线路创建失败"), "error");
+      showToast(result.message || (t('cable_link.save_failed')), "error");
     }
   } catch (error) {
-    handleError(error, t('cable_link.save_failed') || "线路创建失败");
+    handleError(error, t('cable_link.save_failed'));
   }
 }

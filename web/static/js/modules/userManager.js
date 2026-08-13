@@ -23,7 +23,7 @@ let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
 
 // 加载用户数据
-export async function loadUsersData(page = 1) {
+export async function loadUsersData(page = currentUserPage) {
   currentUserPage = page;
   try {
     const response = await apiGet(`/api/users?page=${page}&page_size=${USER_PAGE_SIZE}`);
@@ -202,7 +202,7 @@ window.openTwoFactorModal = async function(userId, username, isEnabled) {
   const modal = openModal("two-factor-modal");
   
   if (!modal) {
-    showToast("无法打开2FA模态框", "error");
+    showToast(t('two_factor.open_modal_failed'), "error");
     return;
   }
   
@@ -219,7 +219,7 @@ window.openTwoFactorModal = async function(userId, username, isEnabled) {
 
   if (!setupStep || !manageStep || !enableBtn || !disableBtn) {
     console.error("2FA模态框元素未找到", { setupStep, manageStep, enableBtn, disableBtn });
-    showToast("2FA模态框加载失败", "error");
+    showToast(t('two_factor.modal_load_failed'), "error");
     return;
   }
 
@@ -272,7 +272,7 @@ async function initTwoFactorConfig(userId) {
     if (currentUser && currentUser.id !== userId) {
       // 不是当前用户，需要检查是否是管理员
       if (currentUser.role !== 'admin') {
-        showToast("权限不足，只有管理员可以为其他用户操作2FA", "error");
+        showToast(t('two_factor.admin_only'), "error");
         return;
       }
     }
@@ -298,11 +298,11 @@ async function initTwoFactorConfig(userId) {
         uriInput.value = otpauth_url;
       }
     } else {
-      showToast("获取2FA配置失败：" + response.message, "error");
+      showToast(t('two_factor.fetch_config_failed') + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("获取2FA配置失败:", error);
-    showToast("获取2FA配置失败，请检查网络连接", "error");
+    showToast(t('two_factor.fetch_config_network'), "error");
   }
 }
 
@@ -322,7 +322,7 @@ async function handleTwoFactorEnable() {
   const userId = userIdInput.value;
 
   if (!code || code.length !== 6) {
-    errorDiv.textContent = "请输入6位验证码";
+    errorDiv.textContent = t('two_factor.verify_code_placeholder');
     errorDiv.classList.add("show");
     return;
   }
@@ -330,7 +330,7 @@ async function handleTwoFactorEnable() {
   try {
     const response = await apiPost("/api/two-factor/enable", { code, user_id: userId });
     if (response.success) {
-      successDiv.textContent = "双因素认证已成功启用！";
+      successDiv.textContent = t('two_factor.enable_success');
       successDiv.classList.add("show");
       
       setTimeout(() => {
@@ -339,12 +339,12 @@ async function handleTwoFactorEnable() {
         loadUsersData();
       }, 2000);
     } else {
-      errorDiv.textContent = "启用失败：" + response.message;
+      errorDiv.textContent = t('two_factor.enable_failed') + "：" + response.message;
       errorDiv.classList.add("show");
     }
   } catch (error) {
     console.error("启用2FA失败:", error);
-    errorDiv.textContent = "启用失败，请检查网络连接";
+    errorDiv.textContent = t('two_factor.enable_failed_network');
     errorDiv.classList.add("show");
   }
 }
@@ -364,7 +364,7 @@ async function handleTwoFactorDisable() {
   const userId = userIdInput.value;
 
   if (!code || code.length !== 6) {
-    errorDiv.textContent = "请输入6位验证码";
+    errorDiv.textContent = t('two_factor.verify_code_placeholder');
     errorDiv.classList.add("show");
     return;
   }
@@ -377,16 +377,16 @@ async function handleTwoFactorDisable() {
   try {
     const response = await apiPost("/api/two-factor/disable", { code, user_id: userId });
     if (response.success) {
-      showToast("双因素认证已成功禁用", "success");
+      showToast(t('two_factor.disable_success'), "success");
       closeModal("two-factor-modal");
       loadUsersData();
     } else {
-      errorDiv.textContent = "禁用失败：" + response.message;
+      errorDiv.textContent = t('two_factor.disable_failed') + "：" + response.message;
       errorDiv.classList.add("show");
     }
   } catch (error) {
     console.error("禁用2FA失败:", error);
-    errorDiv.textContent = "禁用失败，请检查网络连接";
+    errorDiv.textContent = t('two_factor.disable_failed_network');
     errorDiv.classList.add("show");
   }
 }
@@ -408,7 +408,7 @@ export async function submitUserForm() {
   
   if (password) {
     if (password !== passwordConfirm) {
-      showToast("两次输入的密码不一致", "error");
+      showToast(t('user.password_mismatch'), "error");
       return;
     }
     userData.password = password;
@@ -423,16 +423,16 @@ export async function submitUserForm() {
     }
 
     if (response.success) {
-      showToast(userId ? "用户更新成功" : "用户添加成功", "success");
+      showToast(userId ? t('user.update_success') : t('user.add_success'), "success");
       closeModal("user-modal");
       form.reset();
       loadUsersData();
     } else {
-      showToast((userId ? "更新" : "添加") + "用户失败：" + response.message, "error");
+      showToast((userId ? t('user.update_failed') : t('user.add_failed')) + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("保存用户失败:", error);
-    showToast("保存用户失败，请检查网络连接", "error");
+    showToast(t('user.save_failed_network'), "error");
   }
 }
 

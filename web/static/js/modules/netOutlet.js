@@ -27,17 +27,18 @@ import { loadRoomsForSelect } from "../utils/resources.js";
 
 const tableState = createSortState('name', 'asc');
 let currentPage = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
 
 const OUTLET_TYPE_LABELS = {
-  wall_socket: t('net_outlet.type_wall_socket') || '墙面插座',
-  patch_panel: t('net_outlet.type_patch_panel') || '配线架',
-  wifi_ap: t('net_outlet.type_wifi_ap') || '无线AP',
-  other: t('net_outlet.type_other') || '其他',
+  wall_socket: t('net_outlet.type_wall_socket'),
+  patch_panel: t('net_outlet.type_patch_panel'),
+  wifi_ap: t('net_outlet.type_wifi_ap'),
+  other: t('net_outlet.type_other'),
 };
 
 const PEER_TYPE_LABELS = {
-  outlet: t('net_outlet.peer_type_outlet') || '信息点',
-  device_port: t('net_outlet.peer_type_device_port') || '设备端口',
+  outlet: t('net_outlet.peer_type_outlet'),
+  device_port: t('net_outlet.peer_type_device_port'),
 };
 
 function getOutletTypeName(type) {
@@ -64,15 +65,15 @@ function buildPeerDisplay(row) {
   return target ? `${escapeHtml(label)}（${target}）` : escapeHtml(label);
 }
 
-export async function loadNetOutletsData(page = 1, sortBy = null, sortOrder = null) {
+export async function loadNetOutletsData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/net-outlets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await apiGet(`/api/resources/net-outlets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#net-outlets-table", {
       data: items,
@@ -92,7 +93,10 @@ export async function loadNetOutletsData(page = 1, sortBy = null, sortOrder = nu
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#net-outlets-table", data, loadNetOutletsData);
+      appendPaginationToTable("#net-outlets-table", data, loadNetOutletsData, {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => { currentPageSize = size; loadNetOutletsData(1); },
+      });
     }
     updateSortIcons("net-outlets-table", tableState);
   } catch (error) {
@@ -127,7 +131,7 @@ async function loadCabinetsForRoom(roomId, selectedCabinetId = null) {
   const cabinetSelect = elementCache.get('net-outlet-cabinet-id');
   if (!cabinetSelect) return;
 
-  cabinetSelect.innerHTML = `<option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>`;
+  cabinetSelect.innerHTML = `<option value="">${t('net_outlet.select_cabinet')}</option>`;
 
   if (!roomId) return;
 
@@ -172,7 +176,7 @@ async function loadPeerOutlets(peerRoomId, peerType, selectedPeerOutletId = null
   const peerOutletSelect = elementCache.get('net-outlet-peer-outlet-id');
   if (!peerOutletSelect) return;
 
-  const placeholder = t('net_outlet.select_peer_outlet') || '选择对端信息点';
+  const placeholder = t('net_outlet.select_peer_outlet');
   peerOutletSelect.innerHTML = `<option value="">${placeholder}</option>`;
 
   if (!peerRoomId || !peerType) return;
@@ -217,7 +221,7 @@ async function loadPeerDevicePorts(peerRoomId, selectedPeerDevicePortId = null) 
   const peerDevicePortSelect = elementCache.get('net-outlet-peer-device-port-id');
   if (!peerDevicePortSelect) return;
 
-  const placeholder = t('net_outlet.select_peer_device_port') || '选择对端设备端口';
+  const placeholder = t('net_outlet.select_peer_device_port');
   peerDevicePortSelect.innerHTML = `<option value="">${placeholder}</option>`;
 
   if (!peerRoomId) return;
@@ -368,7 +372,7 @@ export async function openNetOutletModal(netOutlet = null) {
     elementCache.setValue('net-outlet-id', '');
     elementCache.setValue('net-outlet-peer-type', '');
     elementCache.setValue('net-outlet-peer-room-id', '');
-    cabinetSelect.innerHTML = `<option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>`;
+    cabinetSelect.innerHTML = `<option value="">${t('net_outlet.select_cabinet')}</option>`;
     updatePeerFieldVisibility('');
   }
 }

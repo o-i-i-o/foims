@@ -1,6 +1,7 @@
 import { apiGet } from "./apiClient.js";
 import { showToast } from "./toast.js";
 import { escapeHtml } from "./helpers.js";
+import { t } from "./i18n.js";
 
 const NETWORK_REGION_CHANGED_EVENT = 'ipma:network-region-changed';
 const NETWORK_CHANGED_EVENT = 'ipma:network-changed';
@@ -164,8 +165,8 @@ const CONFIG = {
     networksApi: (regionId) => regionId ? `/api/resources/networks?region_id=${regionId}&page_size=1000` : null,
     excludeSwitchId: null,
     parentSwitchRequired: false,
-    switchLabel: '上级设备',
-    portLabel: '上级端口',
+    switchLabel: t('device.upstream_device'),
+    portLabel: t('device.upstream_port'),
     loadNetworksByRegion: true
   }
 };
@@ -237,7 +238,7 @@ export class IpConfigManager {
       if (this.config.loadNetworksByRegion) {
         const regionsResult = await apiGet('/api/resources/network-regions?page_size=1000');
         if (!regionsResult.success) {
-          throw new Error('加载网络区域失败');
+          throw new Error(t('ipconfig.load_region_failed'));
         }
         regions = regionsResult.data?.items || regionsResult.data || [];
         
@@ -302,7 +303,7 @@ export class IpConfigManager {
             }
           }
         } else if (!id) {
-          throw new Error(`请先选择${this.config.idName}`);
+          throw new Error(t('ipconfig.select_first', { name: this.config.idName }));
         }
         
         if (id && allNetworks.length === 0) {
@@ -310,7 +311,7 @@ export class IpConfigManager {
           if (url) {
             const result = await apiGet(url);
             if (!result.success) {
-              throw new Error('加载网络数据失败');
+              throw new Error(t('ipconfig.load_network_failed'));
             }
             allNetworks = result.data?.items || result.data || [];
           }
@@ -350,7 +351,7 @@ export class IpConfigManager {
       
     } catch (error) {
       console.error("加载IP失败:", error);
-      showToast(error.message || "加载IP数据失败", "error");
+      showToast(error.message || t('ipconfig.load_ip_failed'), "error");
       await this.addIpRow();
     }
   }
@@ -425,27 +426,27 @@ export class IpConfigManager {
       if (!hasData) return;
 
       if (!networkId) {
-        errors.push(`第${rowNum}行：请选择网络`);
+        errors.push(t('ipconfig.row_select_network', { row: rowNum }));
       }
       if (!ipAddress) {
-        errors.push(`第${rowNum}行：请输入IP地址`);
+        errors.push(t('ipconfig.row_ip_required', { row: rowNum }));
       } else if (!isValidIP(ipAddress)) {
-        errors.push(`第${rowNum}行：IP地址格式无效`);
+        errors.push(t('ipconfig.row_ip_invalid', { row: rowNum }));
       }
       
       if (networkId && ipAddress) {
         const result = this.getCidrForIp(networkId, ipAddress);
         if (!result.hasCidr) {
           const ipType = result.isV6 ? 'IPv6' : 'IPv4';
-          errors.push(`第${rowNum}行：所选网络不支持${ipType}地址`);
+          errors.push(t('ipconfig.row_network_not_supported', { row: rowNum, type: ipType }));
         } else if (result.cidr && !isIpInCidr(ipAddress, result.cidr)) {
-          errors.push(`第${rowNum}行：IP地址 ${ipAddress} 不在所选网段 ${result.cidr} 内`);
+          errors.push(t('ipconfig.row_ip_not_in_cidr', { row: rowNum, ip: ipAddress, cidr: result.cidr }));
         }
       }
 
       if (this.config.parentSwitchRequired) {
         if (!networkId) {
-          errors.push(`第${rowNum}行：请选择网络`);
+          errors.push(t('ipconfig.row_select_network', { row: rowNum }));
         }
       }
 
@@ -478,7 +479,7 @@ export class IpConfigManager {
     if (this.config.idSelector && !initialData) {
       const id = document.getElementById(this.config.idSelector)?.value;
       if (!id) {
-        showToast(`请先选择${this.config.idName}`, "warning");
+        showToast(t('ipconfig.select_first', { name: this.config.idName }), "warning");
         return;
       }
     }
@@ -524,7 +525,7 @@ export class IpConfigManager {
 
     } catch (error) {
       console.error("添加IP行失败:", error);
-      showToast("加载选项失败", "error");
+      showToast(t('ipconfig.load_options_failed'), "error");
     }
   }
 
@@ -576,58 +577,58 @@ export class IpConfigManager {
       const cidrs = [];
       if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
       if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
-      const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+      const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : t('ipconfig.no_cidr');
       return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
     }).join('');
 
-    const switchLabel = this.config.switchLabel || '交换机';
-    const portLabel = this.config.portLabel || '端口';
+    const switchLabel = this.config.switchLabel || t('device.switch');
+    const portLabel = this.config.portLabel || t('device.ports');
 
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">
-          <label>网络区域</label>
+          <label>${t('network.region')}</label>
           <select class="${this.config.classPrefix}-ip-network-region-select form-control">
-            <option value="">请选择区域</option>
+            <option value="">${t('network.select_region')}</option>
             ${regionOptions}
           </select>
         </div>
         <div class="form-group">
-          <label>网络 <span class="required">*</span></label>
+          <label>${t('ipconfig.network')} <span class="required">*</span></label>
           <select class="${this.config.classPrefix}-ip-network-select form-control">
-            <option value="">请选择网络</option>
+            <option value="">${t('network.select_network')}</option>
             ${networkOptions}
           </select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>IP地址 <span class="required">*</span></label>
-          <input type="text" class="${this.config.classPrefix}-ip-address-input form-control" placeholder="如: 192.168.1.100">
+          <label>${t('ip.ip_address')} <span class="required">*</span></label>
+          <input type="text" class="${this.config.classPrefix}-ip-address-input form-control" placeholder="${t('ipconfig.ip_example')}">
         </div>
         <div class="form-group">
-          <label>MAC地址</label>
-          <input type="text" class="${this.config.classPrefix}-ip-mac-address-input form-control" placeholder="如: 00:11:22:33:44:55">
+          <label>${t('ip.mac_address')}</label>
+          <input type="text" class="${this.config.classPrefix}-ip-mac-address-input form-control" placeholder="${t('ipconfig.mac_example')}">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
           <label>${switchLabel}</label>
           <select class="${this.config.classPrefix}-ip-switch-select form-control">
-            <option value="">请选择设备</option>
+            <option value="">${t('device.select_upstream_device')}</option>
           </select>
         </div>
         <div class="form-group">
           <label>${portLabel}</label>
           <select class="${this.config.classPrefix}-ip-port-select form-control">
-            <option value="">请选择端口</option>
+            <option value="">${t('device.select_upstream_port')}</option>
           </select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-group" style="display: flex; align-items: flex-end; gap: 8px;">
-          <button type="button" class="btn btn-danger btn-sm remove-ip-btn">删除</button>
-          <button type="button" class="btn btn-secondary btn-sm add-ip-btn" data-i18n="ip.add_ip">添加IP地址</button>
+          <button type="button" class="btn btn-danger btn-sm remove-ip-btn">${t('common.delete')}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-ip-btn" data-i18n="ip.add_ip">${t('ip.add_ip')}</button>
         </div>
       </div>
     `;
@@ -641,7 +642,7 @@ export class IpConfigManager {
       if (rows && rows.length > 1) {
         row.remove();
       } else {
-        showToast("至少需要保留一个IP配置", "warning");
+        showToast(t('device.at_least_one_ip'), "warning");
       }
     });
     
@@ -674,12 +675,12 @@ export class IpConfigManager {
         
         const filtered = networks.filter(n => n.network_region_id === regionId);
         
-        networkSelect.innerHTML = '<option value="">请选择网络</option>' +
+        networkSelect.innerHTML = '<option value="">' + t('network.select_network') + '</option>' +
           filtered.map(n => {
             const cidrs = [];
             if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
             if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
-            const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+            const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : t('ipconfig.no_cidr');
             return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
           }).join('');
         
@@ -723,12 +724,12 @@ export class IpConfigManager {
             if (result.success && result.data) {
               const regionNetworks = result.data.items || result.data || [];
               this.networks = regionNetworks;
-              networkSelect.innerHTML = '<option value="">请选择网络</option>' +
+              networkSelect.innerHTML = '<option value="">' + t('network.select_network') + '</option>' +
                 regionNetworks.map(n => {
                   const cidrs = [];
                   if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
                   if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
-                  const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
+                  const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : t('ipconfig.no_cidr');
                   return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
                 }).join('');
             }
@@ -781,7 +782,7 @@ export class IpConfigManager {
       }
       devicesCache = devicesData;
 
-      switchSelect.innerHTML = '<option value="">选择设备</option>';
+      switchSelect.innerHTML = '<option value="">' + t('device.select_upstream_device') + '</option>';
 
       let filteredDevices = devicesCache;
       if (this.config.excludeSwitchId) {
@@ -805,12 +806,12 @@ export class IpConfigManager {
     if (!switchSelect || !devicesCache) return;
 
     if (portSelect) {
-      portSelect.innerHTML = '<option value="">选择端口</option>';
+      portSelect.innerHTML = '<option value="">' + t('device.select_upstream_port') + '</option>';
     }
 
     const currentSwitchId = switchSelect.value;
 
-    switchSelect.innerHTML = '<option value="">选择设备</option>';
+    switchSelect.innerHTML = '<option value="">' + t('device.select_upstream_device') + '</option>';
 
     let filteredDevices = devicesCache;
 
@@ -836,7 +837,7 @@ export class IpConfigManager {
 
   async handleSwitchChange(switchSelect, portSelect) {
     const deviceId = switchSelect.value;
-    portSelect.innerHTML = '<option value="">选择接口</option>';
+    portSelect.innerHTML = '<option value="">' + t('device.select_upstream_port') + '</option>';
 
     if (!deviceId) return;
 

@@ -50,7 +50,7 @@ function extractItems(result) {
 }
 
 // 更新选择框选项
-function updateSelect(select, data, placeholder = '选择选项') {
+function updateSelect(select, data, placeholder = t('room.select_option')) {
   const currentValue = select.value;
   select.innerHTML = `<option value="">${placeholder}</option>` +
     data.map(item => `<option value="${item.id}">${item.name}</option>`).join('');
@@ -65,7 +65,7 @@ async function loadNetworkRegions(select) {
 
   const now = Date.now();
   if (networkCache.networkRegions && isCacheValid(networkCache.cacheTime)) {
-    updateSelect(select, networkCache.networkRegions, '选择网络区域');
+    updateSelect(select, networkCache.networkRegions, t('network.select_region'));
     return networkCache.networkRegions;
   }
 
@@ -75,7 +75,7 @@ async function loadNetworkRegions(select) {
     if (items.length > 0) {
       networkCache.networkRegions = items;
       networkCache.cacheTime = now;
-      updateSelect(select, items, '选择网络区域');
+      updateSelect(select, items, t('network.select_region'));
       return items;
     }
   } catch (error) {
@@ -94,7 +94,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
 
   if (cached && isCacheValid(cached.timestamp)) {
     const filtered = cached.data.filter(n => !excludeIds.includes(n.id));
-    updateSelect(select, filtered, '选择网段');
+    updateSelect(select, filtered, t('network.select_segment'));
     return filtered;
   }
 
@@ -106,7 +106,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
     if (items.length > 0) {
       networkCache.networks.set(cacheKey, { data: items, timestamp: Date.now() });
       const filtered = items.filter(n => !excludeIds.includes(n.id));
-      updateSelect(select, filtered, '选择网段');
+      updateSelect(select, filtered, t('network.select_segment'));
       return filtered;
     }
   } catch (error) {
@@ -178,17 +178,17 @@ class NetworkConfigManager {
         <div class="form-row">
           <div class="form-group">
             <select class="${regionSelectClass}" required>
-              <option value="">选择网络区域</option>
+              <option value="">${t('network.select_region')}</option>
             </select>
           </div>
           <div class="form-group">
             <select class="${networkSelectClass}" required>
-              <option value="">选择网段</option>
+              <option value="">${t('network.select_segment')}</option>
             </select>
           </div>
           <div class="form-group network-config-actions">
             <button type="button" class="btn btn-danger btn-sm ${removeBtnClass}">
-              删除
+              ${t('common.delete')}
             </button>
             <button type="button" class="btn btn-secondary btn-sm ${addBtnClass}" style="display: none;">
               ${t('network.add_network_config')}
@@ -259,7 +259,7 @@ class NetworkConfigManager {
     if (!this.ensureContainer()) return;
     const items = this.container.querySelectorAll('.network-config-item');
     if (items.length <= 1) {
-      showToast('至少需要保留一个网段配置', 'warning');
+      showToast(t('room.keep_one_network'), 'warning');
       return;
     }
 
@@ -274,7 +274,7 @@ class NetworkConfigManager {
     
     if (!networkSelect) return;
     
-    networkSelect.innerHTML = '<option value="">选择网段</option>';
+    networkSelect.innerHTML = `<option value="">${t('network.select_segment')}</option>`;
     if (regionId) {
       await loadNetworks(regionId, networkSelect, this.getSelectedNetworkIds());
     }
@@ -573,7 +573,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
   }
 
   addLabel() {
-    return t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
+    return t('room.add_net_outlet') || t('net_outlet.add');
   }
 
   init(roomId = null) {
@@ -610,7 +610,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
       const sel = row.querySelector('.net-outlet-cabinet');
       const current = sel?.dataset.value || '';
       if (sel) {
-        sel.innerHTML = `<option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>` + opts;
+        sel.innerHTML = `<option value="">${t('net_outlet.select_cabinet')}</option>` + opts;
         if (current) sel.value = current;
       }
     });
@@ -624,10 +624,10 @@ class RoomNetOutletsManager extends DynamicRowManager {
 
   outletTypeOptionsHtml() {
     const types = [
-      { value: 'wall_socket', label: t('net_outlet.type_wall_socket') || '墙面插座' },
-      { value: 'patch_panel', label: t('net_outlet.type_patch_panel') || '配线架' },
-      { value: 'wifi_ap', label: t('net_outlet.type_wifi_ap') || '无线AP' },
-      { value: 'other', label: t('net_outlet.type_other') || '其他' },
+      { value: 'wall_socket', label: t('net_outlet.type_wall_socket') },
+      { value: 'patch_panel', label: t('net_outlet.type_patch_panel') },
+      { value: 'wifi_ap', label: t('net_outlet.type_wifi_ap') },
+      { value: 'other', label: t('net_outlet.type_other') },
     ];
     return types.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
   }
@@ -643,7 +643,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
       <div class="form-row">
         <div class="form-group">
           <input type="hidden" class="net-outlet-id" value="${escapeHtml(id)}" />
-          <input type="text" class="net-outlet-name form-control" value="${escapeHtml(name)}" placeholder="${t('net_outlet.name') || '信息点名称'}" autocomplete="off" />
+          <input type="text" class="net-outlet-name form-control" value="${escapeHtml(name)}" placeholder="${t('net_outlet.name')}" autocomplete="off" />
         </div>
         <div class="form-group">
           <select class="net-outlet-type form-control">
@@ -652,12 +652,12 @@ class RoomNetOutletsManager extends DynamicRowManager {
         </div>
         <div class="form-group">
           <select class="net-outlet-cabinet form-control" data-value="${escapeHtml(cabinetId)}">
-            <option value="">${t('net_outlet.select_cabinet') || '选择机柜'}</option>
+            <option value="">${t('net_outlet.select_cabinet')}</option>
             ${this.cabinetOptionsHtml()}
           </select>
         </div>
         <div class="form-group room-net-outlets-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete') || '删除'}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete')}</button>
           <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${this.addLabel()}</button>
         </div>
       </div>
@@ -715,16 +715,17 @@ export const roomNetOutletsManager = new RoomNetOutletsManager();
 
 const tableState = createSortState('name', 'asc');
 let currentPage = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
 
-export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
+export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
   
   try {
-    const roomsData = await apiGet(`/api/resources/rooms?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const roomsData = await apiGet(`/api/resources/rooms?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = roomsData.success ? roomsData.data : { items: [], total: 0 };
     const rooms = data.items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#rooms-table", {
       data: rooms,
@@ -746,8 +747,8 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
           const isCabinetRoom = (row.room_type || '').toLowerCase() === 'data_center' || (row.room_type || '').toLowerCase() === 'telecom_closet';
           return `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${isCabinetRoom ? (t('room.cabinets') || '机柜列表') : (t('room.workstations') || '工位列表')}</button>
-          <button class="btn btn-sm btn-secondary btn-room-net-outlets-list" data-room-id="${v}">${t('room.net_outlets') || '信息点列表'}</button>
+          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${isCabinetRoom ? (t('room.cabinets')) : (t('room.workstations'))}</button>
+          <button class="btn btn-sm btn-secondary btn-room-net-outlets-list" data-room-id="${v}">${t('room.net_outlets')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         `;
         } }
@@ -758,12 +759,15 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
     bindRoomButtonsEvents();
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#rooms-table", data, loadRoomsData);
+      appendPaginationToTable("#rooms-table", data, loadRoomsData, {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => { currentPageSize = size; loadRoomsData(1); },
+      });
     }
     updateSortIcons("rooms-table", tableState);
   } catch (error) {
-    handleError(error, "加载房间数据失败", () => {
-      renderTable("#rooms-table", { data: [], columns: [], emptyMessage: "加载失败，请刷新页面重试" });
+    handleError(error, t('room.load_failed'), () => {
+      renderTable("#rooms-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
     });
   }
 }
@@ -800,7 +804,7 @@ export async function openRoomChildrenListModal(roomId) {
   try {
     const result = await apiGet(`/api/resources/rooms/${roomId}`);
     if (!result.success || !result.data) {
-      showToast(result.message || t('room.load_failed') || "加载房间数据失败", "error");
+      showToast(result.message || t('room.load_failed'), "error");
       return;
     }
     const room = result.data;
@@ -812,12 +816,12 @@ export async function openRoomChildrenListModal(roomId) {
     const tbody = document.getElementById('room-children-list-tbody');
 
     if (roomType === 'office') {
-      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.workstations') || '工位列表'}`;
-      if (extraTh) extraTh.textContent = t('workstation.manager') || '负责人';
+      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.workstations')}`;
+      if (extraTh) extraTh.textContent = t('workstation.manager');
       const workstations = room.workstations || [];
       if (tbody) {
         if (workstations.length === 0) {
-          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data')}</td></tr>`;
         } else {
           tbody.innerHTML = workstations.map((ws, idx) => `
             <tr>
@@ -829,12 +833,12 @@ export async function openRoomChildrenListModal(roomId) {
         }
       }
     } else if (roomType === 'data_center' || roomType === 'telecom_closet') {
-      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.cabinets') || '机柜列表'}`;
-      if (extraTh) extraTh.textContent = t('cabinet.capacity') || '容量(U)';
+      if (titleEl) titleEl.textContent = `${room.name} - ${t('room.cabinets')}`;
+      if (extraTh) extraTh.textContent = t('cabinet.capacity');
       const cabinets = room.cabinets || [];
       if (tbody) {
         if (cabinets.length === 0) {
-          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t('common.no_data')}</td></tr>`;
         } else {
           tbody.innerHTML = cabinets.map((cab, idx) => `
             <tr>
@@ -847,7 +851,7 @@ export async function openRoomChildrenListModal(roomId) {
       }
     }
   } catch (error) {
-    handleError(error, t('room.load_failed') || "加载房间数据失败");
+    handleError(error, t('room.load_failed'));
   }
 }
 
@@ -855,7 +859,7 @@ export async function openRoomNetOutletsListModal(roomId) {
   try {
     const result = await apiGet(`/api/resources/rooms/${roomId}`);
     if (!result.success || !result.data) {
-      showToast(result.message || t('room.load_failed') || "加载房间数据失败", "error");
+      showToast(result.message || t('room.load_failed'), "error");
       return;
     }
     const room = result.data;
@@ -864,12 +868,12 @@ export async function openRoomNetOutletsListModal(roomId) {
     const titleEl = document.getElementById('room-net-outlets-list-modal-title');
     const tbody = document.getElementById('room-net-outlets-list-tbody');
 
-    if (titleEl) titleEl.textContent = `${room.name} - ${t('room.net_outlets') || '信息点列表'}`;
+    if (titleEl) titleEl.textContent = `${room.name} - ${t('room.net_outlets')}`;
 
     const netOutlets = room.net_outlets || [];
     if (tbody) {
       if (netOutlets.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="4" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="4" class="text-center">${t('common.no_data')}</td></tr>`;
       } else {
         tbody.innerHTML = netOutlets.map((no, idx) => `
           <tr>
@@ -882,16 +886,16 @@ export async function openRoomNetOutletsListModal(roomId) {
       }
     }
   } catch (error) {
-    handleError(error, t('room.load_failed') || "加载房间数据失败");
+    handleError(error, t('room.load_failed'));
   }
 }
 
 function outletTypeLabel(type) {
   const map = {
-    wall_socket: t('net_outlet.type_wall_socket') || '墙面插座',
-    patch_panel: t('net_outlet.type_patch_panel') || '配线架',
-    wifi_ap: t('net_outlet.type_wifi_ap') || '无线AP',
-    other: t('net_outlet.type_other') || '其他',
+    wall_socket: t('net_outlet.type_wall_socket'),
+    patch_panel: t('net_outlet.type_patch_panel'),
+    wifi_ap: t('net_outlet.type_wifi_ap'),
+    other: t('net_outlet.type_other'),
   };
   return map[type] || type || '-';
 }
@@ -907,16 +911,16 @@ export async function editRoom(id) {
     if (result.success) {
       openRoomModal(result.data);
     } else {
-      showToast(`获取房间数据失败: ${result.message}`, "error");
+      showToast(`${t('room.fetch_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取房间数据失败");
+    handleError(error, t('room.fetch_failed'));
   }
 }
 
 // 删除房间
 export async function deleteRoom(id) {
-  await handleDelete(id, "/api/resources/rooms", "房间删除成功", loadRoomsData);
+  await handleDelete(id, "/api/resources/rooms", t('room.delete_success'), loadRoomsData);
 }
 
 // 提交房间表单
@@ -982,18 +986,18 @@ export async function submitRoomForm() {
     if (id) {
       const result = await apiPut(`/api/resources/rooms/${id}`, roomData);
       if (!result.success) {
-        showToast(result.message || "房间保存失败", "error");
+        showToast(result.message || t('room.save_failed'), "error");
         return;
       }
     } else {
       const result = await apiPost("/api/resources/rooms", roomData);
       if (!result.success) {
-        showToast(result.message || "房间保存失败", "error");
+        showToast(result.message || t('room.save_failed'), "error");
         return;
       }
       roomId = result.data?.id;
       if (!roomId) {
-        showToast("房间创建成功但未返回ID", "error");
+        showToast(t('room.no_id_returned'), "error");
         return;
       }
       // 写回隐藏 ID，便于重试时按更新处理
@@ -1012,16 +1016,16 @@ export async function submitRoomForm() {
     const netOutletsData = roomNetOutletsManager.collectData();
     const noSyncResult = await apiPut(`/api/resources/rooms/${roomId}/net-outlets`, { net_outlets: netOutletsData });
     if (!noSyncResult.success) {
-      showToast(noSyncResult.message || t('room.net_outlets_save_failed') || "信息点保存失败", "error");
+      showToast(noSyncResult.message || t('room.net_outlets_save_failed'), "error");
       await loadRoomsData();
       return;
     }
 
-    showToast("房间保存成功", "success");
+    showToast(t('room.save_success'), "success");
     closeModal("room-modal");
     await loadRoomsData();
   } catch (error) {
-    handleError(error, "房间保存失败");
+    handleError(error, t('room.save_failed'));
   }
 }
 
@@ -1058,7 +1062,7 @@ export async function openRoomModal(room = null) {
   await loadOrgsForSelect("room-org-id");
 
   if (room) {
-    title.textContent = "编辑房间";
+    title.textContent = t('room.edit');
     elementCache.setValue('room-id', room.id);
     elementCache.setValue('room-name', room.name);
     elementCache.setValue('room-type', room.room_type ? room.room_type.toLowerCase() : "office");
@@ -1074,7 +1078,7 @@ export async function openRoomModal(room = null) {
     // 初始化信息点管理器并加载现有信息点
     await roomNetOutletsManager.loadExisting(room);
   } else {
-    title.textContent = "添加房间";
+    title.textContent = t('room.add');
     if (form) form.reset();
     elementCache.setValue('room-id', '');
     await roomNetworkConfigManager.init();

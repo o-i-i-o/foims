@@ -1,3 +1,5 @@
+import { t } from "../../utils/i18n.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const DEVICE_COLORS = {
@@ -13,18 +15,23 @@ const DEVICE_COLORS = {
   other: { fill: "#f5f5f5", stroke: "#9e9e9e" },
 };
 
-const TYPE_LABELS = {
-  switch: "交换机",
-  network_device: "网络设备",
-  server: "服务器",
-  router: "路由器",
-  camera: "摄像头",
-  phone: "电话",
-  pc: "PC",
-  laptop: "笔记本",
-  printer: "打印机",
-  other: "其他",
+const DEVICE_TYPE_I18N_KEYS = {
+  switch: "device_type.switch",
+  network_device: "device_type.network_device",
+  server: "device_type.server",
+  router: "device_type.router",
+  camera: "device_type.camera",
+  phone: "device_type.phone",
+  pc: "device_type.pc",
+  laptop: "device_type.laptop",
+  printer: "device_type.printer",
+  other: "device_type.other",
 };
+
+function getDeviceTypeLabel(type) {
+  const key = DEVICE_TYPE_I18N_KEYS[type];
+  return key ? t(key) : type;
+}
 
 export class TopologyRenderer {
   constructor(core) {
@@ -36,7 +43,7 @@ export class TopologyRenderer {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("topology-device-node", `type-${device.device_type || "other"}`);
     g.dataset.deviceId = device.device_id;
-    g.dataset.tooltip = `${device.device_name || "Unknown"} (${TYPE_LABELS[device.device_type] || device.device_type})`;
+    g.dataset.tooltip = `${device.device_name || "Unknown"} (${getDeviceTypeLabel(device.device_type) || device.device_type})`;
 
     const x = device.x || 100;
     const y = device.y || 100;
@@ -70,7 +77,7 @@ export class TopologyRenderer {
 
     const typeText = document.createElementNS(SVG_NS, "text");
     typeText.classList.add("device-type-label");
-    typeText.textContent = TYPE_LABELS[device.device_type] || device.device_type || "";
+    typeText.textContent = getDeviceTypeLabel(device.device_type) || device.device_type || "";
     typeText.setAttribute("x", x + w / 2);
     typeText.setAttribute("y", y + 40);
     typeText.setAttribute("text-anchor", "middle");
@@ -216,7 +223,7 @@ export class TopologyRenderer {
       indexLabel.setAttribute("dominant-baseline", "middle");
       node.appendChild(indexLabel);
 
-      node.dataset.tooltip = `${outletName} (${chain[i].outlet_type || 'outlet'}) - 链路顺序: ${i + 1}/${n}`;
+      node.dataset.tooltip = `${outletName} (${chain[i].outlet_type || 'outlet'}) - ${t("viz.link_order")}: ${i + 1}/${n}`;
       group.appendChild(node);
     }
   }

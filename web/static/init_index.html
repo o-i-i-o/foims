@@ -10,53 +10,59 @@
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
     <link rel="stylesheet" href="/static/css/variables.css?v=01253">
     <link rel="stylesheet" href="/static/css/components/toasts.css?v=01253">
-    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01253">
-    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01268"></script>
+    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01254">
+    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01269"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
         <div class="init-header">
-            <h1>IPMA 系统初始化</h1>
-            <p>请完成以下初始化步骤，以启动 IP 地址管理系统</p>
+            <div class="init-lang-switch">
+                <select id="language-selector" aria-label="Select Language">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <h1 data-i18n="init.title">IPMA 系统初始化</h1>
+            <p data-i18n="init.subtitle">请完成以下初始化步骤，以启动 IP 地址管理系统</p>
         </div>
 
         <div class="init-steps">
             <div class="step-indicator">
                 <div class="step active" data-step="1">
                     <span class="step-number">1</span>
-                    <span class="step-label">PostgreSQL 检查</span>
+                    <span class="step-label" data-i18n="init.step_pg_check">PostgreSQL 检查</span>
                 </div>
                 <div class="step" data-step="2">
                     <span class="step-number">2</span>
-                    <span class="step-label">数据库初始化</span>
+                    <span class="step-label" data-i18n="init.step_db_init">数据库初始化</span>
                 </div>
                 <div class="step" data-step="3">
                     <span class="step-number">3</span>
-                    <span class="step-label">管理员账户</span>
+                    <span class="step-label" data-i18n="init.step_admin">管理员账户</span>
                 </div>
                 <div class="step" data-step="4">
                     <span class="step-number">4</span>
-                    <span class="step-label">初始化完成</span>
+                    <span class="step-label" data-i18n="init.step_done">初始化完成</span>
                 </div>
             </div>
 
             <div class="step-content">
                 <div class="step-panel active" data-step="1">
-                    <h2>PostgreSQL 检查</h2>
+                    <h2 data-i18n="init.step_pg_check">PostgreSQL 检查</h2>
                     <div id="pg-status" class="status-container">
                         <div class="status-loading">
                             <div class="loading-spinner"></div>
-                            <p>正在检查 PostgreSQL 状态...</p>
+                            <p data-i18n="init.pg_checking">正在检查 PostgreSQL 状态...</p>
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-primary" onclick="location.reload()">重新检查</button>
-                        <button type="button" class="btn btn-success" disabled>下一步</button>
+                        <button type="button" class="btn btn-primary" onclick="location.reload()" data-i18n="init.pg_recheck">重新检查</button>
+                        <button type="button" class="btn btn-success" disabled data-i18n="init.next">下一步</button>
                     </div>
                 </div>
 
                 <div class="step-panel" data-step="2">
-                    <h2>数据库初始化</h2>
+                    <h2 data-i18n="init.step_db_init">数据库初始化</h2>
                     <div id="db-status" class="status-container">
                         <div class="status-loading">
                             <div class="loading-spinner"></div>
@@ -67,18 +73,18 @@
                     <div class="init-tabs">
                         <div class="init-tab active" data-mode="create" onclick="setInitMode('create')">
                             <span class="tab-icon">📝</span>
-                            <span class="tab-text">新建数据库</span>
+                            <span class="tab-text" data-i18n="init.tab_create_db">新建数据库</span>
                         </div>
                         <div class="init-tab" data-mode="import" onclick="setInitMode('import')">
                             <span class="tab-icon">📁</span>
-                            <span class="tab-text">导入数据库</span>
+                            <span class="tab-text" data-i18n="init.tab_import_db">导入数据库</span>
                         </div>
                     </div>
 
                     <form id="init-mode-form" class="init-form">
                         <div id="create-panel">
                             <div class="panel-description">
-                                <h4>新建数据库</h4>
+                                <h4 data-i18n="init.tab_create_db">新建数据库</h4>
                                 <p>系统将创建全新的数据库结构，适用于首次部署。</p>
                                 <ul>
                                     <li>自动创建所有必需的数据表</li>
@@ -90,74 +96,74 @@
 
                         <div id="import-panel" style="display: none;">
                             <div class="panel-description">
-                                <h4>导入数据库</h4>
+                                <h4 data-i18n="init.tab_import_db">导入数据库</h4>
                                 <p>从SQL备份文件恢复数据库，适用于数据迁移或恢复。</p>
                             </div>
                             <div class="form-group">
-                                <label for="sql-file">SQL备份文件:</label>
+                                <label for="sql-file" data-i18n="init.sql_backup_file">SQL备份文件:</label>
                                 <input type="file" id="sql-file" name="sql_file" accept=".sql" class="file-input">
-                                <p class="help-text">选择要导入的 .sql 备份文件（可选，不选则创建空数据库结构）</p>
+                                <p class="help-text" data-i18n="init.sql_backup_hint">选择要导入的 .sql 备份文件（可选，不选则创建空数据库结构）</p>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="verification-step2">控制台验证码:</label>
+                            <label for="verification-step2" data-i18n="init.console_captcha">控制台验证码:</label>
                             <div style="display: flex; gap: 10px;">
-                                <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" required>
-                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                                <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
-                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                            <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
-                            <button type="submit" class="btn btn-success" disabled>下一步</button>
+                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="submit" class="btn btn-success" disabled data-i18n="init.next">下一步</button>
                         </div>
                     </form>
                 </div>
 
                 <div class="step-panel" data-step="3">
-                    <h2>管理员账户创建</h2>
+                    <h2 data-i18n="init.admin_create_title">管理员账户创建</h2>
                     <form id="admin-account-form" class="init-form">
                         <div class="form-group">
-                            <label for="admin-username">用户名:</label>
+                            <label for="admin-username" data-i18n="init.username">用户名:</label>
                             <input type="text" id="admin-username" name="username" value="admin" required>
                         </div>
                         <div class="form-group">
-                            <label for="admin-password">密码:</label>
+                            <label for="admin-password" data-i18n="init.password">密码:</label>
                             <input type="password" id="admin-password" name="password" required>
                         </div>
                         <div class="form-group">
-                            <label for="admin-confirm-password">确认密码:</label>
+                            <label for="admin-confirm-password" data-i18n="init.confirm_password">确认密码:</label>
                             <input type="password" id="admin-confirm-password" name="confirm_password" required>
                         </div>
                         <div class="form-group">
-                            <label for="admin-email">邮箱:</label>
+                            <label for="admin-email" data-i18n="init.email">邮箱:</label>
                             <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required>
                         </div>
                         <div class="form-group">
-                            <label for="verification">控制台验证码:</label>
+                            <label for="verification" data-i18n="init.console_captcha">控制台验证码:</label>
                             <div style="display: flex; gap: 10px;">
-                                <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" required>
-                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()">获取验证码</button>
+                                <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
+                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
-                            <p class="help-text">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                            <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary prev-step">上一步</button>
-                            <button type="submit" class="btn btn-success">完成初始化</button>
+                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="submit" class="btn btn-success" data-i18n="init.finish_init">完成初始化</button>
                         </div>
                     </form>
                 </div>
 
                 <div class="step-panel" data-step="4">
                     <div class="init-success">
-                        <h2>初始化完成!</h2>
+                        <h2 data-i18n="init.done_title">初始化完成!</h2>
                         <div class="success-icon">✓</div>
-                        <p>IPMA 系统已成功初始化。</p>
-                        <p>系统正在重启，请稍候...</p>
+                        <p data-i18n="init.done_desc">IPMA 系统已成功初始化。</p>
+                        <p data-i18n="init.restarting">系统正在重启，请稍候...</p>
                         <div class="form-actions">
-                            <a href="/main.html" class="btn btn-primary">登录系统</a>
+                            <a href="/main.html" class="btn btn-primary" data-i18n="init.login_system">登录系统</a>
                         </div>
                     </div>
                 </div>
@@ -168,7 +174,7 @@
 
         <div id="loading" class="loading" style="display: none;">
             <div class="loading-spinner"></div>
-            <p>正在处理...</p>
+            <p data-i18n="init.processing">正在处理...</p>
         </div>
     </div>
 </body>

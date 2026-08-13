@@ -17,21 +17,21 @@ function generateUniqueId(prefix = 'nc') {
 }
 
 const CARD_TYPES = [
-  { value: 'pcie', label: () => t('device.card_type_pcie') || 'PCIe' },
-  { value: 'onboard', label: () => t('device.card_type_onboard') || 'Onboard' },
-  { value: 'usb', label: () => t('device.card_type_usb') || 'USB' },
-  { value: 'virtual', label: () => t('device.card_type_virtual') || 'Virtual' },
-  { value: 'wwan', label: () => t('device.card_type_wwan') || 'WWAN' },
-  { value: 'wifi', label: () => t('device.card_type_wifi') || 'WiFi' },
-  { value: 'other', label: () => t('device.card_type_other') || 'Other' },
+  { value: 'pcie', label: () => t('device.card_type_pcie') },
+  { value: 'onboard', label: () => t('device.card_type_onboard') },
+  { value: 'usb', label: () => t('device.card_type_usb') },
+  { value: 'virtual', label: () => t('device.card_type_virtual') },
+  { value: 'wwan', label: () => t('device.card_type_wwan') },
+  { value: 'wifi', label: () => t('device.card_type_wifi') },
+  { value: 'other', label: () => t('device.card_type_other') },
 ];
 
 const PORT_TYPES = [
-  { value: 'physical', label: () => t('device.port_type_physical') || 'Physical' },
-  { value: 'svi', label: () => t('device.port_type_svi') || 'SVI' },
-  { value: 'management', label: () => t('device.port_type_management') || 'Management' },
-  { value: 'loopback', label: () => t('device.port_type_loopback') || 'Loopback' },
-  { value: 'wifi', label: () => t('device.port_type_wifi') || 'WiFi' },
+  { value: 'physical', label: () => t('device.port_type_physical') },
+  { value: 'svi', label: () => t('device.port_type_svi') },
+  { value: 'management', label: () => t('device.port_type_management') },
+  { value: 'loopback', label: () => t('device.port_type_loopback') },
+  { value: 'wifi', label: () => t('device.port_type_wifi') },
 ];
 
 function isValidIPv4(ip) {
@@ -250,26 +250,26 @@ export class NetworkCardManager {
 
     div.innerHTML = `
       <header class="card-level-bar">
-        <h3 id="${uid}-title" class="level-badge level-card">${t('device.network_card') || '网卡'}</h3>
+        <h3 id="${uid}-title" class="level-badge level-card">${t('device.network_card')}</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-card-btn" aria-label="${t('device.delete_network_card') || '删除此网卡'}">${t('common.delete') || '删除'}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-port-btn" aria-label="${t('device.add_network_port') || '添加网口'}">${t('device.add_network_port') || '添加网口'}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-card-btn" aria-label="${t('device.delete_network_card')}">${t('common.delete')}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-port-btn" aria-label="${t('device.add_network_port')}">${t('device.add_network_port')}</button>
         </div>
       </header>
       <input type="hidden" class="card-id" value="${escapeHtml(cardData.id || '')}" />
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-name">${t('device.network_card_name') || '网卡名称'}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
-          <input id="${uid}-name" type="text" class="card-name nc-input" value="${escapeHtml(cardData.name || DEFAULT_CARD_NAME)}" placeholder="${t('device.network_card_name') || '网卡名称'}" autocomplete="off" required />
+          <label for="${uid}-name">${t('device.network_card_name')}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <input id="${uid}-name" type="text" class="card-name nc-input" value="${escapeHtml(cardData.name || DEFAULT_CARD_NAME)}" placeholder="${t('device.network_card_name')}" autocomplete="off" required />
         </div>
         <div class="nc-field">
-          <label for="${uid}-type">${t('device.network_card_type') || '网卡类型'}</label>
+          <label for="${uid}-type">${t('device.network_card_type')}</label>
           <select id="${uid}-type" class="card-type nc-input">
             ${CARD_TYPES.map(opt => `<option value="${opt.value}" ${cardData.card_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-desc">${t('common.description') || '描述'}</label>
+          <label for="${uid}-desc">${t('common.description')}</label>
           <input id="${uid}-desc" type="text" class="card-description nc-input" value="${escapeHtml(cardData.description || '')}" autocomplete="off" />
         </div>
       </div>
@@ -303,7 +303,7 @@ export class NetworkCardManager {
     const container = this.getContainer();
     const cards = container?.querySelectorAll('.network-card-item');
     if (cards && cards.length <= 1) {
-      showToast(t('device.at_least_one_card') || '至少需要保留一张网卡', 'warning');
+      showToast(t('device.at_least_one_card'), 'warning');
       return;
     }
     card.remove();
@@ -316,52 +316,52 @@ export class NetworkCardManager {
 
     div.innerHTML = `
       <header class="port-level-bar">
-        <h3 id="${uid}-title" class="level-badge level-port">${t('device.network_port') || '网口'}</h3>
+        <h3 id="${uid}-title" class="level-badge level-port">${t('device.network_port')}</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-port-btn" aria-label="${t('device.delete_network_port') || '删除此网口'}">${t('common.delete') || '删除'}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-ip-btn" aria-label="${t('ip.add_ip') || '添加IP'}">${t('ip.add_ip') || '添加IP'}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-port-btn" aria-label="${t('device.delete_network_port')}">${t('common.delete')}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-ip-btn" aria-label="${t('ip.add_ip')}">${t('ip.add_ip')}</button>
         </div>
       </header>
       <input type="hidden" class="port-id" value="${escapeHtml(portData.id || '')}" />
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-name">${t('device.network_port_name') || '网口名称'}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
-          <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t('device.network_port_name') || '网口名称'}" autocomplete="off" required />
+          <label for="${uid}-name">${t('device.network_port_name')}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t('device.network_port_name')}" autocomplete="off" required />
         </div>
         <div class="nc-field">
-          <label for="${uid}-type">${t('device.network_port_type') || '网口类型'}</label>
+          <label for="${uid}-type">${t('device.network_port_type')}</label>
           <select id="${uid}-type" class="port-type nc-input">
             ${PORT_TYPES.map(opt => `<option value="${opt.value}" ${portData.interface_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-vlan">${t('device.vlan_id') || 'VLAN ID'}</label>
+          <label for="${uid}-vlan">${t('device.vlan_id')}</label>
           <input id="${uid}-vlan" type="number" class="port-vlan nc-input" value="${portData.vlan_id ?? ''}" min="1" max="4094" autocomplete="off" />
         </div>
         <div class="nc-field">
-          <label for="${uid}-mac">${t('ip.mac_address') || 'MAC地址'}</label>
+          <label for="${uid}-mac">${t('ip.mac_address')}</label>
           <input id="${uid}-mac" type="text" class="port-mac nc-input" value="${escapeHtml(portData.mac_address || '')}" placeholder="00:11:22:33:44:55" autocomplete="off" />
         </div>
         <div class="nc-field">
-          <label for="${uid}-desc">${t('common.description') || '描述'}</label>
+          <label for="${uid}-desc">${t('common.description')}</label>
           <input id="${uid}-desc" type="text" class="port-description nc-input" value="${escapeHtml(portData.description || '')}" autocomplete="off" />
         </div>
       </div>
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-switch">${t('device.upstream_device') || '上级设备'}</label>
+          <label for="${uid}-switch">${t('device.upstream_device')}</label>
           <select id="${uid}-switch" class="port-switch nc-input">
-            <option value="">${t('device.select_upstream_device') || '选择设备'}</option>
+            <option value="">${t('device.select_upstream_device')}</option>
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-port">${t('device.upstream_port') || '上级端口'}</label>
+          <label for="${uid}-port">${t('device.upstream_port')}</label>
           <select id="${uid}-port" class="port-port nc-input">
-            <option value="">${t('device.select_upstream_port') || '选择端口'}</option>
+            <option value="">${t('device.select_upstream_port')}</option>
           </select>
         </div>
       </div>
-      <div class="port-ips-container" aria-label="${t('device.ip_list') || 'IP地址列表'}"></div>
+      <div class="port-ips-container" aria-label="${t('device.ip_list')}"></div>
     `;
     return div;
   }
@@ -408,7 +408,7 @@ export class NetworkCardManager {
     if (!card) return;
     const ports = card.querySelectorAll('.nc-port-item');
     if (ports.length <= 1) {
-      showToast(t('device.at_least_one_port') || '至少需要保留一个网口', 'warning');
+      showToast(t('device.at_least_one_port'), 'warning');
       return;
     }
     port.remove();
@@ -426,29 +426,29 @@ export class NetworkCardManager {
       <header class="ip-level-bar">
         <h3 id="${uid}-title" class="level-badge level-ip">IP</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-ip-btn" aria-label="${t('ip.delete_ip') || '删除此IP'}">${t('common.delete') || '删除'}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-ip-btn" aria-label="${t('ip.delete_ip')}">${t('common.delete')}</button>
         </div>
       </header>
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-region">${t('network.region') || '网络区域'}</label>
+          <label for="${uid}-region">${t('network.region')}</label>
           <select id="${uid}-region" class="ip-region nc-input">
-            <option value="">${t('network.select_region') || '选择网络区域'}</option>
+            <option value="">${t('network.select_region')}</option>
             ${regionOptions}
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-network">${t('network.name') || '网络'}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-network">${t('network.name')}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
           <select id="${uid}-network" class="ip-network nc-input" required>
-            <option value="">${t('network.select_network') || '选择网络'}</option>
+            <option value="">${t('network.select_network')}</option>
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-address">${t('ip.ip_address') || 'IP地址'}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-address">${t('ip.ip_address')}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
           <input id="${uid}-address" type="text" class="ip-address nc-input" value="${escapeHtml(ipData?.ip_address || '')}" placeholder="192.168.1.100" autocomplete="off" required />
         </div>
         <div class="nc-field">
-          <label for="${uid}-description">${t('common.description') || '描述'}</label>
+          <label for="${uid}-description">${t('common.description')}</label>
           <input id="${uid}-description" type="text" class="ip-description nc-input" value="${escapeHtml(ipData?.description || '')}" autocomplete="off" />
         </div>
       </div>
@@ -466,11 +466,11 @@ export class NetworkCardManager {
 
     regionSelect?.addEventListener('change', async () => {
       const regionId = regionSelect.value;
-      networkSelect.innerHTML = `<option value="">${t('network.select_network') || '选择网络'}</option>`;
+      networkSelect.innerHTML = `<option value="">${t('network.select_network')}</option>`;
       if (!regionId) return;
       const networks = await this.loadNetworksByRegion(regionId);
       this.networks = this.mergeNetworks(networks);
-      networkSelect.innerHTML = `<option value="">${t('network.select_network') || '选择网络'}</option>` +
+      networkSelect.innerHTML = `<option value="">${t('network.select_network')}</option>` +
         networks.map(n => {
           const cidrs = [];
           if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
@@ -507,7 +507,7 @@ export class NetworkCardManager {
     if (!port) return;
     const ips = port.querySelectorAll('.nc-ip-item');
     if (ips.length <= 1) {
-      showToast(t('device.at_least_one_ip') || '至少需要保留一个IP', 'warning');
+      showToast(t('device.at_least_one_ip'), 'warning');
       return;
     }
     ipElement.remove();
@@ -523,7 +523,7 @@ export class NetworkCardManager {
     if (!switchSelect || !portSelect) return;
     await this.ensureOptionsLoaded();
 
-    switchSelect.innerHTML = `<option value="">${t('device.select_upstream_device') || '选择设备'}</option>`;
+    switchSelect.innerHTML = `<option value="">${t('device.select_upstream_device')}</option>`;
     let devices = this.devicesCache || [];
     if (this.excludeSwitchId) {
       devices = devices.filter(d => d.id !== this.excludeSwitchId);
@@ -540,7 +540,7 @@ export class NetworkCardManager {
 
   async handleSwitchChange(switchSelect, portSelect) {
     const deviceId = switchSelect.value;
-    portSelect.innerHTML = `<option value="">${t('device.select_upstream_port') || '选择端口'}</option>`;
+    portSelect.innerHTML = `<option value="">${t('device.select_upstream_port')}</option>`;
     if (!deviceId) return;
 
     let interfaces;
@@ -659,7 +659,7 @@ export class NetworkCardManager {
       const cardDesc = cardEl.querySelector('.card-description')?.value?.trim() || null;
 
       if (!cardName) {
-        errors.push(`${t('device.network_card') || '网卡'} ${cardNum}: ${t('device.card_name_required') || '网卡名称不能为空'}`);
+        errors.push(`${t('device.network_card')} ${cardNum}: ${t('device.card_name_required')}`);
         return;
       }
 
@@ -676,11 +676,11 @@ export class NetworkCardManager {
         const portDesc = portEl.querySelector('.port-description')?.value?.trim() || null;
 
         if (!portName) {
-          errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ${t('device.port_name_required') || '网口名称不能为空'}`);
+          errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum}: ${t('device.port_name_required')}`);
           return;
         }
         if (portVlan !== null && (isNaN(portVlan) || portVlan < 1 || portVlan > 4094)) {
-          errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ${t('device.vlan_invalid') || 'VLAN ID 必须为 1-4094'}`);
+          errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum}: ${t('device.vlan_invalid')}`);
           return;
         }
 
@@ -696,26 +696,26 @@ export class NetworkCardManager {
           if (!networkId && !ipAddress && !ipDescription) return;
 
           if (!networkId) {
-            errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.network_required') || '请选择网络'}`);
+            errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum} - IP ${ipNum}: ${t('device.network_required')}`);
             return;
           }
           if (!ipAddress) {
-            errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.ip_required') || '请输入IP地址'}`);
+            errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum} - IP ${ipNum}: ${t('device.ip_required')}`);
             return;
           }
           if (!isValidIP(ipAddress)) {
-            errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.ip_invalid') || 'IP地址格式无效'}`);
+            errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum} - IP ${ipNum}: ${t('device.ip_invalid')}`);
             return;
           }
 
           const cidrResult = this.getNetworkCidr(networkId, ipAddress);
           if (!cidrResult.hasCidr) {
             const ipType = isIPv6(ipAddress) ? 'IPv6' : 'IPv4';
-            errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.cidr_not_supported') || '所选网络不支持该'} ${ipType} ${t('device.address') || '地址'}`);
+            errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum} - IP ${ipNum}: ${t('device.cidr_not_supported')} ${ipType} ${t('device.address')}`);
             return;
           }
           if (cidrResult.cidr && !isIpInCidr(ipAddress, cidrResult.cidr)) {
-            errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum} - IP ${ipNum}: ${t('device.ip_not_in_cidr') || 'IP地址不在网段内'} ${cidrResult.cidr}`);
+            errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum} - IP ${ipNum}: ${t('device.ip_not_in_cidr')} ${cidrResult.cidr}`);
             return;
           }
 
@@ -729,7 +729,7 @@ export class NetworkCardManager {
         });
 
         if (ips.length === 0) {
-          errors.push(`${t('device.network_card') || '网卡'} ${cardNum} - ${t('device.network_port') || '网口'} ${portNum}: ${t('device.at_least_one_ip') || '至少需要保留一个IP'}`);
+          errors.push(`${t('device.network_card')} ${cardNum} - ${t('device.network_port')} ${portNum}: ${t('device.at_least_one_ip')}`);
         }
 
         const portSwitchId = portEl.querySelector('.port-switch')?.value || null;
@@ -749,7 +749,7 @@ export class NetworkCardManager {
       });
 
       if (ports.length === 0) {
-        errors.push(`${t('device.network_card') || '网卡'} ${cardNum}: ${t('device.at_least_one_port') || '至少需要保留一个网口'}`);
+        errors.push(`${t('device.network_card')} ${cardNum}: ${t('device.at_least_one_port')}`);
       }
 
       cards.push({

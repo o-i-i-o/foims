@@ -1,3 +1,5 @@
+import { t } from "../../utils/i18n.js";
+
 export class SVGRenderer {
   constructor(core) {
     this.core = core;
@@ -21,8 +23,8 @@ export class SVGRenderer {
     rect.setAttribute("height", height);
 
     const ipManager = workstation.ipManager || null;
-    const ipAddress = ipManager ? ipManager.ip_address : "无IP";
-    let portInfo = "无端口";
+    const ipAddress = ipManager ? ipManager.ip_address : t("viz.no_ip");
+    let portInfo = t("viz.no_port");
     if (ipManager && ipManager.port_device_name && ipManager.port_device_number) {
       portInfo = `${ipManager.port_device_name}: ${ipManager.port_device_number}`;
     }
@@ -37,7 +39,7 @@ export class SVGRenderer {
     nameText.dataset.relY = 30;
 
     const nameTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-    nameTitleSpan.textContent = "工位: ";
+    nameTitleSpan.textContent = `${t("viz.workstation_label")}: `;
 
     const nameValueSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     nameValueSpan.textContent = workstation.name;
@@ -67,7 +69,7 @@ export class SVGRenderer {
     portText.dataset.relY = 80;
 
     const portTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-    portTitleSpan.textContent = "端口: ";
+    portTitleSpan.textContent = `${t("viz.port_label")}: `;
 
     const portValueSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     portValueSpan.textContent = portInfo;
@@ -81,23 +83,23 @@ export class SVGRenderer {
     managerText.dataset.relY = 105;
 
     const managerTitleSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-    managerTitleSpan.textContent = "管理人: ";
+    managerTitleSpan.textContent = `${t("viz.manager_label")}: `;
 
     const managerValueSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-    managerValueSpan.textContent = workstation.manager || "无管理人";
+    managerValueSpan.textContent = workstation.manager || t("viz.no_manager");
     managerValueSpan.className.baseVal = "workstation-manager";
 
     managerText.appendChild(managerTitleSpan);
     managerText.appendChild(managerValueSpan);
 
     const tooltipLines = [
-      `工位: ${workstation.name}`,
+      `${t("viz.workstation_label")}: ${workstation.name}`,
       `IP: ${ipAddress}`,
-      `端口: ${portInfo}`,
-      `管理人: ${workstation.manager || "无管理人"}`,
+      `${t("viz.port_label")}: ${portInfo}`,
+      `${t("viz.manager_label")}: ${workstation.manager || t("viz.no_manager")}`,
     ];
     if (ipManager && ipManager.network_name) {
-      tooltipLines.splice(2, 0, `网络: ${ipManager.network_name}`);
+      tooltipLines.splice(2, 0, `${t("viz.network_label")}: ${ipManager.network_name}`);
     }
     group.dataset.tooltip = tooltipLines.join("\n");
 
@@ -134,7 +136,7 @@ export class SVGRenderer {
     text.setAttribute("y", y + 20);
     text.dataset.relY = 20;
     text.textContent = cabinet.name;
-    group.dataset.tooltip = `机柜: ${cabinet.name}\n容量: ${cabinet.capacity || 42}U`;
+    group.dataset.tooltip = `${t("viz.cabinet_label")}: ${cabinet.name}\n${t("viz.capacity_label")}: ${cabinet.capacity || 42}${t("viz.u_unit")}`;
 
     group.appendChild(rect);
     this.drawUMarks(cabinet, group, x, y, width, capacity, uHeight);
@@ -213,14 +215,14 @@ export class SVGRenderer {
     text.dataset.relY = height / 2 + 4;
     text.textContent = position.name;
 
-    let portsLabel = "无端口";
+    let portsLabel = t("viz.no_port");
     if (position.ipManager && position.ipManager.port_device_name && position.ipManager.port_device_number) {
       portsLabel = `${position.ipManager.port_device_name}: ${position.ipManager.port_device_number}`;
     }
-    
-    const ipAddress = position.ipManager ? position.ipManager.ip_address : "无IP";
-    
-    group.dataset.tooltip = `机位: ${position.name}\nU位: ${startU}-${endU}\nIP: ${ipAddress}\n${portsLabel}`;
+
+    const ipAddress = position.ipManager ? position.ipManager.ip_address : t("viz.no_ip");
+
+    group.dataset.tooltip = `${t("viz.position_label")}: ${position.name}\n${t("viz.u_position_label")}: ${startU}-${endU}\nIP: ${ipAddress}\n${portsLabel}`;
 
     group.appendChild(rect);
     group.appendChild(text);
@@ -261,9 +263,9 @@ export class SVGRenderer {
     doorLabel.setAttribute("y", y - 10);
     doorLabel.dataset.relX = 0;
     doorLabel.dataset.relY = -10;
-    doorLabel.textContent = "门";
-    
-    group.dataset.tooltip = "房间入口参考点";
+    doorLabel.textContent = t("viz.door");
+
+    group.dataset.tooltip = t("viz.room_entrance_ref");
     
     group.appendChild(doorFrame);
     group.appendChild(doorHandle);

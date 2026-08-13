@@ -150,15 +150,15 @@ async function saveSystemConfig() {
 
     if (result.success) {
       await loadSystemConfig();
-      showToast("系统配置保存成功", "success");
-      showToast("配置已更新，需要重启应用系统以使配置生效", "warning");
+      showToast(t('system.config_save_success'), "success");
+      showToast(t('system.config_saved_restart_needed'), "warning");
       sessionStorage.setItem("configUpdated", "true");
     } else {
-      showToast("系统配置保存失败: " + result.message, "error");
+      showToast(t('system.config_save_failed') + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存系统配置失败:", error);
-    showToast("系统配置保存失败: " + error.message, "error");
+    showToast(t('system.config_save_failed') + ": " + error.message, "error");
   }
 }
 
@@ -167,7 +167,7 @@ function checkConfigUpdateRestartPrompt() {
   // 检查是否有配置更新标记
   if (sessionStorage.getItem("configUpdated") === "true") {
     // 显示重启提示
-    showToast("配置已更新，需要重启应用系统以使配置生效", "warning");
+    showToast(t('system.config_saved_restart_needed'), "warning");
   }
 }
 
@@ -204,7 +204,7 @@ async function loadSmtpConfig() {
         const pwdEl = elementCache.get("smtp-password");
         if (pwdEl) {
           pwdEl.value = "";
-          pwdEl.placeholder = smtpConfig.has_password ? "已配置（留空保持不变）" : "请输入密码";
+          pwdEl.placeholder = smtpConfig.has_password ? t('smtp.password_configured') : t('smtp.password_input');
         }
         elementCache.setValue("smtp-from", smtpConfig.from || "");
         const secureTypeElement = elementCache.get("smtp-secure-type");
@@ -248,13 +248,13 @@ try {
 
     const result = await apiPut("/api/system/smtp/config", smtpConfig);
     if (result.success) {
-      showToast("SMTP配置保存成功", "success");
+      showToast(t('smtp.save_success'), "success");
     } else {
-      showToast("SMTP配置保存失败: " + result.message, "error");
+      showToast(t('smtp.save_failed') + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存SMTP配置失败:", error);
-    showToast("SMTP配置保存失败: " + error.message, "error");
+    showToast(t('smtp.save_failed') + ": " + error.message, "error");
   }
 }
 
@@ -273,13 +273,13 @@ export async function testSmtpConnection() {
 
     const result = await apiPost("/api/system/smtp/test", smtpConfig);
     if (result.success) {
-      showToast("SMTP连接测试成功", "success");
+      showToast(t('smtp.test_success'), "success");
     } else {
-      showToast("SMTP连接测试失败: " + result.message, "error");
+      showToast(t('smtp.test_failed') + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("测试SMTP连接失败:", error);
-    showToast("测试SMTP连接失败: " + error.message, "error");
+    showToast(t('smtp.test_error') + ": " + error.message, "error");
   }
 }
 
@@ -358,13 +358,13 @@ export async function saveNotificationSettings() {
     });
     
     if (result.success) {
-      showToast("通知设置保存成功", "success");
+      showToast(t('notification.save_success'), "success");
     } else {
-      showToast("通知设置保存失败: " + result.message, "error");
+      showToast(t('notification.save_failed') + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存通知设置失败:", error);
-    showToast("保存通知设置失败: " + error.message, "error");
+    showToast(t('notification.save_error') + ": " + error.message, "error");
   }
 }
 
@@ -403,7 +403,7 @@ export async function downloadTemplate() {
     const result = await apiRequest("/api/system/import-export/template?type=all");
 
     if (!result.success) {
-      showToast("下载模板失败: " + result.message, "error");
+      showToast(t('import_export.download_template_failed') + ": " + result.message, "error");
       return;
     }
 
@@ -419,7 +419,7 @@ export async function downloadTemplate() {
     }
   } catch (error) {
     console.error("下载模板失败:", error);
-    showToast("下载模板失败: " + error.message, "error");
+    showToast(t('import_export.download_template_failed') + ": " + error.message, "error");
   }
 }
 
@@ -441,7 +441,7 @@ export async function importCsvData() {
     formData.append("file", file);
 
     try {
-      showToast("正在导入数据，请稍候...", "info");
+      showToast(t('import_export.importing'), "info");
       
       const result = await apiRequest(`/api/system/import-export/import/csv?mode=${mode}`, {
         method: "POST",
@@ -458,13 +458,13 @@ export async function importCsvData() {
             await openModal("import-result-modal");
           }
         }
-        showToast("数据导入完成", "success");
+        showToast(t('import_export.import_success'), "success");
       } else {
-        showToast("数据导入失败: " + result.message, "error");
+        showToast(t('import_export.import_failed') + ": " + result.message, "error");
       }
     } catch (error) {
       console.error("导入CSV数据失败:", error);
-      showToast("数据导入失败: " + error.message, "error");
+      showToast(t('import_export.import_failed') + ": " + error.message, "error");
     }
   });
 }
@@ -476,7 +476,7 @@ export async function exportCsvData() {
     const result = await apiRequest(`/api/system/import-export/export/csv?type=${exportType}`);
 
     if (!result.success) {
-      showToast("导出CSV数据失败: " + result.message, "error");
+      showToast(t('import_export.export_csv_failed') + ": " + result.message, "error");
       return;
     }
 
@@ -495,7 +495,7 @@ export async function exportCsvData() {
     }
   } catch (error) {
     console.error("导出CSV数据失败:", error);
-    showToast("导出CSV数据失败: " + error.message, "error");
+    showToast(t('import_export.export_csv_failed') + ": " + error.message, "error");
   }
 }
 
@@ -513,7 +513,7 @@ export async function exportDatabase() {
         const errorData = await response.json();
         errorMsg = errorData.message || errorMsg;
       } catch (e) {}
-      showToast("导出数据库失败: " + errorMsg, "error");
+      showToast(t('import_export.export_db_failed') + ": " + errorMsg, "error");
       return;
     }
 
@@ -538,10 +538,10 @@ export async function exportDatabase() {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 
-    showToast("数据库导出成功", "success");
+    showToast(t('import_export.export_db_success'), "success");
   } catch (error) {
     console.error("导出数据库失败:", error);
-    showToast("导出数据库失败: " + error.message, "error");
+    showToast(t('import_export.export_db_failed') + ": " + error.message, "error");
   }
 }
 
@@ -551,7 +551,7 @@ export async function backupConfig() {
     const result = await apiRequest("/api/system/config/backup");
 
     if (!result.success) {
-      showToast("备份配置失败: " + result.message, "error");
+      showToast(t('import_export.backup_failed') + ": " + result.message, "error");
       return;
     }
 
@@ -569,7 +569,7 @@ export async function backupConfig() {
     }
   } catch (error) {
     console.error("备份配置失败:", error);
-    showToast("备份配置失败: " + error.message, "error");
+    showToast(t('import_export.backup_failed') + ": " + error.message, "error");
   }
 }
 
@@ -594,18 +594,18 @@ const fileInput = document.createElement("input");
       });
 
       if (result.success) {
-        showToast("配置恢复成功", "success");
+        showToast(t('import_export.restore_success'), "success");
         // 显示重启提示，告知用户需要重启程序
-        showToast("配置已更新，需要重启应用系统以使配置生效", "warning");
-        
+        showToast(t('system.config_saved_restart_needed'), "warning");
+
         // 设置重启提示标记，用于后续的持续提示
         sessionStorage.setItem("configUpdated", "true");
       } else {
-        showToast("配置恢复失败: " + result.message, "error");
+        showToast(t('import_export.restore_failed') + ": " + result.message, "error");
       }
     } catch (error) {
       console.error("恢复配置失败:", error);
-      showToast("恢复配置失败: " + error.message, "error");
+      showToast(t('import_export.restore_error') + ": " + error.message, "error");
     }
   });
 }
@@ -625,12 +625,12 @@ export async function loadLogsStats() {
         stats.notifications?.count || 0;
       
       if (stats.operation_logs?.oldest) {
-        elementCache.get("operation-logs-oldest").textContent = 
-          `最早: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
+        elementCache.get("operation-logs-oldest").textContent =
+          `${t('logs.earliest_label')}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
       }
       if (stats.login_logs?.oldest) {
-        elementCache.get("login-logs-oldest").textContent = 
-          `最早: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
+        elementCache.get("login-logs-oldest").textContent =
+          `${t('logs.earliest_label')}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
       }
     }
   } catch (error) {
@@ -646,9 +646,9 @@ export async function clearLogs() {
   
   let confirmMsg;
   if (days === 0) {
-    confirmMsg = t('logs.clear_all_confirm') || "确定要删除全部日志吗？此操作不可撤销。";
+    confirmMsg = t('logs.clear_all_confirm');
   } else {
-    confirmMsg = t('logs.clear_days_confirm', { days }) || `确定要清理 ${days} 天前的日志吗？此操作不可撤销。`;
+    confirmMsg = t('logs.clear_days_confirm', { days });
   }
   
   if (!confirmMsg) {

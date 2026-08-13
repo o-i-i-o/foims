@@ -5,6 +5,7 @@ import { formatDateTime } from './formatter.js';
 import { closeModal as closeModalFn } from './modal.js';
 import { apiPost, apiPut, apiDelete } from './apiClient.js';
 import { escapeHtml } from './helpers.js';
+import { t } from './i18n.js';
 
 export {
     showToastFn as showToast,
@@ -96,7 +97,7 @@ export function renderTable(container, dataOrOptions, renderFn, emptyMessage, co
     
     if (Array.isArray(dataOrOptions)) {
         data = dataOrOptions;
-        empty = emptyMessage || '暂无数据';
+        empty = emptyMessage || t('common.no_data');
         colspan = colSpan || 1;
         
         const tbody = el.querySelector('tbody') || el;
@@ -118,7 +119,7 @@ export function renderTable(container, dataOrOptions, renderFn, emptyMessage, co
         const options = dataOrOptions;
         data = options.data || [];
         columns = options.columns || [];
-        empty = options.emptyMessage || '暂无数据';
+        empty = options.emptyMessage || t('common.no_data');
         const rowIdField = options.rowIdField || 'id';
         const onRowClick = options.onRowClick;
         const onRowDoubleClick = options.onRowDoubleClick;
@@ -191,7 +192,7 @@ export function getElementValue(id) {
     return element.value?.trim() ?? '';
 }
 
-export function handleError(error, defaultMessage = '操作失败') {
+export function handleError(error, defaultMessage = t('common.operation_failed')) {
     console.error('Error:', error);
     
     if (error.message) {
@@ -205,11 +206,11 @@ export function handleError(error, defaultMessage = '操作失败') {
 
 export async function handleFormSubmit(config) {
     const { 
-        formData, 
-        id, 
-        baseUrl, 
-        successMessage = '保存成功', 
-        errorMessage = '保存失败',
+        formData,
+        id,
+        baseUrl,
+        successMessage = t('common.save_success'),
+        errorMessage = t('common.save_failed'),
         modalId,
         reloadFunction
     } = config;
@@ -253,17 +254,17 @@ export async function handleDelete(id, apiOrCallback, successMessageOrOptions, c
             successMessage = successMessageOrOptions;
             options = typeof callbackOrOptions === 'object' ? callbackOrOptions : {};
         } else {
-            successMessage = '删除成功';
+            successMessage = t('common.delete_success');
             options = successMessageOrOptions || {};
         }
         refreshCallback = typeof callbackOrOptions === 'function' ? callbackOrOptions : null;
     } else {
         options = successMessageOrOptions || {};
-        successMessage = options.successMessage || '删除成功';
+        successMessage = options.successMessage || t('common.delete_success');
     }
-    
-    const confirmMessage = options.confirmMessage || '确定要删除吗？';
-    const errorMessage = options.errorMessage || '删除失败';
+
+    const confirmMessage = options.confirmMessage || t('common.delete_confirm');
+    const errorMessage = options.errorMessage || t('common.delete_failed');
     
     const confirmed = await showConfirm(confirmMessage);
     if (!confirmed) return { success: false, cancelled: true };
@@ -294,14 +295,14 @@ export async function handleDelete(id, apiOrCallback, successMessageOrOptions, c
     }
 }
 
-export function appendPaginationToTable(container, data, onPageChange) {
+export function appendPaginationToTable(container, data, onPageChange, options = {}) {
     const el = typeof container === 'string' ? document.querySelector(container) : container;
-    
+
     if (!el) return;
-    
+
     const tableContainer = el.closest('.table-container');
     let paginationContainer;
-    
+
     if (tableContainer) {
         let existingPagination = tableContainer.querySelector('.pagination-container');
         if (existingPagination) {
@@ -317,24 +318,37 @@ export function appendPaginationToTable(container, data, onPageChange) {
         }
         paginationContainer = el;
     }
-    
+
     const total = data.total || 0;
     const currentPage = data.page || 1;
-    const pageSize = data.page_size || 20;
-    const totalPages = Math.ceil(total / pageSize);
-    
-    if (totalPages <= 1) {
+    const pageSize = data.page_size || options.pageSize || 20;
+    // Trust the backend's total_pages when provided; only fall back to a local
+    // computation when it is missing. Previously this always recomputed
+    // Math.ceil(total / 20), which broke callers that use a different page size
+    // (e.g. the IP table uses 100) and rendered many phantom empty pages.
+    const totalPages = (data.total_pages != null && data.total_pages > 0)
+        ? data.total_pages
+        : Math.ceil(total / pageSize);
+
+    // Even with a single page we may still want the page-size selector, so only
+    // short-circuit when there is nothing interactive to show.
+    const hasSizeSelector = typeof options.onPageSizeChange === 'function';
+    if (totalPages <= 1 && !hasSizeSelector) {
         if (paginationContainer && paginationContainer.classList.contains('pagination-container')) {
             paginationContainer.innerHTML = '';
         }
         return;
     }
-    
+
     const paginationWrapper = document.createElement('div');
     paginationWrapper.className = 'pagination-wrapper';
-    
-    renderPaginationFn(paginationWrapper, currentPage, totalPages, onPageChange, total);
-    
+
+    renderPaginationFn(paginationWrapper, currentPage, totalPages, onPageChange, total, {
+        pageSize,
+        pageSizeOptions: options.pageSizeOptions,
+        onPageSizeChange: options.onPageSizeChange,
+    });
+
     paginationContainer.innerHTML = '';
     paginationContainer.appendChild(paginationWrapper);
 }

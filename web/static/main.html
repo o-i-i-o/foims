@@ -742,17 +742,17 @@
                 <div class="config-row">
                   <div class="config-field">
                     <label for="smtp-username" data-i18n="smtp.username">Username</label>
-                    <input type="text" id="smtp-username" name="username" placeholder="SMTP username" aria-label="SMTP username" />
+                    <input type="text" id="smtp-username" name="username" placeholder="SMTP username" data-i18n-placeholder="smtp.username_placeholder" aria-label="SMTP username" />
                   </div>
                   <div class="config-field">
                     <label for="smtp-password" data-i18n="smtp.password">Password</label>
-                    <input type="password" id="smtp-password" name="password" placeholder="SMTP password" aria-label="SMTP password" autocomplete="new-password" />
+                    <input type="password" id="smtp-password" name="password" placeholder="SMTP password" data-i18n-placeholder="smtp.password_placeholder" aria-label="SMTP password" autocomplete="new-password" />
                   </div>
                 </div>
                 <div class="config-row">
                   <div class="config-field">
                     <label for="smtp-from" data-i18n="smtp.from">Sender Email</label>
-                    <input type="email" id="smtp-from" name="from" placeholder="Sender email" aria-label="Sender email" />
+                    <input type="email" id="smtp-from" name="from" placeholder="Sender email" data-i18n-placeholder="smtp.from_placeholder" aria-label="Sender email" />
                   </div>
                   <div class="config-field">
                     <label for="smtp-secure-type" data-i18n="smtp.secure_type">SSL Connection Type</label>
@@ -894,7 +894,7 @@
                     </div>
                     <div class="form-group">
                       <label for="clear-log-days" data-i18n="logs.keep_days">Keep Days</label>
-                      <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" />
+                      <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" data-i18n-placeholder="logs.clear_zero_hint" />
                     </div>
                   </div>
                   <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 or leave empty to delete all logs. This action cannot be undone.</p>

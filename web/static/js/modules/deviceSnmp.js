@@ -97,15 +97,15 @@ export async function testSnmpConnection() {
   const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
 
   if (!ip) {
-    showToast(t('device.ip_required') || '请输入设备IP地址', 'warning');
+    showToast(t('device.ip_required'), 'warning');
     return;
   }
 
   const testBtn = elementCache.get('test-snmp-btn');
-  const originalText = testBtn?.textContent || (t('device.test_snmp') || '测试连接');
+  const originalText = testBtn?.textContent || t('device.test_snmp');
   if (testBtn) {
     testBtn.disabled = true;
-    testBtn.textContent = t('common.testing') || '测试中...';
+    testBtn.textContent = t('common.testing');
   }
 
   try {
@@ -119,12 +119,12 @@ export async function testSnmpConnection() {
     const result = await apiPost('/api/resources/devices/test-snmp', testData);
 
     if (result.success) {
-      showToast(t('device.snmp_test_success') || 'SNMP连接测试成功', 'success');
+      showToast(t('device.snmp_test_success'), 'success');
     } else {
-      showToast((t('device.snmp_test_failed') || 'SNMP连接测试失败') + ': ' + result.message, 'error');
+      showToast(t('device.snmp_test_failed') + ': ' + result.message, 'error');
     }
   } catch (error) {
-    showToast(t('device.snmp_test_failed') || 'SNMP连接测试失败', 'error');
+    showToast(t('device.snmp_test_failed'), 'error');
   } finally {
     if (testBtn) {
       testBtn.disabled = false;
@@ -140,18 +140,18 @@ export async function getDeviceInfoFromSnmp() {
   if (!deviceId) {
     const ip = formData.ips && formData.ips.length > 0 ? formData.ips[0].ip_address : null;
     if (!ip) {
-      showToast(t('device.ip_required') || '请输入设备IP地址', 'warning');
+      showToast(t('device.ip_required'), 'warning');
       return;
     }
-    showToast(t('device.save_before_snmp') || '请先保存设备后再获取SNMP信息', 'warning');
+    showToast(t('device.save_before_snmp'), 'warning');
     return;
   }
 
   const getInfoBtn = elementCache.get('get-snmp-info-btn');
-  const originalText = getInfoBtn?.textContent || (t('device.get_snmp_info') || '获取信息');
+  const originalText = getInfoBtn?.textContent || t('device.get_snmp_info');
   if (getInfoBtn) {
     getInfoBtn.disabled = true;
-    getInfoBtn.textContent = t('common.loading') || '获取中...';
+    getInfoBtn.textContent = t('device.fetching_snmp');
   }
 
   try {
@@ -161,12 +161,12 @@ export async function getDeviceInfoFromSnmp() {
       const info = result.data;
       if (info.vendor) elementCache.setValue('device-vendor', info.vendor);
       if (info.model) elementCache.setValue('device-model', info.model);
-      showToast(t('device.snmp_info_success') || '设备信息获取成功', 'success');
+      showToast(t('device.snmp_info_success'), 'success');
     } else {
-      showToast((t('device.snmp_info_failed') || '获取设备信息失败') + ': ' + result.message, 'error');
+      showToast(t('device.snmp_info_failed') + ': ' + result.message, 'error');
     }
   } catch (error) {
-    showToast(t('device.snmp_info_failed') || '获取设备信息失败', 'error');
+    showToast(t('device.snmp_info_failed'), 'error');
   } finally {
     if (getInfoBtn) {
       getInfoBtn.disabled = false;

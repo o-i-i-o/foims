@@ -124,10 +124,7 @@ function populateDeviceSelect() {
     const select = document.getElementById('scheduled-task-device-id');
     if (!select) return;
 
-    const currentLang = localStorage.getItem('language') || 'zh';
-    const selectText = currentLang === 'zh' ? '选择设备' : 'Select Device';
-
-    select.innerHTML = `<option value="">${selectText}</option>`;
+    select.innerHTML = `<option value="">${t('scheduled_tasks.config_fields.select_device')}</option>`;
     devices.forEach(dev => {
         const option = document.createElement('option');
         option.value = dev.id;
@@ -140,10 +137,7 @@ function populateNetworkSelect() {
     const select = document.getElementById('scheduled-task-network-id');
     if (!select) return;
 
-    const currentLang = localStorage.getItem('language') || 'zh';
-    const selectText = currentLang === 'zh' ? '选择网络' : 'Select Network';
-
-    select.innerHTML = `<option value="">${selectText}</option>`;
+    select.innerHTML = `<option value="">${t('scheduled_tasks.config_fields.select_network')}</option>`;
     networks.forEach(net => {
         const option = document.createElement('option');
         option.value = net.id;

@@ -47,7 +47,7 @@ class CabinetPositionsManager extends DynamicRowManager {
   }
 
   emptyHintText() {
-    return t('cabinet.no_positions_hint') || '暂无机位，点击下方按钮添加';
+    return t('cabinet.no_positions_hint');
   }
 
   init() {
@@ -149,7 +149,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
   }
 
   emptyHintText() {
-    return t('cabinet.no_patch_panels_hint') || '暂无配线架，点击下方按钮添加';
+    return t('cabinet.no_patch_panels_hint');
   }
 
   init() {
@@ -170,7 +170,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
       <div class="form-row">
         <div class="form-group">
           <input type="hidden" class="patch-panel-id" value="${escapeHtml(String(id))}" />
-          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet.patch_panel_name') || t('net_outlet.name') || '配线架名称'}" autocomplete="off" />
+          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet.patch_panel_name') || t('net_outlet.name')}" autocomplete="off" />
         </div>
         <div class="form-group">
           <button type="button" class="btn btn-danger btn-sm remove-patch-panel-btn">${t('common.delete')}</button>
@@ -218,20 +218,21 @@ export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 
 const tableState = createSortState('name', 'asc');
 let currentPage = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
 
 // 房间选择事件监听器引用
 let roomSelectHandler = null;
 
 // 加载机柜数据
-export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null) {
+export async function loadCabinetsData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const cabinets = data.items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#cabinets-table", {
       data: cabinets,
@@ -245,7 +246,7 @@ export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
         { field: 'id', render: (v) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-cabinet-positions-list" data-cabinet-id="${v}">${t('cabinet.positions_list') || '列表'}</button>
+          <button class="btn btn-sm btn-secondary btn-cabinet-positions-list" data-cabinet-id="${v}">${t('cabinet.positions_list')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
@@ -255,7 +256,13 @@ export async function loadCabinetsData(page = 1, sortBy = null, sortOrder = null
     bindCabinetButtonsEvents();
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#cabinets-table", data, loadCabinetsData);
+      appendPaginationToTable("#cabinets-table", data, loadCabinetsData, {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => {
+          currentPageSize = size;
+          loadCabinetsData(1);
+        },
+      });
     }
     updateSortIcons("cabinets-table", tableState);
   } catch (error) {
@@ -292,7 +299,7 @@ export async function openCabinetPositionsListModal(cabinetId) {
   try {
     const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
     if (!result.success || !result.data) {
-      showToast(result.message || t('cabinet.load_failed') || "加载机柜数据失败", "error");
+      showToast(result.message || t('cabinet.load_failed'), "error");
       return;
     }
     const cabinet = result.data;
@@ -301,12 +308,12 @@ export async function openCabinetPositionsListModal(cabinetId) {
     const titleEl = document.getElementById('cabinet-positions-list-modal-title');
     const tbody = document.getElementById('cabinet-positions-list-tbody');
 
-    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t('cabinet.positions_list') || '机位列表'}`;
+    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t('cabinet.positions_list')}`;
 
     const positions = cabinet.positions || [];
     if (tbody) {
       if (positions.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data') || '暂无数据'}</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data')}</td></tr>`;
       } else {
         tbody.innerHTML = positions.map((pos, idx) => `
           <tr>
@@ -320,7 +327,7 @@ export async function openCabinetPositionsListModal(cabinetId) {
       }
     }
   } catch (error) {
-    handleError(error, t('cabinet.load_failed') || "加载机柜数据失败");
+    handleError(error, t('cabinet.load_failed'));
   }
 }
 

@@ -368,11 +368,11 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
           <td>${escapeHtml(notification.content)}</td>
           <td>
             <span class="status-badge ${notification.read ? "status-active" : "status-inactive"}">
-              ${notification.read ? "已读" : "未读"}
+              ${notification.read ? t('notifications.read') : t('notifications.unread')}
             </span>
           </td>
           <td>
-            ${!notification.read ? `<button class="btn btn-sm btn-primary mark-read" data-id="${notification.id}">标记已读</button>` : ""}
+            ${!notification.read ? `<button class="btn btn-sm btn-primary mark-read" data-id="${notification.id}">${t('notifications.mark_read')}</button>` : ""}
           </td>
         `;
         tbody.appendChild(row);
@@ -382,13 +382,13 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
         appendPaginationToTable("#notifications-table", data, (p) => loadNotificationsData(filterStatus, p));
       }
     } else {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="6" class="text-center">暂无通知数据</td></tr>';
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t('notifications.no_data')}</td></tr>`;
     }
   } catch (error) {
     console.error("加载通知数据失败:", error);
     const tbody = document.querySelector("#notifications-table tbody");
     if (tbody) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="6" class="text-center">加载失败，请刷新重试</td></tr>';
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t('common.load_failed_retry')}</td></tr>`;
     }
   }
 }
@@ -400,11 +400,11 @@ async function markNotificationAsRead(notificationId) {
     if (result.success) {
       loadNotificationsData();
     } else {
-      showToast("操作失败: " + result.message, "error");
+      showToast(`${t('common.operation_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
     console.error("标记通知已读失败:", error);
-    showToast("操作失败，请重试", "error");
+    showToast(t('common.operation_failed_retry'), "error");
   }
 }
 
@@ -418,13 +418,13 @@ export async function clearReadNotifications() {
     const result = await apiPut("/api/notifications/mark-all-read", {});
     if (result.success) {
       loadNotificationsData();
-      showToast("已读通知已清除", "success");
+      showToast(t('notifications.cleared_read'), "success");
     } else {
-      showToast("操作失败: " + result.message, "error");
+      showToast(`${t('common.operation_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
     console.error("清除已读通知失败:", error);
-    showToast("操作失败，请重试", "error");
+    showToast(t('common.operation_failed_retry'), "error");
   }
 }
 
@@ -437,7 +437,7 @@ export async function saveMacNotificationEmail() {
     // 校验邮件地址格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      showToast("请输入有效的邮箱地址", "error");
+      showToast(t('notification.invalid_email'), "error");
       return;
     }
 
@@ -445,20 +445,20 @@ export async function saveMacNotificationEmail() {
     try {
       const result = await apiGet("/api/system/smtp/config");
       if (!result.success || !result.data || !result.data.host) {
-        showToast("请先在系统设置中配置SMTP服务器", "error");
+        showToast(t('notification.smtp_not_configed'), "error");
         return;
       }
 
       // SMTP配置存在，保存邮箱
       sessionStorage.setItem("macNotificationEmail", email);
-      showToast("MAC变动通知邮箱已保存", "success");
+      showToast(t('notification.email_saved'), "success");
     } catch (error) {
       console.error("检查SMTP配置失败:", error);
-      showToast("检查SMTP配置失败，请重试", "error");
+      showToast(t('notification.check_smtp_failed'), "error");
     }
   } else {
     sessionStorage.removeItem("macNotificationEmail");
-    showToast("MAC变动通知邮箱已清除", "info");
+    showToast(t('notification.email_cleared'), "info");
   }
 }
 
@@ -497,7 +497,7 @@ function initLogEvents() {
             const log = JSON.parse(logData);
             showLogDetails(log);
           } catch (e2) {
-            showToast("查看详情失败", "error");
+            showToast(t('logs.view_detail_failed'), "error");
           }
         }
       }
@@ -511,8 +511,8 @@ initLogEvents();
 function showLogDetails(log) {
   const operationTypeText = getOperationTypeText(log.operation_type);
   const resourceTypeText = getResourceTypeText(log.resource_type);
-  const resultText = log.result ? "成功" : "失败";
-  
+  const resultText = log.result ? t('common.success') : t('common.failed');
+
   let detailsHtml = '';
   if (log.details) {
     try {
@@ -522,52 +522,52 @@ function showLogDetails(log) {
       detailsHtml = `<p>${escapeHtml(String(log.details))}</p>`;
     }
   } else {
-    detailsHtml = '<p class="text-muted">无详细信息</p>';
+    detailsHtml = `<p class="text-muted">${t('logs.no_detail')}</p>`;
   }
 
   const modalHtml = `
     <div id="log-details-modal" class="modal modal-flex">
       <div class="modal-content modal-md">
         <div class="modal-header">
-          <h3 class="modal-title">操作日志详情</h3>
+          <h3 class="modal-title">${t('logs.detail_title')}</h3>
           <span class="close" data-action="close-modal">&times;</span>
         </div>
         <div class="modal-body">
           <div class="log-detail-row">
-            <label>操作时间:</label>
+            <label>${t('logs.operation_time')}:</label>
             <span>${new Date(log.created_at).toLocaleString()}</span>
           </div>
           <div class="log-detail-row">
-            <label>操作人:</label>
+            <label>${t('logs.operator')}:</label>
             <span>${escapeHtml(log.username || "-")}</span>
           </div>
           <div class="log-detail-row">
-            <label>操作类型:</label>
+            <label>${t('logs.operation_type')}:</label>
             <span>${escapeHtml(operationTypeText)}</span>
           </div>
           <div class="log-detail-row">
-            <label>资源类型:</label>
+            <label>${t('logs.resource_type')}:</label>
             <span>${escapeHtml(resourceTypeText || "-")}</span>
           </div>
           <div class="log-detail-row">
-            <label>资源ID:</label>
+            <label>${t('logs.resource_id')}:</label>
             <span>${escapeHtml(String(log.resource_id || "-"))}</span>
           </div>
           <div class="log-detail-row">
-            <label>执行结果:</label>
+            <label>${t('logs.result')}:</label>
             <span class="status-badge ${log.result ? 'status-active' : 'status-inactive'}">${resultText}</span>
           </div>
           <div class="log-detail-row">
-            <label>IP地址:</label>
+            <label>${t('logs.ip_address')}:</label>
             <span>${escapeHtml(log.ip_address || "-")}</span>
           </div>
           <div class="log-detail-section">
-            <label>详细信息:</label>
+            <label>${t('logs.details')}:</label>
             ${detailsHtml}
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-action="close-modal">关闭</button>
+          <button class="btn btn-secondary" data-action="close-modal">${t('common.close')}</button>
         </div>
       </div>
     </div>

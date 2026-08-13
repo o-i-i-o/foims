@@ -18,13 +18,13 @@ async function viewArpTable(deviceId) {
   modal.innerHTML = `
     <div class="modal-content" style="max-width: 800px;">
       <div class="modal-header">
-        <h3>${t('device.mac_table') || 'MAC表'} <span id="arp-device-name"></span></h3>
+        <h3>${t('device.mac_table')} <span id="arp-device-name"></span></h3>
         <span class="close arp-modal-close">&times;</span>
       </div>
       <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
         <div id="arp-loading" style="text-align: center; padding: 40px;">
           <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">${t('device.loading_mac_table') || '正在加载MAC表...'}</p>
+          <p style="margin-top: 10px; color: #666;">${t('device.loading_mac_table')}</p>
         </div>
         <div id="arp-content" style="display: none;">
           <div class="tab-container">
@@ -34,18 +34,18 @@ async function viewArpTable(deviceId) {
                 <button class="tab-btn" data-tab="ipv6">IPv6</button>
               </div>
               <button class="btn btn-sm btn-primary" id="sync-mac-btn">
-                <span>${t('device.sync_from_snmp') || '从SNMP同步'}</span>
+                <span>${t('device.sync_from_snmp')}</span>
               </button>
             </div>
             <div class="tab-content active" id="ipv4-tab">
               <div style="margin-bottom: 10px;">
-                <input type="text" id="ipv4-search" placeholder="${t('device.search_ip_mac') || '搜索IP或MAC地址...'}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="text" id="ipv4-search" placeholder="${t('device.search_ip_mac')}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
               </div>
               <div id="ipv4-table-container" style="max-height: 350px; overflow-y: auto;"></div>
             </div>
             <div class="tab-content" id="ipv6-tab">
               <div style="margin-bottom: 10px;">
-                <input type="text" id="ipv6-search" placeholder="${t('device.search_ip_mac') || '搜索IP或MAC地址...'}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="text" id="ipv6-search" placeholder="${t('device.search_ip_mac')}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
               </div>
               <div id="ipv6-table-container" style="max-height: 350px; overflow-y: auto;"></div>
             </div>
@@ -53,7 +53,7 @@ async function viewArpTable(deviceId) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary arp-modal-close">${t('common.close') || '关闭'}</button>
+        <button class="btn btn-secondary arp-modal-close">${t('common.close')}</button>
       </div>
     </div>
   `;
@@ -85,7 +85,7 @@ async function viewArpTable(deviceId) {
     try {
       const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
       if (!deviceResult.success) {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_failed') || '获取设备信息失败'}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_failed')}</p>`;
         return;
       }
 
@@ -96,12 +96,12 @@ async function viewArpTable(deviceId) {
 
       if (result.success) {
         const entries = result.data || [];
-        nameEl.textContent = `- ${deviceData.name} (${entries.length}${t('common.records') || '条'})`;
+        nameEl.textContent = `- ${deviceData.name} (${entries.length} ${t('common.records')})`;
 
         if (entries.length === 0) {
           loadingEl.innerHTML = `
-            <p style="color: #666; margin-bottom: 10px;">${t('device.no_mac_data') || '暂无MAC数据，请点击"从SNMP同步"按钮获取'}</p>
-            <button class="btn btn-primary" id="sync-mac-empty-btn">${t('device.sync_from_snmp') || '从SNMP同步'}</button>
+            <p style="color: #666; margin-bottom: 10px;">${t('device.no_mac_data')}</p>
+            <button class="btn btn-primary" id="sync-mac-empty-btn">${t('device.sync_from_snmp')}</button>
           `;
           modal.querySelector("#sync-mac-empty-btn").addEventListener("click", () => syncMacData());
           return;
@@ -160,10 +160,10 @@ async function viewArpTable(deviceId) {
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_mac_failed') || '加载MAC表失败'}: ${escapeHtml(result.message || '')}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_mac_failed')}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed')}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -179,7 +179,7 @@ async function viewArpTable(deviceId) {
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>
-      <p style="margin-top: 10px; color: #666;">${t('device.syncing_mac') || '正在从SNMP同步MAC表...'}</p>
+      <p style="margin-top: 10px; color: #666;">${t('device.syncing_mac')}</p>
     `;
 
     try {
@@ -187,10 +187,10 @@ async function viewArpTable(deviceId) {
       if (result.success) {
         await loadArpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(result.message || '')}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed')}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed')}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -201,7 +201,7 @@ async function viewArpTable(deviceId) {
 
 function renderMacTable(entries, type) {
   if (entries.length === 0) {
-    return `<p style="text-align: center; color: #666; padding: 20px;">${type === 'ipv4' ? 'IPv4' : 'IPv6'} ${t('common.no_data') || '暂无数据'}</p>`;
+    return `<p style="text-align: center; color: #666; padding: 20px;">${type === 'ipv4' ? 'IPv4' : 'IPv6'} ${t('common.no_data')}</p>`;
   }
 
   const groups = groupByNetwork(entries, type);
@@ -216,12 +216,12 @@ function renderMacTable(entries, type) {
 
     html += `<div style="margin-bottom: 10px;">
       <div class="network-group-header" data-target="${groupId}" style="background: #f5f5f5; padding: 8px 12px; font-weight: bold; border-left: 3px solid #4CAF50; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none;">
-        <span>${escapeHtml(network)} (${items.length}${t('common.records') || '条'})</span>
+        <span>${escapeHtml(network)} (${items.length} ${t('common.records')})</span>
         <span class="collapse-icon" style="transition: transform 0.2s; transform: ${iconRotate};">▼</span>
       </div>
       <div id="${groupId}" class="network-group-content" style="display: ${displayStyle};">
         <table style="width:100%; border-collapse: collapse;">
-          <tr><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t('device.ip_address') || 'IP地址'}</th><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t('device.mac_address') || 'MAC地址'}</th></tr>`;
+          <tr><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t('device.ip_address')}</th><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t('device.mac_address')}</th></tr>`;
     items.forEach((entry) => {
       html += `<tr><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.ip_address)}</td><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.mac_address)}</td></tr>`;
     });
@@ -257,23 +257,23 @@ function groupByNetwork(entries, type) {
     let network;
     if (type === 'ipv4') {
       const parts = entry.ip_address.split('.');
-      network = parts.length >= 3 ? `${parts[0]}.${parts[1]}.${parts[2]}.0/24` : (t('device.unknown_network') || '未知网段');
+      network = parts.length >= 3 ? `${parts[0]}.${parts[1]}.${parts[2]}.0/24` : t('device.unknown_network');
     } else {
       const parts = entry.ip_address.split(':');
       if (parts.length >= 2) {
         if (entry.ip_address.startsWith('fe80')) {
-          network = 'fe80::/10 (链路本地)';
+          network = `fe80::/10 (${t('device.link_local')})`;
         } else if (entry.ip_address.startsWith('fd') || entry.ip_address.startsWith('fc')) {
           network = `${parts[0]}::/16 (ULA)`;
         } else if (parts[0] === '240e' || parts[0] === '2409' || parts[0] === '2408') {
           const prefix = parts.slice(0, 4).join(':');
-          network = `${prefix}::/64 (公网)`;
+          network = `${prefix}::/64 (${t('device.public_network')})`;
         } else {
           const prefix = parts.slice(0, 4).join(':');
           network = `${prefix}::/64`;
         }
       } else {
-        network = t('device.unknown_network') || '未知网段';
+        network = t('device.unknown_network');
       }
     }
 
@@ -319,19 +319,19 @@ async function viewLldpNeighbors(deviceId) {
   modal.innerHTML = `
     <div class="modal-content" style="max-width: 900px;">
       <div class="modal-header">
-        <h3>${t('device.lldp_neighbors') || 'LLDP邻居信息'} <span id="lldp-device-name"></span></h3>
+        <h3>${t('device.lldp_neighbors')} <span id="lldp-device-name"></span></h3>
         <span class="close lldp-modal-close">&times;</span>
       </div>
       <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
         <div id="lldp-loading" style="text-align: center; padding: 40px;">
           <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">${t('device.loading_lldp') || '正在加载LLDP邻居信息...'}</p>
+          <p style="margin-top: 10px; color: #666;">${t('device.loading_lldp')}</p>
         </div>
         <div id="lldp-content" style="display: none;"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" id="sync-lldp-btn">${t('device.sync_from_snmp') || '从SNMP同步'}</button>
-        <button class="btn btn-secondary lldp-modal-close">${t('common.close') || '关闭'}</button>
+        <button class="btn btn-primary" id="sync-lldp-btn">${t('device.sync_from_snmp')}</button>
+        <button class="btn btn-secondary lldp-modal-close">${t('common.close')}</button>
       </div>
     </div>
   `;
@@ -359,7 +359,7 @@ async function viewLldpNeighbors(deviceId) {
     try {
       const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
       if (!deviceResult.success) {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_failed') || '获取设备信息失败'}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_failed')}</p>`;
         return;
       }
 
@@ -370,12 +370,12 @@ async function viewLldpNeighbors(deviceId) {
 
       if (result.success) {
         const neighbors = result.data || [];
-        nameEl.textContent = `- ${deviceData.name} (${neighbors.length}${t('common.records') || '条'})`;
+        nameEl.textContent = `- ${deviceData.name} (${neighbors.length} ${t('common.records')})`;
 
         if (neighbors.length === 0) {
           loadingEl.innerHTML = `
-            <p style="color: #666; margin-bottom: 10px;">${t('device.no_lldp_data') || '暂无LLDP数据，请点击"从SNMP同步"按钮获取'}</p>
-            <button class="btn btn-primary" id="sync-lldp-empty-btn">${t('device.sync_from_snmp') || '从SNMP同步'}</button>
+            <p style="color: #666; margin-bottom: 10px;">${t('device.no_lldp_data')}</p>
+            <button class="btn btn-primary" id="sync-lldp-empty-btn">${t('device.sync_from_snmp')}</button>
           `;
           modal.querySelector("#sync-lldp-empty-btn").addEventListener("click", () => syncLldpData());
           return;
@@ -385,10 +385,10 @@ async function viewLldpNeighbors(deviceId) {
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_lldp_failed') || '加载LLDP邻居失败'}: ${escapeHtml(result.message || '')}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_lldp_failed')}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed')}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -404,7 +404,7 @@ async function viewLldpNeighbors(deviceId) {
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>
-      <p style="margin-top: 10px; color: #666;">${t('device.syncing_lldp') || '正在从SNMP同步LLDP信息...'}</p>
+      <p style="margin-top: 10px; color: #666;">${t('device.syncing_lldp')}</p>
     `;
 
     try {
@@ -412,10 +412,10 @@ async function viewLldpNeighbors(deviceId) {
       if (result.success) {
         await loadLldpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(result.message || '')}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed')}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed')}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -432,12 +432,12 @@ function renderLldpTable(neighbors) {
     <table class="table table-bordered" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
       <thead>
         <tr style="background-color: var(--bg-secondary, #f0f2f5);">
-          <th style="width: 60px; text-align: center; border: 1px solid var(--border-color, #ddd); padding: 12px 8px; font-weight: 600;">${t('common.index') || '序号'}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.local_port') || '本地端口'}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.neighbor_device') || '邻居设备'}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.neighbor_port') || '邻居端口'}</th>
+          <th style="width: 60px; text-align: center; border: 1px solid var(--border-color, #ddd); padding: 12px 8px; font-weight: 600;">${t('common.index')}</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.local_port')}</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.neighbor_device')}</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.neighbor_port')}</th>
           <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">Chassis ID</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.system_description') || '系统描述'}</th>
+          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t('device.system_description')}</th>
         </tr>
       </thead>
       <tbody>

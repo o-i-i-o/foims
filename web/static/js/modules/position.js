@@ -21,10 +21,10 @@ export async function editCabinetPosition(id) {
     if (result.success) {
       openCabinetPositionModal(result.data);
     } else {
-      showToast(`获取机位数据失败: ${result.message}`, "error");
+      showToast(`${t('cabinet_position.load_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取机位数据失败");
+    handleError(error, t('cabinet_position.load_failed'));
   }
 }
 
@@ -40,28 +40,28 @@ export async function submitCabinetPositionForm() {
 
   // 验证必填字段
   if (!name.trim()) {
-    showToast("名称不能为空", "warning");
+    showToast(t('cabinet_position.name_required'), "warning");
     return;
   }
 
   if (!cabinetId) {
-    showToast("请选择机柜", "warning");
+    showToast(t('cabinet_position.cabinet_required'), "warning");
     return;
   }
 
   // 验证U位是否为有效数字
   if (isNaN(startU) || startU <= 0) {
-    showToast("起始U位必须是有效的正数", "warning");
+    showToast(t('cabinet_position.start_u_invalid'), "warning");
     return;
   }
 
   if (isNaN(endU) || endU <= 0) {
-    showToast("结束U位必须是有效的正数", "warning");
+    showToast(t('cabinet_position.end_u_invalid'), "warning");
     return;
   }
 
   if (startU > endU) {
-    showToast("起始U位不能大于结束U位", "warning");
+    showToast(t('cabinet_position.start_gt_end'), "warning");
     return;
   }
 
@@ -83,15 +83,15 @@ export async function submitCabinetPositionForm() {
 
     if (result.success) {
       closeModal("cabinet-position-modal");
-      showToast("机位保存成功", "success");
+      showToast(t('cabinet_position.save_success'), "success");
     } else {
-      const errorMsg = result.message || "操作失败，请检查输入信息";
-      showToast(`操作失败: ${errorMsg}`, "error");
+      const errorMsg = result.message || t('common.check_input');
+      showToast(`${t('common.operation_failed')}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
     console.error("提交机位表单失败:", error);
-    showToast("操作失败，请重试", "error");
+    showToast(t('common.operation_failed_retry'), "error");
   }
 }
 
@@ -107,7 +107,7 @@ export async function openCabinetPositionModal(position = null) {
 
   // 从 cabinets 数据源只读加载房间选项（去重）
   const loadRoomsFromCabinets = async () => {
-    roomSelect.innerHTML = `<option value="">${t('cabinet_position.select_room', '选择房间')}</option>`;
+    roomSelect.innerHTML = `<option value="">${t('cabinet_position.select_room')}</option>`;
 
     try {
       const result = await apiGet('/api/resources/cabinets');
@@ -136,7 +136,7 @@ export async function openCabinetPositionModal(position = null) {
   // 房间选择变化时加载机柜（只读）
   const handleRoomChange = async () => {
     const roomId = roomSelect.value;
-    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_cabinet', '选择机柜')}</option>`;
+    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_cabinet')}</option>`;
 
     if (roomId) {
       try {
@@ -182,7 +182,7 @@ export async function openCabinetPositionModal(position = null) {
 
   if (position) {
     // 编辑模式
-    title.textContent = "编辑机位";
+    title.textContent = t('cabinet_position.edit');
     elementCache.setValue('cabinet-position-id', position.id);
     elementCache.setValue('cabinet-position-name', position.name);
     elementCache.setValue('cabinet-position-start-u', position.start_u || 1);
@@ -200,9 +200,9 @@ export async function openCabinetPositionModal(position = null) {
     }
   } else {
     // 添加模式
-    title.textContent = "添加机位";
+    title.textContent = t('cabinet_position.add');
     form.reset();
     elementCache.setValue('cabinet-position-id', '');
-    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_room_first', '请先选择房间')}</option>`;
+    cabinetSelect.innerHTML = `<option value="">${t('cabinet_position.select_room_first')}</option>`;
   }
 }

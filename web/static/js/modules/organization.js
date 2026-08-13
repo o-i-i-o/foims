@@ -726,7 +726,7 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
   // 如果没有提供图标，使用默认图标（同步）
   iconBtn.dataset.icon = icon || "📁";
   iconBtn.textContent = iconBtn.dataset.icon;
-  iconBtn.title = t("org_template.select_icon") || "选择图标";
+  iconBtn.title = t("org_template.select_icon");
   iconBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     showIconPicker(iconBtn);

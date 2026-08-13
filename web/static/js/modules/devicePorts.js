@@ -65,14 +65,14 @@ async function loadDevicePortsData(page = 1, searchTerm = "") {
           <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: t('device.no_ports') || '暂无端口数据'
+      emptyMessage: t('device.no_ports')
     });
 
     if (data.total !== undefined) {
       appendPaginationToTable("#device-ports-table", data, (p) => loadDevicePortsData(p, searchTerm));
     }
   } catch (error) {
-    handleError(error, t('device.load_ports_failed') || "加载端口数据失败", () => {
+    handleError(error, t('device.load_ports_failed'), () => {
       renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
     });
   }
@@ -101,7 +101,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
             <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
           ` }
         ],
-        emptyMessage: t('device.no_ports') || '暂无端口数据'
+        emptyMessage: t('device.no_ports')
       });
       return;
     }
@@ -119,7 +119,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
       addBtn = document.createElement("button");
       addBtn.id = "add-device-port-btn";
       addBtn.className = "btn btn-primary btn-sm";
-      addBtn.textContent = t('device.add_port') || "添加端口";
+      addBtn.textContent = t('device.add_port');
       addBtn.addEventListener("click", () => openDevicePortModal(null, getCurrentDeviceId()));
       actionButtonsContainer.appendChild(addBtn);
     }
@@ -129,7 +129,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
       snmpPortsBtn = document.createElement("button");
       snmpPortsBtn.id = "sync-snmp-ports-btn";
       snmpPortsBtn.className = "btn btn-secondary btn-sm";
-      snmpPortsBtn.textContent = t('device.sync_ports_from_snmp') || "从SNMP获取端口";
+      snmpPortsBtn.textContent = t('device.sync_ports_from_snmp');
       snmpPortsBtn.addEventListener("click", () => syncPortsFromSnmp(getCurrentDeviceId()));
       actionButtonsContainer.appendChild(snmpPortsBtn);
     }
@@ -148,7 +148,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
           <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
-      emptyMessage: t('device.no_ports') || '暂无端口数据'
+      emptyMessage: t('device.no_ports')
     });
   } catch (error) {
     renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
@@ -162,19 +162,19 @@ async function manageDevicePorts(deviceId, deviceName) {
   try {
     const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
     if (!deviceResult.success) {
-      showToast(t('device.load_failed') || "获取设备信息失败，请检查网络连接", "error");
+      showToast(t('device.load_failed'), "error");
       return;
     }
 
     const deviceData = deviceResult.data;
     const hasSnmpConfig = deviceData.snmp_community || deviceData.snmp_username;
     if (!hasSnmpConfig) {
-      showToast(t('device.no_snmp_config') || "该设备未配置SNMP信息，无法获取端口数据", "warning");
+      showToast(t('device.no_snmp_config'), "warning");
     }
 
     const portsResult = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
     if (!portsResult.success) {
-      showToast(t('device.load_ports_failed') || "获取端口数据失败", "error");
+      showToast(t('device.load_ports_failed'), "error");
       return;
     }
 
@@ -191,7 +191,7 @@ async function manageDevicePorts(deviceId, deviceName) {
     await showPortGroupsModal(deviceName, portGroups, deviceId);
   } catch (error) {
     console.error("管理设备端口失败:", error);
-    showToast(t('common.operation_failed') || "操作失败，请重试", "error");
+    showToast(t('common.operation_failed_retry'), "error");
   }
 }
 
@@ -215,7 +215,7 @@ function groupPorts(ports) {
 
   ports.forEach(port => {
     const portNumber = port.port_number;
-    let groupKey = t('device.port_group_other') || "其他";
+    let groupKey = t('device.port_group_other');
 
     for (const { regex, subGroup } of portTypePatterns) {
       const match = portNumber.match(regex);
@@ -247,7 +247,7 @@ function groupPorts(ports) {
   });
 
   if (smallGroupPorts.length > 0) {
-    const otherKey = t('device.port_group_other') || "其他";
+    const otherKey = t('device.port_group_other');
     if (finalGroups[otherKey]) {
       finalGroups[otherKey].push(...smallGroupPorts);
     } else {
@@ -271,7 +271,7 @@ async function showPortGroupsModal(deviceName, portGroups, deviceId) {
     return;
   }
 
-  title.textContent = `${deviceName} - ${t('device.port_groups') || '端口分组显示'}`;
+  title.textContent = `${deviceName} - ${t('device.port_groups')}`;
   container.innerHTML = "";
 
   Object.entries(portGroups).forEach(([groupName, ports]) => {
@@ -377,7 +377,7 @@ async function openPortDetailModal(portData) {
   }
 
   const isNewPort = !portData.portId;
-  title.textContent = isNewPort ? (t('device.add_port') || "新增端口") : `${t('device.port_detail') || '端口详情'} - ${portData.portNumber}`;
+  title.textContent = isNewPort ? t('device.add_port') : `${t('device.port_detail')} - ${portData.portNumber}`;
 
   elementCache.setValue("device-port-id-expanded", portData.portId || "");
   elementCache.setValue("device-port-device-id-expanded", portData.deviceId || "");
@@ -402,14 +402,14 @@ async function openPortDetailModal(portData) {
       if (portId) {
         const result = await apiDelete(`/api/resources/devices/device-ports/${portId}`);
         if (result.success) {
-          showToast(t('device.port_delete_success') || "端口删除成功", "success");
+          showToast(t('device.port_delete_success'), "success");
           closeModal("device-port-detail-modal");
           const currentDeviceId = getCurrentDeviceId();
           if (currentDeviceId) {
             manageDevicePorts(currentDeviceId, getCurrentDeviceName() || "");
           }
         } else {
-          showToast(t('device.port_delete_failed') || "删除端口失败: " + result.message, "error");
+          showToast(t('device.port_delete_failed') + ': ' + result.message, "error");
         }
       }
     }
@@ -456,7 +456,7 @@ async function submitDevicePortForm() {
   const description = getElementValue("device-port-description-expanded");
 
   if (!portNumber) {
-    showToast(t('device.port_number_required') || "请填写端口号", "warning");
+    showToast(t('device.port_number_required'), "warning");
     return;
   }
 
@@ -480,7 +480,7 @@ async function submitDevicePortForm() {
 
     if (result.success) {
       closeModal("device-port-detail-modal");
-      showToast(id ? (t('device.port_update_success') || "端口更新成功") : (t('device.port_add_success') || "端口添加成功"), "success");
+      showToast(id ? t('device.port_update_success') : t('device.port_add_success'), "success");
       const currentDeviceId = getCurrentDeviceId();
       if (currentDeviceId) {
         try {
@@ -501,16 +501,16 @@ async function submitDevicePortForm() {
           }
         } catch (refreshError) {
           console.error("刷新端口数据失败:", refreshError);
-          showToast(t('device.port_save_refresh_failed') || "端口保存成功，但刷新数据失败，请手动刷新", "warning");
+          showToast(t('device.port_save_refresh_failed'), "warning");
         }
       }
     } else {
-      const errorMsg = result.message ?? (t('common.operation_failed') || "操作失败，请检查输入信息");
-      showToast(`${t('common.operation_failed') || '操作失败'}: ${errorMsg}`, "error");
+      const errorMsg = result.message ?? t('common.operation_failed');
+      showToast(`${t('common.operation_failed')}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
-    handleError(error, t('device.port_submit_failed') || "提交端口表单失败");
+    handleError(error, t('device.port_submit_failed'));
   }
 }
 
@@ -523,29 +523,29 @@ async function deleteDevicePort(id) {
       loadDevicePortsData(1, "");
     }
   };
-  await handleDelete(id, "/api/resources/devices/device-ports", t('device.port_delete_success') || "端口删除成功", successCallback);
+  await handleDelete(id, "/api/resources/devices/device-ports", t('device.port_delete_success'), successCallback);
 }
 
 async function syncPortsFromSnmp(deviceId) {
   const getPortsBtn = elementCache.get("get-snmp-ports-btn");
-  const originalText = getPortsBtn?.textContent || (t('device.sync_ports_from_snmp') || "从SNMP获取端口");
+  const originalText = getPortsBtn?.textContent || t('device.sync_ports_from_snmp');
   if (getPortsBtn) {
     getPortsBtn.disabled = true;
-    getPortsBtn.textContent = t('common.syncing') || "同步中...";
+    getPortsBtn.textContent = t('common.syncing');
   }
 
   try {
     const result = await apiPost(`/api/resources/devices/${deviceId}/device-ports/sync-snmp`, {});
 
     if (result.success) {
-      showToast(result.message || (t('device.port_sync_success') || '端口同步成功'), "success");
+      showToast(result.message || t('device.port_sync_success'), "success");
       return result.data || [];
     } else {
-      showToast((t('device.port_sync_failed') || '端口同步失败') + ': ' + result.message, "error");
+      showToast(t('device.port_sync_failed') + ': ' + result.message, "error");
       return [];
     }
   } catch (error) {
-    showToast(t('device.port_sync_failed') || '端口同步失败', "error");
+    showToast(t('device.port_sync_failed'), "error");
     return [];
   } finally {
     if (getPortsBtn) {

@@ -1,3 +1,5 @@
+import { t } from "../../utils/i18n.js";
+
 export class SVGDataManager {
   constructor(core, renderer) {
     this.core = core;
@@ -192,7 +194,7 @@ export class SVGDataManager {
           layoutData = layoutResult.data;
           hasSavedLayout = true;
         } else {
-          this.showToast("数据库中没有房间布局数据", "info");
+          this.showToast(t("viz.no_room_layout_data"), "info");
         }
         
         if (hasSavedLayout && cabinets.length > 0) {
@@ -261,7 +263,7 @@ export class SVGDataManager {
       }
     } catch (error) {
       console.error("加载布局失败:", error);
-      this.showToast("加载布局失败", "error");
+      this.showToast(t("viz.layout_load_failed"), "error");
       this.core.elementsGroup.innerHTML = "";
       return false;
     }
@@ -343,24 +345,24 @@ export class SVGDataManager {
       });
 
       if (result.success) {
-        this.showToast("布局保存成功", "success");
+        this.showToast(t("viz.layout_save_success"), "success");
       } else {
-        this.showToast("布局保存失败: " + result.message, "error");
+        this.showToast(`${t("viz.layout_save_failed")}: ${result.message}`, "error");
       }
     } catch (error) {
       console.error("保存布局失败:", error);
-      this.showToast("布局保存失败", "error");
+      this.showToast(t("viz.layout_save_failed"), "error");
     }
   }
 
   async deleteLayout() {
     if (this.core.type === "workstation") {
       if (!this.core.currentRoomId) {
-        this.showToast("请先选择房间", "warning");
+        this.showToast(t("viz.select_room_first"), "warning");
         return;
       }
 
-      const confirmed = await this.core.showConfirm("确定要删除当前房间的工位布局数据吗？此操作不可恢复。");
+      const confirmed = await this.core.showConfirm(t('viz.confirm_delete_workstation_layout'));
       if (!confirmed) {
         return;
       }
@@ -369,22 +371,22 @@ export class SVGDataManager {
         const result = await this.apiDelete(`/api/resources/layouts/workstation/${this.core.currentRoomId}`);
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
-          this.showToast("布局删除成功", "success");
+          this.showToast(t("viz.layout_delete_success"), "success");
         } else {
-          this.showToast("布局删除失败: " + result.message, "error");
+          this.showToast(`${t("viz.layout_delete_failed")}: ${result.message}`, "error");
         }
       } catch (error) {
         console.error("删除布局失败:", error);
         this.core.elementsGroup.innerHTML = "";
-        this.showToast("布局删除失败", "error");
+        this.showToast(t("viz.layout_delete_failed"), "error");
       }
     } else if (this.core.type === "cabinet") {
       if (!this.core.currentRoomId) {
-        this.showToast("请先选择房间", "warning");
+        this.showToast(t("viz.select_room_first"), "warning");
         return;
       }
 
-      const confirmed = await this.core.showConfirm("确定要删除当前房间的机位布局数据吗？此操作不可恢复。");
+      const confirmed = await this.core.showConfirm(t('viz.confirm_delete_cabinet_layout'));
       if (!confirmed) {
         return;
       }
@@ -393,14 +395,14 @@ export class SVGDataManager {
         const result = await this.apiDelete(`/api/resources/layouts/positions/${this.core.currentRoomId}`);
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
-          this.showToast("布局删除成功", "success");
+          this.showToast(t("viz.layout_delete_success"), "success");
         } else {
-          this.showToast("布局删除失败: " + result.message, "error");
+          this.showToast(`${t("viz.layout_delete_failed")}: ${result.message}`, "error");
         }
       } catch (error) {
         console.error("删除布局失败:", error);
         this.core.elementsGroup.innerHTML = "";
-        this.showToast("布局删除失败", "error");
+        this.showToast(t("viz.layout_delete_failed"), "error");
       }
     }
   }

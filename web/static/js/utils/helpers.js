@@ -2,6 +2,7 @@
  * 工具函数模块
  * 提供统一的异步调度、缓存管理和错误处理
  */
+import { t } from "./i18n.js";
 
 export function nextFrame(callback) {
   return requestAnimationFrame(() => {
@@ -178,7 +179,7 @@ class ErrorHandler {
     this.handlers.set(errorType, handler);
   }
   
-  handle(error, context = "操作失败", options = {}) {
+  handle(error, context = t('common.operation_failed'), options = {}) {
     const errorInfo = this.parseError(error);
     const handler = this.handlers.get(errorInfo.type) || this.defaultHandler;
     
@@ -202,7 +203,7 @@ class ErrorHandler {
     if (typeof error === "object" && error !== null) {
       return {
         type: error.errorType || error.type || "api",
-        message: error.message || "未知错误",
+        message: error.message || t('common.unknown_error'),
         details: error.errorDetails || error.details,
         original: error,
       };
@@ -249,7 +250,7 @@ class ErrorHandler {
 
 export const errorHandler = new ErrorHandler();
 
-export async function safeAsync(fn, context = "操作失败", options = {}) {
+export async function safeAsync(fn, context = t('common.operation_failed'), options = {}) {
   try {
     return await fn();
   } catch (error) {

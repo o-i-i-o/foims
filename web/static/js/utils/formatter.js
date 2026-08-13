@@ -8,27 +8,27 @@ export function formatDateTime(dateStr) {
 
 export function getStatusText(status) {
   const statusMap = {
-    'active': t('status.active', '活跃'),
-    'inactive': t('status.inactive', '不活跃'),
-    'reserved': t('status.reserved', '保留')
+    'active': t('status.active'),
+    'inactive': t('status.inactive'),
+    'reserved': t('status.reserved')
   };
-  return statusMap[status] || status || t('status.unknown', '未知');
+  return statusMap[status] || status || t('status.unknown');
 }
 
 export function getDeviceTypeName(type) {
   const typeNames = {
-    'workstation': t('device.workstation', '工位'),
-    'cabinet_position': t('device.cabinet_position', '机位'),
-    'switch': t('device.switch', '交换机')
+    'workstation': t('device.workstation'),
+    'cabinet_position': t('device.cabinet_position'),
+    'switch': t('device.switch')
   };
   return typeNames[type] || type || '-';
 }
 
 export function getRoomTypeName(type) {
   const typeNames = {
-    'OFFICE': t('room.type_office', '办公室'),
-    'DATA_CENTER': t('room.type_datacenter', '机房'),
-    'TELECOM_CLOSET': t('room.type_telecom_closet', '弱电井')
+    'OFFICE': t('room.type_office'),
+    'DATA_CENTER': t('room.type_datacenter'),
+    'TELECOM_CLOSET': t('room.type_telecom_closet')
   };
   return typeNames[type] || type || '-';
 }
@@ -50,7 +50,7 @@ export function formatTime(timestamp) {
   const now = new Date();
   const diff = now - date;
 
-  if (diff < 60000) return t('time.just_now', '刚刚');
+  if (diff < 60000) return t('time.just_now');
   if (diff < 3600000) return t('time.minutes_ago', { count: Math.floor(diff / 60000) });
   if (diff < 86400000) return t('time.hours_ago', { count: Math.floor(diff / 3600000) });
   return date.toLocaleDateString();

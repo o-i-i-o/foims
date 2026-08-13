@@ -179,7 +179,7 @@ function renderTopRooms(items) {
           <div class="item-meta">${escapeHtml(getRoomTypeName(room.room_type))}</div>
         </div>
       </div>
-      <span class="item-value">${room.workstation_count || 0} 工位</span>
+      <span class="item-value">${room.workstation_count || 0} ${t('dashboard.unit_workstation')}</span>
     </li>
   `).join('');
 }
@@ -225,7 +225,7 @@ function renderTopCabinets(items) {
           <div class="item-meta">${escapeHtml(cabinet.room_name || '-')}</div>
         </div>
       </div>
-      <span class="item-value">${cabinet.position_count || 0} 机位</span>
+      <span class="item-value">${cabinet.position_count || 0} ${t('dashboard.unit_position')}</span>
     </li>
   `).join('');
 }
@@ -341,9 +341,9 @@ function renderIpStatusChart(statusData) {
   }
   
   const statusNames = {
-    'active': t('status.active', '活跃'),
-    'inactive': t('status.inactive', '不活跃'),
-    'reserved': t('status.reserved', '保留')
+    'active': t('status.active'),
+    'inactive': t('status.inactive'),
+    'reserved': t('status.reserved')
   };
   
   const colors = {
@@ -383,9 +383,9 @@ function renderRoomTypeChart(roomTypes) {
   }
   
   const typeNames = {
-    'office': t('room.type_office', '办公室'),
-    'data_center': t('room.type_datacenter', '机房'),
-    'telecom_closet': t('room.type_telecom_closet', '弱电井')
+    'office': t('room.type_office'),
+    'data_center': t('room.type_datacenter'),
+    'telecom_closet': t('room.type_telecom_closet')
   };
   
   const colors = {

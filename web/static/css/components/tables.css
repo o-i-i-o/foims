@@ -165,6 +165,50 @@
     white-space: nowrap;
 }
 
+.pagination-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.pagination-size,
+.pagination-jump {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+}
+
+.pagination-size-selector,
+.pagination-jump-input {
+    padding: 3px 6px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.pagination-jump-input {
+    width: 56px;
+    cursor: text;
+    text-align: center;
+}
+
+.pagination-size-selector:focus,
+.pagination-jump-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.pagination-jump .pagination-btn {
+    padding: 3px var(--space-sm);
+    font-size: 0.8125rem;
+}
+
 .data-table th.sortable {
     cursor: pointer;
     user-select: none;

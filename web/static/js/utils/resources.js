@@ -220,7 +220,7 @@ export async function loadOrgsForSelect(selectId = "room-org-id") {
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('organization.select_org') || '选择组织节点'}</option>`;
+    select.innerHTML = `<option value="">${t('organization.select_org')}</option>`;
 
     if (result.success && result.data) {
       const flatOrgs = flattenOrgTree(result.data);
@@ -263,7 +263,7 @@ export async function loadNetOutletsForSelect(selectId, roomId = null) {
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet') || '选择信息点'}</option>`;
+    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet')}</option>`;
 
     const items = extractItems(result);
     items.forEach(outlet => {
@@ -289,7 +289,7 @@ export async function loadDeviceTemplatesForSelect(selectId) {
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_template') || '选择模板'}</option>`;
+    select.innerHTML = `<option value="">${t('device.select_template')}</option>`;
 
     const items = extractItems(result);
     items.forEach(tmpl => {
@@ -318,7 +318,7 @@ export async function loadWorkstationsForSelect(selectId, roomId = null) {
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_workstation') || '选择工位'}</option>`;
+    select.innerHTML = `<option value="">${t('device.select_workstation')}</option>`;
 
     const items = extractItems(result);
     items.forEach(ws => {
@@ -348,7 +348,7 @@ export async function loadPositionsForSelect(selectId, cabinetId = null, roomId 
     if (!select) return;
 
     const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_position') || '选择机位'}</option>`;
+    select.innerHTML = `<option value="">${t('device.select_position')}</option>`;
 
     const items = extractItems(result);
     items.forEach(pos => {

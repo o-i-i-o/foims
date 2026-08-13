@@ -27,8 +27,12 @@ export async function initI18n() {
   
   try {
     const [zhTranslations, enTranslations] = await Promise.all([
-      fetch('/static/js/i18n/zh.json').then(r => r.json()),
-      fetch('/static/js/i18n/en.json').then(r => r.json())
+      // cache: 'no-store' guarantees the browser always loads the current
+      // translation file. Without it, browsers (or proxies/CDNs) may serve a
+      // stale cached JSON after new keys are added, leaving new data-i18n
+      // elements untranslated.
+      fetch('/static/js/i18n/zh.json', { cache: 'no-store' }).then(r => r.json()),
+      fetch('/static/js/i18n/en.json', { cache: 'no-store' }).then(r => r.json())
     ]);
 
     i18nInstance = {
@@ -76,6 +80,10 @@ export async function initI18n() {
         document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
         this.updatePageTranslations();
         this.updateLanguageSelector();
+        // Notify pages that render content dynamically (e.g. the init wizard's
+        // status blocks) so they can re-render in the new language. Static
+        // data-i18n elements are already handled by updatePageTranslations().
+        window.dispatchEvent(new CustomEvent('languagechange', { detail: { language: lang } }));
       },
       
       getCurrentLanguage() {
@@ -90,7 +98,7 @@ export async function initI18n() {
             el.textContent = translation;
           }
         });
-        
+
         document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
           const key = el.getAttribute('data-i18n-placeholder');
           const translation = this.t(key);
@@ -98,12 +106,28 @@ export async function initI18n() {
             el.placeholder = translation;
           }
         });
-        
+
         document.querySelectorAll('[data-i18n-title]').forEach(el => {
           const key = el.getAttribute('data-i18n-title');
           const translation = this.t(key);
           if (translation !== key) {
             el.title = translation;
+          }
+        });
+
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+          const key = el.getAttribute('data-i18n-aria-label');
+          const translation = this.t(key);
+          if (translation !== key) {
+            el.setAttribute('aria-label', translation);
+          }
+        });
+
+        document.querySelectorAll('[data-i18n-value]').forEach(el => {
+          const key = el.getAttribute('data-i18n-value');
+          const translation = this.t(key);
+          if (translation !== key) {
+            el.value = translation;
           }
         });
       },

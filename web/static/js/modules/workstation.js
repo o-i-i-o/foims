@@ -13,6 +13,8 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 
+import { t } from "../utils/i18n.js";
+
 import {
   loadRoomsForSelect
 } from "../utils/resources.js";
@@ -26,10 +28,10 @@ export async function editWorkstation(id) {
     if (result.success) {
       openWorkstationModal(result.data);
     } else {
-      showToast(`获取工位数据失败: ${result.message}`, "error");
+      showToast(`${t('workstation.load_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "获取工位数据失败");
+    handleError(error, t('workstation.load_failed'));
   }
 }
 
@@ -45,7 +47,7 @@ export async function openWorkstationModal(workstation = null) {
 
   if (workstation) {
     // 编辑模式
-    title.textContent = "编辑工位";
+    title.textContent = t('workstation.edit');
     elementCache.setValue("workstation-id", workstation.id);
     elementCache.setValue("workstation-name", workstation.name);
     elementCache.setValue("workstation-room", workstation.room_id);
@@ -53,7 +55,7 @@ export async function openWorkstationModal(workstation = null) {
     elementCache.setValue("workstation-description", workstation.description || "");
   } else {
     // 添加模式
-    title.textContent = "添加工位";
+    title.textContent = t('workstation.add');
     form.reset();
     elementCache.setValue("workstation-id", "");
   }
@@ -68,12 +70,12 @@ export async function submitWorkstationForm() {
   const description = elementCache.getValue("workstation-description");
 
   if (!name?.trim()) {
-    showToast("工位名称不能为空", "warning");
+    showToast(t('workstation.name_required'), "warning");
     return;
   }
 
   if (!roomId) {
-    showToast("请选择房间", "warning");
+    showToast(t('workstation.room_required'), "warning");
     return;
   }
 
@@ -94,14 +96,14 @@ export async function submitWorkstationForm() {
 
     if (result.success) {
       closeModal("workstation-modal");
-      showToast("工位保存成功", "success");
+      showToast(t('workstation.save_success'), "success");
     } else {
-      const errorMsg = result.message || "操作失败，请检查输入信息";
-      showToast(`操作失败: ${errorMsg}`, "error");
+      const errorMsg = result.message || t('common.check_input');
+      showToast(`${t('common.operation_failed')}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
     console.error("提交工位表单失败:", error);
-    showToast("操作失败，请重试", "error");
+    showToast(t('common.operation_failed_retry'), "error");
   }
 }

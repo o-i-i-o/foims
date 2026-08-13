@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiDelete } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
+import { t } from "../../utils/i18n.js";
 
 export class TopologyDataManager {
   constructor() {
@@ -26,14 +27,14 @@ export class TopologyDataManager {
     try {
       const result = await this.apiPost("/api/resources/topology/nodes", { nodes });
       if (result.success) {
-        this.showToast("拓扑节点保存成功", "success");
+        this.showToast(t("viz.node_save_success"), "success");
         return true;
       }
-      this.showToast("拓扑节点保存失败: " + result.message, "error");
+      this.showToast(`${t("viz.node_save_failed")}: ${result.message}`, "error");
       return false;
     } catch (error) {
       console.error("保存拓扑节点失败:", error);
-      this.showToast("拓扑节点保存失败", "error");
+      this.showToast(t("viz.node_save_failed"), "error");
       return false;
     }
   }
@@ -42,14 +43,14 @@ export class TopologyDataManager {
     try {
       const result = await this.apiDelete(`/api/resources/topology/nodes/${deviceId}`);
       if (result.success) {
-        this.showToast("设备已从拓扑移除", "success");
+        this.showToast(t("viz.device_removed"), "success");
         return true;
       }
-      this.showToast("删除失败: " + result.message, "error");
+      this.showToast(`${t("viz.delete_failed")}: ${result.message}`, "error");
       return false;
     } catch (error) {
       console.error("删除拓扑节点失败:", error);
-      this.showToast("删除拓扑节点失败", "error");
+      this.showToast(t("viz.node_delete_failed"), "error");
       return false;
     }
   }
@@ -71,14 +72,14 @@ export class TopologyDataManager {
     try {
       const result = await this.apiPost("/api/resources/topology/connections", data);
       if (result.success) {
-        this.showToast("连线创建成功", "success");
+        this.showToast(t("viz.link_create_success"), "success");
         return result.data;
       }
-      this.showToast("连线创建失败: " + result.message, "error");
+      this.showToast(`${t("viz.link_create_failed")}: ${result.message}`, "error");
       return null;
     } catch (error) {
       console.error("创建连线失败:", error);
-      this.showToast("创建连线失败", "error");
+      this.showToast(t("viz.link_create_failed"), "error");
       return null;
     }
   }
@@ -87,14 +88,14 @@ export class TopologyDataManager {
     try {
       const result = await this.apiDelete(`/api/resources/topology/connections/${id}`);
       if (result.success) {
-        this.showToast("连线删除成功", "success");
+        this.showToast(t("viz.link_delete_success"), "success");
         return true;
       }
-      this.showToast("删除连线失败: " + result.message, "error");
+      this.showToast(`${t("viz.link_delete_failed")}: ${result.message}`, "error");
       return false;
     } catch (error) {
       console.error("删除连线失败:", error);
-      this.showToast("删除连线失败", "error");
+      this.showToast(t("viz.link_delete_failed"), "error");
       return false;
     }
   }
@@ -157,11 +158,11 @@ export class TopologyDataManager {
       if (result.success) {
         return result.data || { added_nodes: 0, added_connections: 0 };
       }
-      this.showToast("自动发现失败: " + result.message, "error");
+      this.showToast(`${t("viz.auto_discover_failed")}: ${result.message}`, "error");
       return null;
     } catch (error) {
       console.error("自动发现失败:", error);
-      this.showToast("自动发现失败", "error");
+      this.showToast(t("viz.auto_discover_failed"), "error");
       return null;
     }
   }

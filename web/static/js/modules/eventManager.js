@@ -4,8 +4,10 @@
  */
 
 import { loadModule, getCachedModule } from "../utils/resourceLoader.js";
+import { changeLanguage } from "../utils/i18n.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modal.js";
+import { t } from "../utils/i18n.js";
 
 // ==========================================
 // 编辑/删除函数映射（动态加载）
@@ -171,7 +173,9 @@ const BUTTON_EVENT_BINDINGS = [
     id: "language-selector",
     event: "change",
     handler: (e) => {
-      const { changeLanguage } = getModule("i18n");
+      // i18n is a core module loaded via static import, not via loadModule(),
+      // so it is NOT in resourceLoader's module cache — getModule("i18n") would
+      // return null and throw here. Use the directly-imported changeLanguage.
       changeLanguage(e.target.value);
     },
   },
@@ -246,7 +250,7 @@ async function handleUsageButtonClick(e) {
   const id = button.dataset.id;
 
   if (!id || id === "undefined") {
-    showToast("操作失败：缺少ID参数", "error");
+    showToast(t('common.missing_id_param'), "error");
     return;
   }
 
@@ -283,7 +287,7 @@ async function handleEditDeleteClick(e) {
   const tableId = table?.id;
 
   if (!id || id === "undefined") {
-    showToast("操作失败：缺少ID参数", "error");
+    showToast(t('common.missing_id_param'), "error");
     return;
   }
 

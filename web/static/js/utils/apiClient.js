@@ -3,6 +3,7 @@
  * 使用 HttpOnly Cookie 进行认证，彻底防止 XSS 窃取 token
  */
 import { clearSession } from "./sessionManager.js";
+import { t } from "./i18n.js";
 
 export class ApiClient {
   static #pendingRequests = new Map();
@@ -146,7 +147,7 @@ export class ApiClient {
               const errorData = await response.json();
               return {
                 success: false,
-                message: errorData.message || "认证失败",
+                message: errorData.message || t('api.auth_failed'),
                 errorType: errorData.error_type || "unauthorized",
                 errorDetails: errorData.error_details || {},
                 suggestedAction: errorData.suggested_action || "",
@@ -154,7 +155,7 @@ export class ApiClient {
             } catch (jsonError) {
               return {
                 success: false,
-                message: "认证失败",
+                message: t('api.auth_failed'),
                 errorType: "unauthorized",
               };
             }
@@ -172,7 +173,7 @@ export class ApiClient {
               this.redirectToLogin();
             }, 1500);
           }
-          return { success: false, message: "登录已过期，请重新登录", errorType: "token_expired" };
+          return { success: false, message: t('api.token_expired'), errorType: "token_expired" };
         } else if (response.status === 429 && retryCount < 3) {
           const retryAfter = response.headers.get("Retry-After") || 2;
           const delay = parseInt(retryAfter) * 1000;
@@ -185,7 +186,7 @@ export class ApiClient {
           const errorData = await response.json();
           return { 
             success: false, 
-            message: errorData.message || `API请求失败: ${response.status}`,
+            message: errorData.message || `${t('api.request_failed')}: ${response.status}`,
             errorType: errorData.error_type || "api_error",
             errorDetails: errorData.error_details || {},
             suggestedAction: errorData.suggested_action || ""
@@ -193,7 +194,7 @@ export class ApiClient {
         } catch (jsonError) {
           return { 
             success: false, 
-            message: `API请求失败: ${response.status}`,
+            message: `${t('api.request_failed')}: ${response.status}`,
             errorType: "network_error"
           };
         }
@@ -241,7 +242,7 @@ export class ApiClient {
         const text = await response.text();
         return { 
           success: false, 
-          message: "无法解析响应内容",
+          message: t('api.parse_failed'),
           data: text 
         };
       }
@@ -249,16 +250,16 @@ export class ApiClient {
       console.error("API请求错误:", error);
       
       let errorType = "network_error";
-      let errorMessage = "API请求失败，请检查网络连接";
+      let errorMessage = t('api.network_error');
       
       if (error.name === "AbortError") {
-        errorMessage = "请求已取消";
+        errorMessage = t('api.cancelled');
         errorType = "request_cancelled";
       } else if (error.message.includes("timeout")) {
-        errorMessage = "请求超时，请稍后再试";
+        errorMessage = t('api.timeout');
         errorType = "timeout";
       } else if (error.message.includes("Network")) {
-        errorMessage = "网络连接失败，请检查您的网络设置";
+        errorMessage = t('api.network_failed');
         errorType = "network_error";
       }
       
@@ -350,7 +351,7 @@ export class ApiClient {
     `;
     document.head.appendChild(style);
     
-    errorElement.textContent = "登录已过期，请重新登录";
+    errorElement.textContent = t('api.token_expired');
     document.body.appendChild(errorElement);
     
     setTimeout(() => {

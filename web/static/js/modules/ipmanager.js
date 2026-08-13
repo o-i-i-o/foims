@@ -18,6 +18,7 @@ import { t } from "../utils/i18n.js";
 import { getDeviceTypeName } from "../utils/formatter.js";
 
 const IP_PAGE_SIZE = 100;
+let currentPageSize = IP_PAGE_SIZE;
 
 let currentFilters = {
   device_name: '',
@@ -36,13 +37,13 @@ export async function loadDevicesForPullMac() {
     const select = document.getElementById("pull-mac-device-select");
     if (!select) return;
 
-    select.innerHTML = '<option value="">-- 选择设备 --</option>';
+    select.innerHTML = `<option value="">${t('ip.select_device')}</option>`;
 
     if (result.success && result.data) {
       const devices = Array.isArray(result.data) ? result.data : (result.data.items || []);
       
       if (devices.length === 0) {
-        select.innerHTML = '<option value="">暂无设备数据</option>';
+        select.innerHTML = `<option value="">${t('ip.no_device_data')}</option>`;
         return;
       }
       
@@ -58,14 +59,14 @@ export async function loadDevicesForPullMac() {
       });
       
       if (!hasSnmpDevice) {
-        select.innerHTML = '<option value="">暂无配置SNMP的设备</option>';
+        select.innerHTML = `<option value="">${t('ip.no_snmp_device')}</option>`;
       }
     }
   } catch (error) {
     console.error("加载设备列表失败:", error);
     const select = document.getElementById("pull-mac-device-select");
     if (select) {
-      select.innerHTML = '<option value="">加载失败</option>';
+      select.innerHTML = `<option value="">${t('ip.load_failed_short')}</option>`;
     }
   }
 }
@@ -77,13 +78,13 @@ export async function loadNetworksForPullMac() {
     const select = document.getElementById("pull-mac-network-select");
     if (!select) return;
 
-    select.innerHTML = '<option value="">-- 选择网段 --</option>';
+    select.innerHTML = `<option value="">${t('ip.select_network')}</option>`;
 
     if (result.success && result.data) {
       const networks = Array.isArray(result.data) ? result.data : (result.data.items || result.data.data || []);
       
       if (networks.length === 0) {
-        select.innerHTML = '<option value="">暂无网段数据</option>';
+        select.innerHTML = `<option value="">${t('ip.no_network_data')}</option>`;
         return;
       }
       
@@ -98,7 +99,7 @@ export async function loadNetworksForPullMac() {
     console.error("加载网段列表失败:", error);
     const select = document.getElementById("pull-mac-network-select");
     if (select) {
-      select.innerHTML = '<option value="">加载失败</option>';
+      select.innerHTML = `<option value="">${t('ip.load_failed_short')}</option>`;
     }
   }
 }
@@ -110,7 +111,7 @@ export async function pullIpMacData() {
   const deviceId = deviceSelect ? deviceSelect.value : "";
 
   if (!deviceId) {
-    showToast("请先选择一个设备", "warning");
+    showToast(t('ip.select_device_first'), "warning");
     return;
   }
 
@@ -119,7 +120,7 @@ export async function pullIpMacData() {
   const networkId = networkSelect ? networkSelect.value : "";
 
   if (!networkId) {
-    showToast("请先选择一个网段", "warning");
+    showToast(t('ip.select_network_first'), "warning");
     return;
   }
 
@@ -127,19 +128,19 @@ export async function pullIpMacData() {
   const originalText = btn.textContent;
 
   try {
-    btn.innerHTML = '<span class="loading"></span> 拉取中...';
+    btn.innerHTML = `<span class="loading"></span> ${t('ip.pulling')}`;
     btn.disabled = true;
 
     const result = await apiPost("/api/resources/ip/pull", { device_id: deviceId, network_id: networkId });
 
     if (result.success) {
-      showToast(result.message || "MAC数据拉取成功", "success");
+      showToast(result.message || t('ip.pull_mac_success'), "success");
       loadIpMacData();
     } else {
-      showToast(`MAC数据拉取失败: ${result.message}`, "error");
+      showToast(`${t('ip.pull_mac_failed')}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, "拉取MAC数据失败");
+    handleError(error, t('ip.pull_mac_failed'));
   } finally {
     btn.innerHTML = originalText;
     btn.disabled = false;
@@ -158,7 +159,7 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
     if (network) params.append('network', network);
     if (ip_address) params.append('ip_address', ip_address);
     params.append('page', page);
-    params.append('page_size', IP_PAGE_SIZE);
+    params.append('page_size', currentPageSize);
     
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
@@ -176,7 +177,7 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
           }},
           { field: 'device_name', render: (v) => escapeHtml(v || '-') },
           { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)) },
-          { field: 'network_name', render: (v, row) => `${escapeHtml(v || '未知')} (${escapeHtml(row.network_region || '未知')})` },
+          { field: 'network_name', render: (v, row) => `${escapeHtml(v || t('common.unknown'))} (${escapeHtml(row.network_region || t('common.unknown'))})` },
           { field: 'ip_address', render: (v) => escapeHtml(v) },
           { field: 'mac_address', render: (v) => escapeHtml(v || '-') },
           { field: 'hostname', render: (v) => escapeHtml(v || '-') },
@@ -184,11 +185,14 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
           { field: 'last_seen', render: (v) => formatDateTime(v) },
           { field: 'created_at', render: (v) => formatDateTime(v) }
         ],
-        emptyMessage: '暂无IP数据'
+        emptyMessage: t('ip.no_ip_data')
       });
       
       if (total !== undefined) {
-        appendPaginationToTable("#ip-table", { total, page: pageNum, total_pages }, (p) => loadIpMacData(filters, p));
+        appendPaginationToTable("#ip-table", { total, page: pageNum, total_pages, page_size: currentPageSize }, (p) => loadIpMacData(filters, p), {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => { currentPageSize = size; loadIpMacData(filters, 1); },
+      });
       }
       
       return { total, page: currentPage, total_pages };
@@ -200,7 +204,7 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
     renderTable("#ip-table", {
       data: [],
       columns: [],
-      emptyMessage: "服务器连接失败，请检查网络或联系管理员"
+      emptyMessage: t('ip.server_connection_failed')
     });
     return null;
   }

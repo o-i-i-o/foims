@@ -3,6 +3,7 @@ import { TopologyRenderer } from "./TopologyRenderer.js";
 import { TopologyDataManager } from "./TopologyDataManager.js";
 import { showConfirm } from "../../utils/confirm.js";
 import { showToast } from "../../utils/ui.js";
+import { t } from "../../utils/i18n.js";
 
 export class TopologyVisualization {
   constructor(containerId) {
@@ -44,7 +45,7 @@ export class TopologyVisualization {
 
   async addDevice(deviceId, deviceName, deviceType) {
     if (this.nodes.find((n) => n.device_id === deviceId)) {
-      showToast("该设备已在拓扑中", "warning");
+      showToast(t("viz.device_already_in_topology"), "warning");
       return;
     }
 
@@ -67,7 +68,7 @@ export class TopologyVisualization {
   }
 
   async deleteDevice(deviceId) {
-    const confirmed = await showConfirm("确定要从拓扑中移除该设备吗？关联连线也会被删除。");
+    const confirmed = await showConfirm(t("viz.confirm_remove_device"));
     if (!confirmed) return;
 
     const success = await this.dataManager.deleteTopologyNode(deviceId);
@@ -124,7 +125,7 @@ export class TopologyVisualization {
     });
 
     if (nodes.length === 0) {
-      showToast("没有可保存的节点", "warning");
+      showToast(t("viz.no_nodes_to_save"), "warning");
       return;
     }
 
@@ -132,7 +133,7 @@ export class TopologyVisualization {
   }
 
   async deleteLayout() {
-    const confirmed = await showConfirm("确定要删除全局拓扑布局吗？此操作不可恢复。");
+    const confirmed = await showConfirm(t("viz.confirm_delete_topology_layout"));
     if (!confirmed) return;
 
     for (const node of this.nodes) {
@@ -142,7 +143,7 @@ export class TopologyVisualization {
     this.connections = [];
     this.connectionsMap.clear();
     this.renderer.clearAll();
-    showToast("拓扑布局删除成功", "success");
+    showToast(t("viz.topology_layout_delete_success"), "success");
   }
 
   toggleConnectionMode() {
@@ -156,7 +157,7 @@ export class TopologyVisualization {
       await this.loadTopology();
       this.hierarchicalLayout();
       showToast(
-        `自动发现完成：新增 ${result.added_nodes} 个节点，${result.added_connections} 条连线`,
+        `${t("viz.auto_discover_done", { count: result.added_nodes })}，${result.added_connections} ${t("viz.connections_unit")}`,
         "success"
       );
     }
@@ -168,7 +169,7 @@ export class TopologyVisualization {
 
   hierarchicalLayout() {
     if (this.nodes.length === 0) {
-      showToast("没有可布局的节点", "warning");
+      showToast(t("viz.no_nodes_to_layout"), "warning");
       return;
     }
 

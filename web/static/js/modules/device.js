@@ -40,17 +40,18 @@ import { viewArpTable, viewLldpNeighbors } from "./deviceMacLldp.js";
 
 const tableState = createSortState('name', 'asc');
 let currentPage = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
 
 const DEVICE_TYPE_LABELS = {
-  pc: t('device_type.pc') || 'PC',
-  laptop: t('device_type.laptop') || '笔记本',
-  printer: t('device_type.printer') || '打印机',
-  server: t('device_type.server') || '服务器',
-  network_device: t('device_type.network_device') || '网络设备',
-  switch: t('device_type.switch') || '交换机',
-  camera: t('device_type.camera') || '摄像头',
-  phone: t('device_type.phone') || '电话',
-  other: t('device_type.other') || '其他',
+  pc: t('device_type.pc'),
+  laptop: t('device_type.laptop'),
+  printer: t('device_type.printer'),
+  server: t('device_type.server'),
+  network_device: t('device_type.network_device'),
+  switch: t('device_type.switch'),
+  camera: t('device_type.camera'),
+  phone: t('device_type.phone'),
+  other: t('device_type.other'),
 };
 
 function getDeviceTypeName(type) {
@@ -75,15 +76,15 @@ function maskToNull(value) {
 
 let deviceTableClickHandler = null;
 
-export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null) {
+export async function loadDevicesData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/devices?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await apiGet(`/api/resources/devices?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const devices = data.items || data;
-    const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;
+    const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#devices-table", {
       data: devices,
@@ -102,9 +103,9 @@ export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null)
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'id', render: (v, row) => `
           <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-device-ports" data-device-id="${v}" data-device-name="${escapeHtml(row.name)}">${t('device.ports') || '端口'}</button>
-          <button class="btn btn-sm btn-secondary btn-device-mac" data-device-id="${v}">${t('device.mac_table') || 'MAC表'}</button>
-          <button class="btn btn-sm btn-secondary btn-device-lldp" data-device-id="${v}">${t('device.lldp') || 'LLDP'}</button>
+          <button class="btn btn-sm btn-secondary btn-device-ports" data-device-id="${v}" data-device-name="${escapeHtml(row.name)}">${t('device.ports')}</button>
+          <button class="btn btn-sm btn-secondary btn-device-mac" data-device-id="${v}">${t('device.mac_table')}</button>
+          <button class="btn btn-sm btn-secondary btn-device-lldp" data-device-id="${v}">${t('device.lldp')}</button>
           <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
         ` }
       ],
@@ -114,7 +115,10 @@ export async function loadDevicesData(page = 1, sortBy = null, sortOrder = null)
     bindDeviceButtonsEvents();
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#devices-table", data, loadDevicesData);
+      appendPaginationToTable("#devices-table", data, loadDevicesData, {
+        pageSize: currentPageSize,
+        onPageSizeChange: (size) => { currentPageSize = size; loadDevicesData(1); },
+      });
     }
     updateSortIcons("devices-table", tableState);
   } catch (error) {
@@ -238,15 +242,15 @@ function setupTemplateManageBtn() {
 }
 
 const DEVICE_TYPE_OPTIONS = [
-  { value: 'pc', label: () => t('device_type.pc') || 'PC' },
-  { value: 'laptop', label: () => t('device_type.laptop') || '笔记本' },
-  { value: 'printer', label: () => t('device_type.printer') || '打印机' },
-  { value: 'server', label: () => t('device_type.server') || '服务器' },
-  { value: 'network_device', label: () => t('device_type.network_device') || '网络设备' },
-  { value: 'switch', label: () => t('device_type.switch') || '交换机' },
-  { value: 'camera', label: () => t('device_type.camera') || '摄像头' },
-  { value: 'phone', label: () => t('device_type.phone') || '电话' },
-  { value: 'other', label: () => t('device_type.other') || '其他' },
+  { value: 'pc', label: () => t('device_type.pc') },
+  { value: 'laptop', label: () => t('device_type.laptop') },
+  { value: 'printer', label: () => t('device_type.printer') },
+  { value: 'server', label: () => t('device_type.server') },
+  { value: 'network_device', label: () => t('device_type.network_device') },
+  { value: 'switch', label: () => t('device_type.switch') },
+  { value: 'camera', label: () => t('device_type.camera') },
+  { value: 'phone', label: () => t('device_type.phone') },
+  { value: 'other', label: () => t('device_type.other') },
 ];
 
 async function openDeviceTemplateModal() {
@@ -267,13 +271,13 @@ async function loadDeviceTemplateList() {
   try {
     const result = await apiGet('/api/resources/device-templates');
     if (!result.success || !result.data?.items) {
-      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty') || '暂无模板数据'}</p>`;
+      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty')}</p>`;
       return;
     }
 
     const templates = result.data.items;
     if (templates.length === 0) {
-      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty') || '暂无模板数据'}</p>`;
+      listEl.innerHTML = `<p class="empty-hint" data-i18n="device_template.empty">${t('device_template.empty')}</p>`;
       return;
     }
 
@@ -288,8 +292,8 @@ async function loadDeviceTemplateList() {
           </span>
         </div>
         <div class="device-template-actions">
-          <button type="button" class="btn btn-secondary btn-sm dt-edit-btn" data-i18n="common.edit">${t('common.edit') || '编辑'}</button>
-          <button type="button" class="btn btn-danger btn-sm dt-delete-btn" data-i18n="common.delete">${t('common.delete') || '删除'}</button>
+          <button type="button" class="btn btn-secondary btn-sm dt-edit-btn" data-i18n="common.edit">${t('common.edit')}</button>
+          <button type="button" class="btn btn-danger btn-sm dt-delete-btn" data-i18n="common.delete">${t('common.delete')}</button>
         </div>
       </div>
     `).join('');
@@ -311,8 +315,8 @@ async function loadDeviceTemplateList() {
       });
     });
   } catch (error) {
-    listEl.innerHTML = `<p class="empty-hint">${t('common.load_failed') || '加载失败'}</p>`;
-    handleError(error, t('common.load_failed') || '加载失败');
+    listEl.innerHTML = `<p class="empty-hint">${t('common.load_failed')}</p>`;
+    handleError(error, t('common.load_failed'));
   }
 }
 
@@ -334,31 +338,31 @@ async function editDeviceTemplate(id) {
       <div class="device-template-edit-form" data-id="${escapeHtml(id)}">
         <div class="form-row">
           <div class="form-group">
-            <label data-i18n="common.name">${t('common.name') || '名称'}<span class="required">*</span></label>
+            <label data-i18n="common.name">${t('common.name')}<span class="required">*</span></label>
             <input type="text" class="dt-edit-name nc-input" value="${escapeHtml(tmpl.name)}" />
           </div>
           <div class="form-group">
-            <label data-i18n="device.device_type">${t('device.device_type') || '设备类型'}</label>
+            <label data-i18n="device.device_type">${t('device.device_type')}</label>
             <select class="dt-edit-type nc-input">${typeOptions}</select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label data-i18n="device.brand">${t('device.brand') || '品牌'}</label>
+            <label data-i18n="device.brand">${t('device.brand')}</label>
             <input type="text" class="dt-edit-brand nc-input" value="${escapeHtml(tmpl.brand || '')}" />
           </div>
           <div class="form-group">
-            <label data-i18n="device.model">${t('device.model') || '型号'}</label>
+            <label data-i18n="device.model">${t('device.model')}</label>
             <input type="text" class="dt-edit-model nc-input" value="${escapeHtml(tmpl.model || '')}" />
           </div>
         </div>
         <div class="form-group">
-          <label data-i18n="common.description">${t('common.description') || '描述'}</label>
+          <label data-i18n="common.description">${t('common.description')}</label>
           <textarea class="dt-edit-desc nc-input" rows="2">${escapeHtml(tmpl.description || '')}</textarea>
         </div>
         <div class="device-template-edit-actions">
-          <button type="button" class="btn btn-secondary btn-sm dt-cancel-btn">${t('common.cancel') || '取消'}</button>
-          <button type="button" class="btn btn-primary btn-sm dt-save-btn">${t('common.save') || '保存'}</button>
+          <button type="button" class="btn btn-secondary btn-sm dt-cancel-btn">${t('common.cancel')}</button>
+          <button type="button" class="btn btn-primary btn-sm dt-save-btn">${t('common.save')}</button>
         </div>
       </div>
     `;
@@ -367,7 +371,7 @@ async function editDeviceTemplate(id) {
     itemEl.querySelector('.dt-save-btn')?.addEventListener('click', async () => {
       const name = itemEl.querySelector('.dt-edit-name')?.value?.trim();
       if (!name) {
-        showToast(t('device_template.name_required') || '模板名称不能为空', 'warning');
+        showToast(t('device_template.name_required'), 'warning');
         return;
       }
       const data = {
@@ -380,38 +384,38 @@ async function editDeviceTemplate(id) {
       try {
         const updateResult = await apiPut(`/api/resources/device-templates/${id}`, data);
         if (updateResult.success) {
-          showToast(t('device_template.update_success') || '模板更新成功', 'success');
+          showToast(t('device_template.update_success'), 'success');
           await loadDeviceTemplateList();
           await loadDeviceTemplatesForSelect('device-template-id');
         } else {
-          showToast(updateResult.message || t('common.failed') || '操作失败', 'error');
+          showToast(updateResult.message || t('common.failed'), 'error');
         }
       } catch (error) {
-        handleError(error, t('common.operation_failed') || '操作失败');
+        handleError(error, t('common.operation_failed'));
       }
     });
   } catch (error) {
-    handleError(error, t('common.load_failed') || '加载失败');
+    handleError(error, t('common.load_failed'));
   }
 }
 
 async function deleteDeviceTemplate(id, name) {
   const confirmed = await import('../utils/confirm.js').then(m => m.default(
-    t('common.confirm_delete', { name: name || '' }) || `确定要删除此${name || ''}吗？`
+    t('common.confirm_delete', { name: name || '' })
   ));
   if (!confirmed) return;
 
   try {
     const result = await apiDelete(`/api/resources/device-templates/${id}`);
     if (result.success) {
-      showToast(t('device_template.delete_success') || '模板删除成功', 'success');
+      showToast(t('device_template.delete_success'), 'success');
       await loadDeviceTemplateList();
       await loadDeviceTemplatesForSelect('device-template-id');
     } else {
-      showToast(result.message || t('common.failed') || '操作失败', 'error');
+      showToast(result.message || t('common.failed'), 'error');
     }
   } catch (error) {
-    handleError(error, t('common.operation_failed') || '操作失败');
+    handleError(error, t('common.operation_failed'));
   }
 }
 
