@@ -223,7 +223,7 @@ export class TopologyRenderer {
       indexLabel.setAttribute("dominant-baseline", "middle");
       node.appendChild(indexLabel);
 
-      node.dataset.tooltip = `${outletName} (${chain[i].outlet_type || 'outlet'}) - ${t("viz.link_order")}: ${i + 1}/${n}`;
+      node.dataset.tooltip = `${outletName} - ${t("viz.link_order")}: ${i + 1}/${n}`;
       group.appendChild(node);
     }
   }

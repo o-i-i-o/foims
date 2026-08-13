@@ -3,7 +3,7 @@ use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -34,6 +34,9 @@ pub async fn get_devices(
         .and_then(|id| Uuid::parse_str(id).ok());
     let device_type = query.get("device_type").cloned();
     let room_id = query.get("room_id").and_then(|id| Uuid::parse_str(id).ok());
+    let cabinet_id = query
+        .get("cabinet_id")
+        .and_then(|id| Uuid::parse_str(id).ok());
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -80,6 +83,11 @@ pub async fn get_devices(
 
     if room_id.is_some() {
         where_parts.push(format!("d.room_id = ${param_idx}"));
+        param_idx += 1;
+    }
+
+    if cabinet_id.is_some() {
+        where_parts.push(format!("d.cabinet_id = ${param_idx}"));
         param_idx += 1;
     }
 
@@ -140,6 +148,11 @@ pub async fn get_devices(
     if let Some(r_id) = room_id {
         count_query = count_query.bind(r_id);
         data_query = data_query.bind(r_id);
+    }
+
+    if let Some(c_id) = cabinet_id {
+        count_query = count_query.bind(c_id);
+        data_query = data_query.bind(c_id);
     }
 
     count_query = count_query.bind(page_size).bind(offset);
@@ -388,7 +401,15 @@ pub async fn create_device(
         "description": device.description,
         "ip_count": ip_count
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "device", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "device",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(device, "设备创建成功"))
 }
@@ -686,7 +707,15 @@ pub async fn update_device(
         "model": updated_device.model,
         "description": updated_device.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "device",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(result, "设备更新成功"))
 }
@@ -718,7 +747,15 @@ pub async fn delete_device(
     let details = serde_json::json!({
         "device_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "device",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "设备删除成功"))
 }

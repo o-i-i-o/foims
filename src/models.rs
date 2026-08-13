@@ -509,7 +509,7 @@ pub struct CabinetWithNetworks {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub positions: Option<Vec<PositionBrief>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub patch_panels: Option<Vec<NetOutletBrief>>,
+    pub patch_panels: Option<Vec<PatchPanelBrief>>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -666,8 +666,6 @@ pub struct NetOutletSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
     pub name: String,
-    pub outlet_type: Option<String>,
-    pub cabinet_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -679,9 +677,12 @@ pub struct RoomNetOutletsSync {
 pub struct NetOutletBrief {
     pub id: Uuid,
     pub name: String,
-    pub outlet_type: String,
-    pub cabinet_id: Option<Uuid>,
-    pub cabinet_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatchPanelBrief {
+    pub id: Uuid,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -1040,9 +1041,17 @@ pub struct CableLinkWithDetails {
     pub a_endpoint_type: String,
     pub a_endpoint_id: Uuid,
     pub a_endpoint_label: Option<String>,
+    /// A 端点所属作用域（用于编辑时回填级联选择器）
+    pub a_room_id: Option<Uuid>,
+    pub a_cabinet_id: Option<Uuid>,
+    pub a_device_id: Option<Uuid>,
     pub b_endpoint_type: String,
     pub b_endpoint_id: Uuid,
     pub b_endpoint_label: Option<String>,
+    /// B 端点所属作用域（用于编辑时回填级联选择器）
+    pub b_room_id: Option<Uuid>,
+    pub b_cabinet_id: Option<Uuid>,
+    pub b_device_id: Option<Uuid>,
     pub link_type: String,
     pub cable_label: Option<String>,
     pub length_m: Option<f64>,
@@ -1072,6 +1081,11 @@ pub struct CableLinkUpdate {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub length_m: Option<Option<f64>>,
     pub tested: Option<bool>,
+    // 端点可选更新（编辑模态框复用新建表单时一并提交）
+    pub a_endpoint_type: Option<String>,
+    pub a_endpoint_id: Option<Uuid>,
+    pub b_endpoint_type: Option<String>,
+    pub b_endpoint_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1358,14 +1372,13 @@ pub struct OrganizationUpdate {
 }
 
 // ==================== 信息点模型 ====================
+// 信息点特指网络插座，仅隶属房间；配线架见下方独立模型
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct NetOutlet {
     pub id: Uuid,
     pub name: String,
-    pub outlet_type: String,
     pub room_id: Uuid,
-    pub cabinet_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1374,11 +1387,8 @@ pub struct NetOutlet {
 pub struct NetOutletWithDetails {
     pub id: Uuid,
     pub name: String,
-    pub outlet_type: String,
     pub room_id: Uuid,
     pub room_name: Option<String>,
-    pub cabinet_id: Option<Uuid>,
-    pub cabinet_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1387,18 +1397,38 @@ pub struct NetOutletWithDetails {
 pub struct NetOutletCreate {
     #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
     pub name: String,
-    pub outlet_type: Option<String>,
     pub room_id: Uuid,
-    pub cabinet_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetOutletUpdate {
     #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
-    pub outlet_type: Option<String>,
     pub room_id: Option<Uuid>,
-    pub cabinet_id: Option<Option<Uuid>>,
+}
+
+// ==================== 配线架模型 ====================
+// 配线架与信息点是不同概念，隶属机柜，由机柜弹窗内联同步管理
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct PatchPanel {
+    pub id: Uuid,
+    pub name: String,
+    pub cabinet_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct PatchPanelWithDetails {
+    pub id: Uuid,
+    pub name: String,
+    pub cabinet_id: Uuid,
+    pub cabinet_name: String,
+    pub room_id: Uuid,
+    pub room_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // ==================== 设备模板模型 ====================

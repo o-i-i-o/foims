@@ -64,7 +64,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                             iface_type, NEW.a_endpoint_id;
                     END IF;
                 WHEN 'patch_panel' THEN
-                    SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.a_endpoint_id AND outlet_type = 'patch_panel') INTO endpoint_exists;
+                    SELECT EXISTS(SELECT 1 FROM patch_panels WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 ELSE
                     RAISE EXCEPTION '未知的 a_endpoint_type: %', NEW.a_endpoint_type;
             END CASE;
@@ -88,7 +88,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                             iface_type, NEW.b_endpoint_id;
                     END IF;
                 WHEN 'patch_panel' THEN
-                    SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.b_endpoint_id AND outlet_type = 'patch_panel') INTO endpoint_exists;
+                    SELECT EXISTS(SELECT 1 FROM patch_panels WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 ELSE
                     RAISE EXCEPTION '未知的 b_endpoint_type: %', NEW.b_endpoint_type;
             END CASE;
@@ -147,8 +147,8 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         BEGIN
             IF EXISTS(
                 SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type IN ('net_outlet','patch_panel') AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type IN ('net_outlet','patch_panel') AND b_endpoint_id = OLD.id)
+                WHERE (a_endpoint_type='net_outlet' AND a_endpoint_id = OLD.id)
+                   OR (b_endpoint_type='net_outlet' AND b_endpoint_id = OLD.id)
             ) THEN
                 RAISE EXCEPTION '信息点 % 被 cable_links 引用，不能删除', OLD.id;
             END IF;
@@ -163,6 +163,31 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .await?;
     sqlx::query(
         "CREATE TRIGGER trg_net_outlets_prevent_delete_linked BEFORE DELETE ON net_outlets FOR EACH ROW EXECUTE FUNCTION prevent_net_outlet_deletion_if_linked()"
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"CREATE OR REPLACE FUNCTION prevent_patch_panel_deletion_if_linked() RETURNS TRIGGER AS $$
+        BEGIN
+            IF EXISTS(
+                SELECT 1 FROM cable_links
+                WHERE (a_endpoint_type='patch_panel' AND a_endpoint_id = OLD.id)
+                   OR (b_endpoint_type='patch_panel' AND b_endpoint_id = OLD.id)
+            ) THEN
+                RAISE EXCEPTION '配线架 % 被 cable_links 引用，不能删除', OLD.id;
+            END IF;
+            RETURN OLD;
+        END;
+        $$ LANGUAGE plpgsql;",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query("DROP TRIGGER IF EXISTS trg_patch_panels_prevent_delete_linked ON patch_panels")
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "CREATE TRIGGER trg_patch_panels_prevent_delete_linked BEFORE DELETE ON patch_panels FOR EACH ROW EXECUTE FUNCTION prevent_patch_panel_deletion_if_linked()"
     )
     .execute(pool)
     .await?;
@@ -260,7 +285,7 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             WHEN 'device_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM device_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = p.node_id)
             WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = p.node_id)
             WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = p.node_id)
-            WHEN 'patch_panel'      THEN (SELECT name FROM net_outlets WHERE id = p.node_id AND outlet_type = 'patch_panel')
+            WHEN 'patch_panel'      THEN (SELECT name FROM patch_panels WHERE id = p.node_id)
         END AS node_label,
         p.cable_id,
         p.cable_label,

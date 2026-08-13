@@ -19,9 +19,9 @@ use ipma::app_state::AppState;
 use ipma::config::Config;
 use ipma::db::DbPool;
 use ipma::log::setup_logging;
+use ipma::routes::get_init_status;
 use ipma::routes::init_routes;
 use ipma::routes::static_files::get_web_dir;
-use ipma::routes::get_init_status;
 use ipma::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use ipma::system::config::init_start_time;
 use ipma::system::task_executors::{
@@ -52,14 +52,6 @@ fn setup_panic_handler() {
             .unwrap_or_else(|| "unknown location".to_string());
 
         error!(
-            "程序发生严重panic!\n\
-             位置: {}\n\
-             消息: {}\n\
-             堆栈追踪:\n{}",
-            location, msg, backtrace
-        );
-
-        eprintln!(
             "程序发生严重panic!\n\
              位置: {}\n\
              消息: {}\n\
@@ -342,8 +334,7 @@ async fn main() -> std::io::Result<()> {
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
-            tracing::error!("加载配置文件失败: {:?}", e);
-            eprintln!("Error: Failed to load config: {}", e);
+            error!("加载配置文件失败: {:?}", e);
             std::process::exit(1);
         }
     };
@@ -366,8 +357,7 @@ async fn main() -> std::io::Result<()> {
                 Some(p)
             }
             Err(e) => {
-                tracing::error!("创建数据库连接池失败: {:?}", e);
-                eprintln!("Error: Failed to create database pool: {}", e);
+                error!("创建数据库连接池失败: {:?}", e);
                 std::process::exit(1);
             }
         }
@@ -541,19 +531,18 @@ async fn main() -> std::io::Result<()> {
     if Path::new(&uds_path).exists() {
         match tokio::net::UnixStream::connect(&uds_path).await {
             Ok(_) => {
-                tracing::error!(
+                error!(
                     "UDS socket {} 已被另一个 IPMA 进程占用，拒绝启动以避免重复实例",
-                    uds_path
-                );
-                eprintln!(
-                    "Error: 另一个 IPMA 进程已在监听 {}，请先停止旧进程再启动",
                     uds_path
                 );
                 std::process::exit(1);
             }
             Err(_) => {
                 // 文件存在但无人监听（上次进程异常退出残留）→ 安全清理
-                tracing::info!("检测到残留 socket 文件（无监听者），清理后继续: {}", uds_path);
+                tracing::info!(
+                    "检测到残留 socket 文件（无监听者），清理后继续: {}",
+                    uds_path
+                );
             }
         }
     }

@@ -24,7 +24,6 @@ const MODAL_REGISTRY = {
     'organization-modal': '/static/modals/organization-modal.html',
     'org-template-modal': '/static/modals/org-template-modal.html',
     'org-template-editor-modal': '/static/modals/org-template-editor-modal.html',
-    'net-outlet-modal': '/static/modals/net-outlet-modal.html',
     'cable-link-modal': '/static/modals/cable-link-modal.html',
     'device-modal': '/static/modals/device-modal.html',
     'device-template-modal': '/static/modals/device-template-modal.html',

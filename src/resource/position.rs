@@ -10,7 +10,7 @@ use crate::models::{
     IpManager,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use chrono::Utc;
 use serde_json::json;
@@ -221,7 +221,15 @@ pub async fn create_cabinet_position(
         "end_u": position.end_u,
         "description": position.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "cabinet_position", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "cabinet_position",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(position, "机位创建成功"))
 }
@@ -397,7 +405,15 @@ pub async fn update_cabinet_position(
         "end_u": result.end_u,
         "description": result.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "cabinet_position", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "cabinet_position",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(result, "机位更新成功"))
 }
@@ -441,7 +457,15 @@ pub async fn delete_cabinet_position(
     let details = serde_json::json!({
         "position_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "cabinet_position", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "cabinet_position",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "机位删除成功"))
 }

@@ -13,7 +13,7 @@ use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 
 pub async fn get_users(
@@ -200,14 +200,13 @@ pub async fn update_user(
     .await?;
 
     // 权限或启用状态变更时，吊销该用户的历史令牌（强制重新登录，立即生效）
-    if req.role.is_some() || req.status == Some(false) {
-        if let Err(e) = sqlx::query("UPDATE users SET tokens_invalidated_at = NOW() WHERE id = $1")
+    if (req.role.is_some() || req.status == Some(false))
+        && let Err(e) = sqlx::query("UPDATE users SET tokens_invalidated_at = NOW() WHERE id = $1")
             .bind(id)
             .execute(&conn)
             .await
-        {
-            tracing::warn!("更新 tokens_invalidated_at 失败: {}", e);
-        }
+    {
+        tracing::warn!("更新 tokens_invalidated_at 失败: {}", e);
     }
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
@@ -253,7 +252,15 @@ pub async fn delete_user(
     tx.commit().await?;
 
     let details = json!({});
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete_user", "user", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete_user",
+        "user",
+        Some(&id),
+        &details,
+    )
+    .await;
     tracing::info!("用户删除成功, ID: {}", id);
 
     Ok(crate::error::ok_json((), "用户删除成功"))

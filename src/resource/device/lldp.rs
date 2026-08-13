@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DeviceLldp, LldpNeighbor};
 
-use super::snmp::{SnmpError, SnmpParamsLegacy, DeviceForSnmp, build_auth, format_snmp_error};
+use super::snmp::{DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
 
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,

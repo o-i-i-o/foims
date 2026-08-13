@@ -5,7 +5,7 @@ use crate::models::{
 };
 use crate::resource::org_template::get_allowed_children;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -197,7 +197,7 @@ pub async fn get_organizations(
 
         if !search.is_empty() {
             qb.push(" WHERE name ILIKE ");
-            qb.push_bind(crate::utils::escape_like(&search));
+            qb.push_bind(crate::utils::escape_like(search));
             conditions.push("search");
         }
 
@@ -588,7 +588,15 @@ pub async fn create_organization(
         "level_index": level_index,
         "description": req.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "organization", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "organization",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(
         json!({
@@ -691,7 +699,15 @@ pub async fn update_organization(
         "parent_id": org.parent_id,
         "description": org.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "organization", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "organization",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(
         json!({
@@ -757,7 +773,15 @@ pub async fn delete_organization(
     let details = serde_json::json!({
         "organization_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "organization", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "organization",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "组织节点删除成功"))
 }

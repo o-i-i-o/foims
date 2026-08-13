@@ -1,19 +1,19 @@
 pub mod crud;
+pub mod device_port;
 pub mod interface;
 pub mod lldp;
 pub mod mac;
 pub mod nic;
 pub mod snmp;
-pub mod device_port;
 pub mod template;
 
 pub use crud::*;
+pub use device_port::*;
 pub use interface::*;
 pub use lldp::*;
 pub use mac::*;
 pub use nic::*;
 pub use snmp::*;
-pub use device_port::*;
 pub use template::*;
 
 use crate::error::AppError;

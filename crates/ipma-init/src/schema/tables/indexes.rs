@@ -38,7 +38,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
         "CREATE INDEX IF NOT EXISTS idx_rooms_org_id ON rooms(org_id)",
         "CREATE INDEX IF NOT EXISTS idx_net_outlets_room_id ON net_outlets(room_id)",
-        "CREATE INDEX IF NOT EXISTS idx_net_outlets_cabinet_id ON net_outlets(cabinet_id)",
+        "CREATE INDEX IF NOT EXISTS idx_patch_panels_cabinet_id ON patch_panels(cabinet_id)",
         "CREATE INDEX IF NOT EXISTS idx_devices_workstation_id ON devices(workstation_id)",
         "CREATE INDEX IF NOT EXISTS idx_devices_position_id ON devices(position_id)",
         "CREATE INDEX IF NOT EXISTS idx_devices_device_type ON devices(device_type)",

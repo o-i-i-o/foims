@@ -12,7 +12,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DevicePort, DevicePortCreate, DevicePortUpdate, DevicePortWithDevice};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 
 pub async fn get_device_ports(
@@ -217,7 +217,15 @@ pub async fn create_device_port(
         "port_type": data.port_type,
         "vlan_id": data.vlan_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "device_port", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "device_port",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(data, "创建端口成功"))
 }
@@ -297,7 +305,15 @@ pub async fn update_device_port(
         "port_type": data.port_type,
         "vlan_id": data.vlan_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device_port", Some(&port_id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "device_port",
+        Some(&port_id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(data, "更新端口成功"))
 }
@@ -327,7 +343,15 @@ pub async fn delete_device_port(
     let details = serde_json::json!({
         "port_id": port_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device_port", Some(&port_id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "device_port",
+        Some(&port_id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "删除端口成功"))
 }

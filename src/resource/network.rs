@@ -4,7 +4,7 @@ use crate::models::{
     Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate, NetworkUpdate,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use crate::utils::parse_network_from_row;
 use axum::extract::{Path, Query, State};
@@ -405,7 +405,15 @@ pub async fn create_network(
         "ipv4_cidr": ipv4_cidr_val,
         "ipv6_cidr": ipv6_cidr_val
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "network", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "network",
+        Some(&id),
+        &details,
+    )
+    .await;
     tracing::info!("网络 {} 创建成功, ID: {}", full_network_name, id);
 
     let network = Network {
@@ -660,7 +668,15 @@ pub async fn update_network(
         "ipv4_cidr": network.ipv4_cidr,
         "ipv6_cidr": network.ipv6_cidr
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "network", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "network",
+        Some(&id),
+        &details,
+    )
+    .await;
     tracing::info!("网络 {} 更新成功, ID: {}", network.name, id);
 
     Ok(crate::error::ok_json(network, "网络更新成功"))
@@ -726,7 +742,15 @@ pub async fn delete_network(
     let details = serde_json::json!({
         "network_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "network", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "network",
+        Some(&id),
+        &details,
+    )
+    .await;
     tracing::info!("网络删除成功, ID: {}", id);
 
     Ok(crate::error::ok_json((), "网络删除成功"))
@@ -842,7 +866,15 @@ pub async fn create_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "network_region", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "network_region",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(network_region, "网络区域创建成功"))
 }
@@ -927,7 +959,15 @@ pub async fn update_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "network_region", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "network_region",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(network_region, "网络区域更新成功"))
 }
@@ -968,7 +1008,15 @@ pub async fn delete_network_region(
     let details = serde_json::json!({
         "network_region_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "network_region", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "network_region",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "网络区域删除成功"))
 }

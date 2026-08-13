@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -23,8 +23,6 @@ pub async fn get_net_outlets(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let room_id = query.get("room_id").cloned();
-    let cabinet_id = query.get("cabinet_id").cloned();
-    let outlet_type = query.get("outlet_type").cloned();
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -41,46 +39,26 @@ pub async fn get_net_outlets(
             Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的room_id参数".to_string()))
         })
         .transpose()?;
-    let parsed_cabinet_id = cabinet_id
-        .as_ref()
-        .map(|id| {
-            Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的cabinet_id参数".to_string()))
-        })
-        .transpose()?;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY ap.name DESC",
-        ("outlet_type", "desc") => "ORDER BY ap.outlet_type DESC, ap.name ASC",
-        ("outlet_type", _) => "ORDER BY ap.outlet_type ASC, ap.name ASC",
         ("created_at", "desc") => "ORDER BY ap.created_at DESC",
         ("created_at", _) => "ORDER BY ap.created_at ASC",
         _ => "ORDER BY ap.name ASC",
     };
 
     let has_room_filter = parsed_room_id.is_some();
-    let has_cabinet_filter = parsed_cabinet_id.is_some();
-    let has_type_filter = !outlet_type.as_ref().is_none_or(|t| t.is_empty());
     let has_search = !search.is_empty();
 
     let mut where_parts: Vec<String> = Vec::new();
     let mut param_idx = 1;
 
     if has_search {
-        where_parts.push(format!(
-            "(ap.name ILIKE ${param_idx} OR ap.outlet_type ILIKE ${param_idx})"
-        ));
+        where_parts.push(format!("ap.name ILIKE ${param_idx}"));
         param_idx += 1;
     }
     if has_room_filter {
         where_parts.push(format!("ap.room_id = ${param_idx}"));
-        param_idx += 1;
-    }
-    if has_cabinet_filter {
-        where_parts.push(format!("ap.cabinet_id = ${param_idx}"));
-        param_idx += 1;
-    }
-    if has_type_filter {
-        where_parts.push(format!("ap.outlet_type = ${param_idx}"));
         param_idx += 1;
     }
 
@@ -94,8 +72,7 @@ pub async fn get_net_outlets(
         "SELECT COUNT(*) FROM net_outlets_with_details ap {where_clause}"
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT ap.id, ap.name, ap.outlet_type, ap.room_id, ap.room_name, \
-         ap.cabinet_id, ap.cabinet_name, \
+        "SELECT ap.id, ap.name, ap.room_id, ap.room_name, \
          ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET ${}",
         param_idx + 1
@@ -109,12 +86,6 @@ pub async fn get_net_outlets(
         if has_room_filter {
             q = q.bind(parsed_room_id);
         }
-        if has_cabinet_filter {
-            q = q.bind(parsed_cabinet_id);
-        }
-        if has_type_filter {
-            q = q.bind(&outlet_type);
-        }
         q.fetch_one(&state.pool()?.get_conn()).await?
     };
 
@@ -125,12 +96,6 @@ pub async fn get_net_outlets(
         }
         if has_room_filter {
             q = q.bind(parsed_room_id);
-        }
-        if has_cabinet_filter {
-            q = q.bind(parsed_cabinet_id);
-        }
-        if has_type_filter {
-            q = q.bind(&outlet_type);
         }
         q = q.bind(page_size).bind(offset);
         q.fetch_all(&state.pool()?.get_conn()).await?
@@ -161,42 +126,16 @@ pub async fn create_net_outlet(
         .await?
         .ok_or_else(|| AppError::Validation("房间不存在".to_string()))?;
 
-    if let Some(cabinet_id) = req.cabinet_id {
-        let cabinet_room_id: Option<Uuid> =
-            sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
-                .bind(cabinet_id)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?;
-        let cabinet_room_id =
-            cabinet_room_id.ok_or_else(|| AppError::NotFound("机柜未找到".to_string()))?;
-        if cabinet_room_id != req.room_id {
-            return Err(AppError::Validation("机柜不属于所选房间".to_string()));
-        }
-    }
-
-    let outlet_type = req.outlet_type.as_deref().unwrap_or("wall_socket");
-
-    if !matches!(
-        outlet_type,
-        "wall_socket" | "patch_panel" | "wifi_ap" | "other"
-    ) {
-        return Err(AppError::Validation(
-            "信息点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
-        ));
-    }
-
     let id = Uuid::new_v4();
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO net_outlets (id, name, room_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(id)
     .bind(&req.name)
-    .bind(outlet_type)
     .bind(req.room_id)
-    .bind(req.cabinet_id)
     .bind(now)
     .bind(now)
     .execute(&state.pool()?.get_conn())
@@ -213,19 +152,24 @@ pub async fn create_net_outlet(
     let net_outlet = NetOutlet {
         id,
         name: req.name.clone(),
-        outlet_type: outlet_type.to_string(),
         room_id: req.room_id,
-        cabinet_id: req.cabinet_id,
         created_at: now,
         updated_at: now,
     };
 
     let details = serde_json::json!({
         "name": net_outlet.name,
-        "outlet_type": net_outlet.outlet_type,
         "room_id": net_outlet.room_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "net_outlet", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "net_outlet",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(net_outlet, "信息点创建成功"))
 }
@@ -235,8 +179,7 @@ pub async fn get_net_outlet(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
-        "SELECT id, name, outlet_type, room_id, room_name, \
-         cabinet_id, cabinet_name, \
+        "SELECT id, name, room_id, room_name, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -266,120 +209,32 @@ pub async fn update_net_outlet(
         return Err(AppError::NotFound("信息点未找到".to_string()));
     }
 
-    let (current_room_id, current_cabinet_id): (Uuid, Option<Uuid>) =
-        sqlx::query_as("SELECT room_id, cabinet_id FROM net_outlets WHERE id = $1")
-            .bind(id)
-            .fetch_one(&mut *tx)
+    if let Some(room_id) = req.room_id {
+        let room_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM rooms WHERE id = $1")
+            .bind(room_id)
+            .fetch_optional(&mut *tx)
             .await?;
-
-    let effective_room_id = req.room_id.unwrap_or(current_room_id);
-    let effective_cabinet_id = match &req.cabinet_id {
-        Some(Some(cid)) => Some(*cid),
-        Some(None) => None,
-        None => current_cabinet_id,
-    };
-
-    let room_changed = req.room_id.is_some() && req.room_id != Some(current_room_id);
-    let cabinet_explicitly_set = req.cabinet_id.is_some();
-
-    let effective_cabinet_id = if room_changed && !cabinet_explicitly_set {
-        None
-    } else {
-        effective_cabinet_id
-    };
-
-    if let Some(cab_id) = effective_cabinet_id {
-        let cabinet_room_id: Option<Uuid> =
-            sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
-                .bind(cab_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        let cabinet_room_id =
-            cabinet_room_id.ok_or_else(|| AppError::NotFound("机柜未找到".to_string()))?;
-        if cabinet_room_id != effective_room_id {
-            return Err(AppError::Validation("机柜不属于所选房间".to_string()));
+        if room_exists.is_none() {
+            return Err(AppError::Validation("房间不存在".to_string()));
         }
-    }
-
-    let force_cabinet_null = room_changed && !cabinet_explicitly_set;
-
-    if let Some(ref outlet_type) = req.outlet_type
-        && !matches!(
-            outlet_type.as_str(),
-            "wall_socket" | "patch_panel" | "wifi_ap" | "other"
-        )
-    {
-        return Err(AppError::Validation(
-            "信息点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
-        ));
     }
 
     let now = Utc::now();
 
-    let mut set_clauses: Vec<String> = Vec::new();
-    let mut param_index = 1;
-
-    set_clauses.push(format!("name = COALESCE(${param_index}, name)"));
-    param_index += 1;
-
-    set_clauses.push(format!(
-        "outlet_type = COALESCE(${param_index}, outlet_type)"
-    ));
-    param_index += 1;
-
-    set_clauses.push(format!("room_id = COALESCE(${param_index}, room_id)"));
-    param_index += 1;
-
-    let cabinet_id_update = req.cabinet_id.is_some() || force_cabinet_null;
-    if cabinet_id_update {
-        set_clauses.push(format!(
-            "cabinet_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE cabinet_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    set_clauses.push(format!("updated_at = ${param_index}"));
-    param_index += 1;
-
-    let where_param = param_index;
-
-    let sql = format!(
-        "UPDATE net_outlets SET {} WHERE id = ${}",
-        set_clauses.join(", "),
-        where_param
-    );
-
-    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
-
-    query = query.bind(&req.name);
-    query = query.bind(&req.outlet_type);
-    query = query.bind(req.room_id);
-
-    if cabinet_id_update {
-        if force_cabinet_null {
-            query = query.bind(true);
-            query = query.bind(Option::<Uuid>::None);
-        } else {
-            match req.cabinet_id {
-                Some(Some(cid)) => {
-                    query = query.bind(true);
-                    query = query.bind(cid);
-                }
-                Some(None) => {
-                    query = query.bind(true);
-                    query = query.bind(Option::<Uuid>::None);
-                }
-                None => unreachable!(),
-            }
-        }
-    }
-
-    query = query.bind(now);
-    query = query.bind(id);
-
-    query.execute(&mut *tx).await.map_err(|e| {
+    sqlx::query(
+        "UPDATE net_outlets \
+         SET name = COALESCE($1, name), \
+             room_id = COALESCE($2, room_id), \
+             updated_at = $3 \
+         WHERE id = $4",
+    )
+    .bind(&req.name)
+    .bind(req.room_id)
+    .bind(now)
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
@@ -391,8 +246,7 @@ pub async fn update_net_outlet(
     tx.commit().await?;
 
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
-        "SELECT id, name, outlet_type, room_id, room_name, \
-         cabinet_id, cabinet_name, \
+        "SELECT id, name, room_id, room_name, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ \
          FROM net_outlets_with_details WHERE id = $1",
     )
@@ -402,10 +256,17 @@ pub async fn update_net_outlet(
 
     let details = serde_json::json!({
         "name": net_outlet.name,
-        "outlet_type": net_outlet.outlet_type,
         "room_id": net_outlet.room_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "net_outlet", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "net_outlet",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(net_outlet, "信息点更新成功"))
 }
@@ -428,12 +289,29 @@ pub async fn delete_net_outlet(
     sqlx::query("DELETE FROM net_outlets WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(db_err) = &e {
+                let msg = db_err.message();
+                if msg.contains("cable_links") {
+                    return AppError::Validation("信息点已被线路引用，无法删除".to_string());
+                }
+            }
+            AppError::from(e)
+        })?;
 
     tx.commit().await?;
 
     let details = serde_json::json!({ "net_outlet_id": id.to_string() });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "net_outlet", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "net_outlet",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "信息点删除成功"))
 }

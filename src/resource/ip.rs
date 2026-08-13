@@ -9,12 +9,9 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
-use crate::utils::{
-    get_room_id_by_position, get_room_id_by_workstation,
-    validate_network_in_room,
-};
+use crate::utils::{get_room_id_by_position, get_room_id_by_workstation, validate_network_in_room};
 use chrono::Utc;
 use sqlx::Row;
 use std::net::IpAddr;
@@ -52,7 +49,7 @@ pub async fn get_ip_managers(
     let search_param = if search.is_empty() {
         None
     } else {
-        let pattern = crate::utils::escape_like(&search);
+        let pattern = crate::utils::escape_like(search);
         conditions.push(format!(
             "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR description ILIKE ${} OR device_name ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
             param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6, param_index + 7
@@ -342,7 +339,15 @@ pub async fn create_device_ip(
         "ip_address": mapping.ip_address,
         "description": mapping.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create_device_ip", "device", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create_device_ip",
+        "device",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(mapping, "设备IP创建成功"))
 }
@@ -835,7 +840,15 @@ pub async fn auto_assign_ip(
         "description": mapping.description,
         "auto_assigned": true
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "auto_assign_ip", "ip_manager", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "auto_assign_ip",
+        "ip_manager",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(mapping, "IP地址自动分配成功"))
 }
@@ -1010,7 +1023,15 @@ pub async fn batch_create_ip_managers(
         "error_count": errors.len(),
         "errors": errors
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "batch_create", "ip_manager", None, &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "batch_create",
+        "ip_manager",
+        None,
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(
         serde_json::json!({

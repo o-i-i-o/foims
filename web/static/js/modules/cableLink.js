@@ -32,13 +32,15 @@ const ENDPOINT_TYPE_LABELS = {
   // 设备端口与设备接口在前端整合为「设备接口」，列表统一显示
   device_port: t('cable_link.endpoint_device_interface'),
   device_interface: t('cable_link.endpoint_device_interface'),
-  patch_panel: t('cable_link.endpoint_patch_panel') || t('net_outlet.type_patch_panel'),
+  patch_panel: t('cable_link.endpoint_patch_panel'),
 };
 
 // 各端点类型对应的级联「范围」选择器配置
+// 信息点：房间 → 信息点；配线架：机柜 → 配线架；
+// 设备接口：房间 → 机柜（可选「不限机柜」）→ 设备 → 端点（接口/端口）
 const ENDPOINT_SCOPE = {
   net_outlet: { scope: 'room', labelKey: 'cable_link.scope_room' },
-  device_interface: { scope: 'device', labelKey: 'cable_link.scope_device' },
+  device_interface: { scope: 'room', labelKey: 'cable_link.scope_room', deviceFlow: true },
   patch_panel: { scope: 'cabinet', labelKey: 'cable_link.scope_cabinet' },
 };
 
@@ -132,11 +134,14 @@ export async function deleteCableLink(id) {
 }
 
 // ==========================================
-// 端点类型整合 + 级联范围选择器
+// 端点类型整合 + 级联选择器
 // ==========================================
-// 各端点类型对应一个「范围」选择器：信息点→房间、设备接口→设备、配线架→机柜
-// 「设备接口」为整合类型：下拉中同时包含设备接口与设备端口（optgroup 分组），
-// 选项值用前缀编码（device_interface:<id> / device_port:<id>），提交时还原真实类型。
+// 各端点类型对应一条级联链：
+//   信息点 → 房间 → 信息点
+//   配线架 → 机柜 → 配线架（独立表，通过 /patch-panels 拉取）
+//   设备接口（整合类型）→ 房间 → 机柜（可选）→ 设备 → 端点，
+//     端点下拉同时包含设备接口与设备端口（optgroup 分组），
+//     选项值用前缀编码（device_interface:<id> / device_port:<id>），提交时还原真实类型。
 
 function getSideIds(side) {
   return {
@@ -144,6 +149,9 @@ function getSideIds(side) {
     scopeGroup: `cable-link-${side}-scope-group`,
     scopeLabel: `cable-link-${side}-scope-label`,
     scopeSelect: `cable-link-${side}-scope`,
+    flowRow: `cable-link-${side}-flow-row`,
+    cabinetSelect: `cable-link-${side}-cabinet`,
+    deviceSelect: `cable-link-${side}-device`,
     idSelect: `cable-link-${side}-id`,
   };
 }
@@ -188,6 +196,45 @@ async function loadScopeOptions(scopeType, scopeSelectId) {
   appendOptions(select, items);
 }
 
+// 加载机柜选项（设备接口流程第二级：房间内的机柜，首项「不限机柜」）
+async function loadCabinetOptions(side, roomId) {
+  const ids = getSideIds(side);
+  const select = elementCache.get(ids.cabinetSelect);
+  if (!select) return;
+
+  select.innerHTML = `<option value="">${t('cable_link.cabinet_any')}</option>`;
+  if (!roomId) return;
+
+  try {
+    const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}&page_size=1000`);
+    const data = result.success ? result.data : {};
+    const items = (data.items || data || []).map(c => ({ id: c.id, label: c.name }));
+    appendOptions(select, items);
+  } catch (e) {
+    console.error('加载机柜选项失败:', e);
+  }
+}
+
+// 加载设备选项（设备接口流程第三级：按房间或机柜过滤）
+async function loadDeviceOptions(side, { roomId = null, cabinetId = null } = {}) {
+  const ids = getSideIds(side);
+  const select = elementCache.get(ids.deviceSelect);
+  if (!select) return;
+
+  select.innerHTML = `<option value="">${t('cable_link.select_device')}</option>`;
+  if (!roomId && !cabinetId) return;
+
+  try {
+    const query = cabinetId ? `cabinet_id=${cabinetId}` : `room_id=${roomId}`;
+    const result = await apiGet(`/api/resources/devices?${query}&page_size=1000`);
+    const data = result.success ? result.data : {};
+    const items = (data.items || data || []).map(d => ({ id: d.id, label: d.name || d.id }));
+    appendOptions(select, items);
+  } catch (e) {
+    console.error('加载设备选项失败:', e);
+  }
+}
+
 // 动态加载端点选项（依据端点类型 + 已选范围）
 async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedId = null) {
   const select = elementCache.get(selectId);
@@ -200,10 +247,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
     if (endpointType === 'net_outlet') {
       const result = await apiGet(`/api/resources/net-outlets?room_id=${scopeValue}&page_size=1000`);
       const data = result.success ? result.data : {};
-      // 排除配线架（配线架已作为独立端点类型）
-      const items = (data.items || data || [])
-        .filter(o => o.outlet_type !== 'patch_panel')
-        .map(o => ({ id: o.id, label: o.name }));
+      const items = (data.items || data || []).map(o => ({ id: o.id, label: o.name }));
       appendOptions(select, items);
     } else if (endpointType === 'device_interface') {
       // 整合：并发拉取该设备的接口与端口，optgroup 分组，值前缀编码
@@ -240,9 +284,9 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
         select.appendChild(og);
       }
     } else if (endpointType === 'patch_panel') {
-      const result = await apiGet(`/api/resources/net-outlets?outlet_type=patch_panel&cabinet_id=${scopeValue}&page_size=1000`);
+      const result = await apiGet(`/api/resources/patch-panels?cabinet_id=${scopeValue}&page_size=1000`);
       const data = result.success ? result.data : {};
-      const items = (data.items || data || []).map(o => ({ id: o.id, label: o.name }));
+      const items = (data.items || data || []).map(pp => ({ id: pp.id, label: pp.name }));
       appendOptions(select, items);
     }
   } catch (e) {
@@ -252,13 +296,16 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
   if (selectedId) select.value = selectedId;
 }
 
-// 类型切换：更新范围选择器标签/可见性，并加载范围选项
+// 类型切换：更新范围选择器标签/可见性、设备接口流程级联行的显隐，并加载范围选项
 async function onTypeChange(side) {
   const ids = getSideIds(side);
   const type = elementCache.get(ids.typeSelect)?.value;
   const scopeGroup = elementCache.get(ids.scopeGroup);
   const scopeLabel = elementCache.get(ids.scopeLabel);
   const scopeSelect = elementCache.get(ids.scopeSelect);
+  const flowRow = elementCache.get(ids.flowRow);
+  const cabinetSelect = elementCache.get(ids.cabinetSelect);
+  const deviceSelect = elementCache.get(ids.deviceSelect);
   const idSelect = elementCache.get(ids.idSelect);
 
   if (idSelect) idSelect.innerHTML = `<option value="">${t('cable_link.select_endpoint')}</option>`;
@@ -267,19 +314,55 @@ async function onTypeChange(side) {
   const cfg = type ? ENDPOINT_SCOPE[type] : null;
   if (!cfg) {
     if (scopeGroup) scopeGroup.style.display = 'none';
+    if (flowRow) flowRow.style.display = 'none';
     return;
   }
   if (scopeLabel) scopeLabel.textContent = t(cfg.labelKey) || cfg.scope;
   if (scopeGroup) scopeGroup.style.display = '';
+  // 设备接口流程：显示 机柜（可选）+ 设备 级联行，其余类型隐藏
+  if (flowRow) flowRow.style.display = cfg.deviceFlow ? '' : 'none';
+  if (cfg.deviceFlow) {
+    if (cabinetSelect) cabinetSelect.innerHTML = `<option value="">${t('cable_link.cabinet_any')}</option>`;
+    if (deviceSelect) deviceSelect.innerHTML = `<option value="">${t('cable_link.select_device')}</option>`;
+  }
   await loadScopeOptions(cfg.scope, ids.scopeSelect);
 }
 
-// 范围切换：依据类型 + 范围加载端点选项
+// 范围切换：信息点/配线架直接加载端点；设备接口加载机柜与设备选项
 async function onScopeChange(side) {
   const ids = getSideIds(side);
   const type = elementCache.get(ids.typeSelect)?.value;
   const scopeValue = elementCache.get(ids.scopeSelect)?.value;
+  const idSelect = elementCache.get(ids.idSelect);
+
+  if (idSelect) idSelect.innerHTML = `<option value="">${t('cable_link.select_endpoint')}</option>`;
+
+  if (type === 'device_interface') {
+    await loadCabinetOptions(side, scopeValue);
+    await loadDeviceOptions(side, { roomId: scopeValue });
+    return;
+  }
   await loadEndpointOptions(type, scopeValue, ids.idSelect);
+}
+
+// 机柜切换（设备接口流程）：按机柜过滤设备，「不限机柜」时回到房间范围
+async function onCabinetChange(side) {
+  const ids = getSideIds(side);
+  const scopeValue = elementCache.get(ids.scopeSelect)?.value;
+  const cabinetId = elementCache.get(ids.cabinetSelect)?.value;
+  const idSelect = elementCache.get(ids.idSelect);
+
+  if (idSelect) idSelect.innerHTML = `<option value="">${t('cable_link.select_endpoint')}</option>`;
+  await loadDeviceOptions(side, cabinetId ? { cabinetId } : { roomId: scopeValue });
+}
+
+// 设备切换（设备接口流程）：加载该设备的接口与端口
+async function onDeviceChange(side) {
+  const ids = getSideIds(side);
+  const deviceId = elementCache.get(ids.deviceSelect)?.value;
+  if (deviceId) {
+    await loadEndpointOptions('device_interface', deviceId, ids.idSelect);
+  }
 }
 
 // 还原整合类型的真实 endpoint_type 与 id
@@ -305,31 +388,41 @@ export async function openCableLinkModal(cableLink = null) {
 
   const aTypeSelect = elementCache.get('cable-link-a-type');
   const aScopeSelect = elementCache.get('cable-link-a-scope');
+  const aCabinetSelect = elementCache.get('cable-link-a-cabinet');
+  const aDeviceSelect = elementCache.get('cable-link-a-device');
   const aIdSelect = elementCache.get('cable-link-a-id');
   const bTypeSelect = elementCache.get('cable-link-b-type');
   const bScopeSelect = elementCache.get('cable-link-b-scope');
+  const bCabinetSelect = elementCache.get('cable-link-b-cabinet');
+  const bDeviceSelect = elementCache.get('cable-link-b-device');
   const bIdSelect = elementCache.get('cable-link-b-id');
 
-  // 清理旧事件监听
-  ['a-type', 'a-scope', 'b-type', 'b-scope'].forEach(key => {
+  // 清理旧事件监听并绑定级联处理器（类型/范围/机柜/设备）
+  ['a-type', 'a-scope', 'a-cabinet', 'a-device', 'b-type', 'b-scope', 'b-cabinet', 'b-device'].forEach(key => {
     const [side, evt] = key.split('-');
     const sel = elementCache.get(`cable-link-${key}`);
     if (sel && changeHandlers[key]) {
       sel.removeEventListener('change', changeHandlers[key]);
     }
-    changeHandlers[key] = evt === 'type'
-      ? async () => { await onTypeChange(side); }
-      : async () => { await onScopeChange(side); };
+    const handlers = {
+      type: async () => { await onTypeChange(side); },
+      scope: async () => { await onScopeChange(side); },
+      cabinet: async () => { await onCabinetChange(side); },
+      device: async () => { await onDeviceChange(side); },
+    };
+    changeHandlers[key] = handlers[evt];
     if (sel) sel.addEventListener('change', changeHandlers[key]);
   });
 
   // 编辑时端点不可修改
   const endpointReadonly = isEdit;
-  [aTypeSelect, aScopeSelect, aIdSelect, bTypeSelect, bScopeSelect, bIdSelect].forEach(sel => {
+  [aTypeSelect, aScopeSelect, aCabinetSelect, aDeviceSelect, aIdSelect,
+    bTypeSelect, bScopeSelect, bCabinetSelect, bDeviceSelect, bIdSelect].forEach(sel => {
     if (sel) sel.disabled = endpointReadonly;
   });
-  // 编辑模式下隐藏范围选择器（端点只读，无需级联）
-  ['cable-link-a-scope-group', 'cable-link-b-scope-group'].forEach(gid => {
+  // 编辑模式下隐藏范围与级联选择器（端点只读，无需级联）
+  ['cable-link-a-scope-group', 'cable-link-b-scope-group',
+    'cable-link-a-flow-row', 'cable-link-b-flow-row'].forEach(gid => {
     const g = elementCache.get(gid);
     if (g) g.style.display = isEdit ? 'none' : '';
   });

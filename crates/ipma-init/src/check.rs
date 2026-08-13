@@ -138,15 +138,11 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     );
     columns.insert(
         "net_outlets",
-        vec![
-            "id",
-            "name",
-            "outlet_type",
-            "room_id",
-            "cabinet_id",
-            "created_at",
-            "updated_at",
-        ],
+        vec!["id", "name", "room_id", "created_at", "updated_at"],
+    );
+    columns.insert(
+        "patch_panels",
+        vec!["id", "name", "cabinet_id", "created_at", "updated_at"],
     );
     columns.insert(
         "device_ports",

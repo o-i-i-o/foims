@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::AppError;
-use crate::models::{SnmpTestRequest, DevicePortCreate};
+use crate::models::{DevicePortCreate, SnmpTestRequest};
 use crate::routes::static_files::AppJson;
 
 #[derive(Debug, Clone, sqlx::FromRow)]

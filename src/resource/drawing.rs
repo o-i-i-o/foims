@@ -7,7 +7,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::LayoutSaveRequest;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};
 use serde_json;
 use uuid::Uuid;
@@ -49,7 +49,15 @@ pub async fn save_layout(
             "layout_count": req.layout.len(),
             "type": req.r#type
         });
-        log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "layout", Some(&room_id), &details).await;
+        log_op_best_effort(
+            &state.pool()?.get_conn(),
+            &meta,
+            "update",
+            "layout",
+            Some(&room_id),
+            &details,
+        )
+        .await;
     }
 
     Ok(result)
@@ -67,7 +75,15 @@ pub async fn delete_layout(
     let details = serde_json::json!({
         "room_id": room_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "layout", Some(&room_id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "layout",
+        Some(&room_id),
+        &details,
+    )
+    .await;
 
     Ok(result)
 }
@@ -84,7 +100,15 @@ pub async fn delete_positions_layout(
     let details = serde_json::json!({
         "room_id": room_id
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "layout", Some(&room_id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "layout",
+        Some(&room_id),
+        &details,
+    )
+    .await;
 
     Ok(result)
 }

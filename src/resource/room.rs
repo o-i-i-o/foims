@@ -5,7 +5,7 @@ use crate::models::{
     RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -96,7 +96,8 @@ pub async fn get_rooms(
     .bind(&room_ids)
     .fetch_all(&conn)
     .await?;
-    for (room_id, id, name, network_region, network_region_id, ipv4_cidr, ipv6_cidr) in network_rows {
+    for (room_id, id, name, network_region, network_region_id, ipv4_cidr, ipv6_cidr) in network_rows
+    {
         networks_map.entry(room_id).or_default().push(NetworkInfo {
             id,
             name,
@@ -232,7 +233,15 @@ pub async fn create_room(
         "description": room.description,
         "network_count": req.network_ids.len()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "room", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "room",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(room, "房间创建成功"))
 }
@@ -308,24 +317,16 @@ pub async fn get_room(
         (None, None)
     };
 
-    // 信息点：所有房型都支持（配线架由机柜管理，这里不返回）
-    let no_rows = sqlx::query(
-        "SELECT no.id, no.name, no.outlet_type, no.cabinet_id, cab.name AS cabinet_name \
-         FROM net_outlets no \
-         LEFT JOIN cabinets cab ON no.cabinet_id = cab.id \
-         WHERE no.room_id = $1 AND no.outlet_type != 'patch_panel' ORDER BY no.name",
-    )
-    .bind(room.id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    // 信息点：所有房型都支持（特指网络插座，仅隶属房间）
+    let no_rows = sqlx::query("SELECT id, name FROM net_outlets WHERE room_id = $1 ORDER BY name")
+        .bind(room.id)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
     let net_outlets: Vec<NetOutletBrief> = no_rows
         .iter()
         .map(|r| NetOutletBrief {
             id: r.get("id"),
             name: r.get("name"),
-            outlet_type: r.get("outlet_type"),
-            cabinet_id: r.get("cabinet_id"),
-            cabinet_name: r.get("cabinet_name"),
         })
         .collect();
 
@@ -422,7 +423,15 @@ pub async fn update_room(
         "room_type": room.room_type,
         "description": room.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "room", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "room",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(room, "房间更新成功"))
 }
@@ -485,7 +494,15 @@ pub async fn delete_room(
     let details = serde_json::json!({
         "room_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "room", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "room",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "房间删除成功"))
 }
@@ -674,7 +691,15 @@ pub async fn sync_room_children(
         "workstation_count": req.workstations.as_ref().map(|v| v.len()).unwrap_or(0),
         "cabinet_count": req.cabinets.as_ref().map(|v| v.len()).unwrap_or(0)
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_children", "room", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "sync_children",
+        "room",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "房间子项同步成功"))
 }
@@ -699,34 +724,8 @@ pub async fn sync_room_net_outlets(
     let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
-    // 校验信息点类型
-    for item in items {
-        let outlet_type = item.outlet_type.as_deref().unwrap_or("wall_socket");
-        if !matches!(
-            outlet_type,
-            "wall_socket" | "patch_panel" | "wifi_ap" | "other"
-        ) {
-            return Err(AppError::Validation(
-                "信息点类型必须是wall_socket、patch_panel、wifi_ap或other".to_string(),
-            ));
-        }
-        // 机柜必须属于该房间
-        if let Some(cabinet_id) = item.cabinet_id {
-            let cabinet_room_id: Option<Uuid> =
-                sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
-                    .bind(cabinet_id)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-            let cabinet_room_id = cabinet_room_id
-                .ok_or_else(|| AppError::NotFound("机柜未找到".to_string()))?;
-            if cabinet_room_id != id {
-                return Err(AppError::Validation("机柜不属于所选房间".to_string()));
-            }
-        }
-    }
-
     let existing_ids: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM net_outlets WHERE room_id = $1 AND outlet_type != 'patch_panel'")
+        sqlx::query_scalar("SELECT id FROM net_outlets WHERE room_id = $1")
             .bind(id)
             .fetch_all(&mut *tx)
             .await?;
@@ -757,14 +756,11 @@ pub async fn sync_room_net_outlets(
     // 新增或更新
     for item in items {
         validate_net_outlet_name(&mut tx, &item.name, id, item.id).await?;
-        let outlet_type = item.outlet_type.as_deref().unwrap_or("wall_socket");
         if let Some(item_id) = item.id {
             sqlx::query(
-                "UPDATE net_outlets SET name = $1, outlet_type = $2, cabinet_id = $3, room_id = $4, updated_at = $5 WHERE id = $6",
+                "UPDATE net_outlets SET name = $1, room_id = $2, updated_at = $3 WHERE id = $4",
             )
             .bind(&item.name)
-            .bind(outlet_type)
-            .bind(item.cabinet_id)
             .bind(id)
             .bind(now)
             .bind(item_id)
@@ -773,13 +769,11 @@ pub async fn sync_room_net_outlets(
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO net_outlets (id, name, outlet_type, room_id, cabinet_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO net_outlets (id, name, room_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
             )
             .bind(new_id)
             .bind(&item.name)
-            .bind(outlet_type)
             .bind(id)
-            .bind(item.cabinet_id)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)
@@ -793,7 +787,15 @@ pub async fn sync_room_net_outlets(
         "room_id": id.to_string(),
         "net_outlet_count": items.len()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_net_outlets", "room", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "sync_net_outlets",
+        "room",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "房间信息点同步成功"))
 }

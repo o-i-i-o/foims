@@ -41,12 +41,12 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
 
 /// 校验 log_cleanup 任务的 days 配置，禁止 days < 1 导致清空全部审计日志
 fn validate_log_cleanup_days(config: &serde_json::Value) -> Result<(), AppError> {
-    if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64) {
-        if days < 1 {
-            return Err(AppError::Validation(
-                "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志".to_string(),
-            ));
-        }
+    if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64)
+        && days < 1
+    {
+        return Err(AppError::Validation(
+            "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志".to_string(),
+        ));
     }
     Ok(())
 }
@@ -145,13 +145,11 @@ pub async fn update_scheduled_task(
         let task_type = req.task_type.as_deref().unwrap_or("");
         // 类型未在本请求中变更时，需要读取已有类型来判断
         let effective_type = if task_type.is_empty() {
-            sqlx::query_scalar::<_, String>(
-                "SELECT task_type FROM scheduled_tasks WHERE id = $1",
-            )
-            .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
-            .unwrap_or_default()
+            sqlx::query_scalar::<_, String>("SELECT task_type FROM scheduled_tasks WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&state.pool()?.get_conn())
+                .await?
+                .unwrap_or_default()
         } else {
             task_type.to_string()
         };

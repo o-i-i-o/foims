@@ -271,7 +271,7 @@ async function handleScheduledTaskSubmit(e) {
     const enabled = document.getElementById('scheduled-task-enabled').checked;
 
     if (!name || !taskType || !cronExpression) {
-        alert(t('scheduled_tasks.required_fields'));
+        showToast(t('scheduled_tasks.required_fields'), 'warning');
         return;
     }
 
@@ -281,7 +281,7 @@ async function handleScheduledTaskSubmit(e) {
         const deviceId = document.getElementById('scheduled-task-device-id').value;
         const networkId = document.getElementById('scheduled-task-network-id').value;
         if (!deviceId || !networkId) {
-            alert(t('scheduled_tasks.required_fields'));
+            showToast(t('scheduled_tasks.required_fields'), 'warning');
             return;
         }
         config = { device_id: deviceId, network_id: networkId };

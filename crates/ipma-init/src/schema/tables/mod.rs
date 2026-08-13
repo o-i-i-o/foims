@@ -1,6 +1,7 @@
 mod cabinets;
 mod cable_links;
 mod device_interfaces;
+mod device_ports;
 mod device_templates;
 mod devices;
 mod element;
@@ -14,8 +15,8 @@ mod nics;
 mod notifications;
 mod org_templates;
 mod organizations;
+mod patch_panels;
 mod rooms;
-mod device_ports;
 mod system;
 mod tokens;
 mod topology;
@@ -54,7 +55,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 布局元素（引用 rooms）
     element::create(pool).await?;
 
-    // 设备（引用 workstations/positions/device_templates/net_outlets）
+    // 设备（引用 workstations/positions/device_templates）
     devices::create(pool).await?;
 
     // 设备端口/MAC/LLDP（引用 devices）
@@ -66,10 +67,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 设备三层接口/网口（引用 devices 与 nics）
     device_interfaces::create(pool).await?;
 
-    // 信息点（引用 rooms/cabinets）
+    // 信息点（引用 rooms）
     net_outlets::create(pool).await?;
 
-    // 物理链路（引用 device_ports/net_outlets/device_interfaces 由触发器校验）
+    // 配线架（引用 cabinets）
+    patch_panels::create(pool).await?;
+
+    // 物理链路（引用 device_ports/net_outlets/patch_panels/device_interfaces 由触发器校验）
     cable_links::create(pool).await?;
 
     // IP（引用 device_interfaces/devices/network_cidrs）

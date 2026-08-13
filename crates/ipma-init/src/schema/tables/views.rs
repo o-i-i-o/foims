@@ -149,13 +149,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"
         CREATE VIEW net_outlets_with_details AS
         SELECT
-            ap.id, ap.name, ap.outlet_type, ap.room_id, ap.cabinet_id,
+            ap.id, ap.name, ap.room_id,
             r.name AS room_name,
-            cab.name AS cabinet_name,
             ap.created_at, ap.updated_at
         FROM net_outlets ap
         LEFT JOIN rooms r ON ap.room_id = r.id
-        LEFT JOIN cabinets cab ON ap.cabinet_id = cab.id
     ",
     )
     .execute(pool)
@@ -166,6 +164,37 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .await
     {
         warn!("授予net_outlets_with_details视图权限失败: {}", e);
+    }
+
+    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS patch_panels_with_details CASCADE")
+        .execute(pool)
+        .await
+    {
+        warn!("删除旧视图失败: {}", e);
+    }
+
+    sqlx::query(
+        r"
+        CREATE VIEW patch_panels_with_details AS
+        SELECT
+            pp.id, pp.name, pp.cabinet_id,
+            c.name AS cabinet_name,
+            c.room_id,
+            r.name AS room_name,
+            pp.created_at, pp.updated_at
+        FROM patch_panels pp
+        JOIN cabinets c ON pp.cabinet_id = c.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+    ",
+    )
+    .execute(pool)
+    .await?;
+
+    if let Err(e) = sqlx::query("GRANT SELECT ON patch_panels_with_details TO ipma")
+        .execute(pool)
+        .await
+    {
+        warn!("授予patch_panels_with_details视图权限失败: {}", e);
     }
 
     if let Err(e) = sqlx::query("DROP VIEW IF EXISTS cable_links_with_details CASCADE")
@@ -180,16 +209,27 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE VIEW cable_links_with_details AS
         WITH endpoint_labels AS (
             SELECT sp.id, 'device_port'::VARCHAR AS etype,
-                   (sp.port_number || ' @ ' || d.name) AS label
-            FROM device_ports sp JOIN devices d ON sp.device_id = d.id
+                   (sp.port_number || ' @ ' || d.name) AS label,
+                   d.room_id, cab.id AS cabinet_id, sp.device_id
+            FROM device_ports sp
+            JOIN devices d ON sp.device_id = d.id
+            LEFT JOIN positions p ON d.position_id = p.id
+            LEFT JOIN cabinets cab ON p.cabinet_id = cab.id
             UNION ALL
-            SELECT id, 'net_outlet'::VARCHAR, name::text FROM net_outlets
+            SELECT id, 'net_outlet'::VARCHAR, name::text, room_id, NULL::UUID, NULL::UUID
+            FROM net_outlets
             UNION ALL
-            SELECT di.id, 'device_interface'::VARCHAR, (di.name || ' @ ' || d.name)
-            FROM device_interfaces di JOIN devices d ON di.device_id = d.id
+            SELECT di.id, 'device_interface'::VARCHAR, (di.name || ' @ ' || d.name),
+                   d.room_id, cab.id, di.device_id
+            FROM device_interfaces di
+            JOIN devices d ON di.device_id = d.id
+            LEFT JOIN positions p ON d.position_id = p.id
+            LEFT JOIN cabinets cab ON p.cabinet_id = cab.id
             UNION ALL
-            SELECT no.id, 'patch_panel'::VARCHAR, no.name::text
-            FROM net_outlets no WHERE no.outlet_type = 'patch_panel'
+            SELECT pp.id, 'patch_panel'::VARCHAR, pp.name::text,
+                   c.room_id, pp.cabinet_id, NULL::UUID
+            FROM patch_panels pp
+            JOIN cabinets c ON pp.cabinet_id = c.id
         )
         SELECT
             cl.id, cl.link_type, cl.cable_label, cl.length_m, cl.tested,
@@ -197,7 +237,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             cl.a_endpoint_type, cl.a_endpoint_id,
             cl.b_endpoint_type, cl.b_endpoint_id,
             a_lbl.label AS a_endpoint_label,
-            b_lbl.label AS b_endpoint_label
+            a_lbl.room_id AS a_room_id,
+            a_lbl.cabinet_id AS a_cabinet_id,
+            a_lbl.device_id AS a_device_id,
+            b_lbl.label AS b_endpoint_label,
+            b_lbl.room_id AS b_room_id,
+            b_lbl.cabinet_id AS b_cabinet_id,
+            b_lbl.device_id AS b_device_id
         FROM cable_links cl
         LEFT JOIN endpoint_labels a_lbl ON cl.a_endpoint_id = a_lbl.id AND cl.a_endpoint_type = a_lbl.etype
         LEFT JOIN endpoint_labels b_lbl ON cl.b_endpoint_id = b_lbl.id AND cl.b_endpoint_type = b_lbl.etype

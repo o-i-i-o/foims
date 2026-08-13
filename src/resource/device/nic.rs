@@ -15,7 +15,7 @@ use crate::models::{
 };
 use crate::resource::ip::detect_ip_version;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 
 /// 默认网卡名称
 pub const DEFAULT_CARD_NAME: &str = "网卡1";
@@ -55,7 +55,15 @@ pub async fn sync_device_network_config(
         "device_id": device_id,
         "card_count": req.cards.len()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync", "device_network_config", Some(&device_id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "sync",
+        "device_network_config",
+        Some(&device_id),
+        &details,
+    )
+    .await;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), device_id).await?;
     Ok(crate::error::ok_json(cards, "网卡配置同步成功"))

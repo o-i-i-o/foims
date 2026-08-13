@@ -486,7 +486,7 @@ export async function submitCabinetForm() {
 
     // 同步配线架
     const patchPanelsData = cabinetPatchPanelsManager.collectData();
-    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/net-outlets`, { patch_panels: patchPanelsData });
+    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/patch-panels`, { patch_panels: patchPanelsData });
     if (!ppResult.success) {
       showToast(ppResult.message || (t('cabinet.patch_panels_save_failed') || t('cabinet.save_failed')), "error");
       await loadCabinetsData();

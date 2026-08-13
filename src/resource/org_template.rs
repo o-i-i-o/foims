@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -420,7 +420,15 @@ pub async fn create_org_template(
         "levels": template.levels,
         "description": template.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "org_template", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "org_template",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(template, "模板创建成功"))
 }
@@ -518,7 +526,15 @@ pub async fn update_org_template(
         "levels": template.levels,
         "description": template.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "org_template", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "org_template",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(template, "模板更新成功"))
 }
@@ -558,7 +574,15 @@ pub async fn delete_org_template(
     tx.commit().await?;
 
     let details = serde_json::json!({ "template_id": id.to_string() });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "org_template", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "org_template",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "模板删除成功"))
 }

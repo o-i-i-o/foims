@@ -90,7 +90,6 @@ function getResourceCallbacks() {
     openCabinetModal: createCallback('cabinet', 'openCabinetModal'),
     openUserModal: createCallback('userManager', 'openUserModal'),
     openOrgModal: createCallback('organization', 'openOrgModal'),
-    openNetOutletModal: createCallback('netOutlet', 'openNetOutletModal'),
     openCableLinkModal: createCallback('cableLink', 'openCableLinkModal'),
     openDeviceModal: createCallback('device', 'openDeviceModal'),
     submitOrgTemplateForm: createCallback('organization', 'submitOrgTemplateForm'),
@@ -103,7 +102,6 @@ function getResourceCallbacks() {
     submitDevicePortForm: createCallback('devicePorts', 'submitDevicePortForm'),
     submitUserForm: createCallback('userManager', 'submitUserForm'),
     submitOrgForm: createCallback('organization', 'submitOrgForm'),
-    submitNetOutletForm: createCallback('netOutlet', 'submitNetOutletForm'),
     submitCableLinkForm: createCallback('cableLink', 'submitCableLinkForm'),
     submitDeviceForm: createCallback('device', 'submitDeviceForm'),
   };
@@ -125,7 +123,6 @@ function initResourcePreloading() {
     'workstation',
     'cabinet',
     'position',
-    'netOutlet',
     'cableLink',
     'device',
     'devicePorts',

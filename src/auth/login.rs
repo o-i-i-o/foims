@@ -612,12 +612,11 @@ pub async fn login_with_two_factor(
                     ));
                 }
                 let code_for_check = code.clone();
-                let valid =
-                    tokio::task::spawn_blocking(move || {
-                        totp.check_current(&code_for_check).is_some()
-                    })
-                        .await
-                        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
+                let valid = tokio::task::spawn_blocking(move || {
+                    totp.check_current(&code_for_check).is_some()
+                })
+                .await
+                .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
                 if valid {
                     record_totp_usage(id, &code);
                     verified = true;
@@ -1268,9 +1267,10 @@ pub async fn disable_two_factor(
             ));
         }
         let code_for_check = code.clone();
-        let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
-            .await
-            .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
+        let valid =
+            tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
+                .await
+                .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
         if valid {
             record_totp_usage(target_user_id, &code);
             verified = true;

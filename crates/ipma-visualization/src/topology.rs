@@ -69,7 +69,7 @@ pub struct TopologyConnectionWithPorts {
     pub target_port_number: Option<String>,
     pub target_port_name: Option<String>,
     /// 信息点链：源设备的接口到目标设备之间依次经过的信息点
-    /// 每项包含 id、name、outlet_type
+    /// 每项包含 id、name
     #[sqlx(json)]
     pub outlet_chain: Option<Vec<serde_json::Value>>,
 }
@@ -176,7 +176,7 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
                  tp.port_name AS target_port_name,
                  COALESCE(
                    (
-                     SELECT json_agg(json_build_object('id', no.id, 'name', no.name, 'outlet_type', no.outlet_type))
+                     SELECT json_agg(json_build_object('id', no.id, 'name', no.name))
                      FROM net_outlets no
                      WHERE no.id IN (
                        SELECT CASE WHEN cl1.a_endpoint_type = 'net_outlet' THEN cl1.a_endpoint_id ELSE cl1.b_endpoint_id END AS outlet_id

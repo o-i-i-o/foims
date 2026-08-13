@@ -13,8 +13,7 @@ use crate::error::AppError;
 use crate::models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
-    SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error,
-    get_device_snmp_config,
+    SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, get_device_snmp_config,
 };
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {

@@ -4,7 +4,7 @@ use crate::models::{
     IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -228,7 +228,15 @@ pub async fn create_workstation(
         "manager": workstation.manager,
         "description": workstation.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "workstation", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "workstation",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(workstation, "工位创建成功"))
 }
@@ -359,7 +367,15 @@ pub async fn update_workstation(
         "manager": result.manager,
         "description": result.description
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "workstation", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "workstation",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(result, "工位更新成功"))
 }
@@ -396,7 +412,15 @@ pub async fn delete_workstation(
     let details = serde_json::json!({
         "workstation_id": id.to_string()
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "workstation", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "workstation",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "工位删除成功"))
 }

@@ -2,7 +2,7 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-export const MODULE_VERSION = '01268';
+export const MODULE_VERSION = '01270';
 
 function withVersion(path) {
     if (!path) return path;
@@ -33,7 +33,6 @@ const MODULE_REGISTRY = {
     'workstation': '/static/js/modules/workstation.js',
     'cabinet': '/static/js/modules/cabinet.js',
     'position': '/static/js/modules/position.js',
-    'netOutlet': '/static/js/modules/netOutlet.js',
     'cableLink': '/static/js/modules/cableLink.js',
     'userManager': '/static/js/modules/userManager.js',
     'systemManager': '/static/js/modules/systemManager.js',

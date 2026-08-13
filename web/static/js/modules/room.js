@@ -569,7 +569,6 @@ class RoomNetOutletsManager extends DynamicRowManager {
       showInRowAddButton: true,
     });
     this.roomId = null;
-    this.cabinets = []; // 当前房间的机柜选项 [{id, name}]
   }
 
   addLabel() {
@@ -586,57 +585,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
     return true;
   }
 
-  async loadCabinets(roomId) {
-    this.roomId = roomId;
-    if (!roomId) {
-      this.cabinets = [];
-      return;
-    }
-    try {
-      const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}&page_size=1000`);
-      const data = result.success ? result.data : {};
-      this.cabinets = (data.items || data || []).map(c => ({ id: c.id, name: c.name }));
-    } catch (e) {
-      this.cabinets = [];
-    }
-  }
-
-  // 刷新所有已存在行的机柜下拉选项
-  refreshCabinetOptions() {
-    if (!this.ensureContainer()) return;
-    const rows = this.container.querySelectorAll('.room-net-outlet-item');
-    const opts = this.cabinetOptionsHtml();
-    rows.forEach(row => {
-      const sel = row.querySelector('.net-outlet-cabinet');
-      const current = sel?.dataset.value || '';
-      if (sel) {
-        sel.innerHTML = `<option value="">${t('net_outlet.select_cabinet')}</option>` + opts;
-        if (current) sel.value = current;
-      }
-    });
-  }
-
-  cabinetOptionsHtml() {
-    return this.cabinets.map(c =>
-      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
-    ).join('');
-  }
-
-  outletTypeOptionsHtml() {
-    const types = [
-      { value: 'wall_socket', label: t('net_outlet.type_wall_socket') },
-      { value: 'patch_panel', label: t('net_outlet.type_patch_panel') },
-      { value: 'wifi_ap', label: t('net_outlet.type_wifi_ap') },
-      { value: 'other', label: t('net_outlet.type_other') },
-    ];
-    return types.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-  }
-
   createRow(data = {}) {
     const id = data.id || '';
     const name = data.name || '';
-    const outletType = data.outlet_type || 'wall_socket';
-    const cabinetId = data.cabinet_id || '';
     const div = document.createElement('div');
     div.className = 'room-net-outlet-item';
     div.innerHTML = `
@@ -645,28 +596,12 @@ class RoomNetOutletsManager extends DynamicRowManager {
           <input type="hidden" class="net-outlet-id" value="${escapeHtml(id)}" />
           <input type="text" class="net-outlet-name form-control" value="${escapeHtml(name)}" placeholder="${t('net_outlet.name')}" autocomplete="off" />
         </div>
-        <div class="form-group">
-          <select class="net-outlet-type form-control">
-            ${this.outletTypeOptionsHtml()}
-          </select>
-        </div>
-        <div class="form-group">
-          <select class="net-outlet-cabinet form-control" data-value="${escapeHtml(cabinetId)}">
-            <option value="">${t('net_outlet.select_cabinet')}</option>
-            ${this.cabinetOptionsHtml()}
-          </select>
-        </div>
         <div class="form-group room-net-outlets-actions">
           <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete')}</button>
           <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${this.addLabel()}</button>
         </div>
       </div>
     `;
-    // 设置类型和机柜的选中值
-    const typeSel = div.querySelector('.net-outlet-type');
-    if (typeSel) typeSel.value = outletType;
-    const cabSel = div.querySelector('.net-outlet-cabinet');
-    if (cabSel && cabinetId) cabSel.value = cabinetId;
     this.bindItemEvents(div);
     return div;
   }
@@ -675,11 +610,6 @@ class RoomNetOutletsManager extends DynamicRowManager {
     this.ensureContainer();
     if (!this.container) return;
     this.container.innerHTML = '';
-
-    // 加载该房间的机柜选项（信息点行内的机柜下拉需要）
-    if (room?.id) {
-      await this.loadCabinets(room.id);
-    }
 
     const netOutlets = room?.net_outlets || [];
     netOutlets.forEach(no => this.addItem(no));
@@ -694,13 +624,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
     for (const item of items) {
       const idInput = item.querySelector('.net-outlet-id');
       const nameInput = item.querySelector('.net-outlet-name');
-      const typeSel = item.querySelector('.net-outlet-type');
-      const cabSel = item.querySelector('.net-outlet-cabinet');
       netOutlets.push({
         id: idInput?.value || null,
         name: (nameInput?.value || '').trim(),
-        outlet_type: typeSel?.value || 'wall_socket',
-        cabinet_id: cabSel?.value || null,
       });
     }
     return netOutlets;
@@ -873,14 +799,12 @@ export async function openRoomNetOutletsListModal(roomId) {
     const netOutlets = room.net_outlets || [];
     if (tbody) {
       if (netOutlets.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="4" class="text-center">${t('common.no_data')}</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t('common.no_data')}</td></tr>`;
       } else {
         tbody.innerHTML = netOutlets.map((no, idx) => `
           <tr>
             <td>${idx + 1}</td>
             <td>${escapeHtml(no.name || '')}</td>
-            <td>${escapeHtml(outletTypeLabel(no.outlet_type))}</td>
-            <td>${escapeHtml(no.cabinet_name || '-')}</td>
           </tr>
         `).join('');
       }
@@ -888,16 +812,6 @@ export async function openRoomNetOutletsListModal(roomId) {
   } catch (error) {
     handleError(error, t('room.load_failed'));
   }
-}
-
-function outletTypeLabel(type) {
-  const map = {
-    wall_socket: t('net_outlet.type_wall_socket'),
-    patch_panel: t('net_outlet.type_patch_panel'),
-    wifi_ap: t('net_outlet.type_wifi_ap'),
-    other: t('net_outlet.type_other'),
-  };
-  return map[type] || type || '-';
 }
 
 export function initRoomSortEvents() {

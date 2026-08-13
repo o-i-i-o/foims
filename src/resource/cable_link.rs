@@ -7,7 +7,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
 use chrono::Utc;
 use serde_json::json;
@@ -16,7 +16,12 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-const VALID_ENDPOINT_TYPES: [&str; 4] = ["device_port", "net_outlet", "device_interface", "patch_panel"];
+const VALID_ENDPOINT_TYPES: [&str; 4] = [
+    "device_port",
+    "net_outlet",
+    "device_interface",
+    "patch_panel",
+];
 const VALID_LINK_TYPES: [&str; 3] = ["ethernet", "fiber", "console"];
 
 fn validate_endpoint_type(endpoint_type: &str) -> Result<(), AppError> {
@@ -191,7 +196,9 @@ pub async fn create_cable_link(
 
     let link = sqlx::query_as::<_, CableLinkWithDetails>(
         "SELECT cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
+         cl.a_room_id, cl.a_cabinet_id, cl.a_device_id, \
          cl.b_endpoint_type, cl.b_endpoint_id, cl.b_endpoint_label, \
+         cl.b_room_id, cl.b_cabinet_id, cl.b_device_id, \
          cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
          cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ \
          FROM cable_links_with_details cl WHERE cl.id = $1",
@@ -207,7 +214,15 @@ pub async fn create_cable_link(
         "b_endpoint_id": b_id,
         "link_type": link_type
     });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "cable_link", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "create",
+        "cable_link",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(link, "物理链路创建成功"))
 }
@@ -218,7 +233,9 @@ pub async fn get_cable_link(
 ) -> Result<Response, AppError> {
     let link = sqlx::query_as::<_, CableLinkWithDetails>(
         "SELECT cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
+         cl.a_room_id, cl.a_cabinet_id, cl.a_device_id, \
          cl.b_endpoint_type, cl.b_endpoint_id, cl.b_endpoint_label, \
+         cl.b_room_id, cl.b_cabinet_id, cl.b_device_id, \
          cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
          cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ \
          FROM cable_links_with_details cl WHERE cl.id = $1",
@@ -242,6 +259,40 @@ pub async fn update_cable_link(
     if let Some(ref lt) = req.link_type {
         validate_link_type(lt)?;
     }
+
+    // 端点更新：四字段必须同时提供，参照 create 校验并按规范序排序
+    let endpoint_changed = req.a_endpoint_type.is_some()
+        && req.a_endpoint_id.is_some()
+        && req.b_endpoint_type.is_some()
+        && req.b_endpoint_id.is_some();
+
+    let (a_type, a_id, b_type, b_id) = if endpoint_changed {
+        let a_t = req.a_endpoint_type.as_deref().unwrap();
+        let b_t = req.b_endpoint_type.as_deref().unwrap();
+        validate_endpoint_type(a_t)?;
+        validate_endpoint_type(b_t)?;
+        let a_i = req.a_endpoint_id.unwrap();
+        let b_i = req.b_endpoint_id.unwrap();
+        if a_t == b_t && a_i == b_i {
+            return Err(AppError::Validation("不允许自连接链路".to_string()));
+        }
+        if a_t == "device_interface" && b_t == "device_interface" {
+            return Err(AppError::Validation(
+                "不允许两台设备直连，必须经过交换机或信息点".to_string(),
+            ));
+        }
+        sort_endpoints(a_t, a_i, b_t, b_i)
+    } else if req.a_endpoint_type.is_some()
+        || req.a_endpoint_id.is_some()
+        || req.b_endpoint_type.is_some()
+        || req.b_endpoint_id.is_some()
+    {
+        return Err(AppError::Validation(
+            "更新端点时 A/B 两端的类型与 id 必须同时提供".to_string(),
+        ));
+    } else {
+        (String::new(), Uuid::nil(), String::new(), Uuid::nil())
+    };
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -281,6 +332,17 @@ pub async fn update_cable_link(
 
     if req.tested.is_some() {
         set_clauses.push(format!("tested = ${param_index}"));
+        param_index += 1;
+    }
+
+    if endpoint_changed {
+        set_clauses.push(format!("a_endpoint_type = ${param_index}"));
+        param_index += 1;
+        set_clauses.push(format!("a_endpoint_id = ${param_index}"));
+        param_index += 1;
+        set_clauses.push(format!("b_endpoint_type = ${param_index}"));
+        param_index += 1;
+        set_clauses.push(format!("b_endpoint_id = ${param_index}"));
         param_index += 1;
     }
 
@@ -336,6 +398,13 @@ pub async fn update_cable_link(
         query = query.bind(tested);
     }
 
+    if endpoint_changed {
+        query = query.bind(&a_type);
+        query = query.bind(a_id);
+        query = query.bind(&b_type);
+        query = query.bind(b_id);
+    }
+
     let now = Utc::now();
     query = query.bind(now);
     query = query.bind(id);
@@ -346,7 +415,9 @@ pub async fn update_cable_link(
 
     let link = sqlx::query_as::<_, CableLinkWithDetails>(
         "SELECT cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
+         cl.a_room_id, cl.a_cabinet_id, cl.a_device_id, \
          cl.b_endpoint_type, cl.b_endpoint_id, cl.b_endpoint_label, \
+         cl.b_room_id, cl.b_cabinet_id, cl.b_device_id, \
          cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
          cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ \
          FROM cable_links_with_details cl WHERE cl.id = $1",
@@ -356,7 +427,15 @@ pub async fn update_cable_link(
     .await?;
 
     let details = serde_json::json!({ "cable_link_id": id.to_string() });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "cable_link", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "cable_link",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json(link, "物理链路更新成功"))
 }
@@ -384,7 +463,15 @@ pub async fn delete_cable_link(
     tx.commit().await?;
 
     let details = serde_json::json!({ "cable_link_id": id.to_string() });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "cable_link", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "cable_link",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "物理链路删除成功"))
 }

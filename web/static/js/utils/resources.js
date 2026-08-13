@@ -252,35 +252,6 @@ function flattenOrgTree(nodes, depth = 0) {
   return result;
 }
 
-export async function loadNetOutletsForSelect(selectId, roomId = null) {
-  try {
-    const url = roomId
-      ? `/api/resources/net-outlets?room_id=${roomId}&page_size=1000`
-      : '/api/resources/net-outlets?page_size=1000';
-    const result = await apiGet(url);
-    const select = document.getElementById(selectId);
-
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('net_outlet.select_net_outlet')}</option>`;
-
-    const items = extractItems(result);
-    items.forEach(outlet => {
-      const option = document.createElement("option");
-      option.value = outlet.id;
-      option.textContent = outlet.name;
-      select.appendChild(option);
-    });
-
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载信息点选项失败:", error);
-  }
-}
-
 export async function loadDeviceTemplatesForSelect(selectId) {
   try {
     const result = await apiGet("/api/resources/device-templates");

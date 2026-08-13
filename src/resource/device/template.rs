@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{log_op_best_effort, RequestMeta};
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use serde_json::json;
@@ -79,7 +79,15 @@ pub async fn delete_device_template(
     tx.commit().await?;
 
     let details = serde_json::json!({ "template_id": id.to_string() });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device_template", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "delete",
+        "device_template",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "设备模板删除成功"))
 }
@@ -126,7 +134,15 @@ pub async fn update_device_template(
     .await?;
 
     let details = serde_json::json!({ "template_id": id.to_string(), "name": req.name });
-    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device_template", Some(&id), &details).await;
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "device_template",
+        Some(&id),
+        &details,
+    )
+    .await;
 
     Ok(crate::error::ok_json((), "设备模板更新成功"))
 }
