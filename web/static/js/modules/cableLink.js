@@ -72,7 +72,7 @@ export async function loadCableLinksData(page = 1, sortBy = null, sortOrder = nu
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/cable-links?page=${page}&page_size=${DEFAULT_PAGE_SIZE}`);
+    const result = await apiGet(`/api/resources/cable-links?page=${page}&page_size=${DEFAULT_PAGE_SIZE}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
     const startIndex = (page - 1) * DEFAULT_PAGE_SIZE;

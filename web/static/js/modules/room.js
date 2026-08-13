@@ -859,7 +859,7 @@ export async function loadRoomsData(page = 1, sortBy = null, sortOrder = null) {
           return v || '-';
         }},
         { field: 'org_name', render: (v) => escapeHtml(v) || '-' },
-        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${n.name} (${n.network_region})`).join("<br>") : '-' },
+        { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
         { field: 'id', render: (v, row) => {

@@ -436,11 +436,3 @@ export async function submitUserForm() {
   }
 }
 
-const userForm = elementCache.get("user-form");
-if (userForm) {
-  userForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await submitUserForm();
-  });
-}
-

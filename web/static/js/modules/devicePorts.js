@@ -514,19 +514,6 @@ async function submitDevicePortForm() {
   }
 }
 
-async function editDevicePort(id) {
-  try {
-    const result = await apiGet(`/api/resources/devices/device-ports/${id}`);
-    if (result.success) {
-      openDevicePortModal(result.data);
-    } else {
-      showToast(t('device.load_port_failed') || "获取端口信息失败", "error");
-    }
-  } catch (error) {
-    handleError(error, t('device.load_port_failed') || "获取端口信息失败");
-  }
-}
-
 async function deleteDevicePort(id) {
   const currentDeviceId = getCurrentDeviceId();
   const successCallback = () => {
@@ -591,7 +578,6 @@ export {
   loadDevicePortsByDeviceId,
   manageDevicePorts,
   openDevicePortModal,
-  editDevicePort,
   deleteDevicePort,
   submitDevicePortForm,
   groupPorts,

@@ -160,10 +160,10 @@ async function viewArpTable(deviceId) {
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_mac_failed') || '加载MAC表失败'}: ${result.message || ''}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_mac_failed') || '加载MAC表失败'}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -187,10 +187,10 @@ async function viewArpTable(deviceId) {
       if (result.success) {
         await loadArpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${result.message || ''}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -385,10 +385,10 @@ async function viewLldpNeighbors(deviceId) {
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_lldp_failed') || '加载LLDP邻居失败'}: ${result.message || ''}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.load_lldp_failed') || '加载LLDP邻居失败'}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('common.load_failed') || '加载失败'}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -412,10 +412,10 @@ async function viewLldpNeighbors(deviceId) {
       if (result.success) {
         await loadLldpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${result.message || ''}</p>`;
+        loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(result.message || '')}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${err.message}</p>`;
+      loadingEl.innerHTML = `<p style="color: red;">${t('device.sync_failed') || '同步失败'}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }

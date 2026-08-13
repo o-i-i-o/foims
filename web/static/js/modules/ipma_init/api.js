@@ -8,7 +8,7 @@
  *   - 管理员账户创建
  *   - 控制台验证码获取
  */
-import { showToast } from '../../utils/ui.js';
+import { showToast, escapeHtml } from '../../utils/ui.js';
 import { state } from './state.js';
 import { goToStep, showError, showLoading, hideLoading } from './ui.js';
 
@@ -54,7 +54,7 @@ export const checkPostgreSQL = async () => {
             pgStatusElement.innerHTML = `
                 <div class="status-success">✓</div>
                 <h3>PostgreSQL 已安装并运行</h3>
-                <p>${result.message || 'PostgreSQL 连接成功'}</p>
+                <p>${escapeHtml(result.message || 'PostgreSQL 连接成功')}</p>
             `;
             pgStatusElement.classList.add('status-success');
             nextButton.disabled = false;
@@ -62,7 +62,7 @@ export const checkPostgreSQL = async () => {
             pgStatusElement.innerHTML = `
                 <div class="status-error">✗</div>
                 <h3>PostgreSQL 检查失败</h3>
-                <p>${result.error || '未知错误'}</p>
+                <p>${escapeHtml(result.error || '未知错误')}</p>
                 <div class="error-guide">
                     <h4>解决建议：</h4>
                     <ul>
@@ -134,7 +134,7 @@ export const checkDatabaseStatus = async () => {
                 dbStatusElement.innerHTML = `
                     <div class="status-error">✗</div>
                     <h3>数据库连接失败</h3>
-                    <p>无法连接到数据库: ${dbStatus.error || '未知错误'}</p>
+                    <p>无法连接到数据库: ${escapeHtml(dbStatus.error || '未知错误')}</p>
                     <p>系统将尝试自动创建数据库。</p>
                 `;
                 dbStatusElement.classList.add('status-error');

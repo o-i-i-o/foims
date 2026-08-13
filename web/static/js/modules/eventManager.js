@@ -160,14 +160,6 @@ const BUTTON_EVENT_BINDINGS = [
     },
   },
   {
-    id: "add-user-btn",
-    event: "click",
-    handler: () => {
-      const { openUserModal } = getModule("userManager");
-      openUserModal();
-    },
-  },
-  {
     id: "logout-btn",
     event: "click",
     handler: () => {

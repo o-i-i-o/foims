@@ -1,5 +1,6 @@
 import { apiGet } from "./apiClient.js";
 import { showToast } from "./toast.js";
+import { escapeHtml } from "./helpers.js";
 
 const NETWORK_REGION_CHANGED_EVENT = 'ipma:network-region-changed';
 const NETWORK_CHANGED_EVENT = 'ipma:network-changed';
@@ -570,13 +571,13 @@ export class IpConfigManager {
     const div = document.createElement("div");
     div.className = `${this.config.classPrefix}-ip-row form-row-container`;
     
-    const regionOptions = regions.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    const regionOptions = regions.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join('');
     const networkOptions = networks.map(n => {
       const cidrs = [];
       if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
       if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
       const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
-      return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+      return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
     }).join('');
 
     const switchLabel = this.config.switchLabel || '交换机';
@@ -673,13 +674,13 @@ export class IpConfigManager {
         
         const filtered = networks.filter(n => n.network_region_id === regionId);
         
-        networkSelect.innerHTML = '<option value="">请选择网络</option>' + 
+        networkSelect.innerHTML = '<option value="">请选择网络</option>' +
           filtered.map(n => {
             const cidrs = [];
             if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
             if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
             const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
-            return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+            return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
           }).join('');
         
         if (filtered.length === 1) {
@@ -722,13 +723,13 @@ export class IpConfigManager {
             if (result.success && result.data) {
               const regionNetworks = result.data.items || result.data || [];
               this.networks = regionNetworks;
-              networkSelect.innerHTML = '<option value="">请选择网络</option>' + 
+              networkSelect.innerHTML = '<option value="">请选择网络</option>' +
                 regionNetworks.map(n => {
                   const cidrs = [];
                   if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
                   if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
                   const cidrStr = cidrs.length > 0 ? cidrs.join(' / ') : '无CIDR';
-                  return `<option value="${n.id}">${n.name} (${cidrStr})</option>`;
+                  return `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)} (${escapeHtml(cidrStr)})</option>`;
                 }).join('');
             }
           }

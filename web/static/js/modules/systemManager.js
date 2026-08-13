@@ -10,7 +10,7 @@ import {
   escapeHtml,
 } from "../utils/ui.js";
 
-import { loadModal } from "../utils/modalLoader.js";
+import { loadModal, openModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
 import { initSecurityTab } from "./fail2banManager.js";

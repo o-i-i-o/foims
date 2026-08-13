@@ -347,12 +347,12 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
     
     const result = await apiGet(`/api/notifications?${params.toString()}`);
     const tbody = document.querySelector("#notifications-table tbody");
-    tbody.innerHTML = "";
 
     if (!tbody) {
       console.error("找不到通知表格元素");
       return;
     }
+    tbody.innerHTML = "";
 
     const data = result.success ? result.data : { items: [], total: 0 };
     const notifications = data.items || data;
