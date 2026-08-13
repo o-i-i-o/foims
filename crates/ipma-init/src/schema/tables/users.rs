@@ -14,9 +14,17 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             two_factor_verified BOOLEAN NOT NULL DEFAULT FALSE,
             two_factor_email_code VARCHAR(10),
             two_factor_email_code_expiry TIMESTAMP WITH TIME ZONE,
+            tokens_invalidated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )",
+    )
+    .execute(pool)
+    .await?;
+
+    // 兼容旧库：补充 tokens_invalidated_at 列（用于密码重置/权限变更后吊销历史令牌）
+    sqlx::query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_invalidated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()",
     )
     .execute(pool)
     .await

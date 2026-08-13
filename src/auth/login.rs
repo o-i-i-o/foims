@@ -841,6 +841,31 @@ pub async fn refresh_token(
 
     let user_id = Uuid::parse_str(&claims.sub)
         .map_err(|e| AppError::Internal(format!("无效的用户标识: {e}")))?;
+
+    // 重新校验用户当前状态与角色（防止禁用/降权/删除后旧令牌仍可刷新），
+    // 并强制在 tokens_invalidated_at 之后签发的令牌才能刷新（密码重置/权限变更后吊销历史令牌）
+    let user_state = sqlx::query_as::<_, (String, bool, chrono::DateTime<chrono::Utc>)>(
+        "SELECT role, status, tokens_invalidated_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&conn)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let current_role = match user_state {
+        Some((role, status, invalidated_at)) => {
+            if !status {
+                return Err(AppError::Unauthorized("账户已禁用".to_string()));
+            }
+            // 令牌签发时间早于吊销时间点 → 已被吊销
+            if (claims.iat as i64) < invalidated_at.timestamp() {
+                return Err(AppError::Unauthorized("令牌已失效，请重新登录".to_string()));
+            }
+            role
+        }
+        None => return Err(AppError::Unauthorized("账户不存在".to_string())),
+    };
+
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
     if let Err(e) = crate::utils::revoke_token(&conn, &token, Some(user_id), token_expiry).await {
@@ -854,7 +879,7 @@ pub async fn refresh_token(
         .generate_access_token(
             &user_id,
             &claims.username,
-            &claims.role,
+            &current_role,
             Some(&current_fingerprint),
             Some(ip_address),
         )
@@ -863,7 +888,7 @@ pub async fn refresh_token(
         .generate_refresh_token(
             &user_id,
             &claims.username,
-            &claims.role,
+            &current_role,
             Some(&current_fingerprint),
             Some(ip_address),
             remember_me,
@@ -941,8 +966,10 @@ pub async fn forgot_password(
             tracing::error!("保存重置令牌失败: {}", e);
         } else {
             let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
-            if let Some(ref config) = smtp_config {
-                let reset_link = format!("{}/reset-password?token={}", config.host, reset_token);
+            if let Some(ref _config) = smtp_config {
+                // 使用应用公共URL（而非SMTP主机名）构建重置链接
+                let base_url = state.config.server.public_url.trim_end_matches('/');
+                let reset_link = format!("{base_url}/reset-password?token={reset_token}");
                 let email_body = format!("请点击以下链接重置密码：{reset_link}");
                 if let Err(e) =
                     crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body)
@@ -977,7 +1004,7 @@ pub async fn reset_password(
             let hashed_password = hash_password(&req.new_password).await?;
 
             sqlx::query(
-                "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2",
+                "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, tokens_invalidated_at = NOW() WHERE id = $2",
             )
             .bind(&hashed_password)
             .bind(user_id)

@@ -13,11 +13,48 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
+use crate::auth::extractor::AdminUser;
 use crate::error::AppError;
 use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use crate::routes::static_files::AppJson;
 
-pub async fn get_scheduled_tasks(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+/// 允许通过 API 创建/更新的任务类型白名单（与 task_executors 中注册的类型保持一致）
+const ALLOWED_TASK_TYPES: &[&str] = &[
+    "backup",
+    "token_cleanup",
+    "token_usage_cleanup",
+    "log_cleanup",
+    "mac_sync",
+];
+
+/// 校验任务类型是否在白名单内
+fn validate_task_type(task_type: &str) -> Result<(), AppError> {
+    if ALLOWED_TASK_TYPES.contains(&task_type) {
+        Ok(())
+    } else {
+        Err(AppError::Validation(format!(
+            "不支持的任务类型: {task_type}（允许: {}）",
+            ALLOWED_TASK_TYPES.join(", ")
+        )))
+    }
+}
+
+/// 校验 log_cleanup 任务的 days 配置，禁止 days < 1 导致清空全部审计日志
+fn validate_log_cleanup_days(config: &serde_json::Value) -> Result<(), AppError> {
+    if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64) {
+        if days < 1 {
+            return Err(AppError::Validation(
+                "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub async fn get_scheduled_tasks(
+    State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
+) -> Result<Response, AppError> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
         "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks ORDER BY created_at DESC"
     )
@@ -30,6 +67,7 @@ pub async fn get_scheduled_tasks(State(state): State<Arc<AppState>>) -> Result<R
 
 pub async fn get_scheduled_task(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let task: Option<ScheduledTask> = sqlx::query_as(
@@ -47,11 +85,15 @@ pub async fn get_scheduled_task(
 
 pub async fn create_scheduled_task(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     AppJson(req): AppJson<ScheduledTaskCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-
+    validate_task_type(&req.task_type)?;
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
+    if req.task_type == "log_cleanup" {
+        validate_log_cleanup_days(&config)?;
+    }
     let enabled = req.enabled.unwrap_or(true);
 
     let cron_expr = req.cron_expression.clone();
@@ -91,10 +133,32 @@ pub async fn create_scheduled_task(
 
 pub async fn update_scheduled_task(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
     AppJson(req): AppJson<ScheduledTaskUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    if let Some(ref task_type) = req.task_type {
+        validate_task_type(task_type)?;
+    }
+    if let Some(ref config) = req.config {
+        let task_type = req.task_type.as_deref().unwrap_or("");
+        // 类型未在本请求中变更时，需要读取已有类型来判断
+        let effective_type = if task_type.is_empty() {
+            sqlx::query_scalar::<_, String>(
+                "SELECT task_type FROM scheduled_tasks WHERE id = $1",
+            )
+            .bind(id)
+            .fetch_optional(&state.pool()?.get_conn())
+            .await?
+            .unwrap_or_default()
+        } else {
+            task_type.to_string()
+        };
+        if effective_type == "log_cleanup" {
+            validate_log_cleanup_days(config)?;
+        }
+    }
 
     let now = Utc::now();
     let conn = state.pool()?.get_conn();
@@ -156,6 +220,7 @@ pub async fn update_scheduled_task(
 
 pub async fn delete_scheduled_task(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
@@ -172,6 +237,7 @@ pub async fn delete_scheduled_task(
 
 pub async fn toggle_scheduled_task(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -200,6 +266,7 @@ pub async fn toggle_scheduled_task(
 
 pub async fn run_scheduled_task_now(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let pool = state.pool()?;
@@ -334,6 +401,7 @@ pub async fn run_scheduled_task_now(
 
 pub async fn get_task_logs(
     State(state): State<Arc<AppState>>,
+    _admin: AdminUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let task_name = query.get("task_name").cloned();

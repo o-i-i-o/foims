@@ -21,17 +21,6 @@ use crate::system::smtp::{
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SendEmailRequest {
-    #[validate(length(min = 1, message = "收件人不能为空"))]
-    pub user_ids: Vec<Uuid>,
-    #[validate(length(min = 1, max = 255, message = "主题长度必须在1到255个字符之间"))]
-    pub subject: String,
-    #[validate(length(min = 1, message = "邮件内容不能为空"))]
-    pub body: String,
-    pub is_html: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSystemConfigRequest {
     pub database: Option<crate::config::DatabaseConfig>,
     pub server: Option<ServerConfig>,
@@ -72,7 +61,10 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-pub async fn get_system_info(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+pub async fn get_system_info(
+    State(state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
+) -> Result<Response, AppError> {
     let database_status = match sqlx::query("SELECT 1")
         .execute(&state.pool()?.get_conn())
         .await
@@ -204,57 +196,27 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 
         tracing::info!("服务当前状态: active={}", is_active);
 
-        let output = Command::new("systemctl")
-            .arg("restart")
-            .arg(service_name)
-            .output()
-            .await;
+        // 在后台延迟执行 systemctl restart：若直接 await，成功重启会杀死本进程导致响应不可达。
+        // 先返回响应，由后台任务触发重启；若 systemctl 因权限等原因未能终止进程，则回退到进程退出方式。
+        let service_name_owned = service_name.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tracing::info!("执行 systemctl restart {}...", service_name_owned);
+            let _ = Command::new("systemctl")
+                .arg("restart")
+                .arg(&service_name_owned)
+                .output()
+                .await;
+            // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            tracing::info!("systemctl 未终止进程，使用退出方式重启...");
+            std::process::exit(0);
+        });
 
-        match output {
-            Ok(output) => {
-                let exit_code = output.status.code().unwrap_or(-1);
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-                tracing::info!(
-                    "systemctl restart 执行完成: exit_code={}, stdout='{}', stderr='{}'",
-                    exit_code,
-                    stdout.trim(),
-                    stderr.trim()
-                );
-
-                if output.status.success() {
-                    tracing::info!("systemctl restart 执行成功");
-                    return Ok(crate::error::ok_json(
-                        (),
-                        "服务重启命令已发送，服务正在重启...",
-                    ));
-                }
-
-                if stderr.contains("Access denied")
-                    || stderr.contains("Permission denied")
-                    || stderr.contains("Interactive authentication required")
-                {
-                    tracing::info!("权限不足，使用进程退出方式重启");
-                    return restart_by_exit();
-                }
-
-                if stderr.contains("Failed") && !stderr.contains("Failed to restart") {
-                    tracing::error!("服务重启失败: {}", stderr);
-                    return Err(AppError::Internal(format!(
-                        "服务重启失败: {}",
-                        stderr.trim()
-                    )));
-                }
-
-                tracing::info!("systemctl 返回非零状态码，使用进程退出方式重启");
-                restart_by_exit()
-            }
-            Err(e) => {
-                tracing::warn!("systemctl restart 执行失败: {}，使用退出方式重启", e);
-                restart_by_exit()
-            }
-        }
+        Ok(crate::error::ok_json(
+            (),
+            "服务重启命令已发送，服务正在重启...",
+        ))
     } else {
         tracing::info!("非服务模式运行，使用独立进程重启");
         restart_standalone_process().await
@@ -266,18 +228,6 @@ pub async fn restart_application(
 ) -> Result<Response, AppError> {
     tracing::info!("收到重启应用请求");
     trigger_service_restart().await
-}
-
-fn restart_by_exit() -> Result<Response, AppError> {
-    tracing::info!("使用进程退出方式触发重启（systemd Restart=always 会自动重启）");
-
-    tokio::spawn(async {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        tracing::info!("程序即将退出，等待 systemd 自动重启...");
-        std::process::exit(0);
-    });
-
-    Ok(crate::error::ok_json((), "服务正在重启..."))
 }
 
 fn check_if_running_as_service() -> bool {
@@ -464,6 +414,7 @@ pub async fn get_session_timeout_config(
 
 pub async fn update_session_timeout_config(
     State(_state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -506,6 +457,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 
 pub async fn update_language_setting(
     State(_state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateLanguageRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -551,6 +503,7 @@ pub async fn get_page_timeout_config(
 
 pub async fn update_page_timeout_config(
     State(_state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -601,6 +554,7 @@ pub async fn get_notification_settings(
 
 pub async fn update_notification_settings(
     State(state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
     AppJson(req): AppJson<NotificationSettings>,
 ) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
@@ -711,6 +665,7 @@ pub struct TestSmtpRequest {
 
 pub async fn test_smtp_connection(
     State(state): State<Arc<AppState>>,
+    _admin: crate::auth::extractor::AdminUser,
     AppJson(req): AppJson<TestSmtpRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;

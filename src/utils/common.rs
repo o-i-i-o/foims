@@ -18,6 +18,19 @@ pub fn normalize_ipv4_address(ip: &str) -> String {
     }
 }
 
+/// 转义 ILIKE 搜索串中的特殊字符（\、%、_），并包裹为 `%...%` 模糊匹配模式。
+///
+/// 未转义时，用户输入的 `_` / `%` 会被当作通配符，导致名称含下划线（如 IP、设备型号）
+/// 的查询返回错误结果。配合 sqlx 的 `bind` 使用（参数化，非字符串拼接）。
+#[must_use]
+pub fn escape_like(search: &str) -> String {
+    let escaped = search
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
+}
+
 // ==================== CIDR 验证 ====================
 
 /// 验证 CIDR 格式是否合法（与 PostgreSQL CIDR 类型语义一致）
@@ -313,14 +326,47 @@ pub async fn log_system_operation(
     Ok(())
 }
 
+/// 尽力而为地记录操作日志：失败时仅打印警告，不影响主流程。
+///
+/// 用于替代各 handler 中重复的 `if let Err(e) = log_system_operation(...).await { warn!(...) }` 样板。
+/// 所有调用点均使用 `result: true`（失败路径由各 handler 自行返回错误）。
+pub async fn log_op_best_effort(
+    pool: &sqlx::PgPool,
+    meta: &RequestMeta,
+    action: &str,
+    resource_type: &str,
+    resource_id: Option<&Uuid>,
+    details: &serde_json::Value,
+) {
+    if let Err(e) = log_system_operation(
+        pool,
+        OperationLogParams {
+            ip_address: &meta.ip_address,
+            user_id: meta.user_id(),
+            action,
+            resource_type,
+            resource_id,
+            details,
+            result: true,
+        },
+    )
+    .await
+    {
+        warn!("记录操作日志失败: {}", e);
+    }
+}
+
 // ==================== HTTP 请求处理 ====================
 
 /// 从 axum 请求 parts 中获取真实客户端 IP
 ///
 /// 优先级：
-/// 1. 若 peer 是可信代理（或 UDS 无 peer 信息，默认视为可信），使用 X-Forwarded-For
-/// 2. 其次使用 X-Real-IP
-/// 3. 否则使用 peer IP（TCP）或 "unknown"（UDS 无转发头）
+/// 1. 若 peer 是可信代理（或 UDS 无 peer 信息，默认视为可信），优先使用 X-Real-IP
+///    （nginx 将其设置为 `$remote_addr`，客户端无法伪造）；其次回退到 X-Forwarded-For
+/// 2. 否则使用 peer IP（TCP）或 "unknown"（UDS 无转发头）
+///
+/// 注意：不可优先信任 X-Forwarded-For 的首段——当 nginx 使用
+/// `$proxy_add_x_forwarded_for` 时，该首段是客户端可伪造的，会被用于绕过限流/fail2ban。
 #[must_use]
 pub fn get_real_ip_from_parts(parts: &Parts) -> String {
     // 从 extensions 获取 ConnectInfo（TCP 监听时可用）
@@ -333,19 +379,20 @@ pub fn get_real_ip_from_parts(parts: &Parts) -> String {
     let peer_trusted = peer_info.map(|ip| is_trusted_proxy(&ip)).unwrap_or(true);
 
     if peer_trusted {
+        // 优先 X-Real-IP（不可伪造）；缺失时再回退到 X-Forwarded-For
+        if let Some(x_real_ip) = parts.headers.get("X-Real-IP")
+            && let Ok(real_ip_str) = x_real_ip.to_str()
+            && !real_ip_str.trim().is_empty()
+        {
+            return normalize_ipv4_address(real_ip_str.trim());
+        }
+
         if let Some(xff) = parts.headers.get("X-Forwarded-For")
             && let Ok(xff_str) = xff.to_str()
             && let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string())
             && !real_ip.is_empty()
         {
             return normalize_ipv4_address(&real_ip);
-        }
-
-        if let Some(x_real_ip) = parts.headers.get("X-Real-IP")
-            && let Ok(real_ip_str) = x_real_ip.to_str()
-            && !real_ip_str.trim().is_empty()
-        {
-            return normalize_ipv4_address(real_ip_str.trim());
         }
     }
 

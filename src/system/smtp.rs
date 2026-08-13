@@ -302,9 +302,8 @@ pub async fn send_mac_change_email(
     .await
     {
         Ok(Some(recips)) => {
-            recips.split(',')
-                .filter_map(|id| Uuid::parse_str(id.trim()).ok())
-                .collect::<Vec<Uuid>>()
+            // 收件人以 JSON 数组形式存储（与 system/config.rs update_notification_settings 写入格式一致）
+            serde_json::from_str::<Vec<Uuid>>(&recips).unwrap_or_default()
         }
         Ok(None) => {
             warn!("未配置邮件收件人，跳过MAC变更邮件通知");

@@ -13,9 +13,8 @@ use crate::auth::utils::hash_password;
 use crate::error::AppError;
 use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 
 pub async fn get_users(
     _admin: crate::auth::extractor::AdminUser,
@@ -126,22 +125,7 @@ pub async fn create_user(
     .await?;
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
-    if let Err(e) = log_system_operation(
-        &conn,
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create_user",
-            resource_type: "user",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        tracing::warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
     tracing::info!("用户 {} 创建成功, ID: {}", req.username, id);
 
     let user = User {
@@ -215,23 +199,19 @@ pub async fn update_user(
     .execute(&conn)
     .await?;
 
-    let details = json!({"email": req.email, "role": req.role, "status": req.status});
-    if let Err(e) = log_system_operation(
-        &conn,
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update_user",
-            resource_type: "user",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        tracing::warn!("记录操作日志失败: {}", e);
+    // 权限或启用状态变更时，吊销该用户的历史令牌（强制重新登录，立即生效）
+    if req.role.is_some() || req.status == Some(false) {
+        if let Err(e) = sqlx::query("UPDATE users SET tokens_invalidated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(&conn)
+            .await
+        {
+            tracing::warn!("更新 tokens_invalidated_at 失败: {}", e);
+        }
     }
+
+    let details = json!({"email": req.email, "role": req.role, "status": req.status});
+    log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
     tracing::info!("用户更新成功, ID: {}", id);
 
     let user = sqlx::query_as::<_, User>(
@@ -273,22 +253,7 @@ pub async fn delete_user(
     tx.commit().await?;
 
     let details = json!({});
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete_user",
-            resource_type: "user",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        tracing::warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete_user", "user", Some(&id), &details).await;
     tracing::info!("用户删除成功, ID: {}", id);
 
     Ok(crate::error::ok_json((), "用户删除成功"))
