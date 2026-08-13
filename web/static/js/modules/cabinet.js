@@ -23,6 +23,7 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
 import { t } from "../utils/i18n.js";
+import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
 import {
   loadDataCenterRoomsForSelect,
@@ -33,54 +34,32 @@ import {
 // 机柜机位动态管理模块
 // ==========================================
 
-class CabinetPositionsManager {
+class CabinetPositionsManager extends DynamicRowManager {
   constructor() {
-    this.container = null;
-    this.handlers = new WeakMap();
-    this.addHandler = null;
+    super({
+      containerId: 'cabinet-positions-container',
+      itemSelector: '.cabinet-position-item',
+      emptyClassName: 'cabinet-position-empty',
+      removeBtnSelector: '.remove-position-btn',
+      externalAddButtonId: 'add-position-row-btn',
+      emptyMode: 'hint',
+    });
   }
 
-  ensureContainer() {
-    if (!this.container || !document.contains(this.container)) {
-      this.container = document.getElementById('cabinet-positions-container');
-    }
-    return this.container;
+  emptyHintText() {
+    return t('cabinet.no_positions_hint') || '暂无机位，点击下方按钮添加';
   }
 
   init() {
     this.ensureContainer();
     // 无论 container 是否找到，都要绑定底部"添加机位"按钮
-    this.bindAddButton();
+    this.bindExternalAddButton();
 
     if (!this.container) return false;
 
     this.container.innerHTML = '';
     this.updateEmptyState();
     return true;
-  }
-
-  bindAddButton() {
-    const addBtn = document.getElementById('add-position-row-btn');
-    if (!addBtn) return;
-    if (this.addHandler) {
-      addBtn.removeEventListener('click', this.addHandler);
-    }
-    this.addHandler = () => this.addItem();
-    addBtn.addEventListener('click', this.addHandler);
-  }
-
-  updateEmptyState() {
-    if (!this.ensureContainer()) return;
-    const existing = this.container.querySelector('.cabinet-position-empty');
-    const items = this.container.querySelectorAll('.cabinet-position-item');
-    if (items.length === 0 && !existing) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'cabinet-position-empty text-muted';
-      emptyDiv.textContent = t('cabinet.no_positions_hint') || '暂无机位，点击下方按钮添加';
-      this.container.appendChild(emptyDiv);
-    } else if (items.length > 0 && existing) {
-      existing.remove();
-    }
   }
 
   createRow(data = {}) {
@@ -115,34 +94,11 @@ class CabinetPositionsManager {
     return div;
   }
 
-  addItem(data = {}) {
-    if (!this.ensureContainer()) return;
-    // 移除空状态提示
-    const emptyState = this.container.querySelector('.cabinet-position-empty');
-    if (emptyState) emptyState.remove();
-    const item = this.createRow(data);
-    this.container.appendChild(item);
-  }
-
-  bindItemEvents(item) {
-    const removeBtn = item.querySelector('.remove-position-btn');
-    if (removeBtn) {
-      const handler = () => this.removeItem(item);
-      this.handlers.set(removeBtn, handler);
-      removeBtn.addEventListener('click', handler);
-    }
-  }
-
-  removeItem(item) {
-    item.remove();
-    this.updateEmptyState();
-  }
-
   loadExisting(positions) {
     // closeModal 会移除模态框 DOM，需重新获取 container
     this.ensureContainer();
     // 无论 container 是否找到，都要绑定底部"添加机位"按钮
-    this.bindAddButton();
+    this.bindExternalAddButton();
 
     if (!this.container) return;
     this.container.innerHTML = '';
@@ -180,51 +136,29 @@ class CabinetPositionsManager {
 // 机柜配线架动态管理模块（参照房间信息点逻辑）
 // ==========================================
 
-class CabinetPatchPanelsManager {
+class CabinetPatchPanelsManager extends DynamicRowManager {
   constructor() {
-    this.container = null;
-    this.handlers = new WeakMap();
-    this.addHandler = null;
+    super({
+      containerId: 'cabinet-patch-panels-container',
+      itemSelector: '.cabinet-patch-panel-item',
+      emptyClassName: 'cabinet-patch-panel-empty',
+      removeBtnSelector: '.remove-patch-panel-btn',
+      externalAddButtonId: 'add-patch-panel-row-btn',
+      emptyMode: 'hint',
+    });
   }
 
-  ensureContainer() {
-    if (!this.container || !document.contains(this.container)) {
-      this.container = document.getElementById('cabinet-patch-panels-container');
-    }
-    return this.container;
+  emptyHintText() {
+    return t('cabinet.no_patch_panels_hint') || '暂无配线架，点击下方按钮添加';
   }
 
   init() {
     this.ensureContainer();
-    this.bindAddButton();
+    this.bindExternalAddButton();
     if (!this.container) return false;
     this.container.innerHTML = '';
     this.updateEmptyState();
     return true;
-  }
-
-  bindAddButton() {
-    const addBtn = document.getElementById('add-patch-panel-row-btn');
-    if (!addBtn) return;
-    if (this.addHandler) {
-      addBtn.removeEventListener('click', this.addHandler);
-    }
-    this.addHandler = () => this.addItem();
-    addBtn.addEventListener('click', this.addHandler);
-  }
-
-  updateEmptyState() {
-    if (!this.ensureContainer()) return;
-    const existing = this.container.querySelector('.cabinet-patch-panel-empty');
-    const items = this.container.querySelectorAll('.cabinet-patch-panel-item');
-    if (items.length === 0 && !existing) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'cabinet-patch-panel-empty text-muted';
-      emptyDiv.textContent = t('cabinet.no_patch_panels_hint') || '暂无配线架，点击下方按钮添加';
-      this.container.appendChild(emptyDiv);
-    } else if (items.length > 0 && existing) {
-      existing.remove();
-    }
   }
 
   createRow(data = {}) {
@@ -247,31 +181,9 @@ class CabinetPatchPanelsManager {
     return div;
   }
 
-  addItem(data = {}) {
-    if (!this.ensureContainer()) return;
-    const emptyState = this.container.querySelector('.cabinet-patch-panel-empty');
-    if (emptyState) emptyState.remove();
-    const item = this.createRow(data);
-    this.container.appendChild(item);
-  }
-
-  bindItemEvents(item) {
-    const removeBtn = item.querySelector('.remove-patch-panel-btn');
-    if (removeBtn) {
-      const handler = () => this.removeItem(item);
-      this.handlers.set(removeBtn, handler);
-      removeBtn.addEventListener('click', handler);
-    }
-  }
-
-  removeItem(item) {
-    item.remove();
-    this.updateEmptyState();
-  }
-
   loadExisting(patchPanels) {
     this.ensureContainer();
-    this.bindAddButton();
+    this.bindExternalAddButton();
     if (!this.container) return;
     this.container.innerHTML = '';
     if (patchPanels?.length) {

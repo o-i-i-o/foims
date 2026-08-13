@@ -23,6 +23,7 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { elementCache } from "../utils/helpers.js";
 import { loadOrgsForSelect } from "../utils/resources.js";
+import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
 // ==========================================
 // 网段配置管理模块 - 仅用于房间管理
@@ -383,20 +384,23 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 // 房间子项（工位/机柜）动态管理模块
 // ==========================================
 
-class RoomChildrenManager {
+class RoomChildrenManager extends DynamicRowManager {
   constructor() {
-    this.container = null;
+    super({
+      containerId: 'room-children-container',
+      itemSelector: '.room-child-item',
+      emptyClassName: 'room-child-empty',
+      removeBtnSelector: '.remove-child-btn',
+      addBtnSelector: '.add-child-btn',
+      emptyMode: 'button',
+      showInRowAddButton: true,
+    });
     this.roomType = 'office';
-    this.handlers = new WeakMap();
-    this.addHandler = null;
     this.typeChangeHandler = null;
   }
 
-  ensureContainer() {
-    if (!this.container || !document.contains(this.container)) {
-      this.container = document.getElementById('room-children-container');
-    }
-    return this.container;
+  addLabel() {
+    return this.roomType === 'office' ? t('room.add_workstation') : t('room.add_cabinet');
   }
 
   init() {
@@ -439,25 +443,11 @@ class RoomChildrenManager {
     }
   }
 
-  updateEmptyState() {
-    if (!this.ensureContainer()) return;
-    const existing = this.container.querySelector('.room-child-empty');
-    const items = this.container.querySelectorAll('.room-child-item');
-    if (items.length === 0 && !existing) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'room-child-empty';
-      const addLabel = this.roomType === 'office' ? t('room.add_workstation') : t('room.add_cabinet');
-      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-child-btn">${addLabel}</button>`;
-      const addBtn = emptyDiv.querySelector('.add-child-btn');
-      if (addBtn) {
-        const handler = () => this.addItem();
-        this.handlers.set(addBtn, handler);
-        addBtn.addEventListener('click', handler);
-      }
-      this.container.appendChild(emptyDiv);
-    } else if (items.length > 0 && existing) {
-      existing.remove();
-    }
+  // 按房间类型派发到对应的行构造器
+  createRow(data = {}) {
+    return this.roomType === 'office'
+      ? this.createWorkstationRow(data)
+      : this.createCabinetRow(data);
   }
 
   createWorkstationRow(data = {}) {
@@ -510,53 +500,6 @@ class RoomChildrenManager {
     `;
     this.bindItemEvents(div);
     return div;
-  }
-
-  addItem(data = {}) {
-    if (!this.ensureContainer()) return;
-    // 移除空状态提示
-    const emptyState = this.container.querySelector('.room-child-empty');
-    if (emptyState) emptyState.remove();
-    const item = this.roomType === 'office'
-      ? this.createWorkstationRow(data)
-      : this.createCabinetRow(data);
-    this.container.appendChild(item);
-    this.updateAddButtons();
-  }
-
-  updateAddButtons() {
-    if (!this.ensureContainer()) return;
-    const items = this.container.querySelectorAll('.room-child-item');
-    items.forEach((item, index) => {
-      const addBtn = item.querySelector('.add-child-btn');
-      if (addBtn) {
-        addBtn.style.display = index === items.length - 1 ? '' : 'none';
-        addBtn.textContent = this.roomType === 'office' ? t('room.add_workstation') : t('room.add_cabinet');
-      }
-    });
-  }
-
-  bindItemEvents(item) {
-    const removeBtn = item.querySelector('.remove-child-btn');
-    if (removeBtn) {
-      const handler = () => this.removeItem(item);
-      this.handlers.set(removeBtn, handler);
-      removeBtn.addEventListener('click', handler);
-    }
-
-    const addBtn = item.querySelector('.add-child-btn');
-    if (addBtn) {
-      const handler = () => this.addItem();
-      this.handlers.set(addBtn, handler);
-      addBtn.addEventListener('click', handler);
-    }
-  }
-
-  removeItem(item) {
-    item.remove();
-    this.ensureContainer();
-    this.updateEmptyState();
-    this.updateAddButtons();
   }
 
   loadExisting(children) {
@@ -614,21 +557,23 @@ export const roomChildrenManager = new RoomChildrenManager();
 // 房间信息点管理模块 - 所有房型通用
 // ==========================================
 
-class RoomNetOutletsManager {
+class RoomNetOutletsManager extends DynamicRowManager {
   constructor() {
-    this.container = null;
-    this.handlers = new WeakMap();
-    this.addHandler = null;
-    this.typeChangeHandler = null;
+    super({
+      containerId: 'room-net-outlets-container',
+      itemSelector: '.room-net-outlet-item',
+      emptyClassName: 'room-net-outlet-empty',
+      removeBtnSelector: '.remove-net-outlet-btn',
+      addBtnSelector: '.add-net-outlet-btn',
+      emptyMode: 'button',
+      showInRowAddButton: true,
+    });
     this.roomId = null;
     this.cabinets = []; // 当前房间的机柜选项 [{id, name}]
   }
 
-  ensureContainer() {
-    if (!this.container || !document.contains(this.container)) {
-      this.container = document.getElementById('room-net-outlets-container');
-    }
-    return this.container;
+  addLabel() {
+    return t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
   }
 
   init(roomId = null) {
@@ -677,27 +622,6 @@ class RoomNetOutletsManager {
     ).join('');
   }
 
-  updateEmptyState() {
-    if (!this.ensureContainer()) return;
-    const existing = this.container.querySelector('.room-net-outlet-empty');
-    const items = this.container.querySelectorAll('.room-net-outlet-item');
-    if (items.length === 0 && !existing) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'room-net-outlet-empty';
-      const addLabel = t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
-      emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn">${addLabel}</button>`;
-      const addBtn = emptyDiv.querySelector('.add-net-outlet-btn');
-      if (addBtn) {
-        const handler = () => this.addItem();
-        this.handlers.set(addBtn, handler);
-        addBtn.addEventListener('click', handler);
-      }
-      this.container.appendChild(emptyDiv);
-    } else if (items.length > 0 && existing) {
-      existing.remove();
-    }
-  }
-
   outletTypeOptionsHtml() {
     const types = [
       { value: 'wall_socket', label: t('net_outlet.type_wall_socket') || '墙面插座' },
@@ -734,7 +658,7 @@ class RoomNetOutletsManager {
         </div>
         <div class="form-group room-net-outlets-actions">
           <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t('common.delete') || '删除'}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${t('room.add_net_outlet') || '添加信息点'}</button>
+          <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${this.addLabel()}</button>
         </div>
       </div>
     `;
@@ -745,50 +669,6 @@ class RoomNetOutletsManager {
     if (cabSel && cabinetId) cabSel.value = cabinetId;
     this.bindItemEvents(div);
     return div;
-  }
-
-  addItem(data = {}) {
-    if (!this.ensureContainer()) return;
-    const emptyState = this.container.querySelector('.room-net-outlet-empty');
-    if (emptyState) emptyState.remove();
-    const item = this.createRow(data);
-    this.container.appendChild(item);
-    this.updateAddButtons();
-    this.updateEmptyState();
-  }
-
-  updateAddButtons() {
-    if (!this.ensureContainer()) return;
-    const items = this.container.querySelectorAll('.room-net-outlet-item');
-    items.forEach((item, index) => {
-      const addBtn = item.querySelector('.add-net-outlet-btn');
-      if (addBtn) {
-        addBtn.style.display = index === items.length - 1 ? '' : 'none';
-        addBtn.textContent = t('room.add_net_outlet') || t('net_outlet.add') || '添加信息点';
-      }
-    });
-  }
-
-  bindItemEvents(item) {
-    const removeBtn = item.querySelector('.remove-net-outlet-btn');
-    if (removeBtn) {
-      const handler = () => this.removeItem(item);
-      this.handlers.set(removeBtn, handler);
-      removeBtn.addEventListener('click', handler);
-    }
-    const addBtn = item.querySelector('.add-net-outlet-btn');
-    if (addBtn) {
-      const handler = () => this.addItem();
-      this.handlers.set(addBtn, handler);
-      addBtn.addEventListener('click', handler);
-    }
-  }
-
-  removeItem(item) {
-    item.remove();
-    this.ensureContainer();
-    this.updateEmptyState();
-    this.updateAddButtons();
   }
 
   async loadExisting(room) {
