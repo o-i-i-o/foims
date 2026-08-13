@@ -56,6 +56,13 @@ impl IntoResponse for AppError {
                     "服务器内部错误，请稍后重试".to_string(),
                 ))
             }
+            AppError::Database(msg) => {
+                // 详细错误仅写入服务端日志，避免向客户端泄露数据库结构等内部信息
+                error!("数据库错误详情: {}", msg);
+                Json(crate::models::ApiResponse::<()>::error(
+                    "数据库操作失败，请稍后重试".to_string(),
+                ))
+            }
             other => Json(crate::models::ApiResponse::<()>::error(other.to_string())),
         };
         (status, body).into_response()
