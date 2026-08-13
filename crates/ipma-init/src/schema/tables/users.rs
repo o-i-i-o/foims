@@ -22,11 +22,5 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 兼容旧库：补充 tokens_invalidated_at 列（用于密码重置/权限变更后吊销历史令牌）
-    sqlx::query(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_invalidated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()",
-    )
-    .execute(pool)
-    .await
-    .map(|_| ())
+    Ok(())
 }

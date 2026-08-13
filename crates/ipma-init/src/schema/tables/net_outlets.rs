@@ -15,10 +15,5 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 兼容旧库：移除已废弃的 description 列（信息点不再需要描述字段）
-    sqlx::query("ALTER TABLE net_outlets DROP COLUMN IF EXISTS description")
-        .execute(pool)
-        .await?;
-
     Ok(())
 }

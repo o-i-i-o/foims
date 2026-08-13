@@ -24,35 +24,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 兼容旧库：将端点类型 CHECK 约束扩展为包含 patch_panel
-    // （CREATE TABLE IF NOT EXISTS 不会修改已存在表的列级约束，需显式重建）
-    sqlx::query("ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS cable_links_a_endpoint_type_check")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS cable_links_b_endpoint_type_check")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS chk_cl_a_type",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "ALTER TABLE cable_links DROP CONSTRAINT IF EXISTS chk_cl_b_type",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "ALTER TABLE cable_links ADD CONSTRAINT chk_cl_a_type CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel'))",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "ALTER TABLE cable_links ADD CONSTRAINT chk_cl_b_type CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel'))",
-    )
-    .execute(pool)
-    .await?;
-
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_cable_links_a ON cable_links(a_endpoint_type, a_endpoint_id)",
     )

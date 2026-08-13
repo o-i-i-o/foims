@@ -363,14 +363,6 @@ async fn main() -> std::io::Result<()> {
         match DbPool::new(&config.database).await {
             Ok(p) => {
                 info!("数据库连接池创建成功");
-                // 同步数据库结构：对既有库应用幂等的结构迁移（新增列/视图/触发器等），
-                // 避免 schema 漂移（例如新增列未同步到旧库）导致的运行期 500。
-                // create_tables 内部全部使用 IF NOT EXISTS / DROP IF EXISTS，可安全重复执行，
-                // 不会删除或破坏既有数据。
-                match ipma_init::create_tables(&p.get_conn()).await {
-                    Ok(()) => info!("数据库结构同步完成"),
-                    Err(e) => error!("数据库结构同步失败，部分功能可能异常: {e}"),
-                }
                 Some(p)
             }
             Err(e) => {
