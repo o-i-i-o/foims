@@ -230,7 +230,6 @@ fn configure_app_services(
                 idle_timeout_secs: app_state.config.database.idle_timeout_secs,
                 max_lifetime_secs: app_state.config.database.max_lifetime_secs,
                 query_timeout_secs: app_state.config.database.query_timeout_secs,
-                slow_query_threshold_ms: app_state.config.database.slow_query_threshold_ms,
                 health_check_interval_secs: app_state.config.database.health_check_interval_secs,
             },
             config_path: ipma::config::get_config_file_path(),

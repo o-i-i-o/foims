@@ -10,7 +10,6 @@ acquire_timeout_secs = 15
 idle_timeout_secs = 60
 max_lifetime_secs = 1800
 query_timeout_secs = 30
-slow_query_threshold_ms = 1000
 health_check_interval_secs = 30
 
 [server]

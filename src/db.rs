@@ -140,14 +140,7 @@ pub struct PoolConfig {
     pub max_lifetime_secs: u64,
     pub test_before_acquire: bool,
     pub health_check_interval_secs: u64,
-    pub auto_scaling_enabled: bool,
-    pub low_load_threshold: f32,
-    pub high_load_threshold: f32,
-    pub scaling_cooldown_secs: u64,
     pub query_timeout_secs: u64,
-    pub slow_query_threshold_ms: u64,
-    pub retry_max_attempts: u32,
-    pub retry_base_delay_ms: u64,
     pub leak_detection_threshold: f32,
 }
 
@@ -161,14 +154,7 @@ impl Default for PoolConfig {
             max_lifetime_secs: 1800,
             test_before_acquire: true,
             health_check_interval_secs: 30,
-            auto_scaling_enabled: false,
-            low_load_threshold: 0.3,
-            high_load_threshold: 0.8,
-            scaling_cooldown_secs: 60,
             query_timeout_secs: 30,
-            slow_query_threshold_ms: 1000,
-            retry_max_attempts: 3,
-            retry_base_delay_ms: 100,
             leak_detection_threshold: 0.9,
         }
     }
@@ -203,15 +189,6 @@ impl PoolConfig {
         if self.query_timeout_secs == 0 {
             return Err("query_timeout_secs must be greater than 0".to_string());
         }
-        if self.retry_max_attempts == 0 {
-            return Err("retry_max_attempts must be greater than 0".to_string());
-        }
-        if self.low_load_threshold >= self.high_load_threshold {
-            return Err(format!(
-                "low_load_threshold ({}) must be less than high_load_threshold ({})",
-                self.low_load_threshold, self.high_load_threshold
-            ));
-        }
         if self.leak_detection_threshold <= 0.0 || self.leak_detection_threshold > 1.0 {
             return Err(format!(
                 "leak_detection_threshold ({}) must be in range (0.0, 1.0]",
@@ -232,14 +209,7 @@ impl From<&DatabaseConfig> for PoolConfig {
             max_lifetime_secs: config.max_lifetime_secs,
             test_before_acquire: true,
             health_check_interval_secs: config.health_check_interval_secs,
-            auto_scaling_enabled: false,
-            low_load_threshold: 0.3,
-            high_load_threshold: 0.8,
-            scaling_cooldown_secs: 60,
             query_timeout_secs: config.query_timeout_secs,
-            slow_query_threshold_ms: config.slow_query_threshold_ms,
-            retry_max_attempts: 3,
-            retry_base_delay_ms: 100,
             leak_detection_threshold: 0.9,
         }
     }
@@ -484,7 +454,7 @@ mod tests {
         assert_eq!(config.max_connections, 10);
         assert_eq!(config.min_connections, 5);
         assert_eq!(config.acquire_timeout_secs, 15);
-        assert!(!config.auto_scaling_enabled);
+        assert_eq!(config.health_check_interval_secs, 30);
     }
 
     #[test]
@@ -527,12 +497,10 @@ mod tests {
             idle_timeout_secs: 60,
             max_lifetime_secs: 1800,
             query_timeout_secs: 30,
-            slow_query_threshold_ms: 1000,
             health_check_interval_secs: 30,
         };
         let pool_config = PoolConfig::from(&db_config);
         assert_eq!(pool_config.min_connections, 5);
         assert!(pool_config.min_connections <= pool_config.max_connections);
-        assert!(!pool_config.auto_scaling_enabled);
     }
 }

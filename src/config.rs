@@ -51,8 +51,6 @@ pub struct DatabaseConfig {
     pub max_lifetime_secs: u64,
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: u64,
-    #[serde(default = "default_slow_query_threshold")]
-    pub slow_query_threshold_ms: u64,
     #[serde(default = "default_health_check_interval")]
     pub health_check_interval_secs: u64,
 }
@@ -79,10 +77,6 @@ const fn default_max_lifetime() -> u64 {
 
 const fn default_query_timeout() -> u64 {
     30
-}
-
-const fn default_slow_query_threshold() -> u64 {
-    1000
 }
 
 const fn default_health_check_interval() -> u64 {
