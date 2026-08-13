@@ -470,7 +470,5 @@ function renderLldpTable(neighbors) {
 
 export {
   viewArpTable,
-  viewLldpNeighbors,
-  renderMacTable,
-  bindCollapseEvents
+  viewLldpNeighbors
 };

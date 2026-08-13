@@ -171,10 +171,6 @@ function checkConfigUpdateRestartPrompt() {
   }
 }
 
-// 清除配置更新标记（在重启后调用）
-function clearConfigUpdateFlag() {
-  sessionStorage.removeItem("configUpdated");
-}
 
 // 加载系统配置
 export async function loadSystemConfig() {
@@ -680,15 +676,6 @@ export async function clearLogs() {
     console.error("清理日志失败:", error);
     showToast(t('logs.clear_failed') + ": " + error.message, "error");
   }
-}
-
-// 初始化日志清理功能
-export function initLogsCleanup() {
-  const clearLogsBtn = elementCache.get("clear-logs-btn");
-  if (clearLogsBtn) {
-    clearLogsBtn.addEventListener("click", clearLogs);
-  }
-  loadLogsStats();
 }
 
 // 初始化定时任务标签页

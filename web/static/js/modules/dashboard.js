@@ -454,12 +454,3 @@ async function loadFallbackData() {
     return null;
   }
 }
-
-export function getStatsCache() {
-  return cache.get(CACHE_KEY_STATS);
-}
-
-export function clearDashboardCache() {
-  cache.delete(CACHE_KEY_STATS);
-  cache.delete(CACHE_KEY_TOP_LISTS);
-}

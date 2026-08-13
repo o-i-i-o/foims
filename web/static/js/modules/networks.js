@@ -163,7 +163,7 @@ function applyNetworkFilters() {
 }
 
 // 计算网段的总IP数量
-export function calculateTotalIps(cidr) {
+function calculateTotalIps(cidr) {
   if (!cidr) return 0;
   
   try {
@@ -181,7 +181,7 @@ export function calculateTotalIps(cidr) {
 }
 
 // 生成网段的所有IP地址
-export function generateIpAddresses(cidr) {
+function generateIpAddresses(cidr) {
   if (!cidr) return [];
   
   try {
@@ -228,7 +228,7 @@ export function generateIpAddresses(cidr) {
 }
 
 // 生成 /22 或 /23 网段划分为 /24 的子网列表
-export function generateSubnet24List(cidr) {
+function generateSubnet24List(cidr) {
   if (!cidr) return [];
   const parts = cidr.split('/');
   if (parts.length !== 2) return [];

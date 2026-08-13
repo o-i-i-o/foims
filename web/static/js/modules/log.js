@@ -394,7 +394,7 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
 }
 
 // 标记通知为已读
-export async function markNotificationAsRead(notificationId) {
+async function markNotificationAsRead(notificationId) {
   try {
     const result = await apiPut(`/api/notifications/${notificationId}/read`, {});
     if (result.success) {

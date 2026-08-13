@@ -108,21 +108,6 @@ export class TopologyVisualization {
     }
   }
 
-  async deleteSelectedConnection() {
-    if (!this.selectedConnectionId) {
-      showToast("请先选择一条连线", "warning");
-      return;
-    }
-    const confirmed = await showConfirm("确定要删除此连线吗？");
-    if (!confirmed) return;
-
-    const success = await this.dataManager.deleteConnection(this.selectedConnectionId);
-    if (success) {
-      this.selectedConnectionId = null;
-      await this.loadTopology();
-    }
-  }
-
   async saveLayout() {
     const elements = this.core.elementsGroup.querySelectorAll("[data-device-id]");
     const nodes = [];
@@ -158,14 +143,6 @@ export class TopologyVisualization {
     this.connectionsMap.clear();
     this.renderer.clearAll();
     showToast("拓扑布局删除成功", "success");
-  }
-
-  enterConnectionMode() {
-    this.core.setConnectionMode(true);
-  }
-
-  exitConnectionMode() {
-    this.core.setConnectionMode(false);
   }
 
   toggleConnectionMode() {
