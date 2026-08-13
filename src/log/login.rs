@@ -19,7 +19,7 @@ pub async fn get_login_logs(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = crate::utils::escape_like(&search);
     let conn = state.pool()?.get_conn();
 
     let (total, logs) = if search.is_empty() {

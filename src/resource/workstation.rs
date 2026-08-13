@@ -4,9 +4,8 @@ use crate::models::{
     IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -14,7 +13,6 @@ use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -37,7 +35,7 @@ pub async fn get_workstations(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = crate::utils::escape_like(&search);
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -133,12 +131,6 @@ pub async fn get_workstations(
 
         (total, workstations_basic)
     };
-
-    let mut workstation_ids = Vec::new();
-    for row in &workstations_basic {
-        let id: Uuid = row.get("id");
-        workstation_ids.push(id);
-    }
 
     let mut workstations_with_details = Vec::new();
 
@@ -236,22 +228,7 @@ pub async fn create_workstation(
         "manager": workstation.manager,
         "description": workstation.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "workstation",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "workstation", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(workstation, "工位创建成功"))
 }
@@ -382,22 +359,7 @@ pub async fn update_workstation(
         "manager": result.manager,
         "description": result.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "workstation",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "workstation", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(result, "工位更新成功"))
 }
@@ -434,22 +396,7 @@ pub async fn delete_workstation(
     let details = serde_json::json!({
         "workstation_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "workstation",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "workstation", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "工位删除成功"))
 }

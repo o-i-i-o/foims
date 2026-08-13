@@ -4,17 +4,15 @@ use crate::models::{
     Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate, NetworkUpdate,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
 use crate::utils::parse_network_from_row;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -89,7 +87,7 @@ pub async fn get_networks(
         let mut count_sql = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query));
 
         if !search.is_empty() {
-            let pattern = format!("%{search}%");
+            let pattern = crate::utils::escape_like(&search);
             count_sql = count_sql.bind(pattern);
         }
 
@@ -182,7 +180,7 @@ pub async fn get_networks(
         let mut data_sql = sqlx::query(sqlx::AssertSqlSafe(data_query));
 
         if !search.is_empty() {
-            let pattern = format!("%{search}%");
+            let pattern = crate::utils::escape_like(&search);
             data_sql = data_sql.bind(pattern);
         }
 
@@ -407,22 +405,7 @@ pub async fn create_network(
         "ipv4_cidr": ipv4_cidr_val,
         "ipv6_cidr": ipv6_cidr_val
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "network",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "network", Some(&id), &details).await;
     tracing::info!("网络 {} 创建成功, ID: {}", full_network_name, id);
 
     let network = Network {
@@ -677,22 +660,7 @@ pub async fn update_network(
         "ipv4_cidr": network.ipv4_cidr,
         "ipv6_cidr": network.ipv6_cidr
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "network",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "network", Some(&id), &details).await;
     tracing::info!("网络 {} 更新成功, ID: {}", network.name, id);
 
     Ok(crate::error::ok_json(network, "网络更新成功"))
@@ -758,22 +726,7 @@ pub async fn delete_network(
     let details = serde_json::json!({
         "network_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "network",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "network", Some(&id), &details).await;
     tracing::info!("网络删除成功, ID: {}", id);
 
     Ok(crate::error::ok_json((), "网络删除成功"))
@@ -889,22 +842,7 @@ pub async fn create_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "network_region",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "network_region", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(network_region, "网络区域创建成功"))
 }
@@ -989,22 +927,7 @@ pub async fn update_network_region(
         "name": network_region.name,
         "description": network_region.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "network_region",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "network_region", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(network_region, "网络区域更新成功"))
 }
@@ -1045,22 +968,7 @@ pub async fn delete_network_region(
     let details = serde_json::json!({
         "network_region_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "network_region",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "network_region", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "网络区域删除成功"))
 }

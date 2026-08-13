@@ -23,7 +23,7 @@ pub async fn get_operation_logs(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
 
-    let search_pattern = format!("%{action}%");
+    let search_pattern = crate::utils::escape_like(&action);
 
     let has_filters = !resource_type.is_empty()
         || !resource_id.is_empty()

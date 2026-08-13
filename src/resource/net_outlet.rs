@@ -2,16 +2,14 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -36,11 +34,7 @@ pub async fn get_net_outlets(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let escaped = search
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_");
-    let search_pattern = format!("%{escaped}%");
+    let search_pattern = crate::utils::escape_like(&search);
     let parsed_room_id = room_id
         .as_ref()
         .map(|id| {
@@ -231,22 +225,7 @@ pub async fn create_net_outlet(
         "outlet_type": net_outlet.outlet_type,
         "room_id": net_outlet.room_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "net_outlet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "net_outlet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(net_outlet, "信息点创建成功"))
 }
@@ -426,22 +405,7 @@ pub async fn update_net_outlet(
         "outlet_type": net_outlet.outlet_type,
         "room_id": net_outlet.room_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "net_outlet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "net_outlet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(net_outlet, "信息点更新成功"))
 }
@@ -469,22 +433,7 @@ pub async fn delete_net_outlet(
     tx.commit().await?;
 
     let details = serde_json::json!({ "net_outlet_id": id.to_string() });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "net_outlet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "net_outlet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "信息点删除成功"))
 }

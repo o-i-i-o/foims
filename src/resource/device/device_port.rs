@@ -12,10 +12,8 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DevicePort, DevicePortCreate, DevicePortUpdate, DevicePortWithDevice};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
-use tracing::warn;
 
 pub async fn get_device_ports(
     State(state): State<Arc<AppState>>,
@@ -67,7 +65,7 @@ pub async fn get_all_device_ports(
     let search_pattern = if search.is_empty() {
         None
     } else {
-        Some(format!("%{search}%"))
+        Some(crate::utils::escape_like(&search))
     };
 
     let parsed_room_id = room_id
@@ -219,22 +217,7 @@ pub async fn create_device_port(
         "port_type": data.port_type,
         "vlan_id": data.vlan_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "device_port",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "device_port", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(data, "创建端口成功"))
 }
@@ -314,22 +297,7 @@ pub async fn update_device_port(
         "port_type": data.port_type,
         "vlan_id": data.vlan_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "device_port",
-            resource_id: Some(&port_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device_port", Some(&port_id), &details).await;
 
     Ok(crate::error::ok_json(data, "更新端口成功"))
 }
@@ -359,22 +327,7 @@ pub async fn delete_device_port(
     let details = serde_json::json!({
         "port_id": port_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "device_port",
-            resource_id: Some(&port_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device_port", Some(&port_id), &details).await;
 
     Ok(crate::error::ok_json((), "删除端口成功"))
 }

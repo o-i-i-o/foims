@@ -3,9 +3,8 @@ use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -13,7 +12,6 @@ use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -91,7 +89,7 @@ pub async fn get_devices(
         format!("WHERE {}", where_parts.join(" AND "))
     };
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = crate::utils::escape_like(&search);
 
     let count_sql = sqlx::AssertSqlSafe(format!(
         "SELECT COUNT(*) FROM devices_with_details d {where_clause}"
@@ -390,22 +388,7 @@ pub async fn create_device(
         "description": device.description,
         "ip_count": ip_count
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "device",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "device", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(device, "设备创建成功"))
 }
@@ -703,22 +686,7 @@ pub async fn update_device(
         "model": updated_device.model,
         "description": updated_device.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "device",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(result, "设备更新成功"))
 }
@@ -750,22 +718,7 @@ pub async fn delete_device(
     let details = serde_json::json!({
         "device_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "device",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "设备删除成功"))
 }

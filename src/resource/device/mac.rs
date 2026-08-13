@@ -5,7 +5,7 @@ use async_snmp::{Client, oid};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -13,8 +13,8 @@ use crate::error::AppError;
 use crate::models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
-    SnmpError, SnmpParamsLegacy, DeviceForSnmp, build_auth, format_snmp_error,
-    get_device_ip_address, get_device_snmp_config,
+    SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error,
+    get_device_snmp_config,
 };
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {
@@ -258,167 +258,6 @@ fn simplify_ipv6(ip: &str) -> String {
     ip.parse::<std::net::Ipv6Addr>()
         .map(|addr| addr.to_string())
         .unwrap_or_else(|_| ip.to_string())
-}
-
-pub async fn batch_get_mac_via_snmp(
-    pool: &sqlx::PgPool,
-    ips: &[String],
-) -> HashMap<String, Option<String>> {
-    let mut results: HashMap<String, Option<String>> = HashMap::new();
-    results.reserve(ips.len());
-
-    let switches = match sqlx::query_as::<_, DeviceForSnmp>(
-        r"SELECT
-            id, name, snmp_version, snmp_community,
-            snmp_username, snmp_auth_protocol,
-            snmp_auth_password, snmp_priv_protocol,
-            snmp_priv_password, snmp_port
-        FROM devices WHERE snmp_community IS NOT NULL OR snmp_username IS NOT NULL",
-    )
-    .fetch_all(pool)
-    .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            error!("查询设备列表失败: {}", e);
-            ips.iter().for_each(|ip| {
-                results.insert(ip.clone(), None);
-            });
-            return results;
-        }
-    };
-
-    if switches.is_empty() {
-        warn!("没有配置SNMP的设备");
-        ips.iter().for_each(|ip| {
-            results.insert(ip.clone(), None);
-        });
-        return results;
-    }
-
-    let all_arp_entries =
-        std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, String>::new()));
-    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
-
-    let mut handles = Vec::new();
-    for switch in &switches {
-        let pool_clone = pool.clone();
-        let switch = switch.clone();
-        let all_arp_entries = all_arp_entries.clone();
-        let permit = semaphore.clone();
-
-        handles.push(tokio::spawn(async move {
-            let _permit = permit.acquire().await;
-            let mut local_entries = HashMap::new();
-            let fetch_result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-                fetch_switch_arp(&pool_clone, &switch, &mut local_entries).await
-            })
-            .await;
-            match fetch_result {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    warn!("从交换机 {} 获取ARP表失败: {}", switch.name, e);
-                }
-                Err(_) => {
-                    warn!("从交换机 {} 获取ARP表超时（30秒）", switch.name);
-                }
-            }
-            let mut map = all_arp_entries.lock().await;
-            for (ip, mac) in local_entries {
-                map.insert(ip, mac);
-            }
-        }));
-    }
-
-    for handle in handles {
-        if let Err(e) = handle.await {
-            error!("SNMP扫描任务失败: {}", e);
-        }
-    }
-
-    let all_arp_entries = all_arp_entries.lock().await;
-    for ip in ips {
-        let mac = all_arp_entries.get(ip).cloned();
-        results.insert(ip.clone(), mac);
-    }
-
-    results
-}
-
-async fn fetch_switch_arp(
-    pool: &sqlx::PgPool,
-    switch: &DeviceForSnmp,
-    arp_entries: &mut HashMap<String, String>,
-) -> Result<(), SnmpError> {
-    let ip_address = get_device_ip_address(pool, &switch.id).await?;
-
-    let ip_address = match ip_address {
-        Some(ip) => ip,
-        None => return Ok(()),
-    };
-
-    let params = switch.to_snmp_params_async(&ip_address).await?;
-
-    match get_arp_table_via_snmp(&params).await {
-        Ok(entries) => {
-            for entry in entries {
-                arp_entries.insert(entry.ip_address, entry.mac_address);
-            }
-            Ok(())
-        }
-        Err(e) => Err(e),
-    }
-}
-
-pub async fn get_macs_from_device(
-    pool: &sqlx::PgPool,
-    device_id: &uuid::Uuid,
-    ips: &[String],
-) -> Result<HashMap<String, Option<String>>, SnmpError> {
-    let (switch, ip_address) = get_device_snmp_config(pool, device_id).await?;
-
-    let ip_address =
-        ip_address.ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
-
-    if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
-    }
-
-    let params = switch.to_snmp_params_async(&ip_address).await?;
-
-    let entries = get_arp_table_via_snmp(&params).await?;
-
-    let arp_map: HashMap<String, String> = entries
-        .into_iter()
-        .map(|e| (e.ip_address, e.mac_address))
-        .collect();
-
-    let mut results = HashMap::with_capacity(ips.len());
-    for ip in ips {
-        let mac = arp_map.get(ip).cloned();
-        results.insert(ip.clone(), mac);
-    }
-
-    Ok(results)
-}
-
-pub async fn get_all_arp_entries(
-    pool: &sqlx::PgPool,
-    device_id: &uuid::Uuid,
-) -> Result<Vec<ArpEntry>, SnmpError> {
-    let (switch, ip_address) = get_device_snmp_config(pool, device_id).await?;
-
-    let ip_address =
-        ip_address.ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
-
-    if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
-    }
-
-    let params = switch.to_snmp_params_async(&ip_address).await?;
-
-    let entries = get_arp_table_via_snmp(&params).await?;
-    Ok(entries)
 }
 
 pub async fn get_device_mac_table(

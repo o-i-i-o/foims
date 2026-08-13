@@ -10,14 +10,12 @@ use crate::models::{
     CabinetWithNetworks, NetOutletBrief, NetworkInfo, PositionBrief, PositionSyncItem,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -40,7 +38,7 @@ pub async fn get_cabinets(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = crate::utils::escape_like(&search);
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -259,22 +257,7 @@ pub async fn create_cabinet(
         "capacity": cabinet.capacity,
         "description": cabinet.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "cabinet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "cabinet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(cabinet, "机柜创建成功"))
 }
@@ -404,22 +387,7 @@ pub async fn update_cabinet(
         "capacity": cabinet.capacity,
         "description": cabinet.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "cabinet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "cabinet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(cabinet, "机柜更新成功"))
 }
@@ -458,22 +426,7 @@ pub async fn delete_cabinet(
     let details = serde_json::json!({
         "cabinet_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "cabinet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "cabinet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "机柜删除成功"))
 }
@@ -605,22 +558,7 @@ pub async fn sync_cabinet_positions(
         "cabinet_id": id.to_string(),
         "position_count": items.len()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "sync_positions",
-            resource_type: "cabinet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_positions", "cabinet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "机位同步成功"))
 }
@@ -726,22 +664,7 @@ pub async fn sync_cabinet_net_outlets(
         "cabinet_id": id.to_string(),
         "patch_panel_count": items.len()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "sync_net_outlets",
-            resource_type: "cabinet",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_net_outlets", "cabinet", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "机柜配线架同步成功"))
 }

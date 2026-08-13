@@ -5,16 +5,14 @@ use crate::models::{
 };
 use crate::resource::org_template::get_allowed_children;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -199,7 +197,7 @@ pub async fn get_organizations(
 
         if !search.is_empty() {
             qb.push(" WHERE name ILIKE ");
-            qb.push_bind(format!("%{}%", search));
+            qb.push_bind(crate::utils::escape_like(&search));
             conditions.push("search");
         }
 
@@ -590,22 +588,7 @@ pub async fn create_organization(
         "level_index": level_index,
         "description": req.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "organization",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "organization", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(
         json!({
@@ -708,22 +691,7 @@ pub async fn update_organization(
         "parent_id": org.parent_id,
         "description": org.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "organization",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "organization", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(
         json!({
@@ -789,22 +757,7 @@ pub async fn delete_organization(
     let details = serde_json::json!({
         "organization_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "organization",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "organization", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "组织节点删除成功"))
 }

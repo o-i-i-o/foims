@@ -243,13 +243,6 @@ pub struct ResetPasswordRequest {
 
 // ==================== 2FA 模型 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TwoFactorConfigResponse {
-    pub secret: String,
-    pub qr_code: String,
-    pub uri: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TwoFactorLoginRequest {
     #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]

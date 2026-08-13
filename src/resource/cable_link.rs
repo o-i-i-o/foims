@@ -1,8 +1,3 @@
-//
-// +3../ ;3'
-//
-//
-
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -12,14 +7,12 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -214,22 +207,7 @@ pub async fn create_cable_link(
         "b_endpoint_id": b_id,
         "link_type": link_type
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "cable_link",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "cable_link", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(link, "物理链路创建成功"))
 }
@@ -378,22 +356,7 @@ pub async fn update_cable_link(
     .await?;
 
     let details = serde_json::json!({ "cable_link_id": id.to_string() });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "cable_link",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "cable_link", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(link, "物理链路更新成功"))
 }
@@ -421,22 +384,7 @@ pub async fn delete_cable_link(
     tx.commit().await?;
 
     let details = serde_json::json!({ "cable_link_id": id.to_string() });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "cable_link",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "cable_link", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "物理链路删除成功"))
 }

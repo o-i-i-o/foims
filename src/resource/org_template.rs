@@ -2,14 +2,12 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
-use crate::utils::{OperationLogParams, log_system_operation};
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -422,22 +420,7 @@ pub async fn create_org_template(
         "levels": template.levels,
         "description": template.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "org_template",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "org_template", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(template, "模板创建成功"))
 }
@@ -535,22 +518,7 @@ pub async fn update_org_template(
         "levels": template.levels,
         "description": template.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "org_template",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "org_template", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(template, "模板更新成功"))
 }
@@ -590,22 +558,7 @@ pub async fn delete_org_template(
     tx.commit().await?;
 
     let details = serde_json::json!({ "template_id": id.to_string() });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "org_template",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "org_template", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "模板删除成功"))
 }

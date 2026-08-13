@@ -134,20 +134,6 @@ impl JwtUtils {
         STANDARD.encode(bytes)
     }
 
-    // 验证令牌签名
-    #[must_use]
-    pub fn verify_signature(&self, token: &str) -> bool {
-        self.validate_token(token).is_ok()
-    }
-
-    // 检查令牌是否即将过期（例如，在5分钟内）
-    #[must_use]
-    pub fn is_token_about_to_expire(&self, claims: &JwtClaims) -> bool {
-        let now = Utc::now().timestamp() as usize;
-        let exp = claims.exp;
-        exp.saturating_sub(now) < 300 // 5分钟
-    }
-
     // 生成访问令牌
     pub fn generate_access_token(
         &self,

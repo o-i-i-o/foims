@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time;
 use tracing::{debug, error, info, warn};
@@ -309,30 +309,6 @@ impl DbPool {
             .test_before_acquire(config.test_before_acquire)
             .connect(url)
             .await
-    }
-
-    pub async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {
-        let start_time = Instant::now();
-        self.metrics.record_request_start();
-
-        let pool = self.get_pool();
-        let result = pool.acquire().await;
-        let wait_time_ms = start_time.elapsed().as_millis() as u64;
-
-        match &result {
-            Ok(_) => {
-                self.metrics.record_request_complete(wait_time_ms, true);
-                debug!("获取连接成功，等待时间: {}ms", wait_time_ms);
-            }
-            Err(e) => {
-                self.metrics.record_request_complete(wait_time_ms, false);
-                error!("获取连接失败: {}, 等待时间: {}ms", e, wait_time_ms);
-            }
-        }
-
-        self.update_metrics();
-
-        result
     }
 
     #[must_use]

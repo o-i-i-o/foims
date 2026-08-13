@@ -7,11 +7,9 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::LayoutSaveRequest;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
-use crate::utils::{OperationLogParams, log_system_operation};
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};
 use serde_json;
-use tracing::warn;
 use uuid::Uuid;
 
 pub async fn save_layout(
@@ -51,22 +49,7 @@ pub async fn save_layout(
             "layout_count": req.layout.len(),
             "type": req.r#type
         });
-        if let Err(e) = log_system_operation(
-            &state.pool()?.get_conn(),
-            OperationLogParams {
-                ip_address: &meta.ip_address,
-                user_id: meta.user_id(),
-                action: "update",
-                resource_type: "layout",
-                resource_id: Some(&room_id),
-                details: &details,
-                result: true,
-            },
-        )
-        .await
-        {
-            warn!("记录操作日志失败: {}", e);
-        }
+        log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "layout", Some(&room_id), &details).await;
     }
 
     Ok(result)
@@ -84,22 +67,7 @@ pub async fn delete_layout(
     let details = serde_json::json!({
         "room_id": room_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "layout",
-            resource_id: Some(&room_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "layout", Some(&room_id), &details).await;
 
     Ok(result)
 }
@@ -116,22 +84,7 @@ pub async fn delete_positions_layout(
     let details = serde_json::json!({
         "room_id": room_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "layout",
-            resource_id: Some(&room_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "layout", Some(&room_id), &details).await;
 
     Ok(result)
 }

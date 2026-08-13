@@ -13,10 +13,8 @@ use crate::models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
-use tracing::warn;
 
 pub async fn get_device_interfaces(
     State(state): State<Arc<AppState>>,
@@ -68,7 +66,7 @@ pub async fn get_all_device_interfaces(
     let search_pattern = if search.is_empty() {
         None
     } else {
-        Some(format!("%{search}%"))
+        Some(crate::utils::escape_like(&search))
     };
 
     let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -210,22 +208,7 @@ pub async fn create_device_interface(
         "interface_type": data.interface_type,
         "mac_address": data.mac_address
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "device_interface",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "device_interface", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(data, "创建接口成功"))
 }
@@ -421,22 +404,7 @@ pub async fn update_device_interface(
         "interface_type": data.interface_type,
         "mac_address": data.mac_address
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "device_interface",
-            resource_id: Some(&interface_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "device_interface", Some(&interface_id), &details).await;
 
     Ok(crate::error::ok_json(data, "更新接口成功"))
 }
@@ -479,22 +447,7 @@ pub async fn delete_device_interface(
     let details = serde_json::json!({
         "interface_id": interface_id
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "device_interface",
-            resource_id: Some(&interface_id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "device_interface", Some(&interface_id), &details).await;
 
     Ok(crate::error::ok_json((), "删除接口成功"))
 }

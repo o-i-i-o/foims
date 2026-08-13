@@ -31,48 +31,12 @@ pub struct DeviceForSnmp {
     pub snmp_port: i32,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct DeviceForSnmpWithNetwork {
-    pub id: Uuid,
-    pub name: String,
-    pub network_id: Option<Uuid>,
-    pub snmp_version: String,
-    pub snmp_community: Option<String>,
-    pub snmp_username: Option<String>,
-    pub snmp_auth_protocol: Option<String>,
-    pub snmp_auth_password: Option<String>,
-    pub snmp_priv_protocol: Option<String>,
-    pub snmp_priv_password: Option<String>,
-    pub snmp_port: i32,
-}
-
 impl DeviceForSnmp {
     pub async fn to_snmp_params_async(
         &self,
         ip_address: &str,
     ) -> Result<SnmpParamsLegacy, AppError> {
         let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await?;
-        Ok(SnmpParamsLegacy {
-            ip: ip_address.to_string(),
-            port: self.snmp_port,
-            version: self.snmp_version.clone(),
-            community: creds.community,
-            username: self.snmp_username.clone(),
-            auth_proto: self.snmp_auth_protocol.clone(),
-            auth_pass: creds.auth_password,
-            priv_proto: self.snmp_priv_protocol.clone(),
-            priv_pass: creds.priv_password,
-            timeout_secs: 10,
-        })
-    }
-}
-
-impl DeviceForSnmpWithNetwork {
-    pub async fn to_snmp_params_async(
-        &self,
-        ip_address: &str,
-    ) -> Result<SnmpParamsLegacy, AppError> {
-        let creds = DecryptedSnmpCredentials::from_device_snmp_with_network_async(self).await?;
         Ok(SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port,
@@ -97,19 +61,6 @@ pub struct DecryptedSnmpCredentials {
 
 impl DecryptedSnmpCredentials {
     pub async fn from_device_snmp_async(switch: &DeviceForSnmp) -> Result<Self, AppError> {
-        let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
-        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
-        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;
-        Ok(Self {
-            community,
-            auth_password,
-            priv_password,
-        })
-    }
-
-    pub async fn from_device_snmp_with_network_async(
-        switch: &DeviceForSnmpWithNetwork,
-    ) -> Result<Self, AppError> {
         let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
         let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
         let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;

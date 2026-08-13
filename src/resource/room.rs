@@ -5,9 +5,8 @@ use crate::models::{
     RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{log_op_best_effort, RequestMeta};
 use crate::utils::pagination::Pagination;
-use crate::utils::{OperationLogParams, log_system_operation};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -15,7 +14,6 @@ use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -37,7 +35,7 @@ pub async fn get_rooms(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = crate::utils::escape_like(&search);
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",
@@ -82,34 +80,58 @@ pub async fn get_rooms(
         (total, rooms)
     };
 
+    // 批量查询（避免逐房间 N+1）：一次取全部房间的网络、工位数、组织名
+    let conn = state.pool()?.get_conn();
+    let room_ids: Vec<Uuid> = rooms.iter().map(|r| r.id).collect();
+    let org_ids: Vec<Uuid> = rooms.iter().filter_map(|r| r.org_id).collect();
+
+    let mut networks_map: HashMap<Uuid, Vec<NetworkInfo>> = HashMap::new();
+    let network_rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, Uuid, Option<String>, Option<String>)>(
+        r"SELECT rn.room_id, n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text, n.ipv6_cidr::text
+           FROM room_networks rn
+           JOIN network_cidrs n ON rn.network_id = n.id
+           JOIN network_regions nr ON n.network_region_id = nr.id
+           WHERE rn.room_id = ANY($1)",
+    )
+    .bind(&room_ids)
+    .fetch_all(&conn)
+    .await?;
+    for (room_id, id, name, network_region, network_region_id, ipv4_cidr, ipv6_cidr) in network_rows {
+        networks_map.entry(room_id).or_default().push(NetworkInfo {
+            id,
+            name,
+            network_region,
+            network_region_id,
+            ipv4_cidr,
+            ipv6_cidr,
+        });
+    }
+
+    let ws_count_map: HashMap<Uuid, i64> = sqlx::query_as::<_, (Uuid, i64)>(
+        "SELECT room_id, COUNT(*) FROM workstations WHERE room_id = ANY($1) GROUP BY room_id",
+    )
+    .bind(&room_ids)
+    .fetch_all(&conn)
+    .await?
+    .into_iter()
+    .collect();
+
+    let org_name_map: HashMap<Uuid, String> = if org_ids.is_empty() {
+        HashMap::new()
+    } else {
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, name FROM organizations WHERE id = ANY($1)")
+            .bind(&org_ids)
+            .fetch_all(&conn)
+            .await?
+            .into_iter()
+            .collect()
+    };
+
     let mut rooms_with_networks = Vec::new();
-
     for room in rooms {
-        let room_networks = sqlx::query_as::<_, NetworkInfo>(
-            r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
-               FROM room_networks rn
-               JOIN network_cidrs n ON rn.network_id = n.id
-               JOIN network_regions nr ON n.network_region_id = nr.id
-               WHERE rn.room_id = $1",
-        )
-        .bind(room.id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
-
-        let workstation_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
-                .bind(room.id)
-                .fetch_one(&state.pool()?.get_conn())
-                .await?;
-
-        let org_name: Option<String> = if let Some(oid) = room.org_id {
-            sqlx::query_scalar("SELECT name FROM organizations WHERE id = $1")
-                .bind(oid)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?
-        } else {
-            None
-        };
+        let room_networks = networks_map.remove(&room.id).unwrap_or_default();
+        let workstation_count = ws_count_map.get(&room.id).copied().unwrap_or(0);
+        let org_name = room.org_id.and_then(|oid| org_name_map.get(&oid).cloned());
 
         let room_with_networks = RoomWithNetworks {
             id: room.id,
@@ -161,6 +183,9 @@ pub async fn create_room(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
+    // 房间与其网络关联必须在同一事务内写入，避免中途失败导致网络关联残缺
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     sqlx::query(
         "INSERT INTO rooms (id, name, room_type, org_id, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -172,7 +197,7 @@ pub async fn create_room(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn())
+    .execute(&mut *tx)
     .await?;
 
     for network_id in &req.network_ids {
@@ -185,9 +210,11 @@ pub async fn create_room(
         .bind(network_id)
         .bind(now)
         .bind(now)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
 
     let room = Room {
         id,
@@ -205,22 +232,7 @@ pub async fn create_room(
         "description": room.description,
         "network_count": req.network_ids.len()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "create",
-            resource_type: "room",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "create", "room", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(room, "房间创建成功"))
 }
@@ -355,6 +367,9 @@ pub async fn update_room(
 
     let now = Utc::now();
 
+    // 房间字段更新与网络关联的「删除+重建」必须在同一事务内，避免中途失败丢失全部网络关联
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     sqlx::query(
         "UPDATE rooms SET
          name = COALESCE($1, name),
@@ -371,13 +386,13 @@ pub async fn update_room(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(&state.pool()?.get_conn())
+    .execute(&mut *tx)
     .await?;
 
     if let Some(network_ids) = &req.network_ids {
         sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
             .bind(id)
-            .execute(&state.pool()?.get_conn())
+            .execute(&mut *tx)
             .await?;
 
         for network_id in network_ids {
@@ -390,10 +405,12 @@ pub async fn update_room(
             .bind(network_id)
             .bind(now)
             .bind(now)
-            .execute(&state.pool()?.get_conn())
+            .execute(&mut *tx)
             .await?;
         }
     }
+
+    tx.commit().await?;
 
     let room = sqlx::query_as::<_, Room>(
         "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
@@ -405,22 +422,7 @@ pub async fn update_room(
         "room_type": room.room_type,
         "description": room.description
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "update",
-            resource_type: "room",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "update", "room", Some(&id), &details).await;
 
     Ok(crate::error::ok_json(room, "房间更新成功"))
 }
@@ -483,22 +485,7 @@ pub async fn delete_room(
     let details = serde_json::json!({
         "room_id": id.to_string()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "delete",
-            resource_type: "room",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "delete", "room", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "房间删除成功"))
 }
@@ -687,22 +674,7 @@ pub async fn sync_room_children(
         "workstation_count": req.workstations.as_ref().map(|v| v.len()).unwrap_or(0),
         "cabinet_count": req.cabinets.as_ref().map(|v| v.len()).unwrap_or(0)
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "sync_children",
-            resource_type: "room",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_children", "room", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "房间子项同步成功"))
 }
@@ -821,22 +793,7 @@ pub async fn sync_room_net_outlets(
         "room_id": id.to_string(),
         "net_outlet_count": items.len()
     });
-    if let Err(e) = log_system_operation(
-        &state.pool()?.get_conn(),
-        OperationLogParams {
-            ip_address: &meta.ip_address,
-            user_id: meta.user_id(),
-            action: "sync_net_outlets",
-            resource_type: "room",
-            resource_id: Some(&id),
-            details: &details,
-            result: true,
-        },
-    )
-    .await
-    {
-        warn!("记录操作日志失败: {}", e);
-    }
+    log_op_best_effort(&state.pool()?.get_conn(), &meta, "sync_net_outlets", "room", Some(&id), &details).await;
 
     Ok(crate::error::ok_json((), "房间信息点同步成功"))
 }
