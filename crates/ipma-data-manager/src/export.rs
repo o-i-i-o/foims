@@ -427,11 +427,12 @@ async fn export_switches<P: DataProvider>(
     );
 
     let rows = sqlx::query(
-        r"SELECT s.id, s.name, s.model, s.vendor, s.location, s.snmp_version, s.snmp_port,
-           s.snmp_community, s.snmp_username, s.description,
-           (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.position_id = s.position_id LIMIT 1) as ip_address
-           FROM switches s
-           ORDER BY s.name",
+        r"SELECT d.id, d.name, d.model, d.vendor, d.location, d.snmp_version, d.snmp_port,
+           d.snmp_community, d.snmp_username, d.description,
+           (SELECT host(i.ip_address) FROM ips i WHERE i.device_id = d.id ORDER BY i.created_at LIMIT 1) as ip_address
+           FROM devices d
+           WHERE d.device_type = 'switch'
+           ORDER BY d.name",
     )
     .fetch_all(&mut *conn)
     .await

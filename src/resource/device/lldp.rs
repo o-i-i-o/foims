@@ -33,7 +33,7 @@ pub async fn get_lldp_neighbors(
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(ip_address) FROM ips
-           WHERE position_id = (SELECT position_id FROM devices WHERE id = $1)
+           WHERE device_id = $1
            ORDER BY created_at LIMIT 1",
     )
     .bind(device_id)
@@ -415,78 +415,58 @@ pub async fn sync_lldp_from_snmp(
         .map_err(|e| AppError::Snmp(format!("获取LLDP邻居失败: {e}")))?;
 
     let now = chrono::Utc::now();
-    let mut saved_count = 0usize;
-    let mut updated_count = 0usize;
+    let synced_count = neighbors.len();
+
+    // 在同一事务内 upsert 全部邻居并清理已消失的邻居，避免逐条 autocommit 造成部分写入与数据漂移
+    let mut tx = conn.begin().await?;
 
     for neighbor in &neighbors {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM device_lldps WHERE device_id = $1 AND local_port = $2)",
+        let id = Uuid::new_v4();
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO device_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+               ON CONFLICT (device_id, local_port) DO UPDATE SET
+                    neighbor_chassis_id = EXCLUDED.neighbor_chassis_id,
+                    neighbor_port_id = EXCLUDED.neighbor_port_id,
+                    neighbor_port_desc = EXCLUDED.neighbor_port_desc,
+                    neighbor_sys_name = EXCLUDED.neighbor_sys_name,
+                    neighbor_sys_desc = EXCLUDED.neighbor_sys_desc,
+                    updated_at = EXCLUDED.updated_at",
         )
+        .bind(id)
         .bind(device_id)
         .bind(&neighbor.local_port)
-        .fetch_one(&conn)
-        .await?;
-
-        if exists {
-            let result = sqlx::query(
-                r"UPDATE device_lldps SET
-                    neighbor_chassis_id = $1,
-                    neighbor_port_id = $2,
-                    neighbor_port_desc = $3,
-                    neighbor_sys_name = $4,
-                    neighbor_sys_desc = $5,
-                    updated_at = $6
-                WHERE device_id = $7 AND local_port = $8",
-            )
-            .bind(&neighbor.neighbor_chassis_id)
-            .bind(&neighbor.neighbor_port_id)
-            .bind(&neighbor.neighbor_port_desc)
-            .bind(&neighbor.neighbor_sys_name)
-            .bind(&neighbor.neighbor_sys_desc)
-            .bind(now)
-            .bind(device_id)
-            .bind(&neighbor.local_port)
-            .execute(&conn)
-            .await;
-
-            if result.is_ok() {
-                updated_count += 1;
-            } else if let Err(e) = result {
-                tracing::error!(
-                    "LLDP记录更新失败 (local_port={}): {}",
-                    neighbor.local_port,
-                    e
-                );
-            }
-        } else {
-            let id = Uuid::new_v4();
-            let result = sqlx::query(
-                r"INSERT INTO device_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)"
-            )
-            .bind(id)
-            .bind(device_id)
-            .bind(&neighbor.local_port)
-            .bind(&neighbor.neighbor_chassis_id)
-            .bind(&neighbor.neighbor_port_id)
-            .bind(&neighbor.neighbor_port_desc)
-            .bind(&neighbor.neighbor_sys_name)
-            .bind(&neighbor.neighbor_sys_desc)
-            .bind(now)
-            .execute(&conn)
-            .await;
-
-            if result.is_ok() {
-                saved_count += 1;
-            } else if let Err(e) = result {
-                tracing::error!(
-                    "LLDP记录插入失败 (local_port={}): {}",
-                    neighbor.local_port,
-                    e
-                );
-            }
+        .bind(&neighbor.neighbor_chassis_id)
+        .bind(&neighbor.neighbor_port_id)
+        .bind(&neighbor.neighbor_port_desc)
+        .bind(&neighbor.neighbor_sys_name)
+        .bind(&neighbor.neighbor_sys_desc)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        {
+            tracing::error!(
+                "LLDP记录写入失败 (local_port={}): {}",
+                neighbor.local_port,
+                e
+            );
         }
     }
+
+    // 清理本次未发现的旧邻居记录（防止数据漂移）
+    let local_ports: Vec<&str> = neighbors.iter().map(|n| n.local_port.as_str()).collect();
+    let stale_removed: i64 = sqlx::query_scalar(
+        "WITH deleted AS (
+            DELETE FROM device_lldps WHERE device_id = $1 AND NOT (local_port = ANY($2)) RETURNING 1
+         ) SELECT COUNT(*) FROM deleted",
+    )
+    .bind(device_id)
+    .bind(&local_ports)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap_or(0);
+
+    tx.commit().await?;
 
     let saved_lldps: Vec<DeviceLldp> = sqlx::query_as::<_, DeviceLldp>(
         "SELECT * FROM device_lldps WHERE device_id = $1 ORDER BY local_port",
@@ -495,14 +475,10 @@ pub async fn sync_lldp_from_snmp(
     .fetch_all(&conn)
     .await?;
 
-    let message = if saved_count > 0 && updated_count > 0 {
-        format!("新增 {saved_count} 条，更新 {updated_count} 条 LLDP 记录")
-    } else if saved_count > 0 {
-        format!("新增 {saved_count} 条 LLDP 记录")
-    } else if updated_count > 0 {
-        format!("更新 {updated_count} 条 LLDP 记录")
+    let message = if synced_count > 0 {
+        format!("同步 {synced_count} 条 LLDP 记录，清理 {stale_removed} 条过期记录")
     } else {
-        "LLDP 数据无变化".to_string()
+        format!("LLDP 数据无变化，清理 {stale_removed} 条过期记录")
     };
 
     Ok(crate::error::ok_json(saved_lldps, &message))

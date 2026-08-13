@@ -423,8 +423,8 @@ pub async fn get_room_cabinets_with_positions(
 
     let mut result = Vec::new();
     for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {
-        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>, Option<String>)>(
-            "SELECT id, name, cabinet_id, start_u, end_u, description, device_type FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
+        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>)>(
+            "SELECT id, name, cabinet_id, start_u, end_u, description FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
         )
         .bind(cab_id)
         .fetch_all(pool)
@@ -433,15 +433,14 @@ pub async fn get_room_cabinets_with_positions(
 
         let pos_items: Vec<serde_json::Value> = positions
             .iter()
-            .map(|(id, name, pos_cab_id, start_u, end_u, desc, dt)| {
+            .map(|(id, name, pos_cab_id, start_u, end_u, desc)| {
                 serde_json::json!({
                     "id": id,
                     "name": name,
                     "cabinet_id": pos_cab_id,
                     "start_u": start_u,
                     "end_u": end_u,
-                    "description": desc,
-                    "device_type": dt
+                    "description": desc
                 })
             })
             .collect();

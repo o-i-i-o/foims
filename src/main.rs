@@ -461,8 +461,9 @@ async fn main() -> std::io::Result<()> {
             }
         }
 
-        db_pool.start_health_check_task(30, shutdown.subscribe());
-        info!("数据库连接池健康检查任务已启动");
+        let health_interval = config.database.health_check_interval_secs.max(1) as u64;
+        db_pool.start_health_check_task(health_interval, shutdown.subscribe());
+        info!("数据库连接池健康检查任务已启动 (间隔 {health_interval}s)");
     }
 
     let rate_limiter = RateLimiter::new(
