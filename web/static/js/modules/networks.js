@@ -30,12 +30,13 @@ import { elementCache } from "../utils/helpers.js";
 
 let currentNetworkTypePage = 1;
 const NETWORK_TYPE_PAGE_SIZE = 20;
+let currentNetworkTypePageSize = NETWORK_TYPE_PAGE_SIZE;
 
 // 加载网络区域数据并填充表格
-export async function loadNetworkTypesData(page = 1) {
+export async function loadNetworkTypesData(page = currentNetworkTypePage) {
   currentNetworkTypePage = page;
   try {
-    const result = await apiGet(`/api/resources/network-regions?page=${page}&page_size=${NETWORK_TYPE_PAGE_SIZE}`);
+    const result = await apiGet(`/api/resources/network-regions?page=${page}&page_size=${currentNetworkTypePageSize}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
 
@@ -62,7 +63,13 @@ export async function loadNetworkTypesData(page = 1) {
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#network-types-table", data, loadNetworkTypesData);
+      appendPaginationToTable("#network-types-table", data, loadNetworkTypesData, {
+        pageSize: currentNetworkTypePageSize,
+        onPageSizeChange: (size) => {
+          currentNetworkTypePageSize = size;
+          loadNetworkTypesData(1);
+        },
+      });
     }
   } catch (error) {
     console.error("加载网络区域数据失败:", error);
@@ -76,6 +83,7 @@ export async function loadNetworkTypesData(page = 1) {
 
 let currentNetworkPage = 1;
 const NETWORK_PAGE_SIZE = 20;
+let currentNetworkPageSize = NETWORK_PAGE_SIZE;
 
 let currentFilters = {
   name: '',
@@ -84,26 +92,26 @@ let currentFilters = {
   ipv6: ''
 };
 
-export async function loadNetworksData(page = 1, filters = currentFilters) {
+export async function loadNetworksData(page = currentNetworkPage, filters = currentFilters) {
   currentNetworkPage = page;
   currentFilters = filters;
-  
+
   try {
     const params = new URLSearchParams({
       page: page.toString(),
-      page_size: NETWORK_PAGE_SIZE.toString()
+      page_size: currentNetworkPageSize.toString()
     });
-    
+
     if (filters.name) params.append('name', filters.name);
     if (filters.region) params.append('network_region', filters.region);
     if (filters.ipv4) params.append('ipv4_cidr', filters.ipv4);
     if (filters.ipv6) params.append('ipv6_cidr', filters.ipv6);
-    
+
     const url = `/api/resources/networks?${params.toString()}`;
     const result = await apiGet(url);
     const data = result.success ? result.data : { items: [], total: 0 };
     const networks = data.items || data;
-    const startIndex = (page - 1) * NETWORK_PAGE_SIZE;
+    const startIndex = (page - 1) * currentNetworkPageSize;
 
     renderTable("#networks-table", {
       data: networks,
@@ -124,7 +132,13 @@ export async function loadNetworksData(page = 1, filters = currentFilters) {
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, filters));
+      appendPaginationToTable("#networks-table", data, (p) => loadNetworksData(p, filters), {
+        pageSize: currentNetworkPageSize,
+        onPageSizeChange: (size) => {
+          currentNetworkPageSize = size;
+          loadNetworksData(1, filters);
+        },
+      });
     }
   } catch (error) {
     handleError(error, t('network.load_failed'), () => {
