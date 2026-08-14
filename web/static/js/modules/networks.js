@@ -137,7 +137,7 @@ export async function loadNetworksData(page = currentNetworkPage, filters = curr
         { field: 'ipv6_cidr', render: (v) => escapeHtml(v) || '-' },
         { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
         { field: 'id', render: (v) => `
-          ${iconButton({ icon: 'chart', label: t('network.usage'), cls: 'btn-secondary btn-usage', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'list', label: t('network.usage'), cls: 'btn-warning btn-usage', attrs: `data-id="${v}"` })}
           ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
           ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }

@@ -247,7 +247,7 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
         { field: 'id', render: (v) => `
           ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
-          ${iconButton({ icon: 'grid', label: t('cabinet.positions_list'), cls: 'btn-secondary btn-cabinet-positions-list', attrs: `data-cabinet-id="${v}"` })}
+          ${iconButton({ icon: 'list', label: t('cabinet.positions_list'), cls: 'btn-primary btn-cabinet-positions-list', attrs: `data-cabinet-id="${v}"` })}
           ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],

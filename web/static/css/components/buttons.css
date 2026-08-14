@@ -179,6 +179,15 @@
     background: rgb(40 167 69 / 0.12);
 }
 
+.icon-btn.btn-warning {
+    color: var(--color-warning);
+}
+
+.icon-btn.btn-warning:hover {
+    background: rgb(255 193 7 / 0.15);
+    color: #d39e00;
+}
+
 .button-group {
     display: flex;
     gap: var(--space-md);

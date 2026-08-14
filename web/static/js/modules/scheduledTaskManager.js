@@ -198,10 +198,10 @@ function renderScheduledTasks(tasks) {
             <td class="col-center">${formatDateTime(task.last_run_at)}</td>
             <td class="col-center">${escapeHtml(task.last_result || '-')}</td>
             <td class="col-center actions">
-                ${iconButton({ icon: 'play', label: t('scheduled_tasks.run_now'), cls: 'btn-secondary', attrs: `data-action="run-task" data-task-id="${escapeHtml(task.id)}"` })}
-                ${iconButton({ icon: 'power', label: task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable'), cls: 'btn-secondary', attrs: `data-action="toggle-task" data-task-id="${escapeHtml(task.id)}"` })}
+                ${iconButton({ icon: 'play', label: t('scheduled_tasks.run_now'), cls: 'btn-success', attrs: `data-action="run-task" data-task-id="${escapeHtml(task.id)}"` })}
+                ${iconButton({ icon: 'power', label: task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable'), cls: 'btn-warning', attrs: `data-action="toggle-task" data-task-id="${escapeHtml(task.id)}"` })}
                 ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-secondary', attrs: `data-action="edit-task" data-task-id="${escapeHtml(task.id)}"` })}
-                ${iconButton({ icon: 'fileText', label: t('scheduled_tasks.view_logs'), cls: 'btn-secondary', attrs: `data-action="view-logs" data-task-name="${escapeHtml(task.name)}"` })}
+                ${iconButton({ icon: 'list', label: t('scheduled_tasks.view_logs'), cls: 'btn-secondary', attrs: `data-action="view-logs" data-task-name="${escapeHtml(task.name)}"` })}
                 ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger', attrs: `data-action="delete-task" data-task-id="${escapeHtml(task.id)}"` })}
             </td>
         `;

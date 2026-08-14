@@ -23,6 +23,7 @@
 .data-table td {
     padding: 0.55rem;
     text-align: left;
+    vertical-align: middle;
     border-bottom: 1px solid var(--color-border-light);
 }
 
@@ -48,6 +49,11 @@
 .data-table td.col-center {
     text-align: center;
     vertical-align: middle;
+}
+
+/* 可排序的居中列：右侧箭头占位 28px，左侧补齐对称 padding，文字才真正居中 */
+.data-table th.sortable.col-center {
+    padding-left: 28px;
 }
 
 .data-table th.index-column {
@@ -277,10 +283,6 @@
     right: 0;
     height: 2px;
     background-color: var(--color-primary);
-}
-
-.data-table th {
-    vertical-align: top;
 }
 
 .data-table th .filter-input {

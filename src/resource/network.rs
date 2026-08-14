@@ -788,10 +788,15 @@ pub async fn get_network_regions(
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
     let sort_order = query.get("sort_order").cloned().unwrap_or_default();
 
-    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入。
+    // CIDR 列取数组首元素参与排序，空数组（NULL）固定排末尾
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",
         ("name", _) => "ORDER BY name ASC",
+        ("ipv4_cidrs", "desc") => "ORDER BY ipv4_cidrs[1] DESC NULLS LAST",
+        ("ipv4_cidrs", _) => "ORDER BY ipv4_cidrs[1] ASC NULLS LAST",
+        ("ipv6_cidrs", "desc") => "ORDER BY ipv6_cidrs[1] DESC NULLS LAST",
+        ("ipv6_cidrs", _) => "ORDER BY ipv6_cidrs[1] ASC NULLS LAST",
         ("created_at", "asc") => "ORDER BY created_at ASC",
         _ => "ORDER BY created_at DESC",
     };

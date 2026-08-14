@@ -674,8 +674,8 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
           const isCabinetRoom = (row.room_type || '').toLowerCase() === 'data_center' || (row.room_type || '').toLowerCase() === 'telecom_closet';
           return `
           ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
-          ${iconButton({ icon: 'server', label: isCabinetRoom ? t('room.cabinets') : t('room.workstations'), cls: 'btn-secondary btn-room-children-list', attrs: `data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}"` })}
-          ${iconButton({ icon: 'share', label: t('room.net_outlets'), cls: 'btn-secondary btn-room-net-outlets-list', attrs: `data-room-id="${v}"` })}
+          ${iconButton({ icon: 'list', label: isCabinetRoom ? t('room.cabinets') : t('room.workstations'), cls: 'btn-primary btn-room-children-list', attrs: `data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}"` })}
+          ${iconButton({ icon: 'list', label: t('room.net_outlets'), cls: 'btn-success btn-room-net-outlets-list', attrs: `data-room-id="${v}"` })}
           ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         `;
         } }

@@ -104,9 +104,9 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'id', render: (v, row) => `
           ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
-          ${iconButton({ icon: 'link', label: t('device.ports'), cls: 'btn-secondary btn-device-ports', attrs: `data-device-id="${v}" data-device-name="${escapeHtml(row.name)}"` })}
-          ${iconButton({ icon: 'list', label: t('device.mac_table'), cls: 'btn-secondary btn-device-mac', attrs: `data-device-id="${v}"` })}
-          ${iconButton({ icon: 'radio', label: t('device.lldp'), cls: 'btn-secondary btn-device-lldp', attrs: `data-device-id="${v}"` })}
+          ${iconButton({ icon: 'list', label: t('device.ports'), cls: 'btn-primary btn-device-ports', attrs: `data-device-id="${v}" data-device-name="${escapeHtml(row.name)}"` })}
+          ${iconButton({ icon: 'list', label: t('device.mac_table'), cls: 'btn-success btn-device-mac', attrs: `data-device-id="${v}"` })}
+          ${iconButton({ icon: 'list', label: t('device.lldp'), cls: 'btn-warning btn-device-lldp', attrs: `data-device-id="${v}"` })}
           ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],

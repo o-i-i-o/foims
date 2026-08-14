@@ -68,7 +68,7 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
           <td class="col-center">${formatDateTime(user.created_at)}</td>
           <td class="col-center">
             ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${user.id}"` })}
-            ${iconButton({ icon: 'shield', label: user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa'), cls: 'btn-secondary user-2fa', attrs: `data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}"` })}
+            ${iconButton({ icon: 'lock', label: user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa'), cls: 'btn-primary user-2fa', attrs: `data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}"` })}
             ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger btn-delete', attrs: `data-id="${user.id}"` })}
           </td>
         </tr>
