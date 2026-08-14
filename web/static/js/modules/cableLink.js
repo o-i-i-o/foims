@@ -479,30 +479,7 @@ export async function submitCableLinkForm() {
   const testedVal = getElementValue("cable-link-tested");
   const tested = testedVal === '1' || testedVal === 'true';
 
-  if (id) {
-    // 编辑：仅更新元数据
-    const payload = {
-      link_type: linkType,
-      cable_label: cableLabel || null,
-      length_m: lengthStr ? parseFloat(lengthStr) : null,
-      tested,
-    };
-    try {
-      const result = await apiPut(`/api/resources/cable-links/${id}`, payload);
-      if (result.success) {
-        showToast(t('cable_link.save_success'), "success");
-        closeModal("cable-link-modal");
-        await loadCableLinksData();
-      } else {
-        showToast(result.message || (t('cable_link.save_failed')), "error");
-      }
-    } catch (error) {
-      handleError(error, t('cable_link.save_failed'));
-    }
-    return;
-  }
-
-  // 新建：需要两端点
+  // 编辑与新建共用端点表单：解码两端点并校验
   const aType = getElementValue("cable-link-a-type");
   const aRawId = getElementValue("cable-link-a-id");
   const bType = getElementValue("cable-link-b-type");
@@ -532,7 +509,9 @@ export async function submitCableLinkForm() {
   };
 
   try {
-    const result = await apiPost("/api/resources/cable-links", payload);
+    const result = id
+      ? await apiPut(`/api/resources/cable-links/${id}`, payload)
+      : await apiPost("/api/resources/cable-links", payload);
     if (result.success) {
       showToast(t('cable_link.save_success'), "success");
       closeModal("cable-link-modal");
