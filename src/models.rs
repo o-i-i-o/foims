@@ -1187,7 +1187,7 @@ pub struct OperationLog {
     pub action: String,
     pub operation_type: String,
     pub resource_type: String,
-    pub resource_id: Uuid,
+    pub resource_id: Option<Uuid>,
     pub details: Option<serde_json::Value>,
     pub result: bool,
     pub ip_address: String,
