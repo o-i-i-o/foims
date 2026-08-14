@@ -73,7 +73,8 @@
     "page": "page",
     "page_size": "Rows per page",
     "goto": "Go to",
-    "request_failed": "Request failed"
+    "request_failed": "Request failed",
+    "type": "Type"
   },
   "status": {
     "active": "Active",
@@ -572,7 +573,8 @@
     "no_patch_panels_hint": "No patch panels yet, click the button below to add",
     "patch_panel_name": "Patch Panel Name",
     "patch_panels_save_failed": "Failed to save patch panels",
-    "no_positions_hint": "No positions yet. Click the button below to add one."
+    "no_positions_hint": "No positions yet. Click the button below to add one.",
+    "position_count": "Position Count"
   },
   "cabinet_position": {
     "name": "Position Name",
@@ -852,8 +854,6 @@
     "mac_address": "MAC Address",
     "hostname": "Device Port",
     "status": "Status",
-    "device_name": "Device Name",
-    "device_type": "Device Type",
     "device_types": {
       "workstation": "Workstation",
       "cabinet_position": "Cabinet Position",
@@ -1118,7 +1118,6 @@
     "cron_hint": "e.g., \"0 */6 * * *\" runs every 6 hours",
     "logs_title": "Task Execution Logs",
     "view_logs": "View Logs",
-    "task_name": "Task Name",
     "execution_time": "Execution Time",
     "duration": "Duration(ms)",
     "details": "Details"

@@ -73,7 +73,8 @@
     "page": "页",
     "page_size": "每页条数",
     "goto": "跳至",
-    "request_failed": "请求失败"
+    "request_failed": "请求失败",
+    "type": "类型"
   },
   "status": {
     "active": "活跃",
@@ -428,8 +429,8 @@
     "select_region": "选择网络区域",
     "select_network": "选择网络",
     "add_region_first": "请先添加网络区域",
-    "ipv4_cidrs": "IPv4 CIDR范围",
-    "ipv6_cidrs": "IPv6 CIDR范围",
+    "ipv4_cidrs": "IPv4 CIDR",
+    "ipv6_cidrs": "IPv6 CIDR",
     "load_failed": "加载网络数据失败",
     "total_ips": "IP总数",
     "used_ips": "已用IP",
@@ -572,7 +573,8 @@
     "no_patch_panels_hint": "暂无配线架，点击下方按钮添加",
     "patch_panel_name": "配线架名称",
     "patch_panels_save_failed": "配线架保存失败",
-    "no_positions_hint": "暂无机位，点击下方按钮添加"
+    "no_positions_hint": "暂无机位，点击下方按钮添加",
+    "position_count": "机位数量"
   },
   "cabinet_position": {
     "name": "机位名称",
@@ -852,8 +854,6 @@
     "mac_address": "MAC地址",
     "hostname": "设备端口",
     "status": "状态",
-    "device_name": "设备名称",
-    "device_type": "设备类型",
     "device_types": {
       "workstation": "工位",
       "cabinet_position": "机位",
@@ -1118,7 +1118,6 @@
     "cron_hint": "例如: \"0 */6 * * *\" 表示每6小时执行一次",
     "logs_title": "任务执行日志",
     "view_logs": "查看日志",
-    "task_name": "任务名称",
     "execution_time": "执行时间",
     "duration": "耗时(ms)",
     "details": "详情"
