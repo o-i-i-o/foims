@@ -379,23 +379,44 @@ function decodeEndpoint(type, rawValue) {
 
 let changeHandlers = {};
 
+// 编辑回填：按端点类型驱动级联选择器（类型→范围→机柜（可选）→设备→端点），
+// 与新建表单完全复用，回填后所有选择器保持可编辑
+async function populateEndpointCascade(side, ep) {
+  const ids = getSideIds(side);
+  // device_port / device_interface 统一映射为「设备接口」选项
+  const displayType = (ep.type === 'device_port' || ep.type === 'device_interface') ? 'device_interface' : ep.type;
+  elementCache.setValue(ids.typeSelect, displayType);
+  await onTypeChange(side);
+
+  if (displayType === 'net_outlet') {
+    elementCache.setValue(ids.scopeSelect, ep.roomId || '');
+    await onScopeChange(side);
+    elementCache.setValue(ids.idSelect, ep.id);
+  } else if (displayType === 'patch_panel') {
+    elementCache.setValue(ids.scopeSelect, ep.cabinetId || '');
+    await onScopeChange(side);
+    elementCache.setValue(ids.idSelect, ep.id);
+  } else if (displayType === 'device_interface') {
+    elementCache.setValue(ids.scopeSelect, ep.roomId || '');
+    await onScopeChange(side);
+    if (ep.cabinetId) {
+      elementCache.setValue(ids.cabinetSelect, ep.cabinetId);
+      await onCabinetChange(side);
+    }
+    elementCache.setValue(ids.deviceSelect, ep.deviceId || '');
+    await onDeviceChange(side);
+    // 整合类型的端点值为前缀编码（device_interface:<id> / device_port:<id>）
+    const prefix = ep.type === 'device_port' ? MERGED_TYPE_PREFIX.device_port : MERGED_TYPE_PREFIX.device_interface;
+    elementCache.setValue(ids.idSelect, `${prefix}${ep.id}`);
+  }
+}
+
 export async function openCableLinkModal(cableLink = null) {
   await openModal("cable-link-modal");
 
   const title = elementCache.get('cable-link-modal-title');
   const form = elementCache.get('cable-link-form');
   const isEdit = !!cableLink;
-
-  const aTypeSelect = elementCache.get('cable-link-a-type');
-  const aScopeSelect = elementCache.get('cable-link-a-scope');
-  const aCabinetSelect = elementCache.get('cable-link-a-cabinet');
-  const aDeviceSelect = elementCache.get('cable-link-a-device');
-  const aIdSelect = elementCache.get('cable-link-a-id');
-  const bTypeSelect = elementCache.get('cable-link-b-type');
-  const bScopeSelect = elementCache.get('cable-link-b-scope');
-  const bCabinetSelect = elementCache.get('cable-link-b-cabinet');
-  const bDeviceSelect = elementCache.get('cable-link-b-device');
-  const bIdSelect = elementCache.get('cable-link-b-id');
 
   // 清理旧事件监听并绑定级联处理器（类型/范围/机柜/设备）
   ['a-type', 'a-scope', 'a-cabinet', 'a-device', 'b-type', 'b-scope', 'b-cabinet', 'b-device'].forEach(key => {
@@ -414,40 +435,30 @@ export async function openCableLinkModal(cableLink = null) {
     if (sel) sel.addEventListener('change', changeHandlers[key]);
   });
 
-  // 编辑时端点不可修改
-  const endpointReadonly = isEdit;
-  [aTypeSelect, aScopeSelect, aCabinetSelect, aDeviceSelect, aIdSelect,
-    bTypeSelect, bScopeSelect, bCabinetSelect, bDeviceSelect, bIdSelect].forEach(sel => {
-    if (sel) sel.disabled = endpointReadonly;
-  });
-  // 编辑模式下隐藏范围与级联选择器（端点只读，无需级联）
-  ['cable-link-a-scope-group', 'cable-link-b-scope-group',
-    'cable-link-a-flow-row', 'cable-link-b-flow-row'].forEach(gid => {
-    const g = elementCache.get(gid);
-    if (g) g.style.display = isEdit ? 'none' : '';
-  });
+  // 编辑与新建复用同一表单：级联选择器始终可见、可编辑
 
   if (isEdit) {
     title.textContent = t('cable_link.edit');
     elementCache.setValue('cable-link-id', cableLink.id);
-    // device_port / device_interface 统一映射为「设备接口」选项作展示
-    const aDisplay = (cableLink.a_endpoint_type === 'device_port' || cableLink.a_endpoint_type === 'device_interface') ? 'device_interface' : cableLink.a_endpoint_type;
-    const bDisplay = (cableLink.b_endpoint_type === 'device_port' || cableLink.b_endpoint_type === 'device_interface') ? 'device_interface' : cableLink.b_endpoint_type;
-    elementCache.setValue('cable-link-a-type', aDisplay);
-    elementCache.setValue('cable-link-b-type', bDisplay);
     elementCache.setValue('cable-link-link-type', cableLink.link_type || 'ethernet');
     elementCache.setValue('cable-link-cable-label', cableLink.cable_label || '');
     elementCache.setValue('cable-link-length', cableLink.length_m != null ? cableLink.length_m : '');
     elementCache.setValue('cable-link-tested', cableLink.tested ? '1' : '0');
-    // 显示端点标签（只读）
-    if (aIdSelect) {
-      aIdSelect.innerHTML = `<option value="${escapeHtml(cableLink.a_endpoint_id)}">${escapeHtml(cableLink.a_endpoint_label || cableLink.a_endpoint_id)}</option>`;
-      aIdSelect.value = cableLink.a_endpoint_id;
-    }
-    if (bIdSelect) {
-      bIdSelect.innerHTML = `<option value="${escapeHtml(cableLink.b_endpoint_id)}">${escapeHtml(cableLink.b_endpoint_label || cableLink.b_endpoint_id)}</option>`;
-      bIdSelect.value = cableLink.b_endpoint_id;
-    }
+    // 按当前端点回填级联（后端已随详情返回端点所属房间/机柜/设备）
+    await populateEndpointCascade('a', {
+      type: cableLink.a_endpoint_type,
+      id: cableLink.a_endpoint_id,
+      roomId: cableLink.a_room_id,
+      cabinetId: cableLink.a_cabinet_id,
+      deviceId: cableLink.a_device_id,
+    });
+    await populateEndpointCascade('b', {
+      type: cableLink.b_endpoint_type,
+      id: cableLink.b_endpoint_id,
+      roomId: cableLink.b_room_id,
+      cabinetId: cableLink.b_cabinet_id,
+      deviceId: cableLink.b_device_id,
+    });
   } else {
     title.textContent = t('cable_link.add');
     if (form) form.reset();
