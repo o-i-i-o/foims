@@ -193,7 +193,7 @@ pub async fn create_room(
     )
     .bind(id)
     .bind(&req.name)
-    .bind(&req.room_type)
+    .bind(req.room_type.to_uppercase())
     .bind(req.org_id)
     .bind(&req.description)
     .bind(now)
@@ -381,7 +381,7 @@ pub async fn update_room(
          WHERE id = $7",
     )
     .bind(&req.name)
-    .bind(&req.room_type)
+    .bind(req.room_type.as_ref().map(|t| t.to_uppercase()))
     .bind(req.org_id.is_some())
     .bind(req.org_id.flatten())
     .bind(&req.description)

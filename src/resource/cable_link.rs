@@ -103,7 +103,9 @@ pub async fn get_cable_links(
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
         "SELECT cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
+         cl.a_room_id, cl.a_cabinet_id, cl.a_device_id, \
          cl.b_endpoint_type, cl.b_endpoint_id, cl.b_endpoint_label, \
+         cl.b_room_id, cl.b_cabinet_id, cl.b_device_id, \
          cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
          cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ \
          FROM cable_links_with_details cl {where_clause} \
