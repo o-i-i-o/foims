@@ -5,3 +5,4 @@ package*
 web/.trae/
 web-ts/
 config.toml
+.zcode/
