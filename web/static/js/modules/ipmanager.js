@@ -11,6 +11,9 @@ import {
   appendPaginationToTable,
   debounce,
   escapeHtml,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
@@ -27,6 +30,8 @@ let currentFilters = {
 };
 
 let currentPage = 1;
+
+const ipTableState = createSortState('updated_at', 'desc');
 
 // ====== IP管理 ======
 
@@ -147,10 +152,11 @@ export async function pullIpMacData() {
   }
 }
 
-export async function loadIpMacData(filters = currentFilters, page = currentPage) {
+export async function loadIpMacData(filters = currentFilters, page = currentPage, sortBy = null, sortOrder = null) {
   currentFilters = filters;
   currentPage = page;
-  
+  if (sortBy) ipTableState.setSort(sortBy, sortOrder);
+
   try {
     const { device_name = '', network = '', ip_address = '' } = filters;
 
@@ -160,14 +166,16 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
     if (ip_address) params.append('ip_address', ip_address);
     params.append('page', page);
     params.append('page_size', currentPageSize);
-    
+    params.append('sort_by', ipTableState.sortBy);
+    params.append('sort_order', ipTableState.sortOrder);
+
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
     if (result.success && result.data) {
       const { data, total, page: currentPage, total_pages } = result.data;
       const pageNum = currentPage || 1;
-      const startIndex = (pageNum - 1) * IP_PAGE_SIZE;
-      
+      const startIndex = (pageNum - 1) * currentPageSize;
+
       renderTable("#ip-table", {
         data: data || [],
         columns: [
@@ -176,28 +184,30 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
             return escapeHtml(row.workstation_name || row.cabinet_name || row.port_device_name || row.device_name || '-');
           }},
           { field: 'device_name', render: (v) => escapeHtml(v || '-') },
-          { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)) },
+          { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)), className: 'col-center' },
           { field: 'network_name', render: (v, row) => `${escapeHtml(v || t('common.unknown'))} (${escapeHtml(row.network_region || t('common.unknown'))})` },
           { field: 'ip_address', render: (v) => escapeHtml(v) },
           { field: 'mac_address', render: (v) => escapeHtml(v || '-') },
           { field: 'hostname', render: (v) => escapeHtml(v || '-') },
-          { field: 'status', render: (v) => `<span class="status-badge ${v === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(v)}</span>` },
-          { field: 'last_seen', render: (v) => formatDateTime(v) },
-          { field: 'created_at', render: (v) => formatDateTime(v) }
+          { field: 'status', render: (v) => `<span class="status-badge ${v === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(v)}</span>`, className: 'col-center' },
+          { field: 'last_seen', render: (v) => formatDateTime(v), className: 'col-center' },
+          { field: 'created_at', render: (v) => formatDateTime(v), className: 'col-center' }
         ],
         emptyMessage: t('ip.no_ip_data')
       });
-      
+
       if (total !== undefined) {
         appendPaginationToTable("#ip-table", { total, page: pageNum, total_pages, page_size: currentPageSize }, (p) => loadIpMacData(filters, p), {
         pageSize: currentPageSize,
         onPageSizeChange: (size) => { currentPageSize = size; loadIpMacData(filters, 1); },
       });
       }
-      
+
+      updateSortIcons("ip-table", ipTableState);
+
       return { total, page: currentPage, total_pages };
     }
-    
+
     return null;
   } catch (error) {
     console.error("加载IP数据失败:", error);
@@ -218,6 +228,8 @@ export const initIpMacFunctions = () => {
   ipSection.dataset.initialized = "true";
   
   initIpFilters();
+
+  initSortEvents("ip-table", ipTableState, (page, sortBy, sortOrder) => loadIpMacData(currentFilters, page, sortBy, sortOrder));
 
   ipSection.addEventListener("click", (e) => {
     const target = e.target;

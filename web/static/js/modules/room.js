@@ -21,6 +21,7 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { loadOrgsForSelect } from "../utils/resources.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
@@ -658,7 +659,7 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
       columns: [
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'room_type', render: (v) => {
+        { field: 'room_type', className: 'col-center', render: (v) => {
           const roomTypeLower = v ? v.toLowerCase() : '';
           if (roomTypeLower === "office") return t('room.type_office');
           if (roomTypeLower === "data_center") return t('room.type_datacenter');
@@ -668,14 +669,14 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
         { field: 'org_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'networks', render: (v) => v && v.length > 0 ? v.map(n => `${escapeHtml(n.name)} (${escapeHtml(n.network_region)})`).join("<br>") : '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
-        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
         { field: 'id', render: (v, row) => {
           const isCabinetRoom = (row.room_type || '').toLowerCase() === 'data_center' || (row.room_type || '').toLowerCase() === 'telecom_closet';
           return `
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-room-children-list" data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}">${isCabinetRoom ? (t('room.cabinets')) : (t('room.workstations'))}</button>
-          <button class="btn btn-sm btn-secondary btn-room-net-outlets-list" data-room-id="${v}">${t('room.net_outlets')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'server', label: isCabinetRoom ? t('room.cabinets') : t('room.workstations'), cls: 'btn-secondary btn-room-children-list', attrs: `data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || '')}"` })}
+          ${iconButton({ icon: 'share', label: t('room.net_outlets'), cls: 'btn-secondary btn-room-net-outlets-list', attrs: `data-room-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         `;
         } }
       ],
@@ -709,14 +710,15 @@ function bindRoomButtonsEvents() {
   }
 
   roomTableClickHandler = async (e) => {
-    const target = e.target;
-    if (target.classList.contains("btn-room-children-list")) {
-      const roomId = target.dataset.roomId;
+    const childrenBtn = e.target.closest(".btn-room-children-list");
+    const outletsBtn = e.target.closest(".btn-room-net-outlets-list");
+    if (childrenBtn) {
+      const roomId = childrenBtn.dataset.roomId;
       if (roomId) {
         await openRoomChildrenListModal(roomId);
       }
-    } else if (target.classList.contains("btn-room-net-outlets-list")) {
-      const roomId = target.dataset.roomId;
+    } else if (outletsBtn) {
+      const roomId = outletsBtn.dataset.roomId;
       if (roomId) {
         await openRoomNetOutletsListModal(roomId);
       }

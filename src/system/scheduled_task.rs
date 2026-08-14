@@ -54,10 +54,30 @@ fn validate_log_cleanup_days(config: &serde_json::Value) -> Result<(), AppError>
 pub async fn get_scheduled_tasks(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let tasks: Vec<ScheduledTask> = sqlx::query_as(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks ORDER BY created_at DESC"
-    )
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("name", "desc") => "ORDER BY name DESC",
+        ("name", _) => "ORDER BY name ASC",
+        ("task_type", "desc") => "ORDER BY task_type DESC, name ASC",
+        ("task_type", _) => "ORDER BY task_type ASC, name ASC",
+        ("enabled", "desc") => "ORDER BY enabled DESC, name ASC",
+        ("enabled", _) => "ORDER BY enabled ASC, name ASC",
+        ("last_run_at", "desc") => "ORDER BY last_run_at DESC NULLS LAST, name ASC",
+        ("last_run_at", _) => "ORDER BY last_run_at ASC NULLS LAST, name ASC",
+        ("last_result", "desc") => "ORDER BY last_result DESC NULLS LAST, name ASC",
+        ("last_result", _) => "ORDER BY last_result ASC NULLS LAST, name ASC",
+        ("created_at", "asc") => "ORDER BY created_at ASC",
+        _ => "ORDER BY created_at DESC",
+    };
+
+    let tasks: Vec<ScheduledTask> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks {order_clause}"
+    )))
     .fetch_all(&state.pool()?.get_conn())
     .await
     ?;

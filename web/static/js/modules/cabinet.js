@@ -23,6 +23,7 @@ import {
 import { openModal, closeModal } from "../utils/modal.js";
 import { elementCache } from "../utils/helpers.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
 import {
@@ -240,14 +241,14 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'capacity', render: (v) => v ?? '-' },
-        { field: 'position_count', render: (v) => v ?? 0 },
+        { field: 'capacity', render: (v) => v ?? '-', className: 'col-center' },
+        { field: 'position_count', render: (v) => v ?? 0, className: 'col-center' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
-        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-cabinet-positions-list" data-cabinet-id="${v}">${t('cabinet.positions_list')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'grid', label: t('cabinet.positions_list'), cls: 'btn-secondary btn-cabinet-positions-list', attrs: `data-cabinet-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],
       emptyMessage: t('common.no_data')
@@ -283,9 +284,9 @@ function bindCabinetButtonsEvents() {
   }
 
   cabinetTableClickHandler = async (e) => {
-    const target = e.target;
-    if (target.classList.contains("btn-cabinet-positions-list")) {
-      const cabinetId = target.dataset.cabinetId;
+    const positionsBtn = e.target.closest(".btn-cabinet-positions-list");
+    if (positionsBtn) {
+      const cabinetId = positionsBtn.dataset.cabinetId;
       if (cabinetId) {
         await openCabinetPositionsListModal(cabinetId);
       }

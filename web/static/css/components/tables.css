@@ -38,8 +38,16 @@
 .index-column {
     width: 50px;
     text-align: center;
+    vertical-align: middle;
     font-weight: 500;
     color: var(--color-text-muted);
+}
+
+/* 宽度可控列（序号/时间/数字/枚举/按钮）的水平垂直居中 */
+.data-table th.col-center,
+.data-table td.col-center {
+    text-align: center;
+    vertical-align: middle;
 }
 
 .data-table th.index-column {

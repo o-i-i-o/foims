@@ -38,12 +38,14 @@ pub async fn get_rooms(
     let search_pattern = crate::utils::escape_like(&search);
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
-        ("name", "desc") => "ORDER BY name DESC",
-        ("created_at", "desc") => "ORDER BY created_at DESC",
-        ("created_at", _) => "ORDER BY created_at ASC",
-        ("room_type", "desc") => "ORDER BY room_type DESC, name ASC",
-        ("room_type", _) => "ORDER BY room_type ASC, name ASC",
-        _ => "ORDER BY name ASC",
+        ("name", "desc") => "ORDER BY r.name DESC",
+        ("created_at", "desc") => "ORDER BY r.created_at DESC",
+        ("created_at", _) => "ORDER BY r.created_at ASC",
+        ("room_type", "desc") => "ORDER BY r.room_type DESC, r.name ASC",
+        ("room_type", _) => "ORDER BY r.room_type ASC, r.name ASC",
+        ("org_name", "desc") => "ORDER BY o.name DESC NULLS LAST, r.name ASC",
+        ("org_name", _) => "ORDER BY o.name ASC NULLS LAST, r.name ASC",
+        _ => "ORDER BY r.name ASC",
     };
 
     let (total, rooms) = if search.is_empty() {
@@ -52,7 +54,7 @@ pub async fn get_rooms(
             .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms {order_clause} LIMIT $1 OFFSET $2"))
+            sqlx::AssertSqlSafe(format!("SELECT r.id, r.name, r.room_type, r.org_id, r.description, r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -69,7 +71,7 @@ pub async fn get_rooms(
         .await?;
 
         let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT r.id, r.name, r.room_type, r.org_id, r.description, r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id WHERE r.name ILIKE $1 OR r.room_type ILIKE $1 OR r.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)

@@ -68,7 +68,9 @@ export function initSortEvents(tableId, sortState, loadDataFn) {
     if (!table) return;
     
     table.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
+        th.addEventListener('click', (e) => {
+            // 表头内嵌过滤输入框等控件时不触发排序
+            if (e.target.closest('input, select, textarea, button, a')) return;
             const sortKey = th.dataset.sort;
             sortState.toggle(sortKey);
             loadDataFn(1, sortState.by, sortState.order);

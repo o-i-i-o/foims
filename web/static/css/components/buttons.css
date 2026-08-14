@@ -108,6 +108,77 @@
     justify-content: center;
 }
 
+/* 图标按钮：用于表格行内操作，文字含义通过 data-tooltip 悬浮提示展示 */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+}
+
+.icon-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--control-shadow);
+}
+
+.icon-btn.btn-edit,
+.icon-btn.btn-secondary,
+.icon-btn.btn-info {
+    color: var(--color-info);
+}
+
+.icon-btn.btn-edit:hover,
+.icon-btn.btn-secondary:hover,
+.icon-btn.btn-info:hover {
+    background: rgb(23 162 184 / 0.12);
+    color: var(--color-info-hover);
+}
+
+.icon-btn.btn-delete,
+.icon-btn.btn-danger {
+    color: var(--color-danger);
+}
+
+.icon-btn.btn-delete:hover,
+.icon-btn.btn-danger:hover {
+    background: rgb(220 53 69 / 0.1);
+    color: var(--color-danger-hover);
+}
+
+.icon-btn.btn-primary {
+    color: var(--color-primary);
+}
+
+.icon-btn.btn-primary:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary-hover);
+}
+
+.icon-btn.btn-success,
+.icon-btn.btn-add-child {
+    color: var(--color-success);
+}
+
+.icon-btn.btn-success:hover,
+.icon-btn.btn-add-child:hover {
+    background: rgb(40 167 69 / 0.12);
+}
+
 .button-group {
     display: flex;
     gap: var(--space-md);

@@ -13,10 +13,11 @@
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="/static/css/variables.css?v=01253" />
   <link rel="stylesheet" href="/static/css/base/reset.css?v=01253" />
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01253" />
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01272" />
   <link rel="stylesheet" href="/static/css/components/forms.css?v=01253" />
   <link rel="stylesheet" href="/static/css/components/modals.css?v=01253" />
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01253" />
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01272" />
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01272" />
   <link rel="stylesheet" href="/static/css/components/cards.css?v=01253" />
   <link rel="stylesheet" href="/static/css/components/badges.css?v=01253" />
   <link rel="stylesheet" href="/static/css/components/toasts.css?v=01253" />
@@ -230,11 +231,12 @@
             <table id="network-types-table" class="data-table">
               <thead>
                 <tr>
-                  <th data-i18n="common.name">Name</th>
-                  <th data-i18n="common.description">Description</th>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
                   <th data-i18n="network.ipv4_cidrs">IPv4 CIDRs</th>
                   <th data-i18n="network.ipv6_cidrs">IPv6 CIDRs</th>
-                  <th data-i18n="common.created_at">Created At</th>
+                  <th data-i18n="common.description">Description</th>
+                  <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th class="th-actions">
                     <button id="add-network-type-btn" class="btn btn-primary btn-sm" data-i18n="network.add_region">Add Network Region</button>
                   </th>
@@ -242,7 +244,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="6" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -255,23 +257,23 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th>
+                  <th class="sortable" data-sort="name">
                     <span data-i18n="common.name">Name</span>
                     <input type="text" id="network-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                   </th>
-                  <th>
+                  <th class="sortable" data-sort="network_region">
                     <span data-i18n="network.region">Network Region</span>
                     <input type="text" id="network-region-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                   </th>
-                  <th>
+                  <th class="sortable" data-sort="ipv4_cidr">
                     <span data-i18n="network.ipv4_cidr">IPv4 CIDR</span>
                     <input type="text" id="network-ipv4-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                   </th>
-                  <th>
+                  <th class="sortable" data-sort="ipv6_cidr">
                     <span data-i18n="network.ipv6_cidr">IPv6 CIDR</span>
                     <input type="text" id="network-ipv6-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                   </th>
-                  <th data-i18n="common.created_at">Created At</th>
+                  <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th class="th-actions">
                     <button id="add-network-btn" class="btn btn-primary btn-sm" data-i18n="network.add_network">Add Network</button>
                   </th>
@@ -293,11 +295,11 @@
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
                   <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
-                  <th data-i18n="common.type" class="sortable" data-sort="room_type">Type</th>
+                  <th data-i18n="common.type" class="sortable col-center" data-sort="room_type">Type</th>
                   <th data-i18n="organization.parent_org" class="sortable" data-sort="org_name">Organization</th>
                   <th data-i18n="room.networks">Networks</th>
                   <th data-i18n="common.description">Description</th>
-                  <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
+                  <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th class="th-actions">
                     <button id="add-room-btn" class="btn btn-primary btn-sm" data-i18n="room.add_room">Add Room</button>
                   </th>
@@ -318,12 +320,12 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="cabinet.room">Room</th>
+                  <th data-i18n="cabinet.room" class="sortable" data-sort="room_name">Room</th>
                   <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
-                  <th data-i18n="cabinet.capacity" class="sortable" data-sort="capacity">Capacity</th>
-                  <th data-i18n="cabinet.position_count">Position Count</th>
+                  <th data-i18n="cabinet.capacity" class="sortable col-center" data-sort="capacity">Capacity</th>
+                  <th data-i18n="cabinet.position_count" class="col-center">Position Count</th>
                   <th data-i18n="common.description">Description</th>
-                  <th data-i18n="common.created_at" class="sortable" data-sort="created_at">Created At</th>
+                  <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th class="th-actions">
                     <button id="add-cabinet-btn" class="btn btn-primary btn-sm" data-i18n="cabinet.add_cabinet">Add Cabinet</button>
                   </th>
@@ -345,11 +347,11 @@
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
                   <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
-                  <th data-i18n="common.type">Type</th>
-                  <th data-i18n="device.brand">Brand</th>
-                  <th data-i18n="device.model">Model</th>
+                  <th data-i18n="common.type" class="sortable col-center" data-sort="device_type">Type</th>
+                  <th data-i18n="device.brand" class="sortable" data-sort="brand">Brand</th>
+                  <th data-i18n="device.model" class="sortable" data-sort="model">Model</th>
                   <th data-i18n="device.location">Location</th>
-                  <th data-i18n="device.room">Room</th>
+                  <th data-i18n="device.room" class="sortable" data-sort="room_name">Room</th>
                   <th data-i18n="common.description">Description</th>
                   <th class="th-actions">
                     <button id="add-device-btn" class="btn btn-primary btn-sm" data-i18n="device.add">Add Device</button>
@@ -358,7 +360,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -373,10 +375,10 @@
                   <th data-i18n="common.index" class="index-column">序号</th>
                   <th data-i18n="cable_link.a_endpoint">A Endpoint</th>
                   <th data-i18n="cable_link.b_endpoint">B Endpoint</th>
-                  <th data-i18n="common.type">Type</th>
-                  <th data-i18n="cable_link.cable_label">Cable Label</th>
-                  <th data-i18n="cable_link.length_m">Length (m)</th>
-                  <th data-i18n="cable_link.tested">Tested</th>
+                  <th data-i18n="common.type" class="sortable col-center" data-sort="link_type">Type</th>
+                  <th data-i18n="cable_link.cable_label" class="sortable" data-sort="cable_label">Cable Label</th>
+                  <th data-i18n="cable_link.length_m" class="sortable col-center" data-sort="length_m">Length (m)</th>
+                  <th data-i18n="cable_link.tested" class="sortable col-center" data-sort="tested">Tested</th>
                   <th class="th-actions">
                     <button id="add-cable-link-btn" class="btn btn-primary btn-sm" data-i18n="cable_link.add">Add Cable Link</button>
                   </th>
@@ -427,27 +429,27 @@
               <tr>
                 <th data-i18n="common.index" class="index-column">序号</th>
                 <th data-i18n="ip.location">Location</th>
-                <th>
+                <th class="sortable" data-sort="device_name">
                   <span data-i18n="common.name">Name</span>
                   <input type="text" id="ip-device-name-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                 </th>
-                <th>
+                <th class="sortable col-center" data-sort="device_type">
                   <span data-i18n="common.type">Type</span>
                   <input type="text" id="ip-device-type-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                 </th>
-                <th>
+                <th class="sortable" data-sort="network_name">
                   <span data-i18n="ip.network">Network</span>
                   <input type="text" id="ip-network-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                 </th>
-                <th>
+                <th class="sortable" data-sort="ip_address">
                   <span data-i18n="ip.ip_address">IP Address</span>
                   <input type="text" id="ip-address-filter" class="form-control form-control-sm filter-input" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." />
                 </th>
-                <th data-i18n="ip.mac_address">MAC Address</th>
-                <th data-i18n="ip.hostname">Hostname</th>
-                <th data-i18n="ip.status">Status</th>
-                <th data-i18n="ip.last_seen">Last Seen</th>
-                <th data-i18n="common.created_at">Created At</th>
+                <th data-i18n="ip.mac_address" class="sortable" data-sort="mac_address">MAC Address</th>
+                <th data-i18n="ip.hostname" class="sortable" data-sort="hostname">Hostname</th>
+                <th data-i18n="ip.status" class="sortable col-center" data-sort="status">Status</th>
+                <th data-i18n="ip.last_seen" class="sortable col-center" data-sort="last_seen">Last Seen</th>
+                <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
               </tr>
             </thead>
             <tbody>
@@ -528,13 +530,13 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="logs.operation_time">Operation Time</th>
-                  <th data-i18n="logs.operator">Operator</th>
-                  <th data-i18n="logs.operation_type">Operation Type</th>
-                  <th data-i18n="logs.resource_type">Resource Type</th>
-                  <th data-i18n="logs.result">Result</th>
-                  <th data-i18n="logs.ip_address">IP Address</th>
-                  <th data-i18n="common.actions">Actions</th>
+                  <th data-i18n="logs.operation_time" class="sortable col-center" data-sort="created_at">Operation Time</th>
+                  <th data-i18n="logs.operator" class="sortable" data-sort="username">Operator</th>
+                  <th data-i18n="logs.operation_type" class="sortable col-center" data-sort="operation_type">Operation Type</th>
+                  <th data-i18n="logs.resource_type" class="sortable col-center" data-sort="resource_type">Resource Type</th>
+                  <th data-i18n="logs.result" class="sortable col-center" data-sort="result">Result</th>
+                  <th data-i18n="logs.ip_address" class="sortable" data-sort="ip_address">IP Address</th>
+                  <th data-i18n="common.actions" class="col-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -552,11 +554,11 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="logs.login_time">Login Time</th>
-                  <th data-i18n="auth.username">Username</th>
-                  <th data-i18n="logs.ip_address">IP Address</th>
+                  <th data-i18n="logs.login_time" class="sortable col-center" data-sort="created_at">Login Time</th>
+                  <th data-i18n="auth.username" class="sortable" data-sort="username">Username</th>
+                  <th data-i18n="logs.ip_address" class="sortable" data-sort="ip_address">IP Address</th>
                   <th data-i18n="logs.user_agent">User Agent</th>
-                  <th data-i18n="logs.login_result">Login Result</th>
+                  <th data-i18n="logs.login_result" class="sortable col-center" data-sort="success">Login Result</th>
                   <th data-i18n="logs.error_message">Error Message</th>
                 </tr>
               </thead>
@@ -587,11 +589,11 @@
               <thead>
                 <tr>
                   <th data-i18n="common.index" class="index-column">序号</th>
-                  <th data-i18n="notifications.time">Time</th>
-                  <th data-i18n="notifications.title">Title</th>
+                  <th data-i18n="notifications.time" class="sortable col-center" data-sort="created_at">Time</th>
+                  <th data-i18n="notifications.title" class="sortable" data-sort="title">Title</th>
                   <th data-i18n="notifications.content">Content</th>
-                  <th data-i18n="notifications.status">Status</th>
-                  <th data-i18n="common.actions">Actions</th>
+                  <th data-i18n="notifications.status" class="sortable col-center" data-sort="read">Status</th>
+                  <th data-i18n="common.actions" class="col-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -660,12 +662,13 @@
             <table id="users-table" class="data-table" aria-label="User list">
               <thead>
                 <tr>
-                  <th data-i18n="auth.username">Username</th>
-                  <th data-i18n="user.email">Email</th>
-                  <th data-i18n="user.role">Role</th>
-                  <th data-i18n="user.status">Status</th>
-                  <th>2FA</th>
-                  <th data-i18n="common.created_at">Created At</th>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="auth.username" class="sortable" data-sort="username">Username</th>
+                  <th data-i18n="user.email" class="sortable" data-sort="email">Email</th>
+                  <th data-i18n="user.role" class="sortable col-center" data-sort="role">Role</th>
+                  <th data-i18n="user.status" class="sortable col-center" data-sort="status">Status</th>
+                  <th class="sortable col-center" data-sort="two_factor_enabled">2FA</th>
+                  <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th class="th-actions">
                     <button id="add-user-btn" class="btn btn-primary btn-sm" data-i18n="user.add_user">Add User</button>
                   </th>
@@ -673,7 +676,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="7" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -906,15 +909,16 @@
             <div class="table-container">
               <table id="scheduled-tasks-table" class="data-table">
                 <thead>
-                  <tr>
-                    <th data-i18n="common.name">Name</th>
-                    <th data-i18n="common.type">Type</th>
-                    <th data-i18n="scheduled_tasks.cron">Cron Expression</th>
-                    <th data-i18n="scheduled_tasks.status">Status</th>
-                    <th data-i18n="scheduled_tasks.last_run">Last Run</th>
-                    <th data-i18n="scheduled_tasks.last_result">Last Result</th>
-                    <th data-i18n="common.actions">Actions</th>
-                  </tr>
+                <tr>
+                  <th data-i18n="common.index" class="index-column">序号</th>
+                  <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
+                  <th data-i18n="common.type" class="sortable col-center" data-sort="task_type">Type</th>
+                  <th data-i18n="scheduled_tasks.cron">Cron Expression</th>
+                  <th data-i18n="scheduled_tasks.status" class="sortable col-center" data-sort="enabled">Status</th>
+                  <th data-i18n="scheduled_tasks.last_run" class="sortable col-center" data-sort="last_run_at">Last Run</th>
+                  <th data-i18n="scheduled_tasks.last_result" class="sortable col-center" data-sort="last_result">Last Result</th>
+                  <th data-i18n="common.actions" class="col-center">Actions</th>
+                </tr>
                 </thead>
                 <tbody id="scheduled-tasks-tbody"></tbody>
               </table>
@@ -1016,7 +1020,7 @@
                 <thead>
                   <tr>
                     <th data-i18n="security.ip_address">IP Address</th>
-                    <th data-i18n="security.remaining_seconds">Remaining (s)</th>
+                    <th data-i18n="security.remaining_seconds" class="col-center">Remaining (s)</th>
                     <th class="th-actions" data-i18n="common.actions">Actions</th>
                   </tr>
                 </thead>
@@ -1033,7 +1037,7 @@
                 <thead>
                   <tr>
                     <th data-i18n="security.ip_address">IP Address</th>
-                    <th data-i18n="security.failure_count">Failure Count</th>
+                    <th data-i18n="security.failure_count" class="col-center">Failure Count</th>
                   </tr>
                 </thead>
                 <tbody id="app-fail2ban-tracked-tbody">
@@ -1055,6 +1059,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01271"></script>
+  <script type="module" src="/static/js/app.js?v=01272"></script>
 </body>
 </html>

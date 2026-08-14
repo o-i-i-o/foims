@@ -19,6 +19,21 @@ pub async fn get_login_logs(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("username", "desc") => "ORDER BY username DESC, created_at DESC",
+        ("username", _) => "ORDER BY username ASC, created_at DESC",
+        ("ip_address", "desc") => "ORDER BY ip_address DESC, created_at DESC",
+        ("ip_address", _) => "ORDER BY ip_address ASC, created_at DESC",
+        ("success", "desc") => "ORDER BY success DESC, created_at DESC",
+        ("success", _) => "ORDER BY success ASC, created_at DESC",
+        ("created_at", "asc") => "ORDER BY created_at ASC",
+        _ => "ORDER BY created_at DESC",
+    };
+
     let search_pattern = crate::utils::escape_like(&search);
     let conn = state.pool()?.get_conn();
 
@@ -27,9 +42,9 @@ pub async fn get_login_logs(
             .fetch_one(&conn)
             .await?;
 
-        let logs = sqlx::query_as::<_, LoginLog>(
-            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-        )
+        let logs = sqlx::query_as::<_, LoginLog>(sqlx::AssertSqlSafe(format!(
+            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs {order_clause} LIMIT $1 OFFSET $2"
+        )))
         .bind(page_size)
         .bind(offset)
         .fetch_all(&conn)
@@ -44,9 +59,9 @@ pub async fn get_login_logs(
         .fetch_one(&conn)
         .await?;
 
-        let logs = sqlx::query_as::<_, LoginLog>(
-            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-        )
+        let logs = sqlx::query_as::<_, LoginLog>(sqlx::AssertSqlSafe(format!(
+            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
+        )))
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)

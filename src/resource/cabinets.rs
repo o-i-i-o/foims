@@ -43,6 +43,8 @@ pub async fn get_cabinets(
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY c.name DESC",
+        ("room_name", "desc") => "ORDER BY rm.name DESC NULLS LAST, c.name ASC",
+        ("room_name", _) => "ORDER BY rm.name ASC NULLS LAST, c.name ASC",
         ("capacity", "desc") => "ORDER BY c.capacity DESC, c.name ASC",
         ("capacity", _) => "ORDER BY c.capacity ASC, c.name ASC",
         ("created_at", "desc") => "ORDER BY c.created_at DESC",
@@ -56,7 +58,7 @@ pub async fn get_cabinets(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c {order_clause} LIMIT $1 OFFSET $2"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -71,7 +73,7 @@ pub async fn get_cabinets(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(parsed_room_id)
         .bind(page_size)
@@ -90,7 +92,7 @@ pub async fn get_cabinets(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
@@ -109,7 +111,7 @@ pub async fn get_cabinets(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets c WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)

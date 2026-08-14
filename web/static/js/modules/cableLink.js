@@ -21,6 +21,7 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 
 const tableState = createSortState('updated_at', 'desc');
@@ -86,13 +87,13 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'a_endpoint_type', render: (v, row) => buildEndpointDisplay(row.a_endpoint_type, row.a_endpoint_label) },
         { field: 'b_endpoint_type', render: (v, row) => buildEndpointDisplay(row.b_endpoint_type, row.b_endpoint_label) },
-        { field: 'link_type', render: (v) => getLinkTypeLabel(v) },
+        { field: 'link_type', render: (v) => getLinkTypeLabel(v), className: 'col-center' },
         { field: 'cable_label', render: (v) => escapeHtml(v) || '-' },
-        { field: 'length_m', render: (v) => (v != null ? `${v}m` : '-') },
-        { field: 'tested', render: (v) => v ? (t('cable_link.tested_yes')) : (t('cable_link.tested_no')) },
+        { field: 'length_m', render: (v) => (v != null ? `${v}m` : '-'), className: 'col-center' },
+        { field: 'tested', render: (v) => v ? (t('cable_link.tested_yes')) : (t('cable_link.tested_no')), className: 'col-center' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],
       emptyMessage: t('common.no_data')

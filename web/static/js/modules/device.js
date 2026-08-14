@@ -22,6 +22,7 @@ import {
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import {
   loadRoomsForSelect,
@@ -91,7 +92,7 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
       columns: [
         { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'device_type', render: (v) => getDeviceTypeName(v) },
+        { field: 'device_type', render: (v) => getDeviceTypeName(v), className: 'col-center' },
         { field: 'brand', render: (v) => escapeHtml(v) || '-' },
         { field: 'model', render: (v) => escapeHtml(v) || '-' },
         { field: 'workstation_name', render: (v, row) => {
@@ -102,11 +103,11 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
         { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
         { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'id', render: (v, row) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-secondary btn-device-ports" data-device-id="${v}" data-device-name="${escapeHtml(row.name)}">${t('device.ports')}</button>
-          <button class="btn btn-sm btn-secondary btn-device-mac" data-device-id="${v}">${t('device.mac_table')}</button>
-          <button class="btn btn-sm btn-secondary btn-device-lldp" data-device-id="${v}">${t('device.lldp')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'link', label: t('device.ports'), cls: 'btn-secondary btn-device-ports', attrs: `data-device-id="${v}" data-device-name="${escapeHtml(row.name)}"` })}
+          ${iconButton({ icon: 'list', label: t('device.mac_table'), cls: 'btn-secondary btn-device-mac', attrs: `data-device-id="${v}"` })}
+          ${iconButton({ icon: 'radio', label: t('device.lldp'), cls: 'btn-secondary btn-device-lldp', attrs: `data-device-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],
       emptyMessage: t('common.no_data')
@@ -137,17 +138,18 @@ function bindDeviceButtonsEvents() {
   }
 
   deviceTableClickHandler = async (e) => {
-    const target = e.target;
-    const deviceId = target.dataset.deviceId;
-    const deviceName = target.dataset.deviceName;
-    const id = target.dataset.id;
+    const portsBtn = e.target.closest(".btn-device-ports");
+    const macBtn = e.target.closest(".btn-device-mac");
+    const lldpBtn = e.target.closest(".btn-device-lldp");
 
-    if (target.classList.contains("btn-device-ports") && deviceId) {
+    if (portsBtn) {
+      const deviceId = portsBtn.dataset.deviceId;
+      const deviceName = portsBtn.dataset.deviceName;
       manageUnifiedDevicePorts(deviceId, deviceName || "");
-    } else if (target.classList.contains("btn-device-mac") && deviceId) {
-      viewArpTable(deviceId);
-    } else if (target.classList.contains("btn-device-lldp") && deviceId) {
-      viewLldpNeighbors(deviceId);
+    } else if (macBtn) {
+      viewArpTable(macBtn.dataset.deviceId);
+    } else if (lldpBtn) {
+      viewLldpNeighbors(lldpBtn.dataset.deviceId);
     }
   };
 
@@ -292,8 +294,8 @@ async function loadDeviceTemplateList() {
           </span>
         </div>
         <div class="device-template-actions">
-          <button type="button" class="btn btn-secondary btn-sm dt-edit-btn" data-i18n="common.edit">${t('common.edit')}</button>
-          <button type="button" class="btn btn-danger btn-sm dt-delete-btn" data-i18n="common.delete">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-secondary dt-edit-btn' })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger dt-delete-btn' })}
         </div>
       </div>
     `).join('');
@@ -361,8 +363,8 @@ async function editDeviceTemplate(id) {
           <textarea class="dt-edit-desc nc-input" rows="2">${escapeHtml(tmpl.description || '')}</textarea>
         </div>
         <div class="device-template-edit-actions">
-          <button type="button" class="btn btn-secondary btn-sm dt-cancel-btn">${t('common.cancel')}</button>
-          <button type="button" class="btn btn-primary btn-sm dt-save-btn">${t('common.save')}</button>
+          ${iconButton({ icon: 'x', label: t('common.cancel'), cls: 'btn-secondary dt-cancel-btn' })}
+          ${iconButton({ icon: 'check', label: t('common.save'), cls: 'btn-primary dt-save-btn' })}
         </div>
       </div>
     `;

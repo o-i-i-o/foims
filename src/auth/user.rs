@@ -27,6 +27,25 @@ pub async fn get_users(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("username", "desc") => "ORDER BY username DESC",
+        ("username", _) => "ORDER BY username ASC",
+        ("email", "desc") => "ORDER BY email DESC",
+        ("email", _) => "ORDER BY email ASC",
+        ("role", "desc") => "ORDER BY role DESC, username ASC",
+        ("role", _) => "ORDER BY role ASC, username ASC",
+        ("status", "desc") => "ORDER BY status DESC, username ASC",
+        ("status", _) => "ORDER BY status ASC, username ASC",
+        ("two_factor_enabled", "desc") => "ORDER BY two_factor_enabled DESC, username ASC",
+        ("two_factor_enabled", _) => "ORDER BY two_factor_enabled ASC, username ASC",
+        ("created_at", "asc") => "ORDER BY created_at ASC",
+        _ => "ORDER BY created_at DESC",
+    };
+
     let search_pattern = format!("%{search}%");
     let conn = state.pool()?.get_conn();
 
@@ -35,9 +54,9 @@ pub async fn get_users(
             .fetch_one(&conn)
             .await?;
 
-        let users = sqlx::query_as::<_, User>(
-            "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-        )
+        let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
+            "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users {order_clause} LIMIT $1 OFFSET $2"
+        )))
         .bind(page_size)
         .bind(offset)
         .fetch_all(&conn)
@@ -52,9 +71,9 @@ pub async fn get_users(
         .fetch_one(&conn)
         .await?;
 
-        let users = sqlx::query_as::<_, User>(
-            "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE $1 OR email ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-        )
+        let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
+            "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE $1 OR email ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
+        )))
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)

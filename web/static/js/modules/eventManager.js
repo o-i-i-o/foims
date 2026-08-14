@@ -240,11 +240,12 @@ function handleModalCloseClick(e) {
  * @param {Event} e - 点击事件
  */
 async function handleUsageButtonClick(e) {
-  if (!e.target.classList.contains("btn-usage")) {
+  const button = e.target.closest(".btn-usage");
+
+  if (!button) {
     return;
   }
 
-  const button = e.target;
   const id = button.dataset.id;
 
   if (!id || id === "undefined") {
@@ -265,21 +266,23 @@ async function handleUsageButtonClick(e) {
  * @param {Event} e - 点击事件
  */
 async function handleEditDeleteClick(e) {
-  const isEdit = e.target.classList.contains("btn-edit");
-  const isDelete = e.target.classList.contains("btn-delete");
+  // 图标按钮内嵌 SVG，e.target 可能是 svg/path，必须用 closest 定位按钮
+  const button = e.target.closest(".btn-edit, .btn-delete");
 
-  if (!isEdit && !isDelete) {
+  if (!button) {
     return;
   }
 
+  const isEdit = button.classList.contains("btn-edit");
+  const isDelete = button.classList.contains("btn-delete");
+
   // 有 data-action 属性的按钮由模块自身的事件处理器处理，跳过全局处理
-  if (e.target.dataset.action) {
+  if (button.dataset.action) {
     return;
   }
 
   e.preventDefault();
 
-  const button = e.target;
   const id = button.dataset.id;
   const table = button.closest("table");
   const tableId = table?.id;

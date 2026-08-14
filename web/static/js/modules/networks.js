@@ -17,10 +17,14 @@ import {
   handleError,
   appendPaginationToTable,
   escapeHtml,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 
 import {
   loadNetworkTypeOptions
@@ -31,20 +35,23 @@ import { elementCache } from "../utils/helpers.js";
 let currentNetworkTypePage = 1;
 const NETWORK_TYPE_PAGE_SIZE = 20;
 let currentNetworkTypePageSize = NETWORK_TYPE_PAGE_SIZE;
+const networkRegionTableState = createSortState('created_at', 'desc');
 
 // 加载网络区域数据并填充表格
-export async function loadNetworkTypesData(page = currentNetworkTypePage) {
+export async function loadNetworkTypesData(page = currentNetworkTypePage, sortBy = null, sortOrder = null) {
   currentNetworkTypePage = page;
+  if (sortBy) networkRegionTableState.setSort(sortBy, sortOrder);
   try {
-    const result = await apiGet(`/api/resources/network-regions?page=${page}&page_size=${currentNetworkTypePageSize}`);
+    const result = await apiGet(`/api/resources/network-regions?page=${page}&page_size=${currentNetworkTypePageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`);
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
+    const startIndex = (page - 1) * currentNetworkTypePageSize;
 
     renderTable("#network-types-table", {
       data: items,
       columns: [
+        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
         { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'description', render: (v) => escapeHtml(v) || '-' },
         { field: 'ipv4_cidrs', render: (v) => {
           if (!v || v.length === 0) return '-';
           return v.map(cidr => escapeHtml(cidr)).join('<br>');
@@ -53,10 +60,11 @@ export async function loadNetworkTypesData(page = currentNetworkTypePage) {
           if (!v || v.length === 0) return '-';
           return v.map(cidr => escapeHtml(cidr)).join('<br>');
         }},
-        { field: 'created_at', render: (v) => formatDateTime(v) },
+        { field: 'description', render: (v) => escapeHtml(v) || '-' },
+        { field: 'created_at', render: (v) => formatDateTime(v), className: 'col-center' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],
       emptyMessage: t('network.no_region_data')
@@ -71,6 +79,7 @@ export async function loadNetworkTypesData(page = currentNetworkTypePage) {
         },
       });
     }
+    updateSortIcons("network-types-table", networkRegionTableState);
   } catch (error) {
     console.error("加载网络区域数据失败:", error);
     renderTable("#network-types-table", {
@@ -92,14 +101,19 @@ let currentFilters = {
   ipv6: ''
 };
 
-export async function loadNetworksData(page = currentNetworkPage, filters = currentFilters) {
+const networkTableState = createSortState('created_at', 'desc');
+
+export async function loadNetworksData(page = currentNetworkPage, filters = currentFilters, sortBy = null, sortOrder = null) {
   currentNetworkPage = page;
   currentFilters = filters;
+  if (sortBy) networkTableState.setSort(sortBy, sortOrder);
 
   try {
     const params = new URLSearchParams({
       page: page.toString(),
-      page_size: currentNetworkPageSize.toString()
+      page_size: currentNetworkPageSize.toString(),
+      sort_by: networkTableState.sortBy,
+      sort_order: networkTableState.sortOrder
     });
 
     if (filters.name) params.append('name', filters.name);
@@ -121,11 +135,11 @@ export async function loadNetworksData(page = currentNetworkPage, filters = curr
         { field: 'network_region', render: (v) => escapeHtml(v) },
         { field: 'ipv4_cidr', render: (v) => escapeHtml(v) || '-' },
         { field: 'ipv6_cidr', render: (v) => escapeHtml(v) || '-' },
-        { field: 'created_at', render: (v) => new Date(v).toLocaleString() },
+        { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
         { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-secondary btn-usage" data-id="${v}">${t('network.usage')}</button>
-          <button class="btn btn-sm btn-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-delete" data-id="${v}">${t('common.delete')}</button>
+          ${iconButton({ icon: 'chart', label: t('network.usage'), cls: 'btn-secondary btn-usage', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
         ` }
       ],
       emptyMessage: t('network.no_match_data')
@@ -140,6 +154,7 @@ export async function loadNetworksData(page = currentNetworkPage, filters = curr
         },
       });
     }
+    updateSortIcons("networks-table", networkTableState);
   } catch (error) {
     handleError(error, t('network.load_failed'), () => {
       renderTable("#networks-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
@@ -150,19 +165,23 @@ export async function loadNetworksData(page = currentNetworkPage, filters = curr
 export function initNetworksFilters() {
   const filterIds = [
     'network-name-filter',
-    'network-region-filter', 
+    'network-region-filter',
     'network-ipv4-filter',
     'network-ipv6-filter'
   ];
-  
+
   const debouncedFilter = debounce(applyNetworkFilters, 300);
-  
+
   filterIds.forEach(filterId => {
     const filterElement = document.getElementById(filterId);
     if (filterElement) {
       filterElement.addEventListener('input', debouncedFilter);
     }
   });
+
+  // 网络区域与网段两张表的排序事件（resourceTabs 每模块仅初始化一次）
+  initSortEvents("network-types-table", networkRegionTableState, loadNetworkTypesData);
+  initSortEvents("networks-table", networkTableState, (page, sortBy, sortOrder) => loadNetworksData(page, currentFilters, sortBy, sortOrder));
 }
 
 function applyNetworkFilters() {

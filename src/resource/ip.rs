@@ -43,6 +43,34 @@ pub async fn get_ip_managers(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入。
+    // ip_address 使用视图源列（inet 类型）排序，按数值而非字符串比较
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("device_name", "desc") => "ORDER BY device_name DESC NULLS LAST, updated_at DESC",
+        ("device_name", _) => "ORDER BY device_name ASC NULLS LAST, updated_at DESC",
+        ("device_type", "desc") => "ORDER BY device_type DESC, updated_at DESC",
+        ("device_type", _) => "ORDER BY device_type ASC, updated_at DESC",
+        ("network_name", "desc") => "ORDER BY network_name DESC NULLS LAST, updated_at DESC",
+        ("network_name", _) => "ORDER BY network_name ASC NULLS LAST, updated_at DESC",
+        ("ip_address", "desc") => "ORDER BY ip_with_details.ip_address DESC, updated_at DESC",
+        ("ip_address", _) => "ORDER BY ip_with_details.ip_address ASC, updated_at DESC",
+        ("mac_address", "desc") => "ORDER BY mac_address DESC NULLS LAST, updated_at DESC",
+        ("mac_address", _) => "ORDER BY mac_address ASC NULLS LAST, updated_at DESC",
+        ("hostname", "desc") => "ORDER BY hostname DESC NULLS LAST, updated_at DESC",
+        ("hostname", _) => "ORDER BY hostname ASC NULLS LAST, updated_at DESC",
+        ("status", "desc") => "ORDER BY status DESC, updated_at DESC",
+        ("status", _) => "ORDER BY status ASC, updated_at DESC",
+        ("last_seen", "desc") => "ORDER BY last_seen DESC NULLS LAST",
+        ("last_seen", _) => "ORDER BY last_seen ASC NULLS LAST",
+        ("created_at", "desc") => "ORDER BY created_at DESC",
+        ("created_at", _) => "ORDER BY created_at ASC",
+        ("updated_at", "asc") => "ORDER BY updated_at ASC",
+        _ => "ORDER BY updated_at DESC",
+    };
+
     let mut conditions: Vec<String> = Vec::new();
     let mut param_index = 1;
 
@@ -134,7 +162,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} ORDER BY updated_at DESC LIMIT ${} OFFSET ${}",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} {order_clause} LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1

@@ -72,6 +72,22 @@ pub async fn get_cable_links(
         .get("endpoint_id")
         .and_then(|s| Uuid::parse_str(s).ok());
     let link_type = query.get("link_type").cloned();
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("link_type", "desc") => "ORDER BY cl.link_type DESC, cl.updated_at DESC",
+        ("link_type", _) => "ORDER BY cl.link_type ASC, cl.updated_at DESC",
+        ("cable_label", "desc") => "ORDER BY cl.cable_label DESC NULLS LAST, cl.updated_at DESC",
+        ("cable_label", _) => "ORDER BY cl.cable_label ASC NULLS LAST, cl.updated_at DESC",
+        ("length_m", "desc") => "ORDER BY cl.length_m DESC NULLS LAST, cl.updated_at DESC",
+        ("length_m", _) => "ORDER BY cl.length_m ASC NULLS LAST, cl.updated_at DESC",
+        ("tested", "desc") => "ORDER BY cl.tested DESC, cl.updated_at DESC",
+        ("tested", _) => "ORDER BY cl.tested ASC, cl.updated_at DESC",
+        ("updated_at", "asc") => "ORDER BY cl.updated_at ASC",
+        _ => "ORDER BY cl.updated_at DESC",
+    };
 
     let mut conditions: Vec<String> = Vec::new();
     let mut param_idx = 1;
@@ -109,7 +125,7 @@ pub async fn get_cable_links(
          cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
          cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ \
          FROM cable_links_with_details cl {where_clause} \
-         ORDER BY cl.updated_at DESC LIMIT ${param_idx} OFFSET ${}",
+         {order_clause} LIMIT ${param_idx} OFFSET ${}",
         param_idx + 1
     ));
 

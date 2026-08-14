@@ -34,6 +34,23 @@ pub async fn get_networks(
     let ipv4_filter = query.get("ipv4_cidr").cloned().unwrap_or_default();
     let ipv6_filter = query.get("ipv6_cidr").cloned().unwrap_or_default();
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("name", "desc") => "ORDER BY n.name DESC",
+        ("name", _) => "ORDER BY n.name ASC",
+        ("network_region", "desc") => "ORDER BY nt.name DESC, n.name ASC",
+        ("network_region", _) => "ORDER BY nt.name ASC, n.name ASC",
+        ("ipv4_cidr", "desc") => "ORDER BY n.ipv4_cidr DESC",
+        ("ipv4_cidr", _) => "ORDER BY n.ipv4_cidr ASC",
+        ("ipv6_cidr", "desc") => "ORDER BY n.ipv6_cidr DESC",
+        ("ipv6_cidr", _) => "ORDER BY n.ipv6_cidr ASC",
+        ("created_at", "asc") => "ORDER BY n.created_at ASC",
+        _ => "ORDER BY n.created_at DESC",
+    };
+
     let has_filters = !search.is_empty()
         || region_id.is_some()
         || !name_filter.is_empty()
@@ -163,14 +180,14 @@ pub async fn get_networks(
         };
 
         let data_query = format!(
-            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
-               FROM network_cidrs n 
-               JOIN network_regions nt ON n.network_region_id = nt.id 
+               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
+               FROM network_cidrs n
+               JOIN network_regions nt ON n.network_region_id = nt.id
                {}
-               ORDER BY n.created_at DESC
+               {order_clause}
                LIMIT ${} OFFSET ${}",
             where_clause,
             param_count,
@@ -217,23 +234,25 @@ pub async fn get_networks(
             .map(|row| parse_network_from_row(&row))
             .collect::<Result<_, _>>()?
     } else {
-        sqlx::query(
-            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+        let data_query = format!(
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
-               FROM network_cidrs n 
-               JOIN network_regions nt ON n.network_region_id = nt.id 
-               ORDER BY n.created_at DESC
+               n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
+               FROM network_cidrs n
+               JOIN network_regions nt ON n.network_region_id = nt.id
+               {order_clause}
                LIMIT $1 OFFSET $2"
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-        .into_iter()
-        .map(|row| parse_network_from_row(&row))
-        .collect::<Result<_, _>>()?
+        );
+
+        sqlx::query(sqlx::AssertSqlSafe(data_query))
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
+            .into_iter()
+            .map(|row| parse_network_from_row(&row))
+            .collect::<Result<_, _>>()?
     };
 
     Ok(crate::error::ok_json(
@@ -766,6 +785,17 @@ pub async fn get_network_regions(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("name", "desc") => "ORDER BY name DESC",
+        ("name", _) => "ORDER BY name ASC",
+        ("created_at", "asc") => "ORDER BY created_at ASC",
+        _ => "ORDER BY created_at DESC",
+    };
+
     let total: i64 = if search.is_empty() {
         sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
             .fetch_one(&state.pool()?.get_conn())
@@ -780,30 +810,29 @@ pub async fn get_network_regions(
         .await?
     };
 
-    let network_regions = if search.is_empty() {
-        sqlx::query_as::<_, NetworkRegion>(
-            "SELECT id, name, description,
+    let base_select = "SELECT id, name, description,
                     (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
                     (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
-                    created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
+                    created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions";
+
+    let network_regions = if search.is_empty() {
+        let sql = format!("{base_select} {order_clause} LIMIT $1 OFFSET $2");
+        sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
     } else {
         let pattern = format!("%{search}%");
-        sqlx::query_as::<_, NetworkRegion>(
-            "SELECT id, name, description,
-                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
-                    created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-        )
-        .bind(&pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
+        let sql = format!(
+            "{base_select} WHERE name ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
+        );
+        sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+            .bind(&pattern)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
     };
 
     Ok(crate::error::ok_json(

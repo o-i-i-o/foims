@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 import { showToast, handleError, escapeHtml, debounce } from "../utils/ui.js";
 import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import {
   AVAILABLE_ICONS,
@@ -209,8 +210,8 @@ async function renderTreeNode(node, depth) {
     ${node.description ? `<span class="org-node-desc" title="${escapeHtml(node.description)}">${escapeHtml(node.description)}</span>` : ""}
     <span class="org-node-actions">
       ${addChildBtns}
-      <button class="btn btn-sm btn-edit" data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}">${t("common.edit")}</button>
-      <button class="btn btn-sm btn-delete" data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}">${t("common.delete")}</button>
+      ${iconButton({ icon: 'edit', label: t("common.edit"), cls: 'btn-edit', attrs: `data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: 'trash', label: t("common.delete"), cls: 'btn-delete', attrs: `data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
     </span>
   `;
 
@@ -236,7 +237,7 @@ async function renderTreeNode(node, depth) {
  * 基于模板层级，每个允许的下级类型一个按钮
  */
 function getAllowedChildButtons(node) {
-  return `<button class="btn btn-sm btn-add-child" data-action="add-child" data-parent-id="${node.id}" title="${t("organization.add_child")}">${t("organization.add_child")}</button>`;
+  return iconButton({ icon: 'plusCircle', label: t("organization.add_child"), cls: 'btn-add-child', attrs: `data-action="add-child" data-parent-id="${node.id}"` });
 }
 
 function renderEmptyState(container) {
@@ -593,8 +594,8 @@ function renderTemplateList(container, templates) {
         ${tpl.description ? `<span class="org-template-desc">${escapeHtml(tpl.description)}</span>` : ""}
       </div>
       <div class="org-template-actions">
-        <button class="btn btn-sm btn-edit" data-action="edit-template" data-template-id="${tpl.id}">${t("common.edit")}</button>
-        <button class="btn btn-sm btn-delete" data-action="delete-template" data-template-id="${tpl.id}" data-template-name="${escapeHtml(tpl.name)}">${t("common.delete")}</button>
+        ${iconButton({ icon: 'edit', label: t("common.edit"), cls: 'btn-edit', attrs: `data-action="edit-template" data-template-id="${tpl.id}"` })}
+        ${iconButton({ icon: 'trash', label: t("common.delete"), cls: 'btn-delete', attrs: `data-action="delete-template" data-template-id="${tpl.id}" data-template-name="${escapeHtml(tpl.name)}"` })}
       </div>
     `;
     container.appendChild(item);

@@ -23,6 +23,27 @@ pub async fn get_operation_logs(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("username", "desc") => "ORDER BY u.username DESC NULLS LAST, ol.created_at DESC",
+        ("username", _) => "ORDER BY u.username ASC NULLS LAST, ol.created_at DESC",
+        ("operation_type", "desc") => "ORDER BY ol.action DESC, ol.created_at DESC",
+        ("operation_type", _) => "ORDER BY ol.action ASC, ol.created_at DESC",
+        ("resource_type", "desc") => {
+            "ORDER BY ol.resource_type DESC NULLS LAST, ol.created_at DESC"
+        }
+        ("resource_type", _) => "ORDER BY ol.resource_type ASC NULLS LAST, ol.created_at DESC",
+        ("result", "desc") => "ORDER BY ol.result DESC, ol.created_at DESC",
+        ("result", _) => "ORDER BY ol.result ASC, ol.created_at DESC",
+        ("ip_address", "desc") => "ORDER BY ol.ip_address DESC NULLS LAST, ol.created_at DESC",
+        ("ip_address", _) => "ORDER BY ol.ip_address ASC NULLS LAST, ol.created_at DESC",
+        ("created_at", "asc") => "ORDER BY ol.created_at ASC",
+        _ => "ORDER BY ol.created_at DESC",
+    };
+
     let search_pattern = crate::utils::escape_like(&action);
 
     let has_filters = !resource_type.is_empty()
@@ -67,17 +88,17 @@ pub async fn get_operation_logs(
         .fetch_one(&conn)
         .await?;
 
-        let logs = sqlx::query_as::<_, OperationLog>(
-            r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ 
-               FROM operation_logs ol 
-               LEFT JOIN users u ON ol.user_id = u.id 
+        let logs = sqlx::query_as::<_, OperationLog>(sqlx::AssertSqlSafe(format!(
+            r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ
+               FROM operation_logs ol
+               LEFT JOIN users u ON ol.user_id = u.id
                WHERE ($1::text = '' OR ol.resource_type = $1)
                AND ($2::uuid IS NULL OR ol.resource_id = $2)
                AND ($3::uuid IS NULL OR ol.user_id = $3)
                AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)
-               ORDER BY ol.created_at DESC 
+               {order_clause}
                LIMIT $6 OFFSET $7"
-        )
+        )))
         .bind(&resource_type)
         .bind(parsed_resource_id)
         .bind(parsed_user_id)
@@ -94,9 +115,9 @@ pub async fn get_operation_logs(
             .fetch_one(&conn)
             .await?;
 
-        let logs = sqlx::query_as::<_, OperationLog>(
-            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id ORDER BY ol.created_at DESC LIMIT $1 OFFSET $2"
-        )
+        let logs = sqlx::query_as::<_, OperationLog>(sqlx::AssertSqlSafe(format!(
+            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id {order_clause} LIMIT $1 OFFSET $2"
+        )))
         .bind(page_size)
         .bind(offset)
         .fetch_all(&conn)

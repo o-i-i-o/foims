@@ -28,6 +28,19 @@ pub async fn get_notifications(
         .cloned()
         .unwrap_or_else(|| "all".to_string());
 
+    let sort_by = query.get("sort_by").cloned().unwrap_or_default();
+    let sort_order = query.get("sort_order").cloned().unwrap_or_default();
+
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
+        ("title", "desc") => "ORDER BY title DESC, created_at DESC",
+        ("title", _) => "ORDER BY title ASC, created_at DESC",
+        ("read", "desc") => "ORDER BY read DESC, created_at DESC",
+        ("read", _) => "ORDER BY read ASC, created_at DESC",
+        ("created_at", "asc") => "ORDER BY created_at ASC",
+        _ => "ORDER BY created_at DESC",
+    };
+
     let mut where_conditions = vec!["user_id = $1".to_string()];
 
     match status.as_str() {
@@ -48,7 +61,7 @@ pub async fn get_notifications(
     .await?;
 
     let notifications = sqlx::query_as::<_, Notification>(sqlx::AssertSqlSafe(format!(
-        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} ORDER BY created_at DESC LIMIT {page_size} OFFSET {offset}"
+        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} {order_clause} LIMIT {page_size} OFFSET {offset}"
     )))
     .bind(user_id)
     .fetch_all(&conn)

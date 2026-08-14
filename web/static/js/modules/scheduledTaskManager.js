@@ -9,15 +9,21 @@ import {
   showToast,
   escapeHtml,
   formatDateTime,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modal.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
 let devices = [];
 let networks = [];
+
+const taskTableState = createSortState('created_at', 'desc');
 
 export async function initScheduledTaskManager() {
     await loadDevices();
@@ -82,6 +88,7 @@ function setupEventListeners() {
     const taskTable = document.querySelector('#scheduled-tasks-table');
     if (taskTable && !taskTable.dataset.handlerAttached) {
         taskTable.dataset.handlerAttached = 'true';
+        initSortEvents("scheduled-tasks-table", taskTableState, (page, sortBy, sortOrder) => loadScheduledTasks(sortBy, sortOrder));
         taskTable.addEventListener('click', (e) => {
             const btn = e.target.closest('button[data-action]');
             if (!btn) return;
@@ -146,20 +153,23 @@ function populateNetworkSelect() {
     });
 }
 
-async function loadScheduledTasks() {
+async function loadScheduledTasks(sortBy = null, sortOrder = null) {
     const tbody = document.getElementById('scheduled-tasks-tbody');
     if (!tbody) return;
 
+    if (sortBy) taskTableState.setSort(sortBy, sortOrder);
+
     try {
-        const response = await apiGet('/api/system/scheduled-tasks');
+        const response = await apiGet(`/api/system/scheduled-tasks?sort_by=${taskTableState.sortBy}&sort_order=${taskTableState.sortOrder}`);
         if (response.success) {
             renderScheduledTasks(response.data || []);
+            updateSortIcons("scheduled-tasks-table", taskTableState);
         } else {
-            tbody.innerHTML = `<tr><td colspan="7" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
         }
     } catch (error) {
         console.error('Failed to load scheduled tasks:', error);
-        tbody.innerHTML = `<tr><td colspan="7" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="error-message">${t('scheduled_tasks.load_failed')}</td></tr>`;
     }
 }
 
@@ -168,30 +178,31 @@ function renderScheduledTasks(tasks) {
     if (!tbody) return;
 
     if (tasks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="no-data">${t('scheduled_tasks.no_tasks')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="no-data">${t('scheduled_tasks.no_tasks')}</td></tr>`;
         return;
     }
 
     tbody.innerHTML = '';
-    tasks.forEach(task => {
+    tasks.forEach((task, index) => {
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td class="index-column">${index + 1}</td>
             <td>${escapeHtml(task.name)}</td>
-            <td>${t('scheduled_tasks.task_types.' + task.task_type) || task.task_type}</td>
+            <td class="col-center">${t('scheduled_tasks.task_types.' + task.task_type) || task.task_type}</td>
             <td><code>${escapeHtml(task.cron_expression)}</code></td>
-            <td>
+            <td class="col-center">
                 <span class="status-badge ${task.enabled ? 'status-active' : 'status-inactive'}">
                     ${task.enabled ? t('scheduled_tasks.enabled') : t('scheduled_tasks.disabled')}
                 </span>
             </td>
-            <td>${formatDateTime(task.last_run_at)}</td>
-            <td>${escapeHtml(task.last_result || '-')}</td>
-            <td class="actions">
-                <button class="btn btn-secondary btn-sm" data-action="run-task" data-task-id="${escapeHtml(task.id)}">${t('scheduled_tasks.run_now')}</button>
-                <button class="btn btn-secondary btn-sm" data-action="toggle-task" data-task-id="${escapeHtml(task.id)}">${task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable')}</button>
-                <button class="btn btn-secondary btn-sm" data-action="edit-task" data-task-id="${escapeHtml(task.id)}">${t('common.edit')}</button>
-                <button class="btn btn-secondary btn-sm" data-action="view-logs" data-task-name="${escapeHtml(task.name)}">${t('scheduled_tasks.view_logs')}</button>
-                <button class="btn btn-danger btn-sm" data-action="delete-task" data-task-id="${escapeHtml(task.id)}">${t('common.delete')}</button>
+            <td class="col-center">${formatDateTime(task.last_run_at)}</td>
+            <td class="col-center">${escapeHtml(task.last_result || '-')}</td>
+            <td class="col-center actions">
+                ${iconButton({ icon: 'play', label: t('scheduled_tasks.run_now'), cls: 'btn-secondary', attrs: `data-action="run-task" data-task-id="${escapeHtml(task.id)}"` })}
+                ${iconButton({ icon: 'power', label: task.enabled ? t('scheduled_tasks.disable') : t('scheduled_tasks.enable'), cls: 'btn-secondary', attrs: `data-action="toggle-task" data-task-id="${escapeHtml(task.id)}"` })}
+                ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-secondary', attrs: `data-action="edit-task" data-task-id="${escapeHtml(task.id)}"` })}
+                ${iconButton({ icon: 'fileText', label: t('scheduled_tasks.view_logs'), cls: 'btn-secondary', attrs: `data-action="view-logs" data-task-name="${escapeHtml(task.name)}"` })}
+                ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger', attrs: `data-action="delete-task" data-task-id="${escapeHtml(task.id)}"` })}
             </td>
         `;
         tbody.appendChild(row);

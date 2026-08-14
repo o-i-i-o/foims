@@ -10,11 +10,21 @@ import {
   showToast,
   appendPaginationToTable,
   escapeHtml,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
 import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
+
+const logSortStates = {
+  operation: createSortState('created_at', 'desc'),
+  login: createSortState('created_at', 'desc'),
+};
+const notificationTableState = createSortState('created_at', 'desc');
 
 // 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
@@ -61,6 +71,7 @@ export function initLogTabs() {
 
   // 检查是否已经绑定过事件
   if (!logsContainer.dataset.tabsInitialized) {
+    initLogSortEvents();
     tabBtns.forEach((btn) => {
       btn.addEventListener("click", function () {
         const tabId = this.getAttribute("data-tab");
@@ -201,11 +212,13 @@ function initLogSearch() {
   }
 }
 
-// 加载日志数据（支持搜索和分页）
+// 加载日志数据（支持搜索、排序和分页）
 export async function loadLogsData(logType = "operation", searchParams = {}) {
   try {
-    const { resource_type = '', resource_id = '', user_id = '', action = '', page = 1, page_size = 50 } = searchParams;
-    
+    const { resource_type = '', resource_id = '', user_id = '', action = '', page = 1, page_size = 50, sort_by, sort_order } = searchParams;
+    const tableState = logSortStates[logType] || logSortStates.operation;
+    if (sort_by) tableState.setSort(sort_by, sort_order);
+
     let apiUrl;
     if (logType === "operation") {
       const params = new URLSearchParams();
@@ -215,11 +228,15 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
       if (action) params.append('action', action);
       params.append('page', page);
       params.append('page_size', page_size);
+      params.append('sort_by', tableState.sortBy);
+      params.append('sort_order', tableState.sortOrder);
       apiUrl = `/api/logs/operation?${params.toString()}`;
     } else {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('page_size', page_size);
+      params.append('sort_by', tableState.sortBy);
+      params.append('sort_order', tableState.sortOrder);
       apiUrl = `/api/logs/login?${params.toString()}`;
     }
 
@@ -275,25 +292,25 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             const logData = encodeURIComponent(JSON.stringify(log));
 
             rowHtml += `
-              <td>${new Date(log.created_at).toLocaleString()}</td>
+              <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
               <td>${escapeHtml(log.username) || "-"}</td>
-              <td>${escapeHtml(operationTypeText)}</td>
-              <td>${escapeHtml(resourceTypeText) || "-"}</td>
-              <td>${resultText}</td>
+              <td class="col-center">${escapeHtml(operationTypeText)}</td>
+              <td class="col-center">${escapeHtml(resourceTypeText) || "-"}</td>
+              <td class="col-center">${resultText}</td>
               <td>${escapeHtml(log.ip_address) || "-"}</td>
-              <td>
-                <button class="btn btn-sm btn-info view-log-details" data-log="${logData}">${t('logs.details')}</button>
+              <td class="col-center">
+                ${iconButton({ icon: 'eye', label: t('logs.details'), cls: 'btn-info view-log-details', attrs: `data-log="${logData}"` })}
               </td>
             `;
           } else if (logType === "login") {
             const loginResultText = log.success ? t('common.success') : t('common.failed');
             const logData = encodeURIComponent(JSON.stringify(log));
             rowHtml += `
-              <td>${new Date(log.created_at).toLocaleString()}</td>
+              <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
               <td>${escapeHtml(log.username)}</td>
               <td>${escapeHtml(log.ip_address)}</td>
               <td>${escapeHtml(log.user_agent) || "-"}</td>
-              <td>${loginResultText}</td>
+              <td class="col-center">${loginResultText}</td>
               <td>${escapeHtml(log.error_message) || "-"}</td>
             `;
           }
@@ -315,6 +332,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             loadLogsData(logType, { action: searchValue, page: p });
           });
         }
+        updateSortIcons(`${logType}-logs-table`, tableState);
       } else {
         const colSpan = logType === "operation" ? 8 : 7;
         tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t('common.no_data')}</td></tr>`;
@@ -336,15 +354,19 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
 }
 
 // 加载通知数据
-export async function loadNotificationsData(filterStatus = 'all', page = 1) {
+export async function loadNotificationsData(filterStatus = 'all', page = 1, sortBy = null, sortOrder = null) {
   try {
+    if (sortBy) notificationTableState.setSort(sortBy, sortOrder);
+
     const params = new URLSearchParams();
     if (filterStatus && filterStatus !== 'all') {
       params.append('status', filterStatus);
     }
     params.append('page', page);
     params.append('page_size', 20);
-    
+    params.append('sort_by', notificationTableState.sortBy);
+    params.append('sort_order', notificationTableState.sortOrder);
+
     const result = await apiGet(`/api/notifications?${params.toString()}`);
     const tbody = document.querySelector("#notifications-table tbody");
 
@@ -363,16 +385,16 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td class="index-column">${startIndex + index + 1}</td>
-          <td>${new Date(notification.created_at).toLocaleString()}</td>
+          <td class="col-center">${new Date(notification.created_at).toLocaleString()}</td>
           <td>${escapeHtml(notification.title)}</td>
           <td>${escapeHtml(notification.content)}</td>
-          <td>
+          <td class="col-center">
             <span class="status-badge ${notification.read ? "status-active" : "status-inactive"}">
               ${notification.read ? t('notifications.read') : t('notifications.unread')}
             </span>
           </td>
-          <td>
-            ${!notification.read ? `<button class="btn btn-sm btn-primary mark-read" data-id="${notification.id}">${t('notifications.mark_read')}</button>` : ""}
+          <td class="col-center">
+            ${!notification.read ? iconButton({ icon: 'check', label: t('notifications.mark_read'), cls: 'btn-primary mark-read', attrs: `data-id="${notification.id}"` }) : ""}
           </td>
         `;
         tbody.appendChild(row);
@@ -381,6 +403,7 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1) {
       if (data.total !== undefined) {
         appendPaginationToTable("#notifications-table", data, (p) => loadNotificationsData(filterStatus, p));
       }
+      updateSortIcons("notifications-table", notificationTableState);
     } else {
       tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t('notifications.no_data')}</td></tr>`;
     }
@@ -478,15 +501,17 @@ function initLogEvents() {
   initLogEvents.initialized = true;
 
   document.addEventListener("click", (e) => {
-    if (e.target.classList.contains("mark-read")) {
-      const id = e.target.getAttribute("data-id");
+    const markReadBtn = e.target.closest(".mark-read");
+    if (markReadBtn) {
+      const id = markReadBtn.getAttribute("data-id");
       if (id) {
         markNotificationAsRead(id);
       }
     }
-    
-    if (e.target.classList.contains("view-log-details")) {
-      const logData = e.target.getAttribute("data-log");
+
+    const detailsBtn = e.target.closest(".view-log-details");
+    if (detailsBtn) {
+      const logData = detailsBtn.getAttribute("data-log");
       if (logData) {
         try {
           const log = JSON.parse(decodeURIComponent(logData));
@@ -506,6 +531,19 @@ function initLogEvents() {
 }
 
 initLogEvents();
+
+// 初始化三张表（操作日志/登录日志/通知）的表头排序事件
+function initLogSortEvents() {
+  const getSearchValue = () => document.getElementById("logs-search")?.value || "";
+  const getNotificationFilter = () => document.getElementById("notifications-filter")?.value || "all";
+
+  initSortEvents("operation-logs-table", logSortStates.operation, (page, sortBy, sortOrder) =>
+    loadLogsData("operation", { action: getSearchValue(), page, sort_by: sortBy, sort_order: sortOrder }));
+  initSortEvents("login-logs-table", logSortStates.login, (page, sortBy, sortOrder) =>
+    loadLogsData("login", { page, sort_by: sortBy, sort_order: sortOrder }));
+  initSortEvents("notifications-table", notificationTableState, (page, sortBy, sortOrder) =>
+    loadNotificationsData(getNotificationFilter(), page, sortBy, sortOrder));
+}
 
 // 显示日志详情弹窗
 function showLogDetails(log) {

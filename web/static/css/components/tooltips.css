@@ -1,0 +1,28 @@
+.global-tooltip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: var(--z-tooltip);
+    padding: 4px 10px;
+    background: rgb(33 37 41 / 0.94);
+    color: #fff;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(2px);
+    transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+}
+
+.global-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}

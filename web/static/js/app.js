@@ -13,6 +13,7 @@ import { initModals } from "./utils/modal.js";
 import { initModalTemplates, preloadModalsOnIdle } from "./utils/modalLoader.js";
 import { initEventListeners } from "./modules/eventManager.js";
 import { initUserEvents } from "./modules/userManager.js";
+import { initTooltip } from "./utils/tooltip.js";
 import { 
   displayCurrentUser,
   initAutoRefresh,
@@ -45,6 +46,7 @@ async function initApp() {
     initModals(getResourceCallbacks());
     initEventListeners();
     initUserEvents();
+    initTooltip();
     
     displayCurrentUser();
     initLogout();

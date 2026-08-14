@@ -11,59 +11,65 @@ import {
   formatDateTime,
   appendPaginationToTable,
   escapeHtml,
+  createSortState,
+  updateSortIcons,
+  initSortEvents,
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
 import { getUser } from "../utils/sessionManager.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
+const userTableState = createSortState('created_at', 'desc');
 
 // 加载用户数据
-export async function loadUsersData(page = currentUserPage) {
+export async function loadUsersData(page = currentUserPage, sortBy = null, sortOrder = null) {
   currentUserPage = page;
+  if (sortBy) userTableState.setSort(sortBy, sortOrder);
   try {
-    const response = await apiGet(`/api/users?page=${page}&page_size=${USER_PAGE_SIZE}`);
+    const response = await apiGet(`/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`);
     if (response.success) {
       const data = response.data;
       const users = data.items || data;
       const pagination = data.total !== undefined ? data : null;
       const tableBody = document.querySelector("#users-table tbody");
-      
+
       if (users.length === 0) {
         tableBody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="7" class="text-center">${t('common.no_data')}</td>
+            <td colspan="8" class="text-center">${t('common.no_data')}</td>
           </tr>
         `;
         return;
       }
 
-      tableBody.innerHTML = users.map(user => `
+      const startIndex = (page - 1) * USER_PAGE_SIZE;
+      tableBody.innerHTML = users.map((user, index) => `
         <tr data-user-id="${user.id}">
+          <td class="index-column">${startIndex + index + 1}</td>
           <td>${escapeHtml(user.username)}</td>
           <td>${escapeHtml(user.email)}</td>
-          <td>${user.role === 'admin' ? t('user.role_admin') : t('user.role_user')}</td>
-          <td>
+          <td class="col-center">${user.role === 'admin' ? t('user.role_admin') : t('user.role_user')}</td>
+          <td class="col-center">
             <span class="status-badge ${user.status ? 'status-active' : 'status-inactive'}">
               ${user.status ? t('user.status_enabled') : t('user.status_disabled')}
             </span>
           </td>
-          <td>
+          <td class="col-center">
             <span class="two-factor-badge ${user.two_factor_enabled ? 'two-factor-enabled' : 'two-factor-disabled'}">
               ${user.two_factor_enabled ? t('user.two_factor_enabled') : t('user.two_factor_disabled')}
             </span>
           </td>
-          <td>${formatDateTime(user.created_at)}</td>
-          <td>
-            <button class="btn btn-secondary btn-sm btn-edit" data-id="${user.id}">${t('common.edit')}</button>
-            <button class="btn btn-secondary btn-sm user-2fa" data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}">
-              ${user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa')}
-            </button>
-            <button class="btn btn-danger btn-sm btn-delete" data-id="${user.id}">${t('common.delete')}</button>
+          <td class="col-center">${formatDateTime(user.created_at)}</td>
+          <td class="col-center">
+            ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${user.id}"` })}
+            ${iconButton({ icon: 'shield', label: user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa'), cls: 'btn-secondary user-2fa', attrs: `data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}"` })}
+            ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger btn-delete', attrs: `data-id="${user.id}"` })}
           </td>
         </tr>
       `).join("");
@@ -71,6 +77,7 @@ export async function loadUsersData(page = currentUserPage) {
       if (pagination) {
         appendPaginationToTable("#users-table", pagination, loadUsersData);
       }
+      updateSortIcons("users-table", userTableState);
     } else {
       showToast(`${t('common.load_failed')}：${response.message}`, "error");
     }
@@ -167,27 +174,30 @@ export async function deleteUser(userId) {
 
 
 // 注意：用户编辑/删除按钮的点击事件已在 eventManager.js 中统一处理
-// 此处 initUserEvents 函数保留用于处理 2FA 相关按钮
+// 此处 initUserEvents 函数保留用于处理 2FA 相关按钮及表头排序
 let userEventsInitialized = false;
 
 function initUserEvents() {
   if (userEventsInitialized) return;
   userEventsInitialized = true;
-  
+
+  initSortEvents("users-table", userTableState, loadUsersData);
+
   document.addEventListener("click", (e) => {
-    if (e.target.classList.contains("user-2fa")) {
-      const id = e.target.getAttribute("data-id");
-      const username = e.target.getAttribute("data-username");
-      const enabled = e.target.getAttribute("data-enabled") === "true";
+    const twoFaBtn = e.target.closest(".user-2fa");
+    if (twoFaBtn) {
+      const id = twoFaBtn.getAttribute("data-id");
+      const username = twoFaBtn.getAttribute("data-username");
+      const enabled = twoFaBtn.getAttribute("data-enabled") === "true";
       if (id && username) {
         openTwoFactorModal(id, username, enabled);
       }
     }
-    
+
     if (e.target.id === "two-factor-enable-btn") {
       handleTwoFactorEnable();
     }
-    
+
     if (e.target.id === "two-factor-disable-btn") {
       handleTwoFactorDisable();
     }

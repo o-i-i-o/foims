@@ -1,6 +1,7 @@
 import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 import { showToast, escapeHtml } from "../utils/ui.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
@@ -76,8 +77,8 @@ async function loadAppFail2banStatus() {
         bannedTbody.innerHTML = status.banned_ips.map(item => `
           <tr>
             <td>${escapeHtml(item.ip)}</td>
-            <td>${item.remaining_seconds}</td>
-            <td><button class="btn btn-success btn-sm app-unban-btn" data-ip="${escapeHtml(item.ip)}">${t("security.unban_ip") || "Unban"}</button></td>
+            <td class="col-center">${item.remaining_seconds}</td>
+            <td class="col-center">${iconButton({ icon: 'unlock', label: t("security.unban_ip") || "Unban", cls: 'btn-success app-unban-btn', attrs: `data-ip="${escapeHtml(item.ip)}"` })}</td>
           </tr>
         `).join("");
         bannedTbody.querySelectorAll(".app-unban-btn").forEach(btn => {
@@ -98,7 +99,7 @@ async function loadAppFail2banStatus() {
         trackedTbody.innerHTML = status.tracked_ips.map(item => `
           <tr>
             <td>${escapeHtml(item.ip)}</td>
-            <td>${item.failure_count}</td>
+            <td class="col-center">${item.failure_count}</td>
           </tr>
         `).join("");
       }
