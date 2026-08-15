@@ -856,7 +856,7 @@ export class IpConfigManager {
           interfaces.forEach(iface => {
             const option = document.createElement("option");
             option.value = iface.id;
-            const typeMark = iface.interface_type ? `[${iface.interface_type}]` : '';
+            const typeMark = iface.interface_role ? `[${t(`device.interface_role_${iface.interface_role}`)}]` : '';
             option.textContent = `${iface.name}${typeMark}`;
             portSelect.appendChild(option);
           });

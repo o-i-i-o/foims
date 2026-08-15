@@ -12,6 +12,7 @@ use crate::error::AppError;
 use crate::models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
 };
+use crate::resource::device::nic::{validate_interface_role, validate_physical_type};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::Pagination;
@@ -88,7 +89,7 @@ pub async fn get_all_device_interfaces(
         sqlx::query_as::<_, DeviceInterfaceWithDevice>(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
-                di.nic_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
+                di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
                 di.description, di.switch_id, di.uplink_interface_id,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
@@ -106,7 +107,7 @@ pub async fn get_all_device_interfaces(
         sqlx::query_as::<_, DeviceInterfaceWithDevice>(
             r"SELECT
                 di.id, di.device_id, d.name as device_name,
-                di.nic_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
+                di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
                 di.description, di.switch_id, di.uplink_interface_id,
                 di.sort_order, di.created_at, di.updated_at
             FROM device_interfaces di
@@ -150,16 +151,10 @@ pub async fn create_device_interface(
         return Err(AppError::NotFound("设备不存在".to_string()));
     }
 
-    let interface_type = req.interface_type.as_deref().unwrap_or("physical");
-
-    if !matches!(
-        interface_type,
-        "physical" | "svi" | "management" | "loopback" | "wifi"
-    ) {
-        return Err(AppError::Validation(
-            "接口类型必须是physical、svi、management、loopback或wifi".to_string(),
-        ));
-    }
+    let physical_type = req.physical_type.as_deref().unwrap_or("rj45");
+    validate_physical_type(physical_type)?;
+    let interface_role = req.interface_role.as_deref().unwrap_or("business");
+    validate_interface_role(interface_role)?;
 
     let interface_exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM device_interfaces WHERE device_id = $1 AND name = $2)",
@@ -178,13 +173,14 @@ pub async fn create_device_interface(
 
     sqlx::query(
         r"INSERT INTO device_interfaces (
-            id, device_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            id, device_id, name, physical_type, interface_role, mac_address, vlan_id, description, switch_id, uplink_interface_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(id)
     .bind(device_id)
     .bind(&req.name)
-    .bind(interface_type)
+    .bind(physical_type)
+    .bind(interface_role)
     .bind(&req.mac_address)
     .bind(req.vlan_id)
     .bind(&req.description)
@@ -204,7 +200,8 @@ pub async fn create_device_interface(
     let details = serde_json::json!({
         "device_id": device_id,
         "name": data.name,
-        "interface_type": data.interface_type,
+        "physical_type": data.physical_type,
+        "interface_role": data.interface_role,
         "mac_address": data.mac_address
     });
     log_op_best_effort(
@@ -227,7 +224,7 @@ pub async fn get_device_interface(
     let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(
         r"SELECT
             di.id, di.device_id, d.name as device_name,
-            di.nic_id, di.name, di.interface_type, di.mac_address, di.vlan_id,
+            di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
             di.description, di.switch_id, di.uplink_interface_id,
             di.sort_order, di.created_at, di.updated_at
         FROM device_interfaces di
@@ -250,15 +247,12 @@ pub async fn update_device_interface(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    if let Some(ref interface_type) = req.interface_type
-        && !matches!(
-            interface_type.as_str(),
-            "physical" | "svi" | "management" | "loopback" | "wifi"
-        )
-    {
-        return Err(AppError::Validation(
-            "接口类型必须是physical、svi、management、loopback或wifi".to_string(),
-        ));
+    if let Some(ref physical_type) = req.physical_type {
+        validate_physical_type(physical_type)?;
+    }
+
+    if let Some(ref interface_role) = req.interface_role {
+        validate_interface_role(interface_role)?;
     }
 
     let now = Utc::now();
@@ -270,7 +264,12 @@ pub async fn update_device_interface(
     param_index += 1;
 
     set_clauses.push(format!(
-        "interface_type = COALESCE(${param_index}, interface_type)"
+        "physical_type = COALESCE(${param_index}, physical_type)"
+    ));
+    param_index += 1;
+
+    set_clauses.push(format!(
+        "interface_role = COALESCE(${param_index}, interface_role)"
     ));
     param_index += 1;
 
@@ -330,7 +329,8 @@ pub async fn update_device_interface(
 
     let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     query = query.bind(&req.name);
-    query = query.bind(&req.interface_type);
+    query = query.bind(&req.physical_type);
+    query = query.bind(&req.interface_role);
 
     if mac_update {
         match &req.mac_address {
@@ -408,7 +408,8 @@ pub async fn update_device_interface(
     let details = serde_json::json!({
         "device_id": data.device_id,
         "name": data.name,
-        "interface_type": data.interface_type,
+        "physical_type": data.physical_type,
+        "interface_role": data.interface_role,
         "mac_address": data.mac_address
     });
     log_op_best_effort(

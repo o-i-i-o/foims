@@ -132,18 +132,21 @@ pub async fn apply_network_config(
         for (port_idx, port) in card.ports.iter().enumerate() {
             port.validate()?;
             let port_id = port.id.unwrap_or_else(Uuid::new_v4);
-            let interface_type = port.interface_type.as_deref().unwrap_or("physical");
-            validate_interface_type(interface_type)?;
+            let physical_type = port.physical_type.as_deref().unwrap_or("rj45");
+            validate_physical_type(physical_type)?;
+            let interface_role = port.interface_role.as_deref().unwrap_or("business");
+            validate_interface_role(interface_role)?;
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, interface_type, mac_address, vlan_id, description, switch_id, uplink_interface_id, sort_order, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, switch_id, uplink_interface_id, sort_order, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             )
             .bind(port_id)
             .bind(device_id)
             .bind(card_id)
             .bind(&port.name)
-            .bind(interface_type)
+            .bind(physical_type)
+            .bind(interface_role)
             .bind(&port.mac_address)
             .bind(port.vlan_id)
             .bind(&port.description)
@@ -243,10 +246,14 @@ pub async fn fetch_device_network_config(
             let ips: Vec<IpManager> = sqlx::query_as(
                 r"SELECT
                     m.id, m.device_interface_id, m.device_id, m.network_id,
+                    nc.name AS network_name,
+                    nr.name AS network_region,
                     host(m.ip_address) as ip_address,
                     m.ip_version, m.mac_address, m.hostname, m.description,
                     m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
                   FROM ips m
+                  LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+                  LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
                   WHERE m.device_interface_id = $1
                   ORDER BY m.ip_address",
             )
@@ -298,7 +305,8 @@ fn default_card_sync_item() -> NetworkCardSyncItem {
         ports: vec![PortSyncItem {
             id: None,
             name: DEFAULT_PORT_NAME.to_string(),
-            interface_type: Some("physical".to_string()),
+            physical_type: Some("rj45".to_string()),
+            interface_role: Some("business".to_string()),
             mac_address: None,
             vlan_id: None,
             description: None,
@@ -321,13 +329,34 @@ fn validate_card_type(card_type: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn validate_interface_type(interface_type: &str) -> Result<(), AppError> {
+pub fn validate_physical_type(physical_type: &str) -> Result<(), AppError> {
     if !matches!(
-        interface_type,
-        "physical" | "svi" | "management" | "loopback" | "wifi"
+        physical_type,
+        "rj45"
+            | "sfp"
+            | "sfp_plus"
+            | "sfp28"
+            | "qsfp_plus"
+            | "qsfp28"
+            | "wifi"
+            | "virtual"
+            | "other"
     ) {
         return Err(AppError::Validation(
-            "网口类型必须是physical、svi、management、loopback或wifi".to_string(),
+            "网口物理形态必须是rj45、sfp、sfp_plus、sfp28、qsfp_plus、qsfp28、wifi、virtual或other"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_interface_role(interface_role: &str) -> Result<(), AppError> {
+    if !matches!(
+        interface_role,
+        "management" | "business" | "loopback" | "uplink" | "other"
+    ) {
+        return Err(AppError::Validation(
+            "网口接口角色必须是management、business、loopback、uplink或other".to_string(),
         ));
     }
     Ok(())

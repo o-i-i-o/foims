@@ -257,7 +257,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
         apiGet(`/api/resources/devices/${scopeValue}/device-ports?page_size=1000`),
       ]);
       const ifaces = (ifaceRes.success ? (ifaceRes.data?.items || ifaceRes.data || []) : [])
-        .filter(di => !di.interface_type || ['physical', 'wifi'].includes(di.interface_type))
+        .filter(di => !di.physical_type || di.physical_type !== 'virtual')
         .map(di => ({ id: di.id, label: di.name || di.id }));
       const ports = (portRes.success ? (portRes.data?.items || portRes.data || []) : [])
         .map(sp => ({ id: sp.id, label: sp.port_number || sp.port_name || sp.id }));

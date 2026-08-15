@@ -481,17 +481,18 @@ async fn export_ip_managers(
 ) -> DataResult<(&'static str, Vec<u8>)> {
     let mut csv = Vec::new();
     csv.extend_from_slice(utf8_bom);
-    csv.extend_from_slice("工位,机位,网络,IP地址,MAC地址,主机名,状态\n".as_bytes());
+    csv.extend_from_slice("工位,机位,网络区域,网络,IP地址,MAC地址,主机名,状态\n".as_bytes());
 
     let rows = sqlx::query(
         r"SELECT w.name as workstation_name, p.name as position_name,
-           n.name as network_name, host(im.ip_address),
+           nr.name as network_region, n.name as network_name, host(im.ip_address),
            im.mac_address, im.hostname, im.status
            FROM ips im
            JOIN devices d ON im.device_id = d.id
            LEFT JOIN workstations w ON d.workstation_id = w.id
            LEFT JOIN positions p ON d.position_id = p.id
            LEFT JOIN network_cidrs n ON im.network_id = n.id
+           LEFT JOIN network_regions nr ON n.network_region_id = nr.id
            ORDER BY im.ip_address",
     )
     .fetch_all(&mut *conn)
@@ -501,16 +502,18 @@ async fn export_ip_managers(
     for row in rows {
         let workstation: Option<String> = row.get(0);
         let position: Option<String> = row.get(1);
-        let network: Option<String> = row.get(2);
-        let ip_address: String = row.get(3);
-        let mac_address: Option<String> = row.get(4);
-        let hostname: Option<String> = row.get(5);
-        let status: String = row.get(6);
+        let network_region: Option<String> = row.get(2);
+        let network: Option<String> = row.get(3);
+        let ip_address: String = row.get(4);
+        let mac_address: Option<String> = row.get(5);
+        let hostname: Option<String> = row.get(6);
+        let status: String = row.get(7);
 
         let line = format!(
-            "{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{}\n",
             escape_csv_field(&workstation.unwrap_or_default()),
             escape_csv_field(&position.unwrap_or_default()),
+            escape_csv_field(&network_region.unwrap_or_default()),
             escape_csv_field(&network.unwrap_or_default()),
             escape_csv_field(&ip_address),
             escape_csv_field(&mac_address.unwrap_or_default()),

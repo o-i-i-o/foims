@@ -1,4 +1,5 @@
 .table-container {
+    width: 100%;
     overflow-x: auto;
     margin-top: var(--space-lg);
     display: flex;
@@ -12,6 +13,8 @@
 
 .data-table {
     width: 100%;
+    /* 强制至少铺满容器：表格处于 flex 等上下文时不因内容收缩 */
+    min-width: 100%;
     border-collapse: collapse;
     background: #fff;
     border-radius: var(--radius-lg);

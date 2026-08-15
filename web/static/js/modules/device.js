@@ -28,6 +28,7 @@ import {
   loadRoomsForSelect,
   loadDeviceTemplatesForSelect,
   loadWorkstationsForSelect,
+  loadCabinetsForSelect,
   loadPositionsForSelect,
 } from "../utils/resources.js";
 import { loadModule } from "../utils/resourceLoader.js";
@@ -449,9 +450,22 @@ function setupRoomCascade() {
   roomSelect.addEventListener('change', async () => {
     const roomId = roomSelect.value || null;
     await loadWorkstationsForSelect('device-workstation-id', roomId);
-    await loadPositionsForSelect('device-position-id', null, roomId);
+    await loadCabinetsForSelect('device-cabinet-id', roomId);
+    // 机位依赖机柜选择，房间变更后重置
+    await loadPositionsForSelect('device-position-id');
   });
   roomSelect.dataset.bound = 'true';
+}
+
+function setupCabinetCascade() {
+  const cabinetSelect = elementCache.get('device-cabinet-id');
+  if (!cabinetSelect || cabinetSelect.dataset.bound) return;
+  cabinetSelect.addEventListener('change', async () => {
+    const cabinetId = cabinetSelect.value || null;
+    elementCache.setValue('device-position-id', '');
+    await loadPositionsForSelect('device-position-id', cabinetId);
+  });
+  cabinetSelect.dataset.bound = 'true';
 }
 
 function ensureDeviceListeners() {
@@ -463,6 +477,7 @@ function ensureDeviceListeners() {
   setupSnmpVersionToggle();
   setupSnmpButtons();
   setupRoomCascade();
+  setupCabinetCascade();
   deviceListenersBound = true;
 }
 
@@ -575,6 +590,7 @@ export async function openDeviceModal(device = null) {
   await loadDeviceTemplatesForSelect("device-template-id");
   await loadRoomsForSelect("device-room-id");
   await loadWorkstationsForSelect("device-workstation-id");
+  await loadCabinetsForSelect("device-cabinet-id");
   await loadPositionsForSelect("device-position-id");
 
   ensureDeviceListeners();
@@ -600,6 +616,13 @@ export async function openDeviceModal(device = null) {
     if (device.room_id) {
       elementCache.setValue('device-room-id', device.room_id);
       await loadWorkstationsForSelect('device-workstation-id', device.room_id);
+      await loadCabinetsForSelect('device-cabinet-id', device.room_id);
+    }
+    if (device.cabinet_id) {
+      elementCache.setValue('device-cabinet-id', device.cabinet_id);
+      await loadPositionsForSelect('device-position-id', device.cabinet_id);
+    } else if (device.position_id && device.room_id) {
+      // 历史数据：机位可能未挂接机柜，按房间回退加载以便回显
       await loadPositionsForSelect('device-position-id', null, device.room_id);
     }
     if (device.workstation_id) elementCache.setValue('device-workstation-id', device.workstation_id);

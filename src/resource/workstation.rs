@@ -254,11 +254,15 @@ pub async fn get_workstation(
     let workstation_ips = sqlx::query_as::<_, IpManager>(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
+            nc.name AS network_name,
+            nr.name AS network_region,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
         FROM ips m
         JOIN devices d ON m.device_id = d.id
+        LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+        LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
         WHERE d.workstation_id = $1
         ORDER BY m.ip_address",
     )

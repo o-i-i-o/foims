@@ -162,7 +162,7 @@ pub async fn get_ip_managers(
     let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
 
     let data_query = format!(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, interface_type, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} {order_clause} LIMIT ${} OFFSET ${}",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} {order_clause} LIMIT ${} OFFSET ${}",
         where_clause,
         param_index,
         param_index + 1
@@ -222,10 +222,14 @@ pub async fn get_device_ips(
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
             m.id, m.device_interface_id, m.device_id, m.network_id,
+            nc.name AS network_name,
+            nr.name AS network_region,
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
         FROM ips m
+        LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+        LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
         WHERE m.device_id = $1
         ORDER BY m.ip_address",
     )
@@ -309,18 +313,18 @@ pub async fn create_device_ip(
     let now = Utc::now();
     let ip_id = Uuid::new_v4();
 
-    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认 physical 接口
+    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认物理接口
     let interface_id = match req.device_interface_id {
         Some(iid) => iid,
         None => {
             sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+                "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
             )
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| AppError::Validation(
-                "设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id".to_string()
+                "设备没有可用的物理接口，请先创建接口或指定 device_interface_id".to_string()
             ))?
         }
     };
@@ -345,11 +349,24 @@ pub async fn create_device_ip(
 
     tx.commit().await?;
 
+    let (network_name, network_region): (Option<String>, Option<String>) = match network_id {
+        Some(nid) => sqlx::query_as(
+            "SELECT nc.name, nr.name FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
+        )
+        .bind(nid)
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .map_or((None, None), |(name, region)| (Some(name), Some(region))),
+        None => (None, None),
+    };
+
     let mapping = IpManager {
         id: ip_id,
         device_interface_id: interface_id,
         device_id: id,
         network_id,
+        network_name,
+        network_region,
         ip_address: req.ip_address.clone(),
         ip_version,
         mac_address: None,
@@ -573,9 +590,12 @@ pub async fn pull_ip_managers(
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
         r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
+           nc.name AS network_name, nr.name AS network_region,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description, m.status,
            m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
+           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+           LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
            WHERE m.network_id = $1",
     )
     .bind(req.network_id)
@@ -719,6 +739,7 @@ pub async fn get_available_ips(
         serde_json::json!({
             "network_id": network_id,
             "network_name": network.name,
+            "network_region": network.network_region,
             "available_count": available_ips.len(),
             "available_ips": available_ips
         }),
@@ -797,18 +818,18 @@ pub async fn auto_assign_ip(
     let now = Utc::now();
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
-    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认 physical 接口
+    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认物理接口
     let interface_id = match device_interface_id {
         Some(iid) => iid,
         None => {
             sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+                "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
             )
             .bind(device_id)
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| AppError::Validation(
-                "设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id".to_string()
+                "设备没有可用的物理接口，请先创建接口或指定 device_interface_id".to_string()
             ))?
         }
     };
@@ -850,6 +871,8 @@ pub async fn auto_assign_ip(
         device_interface_id: interface_id,
         device_id,
         network_id: Some(req_network_id),
+        network_name: Some(network.name.clone()),
+        network_region: Some(network.network_region.clone()),
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
         mac_address: None,
@@ -934,6 +957,27 @@ pub async fn batch_create_ip_managers(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
+    // 批量预取网段与区域名称，保证返回的每条 IP 都带所属网段/区域
+    let network_ids: Vec<Uuid> = valid_requests
+        .iter()
+        .filter_map(|(_, ip_req, _, _)| ip_req.network_id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let mut network_names: std::collections::HashMap<Uuid, (Option<String>, Option<String>)> =
+        std::collections::HashMap::new();
+    for nid in network_ids {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT nc.name, nr.name FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
+        )
+        .bind(nid)
+        .fetch_optional(tx.as_mut())
+        .await?;
+        if let Some((name, region)) = row {
+            network_names.insert(nid, (Some(name), Some(region)));
+        }
+    }
+
     let mut created_ips = Vec::new();
     let mut duplicate_errors = Vec::new();
 
@@ -976,7 +1020,7 @@ pub async fn batch_create_ip_managers(
             Some(iid) => iid,
             None => {
                 match sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM device_interfaces WHERE device_id = $1 AND interface_type = 'physical' ORDER BY created_at LIMIT 1",
+                    "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
                 )
                 .bind(device_id)
                 .fetch_optional(tx.as_mut())
@@ -985,7 +1029,7 @@ pub async fn batch_create_ip_managers(
                     Ok(Some(iid)) => iid,
                     Ok(None) => {
                         duplicate_errors.push(format!(
-                            "第{}条记录: 设备没有可用的 physical 接口，请先创建接口或指定 device_interface_id",
+                            "第{}条记录: 设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
                             index + 1
                         ));
                         continue;
@@ -1029,6 +1073,14 @@ pub async fn batch_create_ip_managers(
             device_interface_id: interface_id,
             device_id,
             network_id: ip_req.network_id,
+            network_name: ip_req
+                .network_id
+                .and_then(|nid| network_names.get(&nid))
+                .and_then(|(name, _)| name.clone()),
+            network_region: ip_req
+                .network_id
+                .and_then(|nid| network_names.get(&nid))
+                .and_then(|(_, region)| region.clone()),
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,
             mac_address: None,

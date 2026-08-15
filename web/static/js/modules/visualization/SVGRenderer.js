@@ -98,8 +98,9 @@ export class SVGRenderer {
       `${t("viz.port_label")}: ${portInfo}`,
       `${t("viz.manager_label")}: ${workstation.manager || t("viz.no_manager")}`,
     ];
-    if (ipManager && ipManager.network_name) {
-      tooltipLines.splice(2, 0, `${t("viz.network_label")}: ${ipManager.network_name}`);
+    if (ipManager && (ipManager.network_name || ipManager.network_region)) {
+      const netParts = [ipManager.network_region, ipManager.network_name].filter(Boolean).join(' / ');
+      tooltipLines.splice(2, 0, `${t("viz.network_label")}: ${netParts}`);
     }
     group.dataset.tooltip = tooltipLines.join("\n");
 
@@ -222,7 +223,18 @@ export class SVGRenderer {
 
     const ipAddress = position.ipManager ? position.ipManager.ip_address : t("viz.no_ip");
 
-    group.dataset.tooltip = `${t("viz.position_label")}: ${position.name}\n${t("viz.u_position_label")}: ${startU}-${endU}\nIP: ${ipAddress}\n${portsLabel}`;
+    let tooltip = `${t("viz.position_label")}: ${position.name}\n${t("viz.u_position_label")}: ${startU}-${endU}\nIP: ${ipAddress}`;
+    if (position.ipManager) {
+      const netParts = [position.ipManager.network_region, position.ipManager.network_name]
+        .filter(Boolean)
+        .join(' / ');
+      if (netParts) {
+        tooltip += `\n${t("viz.network_label")}: ${netParts}`;
+      }
+    }
+    tooltip += `\n${portsLabel}`;
+
+    group.dataset.tooltip = tooltip;
 
     group.appendChild(rect);
     group.appendChild(text);

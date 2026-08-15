@@ -307,19 +307,51 @@ export async function loadWorkstationsForSelect(selectId, roomId = null) {
   }
 }
 
-export async function loadPositionsForSelect(selectId, cabinetId = null, roomId = null) {
+export async function loadCabinetsForSelect(selectId, roomId = null) {
   try {
     const params = new URLSearchParams({ page_size: '1000' });
-    if (cabinetId) params.set('cabinet_id', cabinetId);
     if (roomId) params.set('room_id', roomId);
-    const url = `/api/resources/positions?${params.toString()}`;
+    const url = `/api/resources/cabinets?${params.toString()}`;
     const result = await apiGet(url);
     const select = document.getElementById(selectId);
 
     if (!select) return;
 
     const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('device.select_cabinet')}</option>`;
+
+    const items = extractItems(result);
+    items.forEach(cab => {
+      const option = document.createElement("option");
+      option.value = cab.id;
+      option.textContent = cab.name;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  } catch (error) {
+    console.error("加载机柜选项失败:", error);
+  }
+}
+
+export async function loadPositionsForSelect(selectId, cabinetId = null, roomId = null) {
+  try {
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    const currentValue = select.value;
     select.innerHTML = `<option value="">${t('device.select_position')}</option>`;
+
+    // 机位必须先选定所属机柜；roomId 仅用于回显无机柜的历史机位
+    if (!cabinetId && !roomId) return;
+
+    const params = new URLSearchParams({ page_size: '1000' });
+    if (cabinetId) params.set('cabinet_id', cabinetId);
+    else params.set('room_id', roomId);
+    const result = await apiGet(`/api/resources/positions?${params.toString()}`);
 
     const items = extractItems(result);
     items.forEach(pos => {

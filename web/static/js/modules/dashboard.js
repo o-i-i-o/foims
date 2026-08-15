@@ -154,6 +154,7 @@ function renderTopIPs(items) {
         <div>
           <div>${escapeHtml(ip.ip_address || '-')}</div>
           <div class="item-meta">${escapeHtml(ip.hostname || ip.device_name || '-')}</div>
+          <div class="item-meta">${escapeHtml([ip.network_region, ip.network_name].filter(Boolean).join(' / ') || '-')}</div>
         </div>
       </div>
       <span class="item-status status-${ip.status || 'inactive'}">${getStatusText(ip.status)}</span>

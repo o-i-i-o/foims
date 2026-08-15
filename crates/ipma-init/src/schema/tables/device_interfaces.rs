@@ -5,8 +5,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             nic_id UUID REFERENCES nics(id) ON DELETE SET NULL,
             name VARCHAR(50) NOT NULL,
-            interface_type VARCHAR(20) NOT NULL CHECK (interface_type IN (
-                'physical', 'svi', 'management', 'loopback', 'wifi'
+            physical_type VARCHAR(20) NOT NULL DEFAULT 'rj45' CHECK (physical_type IN (
+                'rj45', 'sfp', 'sfp_plus', 'sfp28', 'qsfp_plus', 'qsfp28', 'wifi', 'virtual', 'other'
+            )),
+            interface_role VARCHAR(20) NOT NULL DEFAULT 'business' CHECK (interface_role IN (
+                'management', 'business', 'loopback', 'uplink', 'other'
             )),
             mac_address VARCHAR(20),
             vlan_id INTEGER,

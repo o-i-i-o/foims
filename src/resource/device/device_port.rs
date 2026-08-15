@@ -116,14 +116,21 @@ pub async fn get_all_device_ports(
         let sql = format!(
             r"SELECT
                 sp.id, sp.device_id, d.name as device_name,
-                COALESCE(
-                    (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
-                    ''
-                ) as device_ip,
+                COALESCE(dip.ip, '') as device_ip,
+                dip.network_name as device_network_name,
+                dip.network_region as device_network_region,
                 sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
                 sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
             FROM device_ports sp
             JOIN devices d ON sp.device_id = d.id
+            LEFT JOIN LATERAL (
+                SELECT host(im.ip_address) AS ip, nc.name AS network_name, nr.name AS network_region
+                FROM ips im
+                LEFT JOIN network_cidrs nc ON im.network_id = nc.id
+                LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+                WHERE im.device_id = d.id
+                LIMIT 1
+            ) dip ON true
             {where_clause}
             ORDER BY d.name, sp.port_number
             LIMIT ${param_idx} OFFSET ${}",
@@ -237,14 +244,21 @@ pub async fn get_device_port(
     let data = sqlx::query_as::<_, DevicePortWithDevice>(
         r"SELECT
             sp.id, sp.device_id, d.name as device_name,
-            COALESCE(
-                (SELECT host(im.ip_address) FROM ips im WHERE im.device_id = d.id LIMIT 1),
-                ''
-            ) as device_ip,
+            COALESCE(dip.ip, '') as device_ip,
+            dip.network_name as device_network_name,
+            dip.network_region as device_network_region,
             sp.port_number, sp.port_name, sp.port_type, sp.vlan_id,
             sp.status, sp.speed, sp.description, sp.created_at, sp.updated_at
         FROM device_ports sp
         JOIN devices d ON sp.device_id = d.id
+        LEFT JOIN LATERAL (
+            SELECT host(im.ip_address) AS ip, nc.name AS network_name, nr.name AS network_region
+            FROM ips im
+            LEFT JOIN network_cidrs nc ON im.network_id = nc.id
+            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+            WHERE im.device_id = d.id
+            LIMIT 1
+        ) dip ON true
         WHERE sp.id = $1",
     )
     .bind(port_id)

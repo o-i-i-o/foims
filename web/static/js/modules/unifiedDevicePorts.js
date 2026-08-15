@@ -164,8 +164,13 @@ function createNicPortItem(card, iface) {
   const display = extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3);
   portItem.textContent = display;
 
-  // tooltip：网口名 + MAC + IP
-  const ipList = Array.isArray(iface.ips) ? iface.ips.map(i => i.ip_address).filter(Boolean) : [];
+  // tooltip：网口名 + MAC + IP（含所属网段/网络区域）
+  const ipList = Array.isArray(iface.ips)
+    ? iface.ips.map(i => {
+        const netInfo = [i.network_region, i.network_name].filter(Boolean).join(' / ');
+        return netInfo ? `${i.ip_address} (${netInfo})` : i.ip_address;
+      }).filter(Boolean)
+    : [];
   const tipParts = [iface.name || ""];
   if (iface.mac_address) tipParts.push(`MAC: ${iface.mac_address}`);
   if (ipList.length) tipParts.push(`IP: ${ipList.join(', ')}`);

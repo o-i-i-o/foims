@@ -729,6 +729,10 @@ pub struct IpManager {
     pub device_interface_id: Uuid,
     pub device_id: Uuid,
     pub network_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub network_name: Option<String>,
+    #[sqlx(default)]
+    pub network_region: Option<String>,
     pub ip_address: String,
     pub ip_version: i16,
     pub mac_address: Option<String>,
@@ -752,7 +756,8 @@ pub struct IpManagerWithNames {
     pub workstation_name: Option<String>,
     pub cabinet_position_name: Option<String>,
     pub interface_name: Option<String>,
-    pub interface_type: Option<String>,
+    pub physical_type: Option<String>,
+    pub interface_role: Option<String>,
     pub room_name: Option<String>,
     pub cabinet_name: Option<String>,
     pub org_name: Option<String>,
@@ -798,7 +803,8 @@ pub struct PortSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(min = 1, max = 50, message = "网口名称长度必须在1到50个字符之间"))]
     pub name: String,
-    pub interface_type: Option<String>,
+    pub physical_type: Option<String>,
+    pub interface_role: Option<String>,
     #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
@@ -878,6 +884,10 @@ pub struct DevicePortWithDevice {
     pub device_id: Uuid,
     pub device_name: String,
     pub device_ip: Option<String>,
+    #[sqlx(default)]
+    pub device_network_name: Option<String>,
+    #[sqlx(default)]
+    pub device_network_region: Option<String>,
     pub port_number: String,
     pub port_name: Option<String>,
     pub port_type: String,
@@ -959,7 +969,8 @@ pub struct DeviceInterface {
     pub device_id: Uuid,
     pub nic_id: Option<Uuid>,
     pub name: String,
-    pub interface_type: String,
+    pub physical_type: String,
+    pub interface_role: String,
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
@@ -977,7 +988,8 @@ pub struct DeviceInterfaceWithDevice {
     pub device_name: String,
     pub nic_id: Option<Uuid>,
     pub name: String,
-    pub interface_type: String,
+    pub physical_type: String,
+    pub interface_role: String,
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
@@ -992,7 +1004,8 @@ pub struct DeviceInterfaceWithDevice {
 pub struct DeviceInterfaceCreate {
     #[validate(length(min = 1, max = 50, message = "接口名称长度必须在1到50个字符之间"))]
     pub name: String,
-    pub interface_type: Option<String>,
+    pub physical_type: Option<String>,
+    pub interface_role: Option<String>,
     #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
@@ -1006,7 +1019,8 @@ pub struct DeviceInterfaceCreate {
 pub struct DeviceInterfaceUpdate {
     #[validate(length(min = 1, max = 50, message = "接口名称长度必须在1到50个字符之间"))]
     pub name: Option<String>,
-    pub interface_type: Option<String>,
+    pub physical_type: Option<String>,
+    pub interface_role: Option<String>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub mac_address: Option<Option<String>>,
     pub vlan_id: Option<i32>,

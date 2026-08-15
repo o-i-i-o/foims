@@ -49,7 +49,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE OR REPLACE FUNCTION validate_cable_link_endpoints() RETURNS TRIGGER AS $$
         DECLARE
             endpoint_exists BOOLEAN := FALSE;
-            iface_type VARCHAR(20);
+            iface_ptype VARCHAR(20);
         BEGIN
             CASE NEW.a_endpoint_type
                 WHEN 'device_port' THEN
@@ -57,11 +57,11 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
-                    SELECT interface_type FROM device_interfaces WHERE id = NEW.a_endpoint_id INTO iface_type;
-                    endpoint_exists := iface_type IS NOT NULL AND iface_type IN ('physical','wifi');
-                    IF iface_type IS NOT NULL AND NOT endpoint_exists THEN
-                        RAISE EXCEPTION 'A 端点 device_interface 类型必须为 physical/wifi，实际为 % (id=%)',
-                            iface_type, NEW.a_endpoint_id;
+                    SELECT physical_type FROM device_interfaces WHERE id = NEW.a_endpoint_id INTO iface_ptype;
+                    endpoint_exists := iface_ptype IS NOT NULL AND iface_ptype <> 'virtual';
+                    IF iface_ptype IS NOT NULL AND NOT endpoint_exists THEN
+                        RAISE EXCEPTION 'A 端点 device_interface 物理形态必须为实际连接器（非 virtual），实际为 % (id=%)',
+                            iface_ptype, NEW.a_endpoint_id;
                     END IF;
                 WHEN 'patch_panel' THEN
                     SELECT EXISTS(SELECT 1 FROM patch_panels WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
@@ -74,18 +74,18 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             END IF;
 
             endpoint_exists := FALSE;
-            iface_type := NULL;
+            iface_ptype := NULL;
             CASE NEW.b_endpoint_type
                 WHEN 'device_port' THEN
                     SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
-                    SELECT interface_type FROM device_interfaces WHERE id = NEW.b_endpoint_id INTO iface_type;
-                    endpoint_exists := iface_type IS NOT NULL AND iface_type IN ('physical','wifi');
-                    IF iface_type IS NOT NULL AND NOT endpoint_exists THEN
-                        RAISE EXCEPTION 'B 端点 device_interface 类型必须为 physical/wifi，实际为 % (id=%)',
-                            iface_type, NEW.b_endpoint_id;
+                    SELECT physical_type FROM device_interfaces WHERE id = NEW.b_endpoint_id INTO iface_ptype;
+                    endpoint_exists := iface_ptype IS NOT NULL AND iface_ptype <> 'virtual';
+                    IF iface_ptype IS NOT NULL AND NOT endpoint_exists THEN
+                        RAISE EXCEPTION 'B 端点 device_interface 物理形态必须为实际连接器（非 virtual），实际为 % (id=%)',
+                            iface_ptype, NEW.b_endpoint_id;
                     END IF;
                 WHEN 'patch_panel' THEN
                     SELECT EXISTS(SELECT 1 FROM patch_panels WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
@@ -195,7 +195,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE OR REPLACE FUNCTION prevent_interface_deletion_if_linked() RETURNS TRIGGER AS $$
         BEGIN
-            IF OLD.interface_type IN ('physical','wifi') AND EXISTS(
+            IF OLD.physical_type <> 'virtual' AND EXISTS(
                 SELECT 1 FROM cable_links
                 WHERE (a_endpoint_type='device_interface' AND a_endpoint_id = OLD.id)
                    OR (b_endpoint_type='device_interface' AND b_endpoint_id = OLD.id)

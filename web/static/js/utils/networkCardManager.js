@@ -26,12 +26,26 @@ const CARD_TYPES = [
   { value: 'other', label: () => t('device.card_type_other') },
 ];
 
-const PORT_TYPES = [
-  { value: 'physical', label: () => t('device.port_type_physical') },
-  { value: 'svi', label: () => t('device.port_type_svi') },
-  { value: 'management', label: () => t('device.port_type_management') },
-  { value: 'loopback', label: () => t('device.port_type_loopback') },
-  { value: 'wifi', label: () => t('device.port_type_wifi') },
+// 物理形态：网口的物理接口规格
+const PHYSICAL_TYPES = [
+  { value: 'rj45', label: () => t('device.physical_type_rj45') },
+  { value: 'sfp', label: () => t('device.physical_type_sfp') },
+  { value: 'sfp_plus', label: () => t('device.physical_type_sfp_plus') },
+  { value: 'sfp28', label: () => t('device.physical_type_sfp28') },
+  { value: 'qsfp_plus', label: () => t('device.physical_type_qsfp_plus') },
+  { value: 'qsfp28', label: () => t('device.physical_type_qsfp28') },
+  { value: 'wifi', label: () => t('device.physical_type_wifi') },
+  { value: 'virtual', label: () => t('device.physical_type_virtual') },
+  { value: 'other', label: () => t('device.physical_type_other') },
+];
+
+// 接口角色：网口的用途定位
+const INTERFACE_ROLES = [
+  { value: 'management', label: () => t('device.interface_role_management') },
+  { value: 'business', label: () => t('device.interface_role_business') },
+  { value: 'loopback', label: () => t('device.interface_role_loopback') },
+  { value: 'uplink', label: () => t('device.interface_role_uplink') },
+  { value: 'other', label: () => t('device.interface_role_other') },
 ];
 
 function isValidIPv4(ip) {
@@ -329,9 +343,15 @@ export class NetworkCardManager {
           <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t('device.network_port_name')}" autocomplete="off" required />
         </div>
         <div class="nc-field">
-          <label for="${uid}-type">${t('device.network_port_type')}</label>
-          <select id="${uid}-type" class="port-type nc-input">
-            ${PORT_TYPES.map(opt => `<option value="${opt.value}" ${portData.interface_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
+          <label for="${uid}-ptype">${t('device.physical_type')}</label>
+          <select id="${uid}-ptype" class="port-physical-type nc-input">
+            ${PHYSICAL_TYPES.map(opt => `<option value="${opt.value}" ${portData.physical_type === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
+          </select>
+        </div>
+        <div class="nc-field">
+          <label for="${uid}-role">${t('device.interface_role')}</label>
+          <select id="${uid}-role" class="port-role nc-input">
+            ${INTERFACE_ROLES.map(opt => `<option value="${opt.value}" ${portData.interface_role === opt.value ? 'selected' : ''}>${opt.label()}</option>`).join('')}
           </select>
         </div>
         <div class="nc-field">
@@ -564,7 +584,7 @@ export class NetworkCardManager {
     interfaces.forEach(iface => {
       const option = document.createElement('option');
       option.value = iface.id;
-      const typeMark = iface.interface_type ? `[${iface.interface_type}]` : '';
+      const typeMark = iface.interface_role ? `[${t(`device.interface_role_${iface.interface_role}`)}]` : '';
       option.textContent = `${iface.name}${typeMark}`;
       portSelect.appendChild(option);
     });
@@ -669,7 +689,8 @@ export class NetworkCardManager {
         const portNum = portIdx + 1;
         const portId = portEl.querySelector('.port-id')?.value || null;
         const portName = portEl.querySelector('.port-name')?.value?.trim() || '';
-        const portType = portEl.querySelector('.port-type')?.value || 'physical';
+        const physicalType = portEl.querySelector('.port-physical-type')?.value || 'rj45';
+        const interfaceRole = portEl.querySelector('.port-role')?.value || 'business';
         const portMac = portEl.querySelector('.port-mac')?.value?.trim() || null;
         const portVlanRaw = portEl.querySelector('.port-vlan')?.value?.trim() || '';
         const portVlan = portVlanRaw ? parseInt(portVlanRaw, 10) : null;
@@ -738,7 +759,8 @@ export class NetworkCardManager {
         ports.push({
           id: portId,
           name: portName,
-          interface_type: portType,
+          physical_type: physicalType,
+          interface_role: interfaceRole,
           mac_address: portMac,
           vlan_id: portVlan,
           description: portDesc,

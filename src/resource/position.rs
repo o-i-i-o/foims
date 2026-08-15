@@ -257,6 +257,7 @@ pub async fn get_cabinet_position(
             host(m.ip_address) as ip_address,
             m.ip_version, m.mac_address, m.hostname, m.description,
             m.status, m.last_seen, m.created_at, m.updated_at,
+            n.name as network_name,
             n.network_region_id, nr.name as network_region
         FROM ips m
         JOIN devices d ON m.device_id = d.id
@@ -286,8 +287,9 @@ pub async fn get_cabinet_position(
                 "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(10),
                 "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(11),
                 "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
-                "network_region_id": row.get::<Option<Uuid>, _>(13),
-                "network_region": row.get::<Option<String>, _>(14)
+                "network_name": row.get::<Option<String>, _>(13),
+                "network_region_id": row.get::<Option<Uuid>, _>(14),
+                "network_region": row.get::<Option<String>, _>(15)
             })
         })
         .collect();
@@ -375,9 +377,14 @@ pub async fn update_cabinet_position(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
+           nc.name AS network_name, nr.name AS network_region,
            host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description,
            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
-           FROM ips m JOIN devices d ON m.device_id = d.id WHERE d.position_id = $1",
+           FROM ips m
+           JOIN devices d ON m.device_id = d.id
+           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+           LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+           WHERE d.position_id = $1",
     )
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
