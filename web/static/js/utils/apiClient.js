@@ -311,7 +311,7 @@ export class ApiClient {
 
   static redirectToLogin() {
     clearSession();
-    window.location.href = "/static/index.html";
+    window.location.href = "/index.html";
   }
 
   static showAuthError() {
