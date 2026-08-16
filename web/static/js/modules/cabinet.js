@@ -329,7 +329,7 @@ export async function openCabinetPositionsListModal(cabinetId) {
           .map(
             (pos, idx) => `
           <tr>
-            <td>${idx + 1}</td>
+            <td class="index-column">${idx + 1}</td>
             <td>${escapeHtml(pos.name || "")}</td>
             <td>${pos.start_u ?? "-"}</td>
             <td>${pos.end_u ?? "-"}</td>

@@ -9,6 +9,10 @@ import { escapeHtml } from "./helpers.js";
 const svg = (content) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
 
+// 纵向加高的组合图标视窗（字母区在上、图标区在下，互不遮挡）
+const svgTall = (content, cls) =>
+  `<svg class="${cls}" viewBox="0 0 24 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
+
 export const ICONS = {
   // 编辑（铅笔）
   edit: svg('<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>'),
@@ -40,6 +44,10 @@ export const ICONS = {
   list: svg(
     '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'
   ),
+  // 设备接口（列表 + 字母角标单体组合，角标随图标整体居中）
+  listP: listBadgeIcon("P"),
+  listM: listBadgeIcon("M"),
+  listL: listBadgeIcon("L"),
   // LLDP 邻居（信号发现）
   radio: svg(
     '<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>'
@@ -86,17 +94,18 @@ export function getIcon(name) {
 }
 
 /**
- * 生成"列表 + 顶部字母角标"的单体组合图标
- * 角标绘制在 SVG 内部（白底圆 + currentColor 字母），随图标整体居中，
- * 相比绝对定位的 DOM 角标不会出现定位偏移
+ * 生成"顶部字母 + 列表"的单体组合图标（24x32 纵向视窗）
+ * 上部：白底圆内 currentColor 字母；下部：完整 list 线条，两者互不遮挡，
+ * 配合 CSS 的 .combo-icon 尺寸可同时清晰显示（接近 svg+css 分层的效果）
  * @param {string} letter 角标字母（ASCII）
  * @returns {string} SVG HTML
  */
 function listBadgeIcon(letter) {
-  return svg(
-    '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'
-      + `<circle cx="12" cy="5.5" r="5.5" fill="var(--color-bg-white)" stroke="none"/>`
-      + `<text x="12" y="8.2" text-anchor="middle" font-size="7.5" font-weight="700" font-family="inherit" fill="currentColor" stroke="none">${letter}</text>`
+  return svgTall(
+    `<circle cx="12" cy="6" r="6" fill="var(--color-bg-white)" stroke="none"/>`
+      + `<text x="12" y="8.9" text-anchor="middle" font-size="9" font-weight="700" font-family="inherit" fill="currentColor" stroke="none">${letter}</text>`
+      + '<line x1="8" y1="18" x2="21" y2="18"/><line x1="8" y1="24" x2="21" y2="24"/><line x1="8" y1="30" x2="21" y2="30"/><line x1="3" y1="18" x2="3.01" y2="18"/><line x1="3" y1="24" x2="3.01" y2="24"/><line x1="3" y1="30" x2="3.01" y2="30"/>',
+    "combo-icon"
   );
 }
 

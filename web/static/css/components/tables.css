@@ -7,6 +7,14 @@
   min-height: 200px;
 }
 
+/* 带二级导航的页面（资源管理/日志/系统）：表格容器上提，
+   抵消导航栏 .tabs 的 margin-bottom（main-content.css），表头与导航栏紧贴。
+   用 :first-child 判定（表格是面板首个内容才贴合）而非相邻兄弟选择器——
+   后者只能命中 DOM 序第一个标签页，切换到其他标签时规则失效 */
+.tab-content.active > .table-container:first-child {
+  margin-top: calc(-1 * var(--space-lg));
+}
+
 .table-container > .data-table {
   flex: 1;
 }
@@ -37,30 +45,38 @@
   text-transform: uppercase;
   font-size: 0.875rem;
   letter-spacing: 0.05em;
+  /* 所有表头水平居中（数据单元格保持左对齐，由 col-center 单独控制） */
+  text-align: center;
 }
 
 .index-column {
   width: 50px;
-  text-align: center;
   vertical-align: middle;
   font-weight: 500;
   color: var(--color-text-muted);
 }
 
+/* 序号列居中：必须用 .data-table td/th 前缀提升特异性，
+   否则被基础规则 text-align: left（0,1,1）压制 */
+.data-table th.index-column,
+.data-table td.index-column {
+  text-align: center;
+}
+
+/* 空态行的 text-center 同理会被基础 left 规则压制，此处显式恢复 */
+.data-table td.text-center {
+  text-align: center;
+}
+
 /* 宽度可控列（序号/时间/数字/枚举/按钮）的水平垂直居中 */
-.data-table th.col-center,
 .data-table td.col-center {
   text-align: center;
   vertical-align: middle;
 }
 
-/* 可排序的居中列：右侧箭头占位 28px，左侧补齐对称 padding，文字才真正居中 */
-.data-table th.sortable.col-center {
+/* 可排序表头：右侧箭头占位 28px，左侧补齐对称 padding，居中文字不被箭头推偏 */
+.data-table th.sortable {
   padding-left: 28px;
-}
-
-.data-table th.index-column {
-  text-align: center;
 }
 
 .data-table tr:hover {

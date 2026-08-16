@@ -112,9 +112,9 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
           field: "id",
           render: (v, row) => `
           ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
-          ${iconButton({ icon: "list", label: t("device.ports"), cls: "btn-primary btn-device-ports", attrs: `data-device-id="${v}" data-device-name="${escapeHtml(row.name)}"`, badge: "P" })}
-          ${iconButton({ icon: "list", label: t("device.mac_table"), cls: "btn-success btn-device-mac", attrs: `data-device-id="${v}"`, badge: "M" })}
-          ${iconButton({ icon: "list", label: t("device.lldp"), cls: "btn-warning btn-device-lldp", attrs: `data-device-id="${v}"`, badge: "L" })}
+          ${iconButton({ icon: "listP", label: t("device.ports"), cls: "btn-primary btn-device-ports", attrs: `data-device-id="${v}" data-device-name="${escapeHtml(row.name)}"` })}
+          ${iconButton({ icon: "listM", label: t("device.mac_table"), cls: "btn-success btn-device-mac", attrs: `data-device-id="${v}"` })}
+          ${iconButton({ icon: "listL", label: t("device.lldp"), cls: "btn-warning btn-device-lldp", attrs: `data-device-id="${v}"` })}
           ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-id="${v}"` })}
         `
         }

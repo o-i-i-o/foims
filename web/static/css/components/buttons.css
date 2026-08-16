@@ -137,6 +137,12 @@
   pointer-events: none;
 }
 
+/* 单体组合图标（24x32 视窗）：加大显示尺寸，字母区与图标区同时完整呈现 */
+.icon-btn svg.combo-icon {
+  width: 18px;
+  height: 24px;
+}
+
 /* 图标左上角字母角标：白底 + 字母继承按钮语义色（与图标同色），
    位置内移压住图标左上角；不可用 currentColor 做背景（会被自身 color 覆盖） */
 .icon-btn .icon-badge {

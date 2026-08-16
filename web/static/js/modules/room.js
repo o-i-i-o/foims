@@ -792,7 +792,7 @@ export async function openRoomChildrenListModal(roomId) {
             .map(
               (ws, idx) => `
             <tr>
-              <td>${idx + 1}</td>
+              <td class="index-column">${idx + 1}</td>
               <td>${escapeHtml(ws.name || "")}</td>
               <td>${escapeHtml(ws.manager || "-")}</td>
             </tr>
@@ -813,7 +813,7 @@ export async function openRoomChildrenListModal(roomId) {
             .map(
               (cab, idx) => `
             <tr>
-              <td>${idx + 1}</td>
+              <td class="index-column">${idx + 1}</td>
               <td>${escapeHtml(cab.name || "")}</td>
               <td>${cab.capacity ?? "-"}</td>
             </tr>
@@ -852,7 +852,7 @@ export async function openRoomNetOutletsListModal(roomId) {
           .map(
             (no, idx) => `
           <tr>
-            <td>${idx + 1}</td>
+            <td class="index-column">${idx + 1}</td>
             <td>${escapeHtml(no.name || "")}</td>
           </tr>
         `
