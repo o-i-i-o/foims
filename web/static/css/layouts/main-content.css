@@ -1,16 +1,13 @@
+/* 无内边距：内容直接铺满侧边栏右侧的全部剩余空间 */
 .main-content {
   margin-left: var(--sidebar-width);
-  padding: var(--space-xl);
   min-height: 100vh;
   background-color: var(--color-bg);
 }
 
+/* 仅承担分页切换（display 切换），不再作为带边距的画布容器 */
 .content-section {
   display: none;
-  background: var(--color-bg-white);
-  padding: var(--space-xl);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
 }
 
 .content-section.active {

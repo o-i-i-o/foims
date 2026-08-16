@@ -2,14 +2,14 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 2 * var(--space-xl));
-  max-height: calc(100vh - 2 * var(--space-xl));
+  height: 100vh;
+  max-height: 100vh;
 }
 
 #visualization > .tabs {
   position: absolute;
-  top: var(--space-xl);
-  left: var(--space-xl);
+  top: 0;
+  left: 0;
   z-index: 10;
   margin-bottom: 0;
   box-shadow: var(--shadow-md);
