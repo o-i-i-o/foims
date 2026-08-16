@@ -1,321 +1,316 @@
 .table-container {
-    width: 100%;
-    overflow-x: auto;
-    margin-top: var(--space-lg);
-    display: flex;
-    flex-direction: column;
-    min-height: 200px;
+  width: 100%;
+  overflow-x: auto;
+  margin-top: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
 }
 
 .table-container > .data-table {
-    flex: 1;
+  flex: 1;
 }
 
 .data-table {
-    width: 100%;
-    /* 强制至少铺满容器：表格处于 flex 等上下文时不因内容收缩 */
-    min-width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
+  width: 100%;
+  /* 强制至少铺满容器：表格处于 flex 等上下文时不因内容收缩 */
+  min-width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg-white);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .data-table th,
 .data-table td {
-    padding: 0.55rem;
-    text-align: left;
-    vertical-align: middle;
-    border-bottom: 1px solid var(--color-border-light);
+  padding: 0.55rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .data-table th {
-    background: var(--color-bg);
-    font-weight: 600;
-    color: var(--color-text-light);
-    text-transform: uppercase;
-    font-size: 0.875rem;
-    letter-spacing: 0.05em;
+  background: var(--color-bg);
+  font-weight: 600;
+  color: var(--color-text-light);
+  text-transform: uppercase;
+  font-size: 0.875rem;
+  letter-spacing: 0.05em;
 }
 
 .index-column {
-    width: 50px;
-    text-align: center;
-    vertical-align: middle;
-    font-weight: 500;
-    color: var(--color-text-muted);
+  width: 50px;
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 500;
+  color: var(--color-text-muted);
 }
 
 /* 宽度可控列（序号/时间/数字/枚举/按钮）的水平垂直居中 */
 .data-table th.col-center,
 .data-table td.col-center {
-    text-align: center;
-    vertical-align: middle;
+  text-align: center;
+  vertical-align: middle;
 }
 
 /* 可排序的居中列：右侧箭头占位 28px，左侧补齐对称 padding，文字才真正居中 */
 .data-table th.sortable.col-center {
-    padding-left: 28px;
+  padding-left: 28px;
 }
 
 .data-table th.index-column {
-    text-align: center;
+  text-align: center;
 }
 
 .data-table tr:hover {
-    background: var(--color-bg);
+  background: var(--color-bg);
 }
 
 .data-table tr:last-child td {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 .empty-row td {
-    padding: var(--space-lg);
-    color: var(--color-text-muted);
-    font-style: italic;
+  padding: var(--space-lg);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .th-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .th-actions .btn {
-    margin: 0;
+  margin: 0;
 }
 
 .pagination {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  width: 100%;
 }
 
 .pagination-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-}
-
-.pagination-right {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .pagination-btn {
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    white-space: nowrap;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-primary);
+  color: var(--color-bg-white);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .pagination-btn:hover:not(:disabled) {
-    background: var(--color-primary-hover);
+  background: var(--color-primary-hover);
 }
 
 .pagination-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pagination-pages {
-    display: flex;
-    align-items: center;
-    gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .pagination-page {
-    min-width: 32px;
-    height: 32px;
-    padding: 0 8px;
-    background: transparent;
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.2s ease;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
 }
 
 .pagination-page:hover {
-    background: var(--color-bg-hover);
-    border-color: var(--color-primary);
+  background: var(--color-bg-hover);
+  border-color: var(--color-primary);
 }
 
 .pagination-page.active {
-    background: var(--color-primary);
-    color: white;
-    border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-bg-white);
+  border-color: var(--color-primary);
 }
 
 .pagination-ellipsis {
-    padding: 0 8px;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }
 
 .pagination-container {
-    width: 100%;
-    padding: var(--space-md) 0;
-    border-top: 1px solid var(--color-border);
-    margin-top: auto;
+  width: 100%;
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
 }
 
 .pagination-wrapper {
-    display: block;
-    width: 100%;
-    padding: 0;
+  display: block;
+  width: 100%;
+  padding: 0;
 }
 
 .pagination-info {
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-    white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .pagination-right {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .pagination-size,
 .pagination-jump {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }
 
 .pagination-size-selector,
 .pagination-jump-input {
-    padding: 3px 6px;
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 0.8125rem;
-    cursor: pointer;
+  padding: 3px 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  cursor: pointer;
 }
 
 .pagination-jump-input {
-    width: 56px;
-    cursor: text;
-    text-align: center;
+  width: 56px;
+  cursor: text;
+  text-align: center;
 }
 
 .pagination-size-selector:focus,
 .pagination-jump-input:focus {
-    outline: none;
-    border-color: var(--color-primary);
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .pagination-jump .pagination-btn {
-    padding: 3px var(--space-sm);
-    font-size: 0.8125rem;
+  padding: 3px var(--space-sm);
+  font-size: 0.8125rem;
 }
 
 .data-table th.sortable {
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s ease;
-    position: relative;
-    padding-right: 28px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+  position: relative;
+  padding-right: 28px;
 }
 
 .data-table th.sortable:hover {
-    background-color: var(--color-bg-hover);
+  background-color: var(--color-bg-hover);
 }
 
 .data-table th.sortable::after {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    transition: all 0.2s ease;
-    opacity: 0.5;
-    font-family: monospace;
-    letter-spacing: -2px;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  transition: all 0.2s ease;
+  opacity: 0.5;
+  font-family: "monospace";
+  letter-spacing: -2px;
 }
 
 .data-table th.sortable:hover::after {
-    opacity: 1;
-    color: var(--color-primary);
+  opacity: 1;
+  color: var(--color-primary);
 }
 
 .data-table th.sortable.sorted {
-    background-color: rgb(102 126 234 / 0.08);
+  background-color: var(--color-primary-light);
 }
 
 .data-table th.sortable.sorted::after {
-    opacity: 1;
-    color: var(--color-primary);
-    font-weight: bold;
+  opacity: 1;
+  color: var(--color-primary);
+  font-weight: bold;
 }
 
 .data-table th.sortable.sorted.asc::after {
-    content: '↑';
+  content: "↑";
 }
 
 .data-table th.sortable.sorted.desc::after {
-    content: '↓';
+  content: "↓";
 }
 
 .data-table th.sortable:not(.sorted)::after {
-    content: '↕';
+  content: "↕";
 }
 
 .data-table th.sortable.sorted::before {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: var(--color-primary);
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
 }
 
 .data-table th .filter-input {
-    display: block;
-    width: 100%;
-    margin-top: 0.5rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background-color: white;
-    transition: all 0.2s ease;
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg-white);
+  transition: all 0.2s ease;
 }
 
 .data-table th .filter-input:hover {
-    border-color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .data-table th .filter-input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px rgb(102 126 234 / 0.1);
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .data-table th .filter-input::placeholder {
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 /* 表格容器水平滚动包装（通用工具类，原位于 network-usage.css） */
 .table-responsive {
-    overflow-x: auto;
+  overflow-x: auto;
 }

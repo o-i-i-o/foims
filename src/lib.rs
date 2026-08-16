@@ -1,3 +1,5 @@
+//! IPMA 库入口：汇聚全部子模块供二进制与其他测试使用。
+
 // IPMA - IP/DEVICE Address Management System
 // Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
 // SPDX-License-Identifier: MIT

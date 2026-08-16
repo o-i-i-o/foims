@@ -8,7 +8,7 @@ export class SVGVisualization {
     this.core = new SVGCore(containerId, type, callbacks);
     this.renderer = new SVGRenderer(this.core);
     this.dataManager = new SVGDataManager(this.core, this.renderer);
-    
+
     this.elementsGroup = this.core.elementsGroup;
     this.svg = this.core.svg;
     this.container = this.core.container;
@@ -21,7 +21,7 @@ export class SVGVisualization {
   async autoDrawWorkstations(roomId) {
     try {
       const hasSavedLayout = await this.dataManager.loadSavedLayout(roomId);
-      
+
       if (hasSavedLayout) {
         this.currentRoomId = roomId;
         this.core.currentRoomId = roomId;
@@ -34,14 +34,13 @@ export class SVGVisualization {
 
       const workstations = await this.dataManager.fetchWorkstationsByRoom(roomId);
       const ipManagers = await this.dataManager.fetchIps();
-      
+
       const ipMap = new Map();
       if (Array.isArray(ipManagers)) {
         ipManagers.forEach((ipManager) => {
           if (!ipManager.workstation_id) return;
           const existing = ipMap.get(ipManager.workstation_id);
-          if (!existing ||
-              (existing.status !== "active" && ipManager.status === "active")) {
+          if (!existing || (existing.status !== "active" && ipManager.status === "active")) {
             ipMap.set(ipManager.workstation_id, ipManager);
           }
         });
@@ -59,7 +58,7 @@ export class SVGVisualization {
       const height = 160;
       const startX = 150;
       const startY = 100;
-      
+
       let cols = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(workstations.length))));
       if (workstations.length <= 5) {
         cols = 3;
@@ -68,7 +67,7 @@ export class SVGVisualization {
       } else if (workstations.length <= 24) {
         cols = 6;
       }
-      
+
       const rows = Math.ceil(workstations.length / cols);
 
       workstations.forEach((workstation, index) => {
@@ -80,7 +79,7 @@ export class SVGVisualization {
           x: startX + col * (width + gap),
           y: startY + row * (height + gap),
           width: width,
-          height: height,
+          height: height
         };
 
         this.renderer.drawWorkstation(workstation);
@@ -88,8 +87,11 @@ export class SVGVisualization {
 
       const totalWidth = startX + cols * (width + gap) + 50;
       const totalHeight = startY + rows * (height + gap) + 50;
-      this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${Math.max(800, totalHeight)}`);
-      
+      this.core.svg.setAttribute(
+        "viewBox",
+        `0 0 ${Math.max(1000, totalWidth)} ${Math.max(800, totalHeight)}`
+      );
+
       setTimeout(() => {
         this.saveLayout();
       }, 500);
@@ -109,7 +111,7 @@ export class SVGVisualization {
 
     try {
       const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
-      
+
       if (cabinets.length === 0) {
         this.core.showToast(t("viz.no_cabinet_data"), "info");
         return;
@@ -121,20 +123,20 @@ export class SVGVisualization {
       const gap = 50;
       const startX = 50;
       const padding = 5;
-      
+
       let containerHeight = this.core.container.clientHeight;
       if (!containerHeight || containerHeight < 100) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         containerHeight = this.core.container.clientHeight;
       }
       if (!containerHeight || containerHeight < 100) {
         containerHeight = 600;
       }
-      
+
       const availableHeight = containerHeight - padding * 2;
-      
-      const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
+
+      const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
       const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
 
       cabinets.forEach((cabinet, index) => {
@@ -145,7 +147,7 @@ export class SVGVisualization {
           x: startX + index * (cabinetWidth + gap),
           y: containerHeight - padding - cabinetHeight,
           width: cabinetWidth,
-          height: cabinetHeight,
+          height: cabinetHeight
         };
 
         this.renderer.drawCabinet(cabinet);

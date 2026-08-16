@@ -1,185 +1,208 @@
 /* 网络配置容器：统一卡片样式，所有配置项在同一容器内 */
 #network-configs-container {
-    background: var(--color-bg);
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-light);
-    box-sizing: border-box;
+  background: var(--color-bg);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+  box-sizing: border-box;
 }
 
 /* 单个网络配置项：仅作为容器内的一行，无独立卡片样式 */
 .network-config-item {
-    padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--color-border-light);
-    box-sizing: border-box;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border-light);
+  box-sizing: border-box;
 }
 
 .network-config-item:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 /* 覆盖 modal 中 .form-row 的布局，使用 flex 让 select 占满剩余空间 */
 .modal.active .modal-content .modal-body .network-config-item .form-row {
-    display: flex;
-    gap: var(--space-md);
-    align-items: end;
-    margin: 0;
+  display: flex;
+  gap: var(--space-md);
+  align-items: end;
+  margin: 0;
 }
 
 /* 网络区域/网段选择列：flex: 1 让其占据剩余空间 */
 .modal.active .modal-content .modal-body .network-config-item .form-group {
-    display: block;
-    margin: 0;
-    flex: 1;
-    min-width: 0;
-    position: relative;
+  display: block;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  position: relative;
 }
 
 /* 必填标记：select 为空（:invalid）时，用红色 * 覆盖在占位符文本后面 */
-.modal.active .modal-content .modal-body .network-config-item .form-group:has(select.required:invalid)::after {
-    content: '*';
-    color: var(--color-danger);
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none;
-    font-weight: bold;
-    font-size: 0.95rem;
-    line-height: 1;
+.modal.active
+  .modal-content
+  .modal-body
+  .network-config-item
+  .form-group:has(select.required:invalid)::after {
+  content: "*";
+  color: var(--color-danger);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-weight: bold;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 /* "选择网络区域" = 5 个中文字符 */
-.modal.active .modal-content .modal-body .network-config-item .form-group:has(.network-region-select:invalid)::after {
-    left: calc(var(--control-padding-x) + 5em + 2px);
+.modal.active
+  .modal-content
+  .modal-body
+  .network-config-item
+  .form-group:has(.network-region-select:invalid)::after {
+  left: calc(var(--control-padding-x) + 5em + 2px);
 }
 
 /* "选择网段" = 4 个中文字符 */
-.modal.active .modal-content .modal-body .network-config-item .form-group:has(.network-select:invalid)::after {
-    left: calc(var(--control-padding-x) + 4em + 2px);
+.modal.active
+  .modal-content
+  .modal-body
+  .network-config-item
+  .form-group:has(.network-select:invalid)::after {
+  left: calc(var(--control-padding-x) + 4em + 2px);
 }
 
 .network-config-item .form-group label {
-    display: block;
-    margin-bottom: var(--space-xs);
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    font-size: 0.9rem;
-    min-width: 0;
-    width: auto;
-    padding-top: 0;
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  min-width: 0;
+  width: auto;
+  padding-top: 0;
 }
 
 /* 覆盖 modal 中 select/input 的 width: auto，让下拉框占满列宽 */
 .modal.active .modal-content .modal-body .network-config-item .form-group select,
 .modal.active .modal-content .modal-body .network-config-item .form-group input {
-    width: 100%;
-    flex: none;
-    min-width: 0;
+  width: 100%;
+  flex: none;
+  min-width: 0;
 }
 
 .network-region-select,
 .network-select {
-    width: 100%;
-    padding: var(--control-padding-y) var(--control-padding-x);
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: 0.95rem;
-    background-color: var(--control-bg);
-    transition: all var(--transition-fast);
-    height: var(--control-height);
+  width: 100%;
+  padding: var(--control-padding-y) var(--control-padding-x);
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  font-size: 0.95rem;
+  background-color: var(--control-bg);
+  transition: all var(--transition-fast);
+  height: var(--control-height);
 }
 
 .network-region-select:focus,
 .network-select:focus {
-    outline: none;
-    border-color: var(--control-border-focus);
-    box-shadow: var(--control-shadow);
+  outline: none;
+  border-color: var(--control-border-focus);
+  box-shadow: var(--control-shadow);
 }
 
 .network-config-wrapper {
-    width: 100%;
-    flex: 1 !important;
-    min-width: 0;
+  width: 100%;
+  flex: 1 !important;
+  min-width: 0;
 }
 
 /* 按钮组：删除 + 添加，横向排列 */
 .network-config-actions,
 .room-children-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
 }
 
 /* 按钮组列：flex: none 仅占内容宽度，让 select 占据更多空间 */
 .modal.active .modal-content .modal-body .network-config-item .form-group.network-config-actions,
-.modal.active .modal-content .modal-body #room-children-container .room-child-item .form-group.room-children-actions {
-    display: flex;
-    min-width: 0;
-    width: auto;
-    flex: none;
+.modal.active
+  .modal-content
+  .modal-body
+  #room-children-container
+  .room-child-item
+  .form-group.room-children-actions {
+  display: flex;
+  min-width: 0;
+  width: auto;
+  flex: none;
 }
 
 .remove-network-config-btn:hover {
-    background-color: var(--color-danger);
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgb(198 96 106 / 0.3);
+  background-color: var(--color-danger);
+  color: var(--color-bg-white);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgb(198 96 106 / 0.3);
 }
 
 .remove-network-config-btn:active {
-    transform: translateY(0);
+  transform: translateY(0);
 }
 
 /* 工位/机柜列表容器：统一卡片样式 */
 #room-children-container {
-    background: var(--color-bg);
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-light);
-    box-sizing: border-box;
+  background: var(--color-bg);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+  box-sizing: border-box;
 }
 
 #room-children-container .room-child-item {
-    padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--color-border-light);
-    box-sizing: border-box;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border-light);
+  box-sizing: border-box;
 }
 
 #room-children-container .room-child-item:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 /* 覆盖 modal 中 .form-row 的布局，使用 flex 让 input 占满剩余空间 */
 .modal.active .modal-content .modal-body #room-children-container .room-child-item .form-row {
-    display: flex;
-    gap: var(--space-md);
-    align-items: end;
-    margin: 0;
+  display: flex;
+  gap: var(--space-md);
+  align-items: end;
+  margin: 0;
 }
 
 /* 工位/机柜输入列：flex: 1 让其占据剩余空间 */
 .modal.active .modal-content .modal-body #room-children-container .room-child-item .form-group {
-    display: block;
-    margin: 0;
-    flex: 1;
-    min-width: 0;
+  display: block;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 #room-children-container .room-child-item .form-group label {
-    display: block;
-    margin-bottom: var(--space-xs);
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    font-size: 0.9rem;
-    min-width: 0;
-    width: auto;
-    padding-top: 0;
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  min-width: 0;
+  width: auto;
+  padding-top: 0;
 }
 
 /* 覆盖 modal 中 input 的 width: auto，让输入框占满列宽 */
-.modal.active .modal-content .modal-body #room-children-container .room-child-item .form-group input {
-    width: 100%;
-    flex: none;
-    min-width: 0;
+.modal.active
+  .modal-content
+  .modal-body
+  #room-children-container
+  .room-child-item
+  .form-group
+  input {
+  width: 100%;
+  flex: none;
+  min-width: 0;
 }

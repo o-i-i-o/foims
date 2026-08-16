@@ -1,3 +1,5 @@
+//! SNMP 通用采集（端口/MAC/LLDP 参数构造与请求）。
+
 use std::sync::Arc;
 use std::time::Duration;
 

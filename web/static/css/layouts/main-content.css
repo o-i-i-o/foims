@@ -1,124 +1,122 @@
 .main-content {
-    margin-left: var(--sidebar-width);
-    padding: var(--space-xl);
-    min-height: 100vh;
-    background-color: var(--color-bg);
+  margin-left: var(--sidebar-width);
+  padding: var(--space-xl);
+  min-height: 100vh;
+  background-color: var(--color-bg);
 }
 
 .content-section {
-    display: none;
-    background: #fff;
-    padding: var(--space-xl);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+  display: none;
+  background: var(--color-bg-white);
+  padding: var(--space-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .content-section.active {
-    display: block;
+  display: block;
 }
 
 .content-section h2 {
-    margin-bottom: var(--space-lg);
-    color: var(--color-text);
-    font-size: 1.5rem;
-    font-weight: 600;
-    padding-bottom: var(--space-sm);
-    border-bottom: 2px solid var(--color-border-light);
+  margin-bottom: var(--space-lg);
+  color: var(--color-text);
+  font-size: 1.5rem;
+  font-weight: 600;
+  padding-bottom: var(--space-sm);
+  border-bottom: 2px solid var(--color-border-light);
 }
 
 .section-header {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: var(--space-lg);
-    gap: var(--space-md);
-    align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-lg);
+  gap: var(--space-md);
+  align-items: center;
 }
 
 .tabs {
-    display: flex;
-    margin-bottom: var(--space-lg);
-    background: var(--color-bg);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
+  display: flex;
+  margin-bottom: var(--space-lg);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
-    padding: var(--space-md) var(--space-lg);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: var(--space-md);
-    font-weight: 500;
-    color: var(--color-text-muted);
-    transition: all var(--transition-slow);
-    flex: 1;
-    text-align: center;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  padding: var(--space-md) var(--space-lg);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: var(--space-md);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition: all var(--transition-slow);
+  flex: 1;
+  text-align: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tab-btn:hover {
-    background: var(--color-border-light);
-    color: var(--color-text-light);
+  background: var(--color-border-light);
+  color: var(--color-text-light);
 }
 
 .tab-btn.active {
-    background: #fff;
-    color: var(--color-primary);
-    font-weight: 600;
-    box-shadow: var(--shadow-sm);
+  background: var(--color-bg-white);
+  color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn.active::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: var(--color-primary);
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--color-primary);
 }
 
 .tab-content {
-    display: none;
+  display: none;
 }
 
 .tab-content.active {
-    display: block;
+  display: block;
 }
 
 .section-header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
 }
 
 .toolbar {
-    margin-bottom: var(--space-md);
-    display: flex;
-    gap: var(--space-lg);
-    align-items: center;
+  margin-bottom: var(--space-md);
+  display: flex;
+  gap: var(--space-lg);
+  align-items: center;
 }
 
 .toolbar label {
-    margin-right: var(--space-sm);
+  margin-right: var(--space-sm);
 }
 
 .section-divider {
-    margin: var(--space-md) 0;
+  margin: var(--space-md) 0;
 }
 
 .form-divider {
-    margin: var(--space-md) 0;
+  margin: var(--space-md) 0;
 }
 
 .section-subtitle {
-    margin-bottom: var(--space-md);
+  margin-bottom: var(--space-md);
 }
-
-

@@ -1,3 +1,5 @@
+//! 通用工具（ILIKE 转义、请求元信息、操作日志、IP 归一化等）。
+
 use std::str::FromStr;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -8,6 +10,8 @@ use axum::http::request::Parts;
 use std::net::SocketAddr;
 
 use hex::encode;
+
+use crate::error::AppError;
 
 #[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
@@ -504,19 +508,18 @@ pub async fn send_mac_change_notification(
     .await
     {
         Ok(()) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
+        // SMTP 未配置属预期情形，降级为告警日志
+        Err(AppError::NotFound(msg)) => {
+            warn!(
+                "MAC地址变更邮件通知跳过: 工位={}, 原因: {}",
+                workstation_name, msg
+            );
+        }
         Err(e) => {
-            let msg = format!("{e}");
-            if msg.contains("SMTP配置未设置") {
-                warn!(
-                    "MAC地址变更邮件通知跳过: 工位={}, 原因: {}",
-                    workstation_name, msg
-                );
-            } else {
-                error!(
-                    "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
-                    workstation_name, msg
-                );
-            }
+            error!(
+                "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
+                workstation_name, e
+            );
         }
     }
 

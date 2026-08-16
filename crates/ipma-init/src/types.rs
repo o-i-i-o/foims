@@ -1,3 +1,5 @@
+//! 初始化模块请求/响应类型。
+
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -1,3 +1,5 @@
+//! 初始化操作验证码校验。
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;

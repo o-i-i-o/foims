@@ -1,3 +1,5 @@
+//! CSV 导入调度：按文件名将上传内容分派到对应实体导入器。
+
 use crate::types::{DataError, DataProvider, DataResult, ok_json};
 use axum::extract::{Multipart, Query};
 use axum::response::Response;

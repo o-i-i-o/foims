@@ -1,35 +1,66 @@
+//! 数据库结构校验。
+//!
+//! 提供「必需表存在性」与「必需列完整性」两组校验，用于初始化
+//! 向导与启动自检。清单必须与 `schema/tables/` 实际创建的结构保持
+//! 同步：新增表/列时需同步补充本模块（本项目无迁移框架，见
+//! AGENTS.md）。
+
 use std::collections::HashMap;
 
+/// 必需表清单（与 `schema/tables/mod.rs` 的建表范围一致）。
 #[must_use]
 pub fn get_required_tables() -> Vec<&'static str> {
     vec![
+        // 用户与系统
         "users",
-        "network_cidrs",
+        "encryption_keys",
+        "system_configs",
+        // 网络
         "network_regions",
-        "rooms",
+        "network_cidrs",
         "room_networks",
+        // 组织与模板
+        "org_templates",
+        "organizations",
+        "device_templates",
+        // 空间
+        "rooms",
         "cabinets",
-        "workstations",
         "positions",
-        "device_macs",
-        "device_lldps",
+        "workstations",
+        "element_layouts",
+        // 设备
+        "devices",
+        "nics",
         "device_ports",
         "device_interfaces",
+        "device_macs",
+        "device_lldps",
+        "net_outlets",
+        "patch_panels",
+        // 链路与 IP
         "cable_links",
         "ips",
+        // 拓扑
+        "topology_nodes",
+        "topology_connections",
+        // 日志/令牌/通知/任务/布局
         "operation_logs",
         "task_logs",
         "login_logs",
         "revoked_tokens",
         "token_usage",
         "notifications",
-        "system_configs",
         "scheduled_tasks",
         "workstation_layouts",
         "cabinet_layouts",
     ]
 }
 
+/// 必需列清单：`表名 → 必需列`。
+///
+/// 仅列出业务代码强依赖的列；表名/列名拼入 information_schema 查询，
+/// 值均来自本内部常量，无注入风险。
 #[must_use]
 pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     let mut columns: HashMap<&'static str, Vec<&'static str>> = HashMap::new();
@@ -137,6 +168,86 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
+        "org_templates",
+        vec![
+            "id",
+            "name",
+            "levels",
+            "icons",
+            "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "organizations",
+        vec![
+            "id",
+            "name",
+            "type_path",
+            "parent_id",
+            "template_id",
+            "level_index",
+            "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_templates",
+        vec![
+            "id",
+            "name",
+            "device_type",
+            "brand",
+            "model",
+            "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "devices",
+        vec![
+            "id",
+            "name",
+            "device_type",
+            "brand",
+            "model",
+            "serial_number",
+            "workstation_id",
+            "position_id",
+            "room_id",
+            "template_id",
+            "vendor",
+            "location",
+            "snmp_version",
+            "snmp_community",
+            "snmp_username",
+            "snmp_auth_protocol",
+            "snmp_auth_password",
+            "snmp_priv_protocol",
+            "snmp_priv_password",
+            "snmp_port",
+            "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "nics",
+        vec![
+            "id",
+            "device_id",
+            "name",
+            "card_type",
+            "description",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
         "net_outlets",
         vec!["id", "name", "room_id", "created_at", "updated_at"],
     );
@@ -165,12 +276,16 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         vec![
             "id",
             "device_id",
+            "nic_id",
             "name",
             "physical_type",
             "interface_role",
             "mac_address",
             "vlan_id",
             "description",
+            "switch_id",
+            "uplink_interface_id",
+            "sort_order",
             "created_at",
             "updated_at",
         ],
@@ -233,6 +348,33 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "status",
             "last_seen",
             "last_mac",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "topology_nodes",
+        vec![
+            "id",
+            "device_id",
+            "x",
+            "y",
+            "width",
+            "height",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "topology_connections",
+        vec![
+            "id",
+            "source_device_id",
+            "target_device_id",
+            "source_device_port_id",
+            "target_device_port_id",
+            "label",
+            "auto_discovered",
             "created_at",
             "updated_at",
         ],
@@ -362,17 +504,16 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     columns
 }
 
+/// 检查全部必需表是否已创建。
 pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
-    let required_tables = get_required_tables();
-
-    for table in &required_tables {
-        let Ok(exists) = sqlx::query_scalar::<_, bool>(
-            sqlx::AssertSqlSafe(format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"))
-        )
+    for table in get_required_tables() {
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
+        )))
         .fetch_one(pool)
         .await
         else {
-            return false
+            return false;
         };
 
         if !exists {
@@ -383,12 +524,13 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     true
 }
 
+/// 逐表逐列校验必需列完整性，首个缺失项以错误消息返回。
 pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
-    let required_columns = get_table_columns();
-
-    for (table, columns) in required_columns {
+    for (table, columns) in get_table_columns() {
         let table_exists: bool = match sqlx::query_scalar(
-            sqlx::AssertSqlSafe(format!("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"))
+            sqlx::AssertSqlSafe(format!(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
+            )),
         )
         .fetch_one(pool)
         .await
@@ -405,7 +547,7 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
             let column_exists: bool = match sqlx::query_scalar(
                 sqlx::AssertSqlSafe(format!(
                     "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{table}' AND column_name = '{column}')"
-                ))
+                )),
             )
             .fetch_one(pool)
             .await
@@ -423,6 +565,7 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
     Ok(())
 }
 
+/// 检查系统是否已有业务数据（以 users 表是否非空为准）。
 pub async fn check_has_data(pool: &sqlx::PgPool) -> bool {
     match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
         .fetch_one(pool)

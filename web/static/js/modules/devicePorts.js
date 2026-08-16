@@ -1,9 +1,4 @@
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
-} from "../utils/apiClient.js";
+import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -11,7 +6,7 @@ import {
   getElementValue,
   handleDelete,
   handleError,
-  appendPaginationToTable,
+  appendPaginationToTable
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -23,7 +18,7 @@ export const DEVICE_PORT_PAGE_SIZE = 50;
 
 const devicePortState = {
   currentDeviceId: null,
-  currentDeviceName: null,
+  currentDeviceName: null
 };
 
 export function setCurrentDeviceId(id) {
@@ -53,27 +48,43 @@ async function loadDevicePortsData(page = 1, searchTerm = "") {
     renderTable("#device-ports-table", {
       data: ports,
       columns: [
-        { field: 'device_name', render: (v, row) => v ? `${v} (${row.device_ip || ''})` : currentDeviceName },
-        { field: 'port_number', render: (v) => v },
-        { field: 'port_name', render: (v) => v || '-' },
-        { field: 'port_type', render: (v) => v },
-        { field: 'vlan_id', render: (v) => v || '-' },
-        { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
-        { field: 'speed', render: (v) => v || '-' },
-        { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
-        ` }
+        {
+          field: "device_name",
+          render: (v, row) => (v ? `${v} (${row.device_ip || ""})` : currentDeviceName)
+        },
+        { field: "port_number", render: (v) => v },
+        { field: "port_name", render: (v) => v || "-" },
+        { field: "port_type", render: (v) => v },
+        { field: "vlan_id", render: (v) => v || "-" },
+        {
+          field: "status",
+          render: (v) =>
+            `<span class="status-badge ${v === "up" ? "status-active" : "status-inactive"}">${v}</span>`
+        },
+        { field: "speed", render: (v) => v || "-" },
+        {
+          field: "id",
+          render: (v) => `
+          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t("common.edit")}</button>
+          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t("common.delete")}</button>
+        `
+        }
       ],
-      emptyMessage: t('device.no_ports')
+      emptyMessage: t("device.no_ports")
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#device-ports-table", data, (p) => loadDevicePortsData(p, searchTerm));
+      appendPaginationToTable("#device-ports-table", data, (p) =>
+        loadDevicePortsData(p, searchTerm)
+      );
     }
   } catch (error) {
-    handleError(error, t('device.load_ports_failed'), () => {
-      renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
+    handleError(error, t("device.load_ports_failed"), () => {
+      renderTable("#device-ports-table", {
+        data: [],
+        columns: [],
+        emptyMessage: t("common.load_failed_retry")
+      });
     });
   }
 }
@@ -82,31 +93,37 @@ async function loadDevicePortsByDeviceId(deviceId) {
   try {
     const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
 
-    const searchContainer = document.querySelector(
-      "#device-ports-list-tab .search-container",
-    );
+    const searchContainer = document.querySelector("#device-ports-list-tab .search-container");
 
     if (!searchContainer) {
       renderTable("#device-ports-table", {
         data: result.success ? result.data : [],
         columns: [
-          { field: 'port_number', render: (v) => v },
-          { field: 'port_name', render: (v) => v || '-' },
-          { field: 'port_type', render: (v) => v },
-          { field: 'vlan_id', render: (v) => v || '-' },
-          { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
-          { field: 'speed', render: (v) => v || '-' },
-          { field: 'id', render: (v) => `
-            <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
-            <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
-          ` }
+          { field: "port_number", render: (v) => v },
+          { field: "port_name", render: (v) => v || "-" },
+          { field: "port_type", render: (v) => v },
+          { field: "vlan_id", render: (v) => v || "-" },
+          {
+            field: "status",
+            render: (v) =>
+              `<span class="status-badge ${v === "up" ? "status-active" : "status-inactive"}">${v}</span>`
+          },
+          { field: "speed", render: (v) => v || "-" },
+          {
+            field: "id",
+            render: (v) => `
+            <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t("common.edit")}</button>
+            <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t("common.delete")}</button>
+          `
+          }
         ],
-        emptyMessage: t('device.no_ports')
+        emptyMessage: t("device.no_ports")
       });
       return;
     }
 
-    const actionButtonsContainer = searchContainer.parentElement.querySelector(".action-buttons") ||
+    const actionButtonsContainer =
+      searchContainer.parentElement.querySelector(".action-buttons") ||
       (() => {
         const container = document.createElement("div");
         container.className = "action-buttons";
@@ -119,7 +136,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
       addBtn = document.createElement("button");
       addBtn.id = "add-device-port-btn";
       addBtn.className = "btn btn-primary btn-sm";
-      addBtn.textContent = t('device.add_port');
+      addBtn.textContent = t("device.add_port");
       addBtn.addEventListener("click", () => openDevicePortModal(null, getCurrentDeviceId()));
       actionButtonsContainer.appendChild(addBtn);
     }
@@ -129,7 +146,7 @@ async function loadDevicePortsByDeviceId(deviceId) {
       snmpPortsBtn = document.createElement("button");
       snmpPortsBtn.id = "sync-snmp-ports-btn";
       snmpPortsBtn.className = "btn btn-secondary btn-sm";
-      snmpPortsBtn.textContent = t('device.sync_ports_from_snmp');
+      snmpPortsBtn.textContent = t("device.sync_ports_from_snmp");
       snmpPortsBtn.addEventListener("click", () => syncPortsFromSnmp(getCurrentDeviceId()));
       actionButtonsContainer.appendChild(snmpPortsBtn);
     }
@@ -137,21 +154,32 @@ async function loadDevicePortsByDeviceId(deviceId) {
     renderTable("#device-ports-table", {
       data: result.success ? result.data : [],
       columns: [
-        { field: 'port_number', render: (v) => v },
-        { field: 'port_name', render: (v) => v || '-' },
-        { field: 'port_type', render: (v) => v },
-        { field: 'vlan_id', render: (v) => v || '-' },
-        { field: 'status', render: (v) => `<span class="status-badge ${v === 'up' ? 'status-active' : 'status-inactive'}">${v}</span>` },
-        { field: 'speed', render: (v) => v || '-' },
-        { field: 'id', render: (v) => `
-          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t('common.edit')}</button>
-          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t('common.delete')}</button>
-        ` }
+        { field: "port_number", render: (v) => v },
+        { field: "port_name", render: (v) => v || "-" },
+        { field: "port_type", render: (v) => v },
+        { field: "vlan_id", render: (v) => v || "-" },
+        {
+          field: "status",
+          render: (v) =>
+            `<span class="status-badge ${v === "up" ? "status-active" : "status-inactive"}">${v}</span>`
+        },
+        { field: "speed", render: (v) => v || "-" },
+        {
+          field: "id",
+          render: (v) => `
+          <button class="btn btn-sm btn-edit device-port-edit" data-id="${v}">${t("common.edit")}</button>
+          <button class="btn btn-sm btn-delete device-port-delete" data-id="${v}">${t("common.delete")}</button>
+        `
+        }
       ],
-      emptyMessage: t('device.no_ports')
+      emptyMessage: t("device.no_ports")
     });
   } catch (error) {
-    renderTable("#device-ports-table", { data: [], columns: [], emptyMessage: t('common.load_failed_retry') });
+    renderTable("#device-ports-table", {
+      data: [],
+      columns: [],
+      emptyMessage: t("common.load_failed_retry")
+    });
   }
 }
 
@@ -162,19 +190,21 @@ async function manageDevicePorts(deviceId, deviceName) {
   try {
     const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
     if (!deviceResult.success) {
-      showToast(t('device.load_failed'), "error");
+      showToast(t("device.load_failed"), "error");
       return;
     }
 
     const deviceData = deviceResult.data;
     const hasSnmpConfig = deviceData.snmp_community || deviceData.snmp_username;
     if (!hasSnmpConfig) {
-      showToast(t('device.no_snmp_config'), "warning");
+      showToast(t("device.no_snmp_config"), "warning");
     }
 
-    const portsResult = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
+    const portsResult = await apiGet(
+      `/api/resources/devices/${deviceId}/device-ports?page_size=1000`
+    );
     if (!portsResult.success) {
-      showToast(t('device.load_ports_failed'), "error");
+      showToast(t("device.load_ports_failed"), "error");
       return;
     }
 
@@ -191,7 +221,7 @@ async function manageDevicePorts(deviceId, deviceName) {
     await showPortGroupsModal(deviceName, portGroups, deviceId);
   } catch (error) {
     console.error("管理设备端口失败:", error);
-    showToast(t('common.operation_failed_retry'), "error");
+    showToast(t("common.operation_failed_retry"), "error");
   }
 }
 
@@ -201,7 +231,11 @@ function groupPorts(ports) {
 
   const portTypePatterns = [
     { typeName: "Bridge-Aggregation", regex: /(Bridge-Aggregation)/, subGroup: false },
-    { typeName: "Hundred-GigabitEthernet", regex: /(Hundred-?GigabitEthernet)(\d+)/i, subGroup: true },
+    {
+      typeName: "Hundred-GigabitEthernet",
+      regex: /(Hundred-?GigabitEthernet)(\d+)/i,
+      subGroup: true
+    },
     { typeName: "Forty-GigabitEthernet", regex: /(Forty-?GigabitEthernet)(\d+)/i, subGroup: true },
     { typeName: "Ten-GigabitEthernet", regex: /(Ten-GigabitEthernet)(\d+)/, subGroup: true },
     { typeName: "TenGigabitEthernet", regex: /(TenGigabitEthernet)(\d+)/, subGroup: true },
@@ -213,9 +247,9 @@ function groupPorts(ports) {
     { typeName: "Ethernet", regex: /(Ethernet)(\d+)/, subGroup: true }
   ];
 
-  ports.forEach(port => {
+  ports.forEach((port) => {
     const portNumber = port.port_number;
-    let groupKey = t('device.port_group_other');
+    let groupKey = t("device.port_group_other");
 
     for (const { regex, subGroup } of portTypePatterns) {
       const match = portNumber.match(regex);
@@ -247,7 +281,7 @@ function groupPorts(ports) {
   });
 
   if (smallGroupPorts.length > 0) {
-    const otherKey = t('device.port_group_other');
+    const otherKey = t("device.port_group_other");
     if (finalGroups[otherKey]) {
       finalGroups[otherKey].push(...smallGroupPorts);
     } else {
@@ -271,7 +305,7 @@ async function showPortGroupsModal(deviceName, portGroups, deviceId) {
     return;
   }
 
-  title.textContent = `${deviceName} - ${t('device.port_groups')}`;
+  title.textContent = `${deviceName} - ${t("device.port_groups")}`;
   container.innerHTML = "";
 
   Object.entries(portGroups).forEach(([groupName, ports]) => {
@@ -291,7 +325,7 @@ async function showPortGroupsModal(deviceName, portGroups, deviceId) {
       return aNum - bNum;
     });
 
-    ports.forEach(port => {
+    ports.forEach((port) => {
       const portItem = document.createElement("div");
       portItem.className = `viz-port-item status-${port.status}`;
       portItem.dataset.portId = port.id;
@@ -377,7 +411,9 @@ async function openPortDetailModal(portData) {
   }
 
   const isNewPort = !portData.portId;
-  title.textContent = isNewPort ? t('device.add_port') : `${t('device.port_detail')} - ${portData.portNumber}`;
+  title.textContent = isNewPort
+    ? t("device.add_port")
+    : `${t("device.port_detail")} - ${portData.portNumber}`;
 
   elementCache.setValue("device-port-id-expanded", portData.portId || "");
   elementCache.setValue("device-port-device-id-expanded", portData.deviceId || "");
@@ -396,20 +432,20 @@ async function openPortDetailModal(portData) {
   };
 
   deleteBtn.onclick = async () => {
-    const confirmed = await showConfirm(t('device.confirm_delete_port'));
+    const confirmed = await showConfirm(t("device.confirm_delete_port"));
     if (confirmed) {
       const portId = elementCache.getValue("device-port-id-expanded");
       if (portId) {
         const result = await apiDelete(`/api/resources/devices/device-ports/${portId}`);
         if (result.success) {
-          showToast(t('device.port_delete_success'), "success");
+          showToast(t("device.port_delete_success"), "success");
           closeModal("device-port-detail-modal");
           const currentDeviceId = getCurrentDeviceId();
           if (currentDeviceId) {
             manageDevicePorts(currentDeviceId, getCurrentDeviceName() || "");
           }
         } else {
-          showToast(t('device.port_delete_failed') + ': ' + result.message, "error");
+          showToast(t("device.port_delete_failed") + ": " + result.message, "error");
         }
       }
     }
@@ -456,7 +492,7 @@ async function submitDevicePortForm() {
   const description = getElementValue("device-port-description-expanded");
 
   if (!portNumber) {
-    showToast(t('device.port_number_required'), "warning");
+    showToast(t("device.port_number_required"), "warning");
     return;
   }
 
@@ -467,7 +503,7 @@ async function submitDevicePortForm() {
     vlan_id: vlanId ? parseInt(vlanId) : null,
     status: status || "up",
     speed: speed || null,
-    description: description || null,
+    description: description || null
   };
 
   try {
@@ -480,14 +516,16 @@ async function submitDevicePortForm() {
 
     if (result.success) {
       closeModal("device-port-detail-modal");
-      showToast(id ? t('device.port_update_success') : t('device.port_add_success'), "success");
+      showToast(id ? t("device.port_update_success") : t("device.port_add_success"), "success");
       const currentDeviceId = getCurrentDeviceId();
       if (currentDeviceId) {
         try {
           await loadDevicePortsByDeviceId(currentDeviceId);
           const currentDeviceName = getCurrentDeviceName();
           if (currentDeviceName) {
-            const portsResult = await apiGet(`/api/resources/devices/${currentDeviceId}/device-ports?page_size=1000`);
+            const portsResult = await apiGet(
+              `/api/resources/devices/${currentDeviceId}/device-ports?page_size=1000`
+            );
             if (portsResult.success && portsResult.data) {
               let ports = [];
               if (Array.isArray(portsResult.data)) {
@@ -501,16 +539,16 @@ async function submitDevicePortForm() {
           }
         } catch (refreshError) {
           console.error("刷新端口数据失败:", refreshError);
-          showToast(t('device.port_save_refresh_failed'), "warning");
+          showToast(t("device.port_save_refresh_failed"), "warning");
         }
       }
     } else {
-      const errorMsg = result.message ?? t('common.operation_failed');
-      showToast(`${t('common.operation_failed')}: ${errorMsg}`, "error");
+      const errorMsg = result.message ?? t("common.operation_failed");
+      showToast(`${t("common.operation_failed")}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
-    handleError(error, t('device.port_submit_failed'));
+    handleError(error, t("device.port_submit_failed"));
   }
 }
 
@@ -523,29 +561,34 @@ async function deleteDevicePort(id) {
       loadDevicePortsData(1, "");
     }
   };
-  await handleDelete(id, "/api/resources/devices/device-ports", t('device.port_delete_success'), successCallback);
+  await handleDelete(
+    id,
+    "/api/resources/devices/device-ports",
+    t("device.port_delete_success"),
+    successCallback
+  );
 }
 
 async function syncPortsFromSnmp(deviceId) {
   const getPortsBtn = elementCache.get("get-snmp-ports-btn");
-  const originalText = getPortsBtn?.textContent || t('device.sync_ports_from_snmp');
+  const originalText = getPortsBtn?.textContent || t("device.sync_ports_from_snmp");
   if (getPortsBtn) {
     getPortsBtn.disabled = true;
-    getPortsBtn.textContent = t('common.syncing');
+    getPortsBtn.textContent = t("common.syncing");
   }
 
   try {
     const result = await apiPost(`/api/resources/devices/${deviceId}/device-ports/sync-snmp`, {});
 
     if (result.success) {
-      showToast(result.message || t('device.port_sync_success'), "success");
+      showToast(result.message || t("device.port_sync_success"), "success");
       return result.data || [];
     } else {
-      showToast(t('device.port_sync_failed') + ': ' + result.message, "error");
+      showToast(t("device.port_sync_failed") + ": " + result.message, "error");
       return [];
     }
   } catch (error) {
-    showToast(t('device.port_sync_failed'), "error");
+    showToast(t("device.port_sync_failed"), "error");
     return [];
   } finally {
     if (getPortsBtn) {
@@ -556,7 +599,7 @@ async function syncPortsFromSnmp(deviceId) {
 }
 
 function extractPortNumber(portNumber) {
-  if (typeof portNumber !== 'string' || !portNumber) return 0;
+  if (typeof portNumber !== "string" || !portNumber) return 0;
   const match = portNumber.match(/\d+/g);
   if (match) {
     return parseInt(match[match.length - 1]) || 0;
@@ -565,7 +608,7 @@ function extractPortNumber(portNumber) {
 }
 
 function extractPortLastNumber(portNumber) {
-  if (typeof portNumber !== 'string' || !portNumber) return portNumber || '';
+  if (typeof portNumber !== "string" || !portNumber) return portNumber || "";
   const match = portNumber.match(/\d+/g);
   if (match) {
     return match[match.length - 1];

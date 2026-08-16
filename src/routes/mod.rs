@@ -1,3 +1,9 @@
+//! 路由注册与数据管理转发 handler。
+//!
+//! 权限守卫约定：仅鉴权无入参使用的 handler 使用 `_admin: AdminUser`
+//! 形式的提取器参数（下划线前缀表示“仅用其副作用”），为规范允许的
+//! 唯一下划线例外，见 docs/code-style.md。
+
 pub mod static_files;
 
 use std::collections::HashMap;

@@ -7,11 +7,11 @@
     </header>
     <div class="modal-body">
       <form id="device-form">
-        <input type="hidden" id="device-id" />
+        <input type="hidden" id="device-id">
         <div class="form-row">
           <div class="form-group">
             <label for="device-name"><span data-i18n="device.name">Device Name</span><span class="required">*</span></label>
-            <input type="text" id="device-name" name="name" autocomplete="off" required />
+            <input type="text" id="device-name" name="name" autocomplete="off" required>
           </div>
           <div class="form-group">
             <label for="device-type" data-i18n="device.device_type">Device Type</label>
@@ -35,40 +35,40 @@
               <option value="" data-i18n="device.select_template">Select Template</option>
             </select>
           </div>
-          <div class="form-group" style="display: flex; align-items: center; gap: 8px; padding-top: 0.85rem;">
-            <label for="device-save-as-template" data-i18n="device.save_as_template" style="margin: 0; min-width: auto; padding-top: 0;">Save as Template</label>
-            <input type="checkbox" id="device-save-as-template" name="save_as_template" style="width: 16px; height: 16px; min-width: 16px; margin: 0; flex-shrink: 0;" />
-            <button type="button" id="device-template-manage-btn" class="btn btn-secondary btn-sm" data-i18n="device_template.manage" style="margin-left: 4px;">Manage Templates</button>
+          <div class="form-group form-group-inline">
+            <label for="device-save-as-template" data-i18n="device.save_as_template">Save as Template</label>
+            <input type="checkbox" id="device-save-as-template" name="save_as_template" class="form-checkbox">
+            <button type="button" id="device-template-manage-btn" class="btn btn-secondary btn-sm btn-gap-left" data-i18n="device_template.manage">Manage Templates</button>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="device-serial-number" data-i18n="device.serial_number">Serial Number</label>
-            <input type="text" id="device-serial-number" name="serial_number" autocomplete="off" />
+            <input type="text" id="device-serial-number" name="serial_number" autocomplete="off">
           </div>
           <div class="form-group" id="device-template-name-group" style="display: none;">
             <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
-            <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder" />
+            <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="device-brand" data-i18n="device.brand">Brand</label>
-            <input type="text" id="device-brand" name="brand" autocomplete="off" />
+            <input type="text" id="device-brand" name="brand" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="device-model" data-i18n="device.model">Model</label>
-            <input type="text" id="device-model" name="model" autocomplete="off" />
+            <input type="text" id="device-model" name="model" autocomplete="off">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="device-vendor" data-i18n="device.vendor">Vendor</label>
-            <input type="text" id="device-vendor" name="vendor" autocomplete="off" />
+            <input type="text" id="device-vendor" name="vendor" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="device-location" data-i18n="device.location">Location</label>
-            <input type="text" id="device-location" name="location" autocomplete="off" />
+            <input type="text" id="device-location" name="location" autocomplete="off">
           </div>
         </div>
         <div class="form-row">
@@ -101,38 +101,38 @@
           <label for="device-description" data-i18n="common.description">Description</label>
           <textarea id="device-description" name="description" rows="3"></textarea>
         </div>
-        <hr class="section-divider" />
+        <hr class="section-divider">
         <h4 class="section-subtitle" data-i18n="device.network_card_config">Network Card Management</h4>
         <div id="device-network-cards-container"></div>
         <div class="network-card-actions">
           <button type="button" id="add-network-card-btn" class="btn btn-secondary btn-sm" data-i18n="device.add_network_card">Add Network Card</button>
         </div>
-        <hr class="section-divider" />
+        <hr class="section-divider">
         <h4 class="section-subtitle" data-i18n="device.snmp_config">SNMP Configuration</h4>
         <div class="form-row">
           <div class="form-group">
             <label for="device-snmp-version" data-i18n="device.snmp_version">SNMP Version</label>
             <select id="device-snmp-version" name="snmp_version">
-	              <option value="v2c" data-i18n="device.snmp_v2c">SNMPv1/v2c</option>
-	              <option value="v3" data-i18n="device.snmp_v3">SNMPv3</option>
-	            </select>
+              <option value="v2c" data-i18n="device.snmp_v2c">SNMPv1/v2c</option>
+              <option value="v3" data-i18n="device.snmp_v3">SNMPv3</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="device-snmp-port" data-i18n="device.snmp_port">SNMP Port</label>
-            <input type="number" id="device-snmp-port" name="snmp_port" value="161" autocomplete="off" />
+            <input type="number" id="device-snmp-port" name="snmp_port" value="161" autocomplete="off">
           </div>
         </div>
         <div class="form-row" id="snmp-v2c-config">
           <div class="form-group flex-1">
             <label for="device-snmp-community" data-i18n="device.snmp_community">Community String</label>
-            <input type="text" id="device-snmp-community" name="snmp_community" placeholder="public" autocomplete="off" />
+            <input type="text" id="device-snmp-community" name="snmp_community" placeholder="public" autocomplete="off">
           </div>
         </div>
         <div id="snmp-v3-config" class="hidden">
           <div class="form-row">
             <div class="form-group">
               <label for="device-snmp-username" data-i18n="device.snmp_username">Username</label>
-              <input type="text" id="device-snmp-username" name="snmp_username" autocomplete="off" />
+              <input type="text" id="device-snmp-username" name="snmp_username" autocomplete="off">
             </div>
             <div class="form-group">
               <label for="device-snmp-auth-protocol" data-i18n="device.snmp_auth_protocol">Auth Protocol</label>
@@ -150,7 +150,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="device-snmp-auth-password" data-i18n="device.snmp_auth_password">Auth Password</label>
-              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="off" />
+              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="off">
             </div>
             <div class="form-group">
               <label for="device-snmp-priv-protocol" data-i18n="device.snmp_priv_protocol">Privacy Protocol</label>
@@ -167,9 +167,10 @@
           <div class="form-row">
             <div class="form-group">
               <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
-              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="off" />
+              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="off">
             </div>
-            <div class="form-group"></div>
+            <!-- 空占位：保持 form-row 两列布局，使密码框占半宽 -->
+            <div class="form-group" aria-hidden="true"></div>
           </div>
         </div>
       </form>

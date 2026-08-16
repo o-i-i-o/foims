@@ -17,7 +17,7 @@ export class SessionManager {
   static getUser() {
     const storage = this.#getStorage();
     const userJson = storage.getItem(this.#userKey);
-    
+
     if (userJson) {
       try {
         return JSON.parse(userJson);
@@ -40,7 +40,7 @@ export class SessionManager {
 
   static setUser(user, rememberMe = false) {
     this.clear();
-    
+
     localStorage.setItem(this.#rememberMeKey, rememberMe ? "true" : "false");
     const storage = this.#getStorage();
     storage.setItem(this.#userKey, JSON.stringify(user));
@@ -68,4 +68,3 @@ export const getUser = () => SessionManager.getUser();
 export const setUser = (user, rememberMe) => SessionManager.setUser(user, rememberMe);
 export const clearSession = () => SessionManager.clear();
 export const hasSession = () => SessionManager.hasSession();
-

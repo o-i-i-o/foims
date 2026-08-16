@@ -1,3 +1,5 @@
+//! 数据库级操作接口（创建/导入/备份/清空）。
+
 use std::sync::Arc;
 
 use axum::extract::{Json, Multipart, State};

@@ -36,12 +36,12 @@ export class DynamicRowManager {
 
   /** 「添加」按钮文案，子类可覆盖以返回动态值（如随房间类型变化） */
   addLabel() {
-    return this.config.addLabel || '';
+    return this.config.addLabel || "";
   }
 
   /** 空状态文字提示，子类可覆盖（emptyMode='hint' 时使用） */
   emptyHintText() {
-    return this.config.emptyHintText || '';
+    return this.config.emptyHintText || "";
   }
 
   /** 绑定容器外的「添加」按钮（如机柜底部的添加按钮） */
@@ -50,10 +50,10 @@ export class DynamicRowManager {
     const addBtn = document.getElementById(this.config.externalAddButtonId);
     if (!addBtn) return;
     if (this.addHandler) {
-      addBtn.removeEventListener('click', this.addHandler);
+      addBtn.removeEventListener("click", this.addHandler);
     }
     this.addHandler = () => this.addItem();
-    addBtn.addEventListener('click', this.addHandler);
+    addBtn.addEventListener("click", this.addHandler);
   }
 
   /** 根据 item 数量显示/隐藏空状态占位 */
@@ -63,18 +63,18 @@ export class DynamicRowManager {
     const existing = this.container.querySelector(`.${emptyClassName}`);
     const items = this.container.querySelectorAll(itemSelector);
     if (items.length === 0 && !existing) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = emptyMode === 'hint' ? `${emptyClassName} text-muted` : emptyClassName;
-      if (emptyMode === 'hint') {
+      const emptyDiv = document.createElement("div");
+      emptyDiv.className = emptyMode === "hint" ? `${emptyClassName} text-muted` : emptyClassName;
+      if (emptyMode === "hint") {
         emptyDiv.textContent = this.emptyHintText();
       } else {
-        const btnClass = addBtnSelector.replace('.', '');
+        const btnClass = addBtnSelector.replace(".", "");
         emptyDiv.innerHTML = `<button type="button" class="btn btn-secondary btn-sm ${btnClass}">${this.addLabel()}</button>`;
         const addBtn = emptyDiv.querySelector(addBtnSelector);
         if (addBtn) {
           const handler = () => this.addItem();
           this.handlers.set(addBtn, handler);
-          addBtn.addEventListener('click', handler);
+          addBtn.addEventListener("click", handler);
         }
       }
       this.container.appendChild(emptyDiv);
@@ -91,7 +91,7 @@ export class DynamicRowManager {
     items.forEach((item, index) => {
       const addBtn = item.querySelector(addBtnSelector);
       if (addBtn) {
-        addBtn.style.display = index === items.length - 1 ? '' : 'none';
+        addBtn.style.display = index === items.length - 1 ? "" : "none";
         addBtn.textContent = this.addLabel();
       }
     });
@@ -115,14 +115,14 @@ export class DynamicRowManager {
     if (removeBtn) {
       const handler = () => this.removeItem(item);
       this.handlers.set(removeBtn, handler);
-      removeBtn.addEventListener('click', handler);
+      removeBtn.addEventListener("click", handler);
     }
     if (this.config.showInRowAddButton) {
       const addBtn = item.querySelector(this.config.addBtnSelector);
       if (addBtn) {
         const handler = () => this.addItem();
         this.handlers.set(addBtn, handler);
-        addBtn.addEventListener('click', handler);
+        addBtn.addEventListener("click", handler);
       }
     }
   }
@@ -137,7 +137,7 @@ export class DynamicRowManager {
 
   /** 子类必须实现：构造单行 DOM */
   createRow(_data) {
-    throw new Error('DynamicRowManager.createRow must be implemented by subclass');
+    throw new Error("DynamicRowManager.createRow must be implemented by subclass");
   }
 
   /** 子类实现：收集全部行数据，默认返回空数组 */

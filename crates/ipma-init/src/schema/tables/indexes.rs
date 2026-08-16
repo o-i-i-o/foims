@@ -1,3 +1,5 @@
+//! 跨表索引创建。
+
 use tracing::warn;
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {

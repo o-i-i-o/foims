@@ -148,7 +148,7 @@ export class TopologyCore {
       if (rect) {
         this.elementStartPos = {
           x: parseFloat(rect.getAttribute("x")),
-          y: parseFloat(rect.getAttribute("y")),
+          y: parseFloat(rect.getAttribute("y"))
         };
       }
       this.mouseStartPos = this._getSvgCoordinates(e);
@@ -166,7 +166,10 @@ export class TopologyCore {
       const scale = vb.width / this.container.clientWidth;
       const dx = (e.clientX - this.panStart.x) * scale;
       const dy = (e.clientY - this.panStart.y) * scale;
-      this.svg.setAttribute("viewBox", `${this.viewBoxStart.x - dx} ${this.viewBoxStart.y - dy} ${vb.width} ${vb.height}`);
+      this.svg.setAttribute(
+        "viewBox",
+        `${this.viewBoxStart.x - dx} ${this.viewBoxStart.y - dy} ${vb.width} ${vb.height}`
+      );
       return;
     }
 
@@ -189,8 +192,10 @@ export class TopologyCore {
     if (this.isConnectionMode && this.connectionSource) {
       const svgPos = this._getSvgCoordinates(e);
       this._drawTempConnection(
-        this.connectionSource.x, this.connectionSource.y,
-        svgPos.x, svgPos.y
+        this.connectionSource.x,
+        this.connectionSource.y,
+        svgPos.x,
+        svgPos.y
       );
     }
   }
@@ -244,7 +249,7 @@ export class TopologyCore {
     const svgPos = this._getSvgCoordinates(e);
     const anchorPos = {
       x: parseFloat(anchor.getAttribute("cx")),
-      y: parseFloat(anchor.getAttribute("cy")),
+      y: parseFloat(anchor.getAttribute("cy"))
     };
 
     if (!this.connectionSource) {
@@ -273,7 +278,9 @@ export class TopologyCore {
   _cancelConnection() {
     this.connectionSource = null;
     this.tempConnectionGroup.innerHTML = "";
-    this.elementsGroup.querySelectorAll(".connection-source").forEach((a) => a.classList.remove("connection-source"));
+    this.elementsGroup
+      .querySelectorAll(".connection-source")
+      .forEach((a) => a.classList.remove("connection-source"));
   }
 
   _drawTempConnection(x1, y1, x2, y2) {
@@ -283,7 +290,10 @@ export class TopologyCore {
     const dy = y2 - y1;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const offset = Math.min(dist * 0.3, 80);
-    line.setAttribute("d", `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`);
+    line.setAttribute(
+      "d",
+      `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`
+    );
     line.setAttribute("class", "temp-connection");
     this.tempConnectionGroup.appendChild(line);
   }
@@ -332,7 +342,9 @@ export class TopologyCore {
   }
 
   _clearSelection() {
-    this.elementsGroup.querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
+    this.elementsGroup
+      .querySelectorAll(".selected")
+      .forEach((el) => el.classList.remove("selected"));
     this.selectedElement = null;
   }
 
@@ -371,7 +383,7 @@ export class TopologyCore {
       x: parseFloat(rect.getAttribute("x")),
       y: parseFloat(rect.getAttribute("y")),
       width: parseFloat(rect.getAttribute("width")),
-      height: parseFloat(rect.getAttribute("height")),
+      height: parseFloat(rect.getAttribute("height"))
     };
   }
 
@@ -379,11 +391,16 @@ export class TopologyCore {
     const pos = this.getNodePosition(deviceId);
     if (!pos) return null;
     switch (direction) {
-      case "top": return { x: pos.x + pos.width / 2, y: pos.y };
-      case "right": return { x: pos.x + pos.width, y: pos.y + pos.height / 2 };
-      case "bottom": return { x: pos.x + pos.width / 2, y: pos.y + pos.height };
-      case "left": return { x: pos.x, y: pos.y + pos.height / 2 };
-      default: return { x: pos.x + pos.width / 2, y: pos.y + pos.height / 2 };
+      case "top":
+        return { x: pos.x + pos.width / 2, y: pos.y };
+      case "right":
+        return { x: pos.x + pos.width, y: pos.y + pos.height / 2 };
+      case "bottom":
+        return { x: pos.x + pos.width / 2, y: pos.y + pos.height };
+      case "left":
+        return { x: pos.x, y: pos.y + pos.height / 2 };
+      default:
+        return { x: pos.x + pos.width / 2, y: pos.y + pos.height / 2 };
     }
   }
 

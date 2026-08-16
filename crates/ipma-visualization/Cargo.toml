@@ -7,17 +7,23 @@ description = "IPMA Visualization Module - Layout management and visualization"
 license = "MIT"
 
 [dependencies]
+# Workspace crates
+ipma-common = { path = "../ipma-common" }
+
 # Axum
 axum = { workspace = true }
 
 # SQLx PostgreSQL
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
+sqlx = { workspace = true }
 
 # Serialization
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Utilities
-uuid = { version = "1.24.0", features = ["v4", "serde"] }
-tracing = "0.1.44"
-thiserror = "2.0.20"
+uuid = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

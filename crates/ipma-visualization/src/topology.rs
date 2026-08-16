@@ -1,3 +1,5 @@
+//! 拓扑节点与连线管理。
+
 use axum::extract::Path;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};

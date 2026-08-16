@@ -1,3 +1,5 @@
+//! 登录日志查询。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -7,14 +9,13 @@ use axum::response::Response;
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::LoginLog;
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 
 pub async fn get_login_logs(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -72,13 +73,7 @@ pub async fn get_login_logs(
     };
 
     Ok(crate::error::ok_json(
-        serde_json::json!({
-            "items": logs,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(logs, total, &pagination),
         "登录日志获取成功",
     ))
 }

@@ -12,11 +12,19 @@ import { nextFrame, safeAsync, setActiveSubtab, getActiveSubtab } from "../utils
 
 const TAB_CONFIG = {
   rooms: { module: "room", initFn: "initRoomSortEvents", loadFn: "loadRoomsData" },
-  "network-regions": { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworkTypesData" },
+  "network-regions": {
+    module: "networks",
+    initFn: "initNetworksFilters",
+    loadFn: "loadNetworkTypesData"
+  },
   networks: { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworksData" },
   cabinets: { module: "cabinet", initFn: "initCabinetSortEvents", loadFn: "loadCabinetsData" },
-  "cable-links": { module: "cableLink", initFn: "initCableLinkSortEvents", loadFn: "loadCableLinksData" },
-  devices: { module: "device", initFn: "initDeviceSortEvents", loadFn: "loadDevicesData" },
+  "cable-links": {
+    module: "cableLink",
+    initFn: "initCableLinkSortEvents",
+    loadFn: "loadCableLinksData"
+  },
+  devices: { module: "device", initFn: "initDeviceSortEvents", loadFn: "loadDevicesData" }
 };
 
 const initializedModules = new Set();

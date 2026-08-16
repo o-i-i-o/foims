@@ -1,3 +1,5 @@
+//! 初始化功能配置（备份目录与启用开关）。
+
 pub fn get_backup_dir() -> String {
     if let Some(home) = std::env::var_os("HOME") {
         format!("{}/ipma_backups", home.to_string_lossy())

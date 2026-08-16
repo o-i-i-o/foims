@@ -1,13 +1,14 @@
+//! 信息点（net_outlets）资源管理。
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -18,7 +19,6 @@ pub async fn get_net_outlets(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -102,13 +102,7 @@ pub async fn get_net_outlets(
     };
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": net_outlets,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(net_outlets, total, &pagination),
         "信息点列表获取成功",
     ))
 }

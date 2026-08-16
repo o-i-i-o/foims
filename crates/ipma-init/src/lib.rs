@@ -1,6 +1,8 @@
-// IPMA Init Module - Database initialization and management
-// Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
-// SPDX-License-Identifier: MIT
+//! IPMA 数据库初始化与管理模块。
+//!
+//! 负责数据库结构创建、必需表/列校验、备份恢复与初始化向导 API。
+//! 本项目不使用迁移框架：结构变更时直接执行 SQL 修改数据库，
+//! 并同步完善本模块的结构创建代码（见 AGENTS.md）。
 
 pub mod check;
 pub mod config;
@@ -42,20 +44,5 @@ pub use handlers::{
     import_database_api, import_database_from_file, init_db, init_system, restart_program,
 };
 
-/// Simplified API response for the init crate (no i18n dependency).
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct ApiResponse<T> {
-    pub success: bool,
-    pub message: String,
-    pub data: Option<T>,
-}
-
-impl<T> ApiResponse<T> {
-    pub fn success(data: T, message: &str) -> Self {
-        Self {
-            success: true,
-            message: message.to_string(),
-            data: Some(data),
-        }
-    }
-}
+/// 统一 API 响应结构（由 ipma-common 提供，保持原有路径兼容）。
+pub use ipma_common::ApiResponse;

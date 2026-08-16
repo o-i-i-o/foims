@@ -1,3 +1,5 @@
+//! 程序入口：配置加载、服务启动与优雅退出。
+
 use std::fs;
 use std::panic;
 use std::path::Path;

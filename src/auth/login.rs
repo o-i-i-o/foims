@@ -1,3 +1,5 @@
+//! 登录认证：密码/2FA/邮箱验证码登录、令牌签发刷新与认证中间件。
+
 use std::sync::Arc;
 
 use axum::Json;
@@ -40,6 +42,18 @@ fn totp_replay_store() -> &'static TotpReplayStore {
 
 const TOTP_REPLAY_TTL: std::time::Duration = std::time::Duration::from_secs(90);
 
+/// 构造按用户语言本地化的失败响应（登录链路使用 rust_i18n 翻译消息键）。
+fn error_i18n(message_key: &str, lang: &str) -> ApiResponse<()> {
+    rust_i18n::set_locale(lang);
+    ApiResponse::error(rust_i18n::t!(message_key).to_string())
+}
+
+/// 构造按用户语言本地化的成功响应。
+fn success_i18n<T: serde::Serialize>(data: T, message_key: &str, lang: &str) -> ApiResponse<T> {
+    rust_i18n::set_locale(lang);
+    ApiResponse::success(data, &rust_i18n::t!(message_key))
+}
+
 fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
     let store = totp_replay_store();
     if let Ok(map) = store.lock()
@@ -71,7 +85,7 @@ pub async fn auth_middleware(
         let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<()>::error_i18n("api.auth_failed", &user_lang)),
+            Json(error_i18n("api.auth_failed", &user_lang)),
         )
             .into_response();
     };
@@ -86,7 +100,7 @@ pub async fn auth_middleware(
             };
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()>::error_i18n(error_msg, &user_lang)),
+                Json(error_i18n(error_msg, &user_lang)),
             )
                 .into_response();
         }
@@ -96,10 +110,7 @@ pub async fn auth_middleware(
         let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<()>::error_i18n(
-                "api.invalid_token",
-                &user_lang,
-            )),
+            Json(error_i18n("api.invalid_token", &user_lang)),
         )
             .into_response();
     }
@@ -112,10 +123,7 @@ pub async fn auth_middleware(
         let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<()>::error_i18n(
-                "api.token_revoked",
-                &user_lang,
-            )),
+            Json(error_i18n("api.token_revoked", &user_lang)),
         )
             .into_response();
     }
@@ -129,10 +137,7 @@ pub async fn auth_middleware(
         let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<()>::error_i18n(
-                "api.device_validation_failed",
-                &user_lang,
-            )),
+            Json(error_i18n("api.device_validation_failed", &user_lang)),
         )
             .into_response();
     }
@@ -167,10 +172,7 @@ pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
         let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error_i18n(
-                "api.access_denied",
-                &user_lang,
-            )),
+            Json(error_i18n("api.access_denied", &user_lang)),
         )
             .into_response();
     }
@@ -1338,7 +1340,7 @@ fn build_login_response(
 
     let mut response = (
         StatusCode::OK,
-        Json(ApiResponse::success_i18n(
+        Json(success_i18n(
             serde_json::json!({ "user": user, "expires_in": login_tokens.access_token_expiry }),
             "api.success",
             user_lang,

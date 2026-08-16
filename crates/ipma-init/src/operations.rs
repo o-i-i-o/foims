@@ -1,3 +1,5 @@
+//! 数据库底层操作（创建/删除/备份/恢复）。
+
 use sqlx::PgPool;
 use tracing::info;
 

@@ -1,3 +1,5 @@
+//! 定时任务管理接口。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

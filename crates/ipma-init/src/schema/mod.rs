@@ -1,3 +1,5 @@
+//! 数据库结构（DDL）创建入口。
+
 mod tables;
 
 use sqlx::Error;

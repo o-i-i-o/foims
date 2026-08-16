@@ -1,3 +1,5 @@
+//! 任务执行日志记录。
+
 use chrono::Utc;
 use tracing::{error, warn};
 use uuid::Uuid;

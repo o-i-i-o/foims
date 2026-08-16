@@ -2,177 +2,177 @@
 
 .logs-header,
 .notifications-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    margin-bottom: var(--space-lg);
-    padding: var(--space-md);
-    background: var(--color-bg-white);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--color-bg-white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
 }
 
 .logs-header .form-group,
 .notifications-header .form-group {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .logs-header input {
-    width: 280px;
+  width: 280px;
 }
 
 .notifications-header select {
-    width: 150px;
+  width: 150px;
 }
 
 .notification-settings-section {
-    margin-top: 2rem;
+  margin-top: 2rem;
 }
 
 .users-checkbox-list {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    padding: 0.5rem;
-    background: var(--color-bg);
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  background: var(--color-bg);
 }
 
 .users-checkbox-list .user-checkbox-item {
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
-    border-radius: var(--radius-sm);
-    transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s;
 }
 
 .users-checkbox-list .user-checkbox-item:hover {
-    background-color: var(--color-bg-white);
+  background-color: var(--color-bg-white);
 }
 
 .users-checkbox-list input[type="checkbox"] {
-    margin-right: 0.75rem;
-    width: 18px;
-    height: 18px;
+  margin-right: 0.75rem;
+  width: 18px;
+  height: 18px;
 }
 
 .users-checkbox-list .user-info {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 
 .users-checkbox-list .user-name {
-    font-weight: 500;
-    color: var(--color-text);
+  font-weight: 500;
+  color: var(--color-text);
 }
 
 .users-checkbox-list .user-email {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .logs-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  min-width: 0;
 }
 
 .log-stat-card {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    padding: 1rem;
-    text-align: center;
-    min-width: 0;
-    overflow: hidden;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  text-align: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .log-stat-title {
-    font-size: 0.85rem;
-    color: var(--color-text-secondary);
-    margin-bottom: 0.5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-stat-value {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: var(--color-primary);
-    word-break: break-all;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  word-break: break-all;
 }
 
 .log-stat-info {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin-top: 0.25rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .clear-logs-form {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    padding: 1.5rem;
-    min-width: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  min-width: 0;
 }
 
 .clear-logs-form .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .clear-logs-form .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .clear-logs-form label {
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    white-space: nowrap;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .clear-logs-form select,
 .clear-logs-form input {
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .clear-logs-hint {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-bottom: 1rem;
-    line-height: 1.5;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 @media (max-width: 576px) {
-    .clear-logs-form .form-row {
-        grid-template-columns: 1fr;
-    }
+  .clear-logs-form .form-row {
+    grid-template-columns: 1fr;
+  }
 
-    .logs-stats-grid {
-        grid-template-columns: 1fr;
-    }
+  .logs-stats-grid {
+    grid-template-columns: 1fr;
+  }
 
-    .log-stat-value {
-        font-size: 1.5rem;
-    }
+  .log-stat-value {
+    font-size: 1.5rem;
+  }
 }

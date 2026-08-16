@@ -101,7 +101,7 @@
     "sync_failed": "失败",
     "sync_result": "同步完成",
     "conflict_title": "端口名称冲突",
-    "conflict_summary": "检测到 {conflict} 个端口名称已存在，{add} 个为新端口。请选择冲突端口的处理方式。",
+    "conflict_summary": "检测到 {{conflict}} 个端口名称已存在，{{add}} 个为新端口。请选择冲突端口的处理方式。",
     "conflict_existing": "现名",
     "conflict_new": "新名",
     "conflict_skip": "跳过",
@@ -275,7 +275,7 @@
     "select_device": "-- 选择设备 --",
     "link_local": "链路本地",
     "public_network": "公网",
-    "default_card_name": "网卡"
+    "default_card_name": "网卡1"
   },
   "device_template": {
     "title": "设备模板管理",

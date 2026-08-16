@@ -1,3 +1,5 @@
+//! 机柜 CSV 导入。
+
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
 

@@ -20,7 +20,7 @@ const EDIT_FUNCTIONS = {
   "cabinets-table": { module: "cabinet", fn: "editCabinet" },
   "cable-links-table": { module: "cableLink", fn: "editCableLink" },
   "devices-table": { module: "device", fn: "editDevice" },
-  "users-table": { module: "userManager", fn: "openUserModal" },
+  "users-table": { module: "userManager", fn: "openUserModal" }
 };
 
 const DELETE_FUNCTIONS = {
@@ -31,7 +31,7 @@ const DELETE_FUNCTIONS = {
   "cable-links-table": { module: "cableLink", fn: "deleteCableLink" },
   "devices-table": { module: "device", fn: "deleteDevice" },
   "device-ports-table": { module: "devicePorts", fn: "deleteDevicePort" },
-  "users-table": { module: "userManager", fn: "deleteUser" },
+  "users-table": { module: "userManager", fn: "deleteUser" }
 };
 
 // ==========================================
@@ -41,12 +41,10 @@ const DELETE_FUNCTIONS = {
 /**
  * 预加载模块缓存
  */
-const PRELOAD_MODULES = ['log', 'systemManager', 'userManager', 'authManager', 'i18n'];
+const PRELOAD_MODULES = ["log", "systemManager", "userManager", "authManager", "i18n"];
 
 async function preloadModules() {
-  await Promise.all(
-    PRELOAD_MODULES.map(name => loadModule(name))
-  );
+  await Promise.all(PRELOAD_MODULES.map((name) => loadModule(name)));
 }
 
 function getModule(name) {
@@ -76,7 +74,7 @@ const BUTTON_EVENT_BINDINGS = [
       const activeTabBtn = document.querySelector("#logs .tab-btn.active");
       const logType = activeTabBtn?.getAttribute("data-tab") || "operation";
       loadLogsData(logType);
-    },
+    }
   },
   {
     id: "refresh-notifications-btn",
@@ -85,7 +83,7 @@ const BUTTON_EVENT_BINDINGS = [
       const { loadNotificationsData } = getModule("log");
       const filter = document.getElementById("notifications-filter");
       loadNotificationsData(filter?.value || "all");
-    },
+    }
   },
   {
     id: "clear-read-notifications-btn",
@@ -93,7 +91,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { clearReadNotifications } = getModule("log");
       clearReadNotifications();
-    },
+    }
   },
   {
     id: "save-mac-notification-email-btn",
@@ -101,7 +99,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: async () => {
       const { saveMacNotificationEmail } = getModule("log");
       await saveMacNotificationEmail();
-    },
+    }
   },
   {
     id: "test-smtp-btn",
@@ -109,7 +107,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { testSmtpConnection } = getModule("systemManager");
       testSmtpConnection();
-    },
+    }
   },
   {
     id: "import-csv-btn",
@@ -117,7 +115,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { importCsvData } = getModule("systemManager");
       importCsvData();
-    },
+    }
   },
   {
     id: "download-template-btn",
@@ -125,7 +123,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { downloadTemplate } = getModule("systemManager");
       downloadTemplate();
-    },
+    }
   },
   {
     id: "export-csv-btn",
@@ -133,7 +131,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { exportCsvData } = getModule("systemManager");
       exportCsvData();
-    },
+    }
   },
   {
     id: "export-database-btn",
@@ -141,7 +139,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { exportDatabase } = getModule("systemManager");
       exportDatabase();
-    },
+    }
   },
   {
     id: "backup-config-btn",
@@ -149,7 +147,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { backupConfig } = getModule("systemManager");
       backupConfig();
-    },
+    }
   },
   {
     id: "restore-config-btn",
@@ -157,7 +155,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { restoreConfig } = getModule("systemManager");
       restoreConfig();
-    },
+    }
   },
   {
     id: "logout-btn",
@@ -165,7 +163,7 @@ const BUTTON_EVENT_BINDINGS = [
     handler: () => {
       const { logoutUser } = getModule("authManager");
       logoutUser();
-    },
+    }
   },
   {
     id: "language-selector",
@@ -175,8 +173,8 @@ const BUTTON_EVENT_BINDINGS = [
       // so it is NOT in resourceLoader's module cache — getModule("i18n") would
       // return null and throw here. Use the directly-imported changeLanguage.
       changeLanguage(e.target.value);
-    },
-  },
+    }
+  }
 ];
 
 /**
@@ -187,14 +185,14 @@ function initButtonEventBindings() {
   const otherHandlers = [];
 
   BUTTON_EVENT_BINDINGS.forEach(({ id, event, handler }) => {
-    if (event === 'click') {
+    if (event === "click") {
       clickHandlers[id] = handler;
     } else {
       otherHandlers.push({ id, event, handler });
     }
   });
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener("click", (e) => {
     const handler = clickHandlers[e.target.id];
     if (handler) {
       handler(e);
@@ -230,7 +228,7 @@ function handleModalCloseClick(e) {
   if (!e.target.hasAttribute("data-modal-id")) {
     return;
   }
-  
+
   const modalId = e.target.getAttribute("data-modal-id");
   closeModal(modalId);
 }
@@ -249,7 +247,7 @@ async function handleUsageButtonClick(e) {
   const id = button.dataset.id;
 
   if (!id || id === "undefined") {
-    showToast(t('common.missing_id_param'), "error");
+    showToast(t("common.missing_id_param"), "error");
     return;
   }
 
@@ -288,7 +286,7 @@ async function handleEditDeleteClick(e) {
   const tableId = table?.id;
 
   if (!id || id === "undefined") {
-    showToast(t('common.missing_id_param'), "error");
+    showToast(t("common.missing_id_param"), "error");
     return;
   }
 
@@ -316,7 +314,7 @@ async function handleEditDeleteClick(e) {
  */
 function initSelectChangeHandlers() {
   const notificationsFilter = document.getElementById("notifications-filter");
-  
+
   notificationsFilter?.addEventListener("change", (e) => {
     const { loadNotificationsData } = getModule("log");
     loadNotificationsData(e.target.value);

@@ -1,41 +1,34 @@
-import {
-  apiPost,
-  apiGet,
-  redirectToLogin,
-  refreshToken,
-  ApiClient,
-} from "../utils/apiClient.js";
+import { apiPost, apiGet, redirectToLogin, refreshToken, ApiClient } from "../utils/apiClient.js";
 
-import {
-  showToast,
-} from "../utils/ui.js";
+import { showToast } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
-import {
-  getUser,
-  setUser,
-  hasSession,
-} from "../utils/sessionManager.js";
+import { getUser, setUser, hasSession } from "../utils/sessionManager.js";
 
 const parseDuration = (durationStr) => {
   const match = durationStr.match(/^(\d+)([smhd])$/);
   if (!match) return 15 * 60;
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2];
-  
+
   switch (unit) {
-    case 's': return value;
-    case 'm': return value * 60;
-    case 'h': return value * 60 * 60;
-    case 'd': return value * 24 * 60 * 60;
-    default: return 15 * 60;
+    case "s":
+      return value;
+    case "m":
+      return value * 60;
+    case "h":
+      return value * 60 * 60;
+    case "d":
+      return value * 24 * 60 * 60;
+    default:
+      return 15 * 60;
   }
 };
 
 export const loginUser = (data, rememberMe) => {
   const { user } = data;
-  
+
   setUser(user, rememberMe);
 
   window.location.href = "/main.html";
@@ -55,26 +48,26 @@ export const checkLoginStatus = async () => {
   if (!hasSession()) {
     return;
   }
-  
+
   try {
     const response = await fetch("/api/auth/me", {
-      credentials: 'include',
+      credentials: "include"
     });
-    
+
     if (response.ok) {
       const result = await response.json();
       if (result.success) {
         return;
       }
     }
-    
+
     if (response.status === 401) {
       const refreshed = await refreshToken();
       if (refreshed) {
         return;
       }
     }
-    
+
     redirectToLogin();
   } catch (error) {
     console.error("检查登录状态失败:", error);
@@ -84,11 +77,11 @@ export const checkLoginStatus = async () => {
 
 export const displayCurrentUser = () => {
   const user = getUser();
-  
+
   if (user) {
     const currentUserElement = document.getElementById("current-user");
     if (currentUserElement) {
-      currentUserElement.textContent = t('auth.welcome', { username: user.username });
+      currentUserElement.textContent = t("auth.welcome", { username: user.username });
     }
   }
 };
@@ -106,10 +99,10 @@ export const initAutoRefresh = async () => {
   if (autoRefreshInterval) {
     clearInterval(autoRefreshInterval);
   }
-  
+
   let refreshIntervalSeconds = 7 * 60;
   let refreshThresholdSeconds = 5 * 60;
-  
+
   try {
     const result = await apiGet("/api/system/config");
     if (result.success && result.data?.jwt?.access_token_expiry) {
@@ -122,9 +115,9 @@ export const initAutoRefresh = async () => {
   } catch (error) {
     console.warn("获取JWT配置失败，使用默认刷新间隔:", error);
   }
-  
+
   ApiClient.setRefreshThreshold(refreshThresholdSeconds * 1000);
-  
+
   autoRefreshInterval = setInterval(async () => {
     try {
       const refreshed = await refreshToken();
@@ -139,14 +132,14 @@ export const initAutoRefresh = async () => {
 
 const handlePageTimeout = async () => {
   const refreshed = await refreshToken();
-  
+
   if (refreshed) {
     showToast(t("auth.session_refreshed"), "success");
     return;
   }
-  
+
   showToast(t("auth.session_timeout"), "info");
-  
+
   setTimeout(() => {
     redirectToLogin();
   }, 2000);
@@ -160,9 +153,9 @@ const resetTimeout = (timeoutMinutes) => {
   if (timeoutId) {
     clearTimeout(timeoutId);
   }
-  
+
   const TIMEOUT_DURATION = timeoutMinutes * 60 * 1000;
-  
+
   timeoutId = setTimeout(() => {
     handlePageTimeout();
   }, TIMEOUT_DURATION);
@@ -173,19 +166,20 @@ const startPageTimeout = async () => {
 
   // 移除旧的监听器
   if (boundResetTimeout && boundEvents) {
-    boundEvents.forEach(event => {
+    boundEvents.forEach((event) => {
       document.removeEventListener(event, boundResetTimeout, true);
     });
   }
 
   let timeoutMinutes = 30;
-  
+
   try {
     const result = await apiGet("/api/system/info");
     if (result.success && result.data) {
-      timeoutMinutes = result.data.config?.server?.page_timeout 
-        || result.data.config?.server?.session_timeout 
-        || 30;
+      timeoutMinutes =
+        result.data.config?.server?.page_timeout ||
+        result.data.config?.server?.session_timeout ||
+        30;
     }
   } catch (error) {
     console.error("获取页面超时配置失败:", error);
@@ -193,8 +187,8 @@ const startPageTimeout = async () => {
 
   // 创建新的事件处理函数
   boundResetTimeout = () => resetTimeout(timeoutMinutes);
-  boundEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-  boundEvents.forEach(event => {
+  boundEvents = ["mousedown", "mousemove", "keypress", "scroll", "touchstart", "click"];
+  boundEvents.forEach((event) => {
     document.addEventListener(event, boundResetTimeout, true);
   });
 

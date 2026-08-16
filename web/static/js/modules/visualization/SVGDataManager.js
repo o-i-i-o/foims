@@ -30,7 +30,8 @@ export class SVGDataManager {
         if (Array.isArray(result.data)) return result.data;
         if (result.data.items && Array.isArray(result.data.items)) return result.data.items;
         if (result.data.data && Array.isArray(result.data.data)) return result.data.data;
-        if (result.data.ip_managers && Array.isArray(result.data.ip_managers)) return result.data.ip_managers;
+        if (result.data.ip_managers && Array.isArray(result.data.ip_managers))
+          return result.data.ip_managers;
         if (result.data.ips && Array.isArray(result.data.ips)) return result.data.ips;
       }
       return [];
@@ -74,17 +75,17 @@ export class SVGDataManager {
 
   async loadSavedLayout(id) {
     this.core.currentRoomId = id;
-    
+
     try {
       if (this.core.type === "workstation") {
         this.core.elementsGroup.innerHTML = "";
-        
+
         const [layoutResult, workstations, ipManagers] = await Promise.all([
           this.apiGet(`/api/resources/layouts/workstation/${id}`),
           this.fetchWorkstationsByRoom(id),
           this.fetchIps()
         ]);
-        
+
         const ipMap = new Map();
         if (Array.isArray(ipManagers)) {
           ipManagers.forEach((ipManager) => {
@@ -92,21 +93,26 @@ export class SVGDataManager {
             ipMap.set(ipManager.workstation_id, ipManager);
           });
         }
-        
+
         let layoutData = [];
         let hasSavedLayout = false;
-        
-        if (layoutResult.success && layoutResult.data && Array.isArray(layoutResult.data) && layoutResult.data.length > 0) {
+
+        if (
+          layoutResult.success &&
+          layoutResult.data &&
+          Array.isArray(layoutResult.data) &&
+          layoutResult.data.length > 0
+        ) {
           layoutData = layoutResult.data;
           hasSavedLayout = true;
         }
-        
+
         const doorElement = this.renderer.drawDoor();
-        
+
         let maxX = 0;
         let maxY = 0;
-        
-        const doorItem = layoutData.find(item => item.element_type === "door");
+
+        const doorItem = layoutData.find((item) => item.element_type === "door");
         if (doorItem && doorItem.position) {
           const rect = doorElement.querySelector("rect");
           if (rect) {
@@ -115,14 +121,14 @@ export class SVGDataManager {
             rect.setAttribute("width", doorItem.position.width);
             rect.setAttribute("height", doorItem.position.height);
           }
-          
+
           const text = doorElement.querySelector("text");
           if (text) {
             text.setAttribute("x", doorItem.position.x + doorItem.position.width / 2);
             text.setAttribute("y", doorItem.position.y - 10);
             text.dataset.relY = -10;
           }
-          
+
           const circle = doorElement.querySelector("circle");
           if (circle) {
             circle.setAttribute("cx", doorItem.position.x + doorItem.position.width - 10);
@@ -130,7 +136,7 @@ export class SVGDataManager {
             circle.dataset.relCx = doorItem.position.width - 10;
             circle.dataset.relCy = doorItem.position.height / 2;
           }
-          
+
           maxX = Math.max(maxX, doorItem.position.x + doorItem.position.width);
           maxY = Math.max(maxY, doorItem.position.y + doorItem.position.height);
         } else {
@@ -144,10 +150,12 @@ export class SVGDataManager {
             maxY = Math.max(maxY, y + height);
           }
         }
-        
+
         if (hasSavedLayout) {
           workstations.forEach((workstation, index) => {
-            const savedItem = layoutData.find(item => item.id.toLowerCase() === workstation.id.toLowerCase());
+            const savedItem = layoutData.find(
+              (item) => item.id.toLowerCase() === workstation.id.toLowerCase()
+            );
             if (savedItem && savedItem.position) {
               workstation.position = savedItem.position;
             } else {
@@ -166,99 +174,112 @@ export class SVGDataManager {
             }
             workstation.ipManager = ipMap.get(workstation.id);
             this.renderer.drawWorkstation(workstation);
-            
+
             const pos = workstation.position;
             maxX = Math.max(maxX, pos.x + pos.width);
             maxY = Math.max(maxY, pos.y + pos.height);
           });
         }
-        
+
         if (maxX > 0 || maxY > 0) {
           const padding = 50;
-          this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(800, maxY + padding)}`);
+          this.core.svg.setAttribute(
+            "viewBox",
+            `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(800, maxY + padding)}`
+          );
         }
-        
+
         return hasSavedLayout;
       } else if (this.core.type === "cabinet") {
         this.core.elementsGroup.innerHTML = "";
-        
+
         const [layoutResult, cabinets] = await Promise.all([
           this.apiGet(`/api/resources/layouts/positions/${id}`),
           this.fetchCabinetsByRoom(id)
         ]);
-        
+
         let layoutData = [];
         let hasSavedLayout = false;
-        
-        if (layoutResult.success && layoutResult.data && Array.isArray(layoutResult.data) && layoutResult.data.length > 0) {
+
+        if (
+          layoutResult.success &&
+          layoutResult.data &&
+          Array.isArray(layoutResult.data) &&
+          layoutResult.data.length > 0
+        ) {
           layoutData = layoutResult.data;
           hasSavedLayout = true;
         } else {
           this.showToast(t("viz.no_room_layout_data"), "info");
         }
-        
+
         if (hasSavedLayout && cabinets.length > 0) {
           let containerHeight = this.core.container.clientHeight;
           if (!containerHeight || containerHeight < 100) {
-            await new Promise(resolve => requestAnimationFrame(resolve));
-            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            await new Promise((resolve) => requestAnimationFrame(resolve));
             containerHeight = this.core.container.clientHeight;
           }
           if (!containerHeight || containerHeight < 100) {
             containerHeight = 600;
           }
-          
+
           const padding = 5;
           const availableHeight = containerHeight - padding * 2;
-          const maxCapacity = Math.max(...cabinets.map(c => c.capacity || 45));
+          const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
           const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
-          
+
           let maxX = 0;
           let maxY = 0;
-          
+
           for (let index = 0; index < cabinets.length; index++) {
             const cabinet = cabinets[index];
-            const savedItem = layoutData.find(item => item.id.toLowerCase() === cabinet.id.toLowerCase());
-            
+            const savedItem = layoutData.find(
+              (item) => item.id.toLowerCase() === cabinet.id.toLowerCase()
+            );
+
             cabinet.capacity = cabinet.capacity || 45;
             const cabinetHeight = cabinet.capacity * uHeight + 40;
             const cabinetWidth = 150;
-            
+
             if (savedItem && savedItem.position) {
               cabinet.position = {
                 x: savedItem.position.x,
                 y: containerHeight - padding - cabinetHeight,
                 width: savedItem.position.width || cabinetWidth,
-                height: cabinetHeight,
+                height: cabinetHeight
               };
             } else {
               const gap = 50;
               const startX = 50;
-              
+
               cabinet.position = {
                 x: startX + index * (cabinetWidth + gap),
                 y: containerHeight - padding - cabinetHeight,
                 width: cabinetWidth,
-                height: cabinetHeight,
+                height: cabinetHeight
               };
             }
-            
+
             this.renderer.drawCabinet(cabinet);
             await this.drawCabinetPositionsWithIp(cabinet);
-            
+
             if (cabinet.position) {
               maxX = Math.max(maxX, cabinet.position.x + cabinet.position.width);
               maxY = Math.max(maxY, cabinet.position.y + cabinet.position.height);
             }
           }
-          
+
           if (maxX > 0 || maxY > 0) {
             const padding = 50;
-            this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, maxX + padding)} ${containerHeight}`);
+            this.core.svg.setAttribute(
+              "viewBox",
+              `0 0 ${Math.max(1000, maxX + padding)} ${containerHeight}`
+            );
             this.core.svg.setAttribute("height", "100%");
           }
         }
-        
+
         return hasSavedLayout;
       }
     } catch (error) {
@@ -274,7 +295,7 @@ export class SVGDataManager {
       const positions = cabinet.positions || [];
       const ipResult = await this.apiGet("/api/resources/ip");
       const ipMap = new Map();
-      
+
       if (ipResult.success && ipResult.data) {
         let ipList = [];
         if (Array.isArray(ipResult.data)) {
@@ -284,7 +305,7 @@ export class SVGDataManager {
         } else if (ipResult.data.data && Array.isArray(ipResult.data.data)) {
           ipList = ipResult.data.data;
         }
-        ipList.forEach(ipManager => {
+        ipList.forEach((ipManager) => {
           if (ipManager.position_id) {
             ipMap.set(ipManager.position_id, ipManager);
           }
@@ -310,7 +331,7 @@ export class SVGDataManager {
       if (this.core.type === "cabinet" && el.classList.contains("cabinet-position-element")) {
         return;
       }
-      
+
       const id = el.dataset.id;
       const rect = el.querySelector("rect");
       if (!rect) return;
@@ -320,7 +341,7 @@ export class SVGDataManager {
         y: parseFloat(rect.getAttribute("y")),
         width: parseFloat(rect.getAttribute("width")),
         height: parseFloat(rect.getAttribute("height")),
-        rotation: 0,
+        rotation: 0
       };
 
       let element_type;
@@ -341,7 +362,7 @@ export class SVGDataManager {
         room_id: this.core.currentRoomId || null,
         network_region_id: null,
         cabinet_id: null,
-        layout: layoutData,
+        layout: layoutData
       });
 
       if (result.success) {
@@ -362,13 +383,15 @@ export class SVGDataManager {
         return;
       }
 
-      const confirmed = await this.core.showConfirm(t('viz.confirm_delete_workstation_layout'));
+      const confirmed = await this.core.showConfirm(t("viz.confirm_delete_workstation_layout"));
       if (!confirmed) {
         return;
       }
 
       try {
-        const result = await this.apiDelete(`/api/resources/layouts/workstation/${this.core.currentRoomId}`);
+        const result = await this.apiDelete(
+          `/api/resources/layouts/workstation/${this.core.currentRoomId}`
+        );
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
           this.showToast(t("viz.layout_delete_success"), "success");
@@ -386,13 +409,15 @@ export class SVGDataManager {
         return;
       }
 
-      const confirmed = await this.core.showConfirm(t('viz.confirm_delete_cabinet_layout'));
+      const confirmed = await this.core.showConfirm(t("viz.confirm_delete_cabinet_layout"));
       if (!confirmed) {
         return;
       }
 
       try {
-        const result = await this.apiDelete(`/api/resources/layouts/positions/${this.core.currentRoomId}`);
+        const result = await this.apiDelete(
+          `/api/resources/layouts/positions/${this.core.currentRoomId}`
+        );
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
           this.showToast(t("viz.layout_delete_success"), "success");

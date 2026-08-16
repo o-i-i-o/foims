@@ -1,3 +1,5 @@
+//! 调度器生命周期管理。
+
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
 

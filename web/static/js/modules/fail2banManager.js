@@ -20,7 +20,9 @@ export function initSecurityTab() {
 // 绑定事件
 function bindEvents() {
   elementCache.get("app-fail2ban-refresh-btn")?.addEventListener("click", loadAppFail2banStatus);
-  elementCache.get("app-fail2ban-save-config-btn")?.addEventListener("click", saveAppFail2banConfig);
+  elementCache
+    .get("app-fail2ban-save-config-btn")
+    ?.addEventListener("click", saveAppFail2banConfig);
   elementCache.get("app-fail2ban-ban-btn")?.addEventListener("click", handleBanIp);
   elementCache.get("app-fail2ban-unban-btn")?.addEventListener("click", handleUnbanIp);
   elementCache.get("rate-limit-save-config-btn")?.addEventListener("click", saveRateLimitConfig);
@@ -33,13 +35,16 @@ async function loadAppFail2banStatus() {
   const trackedTbody = elementCache.get("app-fail2ban-tracked-tbody");
   const logPathHint = elementCache.get("app-fail2ban-log-path-hint");
 
-  if (bannedTbody) bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
-  if (trackedTbody) trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
+  if (bannedTbody)
+    bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
+  if (trackedTbody)
+    trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
 
   try {
     const result = await apiGet("/api/system/fail2ban/app/status");
     if (!result.success || !result.data) {
-      if (bannedTbody) bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+      if (bannedTbody)
+        bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
       return;
     }
 
@@ -74,17 +79,24 @@ async function loadAppFail2banStatus() {
       if (status.banned_ips.length === 0) {
         bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.no_data") || "No data"}</td></tr>`;
       } else {
-        bannedTbody.innerHTML = status.banned_ips.map(item => `
+        bannedTbody.innerHTML = status.banned_ips
+          .map(
+            (item) => `
           <tr>
             <td>${escapeHtml(item.ip)}</td>
             <td class="col-center">${item.remaining_seconds}</td>
-            <td class="col-center">${iconButton({ icon: 'unlock', label: t("security.unban_ip") || "Unban", cls: 'btn-success app-unban-btn', attrs: `data-ip="${escapeHtml(item.ip)}"` })}</td>
+            <td class="col-center">${iconButton({ icon: "unlock", label: t("security.unban_ip") || "Unban", cls: "btn-success app-unban-btn", attrs: `data-ip="${escapeHtml(item.ip)}"` })}</td>
           </tr>
-        `).join("");
-        bannedTbody.querySelectorAll(".app-unban-btn").forEach(btn => {
+        `
+          )
+          .join("");
+        bannedTbody.querySelectorAll(".app-unban-btn").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const ip = btn.dataset.ip;
-            const confirmed = await showConfirm(t("security.unban_confirm") || "Unban this IP?", ip);
+            const confirmed = await showConfirm(
+              t("security.unban_confirm") || "Unban this IP?",
+              ip
+            );
             if (confirmed) await doUnbanIp(ip);
           });
         });
@@ -96,17 +108,22 @@ async function loadAppFail2banStatus() {
       if (status.tracked_ips.length === 0) {
         trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.no_data") || "No data"}</td></tr>`;
       } else {
-        trackedTbody.innerHTML = status.tracked_ips.map(item => `
+        trackedTbody.innerHTML = status.tracked_ips
+          .map(
+            (item) => `
           <tr>
             <td>${escapeHtml(item.ip)}</td>
             <td class="col-center">${item.failure_count}</td>
           </tr>
-        `).join("");
+        `
+          )
+          .join("");
       }
     }
   } catch (err) {
     console.error("loadAppFail2banStatus error:", err);
-    if (bannedTbody) bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+    if (bannedTbody)
+      bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
   }
 }
 
@@ -116,7 +133,7 @@ async function saveAppFail2banConfig() {
     enabled: elementCache.get("app-fail2ban-enabled").value === "true",
     findtime: parseInt(elementCache.get("app-fail2ban-findtime").value, 10),
     max_retry: parseInt(elementCache.get("app-fail2ban-maxretry").value, 10),
-    bantime: parseInt(elementCache.get("app-fail2ban-bantime").value, 10),
+    bantime: parseInt(elementCache.get("app-fail2ban-bantime").value, 10)
   };
 
   try {

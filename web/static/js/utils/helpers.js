@@ -26,17 +26,20 @@ export function whenVisible(selector, callback, timeout = 5000) {
     callback(el);
   }, timeout);
 
-  observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        clearTimeout(timer);
-        observer.disconnect();
-        observer = null;
-        callback(el);
-        break;
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          clearTimeout(timer);
+          observer.disconnect();
+          observer = null;
+          callback(el);
+          break;
+        }
       }
-    }
-  }, { threshold: 0 });
+    },
+    { threshold: 0 }
+  );
 
   observer.observe(el);
 }
@@ -50,14 +53,14 @@ class CacheManager {
     this.loadFromStorage();
     this.startCleanupInterval();
   }
-  
+
   loadFromStorage() {
     try {
       const stored = localStorage.getItem(this.localStorageKey);
       if (stored) {
         const data = JSON.parse(stored);
         const now = Date.now();
-        
+
         for (const [key, item] of Object.entries(data)) {
           if (item.expiry > now) {
             this.caches.set(key, item);
@@ -68,18 +71,18 @@ class CacheManager {
       // Ignore localStorage errors
     }
   }
-  
+
   saveToStorage() {
     try {
       const data = {};
       const now = Date.now();
-      
+
       for (const [key, item] of this.caches.entries()) {
         if (item.expiry > now && item.persist !== false) {
           data[key] = item;
         }
       }
-      
+
       localStorage.setItem(this.localStorageKey, JSON.stringify(data));
     } catch (e) {
       if (e.name === "QuotaExceededError") {
@@ -89,80 +92,80 @@ class CacheManager {
       }
     }
   }
-  
+
   get(key) {
     const item = this.caches.get(key);
-    
+
     if (!item) {
       return null;
     }
-    
+
     if (Date.now() > item.expiry) {
       this.caches.delete(key);
       return null;
     }
-    
+
     return item.value;
   }
-  
+
   set(key, value, ttl = this.defaultTTL, persist = true) {
     this.caches.set(key, {
       value,
       expiry: Date.now() + ttl,
-      persist,
+      persist
     });
-    
+
     if (persist) {
       this.saveToStorage();
     }
   }
-  
+
   delete(key) {
     this.caches.delete(key);
     this.saveToStorage();
   }
-  
+
   clear() {
     this.caches.clear();
     localStorage.removeItem(this.localStorageKey);
   }
-  
+
   cleanup() {
     const now = Date.now();
-    
+
     for (const [key, item] of this.caches.entries()) {
       if (now > item.expiry) {
         this.caches.delete(key);
       }
     }
-    
+
     this.saveToStorage();
   }
-  
+
   startCleanupInterval() {
     if (this.cleanupIntervalId) {
       clearInterval(this.cleanupIntervalId);
     }
     this.cleanupIntervalId = setInterval(() => this.cleanup(), 60 * 1000);
   }
-  
+
   stopCleanupInterval() {
     if (this.cleanupIntervalId) {
       clearInterval(this.cleanupIntervalId);
       this.cleanupIntervalId = null;
     }
   }
-  
+
   async getOrSet(key, fetcher, ttl = this.defaultTTL, persist = true) {
     const cached = this.get(key);
-    
+
     if (cached !== null) {
       return cached;
     }
-    
+
     const value = await fetcher();
     this.set(key, value, ttl, persist);
-    
+
     return value;
   }
 }
@@ -174,44 +177,44 @@ class ErrorHandler {
     this.handlers = new Map();
     this.defaultHandler = this.logError;
   }
-  
+
   register(errorType, handler) {
     this.handlers.set(errorType, handler);
   }
-  
-  handle(error, context = t('common.operation_failed'), options = {}) {
+
+  handle(error, context = t("common.operation_failed"), options = {}) {
     const errorInfo = this.parseError(error);
     const handler = this.handlers.get(errorInfo.type) || this.defaultHandler;
-    
+
     handler(errorInfo, context, options);
   }
-  
+
   parseError(error) {
     if (typeof error === "string") {
       return { type: "unknown", message: error, original: error };
     }
-    
+
     if (error instanceof Error) {
       return {
         type: this.getErrorType(error),
         message: error.message,
         stack: error.stack,
-        original: error,
+        original: error
       };
     }
-    
+
     if (typeof error === "object" && error !== null) {
       return {
         type: error.errorType || error.type || "api",
-        message: error.message || t('common.unknown_error'),
+        message: error.message || t("common.unknown_error"),
         details: error.errorDetails || error.details,
-        original: error,
+        original: error
       };
     }
-    
+
     return { type: "unknown", message: String(error), original: error };
   }
-  
+
   getErrorType(error) {
     if (error.name === "NetworkError" || error.message.includes("network")) {
       return "network";
@@ -227,7 +230,7 @@ class ErrorHandler {
     }
     return "unknown";
   }
-  
+
   logError(errorInfo, context, options) {
     if (options.showToast !== false) {
       import("./ui.js").then(({ showToast }) => {
@@ -235,7 +238,7 @@ class ErrorHandler {
       });
     }
   }
-  
+
   wrapAsync(fn, context) {
     return async (...args) => {
       try {
@@ -250,7 +253,7 @@ class ErrorHandler {
 
 export const errorHandler = new ErrorHandler();
 
-export async function safeAsync(fn, context = t('common.operation_failed'), options = {}) {
+export async function safeAsync(fn, context = t("common.operation_failed"), options = {}) {
   try {
     return await fn();
   } catch (error) {
@@ -263,7 +266,7 @@ class ElementCache {
   constructor() {
     this.cache = new Map();
   }
-  
+
   get(id) {
     const cached = this.cache.get(id);
     if (cached && document.contains(cached)) {
@@ -276,35 +279,35 @@ class ElementCache {
     }
     return el;
   }
-  
+
   getMultiple(...ids) {
     const result = {};
     for (const id of ids) {
-      result[id.replace(/-/g, '_')] = this.get(id);
+      result[id.replace(/-/g, "_")] = this.get(id);
     }
     return result;
   }
-  
+
   getValue(id) {
     const el = this.get(id);
-    return el ? el.value : '';
+    return el ? el.value : "";
   }
-  
+
   setValue(id, value) {
     const el = this.get(id);
     if (el) el.value = value;
   }
-  
+
   getChecked(id) {
     const el = this.get(id);
     return el ? el.checked : false;
   }
-  
+
   setChecked(id, checked) {
     const el = this.get(id);
     if (el) el.checked = checked;
   }
-  
+
   clear(id) {
     if (id) {
       this.cache.delete(id);
@@ -312,7 +315,7 @@ class ElementCache {
       this.cache.clear();
     }
   }
-  
+
   refresh() {
     for (const [id] of this.cache) {
       this.cache.set(id, document.getElementById(id));
@@ -321,8 +324,8 @@ class ElementCache {
 }
 
 export function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
+  if (!text) return "";
+  const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }

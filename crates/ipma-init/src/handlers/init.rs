@@ -1,3 +1,5 @@
+//! 初始化执行接口（建库建表、初始管理员）。
+
 use std::sync::Arc;
 
 use axum::extract::{Json, State};

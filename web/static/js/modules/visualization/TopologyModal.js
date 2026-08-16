@@ -68,7 +68,9 @@ export class TopologyModal {
       </div>
     `;
 
-    this.modal.querySelector(".topology-detail-close").addEventListener("click", () => this.close());
+    this.modal
+      .querySelector(".topology-detail-close")
+      .addEventListener("click", () => this.close());
 
     this.modal.querySelectorAll(".topology-detail-tabs button").forEach((btn) => {
       btn.addEventListener("click", () => this._togglePanel(btn.dataset.panel));
@@ -129,7 +131,7 @@ export class TopologyModal {
     await Promise.all([
       this._loadPanelData("ports"),
       this.panelVisibility.macs ? this._loadPanelData("macs") : Promise.resolve(),
-      this.panelVisibility.lldp ? this._loadPanelData("lldp") : Promise.resolve(),
+      this.panelVisibility.lldp ? this._loadPanelData("lldp") : Promise.resolve()
     ]);
   }
 

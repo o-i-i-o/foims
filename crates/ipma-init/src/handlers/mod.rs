@@ -1,3 +1,5 @@
+//! 初始化 HTTP 接口。
+
 pub mod database_ops;
 pub mod init;
 pub mod status;

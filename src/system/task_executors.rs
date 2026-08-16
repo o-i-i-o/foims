@@ -1,3 +1,5 @@
+//! 定时任务执行器实现（绑定具体业务任务类型）。
+
 use async_trait::async_trait;
 use ipma_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
 use uuid::Uuid;

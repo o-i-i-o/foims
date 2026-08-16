@@ -1,4 +1,9 @@
-use tracing::warn;
+//! 物理链路表（cable_links）结构、触发器与路径查询函数。
+//!
+//! 防删触发器保证被链路引用的端点资源（端口/信息点/配线架/物理接口）
+//! 不可删除；`validate_cable_link_endpoints` 校验端点存在性与物理形态
+//! （接口必须为实际连接器，非 virtual）。触发器函数体与
+//! `scripts/port-type-split.sql` 等变更脚本保持一致，修改需同步。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -44,6 +49,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// 创建链路端点校验触发器（A/B 端点存在性 + 接口物理形态 + 禁止设备直连）。
 async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE OR REPLACE FUNCTION validate_cable_link_endpoints() RETURNS TRIGGER AS $$
@@ -117,117 +123,84 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r"CREATE OR REPLACE FUNCTION prevent_device_port_deletion_if_linked() RETURNS TRIGGER AS $$
-        BEGIN
-            IF EXISTS(
-                SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='device_port' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='device_port' AND b_endpoint_id = OLD.id)
-            ) THEN
-                RAISE EXCEPTION '设备端口 % 被 cable_links 引用，不能删除', OLD.id;
-            END IF;
-            RETURN OLD;
-        END;
-        $$ LANGUAGE plpgsql;",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS trg_device_ports_prevent_delete_linked ON device_ports")
+    // 端点资源防删触发器：(端点类型, 所在表, 函数名, 触发器名, 报错文案资源名, 附加守卫)
+    // 附加守卫用于放行无需保护的记录（如 virtual 接口未被链路引用语义覆盖）
+    const PREVENT_DELETION_TRIGGERS: &[(&str, &str, &str, &str, &str, &str)] = &[
+        (
+            "device_port",
+            "device_ports",
+            "prevent_device_port_deletion_if_linked",
+            "trg_device_ports_prevent_delete_linked",
+            "设备端口",
+            "TRUE",
+        ),
+        (
+            "net_outlet",
+            "net_outlets",
+            "prevent_net_outlet_deletion_if_linked",
+            "trg_net_outlets_prevent_delete_linked",
+            "信息点",
+            "TRUE",
+        ),
+        (
+            "patch_panel",
+            "patch_panels",
+            "prevent_patch_panel_deletion_if_linked",
+            "trg_patch_panels_prevent_delete_linked",
+            "配线架",
+            "TRUE",
+        ),
+        (
+            "device_interface",
+            "device_interfaces",
+            "prevent_interface_deletion_if_linked",
+            "trg_device_interfaces_prevent_delete_linked",
+            "设备接口",
+            "OLD.physical_type <> 'virtual'",
+        ),
+    ];
+
+    for (endpoint_type, table, func_name, trigger_name, label, guard) in PREVENT_DELETION_TRIGGERS {
+        // 标识符与文案均来自上方内部常量，拼入 DDL 无注入风险
+        let func = format!(
+            r"CREATE OR REPLACE FUNCTION {func_name}() RETURNS TRIGGER AS $$
+            BEGIN
+                IF {guard} AND EXISTS(
+                    SELECT 1 FROM cable_links
+                    WHERE (a_endpoint_type='{endpoint_type}' AND a_endpoint_id = OLD.id)
+                       OR (b_endpoint_type='{endpoint_type}' AND b_endpoint_id = OLD.id)
+                ) THEN
+                    RAISE EXCEPTION '{label} % 被 cable_links 引用，不能删除', OLD.id;
+                END IF;
+                RETURN OLD;
+            END;
+            $$ LANGUAGE plpgsql;"
+        );
+        sqlx::query(sqlx::AssertSqlSafe(func)).execute(pool).await?;
+
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP TRIGGER IF EXISTS {trigger_name} ON {table}"
+        )))
         .execute(pool)
         .await?;
-    sqlx::query(
-        "CREATE TRIGGER trg_device_ports_prevent_delete_linked BEFORE DELETE ON device_ports FOR EACH ROW EXECUTE FUNCTION prevent_device_port_deletion_if_linked()"
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r"CREATE OR REPLACE FUNCTION prevent_net_outlet_deletion_if_linked() RETURNS TRIGGER AS $$
-        BEGIN
-            IF EXISTS(
-                SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='net_outlet' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='net_outlet' AND b_endpoint_id = OLD.id)
-            ) THEN
-                RAISE EXCEPTION '信息点 % 被 cable_links 引用，不能删除', OLD.id;
-            END IF;
-            RETURN OLD;
-        END;
-        $$ LANGUAGE plpgsql;",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS trg_net_outlets_prevent_delete_linked ON net_outlets")
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "CREATE TRIGGER {trigger_name} BEFORE DELETE ON {table} FOR EACH ROW EXECUTE FUNCTION {func_name}()"
+        )))
         .execute(pool)
         .await?;
-    sqlx::query(
-        "CREATE TRIGGER trg_net_outlets_prevent_delete_linked BEFORE DELETE ON net_outlets FOR EACH ROW EXECUTE FUNCTION prevent_net_outlet_deletion_if_linked()"
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r"CREATE OR REPLACE FUNCTION prevent_patch_panel_deletion_if_linked() RETURNS TRIGGER AS $$
-        BEGIN
-            IF EXISTS(
-                SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='patch_panel' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='patch_panel' AND b_endpoint_id = OLD.id)
-            ) THEN
-                RAISE EXCEPTION '配线架 % 被 cable_links 引用，不能删除', OLD.id;
-            END IF;
-            RETURN OLD;
-        END;
-        $$ LANGUAGE plpgsql;",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS trg_patch_panels_prevent_delete_linked ON patch_panels")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "CREATE TRIGGER trg_patch_panels_prevent_delete_linked BEFORE DELETE ON patch_panels FOR EACH ROW EXECUTE FUNCTION prevent_patch_panel_deletion_if_linked()"
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r"CREATE OR REPLACE FUNCTION prevent_interface_deletion_if_linked() RETURNS TRIGGER AS $$
-        BEGIN
-            IF OLD.physical_type <> 'virtual' AND EXISTS(
-                SELECT 1 FROM cable_links
-                WHERE (a_endpoint_type='device_interface' AND a_endpoint_id = OLD.id)
-                   OR (b_endpoint_type='device_interface' AND b_endpoint_id = OLD.id)
-            ) THEN
-                RAISE EXCEPTION '设备接口 % 被 cable_links 引用，不能删除', OLD.id;
-            END IF;
-            RETURN OLD;
-        END;
-        $$ LANGUAGE plpgsql;",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_device_interfaces_prevent_delete_linked ON device_interfaces",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "CREATE TRIGGER trg_device_interfaces_prevent_delete_linked BEFORE DELETE ON device_interfaces FOR EACH ROW EXECUTE FUNCTION prevent_interface_deletion_if_linked()"
-    )
-    .execute(pool)
-    .await?;
+    }
 
     Ok(())
 }
 
+/// 创建线缆路径查询函数（递归 CTE，BFS 逐跳返回，深度上限 20）。
 async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("DROP FUNCTION IF EXISTS find_cable_path(VARCHAR, UUID, VARCHAR, UUID)")
         .execute(pool)
         .await?;
 
-    let sql = r"CREATE OR REPLACE FUNCTION find_cable_path(
+    sqlx::query(
+        r"CREATE OR REPLACE FUNCTION find_cable_path(
         p_from_type VARCHAR, p_from_id UUID,
         p_to_type   VARCHAR, p_to_id   UUID
     ) RETURNS TABLE(
@@ -292,12 +265,10 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         p.hop_type
     FROM path_cte p
     ORDER BY p.hop_idx;
-    $$ LANGUAGE sql STABLE;";
-
-    if let Err(e) = sqlx::query(sql).execute(pool).await {
-        warn!("find_cable_path 函数创建失败: {}", e);
-        return Err(e);
-    }
+    $$ LANGUAGE sql STABLE;",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

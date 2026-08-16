@@ -1,3 +1,5 @@
+//! 定时任务执行器。
+
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::models::TaskContext;
 use async_trait::async_trait;

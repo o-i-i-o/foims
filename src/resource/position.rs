@@ -1,7 +1,18 @@
+//! 机柜机位（positions）资源管理。
+//!
+//! 机位是机柜内的 U 位区间，可被设备占用并绑定 IP。列表过滤使用
+//! sqlx `QueryBuilder` 动态拼接（关键字经 `escape_like` 转义、排序走
+//! 白名单），行映射统一为 `query_as` + `FromRow` 强类型结构。
+
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
+use chrono::Utc;
+use sqlx::{PgExecutor, Postgres, QueryBuilder};
+use uuid::Uuid;
+use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
@@ -11,22 +22,46 @@ use crate::models::{
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
-use chrono::Utc;
-use serde_json::json;
-use sqlx::Row;
-use std::collections::HashMap;
-use uuid::Uuid;
-use validator::Validate;
+use crate::utils::pagination::{Pagination, paged_response};
 
+/// 追加机位列表过滤条件（关键字 + 机柜 + 机房），供 COUNT 与数据查询共用。
+fn push_position_filters(
+    builder: &mut QueryBuilder<Postgres>,
+    search_pattern: Option<&str>,
+    cabinet_id: Option<Uuid>,
+    room_id: Option<Uuid>,
+) {
+    let mut first = true;
+    if let Some(pattern) = search_pattern {
+        builder
+            .push(" WHERE (p.name ILIKE ")
+            .push_bind(pattern)
+            .push(" OR p.description ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+        first = false;
+    }
+    if let Some(cabinet_id) = cabinet_id {
+        builder
+            .push(if first { " WHERE " } else { " AND " })
+            .push("p.cabinet_id = ")
+            .push_bind(cabinet_id);
+        first = false;
+    }
+    if let Some(room_id) = room_id {
+        builder
+            .push(if first { " WHERE " } else { " AND " })
+            .push("c.room_id = ")
+            .push_bind(room_id);
+    }
+}
+
+/// 分页获取机位列表（支持关键字、机柜、机房过滤与白名单排序）。
 pub async fn get_positions(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
-    let page_size = pagination.page_size;
-    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let cabinet_id = query
         .get("cabinet_id")
@@ -41,6 +76,7 @@ pub async fn get_positions(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",
         ("cabinet_name", "desc") => "ORDER BY cabinet_name DESC, name ASC",
@@ -52,117 +88,56 @@ pub async fn get_positions(
         _ => "ORDER BY name ASC",
     };
 
-    let mut conditions: Vec<String> = Vec::new();
-    let mut param_idx = 1;
+    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
 
-    if !search.is_empty() {
-        conditions.push(format!(
-            "(p.name ILIKE ${param_idx} OR p.description ILIKE ${param_idx})"
-        ));
-        param_idx += 1;
-    }
-    if cabinet_id.is_some() {
-        conditions.push(format!("p.cabinet_id = ${param_idx}"));
-        param_idx += 1;
-    }
-    if room_id.is_some() {
-        conditions.push(format!("c.room_id = ${param_idx}"));
-        param_idx += 1;
-    }
+    let mut count_builder = QueryBuilder::<Postgres>::new(
+        "SELECT COUNT(*) FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id",
+    );
+    push_position_filters(
+        &mut count_builder,
+        search_pattern.as_deref(),
+        cabinet_id,
+        room_id,
+    );
+    let total: i64 = count_builder
+        .build_query_scalar()
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", conditions.join(" AND "))
-    };
-
-    let search_pattern = crate::utils::escape_like(&search);
-    let limit_idx = param_idx;
-    let offset_idx = param_idx + 1;
-
-    let count_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id {where_clause}"
-    ));
-    let data_sql = sqlx::AssertSqlSafe(format!(
+    let mut data_builder = QueryBuilder::<Postgres>::new(
         r"SELECT p.id, p.name, p.cabinet_id,
-                  (SELECT c2.name FROM cabinets c2 WHERE c2.id = p.cabinet_id) as cabinet_name,
-                  c.room_id,
-                  (SELECT r.name FROM rooms r WHERE r.id = c.room_id) as room_name,
+                  c.name as cabinet_name, c.room_id, r.name as room_name,
                   p.start_u, p.end_u, p.description,
                   p.created_at::TIMESTAMPTZ as created_at, p.updated_at::TIMESTAMPTZ as updated_at
            FROM positions p
            LEFT JOIN cabinets c ON p.cabinet_id = c.id
-           {where_clause}
-           {order_clause} LIMIT ${limit_idx} OFFSET ${offset_idx}"
-    ));
-
-    let mut count_query = sqlx::query_scalar::<_, i64>(count_sql);
-    let mut data_query = sqlx::query(data_sql);
-
-    if !search.is_empty() {
-        count_query = count_query.bind(&search_pattern);
-        data_query = data_query.bind(&search_pattern);
-    }
-    if let Some(cid) = cabinet_id {
-        count_query = count_query.bind(cid);
-        data_query = data_query.bind(cid);
-    }
-    if let Some(rid) = room_id {
-        count_query = count_query.bind(rid);
-        data_query = data_query.bind(rid);
-    }
-
-    count_query = count_query.bind(page_size).bind(offset);
-    data_query = data_query.bind(page_size).bind(offset);
-
-    let total: i64 = count_query.fetch_one(&state.pool()?.get_conn()).await?;
-    let positions_basic = data_query.fetch_all(&state.pool()?.get_conn()).await?;
-
-    let mut positions_with_details = Vec::new();
-
-    for row in positions_basic {
-        let id: Uuid = row.get("id");
-        let name: String = row.get("name");
-        let cabinet_id: Option<Uuid> = row.get("cabinet_id");
-        let cabinet_name: Option<String> = row.get("cabinet_name");
-        let room_id: Option<Uuid> = row.get("room_id");
-        let room_name: Option<String> = row.get("room_name");
-        let start_u: i32 = row.get("start_u");
-        let end_u: i32 = row.get("end_u");
-        let description: Option<String> = row.get("description");
-        let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
-        let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-
-        let position_with_details = CabinetPositionWithDetails {
-            id,
-            name,
-            cabinet_id,
-            cabinet_name,
-            room_id,
-            room_name,
-            start_u,
-            end_u,
-            ips: Vec::new(),
-            description,
-            created_at,
-            updated_at,
-        };
-
-        positions_with_details.push(position_with_details);
-    }
+           LEFT JOIN rooms r ON c.room_id = r.id",
+    );
+    push_position_filters(
+        &mut data_builder,
+        search_pattern.as_deref(),
+        cabinet_id,
+        room_id,
+    );
+    data_builder
+        .push(" ")
+        .push(order_clause)
+        .push(" LIMIT ")
+        .push_bind(pagination.page_size)
+        .push(" OFFSET ")
+        .push_bind(pagination.offset);
+    let items = data_builder
+        .build_query_as::<CabinetPositionWithDetails>()
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": positions_with_details,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(items, total, &pagination),
         "机位获取成功",
     ))
 }
 
+/// 创建机位（同机柜内名称唯一，检查与写入在同一事务内）。
 pub async fn create_cabinet_position(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -179,7 +154,6 @@ pub async fn create_cabinet_position(
     .bind(req.cabinet_id)
     .fetch_optional(&mut *tx)
     .await?;
-
     if existing_position.is_some() {
         return Err(AppError::Conflict("机位名称已存在".to_string()));
     }
@@ -188,8 +162,8 @@ pub async fn create_cabinet_position(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        "INSERT INTO positions (id, name, cabinet_id, start_u, end_u, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
@@ -199,7 +173,8 @@ pub async fn create_cabinet_position(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx).await?;
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -234,94 +209,63 @@ pub async fn create_cabinet_position(
     Ok(crate::error::ok_json(position, "机位创建成功"))
 }
 
+/// 查询机位基础信息（含机柜/机房名称联表）。
+async fn fetch_position_base(
+    executor: impl PgExecutor<'_>,
+    id: Uuid,
+) -> Result<Option<CabinetPositionWithDetails>, sqlx::Error> {
+    sqlx::query_as::<_, CabinetPositionWithDetails>(
+        r"SELECT p.id, p.name, p.cabinet_id,
+                  c.name as cabinet_name, c.room_id, r.name as room_name,
+                  p.start_u, p.end_u, p.description,
+                  p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ
+           FROM positions p
+           LEFT JOIN cabinets c ON p.cabinet_id = c.id
+           LEFT JOIN rooms r ON c.room_id = r.id
+           WHERE p.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(executor)
+    .await
+}
+
+/// 查询占用机位的设备所绑定的 IP 明细。
+async fn fetch_position_ips(
+    executor: impl PgExecutor<'_>,
+    id: Uuid,
+) -> Result<Vec<IpManager>, sqlx::Error> {
+    sqlx::query_as(
+        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
+           nc.name AS network_name, nr.name AS network_region,
+           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description,
+           m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
+           FROM ips m
+           JOIN devices d ON m.device_id = d.id
+           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+           LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+           WHERE d.position_id = $1
+           ORDER BY m.ip_address",
+    )
+    .bind(id)
+    .fetch_all(executor)
+    .await
+}
+
+/// 获取机位详情（含占用设备的 IP 明细）。
 pub async fn get_cabinet_position(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let position_data = sqlx::query(
-        r"SELECT p.id, p.name, p.cabinet_id, p.start_u, p.end_u, p.description,
-                  p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ,
-                  c.room_id
-           FROM positions p
-           LEFT JOIN cabinets c ON p.cabinet_id = c.id
-           WHERE p.id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
+    let conn = state.pool()?.get_conn();
+    let mut position = fetch_position_base(&conn, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
+    position.ips = fetch_position_ips(&conn, id).await?;
 
-    let position_ips = sqlx::query(
-        r"SELECT
-            m.id, m.device_interface_id, m.device_id, m.network_id,
-            host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname, m.description,
-            m.status, m.last_seen, m.created_at, m.updated_at,
-            n.name as network_name,
-            n.network_region_id, nr.name as network_region
-        FROM ips m
-        JOIN devices d ON m.device_id = d.id
-        LEFT JOIN network_cidrs n ON m.network_id = n.id
-        LEFT JOIN network_regions nr ON n.network_region_id = nr.id
-        WHERE d.position_id = $1
-        ORDER BY m.ip_address",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
-
-    let ips_with_region: Vec<serde_json::Value> = position_ips
-        .into_iter()
-        .map(|row| {
-            serde_json::json!({
-                "id": row.get::<Uuid, _>(0),
-                "device_interface_id": row.get::<Uuid, _>(1),
-                "device_id": row.get::<Uuid, _>(2),
-                "network_id": row.get::<Option<Uuid>, _>(3),
-                "ip_address": row.get::<String, _>(4),
-                "ip_version": row.get::<i16, _>(5),
-                "mac_address": row.get::<Option<String>, _>(6),
-                "hostname": row.get::<Option<String>, _>(7),
-                "description": row.get::<Option<String>, _>(8),
-                "status": row.get::<String, _>(9),
-                "last_seen": row.get::<chrono::DateTime<chrono::Utc>, _>(10),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>(11),
-                "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>(12),
-                "network_name": row.get::<Option<String>, _>(13),
-                "network_region_id": row.get::<Option<Uuid>, _>(14),
-                "network_region": row.get::<Option<String>, _>(15)
-            })
-        })
-        .collect();
-
-    let cabinet_name: Option<String> =
-        if position_data.get::<Option<Uuid>, _>("cabinet_id").is_some() {
-            let cabinet_id: Uuid = position_data.get("cabinet_id");
-            sqlx::query_scalar::<_, String>("SELECT name FROM cabinets WHERE id = $1")
-                .bind(cabinet_id)
-                .fetch_optional(&state.pool()?.get_conn())
-                .await?
-        } else {
-            None
-        };
-
-    let position_with_details = serde_json::json!({
-        "id": position_data.get::<Uuid, _>("id"),
-        "name": position_data.get::<String, _>("name"),
-        "cabinet_id": position_data.get::<Option<Uuid>, _>("cabinet_id"),
-        "cabinet_name": cabinet_name,
-        "room_id": position_data.get::<Option<Uuid>, _>("room_id"),
-        "start_u": position_data.get::<i32, _>("start_u"),
-        "end_u": position_data.get::<i32, _>("end_u"),
-        "ips": ips_with_region,
-        "description": position_data.get::<Option<String>, _>("description"),
-        "created_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "updated_at": position_data.get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
-    });
-
-    Ok(crate::error::ok_json(position_with_details, "机位获取成功"))
+    Ok(crate::error::ok_json(position, "机位获取成功"))
 }
 
+/// 更新机位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
 pub async fn update_cabinet_position(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -337,21 +281,18 @@ pub async fn update_cabinet_position(
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
-
     if !position_exists {
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
 
-    let now = Utc::now();
-
     sqlx::query(
-        "UPDATE positions SET 
-         name = COALESCE($1, name), 
+        "UPDATE positions SET
+         name = COALESCE($1, name),
          cabinet_id = COALESCE($2, cabinet_id),
          start_u = COALESCE($3, start_u),
          end_u = COALESCE($4, end_u),
-         description = COALESCE($5, description), 
-         updated_at = $6 
+         description = COALESCE($5, description),
+         updated_at = $6
          WHERE id = $7",
     )
     .bind(&req.name)
@@ -359,51 +300,17 @@ pub async fn update_cabinet_position(
     .bind(req.start_u)
     .bind(req.end_u)
     .bind(&req.description)
-    .bind(now)
+    .bind(Utc::now())
     .bind(id)
     .execute(&mut *tx)
     .await?;
 
+    let mut result = fetch_position_base(&mut *tx, id)
+        .await?
+        .ok_or_else(|| AppError::Internal("机位更新后查询详情失败".to_string()))?;
+    result.ips = fetch_position_ips(&mut *tx, id).await?;
+
     tx.commit().await?;
-
-    let row = sqlx::query(
-        "SELECT p.id, p.name, p.cabinet_id, c.name as cabinet_name, c.room_id, r.name as room_name, p.start_u, p.end_u, p.description, p.created_at::TIMESTAMPTZ, p.updated_at::TIMESTAMPTZ 
-        FROM positions p 
-        LEFT JOIN cabinets c ON p.cabinet_id = c.id 
-        LEFT JOIN rooms r ON c.room_id = r.id 
-        WHERE p.id = $1"
-    ).bind(id)
-    .fetch_one(&state.pool()?.get_conn()).await?;
-
-    let ips: Vec<IpManager> = sqlx::query_as(
-        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
-           nc.name AS network_name, nr.name AS network_region,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description,
-           m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
-           FROM ips m
-           JOIN devices d ON m.device_id = d.id
-           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
-           LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-           WHERE d.position_id = $1",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
-
-    let result = CabinetPositionWithDetails {
-        id: row.get("id"),
-        name: row.get("name"),
-        cabinet_id: row.get("cabinet_id"),
-        cabinet_name: row.get::<Option<String>, _>("cabinet_name"),
-        room_id: row.get("room_id"),
-        room_name: row.get("room_name"),
-        start_u: row.get("start_u"),
-        end_u: row.get("end_u"),
-        ips,
-        description: row.get("description"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-    };
 
     let details = serde_json::json!({
         "name": result.name,
@@ -425,6 +332,7 @@ pub async fn update_cabinet_position(
     Ok(crate::error::ok_json(result, "机位更新成功"))
 }
 
+/// 删除机位（被设备占用时拒绝删除）。
 pub async fn delete_cabinet_position(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -437,7 +345,6 @@ pub async fn delete_cabinet_position(
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
-
     if existing_position.is_none() {
         return Err(AppError::NotFound("机位未找到".to_string()));
     }
@@ -447,7 +354,6 @@ pub async fn delete_cabinet_position(
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
-
     if device_using_position.is_some() {
         return Err(AppError::Validation(
             "该机位被设备占用，请先删除对应的设备".to_string(),

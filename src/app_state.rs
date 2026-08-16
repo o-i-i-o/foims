@@ -1,3 +1,5 @@
+//! 应用共享状态（数据库连接池、配置、JWT 工具等）。
+
 use std::sync::Arc;
 
 use async_trait::async_trait;

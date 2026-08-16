@@ -1,3 +1,5 @@
+//! 分页参数解析与统一分页响应构造。
+
 use std::collections::HashMap;
 
 pub const DEFAULT_PAGE: i64 = 1;
@@ -41,4 +43,22 @@ impl Pagination {
     pub const fn total_pages(&self, total: i64) -> i64 {
         (total + self.page_size - 1) / self.page_size
     }
+}
+
+/// 构造统一的分页列表响应体。
+///
+/// 所有列表接口的分页数据统一使用 `items` 键（历史上部分接口用过
+/// `data`，已废弃），配合 [`Pagination::total_pages`] 计算 `total_pages`。
+pub fn paged_response<T: serde::Serialize>(
+    items: Vec<T>,
+    total: i64,
+    pagination: &Pagination,
+) -> serde_json::Value {
+    serde_json::json!({
+        "items": items,
+        "total": total,
+        "page": pagination.page,
+        "page_size": pagination.page_size,
+        "total_pages": pagination.total_pages(total)
+    })
 }

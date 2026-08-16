@@ -18,7 +18,7 @@ function createVisualizationCallbacks() {
   return {
     onEditWorkstation: editWorkstation,
     onEditCabinet: editCabinet,
-    onEditCabinetPosition: editCabinetPosition,
+    onEditCabinetPosition: editCabinetPosition
   };
 }
 
@@ -41,7 +41,7 @@ function initTabSwitching() {
       const targetTab = elementCache.get(tabId);
       if (targetTab) {
         targetTab.classList.add("active");
-        
+
         if (tabId === "cabinet-visualization" && cabinetVisualization) {
           const roomId = elementCache.getValue("cabinet-room-select");
           if (roomId) {
@@ -186,9 +186,7 @@ async function loadDeviceOptions() {
     const devices = result.data.items || result.data || [];
     select.innerHTML = `<option value="" data-i18n="visualization.select_device">${t("visualization.select_device")}</option>`;
 
-    const existingIds = new Set(
-      topologyVisualization.nodes.map((n) => n.device_id)
-    );
+    const existingIds = new Set(topologyVisualization.nodes.map((n) => n.device_id));
 
     devices.forEach((d) => {
       if (existingIds.has(d.id)) return;
@@ -204,13 +202,10 @@ async function loadDeviceOptions() {
 }
 
 async function loadInitialData() {
-  await Promise.all([
-    loadRoomsForSelect(),
-    loadDataCenterRoomsForSelect("cabinet-room-select")
-  ]);
+  await Promise.all([loadRoomsForSelect(), loadDataCenterRoomsForSelect("cabinet-room-select")]);
 
-  await new Promise(resolve => requestAnimationFrame(resolve));
-  await new Promise(resolve => requestAnimationFrame(resolve));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
 
   const visualizationSelect = elementCache.get("room-select");
   if (visualizationSelect && visualizationSelect.options.length > 0) {
@@ -231,12 +226,21 @@ async function loadInitialData() {
 
 export async function initVisualization() {
   if (visualizationInitialized) return;
-  
+
   try {
-    const { SVGVisualization } = await loadModule('SVGVisualization', '/static/js/modules/visualization/SVGVisualization.js');
-    const { TopologyVisualization } = await loadModule('TopologyVisualization', '/static/js/modules/visualization/TopologyVisualization.js');
-    const { TopologyModal } = await loadModule('TopologyModal', '/static/js/modules/visualization/TopologyModal.js');
-    
+    const { SVGVisualization } = await loadModule(
+      "SVGVisualization",
+      "/static/js/modules/visualization/SVGVisualization.js"
+    );
+    const { TopologyVisualization } = await loadModule(
+      "TopologyVisualization",
+      "/static/js/modules/visualization/TopologyVisualization.js"
+    );
+    const { TopologyModal } = await loadModule(
+      "TopologyModal",
+      "/static/js/modules/visualization/TopologyModal.js"
+    );
+
     initTabSwitching();
 
     const callbacks = createVisualizationCallbacks();
@@ -266,7 +270,7 @@ export async function initVisualization() {
         const node = topologyVisualization.nodes.find((n) => n.device_id === deviceId);
         const name = node?.device_name || deviceId;
         topologyModal.open(deviceId, name);
-      },
+      }
     };
 
     bindSelectEvents();

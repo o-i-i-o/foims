@@ -1,3 +1,5 @@
+//! 组织类型模板管理。
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
@@ -373,8 +375,8 @@ pub async fn create_org_template(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 校验 levels 映射格式
-    let _root_type = validate_levels_mapping(&req.levels)?;
+    // 校验 levels 映射格式（返回值仅用于校验，无需保留）
+    validate_levels_mapping(&req.levels)?;
 
     // 校验 icons 格式
     let icons = req.icons.clone().unwrap_or_else(|| serde_json::json!({}));

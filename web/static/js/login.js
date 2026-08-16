@@ -21,13 +21,13 @@ class LoginManager {
     this.State = {
       INIT: "init",
       SUBMITTING: "submitting",
-      TWO_FACTOR: "two_factor",
+      TWO_FACTOR: "two_factor"
     };
 
     // 登录模式枚举
     this.LoginMode = {
       PASSWORD: "password-login",
-      EMAIL: "email-login",
+      EMAIL: "email-login"
     };
 
     // 当前状态和模式
@@ -76,7 +76,7 @@ class LoginManager {
       forgotPasswordLink: document.getElementById("forgot-password-link"),
       forgotPasswordForm: document.getElementById("forgot-password-form"),
       forgotPasswordError: document.getElementById("forgot-password-error"),
-      forgotPasswordSuccess: document.getElementById("forgot-password-success"),
+      forgotPasswordSuccess: document.getElementById("forgot-password-success")
     };
 
     // 绑定方法上下文
@@ -110,7 +110,7 @@ class LoginManager {
     this.checkLoginStatus();
 
     // 绑定 Tabs 事件
-    this.dom.tabs.forEach(tab => {
+    this.dom.tabs.forEach((tab) => {
       tab.addEventListener("click", (e) => this.handleTabClick(e.target));
     });
 
@@ -171,8 +171,8 @@ class LoginManager {
     if (this.currentState === this.State.SUBMITTING) return;
 
     // 移除所有 active 类
-    this.dom.tabs.forEach(btn => btn.classList.remove("active"));
-    this.dom.loginSections.forEach(section => section.classList.remove("active"));
+    this.dom.tabs.forEach((btn) => btn.classList.remove("active"));
+    this.dom.loginSections.forEach((section) => section.classList.remove("active"));
 
     // 激活当前 Tab
     targetBtn.classList.add("active");
@@ -180,7 +180,8 @@ class LoginManager {
     this.currentMode = mode;
 
     // 显示对应的内容区域
-    const sectionId = mode === this.LoginMode.PASSWORD ? "password-login-section" : "email-login-section";
+    const sectionId =
+      mode === this.LoginMode.PASSWORD ? "password-login-section" : "email-login-section";
     document.getElementById(sectionId).classList.add("active");
 
     // 更新验证规则
@@ -213,7 +214,7 @@ class LoginManager {
       const username = this.dom.usernameInput.value.trim();
       const password = this.dom.passwordInput.value;
       if (!username || !password) {
-        this.showError(t('login.username_password_required'));
+        this.showError(t("login.username_password_required"));
         return;
       }
       await this.submitPasswordLogin(username, password, rememberMe);
@@ -221,7 +222,7 @@ class LoginManager {
       const email = this.dom.emailInput.value.trim();
       const code = this.dom.emailCodeInput.value.trim();
       if (!email || !code) {
-        this.showError(t('login.email_code_required'));
+        this.showError(t("login.email_code_required"));
         return;
       }
       await this.submitEmailLogin(email, code, rememberMe);
@@ -323,7 +324,7 @@ class LoginManager {
 
     const code = this.dom.twoFactorCodeInput.value.trim();
     if (!code) {
-      this.showError(t('login.code_required'));
+      this.showError(t("login.code_required"));
       return;
     }
 
@@ -347,7 +348,7 @@ class LoginManager {
       if (result.success) {
         loginUser(result.data, rememberMe);
       } else {
-        this.showError(result.message || t('login.two_factor_failed'));
+        this.showError(result.message || t("login.two_factor_failed"));
       }
     } catch (error) {
       this.handleNetworkError(error);
@@ -369,16 +370,12 @@ class LoginManager {
     this.setLoadingState(this.dom.sendLoginCodeBtn, true);
 
     try {
-      const result = await apiPost(
-        "/api/auth/login/send-code",
-        { email },
-        { skipAuthCheck: true }
-      );
+      const result = await apiPost("/api/auth/login/send-code", { email }, { skipAuthCheck: true });
 
       if (result.success) {
         this.startCountdown(this.dom.sendLoginCodeBtn, 60);
       } else {
-        this.showError(result.message || t('login.send_failed'));
+        this.showError(result.message || t("login.send_failed"));
         this.setLoadingState(this.dom.sendLoginCodeBtn, false);
       }
     } catch (error) {
@@ -392,7 +389,7 @@ class LoginManager {
    */
   startCountdown(btn, seconds) {
     let countdown = seconds;
-    btn.textContent = `${t('login.code_sent')}(${countdown})`;
+    btn.textContent = `${t("login.code_sent")}(${countdown})`;
     btn.disabled = true;
 
     const timer = setInterval(() => {
@@ -401,7 +398,7 @@ class LoginManager {
         clearInterval(timer);
         this.setLoadingState(btn, false);
       } else {
-        btn.textContent = `${t('login.code_sent')}(${countdown})`;
+        btn.textContent = `${t("login.code_sent")}(${countdown})`;
       }
     }, 1000);
   }
@@ -412,11 +409,11 @@ class LoginManager {
   setLoadingState(btn, isLoading) {
     if (isLoading) {
       btn.dataset.originalText = btn.textContent;
-      btn.textContent = t('login.sending');
+      btn.textContent = t("login.sending");
       btn.disabled = true;
       this.clearError();
     } else {
-      btn.textContent = t('login.send_code'); // 恢复默认文本
+      btn.textContent = t("login.send_code"); // 恢复默认文本
       btn.disabled = false;
     }
   }
@@ -435,7 +432,7 @@ class LoginManager {
 
     // 重置 2FA 表单
     this.dom.twoFactorCodeInput.value = "";
-    this.resetButtonContent(this.dom.twoFactorSubmitBtn, t('login.verify_and_sign_in'));
+    this.resetButtonContent(this.dom.twoFactorSubmitBtn, t("login.verify_and_sign_in"));
     this.dom.twoFactorSubmitBtn.disabled = false;
   }
 
@@ -447,19 +444,21 @@ class LoginManager {
       this.currentState = this.State.SUBMITTING;
       if (this.dom.twoFactorView.classList.contains("active")) {
         this.dom.twoFactorSubmitBtn.disabled = true;
-        this.setButtonLoadingContent(this.dom.twoFactorSubmitBtn, t('common.processing'));
+        this.setButtonLoadingContent(this.dom.twoFactorSubmitBtn, t("common.processing"));
       } else {
         this.dom.submitBtn.disabled = true;
-        this.setButtonLoadingContent(this.dom.submitBtn, t('common.processing'));
+        this.setButtonLoadingContent(this.dom.submitBtn, t("common.processing"));
       }
     } else {
-      this.currentState = this.dom.twoFactorView.classList.contains("active") ? this.State.TWO_FACTOR : this.State.INIT;
+      this.currentState = this.dom.twoFactorView.classList.contains("active")
+        ? this.State.TWO_FACTOR
+        : this.State.INIT;
 
       this.dom.twoFactorSubmitBtn.disabled = false;
-      this.resetButtonContent(this.dom.twoFactorSubmitBtn, t('login.verify_and_sign_in'));
+      this.resetButtonContent(this.dom.twoFactorSubmitBtn, t("login.verify_and_sign_in"));
 
       this.dom.submitBtn.disabled = false;
-      this.resetButtonContent(this.dom.submitBtn, t('login.sign_in'));
+      this.resetButtonContent(this.dom.submitBtn, t("login.sign_in"));
     }
   }
 
@@ -493,9 +492,9 @@ class LoginManager {
     }
 
     if (message.includes("账户已禁用")) return t("api.account_disabled");
-    if (message.includes("失败次数过多")) return t('login.too_many_attempts');
-    if (message.includes("系统未初始化")) return t('login.system_not_init');
-    if (message.includes("SMTP未配置")) return t('login.email_service_not_configed');
+    if (message.includes("失败次数过多")) return t("login.too_many_attempts");
+    if (message.includes("系统未初始化")) return t("login.system_not_init");
+    if (message.includes("SMTP未配置")) return t("login.email_service_not_configed");
 
     return message;
   }
@@ -515,11 +514,11 @@ class LoginManager {
   }
 
   handleNetworkError(error) {
-    let msg = t('login.network_error');
+    let msg = t("login.network_error");
     if (error.message && error.message.includes("Network")) {
-      msg = t('login.network_failed');
+      msg = t("login.network_failed");
     } else if (error.message && error.message.includes("timeout")) {
-      msg = t('login.timeout');
+      msg = t("login.timeout");
     }
     this.showError(msg);
   }
@@ -539,13 +538,13 @@ class LoginManager {
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = t('login.sending');
+    btn.textContent = t("login.sending");
 
     try {
       const result = await apiPost("/api/auth/forgot-password", { email }, { skipAuthCheck: true });
 
       if (result.success) {
-        forgotPasswordSuccess.textContent = t('login.reset_email_sent');
+        forgotPasswordSuccess.textContent = t("login.reset_email_sent");
         forgotPasswordSuccess.classList.add("show");
         e.target.reset();
         setTimeout(() => {
@@ -553,12 +552,12 @@ class LoginManager {
           forgotPasswordSuccess.classList.remove("show");
         }, 3000);
       } else {
-        forgotPasswordError.textContent = result.message || t('login.send_failed');
+        forgotPasswordError.textContent = result.message || t("login.send_failed");
         forgotPasswordError.classList.add("show");
       }
     } catch (error) {
-      let msg = t('login.send_failed');
-      if (error.message && error.message.includes("Network")) msg = t('login.network_failed');
+      let msg = t("login.send_failed");
+      if (error.message && error.message.includes("Network")) msg = t("login.network_failed");
       forgotPasswordError.textContent = msg;
       forgotPasswordError.classList.add("show");
     } finally {
@@ -590,7 +589,7 @@ class LoginManager {
 
     try {
       const response = await fetch("/api/auth/me", {
-        credentials: 'include',
+        credentials: "include"
       });
 
       if (response.ok) {
@@ -699,44 +698,53 @@ class LoginManager {
 
   // 紫色角色眨眼
   scheduleBlinkPurple() {
-    setTimeout(() => {
-      this.isPurpleBlinking = true;
-      this.updateCharacters();
-      setTimeout(() => {
-        this.isPurpleBlinking = false;
+    setTimeout(
+      () => {
+        this.isPurpleBlinking = true;
         this.updateCharacters();
-        this.scheduleBlinkPurple();
-      }, 150);
-    }, Math.random() * 4000 + 3000);
+        setTimeout(() => {
+          this.isPurpleBlinking = false;
+          this.updateCharacters();
+          this.scheduleBlinkPurple();
+        }, 150);
+      },
+      Math.random() * 4000 + 3000
+    );
   }
 
   // 黑色角色眨眼
   scheduleBlinkBlack() {
-    setTimeout(() => {
-      this.isBlackBlinking = true;
-      this.updateCharacters();
-      setTimeout(() => {
-        this.isBlackBlinking = false;
+    setTimeout(
+      () => {
+        this.isBlackBlinking = true;
         this.updateCharacters();
-        this.scheduleBlinkBlack();
-      }, 150);
-    }, Math.random() * 4000 + 3000);
+        setTimeout(() => {
+          this.isBlackBlinking = false;
+          this.updateCharacters();
+          this.scheduleBlinkBlack();
+        }, 150);
+      },
+      Math.random() * 4000 + 3000
+    );
   }
 
   // 密码可见时，紫色角色偶尔偷看
   schedulePeek() {
     if (this.dom.passwordInput.value.length > 0 && this.showPassword) {
-      setTimeout(() => {
-        if (this.dom.passwordInput.value.length > 0 && this.showPassword) {
-          this.isPurplePeeking = true;
-          this.updateCharacters();
-          setTimeout(() => {
-            this.isPurplePeeking = false;
+      setTimeout(
+        () => {
+          if (this.dom.passwordInput.value.length > 0 && this.showPassword) {
+            this.isPurplePeeking = true;
             this.updateCharacters();
-            this.schedulePeek();
-          }, 800);
-        }
-      }, Math.random() * 3000 + 2000);
+            setTimeout(() => {
+              this.isPurplePeeking = false;
+              this.updateCharacters();
+              this.schedulePeek();
+            }, 800);
+          }
+        },
+        Math.random() * 3000 + 2000
+      );
     }
   }
 
@@ -990,13 +998,17 @@ class LoginManager {
     }
 
     const shakeIds = [
-      "purple-eyes", "black-eyes", "orange-eyes",
-      "yellow-eyes", "yellow-mouth", "orange-mouth",
+      "purple-eyes",
+      "black-eyes",
+      "orange-eyes",
+      "yellow-eyes",
+      "yellow-mouth",
+      "orange-mouth"
     ];
-    const shakeEls = shakeIds.map(id => document.getElementById(id)).filter(Boolean);
+    const shakeEls = shakeIds.map((id) => document.getElementById(id)).filter(Boolean);
 
     // 重置 shake 动画（移除 class → 强制 reflow → 重新添加）
-    shakeEls.forEach(el => el.classList.remove("shake-head"));
+    shakeEls.forEach((el) => el.classList.remove("shake-head"));
     void document.body.offsetHeight;
 
     this.isLoginError = true;
@@ -1009,7 +1021,7 @@ class LoginManager {
 
     // 身体过渡(0.7s)结束后再开始摇头
     setTimeout(() => {
-      shakeEls.forEach(el => el.classList.add("shake-head"));
+      shakeEls.forEach((el) => el.classList.add("shake-head"));
     }, 350);
 
     // 2.5 秒后自动恢复（仅恢复姿态；错误提示由 clearError 控制）
@@ -1017,7 +1029,7 @@ class LoginManager {
       this.isLoginError = false;
       this.errorRecoverTimer = null;
       if (orangeMouth) orangeMouth.classList.remove("visible");
-      shakeEls.forEach(el => el.classList.remove("shake-head"));
+      shakeEls.forEach((el) => el.classList.remove("shake-head"));
       this.updateCharacters();
     }, 2500);
   }

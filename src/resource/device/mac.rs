@@ -1,3 +1,5 @@
+//! 设备 MAC 地址表管理。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

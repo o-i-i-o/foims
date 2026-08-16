@@ -6,40 +6,40 @@
 
 /* ===== 层级容器 ===== */
 .network-card-item {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-primary);
-    border-radius: var(--radius-md);
-    padding: var(--space-md);
-    margin-bottom: var(--space-md);
-    box-sizing: border-box;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  box-sizing: border-box;
 }
 
 .nc-port-item {
-    background: var(--color-bg-white);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-info);
-    border-radius: var(--radius-sm);
-    padding: var(--space-sm) var(--space-md);
-    margin-top: var(--space-sm);
-    box-sizing: border-box;
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border-light);
+  border-left: 3px solid var(--color-info);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-top: var(--space-sm);
+  box-sizing: border-box;
 }
 
 .nc-ip-item {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border-light);
-    border-left: 3px solid var(--color-success);
-    border-radius: var(--radius-sm);
-    padding: var(--space-sm) var(--space-md);
-    margin-top: var(--space-sm);
-    box-sizing: border-box;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-left: 3px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-top: var(--space-sm);
+  box-sizing: border-box;
 }
 
 /* IP 容器：网口内部承装 IP 的区域 */
 .port-ips-container {
-    margin-top: var(--space-sm);
-    padding-left: var(--space-sm);
-    border-left: 2px solid var(--color-border-light);
+  margin-top: var(--space-sm);
+  padding-left: var(--space-sm);
+  border-left: 2px solid var(--color-border-light);
 }
 
 /* ===== 层级标签栏 ===== */
@@ -49,137 +49,145 @@
 header.card-level-bar,
 header.port-level-bar,
 header.ip-level-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-sm);
-    padding-bottom: var(--space-xs);
-    border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .level-badge,
 .level-badge.level-card,
 .level-badge.level-port,
 .level-badge.level-ip {
-    display: inline-block;
-    padding: 2px var(--space-sm);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: #fff;
-    line-height: 1.6;
-    white-space: nowrap;
-    margin: 0;
+  display: inline-block;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--color-bg-white);
+  line-height: 1.6;
+  white-space: nowrap;
+  margin: 0;
 }
 
 /* 重置 h3 默认样式 */
 .card-level-bar h3.level-badge,
 .port-level-bar h3.level-badge,
 .ip-level-bar h3.level-badge {
-    margin: 0;
-    font-size: var(--font-size-xs);
-    font-weight: 600;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
 }
 
-.level-card { background: var(--color-primary); }
-.level-port { background: var(--color-info); }
-.level-ip   { background: var(--color-success); }
+.level-card {
+  background: var(--color-primary);
+}
+.level-port {
+  background: var(--color-info);
+}
+.level-ip {
+  background: var(--color-success);
+}
 
 .level-actions {
-    display: flex;
-    gap: var(--space-xs);
-    flex-shrink: 0;
+  display: flex;
+  gap: var(--space-xs);
+  flex-shrink: 0;
 }
 
 /* ===== 字段网格容器 ===== */
 .nc-fields {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--space-sm);
-    margin-bottom: var(--space-sm);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
 .nc-fields:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 /* ===== 字段单项 ===== */
 .nc-field {
-    display: block;
-    min-width: 0;
+  display: block;
+  min-width: 0;
 }
 
 .nc-field label {
-    display: block;
-    margin-bottom: var(--space-xs);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--color-text-secondary);
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .nc-field .required {
-    color: var(--color-danger);
-    margin-left: 2px;
+  color: var(--color-danger);
+  margin-left: 2px;
 }
 
 /* ===== 输入控件 ===== */
 .nc-input {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    padding: var(--control-padding-y) var(--control-padding-x);
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: var(--font-size-sm);
-    font-family: inherit;
-    background-color: var(--control-bg);
-    color: var(--color-text);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-    height: var(--control-height);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: var(--control-padding-y) var(--control-padding-x);
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  background-color: var(--control-bg);
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  height: var(--control-height);
 }
 
 .nc-input:focus {
-    outline: none;
-    border-color: var(--control-border-focus);
-    box-shadow: var(--control-shadow);
+  outline: none;
+  border-color: var(--control-border-focus);
+  box-shadow: var(--control-shadow);
 }
 
 .nc-input::placeholder {
-    color: var(--color-text-muted);
+  color: var(--color-text-muted);
 }
 
 select.nc-input {
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right var(--space-sm) center;
-    padding-right: var(--space-lg);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-sm) center;
+  padding-right: var(--space-lg);
 }
 
 /* ===== 操作按钮区域 ===== */
 .network-card-actions {
-    margin-top: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
-    .nc-fields {
-        grid-template-columns: 1fr;
-    }
+  .nc-fields {
+    grid-template-columns: 1fr;
+  }
 
-    .port-ips-container {
-        padding-left: var(--space-xs);
-    }
+  .port-ips-container {
+    padding-left: var(--space-xs);
+  }
 
-    .card-level-bar,
-    .port-level-bar,
-    .ip-level-bar,
-    header.card-level-bar,
-    header.port-level-bar,
-    header.ip-level-bar {
-        flex-wrap: wrap;
-        gap: var(--space-xs);
-    }
+  .card-level-bar,
+  .port-level-bar,
+  .ip-level-bar,
+  header.card-level-bar,
+  header.port-level-bar,
+  header.ip-level-bar {
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
 }

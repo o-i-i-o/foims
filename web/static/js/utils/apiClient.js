@@ -8,65 +8,67 @@ import { t } from "./i18n.js";
 export class ApiClient {
   static #pendingRequests = new Map();
   static #requestTimestamps = new Map();
-  
+
   static THROTTLE_INTERVAL = 1000;
-  
+
   static requestQueue = [];
-  
+
   static MAX_CONCURRENT_REQUESTS = 3;
 
   static #hashBody(body) {
     if (body instanceof FormData) {
       const entries = [...body.entries()].sort(([a], [b]) => a.localeCompare(b));
-      return entries.map(([k, v]) => `${k}=${v}`).join('&');
+      return entries.map(([k, v]) => `${k}=${v}`).join("&");
     }
-    if (typeof body === 'string') {
+    if (typeof body === "string") {
       return body.length > 200 ? body.substring(0, 200) : body;
     }
     return String(body);
   }
-  
+
   static currentRequests = 0;
-  
+
   static #isRedirecting = false;
-  
+
   static #refreshPromise = null;
-  
+
   static #lastRefreshTime = 0;
-  
+
   static #refreshThresholdMs = 5 * 60 * 1000;
-  
+
   static setRefreshThreshold(thresholdMs) {
     this.#refreshThresholdMs = thresholdMs;
   }
 
   static async request(url, options = {}, retryCount = 0) {
-    const method = options.method || 'GET';
-    const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : '';
+    const method = options.method || "GET";
+    const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : "";
     const requestKey = `${url}_${method}${bodyHash}`;
 
-    if (method === 'GET' && retryCount === 0 && this.#pendingRequests.has(requestKey)) {
+    if (method === "GET" && retryCount === 0 && this.#pendingRequests.has(requestKey)) {
       return this.#pendingRequests.get(requestKey);
     }
 
     const now = Date.now();
-    
+
     if (!this.isPublicAuthEndpoint(url) && now - this.#lastRefreshTime > this.#refreshThresholdMs) {
       await this.refreshToken();
     }
 
     const lastRequestTime = this.#requestTimestamps.get(requestKey) || 0;
     if (now - lastRequestTime < this.THROTTLE_INTERVAL) {
-      await new Promise(resolve => setTimeout(resolve, this.THROTTLE_INTERVAL - (now - lastRequestTime)));
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.THROTTLE_INTERVAL - (now - lastRequestTime))
+      );
     }
 
     this.#requestTimestamps.set(requestKey, Date.now());
 
     const defaultOptions = {
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
-      credentials: 'include',
+      credentials: "include"
     };
 
     const mergedOptions = {
@@ -74,11 +76,11 @@ export class ApiClient {
       ...options,
       headers: {
         ...defaultOptions.headers,
-        ...options.headers,
-      },
+        ...options.headers
+      }
     };
-    
-    if ('skipAuthCheck' in mergedOptions) {
+
+    if ("skipAuthCheck" in mergedOptions) {
       delete mergedOptions.skipAuthCheck;
     }
 
@@ -101,14 +103,14 @@ export class ApiClient {
       return this.processRequest(url, mergedOptions, retryCount, requestKey);
     }
   }
-  
+
   static async processRequest(url, options, retryCount, requestKey) {
     this.currentRequests++;
-    
+
     const requestPromise = this.makeRequest(url, options, retryCount, requestKey);
-    
+
     this.#pendingRequests.set(requestKey, requestPromise);
-    
+
     try {
       const result = await requestPromise;
       return result;
@@ -118,7 +120,7 @@ export class ApiClient {
       this.processQueue();
     }
   }
-  
+
   static processQueue() {
     while (this.currentRequests < this.MAX_CONCURRENT_REQUESTS && this.requestQueue.length > 0) {
       const queueItem = this.requestQueue.shift();
@@ -128,10 +130,12 @@ export class ApiClient {
           queueItem.options,
           queueItem.retryCount,
           queueItem.requestKey
-        ).then(queueItem.resolve).catch(error => {
-          console.error("Queue request error:", error);
-          queueItem.resolve({ success: false, message: error.message, errorType: "queue_error" });
-        });
+        )
+          .then(queueItem.resolve)
+          .catch((error) => {
+            console.error("Queue request error:", error);
+            queueItem.resolve({ success: false, message: error.message, errorType: "queue_error" });
+          });
       }
     }
   }
@@ -147,16 +151,16 @@ export class ApiClient {
               const errorData = await response.json();
               return {
                 success: false,
-                message: errorData.message || t('api.auth_failed'),
+                message: errorData.message || t("api.auth_failed"),
                 errorType: errorData.error_type || "unauthorized",
                 errorDetails: errorData.error_details || {},
-                suggestedAction: errorData.suggested_action || "",
+                suggestedAction: errorData.suggested_action || ""
               };
             } catch (jsonError) {
               return {
                 success: false,
-                message: t('api.auth_failed'),
-                errorType: "unauthorized",
+                message: t("api.auth_failed"),
+                errorType: "unauthorized"
               };
             }
           }
@@ -165,7 +169,7 @@ export class ApiClient {
           if (refreshSuccess && retryCount < 3) {
             return this.request(url, options, retryCount + 1);
           }
-          
+
           if (!this.#isRedirecting) {
             this.#isRedirecting = true;
             this.showAuthError();
@@ -173,40 +177,40 @@ export class ApiClient {
               this.redirectToLogin();
             }, 1500);
           }
-          return { success: false, message: t('api.token_expired'), errorType: "token_expired" };
+          return { success: false, message: t("api.token_expired"), errorType: "token_expired" };
         } else if (response.status === 429 && retryCount < 3) {
           const retryAfter = response.headers.get("Retry-After") || 2;
           const delay = parseInt(retryAfter) * 1000;
-          
-          await new Promise(resolve => setTimeout(resolve, delay));
+
+          await new Promise((resolve) => setTimeout(resolve, delay));
           return this.makeRequest(url, options, retryCount + 1, requestKey);
         }
-        
+
         try {
           const errorData = await response.json();
-          return { 
-            success: false, 
-            message: errorData.message || `${t('api.request_failed')}: ${response.status}`,
+          return {
+            success: false,
+            message: errorData.message || `${t("api.request_failed")}: ${response.status}`,
             errorType: errorData.error_type || "api_error",
             errorDetails: errorData.error_details || {},
             suggestedAction: errorData.suggested_action || ""
           };
         } catch (jsonError) {
-          return { 
-            success: false, 
-            message: `${t('api.request_failed')}: ${response.status}`,
+          return {
+            success: false,
+            message: `${t("api.request_failed")}: ${response.status}`,
             errorType: "network_error"
           };
         }
       }
 
       const contentType = response.headers.get("Content-Type");
-      
+
       // 优先处理 JSON 响应
       if (contentType && contentType.includes("application/json")) {
         return await response.json();
       }
-      
+
       // 处理文件下载类型
       if (
         contentType &&
@@ -225,10 +229,10 @@ export class ApiClient {
             filename = matches[1].replace(/['"]/g, "");
           }
         }
-        
-        return { 
-          success: true, 
-          data: await response.blob(), 
+
+        return {
+          success: true,
+          data: await response.blob(),
           isBlob: true,
           filename: filename
         };
@@ -240,31 +244,31 @@ export class ApiClient {
       } catch {
         // 如果不是 JSON，返回文本
         const text = await response.text();
-        return { 
-          success: false, 
-          message: t('api.parse_failed'),
-          data: text 
+        return {
+          success: false,
+          message: t("api.parse_failed"),
+          data: text
         };
       }
     } catch (error) {
       console.error("API请求错误:", error);
-      
+
       let errorType = "network_error";
-      let errorMessage = t('api.network_error');
-      
+      let errorMessage = t("api.network_error");
+
       if (error.name === "AbortError") {
-        errorMessage = t('api.cancelled');
+        errorMessage = t("api.cancelled");
         errorType = "request_cancelled";
       } else if (error.message.includes("timeout")) {
-        errorMessage = t('api.timeout');
+        errorMessage = t("api.timeout");
         errorType = "timeout";
       } else if (error.message.includes("Network")) {
-        errorMessage = t('api.network_failed');
+        errorMessage = t("api.network_failed");
         errorType = "network_error";
       }
-      
-      return { 
-        success: false, 
+
+      return {
+        success: false,
         message: errorMessage,
         errorType,
         errorDetails: { originalError: error.message }
@@ -317,7 +321,7 @@ export class ApiClient {
   static showAuthError() {
     const existingError = document.getElementById("auth-error-toast");
     if (existingError) return;
-    
+
     const errorElement = document.createElement("div");
     errorElement.id = "auth-error-toast";
     errorElement.style.cssText = `
@@ -335,7 +339,7 @@ export class ApiClient {
       font-size: 14px;
       animation: slideIn 0.3s ease-out;
     `;
-    
+
     const style = document.createElement("style");
     style.textContent = `
       @keyframes slideIn {
@@ -350,10 +354,10 @@ export class ApiClient {
       }
     `;
     document.head.appendChild(style);
-    
-    errorElement.textContent = t('api.token_expired');
+
+    errorElement.textContent = t("api.token_expired");
     document.body.appendChild(errorElement);
-    
+
     setTimeout(() => {
       errorElement.style.animation = "slideIn 0.3s ease-out reverse";
       setTimeout(() => {
@@ -371,15 +375,15 @@ export class ApiClient {
     if (this.#refreshPromise) {
       return this.#refreshPromise;
     }
-    
+
     this.#refreshPromise = (async () => {
       try {
         const response = await fetch("/api/auth/refresh", {
           method: "POST",
-          credentials: 'include',
+          credentials: "include",
           headers: {
-            "Content-Type": "application/json",
-          },
+            "Content-Type": "application/json"
+          }
         });
 
         if (response.ok) {
@@ -397,7 +401,7 @@ export class ApiClient {
         this.#refreshPromise = null;
       }
     })();
-    
+
     return this.#refreshPromise;
   }
 }

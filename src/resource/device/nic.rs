@@ -1,3 +1,5 @@
+//! 设备网卡管理：网卡-网口-IP 层级与整体同步。
+
 use std::sync::Arc;
 
 use axum::extract::{Path, State};

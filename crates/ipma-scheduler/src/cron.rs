@@ -1,3 +1,5 @@
+//! Cron 表达式解析与下次执行时间计算。
+
 use crate::error::{SchedulerError, SchedulerResult};
 use chrono::{Datelike, Timelike, Utc};
 

@@ -12,7 +12,7 @@ const DEVICE_COLORS = {
   pc: { fill: "#f5f5f5", stroke: "#9e9e9e" },
   laptop: { fill: "#f5f5f5", stroke: "#757575" },
   printer: { fill: "#fff8e1", stroke: "#f9a825" },
-  other: { fill: "#f5f5f5", stroke: "#9e9e9e" },
+  other: { fill: "#f5f5f5", stroke: "#9e9e9e" }
 };
 
 const DEVICE_TYPE_I18N_KEYS = {
@@ -25,7 +25,7 @@ const DEVICE_TYPE_I18N_KEYS = {
   pc: "device_type.pc",
   laptop: "device_type.laptop",
   printer: "device_type.printer",
-  other: "device_type.other",
+  other: "device_type.other"
 };
 
 function getDeviceTypeLabel(type) {
@@ -109,10 +109,22 @@ export class TopologyRenderer {
 
       let cx, cy;
       switch (dir) {
-        case "top": cx = x + w / 2; cy = y; break;
-        case "right": cx = x + w; cy = y + h / 2; break;
-        case "bottom": cx = x + w / 2; cy = y + h; break;
-        case "left": cx = x; cy = y + h / 2; break;
+        case "top":
+          cx = x + w / 2;
+          cy = y;
+          break;
+        case "right":
+          cx = x + w;
+          cy = y + h / 2;
+          break;
+        case "bottom":
+          cx = x + w / 2;
+          cy = y + h;
+          break;
+        case "left":
+          cx = x;
+          cy = y + h / 2;
+          break;
       }
       anchor.setAttribute("cx", cx);
       anchor.setAttribute("cy", cy);
@@ -152,14 +164,16 @@ export class TopologyRenderer {
     g.appendChild(path);
 
     const sourceLabel = this._createConnectionLabel(
-      sourceAnchor.x, sourceAnchor.y,
+      sourceAnchor.x,
+      sourceAnchor.y,
       connection.source_port_number || connection.source_port_name || "",
       "source"
     );
     if (sourceLabel) g.appendChild(sourceLabel);
 
     const targetLabel = this._createConnectionLabel(
-      targetAnchor.x, targetAnchor.y,
+      targetAnchor.x,
+      targetAnchor.y,
       connection.target_port_number || connection.target_port_name || "",
       "target"
     );
@@ -206,7 +220,7 @@ export class TopologyRenderer {
 
       const label = document.createElementNS(SVG_NS, "text");
       label.classList.add("topology-outlet-label");
-      const outletName = chain[i].name || chain[i].id || '';
+      const outletName = chain[i].name || chain[i].id || "";
       label.textContent = outletName;
       label.setAttribute("x", x);
       label.setAttribute("y", y - 14);
@@ -258,18 +272,21 @@ export class TopologyRenderer {
     const midX = source.x + dx * 0.5 + parallelOffset;
 
     if (source.dir === "bottom" || source.dir === "top") {
-      const elbowY = source.dir === "bottom" ? midY : source.y - Math.abs(dy) * 0.5 - parallelOffset;
-      const clampedEy = source.dir === "bottom"
-        ? Math.max(source.y + 20, Math.min(target.y - 20, elbowY))
-        : Math.min(source.y - 20, Math.max(target.y + 20, elbowY));
+      const elbowY =
+        source.dir === "bottom" ? midY : source.y - Math.abs(dy) * 0.5 - parallelOffset;
+      const clampedEy =
+        source.dir === "bottom"
+          ? Math.max(source.y + 20, Math.min(target.y - 20, elbowY))
+          : Math.min(source.y - 20, Math.max(target.y + 20, elbowY));
       return `M ${source.x} ${source.y} L ${source.x} ${clampedEy} L ${target.x} ${clampedEy} L ${target.x} ${target.y}`;
     }
 
     if (source.dir === "right" || source.dir === "left") {
       const elbowX = source.dir === "right" ? midX : source.x - Math.abs(dx) * 0.5 - parallelOffset;
-      const clampedEx = source.dir === "right"
-        ? Math.max(source.x + 20, Math.min(target.x - 20, elbowX))
-        : Math.min(source.x - 20, Math.max(target.x + 20, elbowX));
+      const clampedEx =
+        source.dir === "right"
+          ? Math.max(source.x + 20, Math.min(target.x - 20, elbowX))
+          : Math.min(source.x - 20, Math.max(target.x + 20, elbowX));
       return `M ${source.x} ${source.y} L ${clampedEx} ${source.y} L ${clampedEx} ${target.y} L ${target.x} ${target.y}`;
     }
 

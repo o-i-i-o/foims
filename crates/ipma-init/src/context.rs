@@ -1,3 +1,5 @@
+//! 初始化上下文（连接信息与请求参数封装）。
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

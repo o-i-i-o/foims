@@ -1,3 +1,5 @@
+//! AES-GCM 加解密与密钥管理。
+
 use aes_gcm::{
     Aes256Gcm,
     aead::{Aead, KeyInit},

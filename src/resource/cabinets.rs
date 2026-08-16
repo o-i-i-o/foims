@@ -1,3 +1,5 @@
+//! 机柜资源管理。
+
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -11,9 +13,8 @@ use crate::models::{
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 use chrono::Utc;
-use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -24,7 +25,6 @@ pub async fn get_cabinets(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -154,13 +154,7 @@ pub async fn get_cabinets(
     }
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": cabinets_with_networks,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(cabinets_with_networks, total, &pagination),
         "机柜获取成功",
     ))
 }

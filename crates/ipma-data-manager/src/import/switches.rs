@@ -1,3 +1,5 @@
+//! 交换机 CSV 导入（含 SNMP 配置）。
+
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
 use tracing::warn;

@@ -1,3 +1,5 @@
+//! 应用层 fail2ban（登录失败自动封禁）。
+
 use axum::response::Response;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,5 @@
+//! IPMA 定时任务：基于 tokio-cron-scheduler 的调度基础设施。
+
 pub mod cron;
 pub mod error;
 pub mod executor;

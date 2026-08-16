@@ -17,9 +17,9 @@
 }
 
 .login-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   background: #1a1a2e;
   overflow: hidden;
   height: 100vh;
@@ -137,7 +137,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--color-bg-white);
   padding: 40px;
   overflow-y: auto;
 }
@@ -225,7 +225,7 @@
 }
 
 .login-tabs .tab-btn.active {
-  background: #fff;
+  background: var(--color-bg-white);
   color: #1a1a2e;
   font-weight: 600;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -381,7 +381,7 @@
 
 .form-inline-group .btn-send-code:hover:not(:disabled) {
   background: #5b21b6;
-  color: #fff;
+  color: var(--color-bg-white);
 }
 
 .form-inline-group .btn-send-code:disabled {
@@ -478,7 +478,7 @@
   border-radius: 25px;
   border: 1.5px solid #1a1a2e;
   background: #1a1a2e;
-  color: #fff;
+  color: var(--color-bg-white);
   font-size: 15px;
   font-weight: 600;
   font-family: inherit;
@@ -501,7 +501,7 @@
   justify-content: center;
   gap: 8px;
   background: #5b21b6;
-  color: #fff;
+  color: var(--color-bg-white);
   opacity: 0;
   transition: all 0.3s;
   border-radius: 25px;
@@ -554,7 +554,7 @@
   justify-content: center;
   gap: 8px;
   background: #5b21b6;
-  color: #fff;
+  color: var(--color-bg-white);
   opacity: 0;
   transition: all 0.3s;
   border-radius: 25px;
@@ -696,7 +696,7 @@
 /* 眼球（白色 + 瞳孔） */
 .eyeball {
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-bg-white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -747,7 +747,6 @@
 
 /* 摇头动画：脸部部件左右摆动 */
 @keyframes shakeHead {
-
   0%,
   100% {
     translate: 0 0;
@@ -816,7 +815,7 @@
 }
 
 .modal-content {
-  background: #fff;
+  background: var(--color-bg-white);
   border-radius: 14px;
   width: 100%;
   max-width: 420px;
@@ -907,7 +906,7 @@
 
 .modal-footer .btn-primary {
   background: #1a1a2e;
-  color: #fff;
+  color: var(--color-bg-white);
 }
 
 .modal-footer .btn-primary:hover {

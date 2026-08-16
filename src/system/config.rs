@@ -1,3 +1,5 @@
+//! 系统配置接口（SMTP/通知/超时/备份等）。
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -650,9 +652,7 @@ pub async fn update_smtp_config(
         secure: req.secure,
     };
 
-    save_smtp_config_to_db(&state.pool()?.get_conn(), &config)
-        .await
-        .map_err(|e| AppError::Internal(format!("保存SMTP配置失败: {e}")))?;
+    save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await?;
 
     Ok(crate::error::ok_json((), "SMTP配置更新成功"))
 }
@@ -678,9 +678,7 @@ pub async fn test_smtp_connection(
         }
     };
 
-    crate::system::smtp::test_smtp_connection(&config)
-        .await
-        .map_err(|e| AppError::Internal(format!("SMTP测试失败: {e}")))?;
+    crate::system::smtp::test_smtp_connection(&config).await?;
 
     Ok(crate::error::ok_json((), "SMTP连接测试成功"))
 }
@@ -708,16 +706,7 @@ pub async fn send_system_email(
         &req.subject,
         &req.body,
     )
-    .await
-    .map_err(|e| {
-        let msg = format!("{e}");
-        if msg.contains("SMTP配置未设置") {
-            tracing::warn!("{}", msg);
-            AppError::NotFound(msg)
-        } else {
-            AppError::Internal(format!("发送邮件失败: {e}"))
-        }
-    })?;
+    .await?;
 
     Ok(crate::error::ok_json((), "邮件发送成功"))
 }

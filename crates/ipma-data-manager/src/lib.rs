@@ -1,3 +1,5 @@
+//! IPMA 数据管理：CSV 导入导出、日志清理与数据库备份。
+
 pub mod backup;
 pub mod export;
 pub mod import;

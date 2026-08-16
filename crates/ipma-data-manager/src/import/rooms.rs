@@ -1,3 +1,5 @@
+//! 房间 CSV 导入（含网络绑定）。
+
 use crate::import::find_network_id;
 use crate::types::{DataError, DataResult};
 use tracing::warn;

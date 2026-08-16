@@ -1,37 +1,17 @@
+//! 数据管理模块的公共类型、错误定义与数据提供者抽象。
+
 use async_trait::async_trait;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use ipma_common::{ApiResponse, DbErrorKind};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use thiserror::Error;
-use tracing::error;
 use validator::Validate;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ApiResponse<T> {
-    pub success: bool,
-    pub message: String,
-    pub data: Option<T>,
-}
-
-impl<T> ApiResponse<T> {
-    pub fn success(data: T, message: &str) -> Self {
-        Self {
-            success: true,
-            message: message.to_string(),
-            data: Some(data),
-        }
-    }
-
-    pub fn error(message: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            message: message.into(),
-            data: None,
-        }
-    }
-}
+/// 成功 JSON 响应构造（由 ipma-common 提供，保持原有路径兼容）。
+pub use ipma_common::ok_json;
 
 #[derive(Error, Debug)]
 pub enum DataError {
@@ -71,47 +51,13 @@ impl IntoResponse for DataError {
     }
 }
 
-/// 构造成功 JSON 响应
-pub fn ok_json<T: Serialize>(data: T, message: &str) -> Response {
-    (StatusCode::OK, Json(ApiResponse::success(data, message))).into_response()
-}
-
 impl From<sqlx::Error> for DataError {
     fn from(err: sqlx::Error) -> Self {
-        match &err {
-            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => {
-                    DataError::Conflict("数据已存在，请检查是否有重复记录".to_string())
-                }
-                Some("23503") => DataError::Validation("关联数据不存在或无法删除".to_string()),
-                Some("23514") => DataError::Validation(db_err.message().to_string()),
-                Some("22P02") => DataError::Validation("数据格式无效".to_string()),
-                Some("22023") => DataError::Validation("参数值无效".to_string()),
-                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                    DataError::Database("数据库连接异常，请稍后重试".to_string())
-                }
-                Some("57014") => DataError::Database("数据库操作超时，请稍后重试".to_string()),
-                _ => {
-                    let err_str = err.to_string();
-                    if err_str.contains("invalid cidr") {
-                        DataError::Validation("不符合CIDR格式".to_string())
-                    } else if err_str.contains("invalid inet") {
-                        DataError::Validation("不符合IP地址格式".to_string())
-                    } else {
-                        error!("数据库错误: {}", err_str);
-                        DataError::Database("数据库操作失败，请稍后重试".to_string())
-                    }
-                }
-            },
-            sqlx::Error::RowNotFound => DataError::NotFound("资源不存在".to_string()),
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
-                DataError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            sqlx::Error::Io(_) => DataError::Database("数据库连接异常，请稍后重试".to_string()),
-            _ => {
-                error!("数据库错误: {}", err);
-                DataError::Database("数据库操作失败，请稍后重试".to_string())
-            }
+        match ipma_common::classify_db_error(&err) {
+            DbErrorKind::Conflict(msg) => DataError::Conflict(msg),
+            DbErrorKind::Validation(msg) => DataError::Validation(msg),
+            DbErrorKind::NotFound => DataError::NotFound("资源不存在".to_string()),
+            DbErrorKind::Database(msg) => DataError::Database(msg),
         }
     }
 }

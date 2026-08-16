@@ -15,7 +15,7 @@ const PAGE_LOADERS = {
   ip: loadIpPage,
   logs: loadLogsPage,
   system: loadSystemPage,
-  visualization: loadVisualizationPage,
+  visualization: loadVisualizationPage
 };
 
 // ==========================================
@@ -28,7 +28,7 @@ const PAGE_LOADERS = {
 export function initNavigation() {
   const navLinks = document.querySelectorAll(".nav-link");
   const contentSections = document.querySelectorAll(".content-section");
-  
+
   bindNavClickHandlers(navLinks);
   loadInitialPage();
   bindHashChangeHandler();
@@ -125,16 +125,20 @@ function bindNavClickHandlers(navLinks) {
   navLinks.forEach((link) => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      
+
       const targetId = link.getAttribute("href").substring(1);
       preloadPageStyles(targetId);
       window.location.hash = targetId;
     });
-    
-    link.addEventListener("mouseenter", () => {
-      const targetId = link.getAttribute("href").substring(1);
-      preloadPageStyles(targetId);
-    }, { once: false });
+
+    link.addEventListener(
+      "mouseenter",
+      () => {
+        const targetId = link.getAttribute("href").substring(1);
+        preloadPageStyles(targetId);
+      },
+      { once: false }
+    );
   });
 }
 
@@ -145,12 +149,12 @@ function bindHashChangeHandler() {
   window.addEventListener("hashchange", () => {
     const hash = window.location.hash;
     const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
-    
+
     // 如果哈希为空，不要重新加载默认页面，除非当前没有激活的页面
     if (!hash && document.querySelector(".content-section.active")) {
       return;
     }
-    
+
     loadPageContent(targetId);
   });
 }
@@ -161,7 +165,7 @@ function bindHashChangeHandler() {
 function loadInitialPage() {
   const hash = window.location.hash;
   const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
-  
+
   loadPageContent(targetId);
 }
 
@@ -182,10 +186,10 @@ async function loadPageContent(targetId) {
  */
 function updateNavActiveState(targetId) {
   const navLinks = document.querySelectorAll(".nav-link");
-  
+
   navLinks.forEach((link) => {
     link.classList.remove("active");
-    
+
     if (link.getAttribute("href") === `#${targetId}`) {
       link.classList.add("active");
     }
@@ -198,10 +202,10 @@ function updateNavActiveState(targetId) {
  */
 function updateContentVisibility(targetId) {
   const contentSections = document.querySelectorAll(".content-section");
-  
+
   contentSections.forEach((section) => {
     section.classList.remove("active");
-    
+
     if (section.id === targetId) {
       section.classList.add("active");
     }
@@ -214,7 +218,7 @@ function updateContentVisibility(targetId) {
  */
 async function executePageLoader(targetId) {
   const loader = PAGE_LOADERS[targetId];
-  
+
   if (loader) {
     await safeAsync(loader, `加载页面 ${targetId}`);
   }

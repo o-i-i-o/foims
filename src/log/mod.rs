@@ -1,3 +1,5 @@
+//! 日志模块（登录/操作/通知）。
+
 pub mod login;
 pub mod notification;
 pub mod operation;

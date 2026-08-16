@@ -1,6 +1,9 @@
+//! 可视化布局管理：布局模型、错误类型与统一 API 响应再导出。
+
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use ipma_common::DbErrorKind;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sqlx::PgPool;
@@ -8,6 +11,7 @@ use uuid::Uuid;
 
 // ==================== 错误类型 ====================
 
+/// 可视化模块错误类型。
 #[derive(Debug, thiserror::Error)]
 pub enum VisualizationError {
     #[error("数据库错误: {0}")]
@@ -41,84 +45,26 @@ impl VisualizationError {
 impl IntoResponse for VisualizationError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        let body = Json(ApiResponse::<()>::error(self.to_string()));
+        let body = Json(ipma_common::ApiResponse::<()>::error(self.to_string()));
         (status, body).into_response()
     }
 }
 
 impl From<sqlx::Error> for VisualizationError {
     fn from(err: sqlx::Error) -> Self {
-        match &err {
-            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => {
-                    VisualizationError::Conflict("数据已存在，请检查是否有重复记录".to_string())
-                }
-                Some("23503") => {
-                    VisualizationError::Validation("关联数据不存在或无法删除".to_string())
-                }
-                Some("23514") => VisualizationError::Validation(db_err.message().to_string()),
-                Some("22P02") => VisualizationError::Validation("数据格式无效".to_string()),
-                Some("22023") => VisualizationError::Validation("参数值无效".to_string()),
-                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                    VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
-                }
-                Some("57014") => {
-                    VisualizationError::Database("数据库操作超时，请稍后重试".to_string())
-                }
-                _ => {
-                    let err_str = err.to_string();
-                    if err_str.contains("invalid cidr") {
-                        VisualizationError::Validation("不符合CIDR格式".to_string())
-                    } else if err_str.contains("invalid inet") {
-                        VisualizationError::Validation("不符合IP地址格式".to_string())
-                    } else {
-                        VisualizationError::Database("数据库操作失败，请稍后重试".to_string())
-                    }
-                }
-            },
-            sqlx::Error::RowNotFound => VisualizationError::NotFound("资源不存在".to_string()),
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
-                VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            sqlx::Error::Io(_) => {
-                VisualizationError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            _ => VisualizationError::Database("数据库操作失败，请稍后重试".to_string()),
+        match ipma_common::classify_db_error(&err) {
+            DbErrorKind::Conflict(msg) => VisualizationError::Conflict(msg),
+            DbErrorKind::Validation(msg) => VisualizationError::Validation(msg),
+            DbErrorKind::NotFound => VisualizationError::NotFound("资源不存在".to_string()),
+            DbErrorKind::Database(msg) => VisualizationError::Database(msg),
         }
     }
 }
 
 // ==================== API 响应模型 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ApiResponse<T> {
-    pub success: bool,
-    pub message: String,
-    pub data: Option<T>,
-}
-
-impl<T> ApiResponse<T> {
-    pub fn success(data: T, message: &str) -> Self {
-        Self {
-            success: true,
-            message: message.to_string(),
-            data: Some(data),
-        }
-    }
-
-    pub fn error(message: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            message: message.into(),
-            data: None,
-        }
-    }
-}
-
-/// 构造成功 JSON 响应
-pub fn ok_json<T: Serialize>(data: T, message: &str) -> Response {
-    (StatusCode::OK, Json(ApiResponse::success(data, message))).into_response()
-}
+/// 统一 API 响应结构与成功响应构造（由 ipma-common 提供，保持原有路径兼容）。
+pub use ipma_common::{ApiResponse, ok_json};
 
 // ==================== 布局模型 ====================
 

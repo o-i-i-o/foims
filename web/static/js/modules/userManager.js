@@ -1,9 +1,4 @@
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiDelete,
-} from "../utils/apiClient.js";
+import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -13,7 +8,7 @@ import {
   escapeHtml,
   createSortState,
   updateSortIcons,
-  initSortEvents,
+  initSortEvents
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -25,14 +20,16 @@ import { showConfirm } from "../utils/confirm.js";
 
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
-const userTableState = createSortState('created_at', 'desc');
+const userTableState = createSortState("created_at", "desc");
 
 // 加载用户数据
 export async function loadUsersData(page = currentUserPage, sortBy = null, sortOrder = null) {
   currentUserPage = page;
   if (sortBy) userTableState.setSort(sortBy, sortOrder);
   try {
-    const response = await apiGet(`/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`);
+    const response = await apiGet(
+      `/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`
+    );
     if (response.success) {
       const data = response.data;
       const users = data.items || data;
@@ -42,55 +39,59 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
       if (users.length === 0) {
         tableBody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="8" class="text-center">${t('common.no_data')}</td>
+            <td colspan="8" class="text-center">${t("common.no_data")}</td>
           </tr>
         `;
         return;
       }
 
       const startIndex = (page - 1) * USER_PAGE_SIZE;
-      tableBody.innerHTML = users.map((user, index) => `
+      tableBody.innerHTML = users
+        .map(
+          (user, index) => `
         <tr data-user-id="${user.id}">
           <td class="index-column">${startIndex + index + 1}</td>
           <td>${escapeHtml(user.username)}</td>
           <td>${escapeHtml(user.email)}</td>
-          <td class="col-center">${user.role === 'admin' ? t('user.role_admin') : t('user.role_user')}</td>
+          <td class="col-center">${user.role === "admin" ? t("user.role_admin") : t("user.role_user")}</td>
           <td class="col-center">
-            <span class="status-badge ${user.status ? 'status-active' : 'status-inactive'}">
-              ${user.status ? t('user.status_enabled') : t('user.status_disabled')}
+            <span class="status-badge ${user.status ? "status-active" : "status-inactive"}">
+              ${user.status ? t("user.status_enabled") : t("user.status_disabled")}
             </span>
           </td>
           <td class="col-center">
-            <span class="two-factor-badge ${user.two_factor_enabled ? 'two-factor-enabled' : 'two-factor-disabled'}">
-              ${user.two_factor_enabled ? t('user.two_factor_enabled') : t('user.two_factor_disabled')}
+            <span class="two-factor-badge ${user.two_factor_enabled ? "two-factor-enabled" : "two-factor-disabled"}">
+              ${user.two_factor_enabled ? t("user.two_factor_enabled") : t("user.two_factor_disabled")}
             </span>
           </td>
           <td class="col-center">${formatDateTime(user.created_at)}</td>
           <td class="col-center">
-            ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${user.id}"` })}
-            ${iconButton({ icon: 'lock', label: user.two_factor_enabled ? t('user.manage_2fa') : t('user.enable_2fa'), cls: 'btn-primary user-2fa', attrs: `data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}"` })}
-            ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-danger btn-delete', attrs: `data-id="${user.id}"` })}
+            ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${user.id}"` })}
+            ${iconButton({ icon: "lock", label: user.two_factor_enabled ? t("user.manage_2fa") : t("user.enable_2fa"), cls: "btn-primary user-2fa", attrs: `data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-enabled="${user.two_factor_enabled}"` })}
+            ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger btn-delete", attrs: `data-id="${user.id}"` })}
           </td>
         </tr>
-      `).join("");
+      `
+        )
+        .join("");
 
       if (pagination) {
         appendPaginationToTable("#users-table", pagination, loadUsersData);
       }
       updateSortIcons("users-table", userTableState);
     } else {
-      showToast(`${t('common.load_failed')}：${response.message}`, "error");
+      showToast(`${t("common.load_failed")}：${response.message}`, "error");
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
-    showToast(t('common.load_failed_retry'), "error");
+    showToast(t("common.load_failed_retry"), "error");
   }
 }
 
 // 打开用户模态框
 export async function openUserModal(userId) {
   await openModal("user-modal");
-  
+
   const modal = elementCache.get("user-modal");
   const title = elementCache.get("user-modal-title");
   const userIdInput = elementCache.get("user-id");
@@ -101,33 +102,42 @@ export async function openUserModal(userId) {
   const passwordInput = elementCache.get("user-password");
   const passwordConfirmInput = elementCache.get("user-password-confirm");
 
-  if (!modal || !title || !userIdInput || !usernameInput || !emailInput || 
-      !roleInput || !statusInput || !passwordInput || !passwordConfirmInput) {
+  if (
+    !modal ||
+    !title ||
+    !userIdInput ||
+    !usernameInput ||
+    !emailInput ||
+    !roleInput ||
+    !statusInput ||
+    !passwordInput ||
+    !passwordConfirmInput
+  ) {
     console.error("用户模态框相关DOM元素未找到");
     return;
   }
 
   if (userId) {
-    title.textContent = t('user.edit_user');
+    title.textContent = t("user.edit_user");
     userIdInput.value = userId;
-    passwordInput.placeholder = t('user.password_leave_blank');
+    passwordInput.placeholder = t("user.password_leave_blank");
     passwordInput.required = false;
-    passwordConfirmInput.placeholder = t('user.password_leave_blank');
+    passwordConfirmInput.placeholder = t("user.password_leave_blank");
     passwordConfirmInput.required = false;
-    
+
     loadUserData(userId);
   } else {
-    title.textContent = t('user.add_user');
+    title.textContent = t("user.add_user");
     userIdInput.value = "";
     usernameInput.value = "";
     emailInput.value = "";
     roleInput.value = "user";
     statusInput.value = "true";
     passwordInput.value = "";
-    passwordInput.placeholder = t('user.password_placeholder');
+    passwordInput.placeholder = t("user.password_placeholder");
     passwordInput.required = true;
     passwordConfirmInput.value = "";
-    passwordConfirmInput.placeholder = t('user.password_confirm_placeholder');
+    passwordConfirmInput.placeholder = t("user.password_confirm_placeholder");
     passwordConfirmInput.required = true;
   }
 }
@@ -147,13 +157,13 @@ async function loadUserData(userId) {
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
-    showToast(t('common.load_failed'), "error");
+    showToast(t("common.load_failed"), "error");
   }
 }
 
 // 删除用户
 export async function deleteUser(userId) {
-  const confirmed = await showConfirm(t('user.delete_confirm'));
+  const confirmed = await showConfirm(t("user.delete_confirm"));
   if (!confirmed) {
     return;
   }
@@ -161,17 +171,16 @@ export async function deleteUser(userId) {
   try {
     const response = await apiDelete(`/api/users/${userId}`);
     if (response.success) {
-      showToast(t('user.delete_user') + t('common.success'), "success");
+      showToast(t("user.delete_user") + t("common.success"), "success");
       loadUsersData();
     } else {
-      showToast(t('user.delete_user') + t('common.failed') + "：" + response.message, "error");
+      showToast(t("user.delete_user") + t("common.failed") + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("删除用户失败:", error);
-    showToast(t('user.delete_user') + t('common.failed'), "error");
+    showToast(t("user.delete_user") + t("common.failed"), "error");
   }
 }
-
 
 // 注意：用户编辑/删除按钮的点击事件已在 eventManager.js 中统一处理
 // 此处 initUserEvents 函数保留用于处理 2FA 相关按钮及表头排序
@@ -208,14 +217,14 @@ function initUserEvents() {
 export { initUserEvents };
 
 // 打开2FA模态框
-window.openTwoFactorModal = async function(userId, username, isEnabled) {
+window.openTwoFactorModal = async function (userId, username, isEnabled) {
   const modal = openModal("two-factor-modal");
-  
+
   if (!modal) {
-    showToast(t('two_factor.open_modal_failed'), "error");
+    showToast(t("two_factor.open_modal_failed"), "error");
     return;
   }
-  
+
   const setupStep = modal.querySelector("#two-factor-setup-step");
   const manageStep = modal.querySelector("#two-factor-manage-step");
   const enableBtn = modal.querySelector("#two-factor-enable-btn");
@@ -229,7 +238,7 @@ window.openTwoFactorModal = async function(userId, username, isEnabled) {
 
   if (!setupStep || !manageStep || !enableBtn || !disableBtn) {
     console.error("2FA模态框元素未找到", { setupStep, manageStep, enableBtn, disableBtn });
-    showToast(t('two_factor.modal_load_failed'), "error");
+    showToast(t("two_factor.modal_load_failed"), "error");
     return;
   }
 
@@ -269,7 +278,7 @@ window.openTwoFactorModal = async function(userId, username, isEnabled) {
     manageStep.classList.add("hidden");
     enableBtn.classList.remove("hidden");
     disableBtn.classList.add("hidden");
-    
+
     // 初始化2FA配置
     await initTwoFactorConfig(userId);
   }
@@ -281,38 +290,38 @@ async function initTwoFactorConfig(userId) {
     const currentUser = getUser();
     if (currentUser && currentUser.id !== userId) {
       // 不是当前用户，需要检查是否是管理员
-      if (currentUser.role !== 'admin') {
-        showToast(t('two_factor.admin_only'), "error");
+      if (currentUser.role !== "admin") {
+        showToast(t("two_factor.admin_only"), "error");
         return;
       }
     }
-    
+
     const response = await apiPost("/api/two-factor/init", { user_id: userId });
     if (response.success) {
       const { secret, qr_code_base64, otpauth_url } = response.data;
-      
+
       // 显示QR码和密钥
       const qrCodeImg = elementCache.get("two-factor-qr-code");
       if (qrCodeImg && qr_code_base64) {
         qrCodeImg.src = "data:image/png;base64," + qr_code_base64;
       }
-      
+
       const secretInput = elementCache.get("two-factor-secret");
       if (secretInput) {
         secretInput.value = secret;
       }
-      
+
       // 存储URI用于验证
       const uriInput = elementCache.get("two-factor-uri");
       if (uriInput) {
         uriInput.value = otpauth_url;
       }
     } else {
-      showToast(t('two_factor.fetch_config_failed') + "：" + response.message, "error");
+      showToast(t("two_factor.fetch_config_failed") + "：" + response.message, "error");
     }
   } catch (error) {
     console.error("获取2FA配置失败:", error);
-    showToast(t('two_factor.fetch_config_network'), "error");
+    showToast(t("two_factor.fetch_config_network"), "error");
   }
 }
 
@@ -332,7 +341,7 @@ async function handleTwoFactorEnable() {
   const userId = userIdInput.value;
 
   if (!code || code.length !== 6) {
-    errorDiv.textContent = t('two_factor.verify_code_placeholder');
+    errorDiv.textContent = t("two_factor.verify_code_placeholder");
     errorDiv.classList.add("show");
     return;
   }
@@ -340,21 +349,21 @@ async function handleTwoFactorEnable() {
   try {
     const response = await apiPost("/api/two-factor/enable", { code, user_id: userId });
     if (response.success) {
-      successDiv.textContent = t('two_factor.enable_success');
+      successDiv.textContent = t("two_factor.enable_success");
       successDiv.classList.add("show");
-      
+
       setTimeout(() => {
         closeModal("two-factor-modal");
         successDiv.classList.remove("show");
         loadUsersData();
       }, 2000);
     } else {
-      errorDiv.textContent = t('two_factor.enable_failed') + "：" + response.message;
+      errorDiv.textContent = t("two_factor.enable_failed") + "：" + response.message;
       errorDiv.classList.add("show");
     }
   } catch (error) {
     console.error("启用2FA失败:", error);
-    errorDiv.textContent = t('two_factor.enable_failed_network');
+    errorDiv.textContent = t("two_factor.enable_failed_network");
     errorDiv.classList.add("show");
   }
 }
@@ -374,12 +383,12 @@ async function handleTwoFactorDisable() {
   const userId = userIdInput.value;
 
   if (!code || code.length !== 6) {
-    errorDiv.textContent = t('two_factor.verify_code_placeholder');
+    errorDiv.textContent = t("two_factor.verify_code_placeholder");
     errorDiv.classList.add("show");
     return;
   }
 
-  const confirmed = await showConfirm(t('two_factor.disable_confirm'));
+  const confirmed = await showConfirm(t("two_factor.disable_confirm"));
   if (!confirmed) {
     return;
   }
@@ -387,16 +396,16 @@ async function handleTwoFactorDisable() {
   try {
     const response = await apiPost("/api/two-factor/disable", { code, user_id: userId });
     if (response.success) {
-      showToast(t('two_factor.disable_success'), "success");
+      showToast(t("two_factor.disable_success"), "success");
       closeModal("two-factor-modal");
       loadUsersData();
     } else {
-      errorDiv.textContent = t('two_factor.disable_failed') + "：" + response.message;
+      errorDiv.textContent = t("two_factor.disable_failed") + "：" + response.message;
       errorDiv.classList.add("show");
     }
   } catch (error) {
     console.error("禁用2FA失败:", error);
-    errorDiv.textContent = t('two_factor.disable_failed_network');
+    errorDiv.textContent = t("two_factor.disable_failed_network");
     errorDiv.classList.add("show");
   }
 }
@@ -410,15 +419,15 @@ export async function submitUserForm() {
     username: formData.get("username"),
     email: formData.get("email"),
     role: formData.get("role"),
-    status: formData.get("status") === "true",
+    status: formData.get("status") === "true"
   };
 
   const password = formData.get("password");
   const passwordConfirm = formData.get("password_confirm");
-  
+
   if (password) {
     if (password !== passwordConfirm) {
-      showToast(t('user.password_mismatch'), "error");
+      showToast(t("user.password_mismatch"), "error");
       return;
     }
     userData.password = password;
@@ -433,16 +442,18 @@ export async function submitUserForm() {
     }
 
     if (response.success) {
-      showToast(userId ? t('user.update_success') : t('user.add_success'), "success");
+      showToast(userId ? t("user.update_success") : t("user.add_success"), "success");
       closeModal("user-modal");
       form.reset();
       loadUsersData();
     } else {
-      showToast((userId ? t('user.update_failed') : t('user.add_failed')) + "：" + response.message, "error");
+      showToast(
+        (userId ? t("user.update_failed") : t("user.add_failed")) + "：" + response.message,
+        "error"
+      );
     }
   } catch (error) {
     console.error("保存用户失败:", error);
-    showToast(t('user.save_failed_network'), "error");
+    showToast(t("user.save_failed_network"), "error");
   }
 }
-

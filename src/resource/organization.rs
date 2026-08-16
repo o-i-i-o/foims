@@ -1,3 +1,5 @@
+//! 组织架构管理（树形结构与类型解析）。
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
@@ -6,7 +8,7 @@ use crate::models::{
 use crate::resource::org_template::get_allowed_children;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -174,7 +176,6 @@ pub async fn get_organizations(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -248,13 +249,7 @@ pub async fn get_organizations(
     let items = resolve_org_list_types(&state, &organizations).await?;
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(items, total, &pagination),
         "组织列表获取成功",
     ))
 }
@@ -301,15 +296,15 @@ fn build_tree(
         }
     }
 
-    // 递归构建节点（带深度检查）
+    // 递归构建节点（带深度检查）；节点缺失时跳过（防御悬挂 parent_id 引用）
     fn build_node(
         org_id: Uuid,
         node_map: &HashMap<Uuid, &Organization>,
         children_map: &HashMap<Uuid, Vec<Uuid>>,
         template_levels_map: &HashMap<Uuid, serde_json::Value>,
         depth: usize,
-    ) -> OrganizationTreeNode {
-        let org = node_map.get(&org_id).expect("Organization must exist");
+    ) -> Option<OrganizationTreeNode> {
+        let org = node_map.get(&org_id)?;
 
         // 从模板解析类型名称
         let org_type = org
@@ -320,7 +315,7 @@ fn build_tree(
 
         // 深度安全检查
         if depth > MAX_DEPTH {
-            return OrganizationTreeNode {
+            return Some(OrganizationTreeNode {
                 id: org.id,
                 name: org.name.clone(),
                 org_type,
@@ -331,7 +326,7 @@ fn build_tree(
                 children: vec![],
                 created_at: org.created_at,
                 updated_at: org.updated_at,
-            };
+            });
         }
 
         let children: Vec<OrganizationTreeNode> = children_map
@@ -339,14 +334,14 @@ fn build_tree(
             .map(|child_ids| {
                 child_ids
                     .iter()
-                    .map(|id| {
+                    .filter_map(|id| {
                         build_node(*id, node_map, children_map, template_levels_map, depth + 1)
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        OrganizationTreeNode {
+        Some(OrganizationTreeNode {
             id: org.id,
             name: org.name.clone(),
             org_type,
@@ -357,14 +352,14 @@ fn build_tree(
             children,
             created_at: org.created_at,
             updated_at: org.updated_at,
-        }
+        })
     }
 
     // 构建根节点
     all_orgs
         .iter()
         .filter(|org| org.parent_id.is_none())
-        .map(|org| build_node(org.id, &node_map, &children_map, template_levels_map, 0))
+        .filter_map(|org| build_node(org.id, &node_map, &children_map, template_levels_map, 0))
         .collect()
 }
 

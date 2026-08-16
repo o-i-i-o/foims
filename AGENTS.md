@@ -1,39 +1,33 @@
-# IPMA 后端代码风格规范（Rust 版）
+# IPMA 代码规范入口
+
+**完整风格规范见 [docs/code-style.md](docs/code-style.md)**（前后端唯一权威来源，
+本文件仅保留必须随时可见的硬性规则）。`.trae/rules/` 下的指引亦以该文档为准。
 
 ## 基础规范
 
-- 本项目基于 **Rust 2024 Edition** 标准，确保代码一致性、可读性、可维护性和高性能。本规范通过 rustfmt 和 clippy 强制落地。
-- 所有代码必须符合 Rust 语言规范，避免使用未定义行为。
-- 符合rust、axum、api、http、pgsql等最佳实践，确保代码质量和可维护性。
-- 本项目不考虑老旧基础设施兼容性，只考虑最新的 Rust 版本和相关库。
-- 本项目ipv6支持友好。
-- 项目中不要使用数据库迁移代码，明确初始化模块功能为创建数据库结构，平时修改数据库结构时，直接执行pgsql的命令修改数据库结构，然后同步完善初始化模块的数据库结构创建代码。
-- 本项目前后端分离，使用nginx托管静态资源、代理api。
----
+- 本项目基于 **Rust 2024 Edition**，风格由 rustfmt + clippy 强制落地
+  （`[workspace.lints.clippy]` 已启用 unwrap/expect/print/allow 等护栏）。
+- 符合 rust、axum、api、http、pgsql 最佳实践；不考虑老旧基础设施兼容性。
+- 本项目 IPv6 支持友好。
+- 不使用数据库迁移代码：修改结构时直接执行 SQL，然后同步完善 ipma-init 的
+  建表代码与 `check.rs` 校验清单。
+- 前后端分离，nginx 托管静态资源、代理 API。
 
+## 硬性规则
 
-### 1. 编码与文件
+- 编码统一 UTF-8；注释统一中文。
+- 禁止 `unwrap()`/`expect()`/`unreachable!()`/`#[allow(...)]`（测试代码除外）；
+  禁止用 `_` 忽略参数。唯一例外：仅取鉴权副作用的提取器参数
+  `_admin: AdminUser` / `_user: CurrentUser`。
+- 禁止硬编码密钥/密码；所有用户输入必须验证；所有可能失败的操作必须有错误处理。
+- 后端日志统一 `tracing`，禁止 `println!`；前端通知统一 `showToast`，禁止 `alert()`。
+- 动态 SQL 用 `sqlx::QueryBuilder`；跨 crate 共享类型放 `ipma-common`，不得复制副本。
+- 分页响应用 `paged_response`（键固定 `items/total/page/page_size/total_pages`）。
 
-- **编码统一：** 所有文件必须使用 **UTF-8** 编码。
-- **代码规范：** 
-    - 不要试图用 #[allow(...)] 忽略错误！
-    - 不要试图使用_ 来忽略未使用的变量或函数参数。要么真实实现，要么删除。
+## 版本与测试
 
-### 2. 安全性
-
-- **敏感信息：** 禁止在代码中硬编码密钥、密码等敏感信息，使用环境变量或配置文件。
-- **输入验证：** 所有用户输入必须验证。
-- **错误处理：** 禁止使用 `unwrap()` 或 `expect()` 处理可能失败的操作（测试代码除外）。
-- **代码操作：** 生成或修改代码时避免逻辑混乱及幽灵代码。
-- **错误处理：** 所有可能失败的操作都必须有对应的错误处理代码。
-- **日志统一：** 后端日志统一使用 `tracing`（`error!`/`warn!`/`info!`/`debug!`），禁止使用 `println!`/`eprintln!`。
-- **通知统一：** 前端用户通知统一使用 toast（`showToast`），禁止使用 `alert()`。
-
-### 3. 版本管理
-- **版本更新：** 每次代码更新后，必须更新 `Cargo.toml` 中的版本号，版本号规则为“0.x.yy"，先累积更新yy，当yy>=99时，x+1，yy=0。
-- **初始化相关** 涉及数据库的变更，直接修改数据库后还需要完善初始化代码中的数据库处理代码。
-
-### 4. 部署与测试
-- **代码检查 ：** 每次代码更新后，必须使用cargo fmt && cargo clippy 检查代码风格。  
-- **代码测试 ：** 通过cargo build --release && sudo ./target/release/ipma 测试(原因是编译不需要root权限，但是运行需要root权限监听80/443端口，所以需要sudo运行)
-- **测试用户 ：** 数据库、API测试用户为admin，密码为admin123
+- 每次代码更新后 bump `Cargo.toml` 版本号（规则 `0.x.yy`，`yy>=99` 时进位）；
+  前端资源同步 bump `main.html` 的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`。
+- 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
+- 测试：`cargo build --release && sudo ./target/release/ipma`
+  （运行需 root 监听端口）；测试用户 admin / admin123。

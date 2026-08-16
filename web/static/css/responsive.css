@@ -2,361 +2,360 @@
 
 /* 中等屏幕 */
 @media (max-width: 992px) {
-    .import-export-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .sidebar {
-        width: 200px;
-    }
-    
-    .main-content {
-        margin-left: 200px;
-    }
+  .import-export-container {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    width: 200px;
+  }
+
+  .main-content {
+    margin-left: 200px;
+  }
 }
 
 @media (max-width: 768px) {
-    /* 登录页面响应式 */
-    .login-container {
-        padding: 1.5rem;
-        margin: 1rem;
-    }
-    
-    /* 侧边栏响应式 - 折叠为顶部横向导航 */
-    .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        top: 0;
-        margin-bottom: 0;
-        overflow-x: auto;
-        flex-direction: column;
-    }
-    
-    /* 侧边栏头部响应式 */
-    .sidebar-header {
-        padding: 0.75rem 1rem;
-    }
-    
-    .sidebar-header h1 {
-        font-size: 1.1rem;
-    }
-    
-    /* 侧边栏菜单响应式 */
-    .sidebar-menu {
-        display: flex;
-        flex-wrap: nowrap;
-        padding: 0.5rem;
-        gap: 0.25rem;
-        overflow-x: auto;
-    }
-    
-    .sidebar-menu li {
-        margin-bottom: 0;
-        flex-shrink: 0;
-    }
-    
-    .sidebar-menu li a {
-        padding: 0.5rem 1rem;
-        border-left: none;
-        border-bottom: 3px solid transparent;
-        border-radius: var(--radius-sm);
-        white-space: nowrap;
-        font-size: 0.875rem;
-    }
-    
-    .sidebar-menu li a:hover,
-    .sidebar-menu li a.active {
-        border-left-color: transparent;
-        border-bottom-color: var(--color-primary);
-    }
-    
-    /* 侧边栏页脚响应式 */
-    .sidebar-footer {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 1rem;
-        gap: 0.5rem;
-    }
-    
-    .user-info {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-    }
-    
-    .logout-section .btn {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.875rem;
-    }
-    
-    /* 主内容区响应式 */
-    .main-content {
-        margin-left: 0;
-        padding: 1rem;
-    }
-    
-    /* 仪表盘响应式 */
+  /* 登录页面响应式 */
+  .login-container {
+    padding: 1.5rem;
+    margin: 1rem;
+  }
 
-    /* .dashboard-stats and .form-row overrides removed to use auto-fit from base CSS */
-    .dashboard-stats {
-        gap: 0.75rem;
-    }
-    
-    .stat-card {
-        padding: 1rem;
-    }
+  /* 侧边栏响应式 - 折叠为顶部横向导航 */
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    top: 0;
+    margin-bottom: 0;
+    overflow-x: auto;
+    flex-direction: column;
+  }
 
-    .stat-card .stat-value {
-        font-size: 1.75rem;
-    }
+  /* 侧边栏头部响应式 */
+  .sidebar-header {
+    padding: 0.75rem 1rem;
+  }
 
-    .stat-card .stat-icon {
-        font-size: 2rem;
-    }
+  .sidebar-header h1 {
+    font-size: 1.1rem;
+  }
 
-    /* 表格响应式 */
-    .table-container {
-        margin: 0 -1rem;
-        padding: 0 1rem;
-    }
-    
-    .data-table {
-        font-size: 0.8rem;
-    }
-    
-    .data-table th,
-    .data-table td {
-        padding: 0.5rem 0.35rem;
-    }
-    
-    .th-actions {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    /* 模态框响应式 */
-    .modal.active {
-        padding: 1rem 0.5rem;
-        align-items: flex-start;
-    }
-    
-    .modal-content {
-        width: 100%;
-        max-height: calc(100vh - 2rem);
-        border-radius: var(--radius-lg);
-    }
-    
-    .modal-header {
-        padding: 1rem;
-    }
-    
-    .modal-title {
-        font-size: 1rem;
-    }
-    
-    .modal-body {
-        padding: 1rem;
-    }
-    
-    .modal-footer {
-        padding: 0.875rem 1rem;
-        flex-wrap: wrap;
-    }
-    
-    .modal-footer .btn {
-        flex: 1;
-        min-width: 100px;
-    }
-    
-    .modal .form-row {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-    
-    /* 表单行响应式 */
+  /* 侧边栏菜单响应式 */
+  .sidebar-menu {
+    display: flex;
+    flex-wrap: nowrap;
+    padding: 0.5rem;
+    gap: 0.25rem;
+    overflow-x: auto;
+  }
 
-    /* .form-row override removed */
-    .form-row {
-        gap: 0.5rem;
-    }
-    
-    .form-group {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .form-group label {
-        width: 100%;
-        padding-top: 0;
-        margin-bottom: 0.25rem;
-    }
-    
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-        min-width: 100%;
-    }
-    
-    .form-inline-group {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-    }
-    
-    .form-inline-group label {
-        width: 60%;
-        margin-bottom: 0.25rem;
-    }
-    
-    /* 网络配置项响应式 */
-    .network-config-item .form-row,
-    .workstation-port-row,
-    .network-port-item {
-        flex-direction: column;
-    }
-    
-    .network-config-item .form-group,
-    .workstation-port-row .form-group,
-    .network-port-item .form-group {
-        margin-right: 0;
-        margin-bottom: 0.5rem;
-    }
-    
-    .network-config-item .form-group:last-child,
-    .workstation-port-row .form-group:last-child,
-    .network-port-item .form-group:last-child {
-        margin-left: 0;
-        align-items: stretch;
-    }
-    
-    /* 搜索容器响应式 */
-    .search-container {
-        width: 100%;
-    }
-    
-    .search-container input {
-        min-width: 100%;
-        flex: 1;
-    }
-    
-    /* 卡片头部响应式 */
-    .card-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .card-header h3 {
-        margin-bottom: 0.5rem;
-    }
-    
-    /* 标签页响应式 */
-    .tabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .tab-btn {
-        flex: 0 0 auto;
-        padding: 0.75rem 1rem;
-        font-size: 0.875rem;
-        white-space: nowrap;
-    }
-    
-    /* 日志和通知头部响应式 */
-    .logs-header,
-    .notifications-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .logs-header input,
-    .notifications-header select {
-        width: 100%;
-    }
-    
-    /* 导入导出响应式 */
-    .import-export-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .import-actions,
-    .export-actions {
-        flex-direction: column;
-    }
-    
-    .backup-actions {
-        flex-direction: column;
-    }
-    
-    .restore-actions {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    /* 操作按钮响应式 */
-    .action-buttons {
-        width: 100%;
-        justify-content: space-between;
-    }
-    
-    /* 按钮响应式 */
-    .btn-sm {
-        padding: 0.4rem 0.75rem;
-        font-size: 0.8rem;
-        min-width: 60px;
-    }
+  .sidebar-menu li {
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .sidebar-menu li a {
+    padding: 0.5rem 1rem;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    font-size: 0.875rem;
+  }
+
+  .sidebar-menu li a:hover,
+  .sidebar-menu li a.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--color-primary);
+  }
+
+  /* 侧边栏页脚响应式 */
+  .sidebar-footer {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+
+  .user-info {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .logout-section .btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+  }
+
+  /* 主内容区响应式 */
+  .main-content {
+    margin-left: 0;
+    padding: 1rem;
+  }
+
+  /* 仪表盘响应式 */
+
+  /* .dashboard-stats and .form-row overrides removed to use auto-fit from base CSS */
+  .dashboard-stats {
+    gap: 0.75rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-card .stat-value {
+    font-size: 1.75rem;
+  }
+
+  .stat-card .stat-icon {
+    font-size: 2rem;
+  }
+
+  /* 表格响应式 */
+  .table-container {
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+
+  .data-table {
+    font-size: 0.8rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.5rem 0.35rem;
+  }
+
+  .th-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* 模态框响应式 */
+  .modal.active {
+    padding: 1rem 0.5rem;
+    align-items: flex-start;
+  }
+
+  .modal-content {
+    width: 100%;
+    max-height: calc(100vh - 2rem);
+    border-radius: var(--radius-lg);
+  }
+
+  .modal-header {
+    padding: 1rem;
+  }
+
+  .modal-title {
+    font-size: 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .modal-footer {
+    padding: 0.875rem 1rem;
+    flex-wrap: wrap;
+  }
+
+  .modal-footer .btn {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .modal .form-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  /* 表单行响应式 */
+
+  /* .form-row override removed */
+  .form-row {
+    gap: 0.5rem;
+  }
+
+  .form-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-group label {
+    width: 100%;
+    padding-top: 0;
+    margin-bottom: 0.25rem;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    min-width: 100%;
+  }
+
+  .form-inline-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .form-inline-group label {
+    width: 60%;
+    margin-bottom: 0.25rem;
+  }
+
+  /* 网络配置项响应式 */
+  .network-config-item .form-row,
+  .workstation-port-row,
+  .network-port-item {
+    flex-direction: column;
+  }
+
+  .network-config-item .form-group,
+  .workstation-port-row .form-group,
+  .network-port-item .form-group {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .network-config-item .form-group:last-child,
+  .workstation-port-row .form-group:last-child,
+  .network-port-item .form-group:last-child {
+    margin-left: 0;
+    align-items: stretch;
+  }
+
+  /* 搜索容器响应式 */
+  .search-container {
+    width: 100%;
+  }
+
+  .search-container input {
+    min-width: 100%;
+    flex: 1;
+  }
+
+  /* 卡片头部响应式 */
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card-header h3 {
+    margin-bottom: 0.5rem;
+  }
+
+  /* 标签页响应式 */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  /* 日志和通知头部响应式 */
+  .logs-header,
+  .notifications-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .logs-header input,
+  .notifications-header select {
+    width: 100%;
+  }
+
+  /* 导入导出响应式 */
+  .import-export-container {
+    grid-template-columns: 1fr;
+  }
+
+  .import-actions,
+  .export-actions {
+    flex-direction: column;
+  }
+
+  .backup-actions {
+    flex-direction: column;
+  }
+
+  .restore-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 操作按钮响应式 */
+  .action-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* 按钮响应式 */
+  .btn-sm {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    min-width: 60px;
+  }
 }
 
 /* 超小屏幕 */
 @media (max-width: 480px) {
-    /* .dashboard-stats override removed */
-    
-    .stat-card h3 {
-        font-size: 0.8rem;
-    }
-    
-    .stat-card .stat-value {
-        font-size: 1.5rem;
-    }
-    
-    .header h1 {
-        font-size: 1rem;
-    }
-    
-    .data-table th,
-    .data-table td {
-        padding: 0.35rem 0.25rem;
-        font-size: 0.75rem;
-    }
-    
-    .system-info-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .info-value {
-        font-size: 1.25rem;
-    }
-    
-    /* 可视化管理响应式样式 */
-    #workstation-visualization-container,
-    #cabinet-visualization-container {
-        height: 400px;
-    }
-    
-    .login-container {
-        padding: var(--space-lg);
-    }
-    
-    .btn {
-        min-width: 100px;
-    }
-    
-    .form-group input:not([type="checkbox"]),
-    .form-group select,
-    .form-group textarea {
-        min-width: 100%;
-    }
-}
+  /* .dashboard-stats override removed */
 
+  .stat-card h3 {
+    font-size: 0.8rem;
+  }
+
+  .stat-card .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .header h1 {
+    font-size: 1rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.35rem 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .system-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-value {
+    font-size: 1.25rem;
+  }
+
+  /* 可视化管理响应式样式 */
+  #workstation-visualization-container,
+  #cabinet-visualization-container {
+    height: 400px;
+  }
+
+  .login-container {
+    padding: var(--space-lg);
+  }
+
+  .btn {
+    min-width: 100px;
+  }
+
+  .form-group input:not([type="checkbox"]),
+  .form-group select,
+  .form-group textarea {
+    min-width: 100%;
+  }
+}

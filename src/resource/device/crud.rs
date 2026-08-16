@@ -1,14 +1,15 @@
+//! 设备 CRUD 与跨设备列表查询。
+
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
 use crate::error::AppError;
 use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
-use serde_json::json;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,7 +23,6 @@ pub async fn get_devices(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -181,13 +181,7 @@ pub async fn get_devices(
         .collect::<Result<Vec<_>, AppError>>()?;
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(items, total, &pagination),
         "设备列表获取成功",
     ))
 }

@@ -10,9 +10,9 @@ let currentTarget = null;
 
 function getTooltipElement() {
   if (!tooltipEl) {
-    tooltipEl = document.createElement('div');
-    tooltipEl.className = 'global-tooltip';
-    tooltipEl.setAttribute('role', 'tooltip');
+    tooltipEl = document.createElement("div");
+    tooltipEl.className = "global-tooltip";
+    tooltipEl.setAttribute("role", "tooltip");
     document.body.appendChild(tooltipEl);
   }
   return tooltipEl;
@@ -24,7 +24,7 @@ function showTooltip(target) {
 
   const el = getTooltipElement();
   el.textContent = text;
-  el.classList.add('visible');
+  el.classList.add("visible");
 
   const rect = target.getBoundingClientRect();
   const tooltipRect = el.getBoundingClientRect();
@@ -43,7 +43,7 @@ function showTooltip(target) {
 function hideTooltip() {
   currentTarget = null;
   if (tooltipEl) {
-    tooltipEl.classList.remove('visible');
+    tooltipEl.classList.remove("visible");
   }
 }
 
@@ -51,8 +51,8 @@ function hideTooltip() {
  * 初始化全局 tooltip（应用启动时调用一次）
  */
 export function initTooltip() {
-  document.addEventListener('mouseover', (e) => {
-    const target = e.target.closest('[data-tooltip]');
+  document.addEventListener("mouseover", (e) => {
+    const target = e.target.closest("[data-tooltip]");
     if (target) {
       if (target !== currentTarget) {
         currentTarget = target;
@@ -63,15 +63,15 @@ export function initTooltip() {
     }
   });
 
-  document.addEventListener('focusin', (e) => {
-    const target = e.target.closest('[data-tooltip]');
+  document.addEventListener("focusin", (e) => {
+    const target = e.target.closest("[data-tooltip]");
     if (target) {
       currentTarget = target;
       showTooltip(target);
     }
   });
 
-  document.addEventListener('focusout', () => {
+  document.addEventListener("focusout", () => {
     if (currentTarget) {
       hideTooltip();
     }
@@ -79,7 +79,7 @@ export function initTooltip() {
 
   // 滚动后位置会失效，直接隐藏
   window.addEventListener(
-    'scroll',
+    "scroll",
     () => {
       if (currentTarget) {
         hideTooltip();

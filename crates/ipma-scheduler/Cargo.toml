@@ -7,6 +7,10 @@ description = "IPMA Scheduler - Cron scheduling infrastructure and task manageme
 license = "MIT"
 
 [dependencies]
+# Workspace crates
+ipma-common = { path = "../ipma-common" }
+ipma-data-manager = { path = "../ipma-data-manager" }
+
 sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -15,6 +19,8 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-cron-scheduler = "0.15.1"
-async-trait = "0.1.92"
-ipma-data-manager = { path = "../ipma-data-manager" }
+tokio-cron-scheduler = { workspace = true }
+async-trait = { workspace = true }
+
+[lints]
+workspace = true

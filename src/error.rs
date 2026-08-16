@@ -1,6 +1,9 @@
+//! 全局错误类型（AppError）：统一 HTTP 语义并对内部错误脱敏。
+
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use ipma_common::{ApiResponse, DbErrorKind};
 use thiserror::Error;
 use tracing::error;
 
@@ -51,67 +54,30 @@ impl IntoResponse for AppError {
         let status = self.status_code();
         let body = match self {
             AppError::Internal(msg) => {
-                error!("内部错误详情: {}", msg);
-                Json(crate::models::ApiResponse::<()>::error(
-                    "服务器内部错误，请稍后重试".to_string(),
-                ))
+                error!("内部错误详情: {msg}");
+                Json(ApiResponse::<()>::error("服务器内部错误，请稍后重试"))
             }
             AppError::Database(msg) => {
                 // 详细错误仅写入服务端日志，避免向客户端泄露数据库结构等内部信息
-                error!("数据库错误详情: {}", msg);
-                Json(crate::models::ApiResponse::<()>::error(
-                    "数据库操作失败，请稍后重试".to_string(),
-                ))
+                error!("数据库错误详情: {msg}");
+                Json(ApiResponse::<()>::error("数据库操作失败，请稍后重试"))
             }
-            other => Json(crate::models::ApiResponse::<()>::error(other.to_string())),
+            other => Json(ApiResponse::<()>::error(other.to_string())),
         };
         (status, body).into_response()
     }
 }
 
-/// 构造成功 JSON 响应
-pub fn ok_json<T: serde::Serialize>(data: T, message: &str) -> Response {
-    (
-        StatusCode::OK,
-        Json(crate::models::ApiResponse::success(data, message)),
-    )
-        .into_response()
-}
+/// 构造成功 JSON 响应（委托 ipma-common 的统一实现）。
+pub use ipma_common::ok_json;
 
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
-        match &err {
-            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => AppError::Conflict("数据已存在，请检查是否有重复记录".to_string()),
-                Some("23503") => AppError::Validation("关联数据不存在或无法删除".to_string()),
-                Some("23514") => AppError::Validation(db_err.message().to_string()),
-                Some("22P02") => AppError::Validation("数据格式无效".to_string()),
-                Some("22023") => AppError::Validation("参数值无效".to_string()),
-                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                    AppError::Database("数据库连接异常，请稍后重试".to_string())
-                }
-                Some("57014") => AppError::Database("数据库操作超时，请稍后重试".to_string()),
-                _ => {
-                    let err_str = err.to_string();
-                    if err_str.contains("invalid cidr") {
-                        AppError::Validation("不符合CIDR格式".to_string())
-                    } else if err_str.contains("invalid inet") {
-                        AppError::Validation("不符合IP地址格式".to_string())
-                    } else {
-                        error!("数据库错误: {}", err_str);
-                        AppError::Database("数据库操作失败，请稍后重试".to_string())
-                    }
-                }
-            },
-            sqlx::Error::RowNotFound => AppError::NotFound("资源不存在".to_string()),
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
-                AppError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            sqlx::Error::Io(_) => AppError::Database("数据库连接异常，请稍后重试".to_string()),
-            _ => {
-                error!("数据库错误: {}", err);
-                AppError::Database("数据库操作失败，请稍后重试".to_string())
-            }
+        match ipma_common::classify_db_error(&err) {
+            DbErrorKind::Conflict(msg) => AppError::Conflict(msg),
+            DbErrorKind::Validation(msg) => AppError::Validation(msg),
+            DbErrorKind::NotFound => AppError::NotFound("资源不存在".to_string()),
+            DbErrorKind::Database(msg) => AppError::Database(msg),
         }
     }
 }

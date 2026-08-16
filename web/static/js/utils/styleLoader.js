@@ -4,39 +4,39 @@ const loadingStyles = new Map();
 // dashboard.css / organization.css 已在 main.html 静态引入，无需动态加载；
 // 仅 visualization.css 未静态引入，按页面按需加载。
 const PAGE_STYLES = {
-  resources: ['/static/css/pages/visualization.css'],
-  visualization: ['/static/css/pages/visualization.css']
+  resources: ["/static/css/pages/visualization.css"],
+  visualization: ["/static/css/pages/visualization.css"]
 };
 
 async function loadStyle(href) {
   if (loadedStyles.has(href)) {
     return true;
   }
-  
+
   if (loadingStyles.has(href)) {
     return loadingStyles.get(href);
   }
-  
+
   const promise = new Promise((resolve, reject) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
     link.href = href;
-    
+
     link.onload = () => {
       loadedStyles.add(href);
       loadingStyles.delete(href);
       resolve(true);
     };
-    
+
     link.onerror = () => {
       loadingStyles.delete(href);
       console.error(`Failed to load style: ${href}`);
       reject(new Error(`Failed to load style: ${href}`));
     };
-    
+
     document.head.appendChild(link);
   });
-  
+
   loadingStyles.set(href, promise);
   return promise;
 }
@@ -46,8 +46,8 @@ export async function loadPageStyles(pageId) {
   if (!styles || styles.length === 0) {
     return;
   }
-  
-  const promises = styles.map(style => loadStyle(style));
+
+  const promises = styles.map((style) => loadStyle(style));
   await Promise.allSettled(promises);
 }
 
@@ -56,12 +56,12 @@ export function preloadPageStyles(pageId) {
   if (!styles || styles.length === 0) {
     return;
   }
-  
-  styles.forEach(href => {
+
+  styles.forEach((href) => {
     if (!loadedStyles.has(href) && !loadingStyles.has(href)) {
-      const link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.as = 'style';
+      const link = document.createElement("link");
+      link.rel = "prefetch";
+      link.as = "style";
       link.href = href;
       document.head.appendChild(link);
     }

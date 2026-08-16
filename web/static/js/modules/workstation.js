@@ -1,23 +1,13 @@
-
 // 导入必要的模块
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-} from "../utils/apiClient.js";
+import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
-import {
-  showToast,
-  handleError,
-} from "../utils/ui.js";
+import { showToast, handleError } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
 
 import { t } from "../utils/i18n.js";
 
-import {
-  loadRoomsForSelect
-} from "../utils/resources.js";
+import { loadRoomsForSelect } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
 
@@ -28,10 +18,10 @@ export async function editWorkstation(id) {
     if (result.success) {
       openWorkstationModal(result.data);
     } else {
-      showToast(`${t('workstation.load_failed')}: ${result.message}`, "error");
+      showToast(`${t("workstation.load_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t('workstation.load_failed'));
+    handleError(error, t("workstation.load_failed"));
   }
 }
 
@@ -47,7 +37,7 @@ export async function openWorkstationModal(workstation = null) {
 
   if (workstation) {
     // 编辑模式
-    title.textContent = t('workstation.edit');
+    title.textContent = t("workstation.edit");
     elementCache.setValue("workstation-id", workstation.id);
     elementCache.setValue("workstation-name", workstation.name);
     elementCache.setValue("workstation-room", workstation.room_id);
@@ -55,7 +45,7 @@ export async function openWorkstationModal(workstation = null) {
     elementCache.setValue("workstation-description", workstation.description || "");
   } else {
     // 添加模式
-    title.textContent = t('workstation.add');
+    title.textContent = t("workstation.add");
     form.reset();
     elementCache.setValue("workstation-id", "");
   }
@@ -70,12 +60,12 @@ export async function submitWorkstationForm() {
   const description = elementCache.getValue("workstation-description");
 
   if (!name?.trim()) {
-    showToast(t('workstation.name_required'), "warning");
+    showToast(t("workstation.name_required"), "warning");
     return;
   }
 
   if (!roomId) {
-    showToast(t('workstation.room_required'), "warning");
+    showToast(t("workstation.room_required"), "warning");
     return;
   }
 
@@ -83,7 +73,7 @@ export async function submitWorkstationForm() {
     name: name.trim(),
     room_id: roomId,
     manager: manager.trim() || null,
-    description: description.trim() || null,
+    description: description.trim() || null
   };
 
   try {
@@ -96,14 +86,14 @@ export async function submitWorkstationForm() {
 
     if (result.success) {
       closeModal("workstation-modal");
-      showToast(t('workstation.save_success'), "success");
+      showToast(t("workstation.save_success"), "success");
     } else {
-      const errorMsg = result.message || t('common.check_input');
-      showToast(`${t('common.operation_failed')}: ${errorMsg}`, "error");
+      const errorMsg = result.message || t("common.check_input");
+      showToast(`${t("common.operation_failed")}: ${errorMsg}`, "error");
       console.error("服务器返回错误:", result);
     }
   } catch (error) {
     console.error("提交工位表单失败:", error);
-    showToast(t('common.operation_failed_retry'), "error");
+    showToast(t("common.operation_failed_retry"), "error");
   }
 }

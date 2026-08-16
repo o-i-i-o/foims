@@ -1,14 +1,6 @@
-import {
-  apiRequest,
-  apiGet,
-  apiPut,
-  apiPost,
-} from "../utils/apiClient.js";
+import { apiRequest, apiGet, apiPut, apiPost } from "../utils/apiClient.js";
 
-import {
-  showToast,
-  escapeHtml,
-} from "../utils/ui.js";
+import { showToast, escapeHtml } from "../utils/ui.js";
 
 import { loadModal, openModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
@@ -21,7 +13,7 @@ import { showConfirm } from "../utils/confirm.js";
 export function initSystemTabs() {
   const systemContainer = elementCache.get("system");
   if (!systemContainer) return;
-  
+
   const tabBtns = systemContainer.querySelectorAll(".tab-btn[data-tab]");
   const tabContents = systemContainer.querySelectorAll(".tab-content");
 
@@ -131,8 +123,6 @@ function formatUptime(seconds) {
   return result;
 }
 
-
-
 // 保存系统配置
 let currentServerConfig = null;
 
@@ -150,15 +140,15 @@ async function saveSystemConfig() {
 
     if (result.success) {
       await loadSystemConfig();
-      showToast(t('system.config_save_success'), "success");
-      showToast(t('system.config_saved_restart_needed'), "warning");
+      showToast(t("system.config_save_success"), "success");
+      showToast(t("system.config_saved_restart_needed"), "warning");
       sessionStorage.setItem("configUpdated", "true");
     } else {
-      showToast(t('system.config_save_failed') + ": " + result.message, "error");
+      showToast(t("system.config_save_failed") + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存系统配置失败:", error);
-    showToast(t('system.config_save_failed') + ": " + error.message, "error");
+    showToast(t("system.config_save_failed") + ": " + error.message, "error");
   }
 }
 
@@ -167,10 +157,9 @@ function checkConfigUpdateRestartPrompt() {
   // 检查是否有配置更新标记
   if (sessionStorage.getItem("configUpdated") === "true") {
     // 显示重启提示
-    showToast(t('system.config_saved_restart_needed'), "warning");
+    showToast(t("system.config_saved_restart_needed"), "warning");
   }
 }
-
 
 // 加载系统配置
 export async function loadSystemConfig() {
@@ -204,7 +193,9 @@ async function loadSmtpConfig() {
         const pwdEl = elementCache.get("smtp-password");
         if (pwdEl) {
           pwdEl.value = "";
-          pwdEl.placeholder = smtpConfig.has_password ? t('smtp.password_configured') : t('smtp.password_input');
+          pwdEl.placeholder = smtpConfig.has_password
+            ? t("smtp.password_configured")
+            : t("smtp.password_input");
         }
         elementCache.setValue("smtp-from", smtpConfig.from || "");
         const secureTypeElement = elementCache.get("smtp-secure-type");
@@ -235,7 +226,7 @@ async function loadSmtpConfig() {
 
 // 保存SMTP配置
 async function saveSmtpConfig() {
-try {
+  try {
     const secureType = elementCache.getValue("smtp-secure-type");
     const smtpConfig = {
       host: elementCache.getValue("smtp-host"),
@@ -243,18 +234,18 @@ try {
       username: elementCache.getValue("smtp-username"),
       password: elementCache.getValue("smtp-password"),
       from: elementCache.getValue("smtp-from"),
-      secure: secureType !== "none",
+      secure: secureType !== "none"
     };
 
     const result = await apiPut("/api/system/smtp/config", smtpConfig);
     if (result.success) {
-      showToast(t('smtp.save_success'), "success");
+      showToast(t("smtp.save_success"), "success");
     } else {
-      showToast(t('smtp.save_failed') + ": " + result.message, "error");
+      showToast(t("smtp.save_failed") + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存SMTP配置失败:", error);
-    showToast(t('smtp.save_failed') + ": " + error.message, "error");
+    showToast(t("smtp.save_failed") + ": " + error.message, "error");
   }
 }
 
@@ -268,18 +259,18 @@ export async function testSmtpConnection() {
       username: elementCache.getValue("smtp-username"),
       password: elementCache.getValue("smtp-password"),
       from: elementCache.getValue("smtp-from"),
-      secure: secureType !== "none",
+      secure: secureType !== "none"
     };
 
     const result = await apiPost("/api/system/smtp/test", smtpConfig);
     if (result.success) {
-      showToast(t('smtp.test_success'), "success");
+      showToast(t("smtp.test_success"), "success");
     } else {
-      showToast(t('smtp.test_failed') + ": " + result.message, "error");
+      showToast(t("smtp.test_failed") + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("测试SMTP连接失败:", error);
-    showToast(t('smtp.test_error') + ": " + error.message, "error");
+    showToast(t("smtp.test_error") + ": " + error.message, "error");
   }
 }
 
@@ -294,50 +285,51 @@ export async function loadNotificationSettings() {
     // 加载用户列表
     const usersResult = await apiGet("/api/users");
     const settingsResult = await apiGet("/api/system/notification/settings");
-    
+
     const usersList = elementCache.get("notification-users-list");
     if (!usersList) return;
-    
+
     usersList.innerHTML = "";
-    
+
     if (!usersResult.success || !usersResult.data) return;
-    
+
     let users = [];
     if (Array.isArray(usersResult.data)) {
       users = usersResult.data;
     } else if (usersResult.data.items && Array.isArray(usersResult.data.items)) {
       users = usersResult.data.items;
     }
-    
-    const selectedRecipients = settingsResult.success && settingsResult.data 
-      ? settingsResult.data.email_recipients || [] 
-      : [];
-    
-    users.forEach(user => {
+
+    const selectedRecipients =
+      settingsResult.success && settingsResult.data
+        ? settingsResult.data.email_recipients || []
+        : [];
+
+    users.forEach((user) => {
       const item = document.createElement("div");
       item.className = "user-checkbox-item";
-      
+
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.id = `notify-user-${user.id}`;
       checkbox.value = user.id;
       checkbox.checked = selectedRecipients.includes(user.id);
-      
+
       const label = document.createElement("label");
       label.htmlFor = `notify-user-${user.id}`;
       label.className = "user-info";
-      
+
       const nameSpan = document.createElement("span");
       nameSpan.className = "user-name";
       nameSpan.textContent = user.username;
-      
+
       const emailSpan = document.createElement("span");
       emailSpan.className = "user-email";
       emailSpan.textContent = user.email;
-      
+
       label.appendChild(nameSpan);
       label.appendChild(emailSpan);
-      
+
       item.appendChild(checkbox);
       item.appendChild(label);
       usersList.appendChild(item);
@@ -350,21 +342,23 @@ export async function loadNotificationSettings() {
 // 保存通知设置
 export async function saveNotificationSettings() {
   try {
-    const checkboxes = document.querySelectorAll("#notification-users-list input[type='checkbox']:checked");
-    const userIds = Array.from(checkboxes).map(cb => cb.value);
-    
+    const checkboxes = document.querySelectorAll(
+      "#notification-users-list input[type='checkbox']:checked"
+    );
+    const userIds = Array.from(checkboxes).map((cb) => cb.value);
+
     const result = await apiPut("/api/system/notification/settings", {
       email_recipients: userIds
     });
-    
+
     if (result.success) {
-      showToast(t('notification.save_success'), "success");
+      showToast(t("notification.save_success"), "success");
     } else {
-      showToast(t('notification.save_failed') + ": " + result.message, "error");
+      showToast(t("notification.save_failed") + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("保存通知设置失败:", error);
-    showToast(t('notification.save_error') + ": " + error.message, "error");
+    showToast(t("notification.save_error") + ": " + error.message, "error");
   }
 }
 
@@ -380,15 +374,15 @@ export async function loadSystemInfo() {
       const dbStatus = systemInfo.database_status || "-";
       let dbStatusText;
       if (dbStatus === "connected") {
-        dbStatusText = t('system.connected');
+        dbStatusText = t("system.connected");
       } else if (dbStatus.startsWith("disconnected")) {
-        dbStatusText = t('system.disconnected');
+        dbStatusText = t("system.disconnected");
       } else {
         dbStatusText = dbStatus;
       }
       elementCache.get("database-status").textContent = dbStatusText;
-      elementCache.get("system-time").textContent = systemInfo.timestamp 
-        ? new Date(systemInfo.timestamp).toLocaleString() 
+      elementCache.get("system-time").textContent = systemInfo.timestamp
+        ? new Date(systemInfo.timestamp).toLocaleString()
         : new Date().toLocaleString();
       elementCache.get("system-uptime").textContent = formatUptime(systemInfo.uptime_seconds || 0);
     }
@@ -403,7 +397,7 @@ export async function downloadTemplate() {
     const result = await apiRequest("/api/system/import-export/template?type=all");
 
     if (!result.success) {
-      showToast(t('import_export.download_template_failed') + ": " + result.message, "error");
+      showToast(t("import_export.download_template_failed") + ": " + result.message, "error");
       return;
     }
 
@@ -419,7 +413,7 @@ export async function downloadTemplate() {
     }
   } catch (error) {
     console.error("下载模板失败:", error);
-    showToast(t('import_export.download_template_failed') + ": " + error.message, "error");
+    showToast(t("import_export.download_template_failed") + ": " + error.message, "error");
   }
 }
 
@@ -441,30 +435,32 @@ export async function importCsvData() {
     formData.append("file", file);
 
     try {
-      showToast(t('import_export.importing'), "info");
-      
+      showToast(t("import_export.importing"), "info");
+
       const result = await apiRequest(`/api/system/import-export/import/csv?mode=${mode}`, {
         method: "POST",
-        body: formData,
+        body: formData
       });
 
       if (result.success) {
         const results = result.data?.results || [];
         if (results.length > 0) {
-          await loadModal('import-result-modal');
+          await loadModal("import-result-modal");
           const contentDiv = elementCache.get("import-result-content");
           if (contentDiv) {
-            contentDiv.innerHTML = results.map(r => `<div class="import-result-item">${escapeHtml(r)}</div>`).join("");
+            contentDiv.innerHTML = results
+              .map((r) => `<div class="import-result-item">${escapeHtml(r)}</div>`)
+              .join("");
             await openModal("import-result-modal");
           }
         }
-        showToast(t('import_export.import_success'), "success");
+        showToast(t("import_export.import_success"), "success");
       } else {
-        showToast(t('import_export.import_failed') + ": " + result.message, "error");
+        showToast(t("import_export.import_failed") + ": " + result.message, "error");
       }
     } catch (error) {
       console.error("导入CSV数据失败:", error);
-      showToast(t('import_export.import_failed') + ": " + error.message, "error");
+      showToast(t("import_export.import_failed") + ": " + error.message, "error");
     }
   });
 }
@@ -476,7 +472,7 @@ export async function exportCsvData() {
     const result = await apiRequest(`/api/system/import-export/export/csv?type=${exportType}`);
 
     if (!result.success) {
-      showToast(t('import_export.export_csv_failed') + ": " + result.message, "error");
+      showToast(t("import_export.export_csv_failed") + ": " + result.message, "error");
       return;
     }
 
@@ -485,9 +481,10 @@ export async function exportCsvData() {
       const a = document.createElement("a");
       a.href = url;
       // 如果 ApiClient 没有解析出文件名，则使用默认生成的文件名
-      a.download = result.filename && result.filename !== "download" 
-        ? result.filename 
-        : `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download =
+        result.filename && result.filename !== "download"
+          ? result.filename
+          : `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -495,7 +492,7 @@ export async function exportCsvData() {
     }
   } catch (error) {
     console.error("导出CSV数据失败:", error);
-    showToast(t('import_export.export_csv_failed') + ": " + error.message, "error");
+    showToast(t("import_export.export_csv_failed") + ": " + error.message, "error");
   }
 }
 
@@ -504,7 +501,7 @@ export async function exportDatabase() {
   try {
     const response = await fetch("/api/system/import-export/export/database", {
       method: "GET",
-      credentials: "include",
+      credentials: "include"
     });
 
     if (!response.ok) {
@@ -513,7 +510,7 @@ export async function exportDatabase() {
         const errorData = await response.json();
         errorMsg = errorData.message || errorMsg;
       } catch (e) {}
-      showToast(t('import_export.export_db_failed') + ": " + errorMsg, "error");
+      showToast(t("import_export.export_db_failed") + ": " + errorMsg, "error");
       return;
     }
 
@@ -538,10 +535,10 @@ export async function exportDatabase() {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 
-    showToast(t('import_export.export_db_success'), "success");
+    showToast(t("import_export.export_db_success"), "success");
   } catch (error) {
     console.error("导出数据库失败:", error);
-    showToast(t('import_export.export_db_failed') + ": " + error.message, "error");
+    showToast(t("import_export.export_db_failed") + ": " + error.message, "error");
   }
 }
 
@@ -551,7 +548,7 @@ export async function backupConfig() {
     const result = await apiRequest("/api/system/config/backup");
 
     if (!result.success) {
-      showToast(t('import_export.backup_failed') + ": " + result.message, "error");
+      showToast(t("import_export.backup_failed") + ": " + result.message, "error");
       return;
     }
 
@@ -559,9 +556,10 @@ export async function backupConfig() {
       const url = window.URL.createObjectURL(result.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = result.filename && result.filename !== "download"
-        ? result.filename
-        : `ipma-config-${new Date().toISOString().slice(0, 10)}.toml`;
+      a.download =
+        result.filename && result.filename !== "download"
+          ? result.filename
+          : `ipma-config-${new Date().toISOString().slice(0, 10)}.toml`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -569,13 +567,13 @@ export async function backupConfig() {
     }
   } catch (error) {
     console.error("备份配置失败:", error);
-    showToast(t('import_export.backup_failed') + ": " + error.message, "error");
+    showToast(t("import_export.backup_failed") + ": " + error.message, "error");
   }
 }
 
 // 恢复配置
 export function restoreConfig() {
-const fileInput = document.createElement("input");
+  const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = ".toml";
   fileInput.click();
@@ -590,22 +588,22 @@ const fileInput = document.createElement("input");
     try {
       const result = await apiRequest("/api/system/config/restore", {
         method: "POST",
-        body: formData,
+        body: formData
       });
 
       if (result.success) {
-        showToast(t('import_export.restore_success'), "success");
+        showToast(t("import_export.restore_success"), "success");
         // 显示重启提示，告知用户需要重启程序
-        showToast(t('system.config_saved_restart_needed'), "warning");
+        showToast(t("system.config_saved_restart_needed"), "warning");
 
         // 设置重启提示标记，用于后续的持续提示
         sessionStorage.setItem("configUpdated", "true");
       } else {
-        showToast(t('import_export.restore_failed') + ": " + result.message, "error");
+        showToast(t("import_export.restore_failed") + ": " + result.message, "error");
       }
     } catch (error) {
       console.error("恢复配置失败:", error);
-      showToast(t('import_export.restore_error') + ": " + error.message, "error");
+      showToast(t("import_export.restore_error") + ": " + error.message, "error");
     }
   });
 }
@@ -616,21 +614,18 @@ export async function loadLogsStats() {
     const result = await apiGet("/api/system/logs/stats");
     if (result.success && result.data) {
       const stats = result.data;
-      
-      elementCache.get("operation-logs-count").textContent = 
-        stats.operation_logs?.count || 0;
-      elementCache.get("login-logs-count").textContent = 
-        stats.login_logs?.count || 0;
-      elementCache.get("notifications-count").textContent = 
-        stats.notifications?.count || 0;
-      
+
+      elementCache.get("operation-logs-count").textContent = stats.operation_logs?.count || 0;
+      elementCache.get("login-logs-count").textContent = stats.login_logs?.count || 0;
+      elementCache.get("notifications-count").textContent = stats.notifications?.count || 0;
+
       if (stats.operation_logs?.oldest) {
         elementCache.get("operation-logs-oldest").textContent =
-          `${t('logs.earliest_label')}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
+          `${t("logs.earliest_label")}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
       }
       if (stats.login_logs?.oldest) {
         elementCache.get("login-logs-oldest").textContent =
-          `${t('logs.earliest_label')}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
+          `${t("logs.earliest_label")}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
       }
     }
   } catch (error) {
@@ -643,38 +638,38 @@ export async function clearLogs() {
   const logType = elementCache.getValue("clear-log-type");
   const daysInput = elementCache.getValue("clear-log-days");
   const days = daysInput ? parseInt(daysInput) : 0;
-  
+
   let confirmMsg;
   if (days === 0) {
-    confirmMsg = t('logs.clear_all_confirm');
+    confirmMsg = t("logs.clear_all_confirm");
   } else {
-    confirmMsg = t('logs.clear_days_confirm', { days });
+    confirmMsg = t("logs.clear_days_confirm", { days });
   }
-  
+
   if (!confirmMsg) {
-    confirmMsg = t('logs.clear_all_confirm');
+    confirmMsg = t("logs.clear_all_confirm");
   }
-  
+
   const confirmed = await showConfirm(confirmMsg);
   if (!confirmed) {
     return;
   }
-  
+
   try {
     const result = await apiPost("/api/system/logs/clear", {
       log_type: logType,
       days: days
     });
-    
+
     if (result.success) {
       showToast(result.message, "success");
       loadLogsStats();
     } else {
-      showToast(t('logs.clear_failed') + ": " + result.message, "error");
+      showToast(t("logs.clear_failed") + ": " + result.message, "error");
     }
   } catch (error) {
     console.error("清理日志失败:", error);
-    showToast(t('logs.clear_failed') + ": " + error.message, "error");
+    showToast(t("logs.clear_failed") + ": " + error.message, "error");
   }
 }
 

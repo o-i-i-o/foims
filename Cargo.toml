@@ -1,9 +1,22 @@
 [workspace]
-members = [".", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler"]
+members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
+
+# 与 AGENTS.md 硬性规范对应的 clippy 护栏（warn 级，CI 以 -D warnings 强制）：
+# 禁止 unwrap/expect/调试输出/占位实现遗留，禁止用 #[allow] 压制告警
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
+allow_attributes = "warn"
 
 [workspace.dependencies]
 # Axum
@@ -55,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.8"
+version = "0.15.9"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -63,6 +76,7 @@ license = "MIT"
 
 [dependencies]
 # Workspace crates
+ipma-common = { path = "crates/ipma-common" }
 ipma-init = { path = "crates/ipma-init" }
 ipma-visualization = { path = "crates/ipma-visualization" }
 ipma-data-manager = { path = "crates/ipma-data-manager" }
@@ -92,8 +106,6 @@ async-trait = { workspace = true }
 
 # 主项目特有依赖
 
-regex = "1.13.1"
-
 bcrypt = "0.19.3"
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
@@ -110,7 +122,6 @@ async-snmp = "0.17.0"
 config = { version = "0.15.25", features = ["toml"] }
 toml = "1.1.4"
 
-anyhow = "1.0.104"
 dashmap = "6.2.1"
 arc-swap = "1.9.2"
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
@@ -119,6 +130,9 @@ totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 
 rust-i18n = "4.2.1"
 time = "0.3.55"
+
+[lints]
+workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

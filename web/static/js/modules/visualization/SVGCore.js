@@ -328,9 +328,9 @@ export class SVGCore {
     const elementCenterY = y + height / 2;
 
     const allElements = this.elementsGroup.querySelectorAll("[data-id]");
-    const otherElements = Array.from(allElements).filter(el => el !== element);
+    const otherElements = Array.from(allElements).filter((el) => el !== element);
 
-    otherElements.forEach(other => {
+    otherElements.forEach((other) => {
       const otherRect = other.querySelector("rect");
       if (!otherRect) return;
 
@@ -342,11 +342,21 @@ export class SVGCore {
       const otherCenterY = oy + oh / 2;
 
       if (Math.abs(elementCenterX - otherCenterX) < this.alignmentThreshold) {
-        this._drawAlignmentLine(otherCenterX, Math.min(y, oy), otherCenterX, Math.max(y + height, oy + oh));
+        this._drawAlignmentLine(
+          otherCenterX,
+          Math.min(y, oy),
+          otherCenterX,
+          Math.max(y + height, oy + oh)
+        );
       }
 
       if (Math.abs(elementCenterY - otherCenterY) < this.alignmentThreshold) {
-        this._drawAlignmentLine(Math.min(x, ox), otherCenterY, Math.max(x + width, ox + ow), otherCenterY);
+        this._drawAlignmentLine(
+          Math.min(x, ox),
+          otherCenterY,
+          Math.max(x + width, ox + ow),
+          otherCenterY
+        );
       }
 
       if (Math.abs(x - ox) < this.alignmentThreshold) {

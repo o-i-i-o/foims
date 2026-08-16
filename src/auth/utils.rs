@@ -1,3 +1,5 @@
+//! 认证辅助工具。
+
 use crate::config::{Config, parse_duration};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{Duration, Utc};

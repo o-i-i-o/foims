@@ -7,27 +7,33 @@ description = "IPMA Init Module - Database initialization and management"
 license = "MIT"
 
 [dependencies]
+# Workspace crates
+ipma-common = { path = "../ipma-common" }
+
 # Axum
 axum = { workspace = true }
 
 # SQLx PostgreSQL
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
+sqlx = { workspace = true }
 
 # Serialization
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Validation
-validator = { version = "0.21.0", features = ["derive"] }
+validator = { workspace = true }
 
 # Password hashing
 bcrypt = "0.19.3"
 
 # Utilities
-chrono = { version = "0.4.45", features = ["serde"] }
-uuid = { version = "1.24.0", features = ["v4", "serde"] }
+chrono = { workspace = true }
+uuid = { workspace = true }
 rand = "0.10.2"
-tracing = "0.1.44"
-tokio = { version = "1.53.1", features = ["full"] }
+tracing = { workspace = true }
+tokio = { workspace = true }
 toml = "1.1.4"
-thiserror = "2.0.20"
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,3 +1,5 @@
+//! 系统配置（system_configs）表结构创建。
+
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS system_configs (

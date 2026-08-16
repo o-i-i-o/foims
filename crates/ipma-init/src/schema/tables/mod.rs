@@ -1,3 +1,5 @@
+//! 建表总入口：按外键依赖顺序创建各表，随后建索引/视图/触发器。
+
 mod cabinets;
 mod cable_links;
 mod device_interfaces;

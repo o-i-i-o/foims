@@ -1,3 +1,5 @@
+//! 认证提取器：当前用户与管理员权限守卫（axum FromRequestParts）。
+
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 

@@ -14,7 +14,7 @@ import {
   AVAILABLE_ICONS,
   getOrgIcon,
   getAllOrgTypes,
-  loadOrgTypesFromAPI,
+  loadOrgTypesFromAPI
 } from "../config/org-config.js";
 
 // ==========================================
@@ -132,7 +132,7 @@ export async function loadOrganizationTree() {
   try {
     const [treeResult, templatesResult] = await Promise.all([
       apiGet("/api/resources/organizations/tree"),
-      apiGet("/api/resources/org-templates"),
+      apiGet("/api/resources/org-templates")
     ]);
 
     // 构建模板图标映射
@@ -210,8 +210,8 @@ async function renderTreeNode(node, depth) {
     ${node.description ? `<span class="org-node-desc" title="${escapeHtml(node.description)}">${escapeHtml(node.description)}</span>` : ""}
     <span class="org-node-actions">
       ${addChildBtns}
-      ${iconButton({ icon: 'edit', label: t("common.edit"), cls: 'btn-edit', attrs: `data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
-      ${iconButton({ icon: 'trash', label: t("common.delete"), cls: 'btn-delete', attrs: `data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
     </span>
   `;
 
@@ -237,7 +237,12 @@ async function renderTreeNode(node, depth) {
  * 基于模板层级，每个允许的下级类型一个按钮
  */
 function getAllowedChildButtons(node) {
-  return iconButton({ icon: 'plusCircle', label: t("organization.add_child"), cls: 'btn-add-child', attrs: `data-action="add-child" data-parent-id="${node.id}"` });
+  return iconButton({
+    icon: "plusCircle",
+    label: t("organization.add_child"),
+    cls: "btn-add-child",
+    attrs: `data-action="add-child" data-parent-id="${node.id}"`
+  });
 }
 
 function renderEmptyState(container) {
@@ -475,7 +480,7 @@ export async function editOrganization(id) {
 
 export async function deleteOrganization(id, name) {
   const confirmed = await import("../utils/confirm.js").then((m) =>
-    m.showConfirm(t("organization.delete_confirm", { name })),
+    m.showConfirm(t("organization.delete_confirm", { name }))
   );
   if (!confirmed) return;
 
@@ -500,7 +505,8 @@ export async function submitOrgForm() {
   const description = elementCache.getValue("org-description");
   const parentId = elementCache.getValue("org-parent-id");
   const templateSelect = document.getElementById("org-template-select");
-  const templateId = templateSelect && templateSelect.style.display !== "none" ? templateSelect.value : null;
+  const templateId =
+    templateSelect && templateSelect.style.display !== "none" ? templateSelect.value : null;
 
   if (!name) {
     showToast(t("organization.name_required"), "warning");
@@ -524,7 +530,7 @@ export async function submitOrgForm() {
       // 编辑模式：仅更新 name / description，type_path 由模板决定不可修改
       result = await apiPut(`/api/resources/organizations/${id}`, {
         name: name.trim(),
-        description: description || null,
+        description: description || null
       });
     } else {
       // 新增模式：需要 parent_id（子节点）或 template_id（根节点）
@@ -532,7 +538,7 @@ export async function submitOrgForm() {
         name: name.trim(),
         type_path: typePath,
         parent_id: parentId || null,
-        description: description || null,
+        description: description || null
       };
       if (!parentId && templateId) {
         orgData.template_id = templateId;
@@ -541,7 +547,10 @@ export async function submitOrgForm() {
     }
 
     if (result.success) {
-      showToast(id ? t("organization.update_success") : t("organization.create_success"), "success");
+      showToast(
+        id ? t("organization.update_success") : t("organization.create_success"),
+        "success"
+      );
       closeModal("organization-modal");
       loadOrganizationTree();
     } else {
@@ -594,8 +603,8 @@ function renderTemplateList(container, templates) {
         ${tpl.description ? `<span class="org-template-desc">${escapeHtml(tpl.description)}</span>` : ""}
       </div>
       <div class="org-template-actions">
-        ${iconButton({ icon: 'edit', label: t("common.edit"), cls: 'btn-edit', attrs: `data-action="edit-template" data-template-id="${tpl.id}"` })}
-        ${iconButton({ icon: 'trash', label: t("common.delete"), cls: 'btn-delete', attrs: `data-action="delete-template" data-template-id="${tpl.id}" data-template-name="${escapeHtml(tpl.name)}"` })}
+        ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-action="edit-template" data-template-id="${tpl.id}"` })}
+        ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-action="delete-template" data-template-id="${tpl.id}" data-template-name="${escapeHtml(tpl.name)}"` })}
       </div>
     `;
     container.appendChild(item);
@@ -944,7 +953,7 @@ async function populateQuickFillFromDB(select) {
 
 async function deleteTemplate(id, name) {
   const confirmed = await import("../utils/confirm.js").then((m) =>
-    m.showConfirm(t("org_template.delete_confirm", { name })),
+    m.showConfirm(t("org_template.delete_confirm", { name }))
   );
   if (!confirmed) return;
 
@@ -984,7 +993,7 @@ export async function submitOrgTemplateForm() {
     name: name.trim(),
     levels: levels,
     icons: Object.keys(icons).length > 0 ? icons : null,
-    description: description || null,
+    description: description || null
   };
 
   try {
@@ -996,7 +1005,10 @@ export async function submitOrgTemplateForm() {
     }
 
     if (result.success) {
-      showToast(id ? t("org_template.update_success") : t("org_template.create_success"), "success");
+      showToast(
+        id ? t("org_template.update_success") : t("org_template.create_success"),
+        "success"
+      );
       closeModal("org-template-editor-modal");
       openTemplateManagement();
     } else {

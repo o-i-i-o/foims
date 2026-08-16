@@ -1,3 +1,5 @@
+//! 工位 CSV 导入（含 IP 绑定）。
+
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
 use tracing::warn;
@@ -100,7 +102,16 @@ pub async fn import_workstations(
                 match update_result {
                     Ok(_) => {
                         handle_workstation_ip(
-                            &mut *conn, id, room_id, ip_address, true, name, room_name, results,
+                            &mut *conn,
+                            WorkstationRow {
+                                ws_id: id,
+                                room_id,
+                                ip_address,
+                                name,
+                                room_name,
+                            },
+                            true,
+                            results,
                         )
                         .await;
                         success_count += 1;
@@ -130,7 +141,16 @@ pub async fn import_workstations(
             match insert_result {
                 Ok(_) => {
                     handle_workstation_ip(
-                        &mut *conn, new_id, room_id, ip_address, false, name, room_name, results,
+                        &mut *conn,
+                        WorkstationRow {
+                            ws_id: new_id,
+                            room_id,
+                            ip_address,
+                            name,
+                            room_name,
+                        },
+                        false,
+                        results,
                     )
                     .await;
                     success_count += 1;
@@ -149,17 +169,30 @@ pub async fn import_workstations(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn handle_workstation_ip(
-    conn: &mut sqlx::PgConnection,
+/// 单行工位导入上下文（收敛 `handle_workstation_ip` 的参数）。
+struct WorkstationRow<'a> {
     ws_id: uuid::Uuid,
     room_id: uuid::Uuid,
-    ip_address: &str,
+    ip_address: &'a str,
+    name: &'a str,
+    room_name: &'a str,
+}
+
+/// 为工位写入/更新 IP：已绑定 IP 则更新，否则新写入；所在网段按房间推导。
+async fn handle_workstation_ip(
+    conn: &mut sqlx::PgConnection,
+    row: WorkstationRow<'_>,
     is_update: bool,
-    name: &str,
-    room_name: &str,
     results: &mut Vec<String>,
 ) {
+    let WorkstationRow {
+        ws_id,
+        room_id,
+        ip_address,
+        name,
+        room_name,
+    } = row;
+
     if ip_address.is_empty() {
         let action = if is_update { "更新" } else { "导入" };
         results.push(format!("{action}工位: {name} (房间: {room_name})"));

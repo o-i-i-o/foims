@@ -1,3 +1,5 @@
+//! 跨表触发器创建。
+
 use tracing::warn;
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {

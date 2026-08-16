@@ -1,210 +1,215 @@
 .btn {
-    padding: 0 var(--btn-padding-x);
-    font-size: 0.95rem;
-    font-weight: 500;
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: transform var(--transition-normal), box-shadow var(--transition-normal), background-color var(--transition-normal);
-    text-align: center;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    min-width: 120px;
-    height: var(--btn-height);
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.08);
+  padding: 0 var(--btn-padding-x);
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal),
+    background-color var(--transition-normal);
+  text-align: center;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 120px;
+  height: var(--btn-height);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08);
 }
 
 .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .btn:focus-visible {
-    outline: none;
-    box-shadow: var(--control-shadow);
+  outline: none;
+  box-shadow: var(--control-shadow);
 }
 
 .btn:active {
-    transform: translateY(0);
+  transform: translateY(0);
 }
 
 .btn-primary {
-    background: var(--color-primary);
-    color: #fff;
+  background: var(--color-primary);
+  color: var(--color-bg-white);
 }
 
 .btn-primary:hover {
-    background: var(--color-primary-hover);
-    box-shadow: 0 4px 12px rgb(102 126 234 / 0.3);
+  background: var(--color-primary-hover);
+  box-shadow: 0 4px 12px rgb(102 126 234 / 0.3);
 }
 
 .btn-secondary {
-    background: var(--color-secondary);
-    color: #fff;
+  background: var(--color-secondary);
+  color: var(--color-bg-white);
 }
 
 .btn-secondary:hover {
-    background: var(--color-secondary-hover);
-    box-shadow: 0 4px 12px rgb(108 117 125 / 0.3);
+  background: var(--color-secondary-hover);
+  box-shadow: 0 4px 12px rgb(108 117 125 / 0.3);
 }
 
 .btn-edit {
-    background: var(--color-info);
-    color: #fff;
+  background: var(--color-info);
+  color: var(--color-bg-white);
 }
 
 .btn-edit:hover {
-    background: var(--color-info-hover);
-    box-shadow: 0 2px 8px rgb(23 162 184 / 0.3);
+  background: var(--color-info-hover);
+  box-shadow: 0 2px 8px rgb(23 162 184 / 0.3);
 }
 
 .btn-delete,
 .btn-danger {
-    background: var(--color-danger);
-    color: #fff;
+  background: var(--color-danger);
+  color: var(--color-bg-white);
 }
 
 .btn-delete:hover,
 .btn-danger:hover {
-    background: var(--color-danger-hover);
-    box-shadow: 0 2px 8px rgb(220 53 69 / 0.3);
+  background: var(--color-danger-hover);
+  box-shadow: 0 2px 8px rgb(220 53 69 / 0.3);
 }
 
 .btn-warning {
-    background: var(--color-warning);
-    color: var(--color-warning-text);
+  background: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .btn-warning:hover {
-    background: #e0a800;
-    box-shadow: 0 2px 8px rgb(255 193 7 / 0.3);
+  background: #e0a800;
+  box-shadow: 0 2px 8px rgb(255 193 7 / 0.3);
 }
 
 .btn-sm {
-    padding: 0 0.9rem;
-    font-size: 0.85rem;
-    width: auto;
-    min-width: 80px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  padding: 0 0.9rem;
+  font-size: 0.85rem;
+  width: auto;
+  min-width: 80px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-icon-sm {
-    width: 28px;
-    min-width: 28px;
-    max-width: 28px;
-    height: 28px;
-    padding: 0;
-    font-size: 16px;
-    line-height: 1;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 图标按钮：用于表格行内操作，文字含义通过 data-tooltip 悬浮提示展示 */
 .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
-    padding: 0;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    transition: background-color var(--transition-fast), color var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .icon-btn svg {
-    width: 16px;
-    height: 16px;
-    pointer-events: none;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
 }
 
 .icon-btn:focus-visible {
-    outline: none;
-    box-shadow: var(--control-shadow);
+  outline: none;
+  box-shadow: var(--control-shadow);
 }
 
 .icon-btn.btn-edit,
 .icon-btn.btn-secondary,
 .icon-btn.btn-info {
-    color: var(--color-info);
+  color: var(--color-info);
 }
 
 .icon-btn.btn-edit:hover,
 .icon-btn.btn-secondary:hover,
 .icon-btn.btn-info:hover {
-    background: rgb(23 162 184 / 0.12);
-    color: var(--color-info-hover);
+  background: rgb(23 162 184 / 0.12);
+  color: var(--color-info-hover);
 }
 
 .icon-btn.btn-delete,
 .icon-btn.btn-danger {
-    color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 .icon-btn.btn-delete:hover,
 .icon-btn.btn-danger:hover {
-    background: rgb(220 53 69 / 0.1);
-    color: var(--color-danger-hover);
+  background: rgb(220 53 69 / 0.1);
+  color: var(--color-danger-hover);
 }
 
 .icon-btn.btn-primary {
-    color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .icon-btn.btn-primary:hover {
-    background: var(--color-primary-light);
-    color: var(--color-primary-hover);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
 }
 
 .icon-btn.btn-success,
 .icon-btn.btn-add-child {
-    color: var(--color-success);
+  color: var(--color-success);
 }
 
 .icon-btn.btn-success:hover,
 .icon-btn.btn-add-child:hover {
-    background: rgb(40 167 69 / 0.12);
+  background: rgb(40 167 69 / 0.12);
 }
 
 .icon-btn.btn-warning {
-    color: var(--color-warning);
+  color: var(--color-warning);
 }
 
 .icon-btn.btn-warning:hover {
-    background: rgb(255 193 7 / 0.15);
-    color: #d39e00;
+  background: rgb(255 193 7 / 0.15);
+  color: #d39e00;
 }
 
 .button-group {
-    display: flex;
-    gap: var(--space-md);
-    flex-wrap: wrap;
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .action-buttons {
-    display: flex;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .btn-nowrap {
-    white-space: nowrap;
+  white-space: nowrap;
 }
 
 .btn-full-width {
-    width: 100%;
-    margin-top: var(--space-sm);
+  width: 100%;
+  margin-top: var(--space-sm);
 }

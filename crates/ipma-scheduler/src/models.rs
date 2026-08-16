@@ -1,3 +1,5 @@
+//! 定时任务数据模型。
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;

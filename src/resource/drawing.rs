@@ -1,3 +1,5 @@
+//! 机房可视化图纸接口（转发 ipma-visualization 模块）。
+
 use std::sync::Arc;
 
 use axum::extract::{Path, State};

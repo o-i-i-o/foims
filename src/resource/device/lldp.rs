@@ -1,3 +1,5 @@
+//! 设备 LLDP 邻居发现（SNMP 采集与入库）。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

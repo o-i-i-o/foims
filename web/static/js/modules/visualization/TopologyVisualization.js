@@ -11,9 +11,10 @@ export class TopologyVisualization {
       onNodeClick: (deviceId) => this.openDeviceDetail(deviceId),
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
       onNodeDragEnd: () => {},
-      onConnectionComplete: (sDev, sPort, tDev, tPort) => this._createConnection(sDev, sPort, tDev, tPort),
+      onConnectionComplete: (sDev, sPort, tDev, tPort) =>
+        this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
-      onCanvasClick: () => this._deselectConnection(),
+      onCanvasClick: () => this._deselectConnection()
     });
     this.renderer = new TopologyRenderer(this.core);
     this.dataManager = new TopologyDataManager();
@@ -27,7 +28,7 @@ export class TopologyVisualization {
     this.renderer.clearAll();
     const [nodes, connections] = await Promise.all([
       this.dataManager.fetchTopologyNodes(),
-      this.dataManager.fetchTopologyConnections(),
+      this.dataManager.fetchTopologyConnections()
     ]);
 
     this.nodes = nodes;
@@ -57,7 +58,7 @@ export class TopologyVisualization {
       width: 200,
       height: 100,
       device_name: deviceName,
-      device_type: deviceType,
+      device_type: deviceType
     };
 
     const saved = await this.dataManager.saveTopologyNodes([node]);
@@ -88,7 +89,7 @@ export class TopologyVisualization {
       source_device_id: sourceDeviceId,
       target_device_id: targetDeviceId,
       source_port_id: sourcePortId || null,
-      target_port_id: targetPortId || null,
+      target_port_id: targetPortId || null
     });
 
     if (result) {
@@ -98,13 +99,17 @@ export class TopologyVisualization {
 
   async _handleConnectionClick(connectionId) {
     this.selectedConnectionId = connectionId;
-    const path = this.core.connectionsGroup.querySelector(`[data-connection-id="${connectionId}"] .topology-connection`);
+    const path = this.core.connectionsGroup.querySelector(
+      `[data-connection-id="${connectionId}"] .topology-connection`
+    );
     if (path) path.classList.add("selected");
   }
 
   async _deselectConnection() {
     if (this.selectedConnectionId) {
-      this.core.connectionsGroup.querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
+      this.core.connectionsGroup
+        .querySelectorAll(".selected")
+        .forEach((el) => el.classList.remove("selected"));
       this.selectedConnectionId = null;
     }
   }
@@ -120,7 +125,7 @@ export class TopologyVisualization {
         x: parseFloat(rect.getAttribute("x")),
         y: parseFloat(rect.getAttribute("y")),
         width: parseFloat(rect.getAttribute("width")),
-        height: parseFloat(rect.getAttribute("height")),
+        height: parseFloat(rect.getAttribute("height"))
       });
     });
 
@@ -341,7 +346,7 @@ export class TopologyVisualization {
     const idx = this.nodes.length;
     return {
       x: 100 + (idx % cols) * 250,
-      y: 100 + Math.floor(idx / cols) * 150,
+      y: 100 + Math.floor(idx / cols) * 150
     };
   }
 
@@ -350,7 +355,10 @@ export class TopologyVisualization {
       this.core.svg.setAttribute("viewBox", "0 0 3000 2000");
       return;
     }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     this.nodes.forEach((n) => {
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
@@ -358,6 +366,9 @@ export class TopologyVisualization {
       maxY = Math.max(maxY, n.y + (n.height || 100));
     });
     const padding = 100;
-    this.core.svg.setAttribute("viewBox", `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`);
+    this.core.svg.setAttribute(
+      "viewBox",
+      `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`
+    );
   }
 }

@@ -1,3 +1,5 @@
+//! 站内通知（notifications）表结构创建。
+
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS notifications (

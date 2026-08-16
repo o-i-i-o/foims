@@ -1,6 +1,9 @@
-use thiserror::Error;
-use tracing::error;
+//! 定时任务错误定义。
 
+use ipma_common::DbErrorKind;
+use thiserror::Error;
+
+/// 定时任务模块错误类型。
 #[derive(Error, Debug)]
 pub enum SchedulerError {
     #[error("数据库错误: {0}")]
@@ -27,42 +30,11 @@ pub enum SchedulerError {
 
 impl From<sqlx::Error> for SchedulerError {
     fn from(err: sqlx::Error) -> Self {
-        match &err {
-            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => {
-                    SchedulerError::Conflict("数据已存在，请检查是否有重复记录".to_string())
-                }
-                Some("23503") => SchedulerError::Validation("关联数据不存在或无法删除".to_string()),
-                Some("23514") => SchedulerError::Validation(db_err.message().to_string()),
-                Some("22P02") => SchedulerError::Validation("数据格式无效".to_string()),
-                Some("22023") => SchedulerError::Validation("参数值无效".to_string()),
-                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                    SchedulerError::Database("数据库连接异常，请稍后重试".to_string())
-                }
-                Some("57014") => SchedulerError::Database("数据库操作超时，请稍后重试".to_string()),
-                _ => {
-                    let err_str = err.to_string();
-                    if err_str.contains("invalid cidr") {
-                        SchedulerError::Validation("不符合CIDR格式".to_string())
-                    } else if err_str.contains("invalid inet") {
-                        SchedulerError::Validation("不符合IP地址格式".to_string())
-                    } else {
-                        error!("数据库错误: {}", err_str);
-                        SchedulerError::Database("数据库操作失败，请稍后重试".to_string())
-                    }
-                }
-            },
-            sqlx::Error::RowNotFound => SchedulerError::NotFound("资源不存在".to_string()),
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
-                SchedulerError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            sqlx::Error::Io(_) => {
-                SchedulerError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            _ => {
-                error!("数据库错误: {}", err);
-                SchedulerError::Database("数据库操作失败，请稍后重试".to_string())
-            }
+        match ipma_common::classify_db_error(&err) {
+            DbErrorKind::Conflict(msg) => SchedulerError::Conflict(msg),
+            DbErrorKind::Validation(msg) => SchedulerError::Validation(msg),
+            DbErrorKind::NotFound => SchedulerError::NotFound("资源不存在".to_string()),
+            DbErrorKind::Database(msg) => SchedulerError::Database(msg),
         }
     }
 }

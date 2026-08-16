@@ -1,3 +1,5 @@
+//! 设备模板管理。
+
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};

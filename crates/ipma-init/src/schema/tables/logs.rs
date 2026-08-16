@@ -1,3 +1,5 @@
+//! 日志表（操作/任务/登录）结构创建。
+
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS operation_logs (

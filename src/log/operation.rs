@@ -1,3 +1,5 @@
+//! 操作审计日志查询。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -8,7 +10,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::OperationLog;
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 
 pub async fn get_operation_logs(
     State(state): State<Arc<AppState>>,
@@ -19,7 +21,6 @@ pub async fn get_operation_logs(
     let user_id = query.get("user_id").cloned().unwrap_or_default();
     let action = query.get("action").cloned().unwrap_or_default();
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
 
@@ -127,13 +128,7 @@ pub async fn get_operation_logs(
     };
 
     Ok(crate::error::ok_json(
-        serde_json::json!({
-            "data": logs,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(logs, total, &pagination),
         "操作日志获取成功",
     ))
 }

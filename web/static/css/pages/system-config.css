@@ -2,295 +2,295 @@
 
 .system-config-section,
 .smtp-config-section {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: var(--space-lg);
-    background: var(--color-bg-white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-md);
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+  background: var(--color-bg-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
 }
 
 .system-config-section h3,
 .smtp-config-section h3 {
-    color: var(--color-text);
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-sm);
-    border-bottom: 2px solid var(--color-primary-light);
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-sm);
+  border-bottom: 2px solid var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .system-config-section h3::before,
 .smtp-config-section h3::before {
-    content: '';
-    width: 4px;
-    height: 20px;
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
-    border-radius: 2px;
+  content: "";
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
+  border-radius: 2px;
 }
 
 .config-card {
-    background: var(--color-bg);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    margin-bottom: var(--space-lg);
-    border: 1px solid var(--color-border-light);
-    transition: all var(--transition-fast);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  border: 1px solid var(--color-border-light);
+  transition: all var(--transition-fast);
 }
 
 .config-card:hover {
-    border-color: var(--color-primary-light);
-    box-shadow: 0 4px 12px rgb(102 126 234 / 0.1);
+  border-color: var(--color-primary-light);
+  box-shadow: 0 4px 12px rgb(102 126 234 / 0.1);
 }
 
 .config-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-md);
-    padding-bottom: var(--space-sm);
-    border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .config-card-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--color-text);
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .config-card-title .icon {
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-primary-light);
-    border-radius: 50%;
-    color: var(--color-primary);
-    font-size: 0.75rem;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-light);
+  border-radius: 50%;
+  color: var(--color-primary);
+  font-size: 0.75rem;
 }
 
 .config-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-lg);
-    margin-bottom: var(--space-lg);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
 
 .config-row:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .config-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 .config-field label {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .config-field input,
 .config-field select {
-    padding: 0.65rem 1rem;
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: 0.9rem;
-    transition: all var(--transition-fast);
-    background: var(--color-bg-white);
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  font-size: 0.9rem;
+  transition: all var(--transition-fast);
+  background: var(--color-bg-white);
 }
 
 .config-field input:focus,
 .config-field select:focus {
-    outline: none;
-    border-color: var(--control-border-focus);
-    box-shadow: var(--control-shadow);
+  outline: none;
+  border-color: var(--control-border-focus);
+  box-shadow: var(--control-shadow);
 }
 
 .config-field .hint-text {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
 }
 
 .config-hint {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .port-config-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md);
-    background: var(--color-bg-white);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg-white);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
 }
 
 .port-config-row label {
-    min-width: 100px;
-    font-weight: 500;
-    color: var(--color-text-secondary);
+  min-width: 100px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .port-config-row input[type="number"] {
-    width: 100px;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: 0.9rem;
+  width: 100px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  font-size: 0.9rem;
 }
 
 .config-actions {
-    display: flex;
-    gap: var(--space-md);
-    padding-top: var(--space-lg);
-    margin-top: var(--space-lg);
-    border-top: 1px solid var(--color-border-light);
-    flex-wrap: wrap;
+  display: flex;
+  gap: var(--space-md);
+  padding-top: var(--space-lg);
+  margin-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-light);
+  flex-wrap: wrap;
 }
 
 .config-actions .btn {
-    min-width: 120px;
-    padding: 0.65rem 1.5rem;
-    font-weight: 500;
-    border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+  min-width: 120px;
+  padding: 0.65rem 1.5rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
 }
 
 .config-actions .btn:hover {
-    transform: translateY(-1px);
+  transform: translateY(-1px);
 }
 
 .config-actions .btn:active {
-    transform: translateY(0);
+  transform: translateY(0);
 }
 
 @media (max-width: 768px) {
-    .config-row {
-        grid-template-columns: 1fr;
-    }
+  .config-row {
+    grid-template-columns: 1fr;
+  }
 
-    .port-config-row {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+  .port-config-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-    .config-actions {
-        flex-direction: column;
-    }
+  .config-actions {
+    flex-direction: column;
+  }
 
-    .config-actions .btn {
-        width: 100%;
-    }
+  .config-actions .btn {
+    width: 100%;
+  }
 }
 
 /* 系统信息网格 */
 .system-info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: var(--space-lg);
-    margin-bottom: var(--space-xl);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
 }
 
 /* 服务状态 */
 .service-status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--space-md);
-    margin-top: var(--space-md);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }
 
 .status-item {
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-sm) var(--space-md);
-    background: var(--color-bg);
-    border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
 }
 
 .status-label {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-xs);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
 }
 
 .status-value {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-text);
 }
 
 /* 作用域限定在 .status-value 上，避免与 badges.css 的 .status-active/.status-inactive 冲突 */
 .status-value.status-active,
 .status-value.status-enabled {
-    color: var(--color-success);
+  color: var(--color-success);
 }
 
 .status-value.status-inactive,
 .status-value.status-disabled {
-    color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 /* 端口配置组件 */
 .port-config {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    width: 100%;
-    flex-wrap: wrap;
-    padding: var(--space-md);
-    background: var(--color-bg);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  flex-wrap: wrap;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
 }
 
 .port-config .toggle-group {
-    flex-shrink: 0;
+  flex-shrink: 0;
 }
 
 .port-config input[type="number"] {
-    flex-grow: 1;
-    max-width: 120px;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: 0.9rem;
-    transition: all var(--transition-fast);
+  flex-grow: 1;
+  max-width: 120px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  font-size: 0.9rem;
+  transition: all var(--transition-fast);
 }
 
 .port-config input[type="number"]:focus {
-    outline: none;
-    border-color: var(--control-border-focus);
-    box-shadow: var(--control-shadow);
+  outline: none;
+  border-color: var(--control-border-focus);
+  box-shadow: var(--control-shadow);
 }
 
 .port-config label {
-    min-width: 80px;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    font-size: 0.9rem;
+  min-width: 80px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 576px) {
-    .port-config {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+  .port-config {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-    .port-config input[type="number"] {
-        max-width: 100%;
-        width: 100%;
-    }
+  .port-config input[type="number"] {
+    max-width: 100%;
+    width: 100%;
+  }
 }

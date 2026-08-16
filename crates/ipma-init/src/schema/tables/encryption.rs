@@ -1,3 +1,5 @@
+//! 加密密钥（encryption_keys）表结构创建。
+
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS encryption_keys (

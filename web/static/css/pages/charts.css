@@ -1,121 +1,121 @@
 /* 图表组件样式 */
 
 .dashboard-charts {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: var(--space-lg);
-    margin-bottom: var(--space-xl);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
 }
 
 .chart-card {
-    background: var(--color-bg-white);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
-    overflow: hidden;
-    border: 1px solid var(--color-border-light);
+  background: var(--color-bg-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
 }
 
 .chart-card-header {
-    padding: var(--space-md) var(--space-lg);
-    background: var(--color-bg);
-    border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .chart-card-header h3 {
-    margin: 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--color-text);
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .chart-container {
-    padding: var(--space-lg);
-    min-height: 200px;
+  padding: var(--space-lg);
+  min-height: 200px;
 }
 
 .chart-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 150px;
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
 }
 
 .chart-bars {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
 .chart-bar-item {
-    display: grid;
-    grid-template-columns: 80px 1fr 80px;
-    align-items: center;
-    gap: var(--space-md);
+  display: grid;
+  grid-template-columns: 80px 1fr 80px;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 .chart-bar-label {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .chart-bar-container {
-    height: 24px;
-    background: var(--color-bg);
-    border-radius: var(--radius-md);
-    overflow: hidden;
+  height: 24px;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .chart-bar-fill {
-    height: 100%;
-    border-radius: var(--radius-md);
-    transition: width 0.5s ease;
+  height: 100%;
+  border-radius: var(--radius-md);
+  transition: width 0.5s ease;
 }
 
 .chart-bar-value {
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    text-align: right;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: right;
 }
 
 .chart-pie {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
 .chart-pie-legend {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
 .chart-legend-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-xs) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
 }
 
 .chart-legend-color {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .chart-legend-label {
-    font-size: 0.85rem;
-    color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 768px) {
-    .dashboard-charts {
-        grid-template-columns: 1fr;
-    }
+  .dashboard-charts {
+    grid-template-columns: 1fr;
+  }
 }

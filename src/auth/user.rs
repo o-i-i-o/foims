@@ -1,3 +1,5 @@
+//! 用户管理 CRUD。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -14,7 +16,7 @@ use crate::error::AppError;
 use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 
 pub async fn get_users(
     _admin: crate::auth::extractor::AdminUser,
@@ -22,7 +24,6 @@ pub async fn get_users(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
@@ -84,13 +85,7 @@ pub async fn get_users(
     };
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": users,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(users, total, &pagination),
         "用户获取成功",
     ))
 }

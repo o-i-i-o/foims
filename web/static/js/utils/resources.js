@@ -1,246 +1,204 @@
-import {
-  apiGet,
-} from "./apiClient.js";
+/**
+ * 资源下拉选项加载工具。
+ *
+ * 各 loadXxxForSelect 统一基于 fillSelect 实现：请求 API → 清空 →
+ * 占位项 → 逐项填充 → 恢复原选中值；失败时置不可选的提示项。
+ */
+import { apiGet } from "./apiClient.js";
 import { t } from "./i18n.js";
-import { escapeHtml } from "./helpers.js";
 
+/** 从 API 响应中提取列表（兼容裸数组与 {items} 分页结构）。 */
 function extractItems(result) {
   if (!result.success || !result.data) return [];
   if (Array.isArray(result.data)) return result.data;
-  if (result.data.items && Array.isArray(result.data.items)) return result.data.items;
+  if (Array.isArray(result.data.items)) return result.data.items;
   return [];
 }
 
-export async function loadNetworkTypeOptions(selectId = "network-type") {
-  try {
-    const result = await apiGet("/api/resources/network-regions?page_size=1000");
-    const select = document.getElementById(selectId);
+/** 构造单个 <option>。 */
+function buildOption(value, label, disabled = false) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  option.disabled = disabled;
+  return option;
+}
 
-    if (!select) return;
+/**
+ * 通用下拉填充。
+ *
+ * @param {string} selectId 目标 select 元素 id
+ * @param {string|null} url API 地址（返回数组或 {items} 结构）；传入 null
+ *   且提供 opts.items 时不发请求（用于已预取或纯占位场景）
+ * @param {Object} [opts]
+ * @param {Array} [opts.items] 预取的候选项（优先于 url 请求）
+ * @param {string} [opts.placeholderKey] 空值占位项的 i18n 键
+ * @param {string} [opts.emptyKey] 过滤后无数据时的提示项 i18n 键
+ * @param {Function} [opts.filter] 项过滤谓词（item => boolean）
+ * @param {Function} [opts.itemToLabel] 自定义展示文本（item => string，默认 item.name）
+ * @param {string} [opts.errorLabel] 失败日志中的资源名
+ */
+export async function fillSelect(selectId, url, opts = {}) {
+  const {
+    items: prefetched,
+    placeholderKey,
+    emptyKey,
+    filter,
+    itemToLabel,
+    errorLabel = "选项"
+  } = opts;
+  const select = document.getElementById(selectId);
+  if (!select) return;
 
-    const currentValue = select.value;
-    select.innerHTML = "";
+  const currentValue = select.value;
+  select.replaceChildren();
+  if (placeholderKey) {
+    select.appendChild(buildOption("", t(placeholderKey)));
+  }
 
-    const items = extractItems(result);
-    if (items.length > 0) {
-      items.forEach((networkType) => {
-        const option = document.createElement("option");
-        option.value = networkType.id;
-        option.textContent = networkType.name;
-        select.appendChild(option);
-      });
-    } else {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = t('network.add_region_first');
-      option.disabled = true;
-      select.appendChild(option);
+  let fetched = [];
+  if (prefetched) {
+    fetched = prefetched;
+  } else if (url) {
+    try {
+      fetched = extractItems(await apiGet(url));
+    } catch (error) {
+      console.error(`加载${errorLabel}失败:`, error);
+      select.appendChild(buildOption("", t("common.load_failed"), true));
+      return;
     }
+  }
 
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载网络区域选项失败:", error);
-    const select = document.getElementById(selectId);
-    if (select) {
-      select.innerHTML = "";
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = t('common.load_failed');
-      option.disabled = true;
-      select.appendChild(option);
-    }
+  const items = fetched.filter(filter || (() => true));
+  for (const item of items) {
+    select.appendChild(buildOption(item.id, itemToLabel ? itemToLabel(item) : item.name));
+  }
+
+  if (emptyKey && items.length === 0) {
+    select.appendChild(buildOption("", t(emptyKey), true));
+  }
+
+  if (currentValue) {
+    select.value = currentValue;
   }
 }
 
+/** 加载网络区域选项（无空值占位，空列表时提示先建区域）。 */
+export function loadNetworkTypeOptions(selectId = "network-type") {
+  return fillSelect(selectId, "/api/resources/network-regions?page_size=1000", {
+    emptyKey: "network.add_region_first",
+    errorLabel: "网络区域"
+  });
+}
+
+/**
+ * 加载房间选项。
+ *
+ * onlyOffice 仅保留办公室；includeVisualization 时同步填充可视化
+ * 房间选择器（room-select，排除数据中心/弱电井）。
+ */
 export async function loadRoomsForSelect(selectId = "workstation-room", options = {}) {
   const { onlyOffice = false, includeVisualization = true } = options;
-  try {
-    const result = await apiGet("/api/resources/rooms?page_size=1000");
-    const select = document.getElementById(selectId);
-    const visualizationSelect = includeVisualization ? document.getElementById("room-select") : null;
-
-    const rooms = extractItems(result);
-
-    if (select) {
-      select.innerHTML = "";
-
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = onlyOffice ? t('room.select_office') : t('room.select_room');
-      select.appendChild(placeholder);
-
-      rooms.forEach((room) => {
-        if (onlyOffice) {
-          const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-          if (roomTypeLower === "office") {
-            const option = document.createElement("option");
-            option.value = room.id;
-            option.textContent = room.name;
-            select.appendChild(option);
-          }
-        } else {
-          const option = document.createElement("option");
-          option.value = room.id;
-          option.textContent = room.name;
-          select.appendChild(option);
-        }
-      });
-
-      if (select.children.length === 1) {
-        const noDataOption = document.createElement("option");
-        noDataOption.value = "";
-        noDataOption.textContent = onlyOffice ? t('room.no_office_data') : t('room.no_room_data');
-        noDataOption.disabled = true;
-        select.appendChild(noDataOption);
-      }
+  await fillSelect(selectId, "/api/resources/rooms?page_size=1000", {
+    placeholderKey: onlyOffice ? "room.select_office" : "room.select_room",
+    emptyKey: onlyOffice ? "room.no_office_data" : "room.no_room_data",
+    errorLabel: "房间",
+    filter: (room) => {
+      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
+      return onlyOffice ? roomType === "office" : true;
     }
+  });
 
-    if (visualizationSelect) {
-      visualizationSelect.innerHTML = "";
-
-      rooms.forEach((room) => {
-        const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-        if (roomTypeLower !== 'data_center' && roomTypeLower !== 'telecom_closet') {
-          const option = document.createElement("option");
-          option.value = room.id;
-          option.textContent = room.name;
-          visualizationSelect.appendChild(option);
-        }
-      });
+  if (!includeVisualization) return;
+  await fillSelect("room-select", "/api/resources/rooms?page_size=1000", {
+    errorLabel: "可视化房间",
+    filter: (room) => {
+      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
+      return roomType !== "data_center" && roomType !== "telecom_closet";
     }
-  } catch (error) {
-    console.error("加载房间选项失败:", error);
-    if (select) {
-      select.innerHTML = "";
-      const noDataOption = document.createElement("option");
-      noDataOption.value = "";
-      noDataOption.textContent = t('common.load_failed');
-      noDataOption.disabled = true;
-      select.appendChild(noDataOption);
-    }
-  }
+  });
 }
 
-export async function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
-  try {
-    const result = await apiGet("/api/resources/rooms?page_size=1000");
-    const select = document.getElementById(selectId);
-
-    const rooms = extractItems(result);
-    if (select) {
-      select.innerHTML = "";
-
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = t('room.select_datacenter');
-      select.appendChild(placeholder);
-
-      rooms.forEach((room) => {
-        const roomTypeLower = room.room_type ? room.room_type.toLowerCase() : '';
-        if (roomTypeLower === "data_center" || roomTypeLower === "telecom_closet") {
-          const option = document.createElement("option");
-          option.value = room.id;
-          option.textContent = room.name;
-          select.appendChild(option);
-        }
-      });
-
-      if (select.children.length === 1) {
-        const noDataOption = document.createElement("option");
-        noDataOption.value = "";
-        noDataOption.textContent = t('room.no_datacenter_data');
-        noDataOption.disabled = true;
-        select.appendChild(noDataOption);
-      }
+/** 加载机房类房间（数据中心/弱电井）选项。 */
+export function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
+  return fillSelect(selectId, "/api/resources/rooms?page_size=1000", {
+    placeholderKey: "room.select_datacenter",
+    emptyKey: "room.no_datacenter_data",
+    errorLabel: "机房",
+    filter: (room) => {
+      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
+      return roomType === "data_center" || roomType === "telecom_closet";
     }
-  } catch (error) {
-    console.error("加载机房数据失败:", error);
-    const select = document.getElementById(selectId);
-    if (select) {
-      select.innerHTML = "";
-      const noDataOption = document.createElement("option");
-      noDataOption.value = "";
-      noDataOption.textContent = t('common.load_failed');
-      noDataOption.disabled = true;
-      select.appendChild(noDataOption);
-    }
-  }
+  });
 }
 
-export async function loadRoomNetworksForCabinet(roomId, containerId = "cabinet-inherited-networks") {
-  const inheritedNetworksContainer = document.getElementById(containerId);
-  
-  if (!inheritedNetworksContainer) return;
-  
+/** 在容器内渲染房间继承的网段清单（机柜表单用）。 */
+export async function loadRoomNetworksForCabinet(
+  roomId,
+  containerId = "cabinet-inherited-networks"
+) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const showHint = (key) => {
+    container.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "text-muted";
+    p.textContent = t(key);
+    container.appendChild(p);
+  };
+
   if (!roomId) {
-    inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('cabinet.select_room_first') + '</p>';
+    showHint("cabinet.select_room_first");
     return;
   }
-  
+
   try {
     const roomResult = await apiGet(`/api/resources/rooms/${roomId}`);
-    
-    if (roomResult.success && roomResult.data) {
-      const room = roomResult.data;
-      const networks = room.networks || [];
-      
-      if (networks.length > 0) {
-        let networksHtml = '<ul class="list-group">';
-        networks.forEach(network => {
-          networksHtml += `
-            <li class="list-group-item">
-              <span class="font-weight-bold">${escapeHtml(network.name)}</span>
-              <span class="text-muted">(${escapeHtml(network.network_region)})</span>
-              ${network.ipv4_cidr ? `<div class="small">IPv4: ${escapeHtml(network.ipv4_cidr)}</div>` : ''}
-              ${network.ipv6_cidr ? `<div class="small">IPv6: ${escapeHtml(network.ipv6_cidr)}</div>` : ''}
-            </li>
-          `;
-        });
-        networksHtml += '</ul>';
-        inheritedNetworksContainer.innerHTML = networksHtml;
-      } else {
-        inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('cabinet.no_network_config') + '</p>';
-      }
-    } else {
-      inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('common.load_failed_retry') + '</p>';
+
+    if (!roomResult.success || !roomResult.data) {
+      showHint("common.load_failed_retry");
+      return;
     }
+
+    const networks = roomResult.data.networks || [];
+    if (networks.length === 0) {
+      showHint("cabinet.no_network_config");
+      return;
+    }
+
+    const list = document.createElement("ul");
+    list.className = "list-group";
+    for (const network of networks) {
+      const li = document.createElement("li");
+      li.className = "list-group-item";
+      const name = document.createElement("span");
+      name.className = "font-weight-bold";
+      name.textContent = network.name;
+      const region = document.createElement("span");
+      region.className = "text-muted";
+      region.textContent = `(${network.network_region})`;
+      li.append(name, region);
+      for (const [label, cidr] of [
+        ["IPv4", network.ipv4_cidr],
+        ["IPv6", network.ipv6_cidr]
+      ]) {
+        if (!cidr) continue;
+        const div = document.createElement("div");
+        div.className = "small";
+        div.textContent = `${label}: ${cidr}`;
+        li.appendChild(div);
+      }
+      list.appendChild(li);
+    }
+    container.replaceChildren(list);
   } catch (error) {
     console.error("加载房间网段配置失败:", error);
-    inheritedNetworksContainer.innerHTML = '<p class="text-muted">' + t('common.load_failed_retry') + '</p>';
+    showHint("common.load_failed_retry");
   }
 }
 
-export async function loadOrgsForSelect(selectId = "room-org-id") {
-  try {
-    const result = await apiGet("/api/resources/organizations/tree");
-    const select = document.getElementById(selectId);
-
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('organization.select_org')}</option>`;
-
-    if (result.success && result.data) {
-      const flatOrgs = flattenOrgTree(result.data);
-      flatOrgs.forEach(org => {
-        const option = document.createElement("option");
-        option.value = org.id;
-        const indent = "\u00A0\u00A0\u00A0\u00A0".repeat(org.depth);
-        option.textContent = `${indent}${org.name} (${org.org_type})`;
-        select.appendChild(option);
-      });
-    }
-
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载组织选项失败:", error);
-  }
-}
-
+/** 组织树展平为带缩进深度的列表（下拉展示用）。 */
 function flattenOrgTree(nodes, depth = 0) {
   const result = [];
   for (const node of nodes) {
@@ -252,119 +210,71 @@ function flattenOrgTree(nodes, depth = 0) {
   return result;
 }
 
-export async function loadDeviceTemplatesForSelect(selectId) {
-  try {
-    const result = await apiGet("/api/resources/device-templates");
-    const select = document.getElementById(selectId);
-
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_template')}</option>`;
-
-    const items = extractItems(result);
-    items.forEach(tmpl => {
-      const option = document.createElement("option");
-      option.value = tmpl.id;
-      option.textContent = tmpl.name;
-      select.appendChild(option);
-    });
-
-    if (currentValue) {
-      select.value = currentValue;
+/** 加载组织选项（树形按深度缩进展示）。 */
+export function loadOrgsForSelect(selectId = "room-org-id") {
+  return (async () => {
+    let flatOrgs = [];
+    try {
+      const result = await apiGet("/api/resources/organizations/tree");
+      if (result.success && result.data) {
+        flatOrgs = flattenOrgTree(result.data);
+      }
+    } catch (error) {
+      console.error("加载组织选项失败:", error);
     }
-  } catch (error) {
-    console.error("加载设备模板选项失败:", error);
-  }
+    await fillSelect(selectId, null, {
+      items: flatOrgs,
+      placeholderKey: "organization.select_org",
+      errorLabel: "组织",
+      itemToLabel: (org) =>
+        `\u00A0\u00A0\u00A0\u00A0`.repeat(org.depth) + `${org.name} (${org.org_type})`
+    });
+  })();
 }
 
-export async function loadWorkstationsForSelect(selectId, roomId = null) {
-  try {
-    const url = roomId
-      ? `/api/resources/workstations?room_id=${roomId}&page_size=1000`
-      : '/api/resources/workstations?page_size=1000';
-    const result = await apiGet(url);
-    const select = document.getElementById(selectId);
-
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_workstation')}</option>`;
-
-    const items = extractItems(result);
-    items.forEach(ws => {
-      const option = document.createElement("option");
-      option.value = ws.id;
-      option.textContent = ws.name;
-      select.appendChild(option);
-    });
-
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载工位选项失败:", error);
-  }
+/** 加载设备模板选项。 */
+export function loadDeviceTemplatesForSelect(selectId) {
+  return fillSelect(selectId, "/api/resources/device-templates", {
+    placeholderKey: "device.select_template",
+    errorLabel: "设备模板"
+  });
 }
 
-export async function loadCabinetsForSelect(selectId, roomId = null) {
-  try {
-    const params = new URLSearchParams({ page_size: '1000' });
-    if (roomId) params.set('room_id', roomId);
-    const url = `/api/resources/cabinets?${params.toString()}`;
-    const result = await apiGet(url);
-    const select = document.getElementById(selectId);
-
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_cabinet')}</option>`;
-
-    const items = extractItems(result);
-    items.forEach(cab => {
-      const option = document.createElement("option");
-      option.value = cab.id;
-      option.textContent = cab.name;
-      select.appendChild(option);
-    });
-
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载机柜选项失败:", error);
-  }
+/** 加载工位选项（可按房间过滤）。 */
+export function loadWorkstationsForSelect(selectId, roomId = null) {
+  const url = roomId
+    ? `/api/resources/workstations?room_id=${roomId}&page_size=1000`
+    : "/api/resources/workstations?page_size=1000";
+  return fillSelect(selectId, url, {
+    placeholderKey: "device.select_workstation",
+    errorLabel: "工位"
+  });
 }
 
-export async function loadPositionsForSelect(selectId, cabinetId = null, roomId = null) {
-  try {
-    const select = document.getElementById(selectId);
+/** 加载机柜选项（可按房间过滤）。 */
+export function loadCabinetsForSelect(selectId, roomId = null) {
+  const params = new URLSearchParams({ page_size: "1000" });
+  if (roomId) params.set("room_id", roomId);
+  return fillSelect(selectId, `/api/resources/cabinets?${params.toString()}`, {
+    placeholderKey: "device.select_cabinet",
+    errorLabel: "机柜"
+  });
+}
 
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">${t('device.select_position')}</option>`;
-
-    // 机位必须先选定所属机柜；roomId 仅用于回显无机柜的历史机位
-    if (!cabinetId && !roomId) return;
-
-    const params = new URLSearchParams({ page_size: '1000' });
-    if (cabinetId) params.set('cabinet_id', cabinetId);
-    else params.set('room_id', roomId);
-    const result = await apiGet(`/api/resources/positions?${params.toString()}`);
-
-    const items = extractItems(result);
-    items.forEach(pos => {
-      const option = document.createElement("option");
-      option.value = pos.id;
-      option.textContent = pos.name;
-      select.appendChild(option);
+/** 加载机位选项（必须先选定机柜；roomId 仅用于回显无机柜的历史机位）。 */
+export function loadPositionsForSelect(selectId, cabinetId = null, roomId = null) {
+  if (!cabinetId && !roomId) {
+    // 无过滤条件时仅展示占位项
+    return fillSelect(selectId, null, {
+      placeholderKey: "device.select_position",
+      errorLabel: "机位"
     });
-
-    if (currentValue) {
-      select.value = currentValue;
-    }
-  } catch (error) {
-    console.error("加载机位选项失败:", error);
   }
+  const params = new URLSearchParams({ page_size: "1000" });
+  if (cabinetId) params.set("cabinet_id", cabinetId);
+  else params.set("room_id", roomId);
+  return fillSelect(selectId, `/api/resources/positions?${params.toString()}`, {
+    placeholderKey: "device.select_position",
+    errorLabel: "机位"
+  });
 }

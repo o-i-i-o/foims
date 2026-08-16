@@ -1,3 +1,5 @@
+//! 初始化状态与数据库检查接口。
+
 use std::sync::Arc;
 
 use axum::Json;

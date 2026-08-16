@@ -1,16 +1,17 @@
+//! 站内通知查询与已读管理。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AuthUser;
 use crate::error::AppError;
 use crate::models::Notification;
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 
 pub async fn get_notifications(
     State(state): State<Arc<AppState>>,
@@ -20,7 +21,6 @@ pub async fn get_notifications(
     let user_id =
         Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let status = query
@@ -68,13 +68,7 @@ pub async fn get_notifications(
     .await?;
 
     Ok(crate::error::ok_json(
-        json!({
-            "items": notifications,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(notifications, total, &pagination),
         "通知列表获取成功",
     ))
 }

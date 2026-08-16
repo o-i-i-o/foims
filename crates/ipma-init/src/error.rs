@@ -1,6 +1,9 @@
+//! 初始化模块错误类型。
+
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use ipma_common::{ApiResponse, DbErrorKind};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -44,60 +47,21 @@ impl InitError {
 impl IntoResponse for InitError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        let body = Json(crate::ApiResponse::<()> {
-            success: false,
-            message: self.to_string(),
-            data: None,
-        });
+        let body = Json(ApiResponse::<()>::error(self.to_string()));
         (status, body).into_response()
     }
 }
 
-/// 构造成功 JSON 响应
-pub fn ok_json<T: serde::Serialize>(data: T, message: &str) -> Response {
-    (
-        StatusCode::OK,
-        Json(crate::ApiResponse::success(data, message)),
-    )
-        .into_response()
-}
+/// 构造成功 JSON 响应（委托 ipma-common 的统一实现）。
+pub use ipma_common::ok_json;
 
 impl From<sqlx::Error> for InitError {
     fn from(err: sqlx::Error) -> Self {
-        match &err {
-            sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
-                Some("23505") => {
-                    InitError::Conflict("数据已存在，请检查是否有重复记录".to_string())
-                }
-                Some("23503") => InitError::Validation("关联数据不存在或无法删除".to_string()),
-                Some("23514") => InitError::Validation(db_err.message().to_string()),
-                Some("22P02") => InitError::Validation("数据格式无效".to_string()),
-                Some("22023") => InitError::Validation("参数值无效".to_string()),
-                Some("08006") | Some("08001") | Some("08004") | Some("57P03") => {
-                    InitError::Database("数据库连接异常，请稍后重试".to_string())
-                }
-                Some("57014") => InitError::Database("数据库操作超时，请稍后重试".to_string()),
-                _ => {
-                    let err_str = err.to_string();
-                    if err_str.contains("invalid cidr") {
-                        InitError::Validation("不符合CIDR格式".to_string())
-                    } else if err_str.contains("invalid inet") {
-                        InitError::Validation("不符合IP地址格式".to_string())
-                    } else {
-                        tracing::error!("数据库错误: {}", err_str);
-                        InitError::Database("数据库操作失败，请稍后重试".to_string())
-                    }
-                }
-            },
-            sqlx::Error::RowNotFound => InitError::NotFound("资源不存在".to_string()),
-            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
-                InitError::Database("数据库连接异常，请稍后重试".to_string())
-            }
-            sqlx::Error::Io(_) => InitError::Database("数据库连接异常，请稍后重试".to_string()),
-            _ => {
-                tracing::error!("数据库错误: {}", err);
-                InitError::Database("数据库操作失败，请稍后重试".to_string())
-            }
+        match ipma_common::classify_db_error(&err) {
+            DbErrorKind::Conflict(msg) => InitError::Conflict(msg),
+            DbErrorKind::Validation(msg) => InitError::Validation(msg),
+            DbErrorKind::NotFound => InitError::NotFound("资源不存在".to_string()),
+            DbErrorKind::Database(msg) => InitError::Database(msg),
         }
     }
 }

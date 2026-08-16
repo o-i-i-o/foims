@@ -1,3 +1,5 @@
+//! 数据库连接池构建与健康管理。
+
 use arc_swap::ArcSwap;
 use serde::Serialize;
 use sqlx::PgPool;

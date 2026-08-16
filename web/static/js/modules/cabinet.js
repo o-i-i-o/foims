@@ -1,10 +1,5 @@
-
 // 导入必要的模块
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-} from "../utils/apiClient.js";
+import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -17,7 +12,7 @@ import {
   DEFAULT_PAGE_SIZE,
   createSortState,
   updateSortIcons,
-  initSortEvents,
+  initSortEvents
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -26,10 +21,7 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
-import {
-  loadDataCenterRoomsForSelect,
-  loadRoomNetworksForCabinet,
-} from "../utils/resources.js";
+import { loadDataCenterRoomsForSelect, loadRoomNetworksForCabinet } from "../utils/resources.js";
 
 // ==========================================
 // 机柜机位动态管理模块
@@ -38,17 +30,17 @@ import {
 class CabinetPositionsManager extends DynamicRowManager {
   constructor() {
     super({
-      containerId: 'cabinet-positions-container',
-      itemSelector: '.cabinet-position-item',
-      emptyClassName: 'cabinet-position-empty',
-      removeBtnSelector: '.remove-position-btn',
-      externalAddButtonId: 'add-position-row-btn',
-      emptyMode: 'hint',
+      containerId: "cabinet-positions-container",
+      itemSelector: ".cabinet-position-item",
+      emptyClassName: "cabinet-position-empty",
+      removeBtnSelector: ".remove-position-btn",
+      externalAddButtonId: "add-position-row-btn",
+      emptyMode: "hint"
     });
   }
 
   emptyHintText() {
-    return t('cabinet.no_positions_hint');
+    return t("cabinet.no_positions_hint");
   }
 
   init() {
@@ -58,36 +50,36 @@ class CabinetPositionsManager extends DynamicRowManager {
 
     if (!this.container) return false;
 
-    this.container.innerHTML = '';
+    this.container.innerHTML = "";
     this.updateEmptyState();
     return true;
   }
 
   createRow(data = {}) {
-    const id = data.id || '';
-    const name = data.name || '';
+    const id = data.id || "";
+    const name = data.name || "";
     const startU = data.start_u ?? 1;
     const endU = data.end_u ?? 1;
-    const description = data.description || '';
-    const div = document.createElement('div');
-    div.className = 'cabinet-position-item';
+    const description = data.description || "";
+    const div = document.createElement("div");
+    div.className = "cabinet-position-item";
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">
           <input type="hidden" class="position-id" value="${escapeHtml(String(id))}" />
-          <input type="text" class="position-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet_position.name')}" autocomplete="off" />
+          <input type="text" class="position-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet_position.name")}" autocomplete="off" />
         </div>
         <div class="form-group">
-          <input type="number" class="position-start-u form-control" value="${startU}" min="1" max="48" placeholder="${t('cabinet_position.start_u')}" />
+          <input type="number" class="position-start-u form-control" value="${startU}" min="1" max="48" placeholder="${t("cabinet_position.start_u")}" />
         </div>
         <div class="form-group">
-          <input type="number" class="position-end-u form-control" value="${endU}" min="1" max="48" placeholder="${t('cabinet_position.end_u')}" />
+          <input type="number" class="position-end-u form-control" value="${endU}" min="1" max="48" placeholder="${t("cabinet_position.end_u")}" />
         </div>
         <div class="form-group">
-          <input type="text" class="position-description form-control" value="${escapeHtml(description)}" placeholder="${t('cabinet_position.description')}" autocomplete="off" />
+          <input type="text" class="position-description form-control" value="${escapeHtml(description)}" placeholder="${t("cabinet_position.description")}" autocomplete="off" />
         </div>
         <div class="form-group">
-          <button type="button" class="btn btn-danger btn-sm remove-position-btn">${t('common.delete')}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-position-btn">${t("common.delete")}</button>
         </div>
       </div>
     `;
@@ -102,31 +94,31 @@ class CabinetPositionsManager extends DynamicRowManager {
     this.bindExternalAddButton();
 
     if (!this.container) return;
-    this.container.innerHTML = '';
+    this.container.innerHTML = "";
 
     if (positions?.length) {
-      positions.forEach(pos => this.addItem(pos));
+      positions.forEach((pos) => this.addItem(pos));
     }
     this.updateEmptyState();
   }
 
   collectData() {
     if (!this.ensureContainer()) return { positions: [] };
-    const items = this.container.querySelectorAll('.cabinet-position-item');
+    const items = this.container.querySelectorAll(".cabinet-position-item");
     const positions = [];
     for (const item of items) {
-      const idInput = item.querySelector('.position-id');
-      const nameInput = item.querySelector('.position-name');
-      const startUInput = item.querySelector('.position-start-u');
-      const endUInput = item.querySelector('.position-end-u');
-      const descInput = item.querySelector('.position-description');
+      const idInput = item.querySelector(".position-id");
+      const nameInput = item.querySelector(".position-name");
+      const startUInput = item.querySelector(".position-start-u");
+      const endUInput = item.querySelector(".position-end-u");
+      const descInput = item.querySelector(".position-description");
       const idValue = idInput?.value?.trim();
       positions.push({
         id: idValue || null,
-        name: (nameInput?.value || '').trim(),
-        start_u: parseInt(startUInput?.value || '0', 10),
-        end_u: parseInt(endUInput?.value || '0', 10),
-        description: (descInput?.value || '').trim() || null,
+        name: (nameInput?.value || "").trim(),
+        start_u: parseInt(startUInput?.value || "0", 10),
+        end_u: parseInt(endUInput?.value || "0", 10),
+        description: (descInput?.value || "").trim() || null
       });
     }
     return { positions };
@@ -140,41 +132,41 @@ class CabinetPositionsManager extends DynamicRowManager {
 class CabinetPatchPanelsManager extends DynamicRowManager {
   constructor() {
     super({
-      containerId: 'cabinet-patch-panels-container',
-      itemSelector: '.cabinet-patch-panel-item',
-      emptyClassName: 'cabinet-patch-panel-empty',
-      removeBtnSelector: '.remove-patch-panel-btn',
-      externalAddButtonId: 'add-patch-panel-row-btn',
-      emptyMode: 'hint',
+      containerId: "cabinet-patch-panels-container",
+      itemSelector: ".cabinet-patch-panel-item",
+      emptyClassName: "cabinet-patch-panel-empty",
+      removeBtnSelector: ".remove-patch-panel-btn",
+      externalAddButtonId: "add-patch-panel-row-btn",
+      emptyMode: "hint"
     });
   }
 
   emptyHintText() {
-    return t('cabinet.no_patch_panels_hint');
+    return t("cabinet.no_patch_panels_hint");
   }
 
   init() {
     this.ensureContainer();
     this.bindExternalAddButton();
     if (!this.container) return false;
-    this.container.innerHTML = '';
+    this.container.innerHTML = "";
     this.updateEmptyState();
     return true;
   }
 
   createRow(data = {}) {
-    const id = data.id || '';
-    const name = data.name || '';
-    const div = document.createElement('div');
-    div.className = 'cabinet-patch-panel-item';
+    const id = data.id || "";
+    const name = data.name || "";
+    const div = document.createElement("div");
+    div.className = "cabinet-patch-panel-item";
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">
           <input type="hidden" class="patch-panel-id" value="${escapeHtml(String(id))}" />
-          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t('cabinet.patch_panel_name') || t('net_outlet.name')}" autocomplete="off" />
+          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet.patch_panel_name") || t("net_outlet.name")}" autocomplete="off" />
         </div>
         <div class="form-group">
-          <button type="button" class="btn btn-danger btn-sm remove-patch-panel-btn">${t('common.delete')}</button>
+          <button type="button" class="btn btn-danger btn-sm remove-patch-panel-btn">${t("common.delete")}</button>
         </div>
       </div>
     `;
@@ -186,24 +178,24 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
     this.ensureContainer();
     this.bindExternalAddButton();
     if (!this.container) return;
-    this.container.innerHTML = '';
+    this.container.innerHTML = "";
     if (patchPanels?.length) {
-      patchPanels.forEach(pp => this.addItem(pp));
+      patchPanels.forEach((pp) => this.addItem(pp));
     }
     this.updateEmptyState();
   }
 
   collectData() {
     if (!this.ensureContainer()) return [];
-    const items = this.container.querySelectorAll('.cabinet-patch-panel-item');
+    const items = this.container.querySelectorAll(".cabinet-patch-panel-item");
     const patchPanels = [];
     for (const item of items) {
-      const idInput = item.querySelector('.patch-panel-id');
-      const nameInput = item.querySelector('.patch-panel-name');
+      const idInput = item.querySelector(".patch-panel-id");
+      const nameInput = item.querySelector(".patch-panel-name");
       const idValue = idInput?.value?.trim();
       patchPanels.push({
         id: idValue || null,
-        name: (nameInput?.value || '').trim(),
+        name: (nameInput?.value || "").trim()
       });
     }
     return patchPanels;
@@ -217,7 +209,7 @@ export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 // 机柜管理功能
 // ==========================================
 
-const tableState = createSortState('name', 'asc');
+const tableState = createSortState("name", "asc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
@@ -230,7 +222,9 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
   if (sortBy) tableState.setSort(sortBy, sortOrder);
 
   try {
-    const result = await apiGet(`/api/resources/cabinets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`);
+    const result = await apiGet(
+      `/api/resources/cabinets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
+    );
     const data = result.success ? result.data : { items: [], total: 0 };
     const cabinets = data.items || data;
     const startIndex = (page - 1) * currentPageSize;
@@ -238,20 +232,31 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
     renderTable("#cabinets-table", {
       data: cabinets,
       columns: [
-        { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
-        { field: 'room_name', render: (v) => escapeHtml(v) || '-' },
-        { field: 'name', render: (v) => escapeHtml(v) },
-        { field: 'capacity', render: (v) => v ?? '-', className: 'col-center' },
-        { field: 'position_count', render: (v) => v ?? 0, className: 'col-center' },
-        { field: 'description', render: (v) => escapeHtml(v) || '-' },
-        { field: 'created_at', render: (v) => new Date(v).toLocaleString(), className: 'col-center' },
-        { field: 'id', render: (v) => `
-          ${iconButton({ icon: 'edit', label: t('common.edit'), cls: 'btn-edit', attrs: `data-id="${v}"` })}
-          ${iconButton({ icon: 'list', label: t('cabinet.positions_list'), cls: 'btn-primary btn-cabinet-positions-list', attrs: `data-cabinet-id="${v}"` })}
-          ${iconButton({ icon: 'trash', label: t('common.delete'), cls: 'btn-delete', attrs: `data-id="${v}"` })}
-        ` }
+        {
+          field: "id",
+          render: (v, row, index) => startIndex + index + 1,
+          className: "index-column"
+        },
+        { field: "room_name", render: (v) => escapeHtml(v) || "-" },
+        { field: "name", render: (v) => escapeHtml(v) },
+        { field: "capacity", render: (v) => v ?? "-", className: "col-center" },
+        { field: "position_count", render: (v) => v ?? 0, className: "col-center" },
+        { field: "description", render: (v) => escapeHtml(v) || "-" },
+        {
+          field: "created_at",
+          render: (v) => new Date(v).toLocaleString(),
+          className: "col-center"
+        },
+        {
+          field: "id",
+          render: (v) => `
+          ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: "list", label: t("cabinet.positions_list"), cls: "btn-primary btn-cabinet-positions-list", attrs: `data-cabinet-id="${v}"` })}
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-id="${v}"` })}
+        `
+        }
       ],
-      emptyMessage: t('common.no_data')
+      emptyMessage: t("common.no_data")
     });
 
     bindCabinetButtonsEvents();
@@ -262,13 +267,17 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         onPageSizeChange: (size) => {
           currentPageSize = size;
           loadCabinetsData(1);
-        },
+        }
       });
     }
     updateSortIcons("cabinets-table", tableState);
   } catch (error) {
-    handleError(error, t('cabinet.load_failed'), () => {
-      renderTable("#cabinets-table", { data: [], columns: [], emptyMessage: t('common.load_failed') });
+    handleError(error, t("cabinet.load_failed"), () => {
+      renderTable("#cabinets-table", {
+        data: [],
+        columns: [],
+        emptyMessage: t("common.load_failed")
+      });
     });
   }
 }
@@ -300,35 +309,39 @@ export async function openCabinetPositionsListModal(cabinetId) {
   try {
     const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
     if (!result.success || !result.data) {
-      showToast(result.message || t('cabinet.load_failed'), "error");
+      showToast(result.message || t("cabinet.load_failed"), "error");
       return;
     }
     const cabinet = result.data;
     await openModal("cabinet-positions-list-modal");
 
-    const titleEl = document.getElementById('cabinet-positions-list-modal-title');
-    const tbody = document.getElementById('cabinet-positions-list-tbody');
+    const titleEl = document.getElementById("cabinet-positions-list-modal-title");
+    const tbody = document.getElementById("cabinet-positions-list-tbody");
 
-    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t('cabinet.positions_list')}`;
+    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t("cabinet.positions_list")}`;
 
     const positions = cabinet.positions || [];
     if (tbody) {
       if (positions.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t('common.no_data')}</td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t("common.no_data")}</td></tr>`;
       } else {
-        tbody.innerHTML = positions.map((pos, idx) => `
+        tbody.innerHTML = positions
+          .map(
+            (pos, idx) => `
           <tr>
             <td>${idx + 1}</td>
-            <td>${escapeHtml(pos.name || '')}</td>
-            <td>${pos.start_u ?? '-'}</td>
-            <td>${pos.end_u ?? '-'}</td>
-            <td>${escapeHtml(pos.description || '-')}</td>
+            <td>${escapeHtml(pos.name || "")}</td>
+            <td>${pos.start_u ?? "-"}</td>
+            <td>${pos.end_u ?? "-"}</td>
+            <td>${escapeHtml(pos.description || "-")}</td>
           </tr>
-        `).join('');
+        `
+          )
+          .join("");
       }
     }
   } catch (error) {
-    handleError(error, t('cabinet.load_failed'));
+    handleError(error, t("cabinet.load_failed"));
   }
 }
 
@@ -343,31 +356,31 @@ export async function editCabinet(id) {
     if (result.success) {
       openCabinetModal(result.data);
     } else {
-      showToast(`${t('cabinet.load_failed')}: ${result.message}`, "error");
+      showToast(`${t("cabinet.load_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t('cabinet.load_failed'));
+    handleError(error, t("cabinet.load_failed"));
   }
 }
 
 // 删除机柜
 export async function deleteCabinet(id) {
-  await handleDelete(id, "/api/resources/cabinets", t('cabinet.delete_success'), loadCabinetsData);
+  await handleDelete(id, "/api/resources/cabinets", t("cabinet.delete_success"), loadCabinetsData);
 }
 
 // ====== 机柜管理模态框 ======
 export async function openCabinetModal(cabinet = null) {
   await openModal("cabinet-modal");
 
-  const title = elementCache.get('cabinet-modal-title');
-  const form = elementCache.get('cabinet-form');
-  const capacityInput = elementCache.get('cabinet-capacity');
+  const title = elementCache.get("cabinet-modal-title");
+  const form = elementCache.get("cabinet-form");
+  const capacityInput = elementCache.get("cabinet-capacity");
 
   // 加载机房选项
   await loadDataCenterRoomsForSelect();
 
   // 获取房间选择框
-  const roomSelect = elementCache.get('cabinet-room');
+  const roomSelect = elementCache.get("cabinet-room");
 
   // 移除旧的事件监听器
   if (roomSelectHandler) {
@@ -386,15 +399,15 @@ export async function openCabinetModal(cabinet = null) {
 
   if (cabinet) {
     // 编辑模式
-    title.textContent = t('cabinet.edit_cabinet');
-    elementCache.setValue('cabinet-id', cabinet.id);
-    elementCache.setValue('cabinet-name', cabinet.name);
+    title.textContent = t("cabinet.edit_cabinet");
+    elementCache.setValue("cabinet-id", cabinet.id);
+    elementCache.setValue("cabinet-name", cabinet.name);
     if (cabinet.room_id) {
-      elementCache.setValue('cabinet-room', cabinet.room_id);
+      elementCache.setValue("cabinet-room", cabinet.room_id);
       await loadRoomNetworksForCabinet(cabinet.room_id);
     }
     if (capacityInput) capacityInput.value = cabinet.capacity || 42;
-    elementCache.setValue('cabinet-description', cabinet.description || "");
+    elementCache.setValue("cabinet-description", cabinet.description || "");
 
     // 加载现有机位
     cabinetPositionsManager.loadExisting(cabinet.positions || []);
@@ -402,12 +415,12 @@ export async function openCabinetModal(cabinet = null) {
     cabinetPatchPanelsManager.loadExisting(cabinet.patch_panels || []);
   } else {
     // 添加模式
-    title.textContent = t('cabinet.add_cabinet');
+    title.textContent = t("cabinet.add_cabinet");
     if (form) form.reset();
-    elementCache.setValue('cabinet-id', '');
-    const inheritedNetworksContainer = elementCache.get('cabinet-inherited-networks');
+    elementCache.setValue("cabinet-id", "");
+    const inheritedNetworksContainer = elementCache.get("cabinet-inherited-networks");
     if (inheritedNetworksContainer) {
-      inheritedNetworksContainer.innerHTML = `<p class="text-muted">${t('cabinet.inherited_networks_hint')}</p>`;
+      inheritedNetworksContainer.innerHTML = `<p class="text-muted">${t("cabinet.inherited_networks_hint")}</p>`;
     }
     // 初始化机位管理器为默认空状态
     cabinetPositionsManager.init();
@@ -426,17 +439,17 @@ export async function submitCabinetForm() {
   const description = getElementValue("cabinet-description");
 
   if (!name.trim()) {
-    showToast(t('cabinet.name_required'), "warning");
+    showToast(t("cabinet.name_required"), "warning");
     return;
   }
 
   if (!roomId) {
-    showToast(t('cabinet.select_room_first'), "warning");
+    showToast(t("cabinet.select_room_first"), "warning");
     return;
   }
 
   if (isNaN(capacity) || capacity <= 0) {
-    showToast(t('cabinet.capacity_invalid'), "warning");
+    showToast(t("cabinet.capacity_invalid"), "warning");
     return;
   }
 
@@ -452,7 +465,7 @@ export async function submitCabinetForm() {
     name: name.trim(),
     room_id: roomId,
     capacity,
-    description: description.trim() || null,
+    description: description.trim() || null
   };
 
   try {
@@ -460,45 +473,53 @@ export async function submitCabinetForm() {
     if (id) {
       const result = await apiPut(`/api/resources/cabinets/${id}`, cabinetData);
       if (!result.success) {
-        showToast(result.message || t('cabinet.save_failed'), "error");
+        showToast(result.message || t("cabinet.save_failed"), "error");
         return;
       }
     } else {
       const result = await apiPost("/api/resources/cabinets", cabinetData);
       if (!result.success) {
-        showToast(result.message || t('cabinet.save_failed'), "error");
+        showToast(result.message || t("cabinet.save_failed"), "error");
         return;
       }
       cabinetId = result.data?.id;
       if (!cabinetId) {
-        showToast(t('cabinet.save_failed'), "error");
+        showToast(t("cabinet.save_failed"), "error");
         return;
       }
-      elementCache.setValue('cabinet-id', cabinetId);
+      elementCache.setValue("cabinet-id", cabinetId);
     }
 
     // 同步机位
-    const syncResult = await apiPut(`/api/resources/cabinets/${cabinetId}/positions`, positionsData);
+    const syncResult = await apiPut(
+      `/api/resources/cabinets/${cabinetId}/positions`,
+      positionsData
+    );
     if (!syncResult.success) {
-      showToast(syncResult.message || t('cabinet.positions_save_failed'), "error");
+      showToast(syncResult.message || t("cabinet.positions_save_failed"), "error");
       await loadCabinetsData();
       return;
     }
 
     // 同步配线架
     const patchPanelsData = cabinetPatchPanelsManager.collectData();
-    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/patch-panels`, { patch_panels: patchPanelsData });
+    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/patch-panels`, {
+      patch_panels: patchPanelsData
+    });
     if (!ppResult.success) {
-      showToast(ppResult.message || (t('cabinet.patch_panels_save_failed') || t('cabinet.save_failed')), "error");
+      showToast(
+        ppResult.message || t("cabinet.patch_panels_save_failed") || t("cabinet.save_failed"),
+        "error"
+      );
       await loadCabinetsData();
       return;
     }
 
-    showToast(t('cabinet.save_success'), "success");
+    showToast(t("cabinet.save_success"), "success");
     closeModal("cabinet-modal");
     await loadCabinetsData();
   } catch (error) {
-    handleError(error, t('cabinet.save_failed'));
+    handleError(error, t("cabinet.save_failed"));
   }
 }
 
@@ -509,12 +530,18 @@ function validatePositions(positions) {
   }
   for (const pos of positions) {
     if (!pos.name) {
-      return t('cabinet.position_name_required');
+      return t("cabinet.position_name_required");
     }
-    if (!Number.isInteger(pos.start_u) || pos.start_u < 1 || pos.start_u > 48 ||
-        !Number.isInteger(pos.end_u) || pos.end_u < 1 || pos.end_u > 48 ||
-        pos.end_u < pos.start_u) {
-      return t('cabinet.position_u_invalid');
+    if (
+      !Number.isInteger(pos.start_u) ||
+      pos.start_u < 1 ||
+      pos.start_u > 48 ||
+      !Number.isInteger(pos.end_u) ||
+      pos.end_u < 1 ||
+      pos.end_u > 48 ||
+      pos.end_u < pos.start_u
+    ) {
+      return t("cabinet.position_u_invalid");
     }
   }
   return null;

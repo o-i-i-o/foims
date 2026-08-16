@@ -1,11 +1,8 @@
+//! 应用配置加载（多路径搜索、环境变量覆盖、时长解析）。
+
 use config::Config as ConfigBuilder;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::LazyLock;
-
-static DURATION_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\d+)([smhd])$").expect("failed to compile duration regex"));
 
 // 配置文件搜索路径（按优先级）
 pub const CONFIG_PATHS: [&str; 3] = [
@@ -323,20 +320,31 @@ impl Config {
     }
 }
 
-// 解析带单位的时间字符串为秒数
+/// 解析带单位的时间字符串为秒数，如 `"90s"`、`"5m"`、`"2h"`、`"3d"`。
+///
+/// 手工解析而非正则：模式固定且简单，可避免静态 Regex 初始化的
+/// panic 语义，并用 `checked_mul` 拦截超大数值溢出。
 pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
-    if let Some(captures) = DURATION_RE.captures(duration_str) {
-        let value: u64 = captures[1].parse().map_err(|_| "Invalid duration value")?;
-        let unit = &captures[2];
+    let Some(unit) = duration_str.chars().last() else {
+        return Err("Invalid duration format".to_string());
+    };
+    let unit_secs = match unit {
+        's' => 1u64,   // 秒
+        'm' => 60,     // 分钟
+        'h' => 3600,   // 小时
+        'd' => 86_400, // 天
+        _ => return Err("Invalid duration format".to_string()),
+    };
 
-        match unit {
-            "s" => Ok(value),         // 秒
-            "m" => Ok(value * 60),    // 分钟
-            "h" => Ok(value * 3600),  // 小时
-            "d" => Ok(value * 86400), // 天
-            _ => Err("Invalid time unit".to_string()),
-        }
-    } else {
-        Err("Invalid duration format".to_string())
+    let digits = &duration_str[..duration_str.len() - unit.len_utf8()];
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err("Invalid duration format".to_string());
     }
+
+    let value: u64 = digits
+        .parse()
+        .map_err(|_| "Invalid duration value".to_string())?;
+    value
+        .checked_mul(unit_secs)
+        .ok_or_else(|| "Invalid duration value".to_string())
 }

@@ -1,3 +1,5 @@
+//! 静态资源服务与统一 JSON 提取器（AppJson）。
+
 use std::sync::OnceLock;
 
 use axum::Json;

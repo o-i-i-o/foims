@@ -1,4 +1,9 @@
-import { loadModal, openModal as _openModal, closeModal as _closeModal, initModalTemplates } from './modalLoader.js';
+import {
+  loadModal,
+  openModal as _openModal,
+  closeModal as _closeModal,
+  initModalTemplates
+} from "./modalLoader.js";
 
 const BUTTON_CALLBACK_MAP = {
   "add-network-type-btn": "openNetworkTypeModal",
@@ -7,7 +12,7 @@ const BUTTON_CALLBACK_MAP = {
   "add-cabinet-btn": "openCabinetModal",
   "add-user-btn": "openUserModal",
   "add-cable-link-btn": "openCableLinkModal",
-  "add-device-btn": "openDeviceModal",
+  "add-device-btn": "openDeviceModal"
 };
 
 const FORM_CALLBACK_MAP = {
@@ -22,7 +27,7 @@ const FORM_CALLBACK_MAP = {
   "organization-form": "submitOrgForm",
   "org-template-editor-form": "submitOrgTemplateForm",
   "cable-link-form": "submitCableLinkForm",
-  "device-form": "submitDeviceForm",
+  "device-form": "submitDeviceForm"
 };
 
 export function openModal(modalId, title = "") {
@@ -44,20 +49,20 @@ function initClickHandlers(callbacks) {
       closeModal(e.target.id);
       return;
     }
-    
+
     const buttonId = e.target.id;
     const callbackName = BUTTON_CALLBACK_MAP[buttonId];
-    
+
     if (callbackName && callbacks[callbackName]) {
       e.preventDefault();
       callbacks[callbackName]();
       return;
     }
-    
+
     if (e.target.type === "submit" && e.target.hasAttribute("form")) {
       const formId = e.target.getAttribute("form");
       const callbackName = FORM_CALLBACK_MAP[formId];
-      
+
       if (callbackName && callbacks[callbackName]) {
         e.preventDefault();
         callbacks[callbackName]();
@@ -70,7 +75,7 @@ function initSubmitHandlers(callbacks) {
   document.addEventListener("submit", (e) => {
     const formId = e.target.id;
     const callbackName = FORM_CALLBACK_MAP[formId];
-    
+
     if (callbackName && callbacks[callbackName]) {
       e.preventDefault();
       callbacks[callbackName]();

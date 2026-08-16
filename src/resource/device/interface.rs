@@ -1,9 +1,17 @@
+//! 设备网络接口（device_interfaces）资源管理。
+//!
+//! 接口按 `physical_type`（物理形态：rj45/sfp/.../virtual）与
+//! `interface_role`（角色：management/business/...）两个正交维度描述，
+//! 枚举校验复用 `nic` 模块的统一函数。更新时字段缺失表示不修改，
+//! 可空字段（MAC/描述/上联等）以 `Some(None)` 显式置空。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use sqlx::{Postgres, QueryBuilder};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -15,17 +23,21 @@ use crate::models::{
 use crate::resource::device::nic::{validate_interface_role, validate_physical_type};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 
+/// 接口联表查询列（含所属设备名），列表与单条查询共用。
+const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,
+                di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
+                di.description, di.switch_id, di.uplink_interface_id,
+                di.sort_order, di.created_at, di.updated_at";
+
+/// 分页获取指定设备的接口列表。
 pub async fn get_device_interfaces(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
-    let page_size = pagination.page_size;
-    let offset = pagination.offset;
 
     let total: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM device_interfaces WHERE device_id = $1")
@@ -37,102 +49,70 @@ pub async fn get_device_interfaces(
         r"SELECT * FROM device_interfaces WHERE device_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
     )
     .bind(device_id)
-    .bind(page_size)
-    .bind(offset)
+    .bind(pagination.page_size)
+    .bind(pagination.offset)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
     Ok(crate::error::ok_json(
-        serde_json::json!({
-            "items": data,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(data, total, &pagination),
         "获取接口列表成功",
     ))
 }
 
+/// 分页获取全部设备接口（跨设备视图，支持关键字模糊匹配）。
 pub async fn get_all_device_interfaces(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
-    let page_size = pagination.page_size;
-    let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
+    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
 
-    let search_pattern = if search.is_empty() {
-        None
-    } else {
-        Some(crate::utils::escape_like(&search))
-    };
-
-    let total: i64 = if let Some(ref pattern) = search_pattern {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE d.name ILIKE $1 OR di.name ILIKE $1 OR di.mac_address ILIKE $1 OR di.description ILIKE $1"
-        )
-        .bind(pattern)
-        .fetch_one(&state.pool()?.get_conn())
-        .await?
-    } else {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id",
-        )
-        .fetch_one(&state.pool()?.get_conn())
-        .await?
-    };
-
-    let data = if let Some(ref pattern) = search_pattern {
-        sqlx::query_as::<_, DeviceInterfaceWithDevice>(
-            r"SELECT
-                di.id, di.device_id, d.name as device_name,
-                di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.uplink_interface_id,
-                di.sort_order, di.created_at, di.updated_at
+    let mut count_builder = QueryBuilder::<Postgres>::new(
+        "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id",
+    );
+    let mut data_builder = QueryBuilder::<Postgres>::new(format!(
+        "SELECT {INTERFACE_WITH_DEVICE_COLUMNS}
             FROM device_interfaces di
-            JOIN devices d ON di.device_id = d.id
-            WHERE d.name ILIKE $1 OR di.name ILIKE $1 OR di.mac_address ILIKE $1 OR di.description ILIKE $1
-            ORDER BY d.name, di.name
-            LIMIT $2 OFFSET $3"
-        )
-        .bind(pattern)
-        .bind(page_size)
-        .bind(offset)
+            JOIN devices d ON di.device_id = d.id"
+    ));
+    if let Some(pattern) = &search_pattern {
+        for builder in [&mut count_builder, &mut data_builder] {
+            builder
+                .push(" WHERE d.name ILIKE ")
+                .push_bind(pattern)
+                .push(" OR di.name ILIKE ")
+                .push_bind(pattern)
+                .push(" OR di.mac_address ILIKE ")
+                .push_bind(pattern)
+                .push(" OR di.description ILIKE ")
+                .push_bind(pattern);
+        }
+    }
+
+    let total: i64 = count_builder
+        .build_query_scalar()
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    data_builder
+        .push(" ORDER BY d.name, di.name LIMIT ")
+        .push_bind(pagination.page_size)
+        .push(" OFFSET ")
+        .push_bind(pagination.offset);
+    let data = data_builder
+        .build_query_as::<DeviceInterfaceWithDevice>()
         .fetch_all(&state.pool()?.get_conn())
-        .await?
-    } else {
-        sqlx::query_as::<_, DeviceInterfaceWithDevice>(
-            r"SELECT
-                di.id, di.device_id, d.name as device_name,
-                di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.uplink_interface_id,
-                di.sort_order, di.created_at, di.updated_at
-            FROM device_interfaces di
-            JOIN devices d ON di.device_id = d.id
-            ORDER BY d.name, di.name
-            LIMIT $1 OFFSET $2",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?
-    };
+        .await?;
 
     Ok(crate::error::ok_json(
-        serde_json::json!({
-            "items": data,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(data, total, &pagination),
         "获取所有接口列表成功",
     ))
 }
 
+/// 为设备创建网络接口（同设备接口名唯一，存在性检查与写入在同一事务内）。
 pub async fn create_device_interface(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
@@ -141,29 +121,29 @@ pub async fn create_device_interface(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let device_exists =
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
-            .bind(device_id)
-            .fetch_one(&state.pool()?.get_conn())
-            .await?;
-
-    if !device_exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
-    }
-
     let physical_type = req.physical_type.as_deref().unwrap_or("rj45");
     validate_physical_type(physical_type)?;
     let interface_role = req.interface_role.as_deref().unwrap_or("business");
     validate_interface_role(interface_role)?;
+
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    let device_exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
+            .bind(device_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !device_exists {
+        return Err(AppError::NotFound("设备不存在".to_string()));
+    }
 
     let interface_exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM device_interfaces WHERE device_id = $1 AND name = $2)",
     )
     .bind(device_id)
     .bind(&req.name)
-    .fetch_one(&state.pool()?.get_conn())
+    .fetch_one(&mut *tx)
     .await?;
-
     if interface_exists {
         return Err(AppError::Conflict("该接口名已存在".to_string()));
     }
@@ -188,14 +168,16 @@ pub async fn create_device_interface(
     .bind(req.uplink_interface_id)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn())
+    .execute(&mut *tx)
     .await?;
 
     let data =
         sqlx::query_as::<_, DeviceInterface>("SELECT * FROM device_interfaces WHERE id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "device_id": device_id,
@@ -217,20 +199,17 @@ pub async fn create_device_interface(
     Ok(crate::error::ok_json(data, "创建接口成功"))
 }
 
+/// 获取单个接口详情（含所属设备名）。
 pub async fn get_device_interface(
     State(state): State<Arc<AppState>>,
     Path(interface_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(
-        r"SELECT
-            di.id, di.device_id, d.name as device_name,
-            di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-            di.description, di.switch_id, di.uplink_interface_id,
-            di.sort_order, di.created_at, di.updated_at
-        FROM device_interfaces di
-        JOIN devices d ON di.device_id = d.id
-        WHERE di.id = $1",
-    )
+    let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(sqlx::AssertSqlSafe(format!(
+        "SELECT {INTERFACE_WITH_DEVICE_COLUMNS}
+            FROM device_interfaces di
+            JOIN devices d ON di.device_id = d.id
+            WHERE di.id = $1"
+    )))
     .bind(interface_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
@@ -239,6 +218,11 @@ pub async fn get_device_interface(
     Ok(crate::error::ok_json(data, "获取接口成功"))
 }
 
+/// 更新网络接口。
+///
+/// 普通字段缺失表示不修改（`COALESCE` 保留旧值）；可空字段
+/// （MAC/描述/上联交换机/上联接口）为 `Option<Option<T>>`，
+/// `Some(None)` 显式置空、外层 `None` 不修改。
 pub async fn update_device_interface(
     State(state): State<Arc<AppState>>,
     Path(interface_id): Path<Uuid>,
@@ -247,154 +231,43 @@ pub async fn update_device_interface(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    if let Some(ref physical_type) = req.physical_type {
+    if let Some(physical_type) = req.physical_type.as_deref() {
         validate_physical_type(physical_type)?;
     }
-
-    if let Some(ref interface_role) = req.interface_role {
+    if let Some(interface_role) = req.interface_role.as_deref() {
         validate_interface_role(interface_role)?;
     }
 
-    let now = Utc::now();
-
-    let mut set_clauses: Vec<String> = Vec::new();
-    let mut param_index = 1;
-
-    set_clauses.push(format!("name = COALESCE(${param_index}, name)"));
-    param_index += 1;
-
-    set_clauses.push(format!(
-        "physical_type = COALESCE(${param_index}, physical_type)"
-    ));
-    param_index += 1;
-
-    set_clauses.push(format!(
-        "interface_role = COALESCE(${param_index}, interface_role)"
-    ));
-    param_index += 1;
-
-    let mac_update = req.mac_address.is_some();
-    if mac_update {
-        set_clauses.push(format!(
-            "mac_address = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE mac_address END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    set_clauses.push(format!("vlan_id = COALESCE(${param_index}, vlan_id)"));
-    param_index += 1;
-
-    let desc_update = req.description.is_some();
-    if desc_update {
-        set_clauses.push(format!(
-            "description = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE description END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    let switch_id_update = req.switch_id.is_some();
-    if switch_id_update {
-        set_clauses.push(format!(
-            "switch_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE switch_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    let uplink_interface_id_update = req.uplink_interface_id.is_some();
-    if uplink_interface_id_update {
-        set_clauses.push(format!(
-            "uplink_interface_id = CASE WHEN ${param_index}::boolean IS TRUE THEN ${param_idx_val} ELSE uplink_interface_id END",
-            param_index = param_index,
-            param_idx_val = param_index + 1
-        ));
-        param_index += 2;
-    }
-
-    set_clauses.push(format!("updated_at = ${param_index}"));
-    param_index += 1;
-
-    let where_param = param_index;
-
-    let sql = format!(
-        "UPDATE device_interfaces SET {} WHERE id = ${}",
-        set_clauses.join(", "),
-        where_param
-    );
-
-    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
-    query = query.bind(&req.name);
-    query = query.bind(&req.physical_type);
-    query = query.bind(&req.interface_role);
-
-    if mac_update {
-        match &req.mac_address {
-            Some(Some(m)) => {
-                query = query.bind(true);
-                query = query.bind(m);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<String>::None);
-            }
-            None => unreachable!(),
+    let mut builder = QueryBuilder::<Postgres>::new("UPDATE device_interfaces SET ");
+    {
+        let mut sep = builder.separated(", ");
+        sep.push("name = ")
+            .push_bind(&req.name)
+            .push(", physical_type = ")
+            .push_bind(&req.physical_type)
+            .push(", interface_role = ")
+            .push_bind(&req.interface_role);
+        // 可空字段：仅当请求中出现该字段时才加入 SET，bind 对 Option
+        // 直接编码（Some→值，None→NULL），无需 CASE WHEN 区分
+        if let Some(mac_address) = &req.mac_address {
+            sep.push(", mac_address = ").push_bind(mac_address);
         }
-    }
-
-    query = query.bind(req.vlan_id);
-
-    if desc_update {
-        match &req.description {
-            Some(Some(d)) => {
-                query = query.bind(true);
-                query = query.bind(d);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<String>::None);
-            }
-            None => unreachable!(),
+        sep.push(", vlan_id = ").push_bind(req.vlan_id);
+        if let Some(description) = &req.description {
+            sep.push(", description = ").push_bind(description);
         }
-    }
-
-    if switch_id_update {
-        match &req.switch_id {
-            Some(Some(sid)) => {
-                query = query.bind(true);
-                query = query.bind(sid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
+        if let Some(switch_id) = &req.switch_id {
+            sep.push(", switch_id = ").push_bind(switch_id);
         }
-    }
-
-    if uplink_interface_id_update {
-        match &req.uplink_interface_id {
-            Some(Some(uifid)) => {
-                query = query.bind(true);
-                query = query.bind(uifid);
-            }
-            Some(None) => {
-                query = query.bind(true);
-                query = query.bind(Option::<Uuid>::None);
-            }
-            None => unreachable!(),
+        if let Some(uplink_interface_id) = &req.uplink_interface_id {
+            sep.push(", uplink_interface_id = ")
+                .push_bind(uplink_interface_id);
         }
+        sep.push(", updated_at = ").push_bind(Utc::now());
     }
+    builder.push(" WHERE id = ").push_bind(interface_id);
 
-    query = query.bind(now);
-    query = query.bind(interface_id);
-
-    let result = query.execute(&state.pool()?.get_conn()).await?;
-
+    let result = builder.build().execute(&state.pool()?.get_conn()).await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("接口不存在".to_string()));
     }
@@ -425,6 +298,10 @@ pub async fn update_device_interface(
     Ok(crate::error::ok_json(data, "更新接口成功"))
 }
 
+/// 删除网络接口。
+///
+/// 接口可能被 IP 地址与物理链路引用，在同一事务内先清理关联数据
+/// 再删除接口，避免外键约束与防删触发器（cable_links 侧）报错。
 pub async fn delete_device_interface(
     State(state): State<Arc<AppState>>,
     Path(interface_id): Path<Uuid>,
@@ -453,7 +330,6 @@ pub async fn delete_device_interface(
         .bind(interface_id)
         .execute(&mut *tx)
         .await?;
-
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("接口不存在".to_string()));
     }

@@ -1,3 +1,5 @@
+//! 日志清理与统计。
+
 use crate::types::{ClearLogsRequest, DataError, DataProvider, DataResult, ok_json};
 use axum::response::Response;
 use serde_json::json;

@@ -1,3 +1,5 @@
+//! 设备接口（device_interfaces）表结构创建。
+
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS device_interfaces (

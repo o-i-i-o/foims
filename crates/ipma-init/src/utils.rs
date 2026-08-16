@@ -1,3 +1,5 @@
+//! 初始化辅助工具。
+
 use std::path::PathBuf;
 
 pub fn url_encode_component(s: &str) -> String {

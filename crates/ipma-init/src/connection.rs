@@ -1,3 +1,5 @@
+//! 数据库连接建立与 schema 存在性保证。
+
 use sqlx::PgPool;
 use tracing::{info, warn};
 

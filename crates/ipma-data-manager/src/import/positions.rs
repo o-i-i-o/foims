@@ -1,3 +1,5 @@
+//! 机位 CSV 导入（含 IP 绑定）。
+
 use crate::import::empty_to_none;
 use crate::import::workstations::find_room_network_id;
 use crate::types::{DataError, DataResult};
@@ -139,15 +141,17 @@ pub async fn import_positions(
                     Ok(_) => {
                         handle_position_ip(
                             &mut *conn,
-                            id,
-                            cabinet_id,
-                            room_id,
-                            ip_address,
+                            PositionRow {
+                                pos_id: id,
+                                cabinet_id,
+                                room_id,
+                                ip_address,
+                                name,
+                                cabinet_name,
+                                start_u,
+                                end_u,
+                            },
                             true,
-                            name,
-                            cabinet_name,
-                            start_u,
-                            end_u,
                             results,
                         )
                         .await;
@@ -180,15 +184,17 @@ pub async fn import_positions(
                 Ok(_) => {
                     handle_position_ip(
                         &mut *conn,
-                        new_id,
-                        cabinet_id,
-                        room_id,
-                        ip_address,
+                        PositionRow {
+                            pos_id: new_id,
+                            cabinet_id,
+                            room_id,
+                            ip_address,
+                            name,
+                            cabinet_name,
+                            start_u,
+                            end_u,
+                        },
                         false,
-                        name,
-                        cabinet_name,
-                        start_u,
-                        end_u,
                         results,
                     )
                     .await;
@@ -208,20 +214,35 @@ pub async fn import_positions(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn handle_position_ip(
-    conn: &mut sqlx::PgConnection,
+/// 单行机位导入上下文（收敛 `handle_position_ip` 的参数）。
+struct PositionRow<'a> {
     pos_id: uuid::Uuid,
     cabinet_id: uuid::Uuid,
     room_id: Option<uuid::Uuid>,
-    ip_address: &str,
-    is_update: bool,
-    name: &str,
-    cabinet_name: &str,
+    ip_address: &'a str,
+    name: &'a str,
+    cabinet_name: &'a str,
     start_u: i32,
     end_u: i32,
+}
+
+/// 为机位写入/更新 IP：已绑定 IP 则更新，否则新写入；所在网段按房间/机柜推导。
+async fn handle_position_ip(
+    conn: &mut sqlx::PgConnection,
+    row: PositionRow<'_>,
+    is_update: bool,
     results: &mut Vec<String>,
 ) {
+    let PositionRow {
+        pos_id,
+        cabinet_id,
+        room_id,
+        ip_address,
+        name,
+        cabinet_name,
+        start_u,
+        end_u,
+    } = row;
     let action = if is_update { "更新" } else { "导入" };
 
     if ip_address.is_empty() {

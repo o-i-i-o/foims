@@ -1,7 +1,4 @@
-import {
-  apiGet,
-  apiPost,
-} from "../utils/apiClient.js";
+import { apiGet, apiPost } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -13,7 +10,7 @@ import {
   escapeHtml,
   createSortState,
   updateSortIcons,
-  initSortEvents,
+  initSortEvents
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
@@ -24,14 +21,14 @@ const IP_PAGE_SIZE = 100;
 let currentPageSize = IP_PAGE_SIZE;
 
 let currentFilters = {
-  device_name: '',
-  network: '',
-  ip_address: ''
+  device_name: "",
+  network: "",
+  ip_address: ""
 };
 
 let currentPage = 1;
 
-const ipTableState = createSortState('updated_at', 'desc');
+const ipTableState = createSortState("updated_at", "desc");
 
 // ====== IP管理 ======
 
@@ -42,36 +39,36 @@ export async function loadDevicesForPullMac() {
     const select = document.getElementById("pull-mac-device-select");
     if (!select) return;
 
-    select.innerHTML = `<option value="">${t('ip.select_device')}</option>`;
+    select.innerHTML = `<option value="">${t("ip.select_device")}</option>`;
 
     if (result.success && result.data) {
-      const devices = Array.isArray(result.data) ? result.data : (result.data.items || []);
-      
+      const devices = Array.isArray(result.data) ? result.data : result.data.items || [];
+
       if (devices.length === 0) {
-        select.innerHTML = `<option value="">${t('ip.no_device_data')}</option>`;
+        select.innerHTML = `<option value="">${t("ip.no_device_data")}</option>`;
         return;
       }
-      
+
       let hasSnmpDevice = false;
       devices.forEach((dev) => {
         if (dev.snmp_community || dev.snmp_username) {
           hasSnmpDevice = true;
           const option = document.createElement("option");
           option.value = dev.id;
-          option.textContent = `${dev.name} (${dev.ip_address || '-'})`;
+          option.textContent = `${dev.name} (${dev.ip_address || "-"})`;
           select.appendChild(option);
         }
       });
-      
+
       if (!hasSnmpDevice) {
-        select.innerHTML = `<option value="">${t('ip.no_snmp_device')}</option>`;
+        select.innerHTML = `<option value="">${t("ip.no_snmp_device")}</option>`;
       }
     }
   } catch (error) {
     console.error("加载设备列表失败:", error);
     const select = document.getElementById("pull-mac-device-select");
     if (select) {
-      select.innerHTML = `<option value="">${t('ip.load_failed_short')}</option>`;
+      select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
     }
   }
 }
@@ -83,20 +80,22 @@ export async function loadNetworksForPullMac() {
     const select = document.getElementById("pull-mac-network-select");
     if (!select) return;
 
-    select.innerHTML = `<option value="">${t('ip.select_network')}</option>`;
+    select.innerHTML = `<option value="">${t("ip.select_network")}</option>`;
 
     if (result.success && result.data) {
-      const networks = Array.isArray(result.data) ? result.data : (result.data.items || result.data.data || []);
-      
+      const networks = Array.isArray(result.data)
+        ? result.data
+        : result.data.items || result.data.data || [];
+
       if (networks.length === 0) {
-        select.innerHTML = `<option value="">${t('ip.no_network_data')}</option>`;
+        select.innerHTML = `<option value="">${t("ip.no_network_data")}</option>`;
         return;
       }
-      
+
       networks.forEach((network) => {
         const option = document.createElement("option");
         option.value = network.id;
-        option.textContent = `${network.name} (${network.ipv4_cidr || network.ipv6_cidr || '-'})`;
+        option.textContent = `${network.name} (${network.ipv4_cidr || network.ipv6_cidr || "-"})`;
         select.appendChild(option);
       });
     }
@@ -104,19 +103,19 @@ export async function loadNetworksForPullMac() {
     console.error("加载网段列表失败:", error);
     const select = document.getElementById("pull-mac-network-select");
     if (select) {
-      select.innerHTML = `<option value="">${t('ip.load_failed_short')}</option>`;
+      select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
     }
   }
 }
 
 // 拉取IP MAC数据
 export async function pullIpMacData() {
-// 获取选中的设备
+  // 获取选中的设备
   const deviceSelect = document.getElementById("pull-mac-device-select");
   const deviceId = deviceSelect ? deviceSelect.value : "";
 
   if (!deviceId) {
-    showToast(t('ip.select_device_first'), "warning");
+    showToast(t("ip.select_device_first"), "warning");
     return;
   }
 
@@ -125,7 +124,7 @@ export async function pullIpMacData() {
   const networkId = networkSelect ? networkSelect.value : "";
 
   if (!networkId) {
-    showToast(t('ip.select_network_first'), "warning");
+    showToast(t("ip.select_network_first"), "warning");
     return;
   }
 
@@ -133,41 +132,49 @@ export async function pullIpMacData() {
   const originalText = btn.textContent;
 
   try {
-    btn.innerHTML = `<span class="loading"></span> ${t('ip.pulling')}`;
+    btn.innerHTML = `<span class="loading"></span> ${t("ip.pulling")}`;
     btn.disabled = true;
 
-    const result = await apiPost("/api/resources/ip/pull", { device_id: deviceId, network_id: networkId });
+    const result = await apiPost("/api/resources/ip/pull", {
+      device_id: deviceId,
+      network_id: networkId
+    });
 
     if (result.success) {
-      showToast(result.message || t('ip.pull_mac_success'), "success");
+      showToast(result.message || t("ip.pull_mac_success"), "success");
       loadIpMacData();
     } else {
-      showToast(`${t('ip.pull_mac_failed')}: ${result.message}`, "error");
+      showToast(`${t("ip.pull_mac_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t('ip.pull_mac_failed'));
+    handleError(error, t("ip.pull_mac_failed"));
   } finally {
     btn.innerHTML = originalText;
     btn.disabled = false;
   }
 }
 
-export async function loadIpMacData(filters = currentFilters, page = currentPage, sortBy = null, sortOrder = null) {
+export async function loadIpMacData(
+  filters = currentFilters,
+  page = currentPage,
+  sortBy = null,
+  sortOrder = null
+) {
   currentFilters = filters;
   currentPage = page;
   if (sortBy) ipTableState.setSort(sortBy, sortOrder);
 
   try {
-    const { device_name = '', network = '', ip_address = '' } = filters;
+    const { device_name = "", network = "", ip_address = "" } = filters;
 
     const params = new URLSearchParams();
-    if (device_name) params.append('device_name', device_name);
-    if (network) params.append('network', network);
-    if (ip_address) params.append('ip_address', ip_address);
-    params.append('page', page);
-    params.append('page_size', currentPageSize);
-    params.append('sort_by', ipTableState.sortBy);
-    params.append('sort_order', ipTableState.sortOrder);
+    if (device_name) params.append("device_name", device_name);
+    if (network) params.append("network", network);
+    if (ip_address) params.append("ip_address", ip_address);
+    params.append("page", page);
+    params.append("page_size", currentPageSize);
+    params.append("sort_by", ipTableState.sortBy);
+    params.append("sort_order", ipTableState.sortOrder);
 
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
@@ -179,28 +186,62 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
       renderTable("#ip-table", {
         data: data || [],
         columns: [
-          { field: 'id', render: (v, row, index) => startIndex + index + 1, className: 'index-column' },
-          { field: 'location', render: (v, row) => {
-            return escapeHtml(row.workstation_name || row.cabinet_name || row.port_device_name || row.device_name || '-');
-          }},
-          { field: 'device_name', render: (v) => escapeHtml(v || '-') },
-          { field: 'device_type', render: (v) => escapeHtml(getDeviceTypeName(v)), className: 'col-center' },
-          { field: 'network_name', render: (v, row) => `${escapeHtml(v || t('common.unknown'))} (${escapeHtml(row.network_region || t('common.unknown'))})` },
-          { field: 'ip_address', render: (v) => escapeHtml(v) },
-          { field: 'mac_address', render: (v) => escapeHtml(v || '-') },
-          { field: 'hostname', render: (v) => escapeHtml(v || '-') },
-          { field: 'status', render: (v) => `<span class="status-badge ${v === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(v)}</span>`, className: 'col-center' },
-          { field: 'last_seen', render: (v) => formatDateTime(v), className: 'col-center' },
-          { field: 'created_at', render: (v) => formatDateTime(v), className: 'col-center' }
+          {
+            field: "id",
+            render: (v, row, index) => startIndex + index + 1,
+            className: "index-column"
+          },
+          {
+            field: "location",
+            render: (v, row) => {
+              return escapeHtml(
+                row.workstation_name ||
+                  row.cabinet_name ||
+                  row.port_device_name ||
+                  row.device_name ||
+                  "-"
+              );
+            }
+          },
+          { field: "device_name", render: (v) => escapeHtml(v || "-") },
+          {
+            field: "device_type",
+            render: (v) => escapeHtml(getDeviceTypeName(v)),
+            className: "col-center"
+          },
+          {
+            field: "network_name",
+            render: (v, row) =>
+              `${escapeHtml(v || t("common.unknown"))} (${escapeHtml(row.network_region || t("common.unknown"))})`
+          },
+          { field: "ip_address", render: (v) => escapeHtml(v) },
+          { field: "mac_address", render: (v) => escapeHtml(v || "-") },
+          { field: "hostname", render: (v) => escapeHtml(v || "-") },
+          {
+            field: "status",
+            render: (v) =>
+              `<span class="status-badge ${v === "active" ? "status-active" : "status-inactive"}">${escapeHtml(v)}</span>`,
+            className: "col-center"
+          },
+          { field: "last_seen", render: (v) => formatDateTime(v), className: "col-center" },
+          { field: "created_at", render: (v) => formatDateTime(v), className: "col-center" }
         ],
-        emptyMessage: t('ip.no_ip_data')
+        emptyMessage: t("ip.no_ip_data")
       });
 
       if (total !== undefined) {
-        appendPaginationToTable("#ip-table", { total, page: pageNum, total_pages, page_size: currentPageSize }, (p) => loadIpMacData(filters, p), {
-        pageSize: currentPageSize,
-        onPageSizeChange: (size) => { currentPageSize = size; loadIpMacData(filters, 1); },
-      });
+        appendPaginationToTable(
+          "#ip-table",
+          { total, page: pageNum, total_pages, page_size: currentPageSize },
+          (p) => loadIpMacData(filters, p),
+          {
+            pageSize: currentPageSize,
+            onPageSizeChange: (size) => {
+              currentPageSize = size;
+              loadIpMacData(filters, 1);
+            }
+          }
+        );
       }
 
       updateSortIcons("ip-table", ipTableState);
@@ -214,7 +255,7 @@ export async function loadIpMacData(filters = currentFilters, page = currentPage
     renderTable("#ip-table", {
       data: [],
       columns: [],
-      emptyMessage: t('ip.server_connection_failed')
+      emptyMessage: t("ip.server_connection_failed")
     });
     return null;
   }
@@ -226,10 +267,12 @@ export const initIpMacFunctions = () => {
 
   if (ipSection.dataset.initialized === "true") return;
   ipSection.dataset.initialized = "true";
-  
+
   initIpFilters();
 
-  initSortEvents("ip-table", ipTableState, (page, sortBy, sortOrder) => loadIpMacData(currentFilters, page, sortBy, sortOrder));
+  initSortEvents("ip-table", ipTableState, (page, sortBy, sortOrder) =>
+    loadIpMacData(currentFilters, page, sortBy, sortOrder)
+  );
 
   ipSection.addEventListener("click", (e) => {
     const target = e.target;
@@ -244,29 +287,25 @@ export const initIpMacFunctions = () => {
 };
 
 export function initIpFilters() {
-  const filterIds = [
-    'ip-device-name-filter',
-    'ip-network-filter',
-    'ip-address-filter'
-  ];
-  
+  const filterIds = ["ip-device-name-filter", "ip-network-filter", "ip-address-filter"];
+
   const debouncedFilter = debounce(applyIpFilters, 300);
-  
-  filterIds.forEach(filterId => {
+
+  filterIds.forEach((filterId) => {
     const filterElement = document.getElementById(filterId);
     if (filterElement) {
-      filterElement.addEventListener('input', debouncedFilter);
+      filterElement.addEventListener("input", debouncedFilter);
     }
   });
 }
 
 function applyIpFilters() {
   const filters = {
-    device_name: document.getElementById('ip-device-name-filter')?.value || '',
-    network: document.getElementById('ip-network-filter')?.value || '',
-    ip_address: document.getElementById('ip-address-filter')?.value || ''
+    device_name: document.getElementById("ip-device-name-filter")?.value || "",
+    network: document.getElementById("ip-network-filter")?.value || "",
+    ip_address: document.getElementById("ip-address-filter")?.value || ""
   };
-  
+
   currentPage = 1;
   loadIpMacData(filters, 1);
 }

@@ -1,18 +1,16 @@
 // 日志和通知管理模块
 
 // ES模块导入
-import {
-  apiGet,
-  apiPut,
-} from "../utils/apiClient.js";
+import { apiGet, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
+  renderTable,
   appendPaginationToTable,
   escapeHtml,
   createSortState,
   updateSortIcons,
-  initSortEvents,
+  initSortEvents
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
@@ -21,10 +19,10 @@ import { showConfirm } from "../utils/confirm.js";
 import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
 
 const logSortStates = {
-  operation: createSortState('created_at', 'desc'),
-  login: createSortState('created_at', 'desc'),
+  operation: createSortState("created_at", "desc"),
+  login: createSortState("created_at", "desc")
 };
-const notificationTableState = createSortState('created_at', 'desc');
+const notificationTableState = createSortState("created_at", "desc");
 
 // 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
@@ -62,7 +60,7 @@ function getResourceTypeText(type) {
 export function initLogTabs() {
   const logsContainer = document.getElementById("logs");
   if (!logsContainer) return;
-  
+
   // 初始化搜索和刷新功能
   initLogSearch();
 
@@ -114,9 +112,7 @@ export function initLogTabs() {
 
   // 如果URL中指定了子标签，激活该标签
   if (targetTabId) {
-    const targetTabBtn = document.querySelector(
-      `#logs [data-tab="${targetTabId}"]`,
-    );
+    const targetTabBtn = document.querySelector(`#logs [data-tab="${targetTabId}"]`);
     if (targetTabBtn) {
       // 检查是否已经是激活状态
       if (!targetTabBtn.classList.contains("active")) {
@@ -215,28 +211,37 @@ function initLogSearch() {
 // 加载日志数据（支持搜索、排序和分页）
 export async function loadLogsData(logType = "operation", searchParams = {}) {
   try {
-    const { resource_type = '', resource_id = '', user_id = '', action = '', page = 1, page_size = 50, sort_by, sort_order } = searchParams;
+    const {
+      resource_type = "",
+      resource_id = "",
+      user_id = "",
+      action = "",
+      page = 1,
+      page_size = 50,
+      sort_by,
+      sort_order
+    } = searchParams;
     const tableState = logSortStates[logType] || logSortStates.operation;
     if (sort_by) tableState.setSort(sort_by, sort_order);
 
     let apiUrl;
     if (logType === "operation") {
       const params = new URLSearchParams();
-      if (resource_type) params.append('resource_type', resource_type);
-      if (resource_id) params.append('resource_id', resource_id);
-      if (user_id) params.append('user_id', user_id);
-      if (action) params.append('action', action);
-      params.append('page', page);
-      params.append('page_size', page_size);
-      params.append('sort_by', tableState.sortBy);
-      params.append('sort_order', tableState.sortOrder);
+      if (resource_type) params.append("resource_type", resource_type);
+      if (resource_id) params.append("resource_id", resource_id);
+      if (user_id) params.append("user_id", user_id);
+      if (action) params.append("action", action);
+      params.append("page", page);
+      params.append("page_size", page_size);
+      params.append("sort_by", tableState.sortBy);
+      params.append("sort_order", tableState.sortOrder);
       apiUrl = `/api/logs/operation?${params.toString()}`;
     } else {
       const params = new URLSearchParams();
-      params.append('page', page);
-      params.append('page_size', page_size);
-      params.append('sort_by', tableState.sortBy);
-      params.append('sort_order', tableState.sortOrder);
+      params.append("page", page);
+      params.append("page_size", page_size);
+      params.append("sort_by", tableState.sortBy);
+      params.append("sort_order", tableState.sortOrder);
       apiUrl = `/api/logs/login?${params.toString()}`;
     }
 
@@ -252,42 +257,33 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
     if (data.success) {
       let logs = [];
       let pagination = null;
-      
+
       if (Array.isArray(data.data)) {
         logs = data.data;
-      } else if (data.data) {
-        if (Array.isArray(data.data.items)) {
-          logs = data.data.items;
-          pagination = {
-            total: data.data.total,
-            page: data.data.page,
-            total_pages: data.data.total_pages,
-            page_size: data.data.page_size
-          };
-        } else if (Array.isArray(data.data.data)) {
-          logs = data.data.data;
-          pagination = {
-            total: data.data.total,
-            page: data.data.page,
-            total_pages: data.data.total_pages,
-            page_size: data.data.page_size
-          };
-        }
+      } else if (data.data && Array.isArray(data.data.items)) {
+        // 后端分页响应统一为 items 键
+        logs = data.data.items;
+        pagination = {
+          total: data.data.total,
+          page: data.data.page,
+          total_pages: data.data.total_pages,
+          page_size: data.data.page_size
+        };
       }
-      
-      if (logs.length > 0) {
-        tbody.innerHTML = "";
-        const startIndex = (page - 1) * page_size;
 
-        logs.forEach((log, index) => {
-          const row = document.createElement("tr");
+      const colSpan = logType === "operation" ? 8 : 7;
+      const startIndex = (page - 1) * page_size;
 
+      renderTable(
+        `#${tableId}`,
+        logs,
+        (log, index) => {
           let rowHtml = `<td class="index-column">${startIndex + index + 1}</td>`;
           if (logType === "operation") {
             const operationTypeText = getOperationTypeText(log.operation_type);
             const resourceTypeText = getResourceTypeText(log.resource_type);
-            const resultText = log.result ? t('common.success') : t('common.failed');
-            
+            const resultText = log.result ? t("common.success") : t("common.failed");
+
             // 安全地处理日志详情数据
             const logData = encodeURIComponent(JSON.stringify(log));
 
@@ -299,11 +295,11 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
               <td class="col-center">${resultText}</td>
               <td>${escapeHtml(log.ip_address) || "-"}</td>
               <td class="col-center">
-                ${iconButton({ icon: 'eye', label: t('logs.details'), cls: 'btn-info view-log-details', attrs: `data-log="${logData}"` })}
+                ${iconButton({ icon: "eye", label: t("logs.details"), cls: "btn-info view-log-details", attrs: `data-log="${logData}"` })}
               </td>
             `;
-          } else if (logType === "login") {
-            const loginResultText = log.success ? t('common.success') : t('common.failed');
+          } else {
+            const loginResultText = log.success ? t("common.success") : t("common.failed");
             const logData = encodeURIComponent(JSON.stringify(log));
             rowHtml += `
               <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
@@ -314,58 +310,64 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
               <td>${escapeHtml(log.error_message) || "-"}</td>
             `;
           }
+          return rowHtml;
+        },
+        t("common.no_data"),
+        colSpan
+      );
 
-          row.innerHTML = rowHtml;
-          tbody.appendChild(row);
-        });
-        
-        // 渲染分页控件
-        if (pagination && pagination.total_pages > 1) {
-          appendPaginationToTable(`#${logType}-logs-table`, {
+      // 渲染分页控件
+      if (pagination && pagination.total_pages > 1) {
+        appendPaginationToTable(
+          `#${logType}-logs-table`,
+          {
             total: pagination.total,
             page: pagination.page,
             page_size: pagination.page_size,
             total_pages: pagination.total_pages
-          }, (p) => {
+          },
+          (p) => {
             const searchInput = document.getElementById("logs-search");
             const searchValue = searchInput ? searchInput.value : "";
             loadLogsData(logType, { action: searchValue, page: p });
-          });
-        }
-        updateSortIcons(`${logType}-logs-table`, tableState);
-      } else {
-        const colSpan = logType === "operation" ? 8 : 7;
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t('common.no_data')}</td></tr>`;
+          }
+        );
       }
+      updateSortIcons(`${logType}-logs-table`, tableState);
     } else {
       const colSpan = logType === "operation" ? 8 : 7;
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${escapeHtml(data.message || t('common.load_failed'))}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${escapeHtml(data.message || t("common.load_failed"))}</td></tr>`;
     }
   } catch (error) {
     console.error("加载日志数据失败:", error);
     const tableId = `${logType}-logs-table`;
     const tbody = document.querySelector(`#${tableId} tbody`);
-    
+
     if (tbody) {
       const colSpan = logType === "operation" ? 8 : 7;
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t('common.load_failed_retry')}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${colSpan}" class="text-center">${t("common.load_failed_retry")}</td></tr>`;
     }
   }
 }
 
 // 加载通知数据
-export async function loadNotificationsData(filterStatus = 'all', page = 1, sortBy = null, sortOrder = null) {
+export async function loadNotificationsData(
+  filterStatus = "all",
+  page = 1,
+  sortBy = null,
+  sortOrder = null
+) {
   try {
     if (sortBy) notificationTableState.setSort(sortBy, sortOrder);
 
     const params = new URLSearchParams();
-    if (filterStatus && filterStatus !== 'all') {
-      params.append('status', filterStatus);
+    if (filterStatus && filterStatus !== "all") {
+      params.append("status", filterStatus);
     }
-    params.append('page', page);
-    params.append('page_size', 20);
-    params.append('sort_by', notificationTableState.sortBy);
-    params.append('sort_order', notificationTableState.sortOrder);
+    params.append("page", page);
+    params.append("page_size", 20);
+    params.append("sort_by", notificationTableState.sortBy);
+    params.append("sort_order", notificationTableState.sortOrder);
 
     const result = await apiGet(`/api/notifications?${params.toString()}`);
     const tbody = document.querySelector("#notifications-table tbody");
@@ -390,28 +392,30 @@ export async function loadNotificationsData(filterStatus = 'all', page = 1, sort
           <td>${escapeHtml(notification.content)}</td>
           <td class="col-center">
             <span class="status-badge ${notification.read ? "status-active" : "status-inactive"}">
-              ${notification.read ? t('notifications.read') : t('notifications.unread')}
+              ${notification.read ? t("notifications.read") : t("notifications.unread")}
             </span>
           </td>
           <td class="col-center">
-            ${!notification.read ? iconButton({ icon: 'check', label: t('notifications.mark_read'), cls: 'btn-primary mark-read', attrs: `data-id="${notification.id}"` }) : ""}
+            ${!notification.read ? iconButton({ icon: "check", label: t("notifications.mark_read"), cls: "btn-primary mark-read", attrs: `data-id="${notification.id}"` }) : ""}
           </td>
         `;
         tbody.appendChild(row);
       });
 
       if (data.total !== undefined) {
-        appendPaginationToTable("#notifications-table", data, (p) => loadNotificationsData(filterStatus, p));
+        appendPaginationToTable("#notifications-table", data, (p) =>
+          loadNotificationsData(filterStatus, p)
+        );
       }
       updateSortIcons("notifications-table", notificationTableState);
     } else {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t('notifications.no_data')}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("notifications.no_data")}</td></tr>`;
     }
   } catch (error) {
     console.error("加载通知数据失败:", error);
     const tbody = document.querySelector("#notifications-table tbody");
     if (tbody) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t('common.load_failed_retry')}</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("common.load_failed_retry")}</td></tr>`;
     }
   }
 }
@@ -423,17 +427,17 @@ async function markNotificationAsRead(notificationId) {
     if (result.success) {
       loadNotificationsData();
     } else {
-      showToast(`${t('common.operation_failed')}: ${result.message}`, "error");
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
     console.error("标记通知已读失败:", error);
-    showToast(t('common.operation_failed_retry'), "error");
+    showToast(t("common.operation_failed_retry"), "error");
   }
 }
 
 // 清除已读通知
 export async function clearReadNotifications() {
-  const confirmed = await showConfirm(t('notifications.confirm_clear_read'));
+  const confirmed = await showConfirm(t("notifications.confirm_clear_read"));
   if (!confirmed) {
     return;
   }
@@ -441,13 +445,13 @@ export async function clearReadNotifications() {
     const result = await apiPut("/api/notifications/mark-all-read", {});
     if (result.success) {
       loadNotificationsData();
-      showToast(t('notifications.cleared_read'), "success");
+      showToast(t("notifications.cleared_read"), "success");
     } else {
-      showToast(`${t('common.operation_failed')}: ${result.message}`, "error");
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
     console.error("清除已读通知失败:", error);
-    showToast(t('common.operation_failed_retry'), "error");
+    showToast(t("common.operation_failed_retry"), "error");
   }
 }
 
@@ -460,7 +464,7 @@ export async function saveMacNotificationEmail() {
     // 校验邮件地址格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      showToast(t('notification.invalid_email'), "error");
+      showToast(t("notification.invalid_email"), "error");
       return;
     }
 
@@ -468,20 +472,20 @@ export async function saveMacNotificationEmail() {
     try {
       const result = await apiGet("/api/system/smtp/config");
       if (!result.success || !result.data || !result.data.host) {
-        showToast(t('notification.smtp_not_configed'), "error");
+        showToast(t("notification.smtp_not_configed"), "error");
         return;
       }
 
       // SMTP配置存在，保存邮箱
       sessionStorage.setItem("macNotificationEmail", email);
-      showToast(t('notification.email_saved'), "success");
+      showToast(t("notification.email_saved"), "success");
     } catch (error) {
       console.error("检查SMTP配置失败:", error);
-      showToast(t('notification.check_smtp_failed'), "error");
+      showToast(t("notification.check_smtp_failed"), "error");
     }
   } else {
     sessionStorage.removeItem("macNotificationEmail");
-    showToast(t('notification.email_cleared'), "info");
+    showToast(t("notification.email_cleared"), "info");
   }
 }
 
@@ -489,7 +493,7 @@ export async function saveMacNotificationEmail() {
 function initMacNotificationEmail() {
   const emailInput = document.getElementById("mac-notification-email");
   if (!emailInput) return;
-  
+
   const savedEmail = sessionStorage.getItem("macNotificationEmail");
   if (savedEmail) {
     emailInput.value = savedEmail;
@@ -522,7 +526,7 @@ function initLogEvents() {
             const log = JSON.parse(logData);
             showLogDetails(log);
           } catch (e2) {
-            showToast(t('logs.view_detail_failed'), "error");
+            showToast(t("logs.view_detail_failed"), "error");
           }
         }
       }
@@ -535,87 +539,96 @@ initLogEvents();
 // 初始化三张表（操作日志/登录日志/通知）的表头排序事件
 function initLogSortEvents() {
   const getSearchValue = () => document.getElementById("logs-search")?.value || "";
-  const getNotificationFilter = () => document.getElementById("notifications-filter")?.value || "all";
+  const getNotificationFilter = () =>
+    document.getElementById("notifications-filter")?.value || "all";
 
   initSortEvents("operation-logs-table", logSortStates.operation, (page, sortBy, sortOrder) =>
-    loadLogsData("operation", { action: getSearchValue(), page, sort_by: sortBy, sort_order: sortOrder }));
+    loadLogsData("operation", {
+      action: getSearchValue(),
+      page,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    })
+  );
   initSortEvents("login-logs-table", logSortStates.login, (page, sortBy, sortOrder) =>
-    loadLogsData("login", { page, sort_by: sortBy, sort_order: sortOrder }));
+    loadLogsData("login", { page, sort_by: sortBy, sort_order: sortOrder })
+  );
   initSortEvents("notifications-table", notificationTableState, (page, sortBy, sortOrder) =>
-    loadNotificationsData(getNotificationFilter(), page, sortBy, sortOrder));
+    loadNotificationsData(getNotificationFilter(), page, sortBy, sortOrder)
+  );
 }
 
 // 显示日志详情弹窗
 function showLogDetails(log) {
   const operationTypeText = getOperationTypeText(log.operation_type);
   const resourceTypeText = getResourceTypeText(log.resource_type);
-  const resultText = log.result ? t('common.success') : t('common.failed');
+  const resultText = log.result ? t("common.success") : t("common.failed");
 
-  let detailsHtml = '';
+  let detailsHtml = "";
   if (log.details) {
     try {
-      const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+      const details = typeof log.details === "string" ? JSON.parse(log.details) : log.details;
       detailsHtml = `<pre class="log-details-json">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
     } catch (e) {
       detailsHtml = `<p>${escapeHtml(String(log.details))}</p>`;
     }
   } else {
-    detailsHtml = `<p class="text-muted">${t('logs.no_detail')}</p>`;
+    detailsHtml = `<p class="text-muted">${t("logs.no_detail")}</p>`;
   }
 
   const modalHtml = `
     <div id="log-details-modal" class="modal modal-flex">
       <div class="modal-content modal-md">
         <div class="modal-header">
-          <h3 class="modal-title">${t('logs.detail_title')}</h3>
+          <h3 class="modal-title">${t("logs.detail_title")}</h3>
           <span class="close" data-action="close-modal">&times;</span>
         </div>
         <div class="modal-body">
           <div class="log-detail-row">
-            <label>${t('logs.operation_time')}:</label>
+            <label>${t("logs.operation_time")}:</label>
             <span>${new Date(log.created_at).toLocaleString()}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.operator')}:</label>
+            <label>${t("logs.operator")}:</label>
             <span>${escapeHtml(log.username || "-")}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.operation_type')}:</label>
+            <label>${t("logs.operation_type")}:</label>
             <span>${escapeHtml(operationTypeText)}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.resource_type')}:</label>
+            <label>${t("logs.resource_type")}:</label>
             <span>${escapeHtml(resourceTypeText || "-")}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.resource_id')}:</label>
+            <label>${t("logs.resource_id")}:</label>
             <span>${escapeHtml(String(log.resource_id || "-"))}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.result')}:</label>
-            <span class="status-badge ${log.result ? 'status-active' : 'status-inactive'}">${resultText}</span>
+            <label>${t("logs.result")}:</label>
+            <span class="status-badge ${log.result ? "status-active" : "status-inactive"}">${resultText}</span>
           </div>
           <div class="log-detail-row">
-            <label>${t('logs.ip_address')}:</label>
+            <label>${t("logs.ip_address")}:</label>
             <span>${escapeHtml(log.ip_address || "-")}</span>
           </div>
           <div class="log-detail-section">
-            <label>${t('logs.details')}:</label>
+            <label>${t("logs.details")}:</label>
             ${detailsHtml}
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-action="close-modal">${t('common.close')}</button>
+          <button class="btn btn-secondary" data-action="close-modal">${t("common.close")}</button>
         </div>
       </div>
     </div>
   `;
-  
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-  
-  const modal = document.getElementById('log-details-modal');
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal || e.target.dataset.action === 'close-modal') {
+
+  document.body.insertAdjacentHTML("beforeend", modalHtml);
+
+  const modal = document.getElementById("log-details-modal");
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal || e.target.dataset.action === "close-modal") {
       modal.remove();
     }
   });

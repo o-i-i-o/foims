@@ -7,6 +7,9 @@ description = "IPMA Data Management - CSV import/export and database backup func
 license = "MIT"
 
 [dependencies]
+# Workspace crates
+ipma-common = { path = "../ipma-common" }
+
 # Axum
 axum = { workspace = true }
 
@@ -37,7 +40,7 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 
 # Error handling
-thiserror = "2.0.20"
+thiserror = { workspace = true }
 
 # Async trait
 async-trait = { workspace = true }
@@ -46,3 +49,6 @@ async-trait = { workspace = true }
 aes-gcm = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
+
+[lints]
+workspace = true

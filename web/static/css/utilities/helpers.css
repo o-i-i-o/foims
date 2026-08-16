@@ -1,25 +1,52 @@
 /* 通用工具类 */
 
 .flex-1 {
-    flex: 1;
+  flex: 1;
 }
 
 .hidden {
-    display: none !important;
+  display: none !important;
 }
 
 .text-muted {
-    color: var(--color-text-muted);
+  color: var(--color-text-muted);
 }
 
 .text-center {
-    text-align: center;
+  text-align: center;
 }
 
 .d-inline-block {
-    display: inline-block;
+  display: inline-block;
 }
 
 .w-auto {
-    width: auto;
+  width: auto;
+}
+/* 表单行内的横向组合（label + checkbox + 按钮等） */
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-top: 0.85rem;
+}
+
+.form-group-inline label {
+  margin: 0;
+  min-width: auto;
+  padding-top: 0;
+}
+
+/* 行内 checkbox：固定小尺寸，不被 form-group 的全宽布局拉伸 */
+.form-checkbox {
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* 紧随组合内容的小间距按钮 */
+.btn-gap-left {
+  margin-left: var(--space-xs);
 }

@@ -101,7 +101,7 @@
     "sync_failed": "Failed",
     "sync_result": "Sync complete",
     "conflict_title": "Port name conflict",
-    "conflict_summary": "{conflict} port name(s) already exist, {add} are new. Choose how to handle conflicts.",
+    "conflict_summary": "{{conflict}} port name(s) already exist, {{add}} are new. Choose how to handle conflicts.",
     "conflict_existing": "Current",
     "conflict_new": "New",
     "conflict_skip": "Skip",
@@ -275,7 +275,7 @@
     "select_device": "-- Select Device --",
     "link_local": "link-local",
     "public_network": "public",
-    "default_card_name": "NIC"
+    "default_card_name": "Card 1"
   },
   "device_template": {
     "title": "Device Template Management",

@@ -1,14 +1,17 @@
+//! 数据库视图定义。
+//!
+//! 每个视图按「DROP（容忍失败，仅告警）→ CREATE → GRANT（容忍失败）」
+//! 的统一流程重建；CREATE 失败会中止初始化。视图列名与各资源查询
+//! （如 `src/resource/ip.rs`）约定耦合，修改时需同步业务查询。
+
 use tracing::warn;
 
-pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS ip_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+/// 视图清单：`(视图名, CREATE VIEW 语句)`。
+///
+/// 名称仅来自本内部常量，拼入 DROP/GRANT 语句无注入风险。
+const VIEWS: &[(&str, &str)] = &[
+    (
+        "ip_with_details",
         r"
         CREATE VIEW ip_with_details AS
         SELECT
@@ -49,25 +52,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
     ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("GRANT SELECT ON ip_with_details TO ipma")
-        .execute(pool)
-        .await
-    {
-        warn!("授予ip_with_details视图权限失败: {}", e);
-    }
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS mac_comparison CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+    ),
+    (
+        "mac_comparison",
         r"
         CREATE VIEW mac_comparison AS
         SELECT
@@ -85,25 +72,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         JOIN devices sdv ON sm.device_id = sdv.id
         LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_id != sm.device_id
     ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("GRANT SELECT ON mac_comparison TO ipma")
-        .execute(pool)
-        .await
-    {
-        warn!("授予mac_comparison视图权限失败: {}", e);
-    }
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS devices_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+    ),
+    (
+        "devices_with_details",
         r"
         CREATE VIEW devices_with_details AS
         SELECT
@@ -128,25 +99,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN rooms r ON d.room_id = r.id
         LEFT JOIN device_templates dt ON d.template_id = dt.id
     ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("GRANT SELECT ON devices_with_details TO ipma")
-        .execute(pool)
-        .await
-    {
-        warn!("授予devices_with_details视图权限失败: {}", e);
-    }
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS net_outlets_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+    ),
+    (
+        "net_outlets_with_details",
         r"
         CREATE VIEW net_outlets_with_details AS
         SELECT
@@ -156,25 +111,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         FROM net_outlets ap
         LEFT JOIN rooms r ON ap.room_id = r.id
     ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("GRANT SELECT ON net_outlets_with_details TO ipma")
-        .execute(pool)
-        .await
-    {
-        warn!("授予net_outlets_with_details视图权限失败: {}", e);
-    }
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS patch_panels_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+    ),
+    (
+        "patch_panels_with_details",
         r"
         CREATE VIEW patch_panels_with_details AS
         SELECT
@@ -187,25 +126,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         JOIN cabinets c ON pp.cabinet_id = c.id
         LEFT JOIN rooms r ON c.room_id = r.id
     ",
-    )
-    .execute(pool)
-    .await?;
-
-    if let Err(e) = sqlx::query("GRANT SELECT ON patch_panels_with_details TO ipma")
-        .execute(pool)
-        .await
-    {
-        warn!("授予patch_panels_with_details视图权限失败: {}", e);
-    }
-
-    if let Err(e) = sqlx::query("DROP VIEW IF EXISTS cable_links_with_details CASCADE")
-        .execute(pool)
-        .await
-    {
-        warn!("删除旧视图失败: {}", e);
-    }
-
-    sqlx::query(
+    ),
+    (
+        "cable_links_with_details",
         r"
         CREATE VIEW cable_links_with_details AS
         WITH endpoint_labels AS (
@@ -249,16 +172,35 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         LEFT JOIN endpoint_labels a_lbl ON cl.a_endpoint_id = a_lbl.id AND cl.a_endpoint_type = a_lbl.etype
         LEFT JOIN endpoint_labels b_lbl ON cl.b_endpoint_id = b_lbl.id AND cl.b_endpoint_type = b_lbl.etype
     ",
-    )
-    .execute(pool)
-    .await?;
+    ),
+];
 
-    if let Err(e) = sqlx::query("GRANT SELECT ON cable_links_with_details TO ipma")
+/// 创建全部视图（重复执行安全：先删后建）。
+pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    for (name, ddl) in VIEWS {
+        // 旧视图残留时删除失败不致命（如权限差异），告警后继续重建
+        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP VIEW IF EXISTS {name} CASCADE"
+        )))
         .execute(pool)
         .await
-    {
-        warn!("授予cable_links_with_details视图权限失败: {}", e);
-    }
+        {
+            warn!("删除旧视图 {name} 失败: {e}");
+        }
 
+        sqlx::query(sqlx::AssertSqlSafe((*ddl).to_string()))
+            .execute(pool)
+            .await?;
+
+        // 应用角色缺省时 GRANT 失败不致命，告警后继续
+        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "GRANT SELECT ON {name} TO ipma"
+        )))
+        .execute(pool)
+        .await
+        {
+            warn!("授予视图 {name} 权限失败: {e}");
+        }
+    }
     Ok(())
 }

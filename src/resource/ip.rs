@@ -1,3 +1,5 @@
+//! IP 地址管理：列表检索、设备 IP 绑定与 MAC 同步。
+
 use std::sync::Arc;
 
 use axum::Json;
@@ -10,7 +12,7 @@ use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::Pagination;
+use crate::utils::pagination::{Pagination, paged_response};
 use crate::utils::{get_room_id_by_position, get_room_id_by_workstation, validate_network_in_room};
 use chrono::Utc;
 use sqlx::Row;
@@ -21,6 +23,88 @@ use uuid::Uuid;
 use validator::Validate;
 
 type IpMacCurrentInfo = (Option<String>, Uuid);
+
+/// IP 列表过滤条件（经解析与转义后的形态）。
+struct IpListFilters {
+    /// 全局搜索关键字（转义 ILIKE 通配符）。
+    search: Option<String>,
+    status: Option<String>,
+    device_name: Option<String>,
+    network: Option<String>,
+    ip_address: Option<String>,
+    network_id: Option<Uuid>,
+}
+
+/// 追加 IP 列表过滤条件，供 COUNT 与数据查询共用。
+///
+/// 所有 ILIKE 模式均经 `escape_like` 转义（`%`/`_`/`\` 按字面匹配），
+/// 值通过 `push_bind` 参数绑定。
+fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &IpListFilters) {
+    let mut first = true;
+    let next = |builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, first: &mut bool| {
+        let prefix = if *first {
+            *first = false;
+            " WHERE ("
+        } else {
+            " AND ("
+        };
+        builder.push(prefix);
+    };
+
+    if let Some(pattern) = &filters.search {
+        next(builder, &mut first);
+        builder
+            .push("ip_address::TEXT ILIKE ")
+            .push_bind(pattern)
+            .push(" OR mac_address ILIKE ")
+            .push_bind(pattern)
+            .push(" OR hostname ILIKE ")
+            .push_bind(pattern)
+            .push(" OR description ILIKE ")
+            .push_bind(pattern)
+            .push(" OR device_name ILIKE ")
+            .push_bind(pattern)
+            .push(" OR workstation_name ILIKE ")
+            .push_bind(pattern)
+            .push(" OR cabinet_position_name ILIKE ")
+            .push_bind(pattern)
+            .push(" OR network_name ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if let Some(status) = &filters.status {
+        next(builder, &mut first);
+        builder.push("status = ").push_bind(status).push(")");
+    }
+    if let Some(pattern) = &filters.device_name {
+        next(builder, &mut first);
+        builder
+            .push("device_name ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if let Some(pattern) = &filters.network {
+        next(builder, &mut first);
+        builder
+            .push("network_name ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if let Some(pattern) = &filters.ip_address {
+        next(builder, &mut first);
+        builder
+            .push("ip_address::TEXT ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if let Some(network_id) = filters.network_id {
+        next(builder, &mut first);
+        builder
+            .push("network_id = ")
+            .push_bind(network_id)
+            .push(")");
+    }
+}
 
 pub async fn get_ip_managers(
     State(state): State<Arc<AppState>>,
@@ -35,13 +119,18 @@ pub async fn get_ip_managers(
     let ip_address = query
         .get("ip_address")
         .map_or("", std::string::String::as_str);
-    let network_id = query
-        .get("network_id")
-        .and_then(|s| uuid::Uuid::parse_str(s).ok());
     let pagination = Pagination::from_query(&query);
-    let page = pagination.page;
-    let page_size = pagination.page_size;
-    let offset = pagination.offset;
+
+    let filters = IpListFilters {
+        search: (!search.is_empty()).then(|| crate::utils::escape_like(search)),
+        status: (!status.is_empty()).then(|| status.to_string()),
+        device_name: (!device_name.is_empty()).then(|| crate::utils::escape_like(device_name)),
+        network: (!network.is_empty()).then(|| crate::utils::escape_like(network)),
+        ip_address: (!ip_address.is_empty()).then(|| crate::utils::escape_like(ip_address)),
+        network_id: query
+            .get("network_id")
+            .and_then(|s| uuid::Uuid::parse_str(s).ok()),
+    };
 
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
     let sort_order = query.get("sort_order").cloned().unwrap_or_default();
@@ -71,137 +160,32 @@ pub async fn get_ip_managers(
         _ => "ORDER BY updated_at DESC",
     };
 
-    let mut conditions: Vec<String> = Vec::new();
-    let mut param_index = 1;
+    let mut count_builder =
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM ip_with_details");
+    push_ip_filters(&mut count_builder, &filters);
+    let total: i64 = count_builder
+        .build_query_scalar()
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-    let search_param = if search.is_empty() {
-        None
-    } else {
-        let pattern = crate::utils::escape_like(search);
-        conditions.push(format!(
-            "(ip_address::TEXT ILIKE ${} OR mac_address ILIKE ${} OR hostname ILIKE ${} OR description ILIKE ${} OR device_name ILIKE ${} OR workstation_name ILIKE ${} OR cabinet_position_name ILIKE ${} OR network_name ILIKE ${})",
-            param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6, param_index + 7
-        ));
-        param_index += 8;
-        Some(pattern)
-    };
-
-    let status_param = if status.is_empty() {
-        None
-    } else {
-        conditions.push(format!("status = ${param_index}"));
-        param_index += 1;
-        Some(status.to_string())
-    };
-
-    let device_name_param = if device_name.is_empty() {
-        None
-    } else {
-        let pattern = format!("%{device_name}%");
-        conditions.push(format!("device_name ILIKE ${param_index}"));
-        param_index += 1;
-        Some(pattern)
-    };
-
-    let network_param = if network.is_empty() {
-        None
-    } else {
-        let pattern = format!("%{network}%");
-        conditions.push(format!("network_name ILIKE ${param_index}"));
-        param_index += 1;
-        Some(pattern)
-    };
-
-    let ip_address_param = if ip_address.is_empty() {
-        None
-    } else {
-        let pattern = format!("%{ip_address}%");
-        conditions.push(format!("ip_address::TEXT ILIKE ${param_index}"));
-        param_index += 1;
-        Some(pattern)
-    };
-
-    let network_id_param = if let Some(nid) = network_id {
-        conditions.push(format!("network_id = ${param_index}"));
-        param_index += 1;
-        Some(nid)
-    } else {
-        None
-    };
-
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", conditions.join(" AND "))
-    };
-
-    let count_query = format!("SELECT COUNT(*) FROM ip_with_details {where_clause}");
-    let mut count_sql = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(count_query));
-
-    if let Some(ref pattern) = search_param {
-        for _ in 0..8 {
-            count_sql = count_sql.bind(pattern);
-        }
-    }
-    if let Some(ref st) = status_param {
-        count_sql = count_sql.bind(st);
-    }
-    if let Some(ref pattern) = device_name_param {
-        count_sql = count_sql.bind(pattern);
-    }
-    if let Some(ref pattern) = network_param {
-        count_sql = count_sql.bind(pattern);
-    }
-    if let Some(ref pattern) = ip_address_param {
-        count_sql = count_sql.bind(pattern);
-    }
-    if let Some(ref nid) = network_id_param {
-        count_sql = count_sql.bind(nid);
-    }
-
-    let total: i64 = count_sql.fetch_one(&state.pool()?.get_conn()).await?;
-
-    let data_query = format!(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details {} {order_clause} LIMIT ${} OFFSET ${}",
-        where_clause,
-        param_index,
-        param_index + 1
+    let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details",
     );
-
-    let mut data_sql = sqlx::query_as::<_, IpManagerWithNames>(sqlx::AssertSqlSafe(data_query));
-
-    if let Some(ref pattern) = search_param {
-        for _ in 0..8 {
-            data_sql = data_sql.bind(pattern);
-        }
-    }
-    if let Some(ref st) = status_param {
-        data_sql = data_sql.bind(st);
-    }
-    if let Some(ref pattern) = device_name_param {
-        data_sql = data_sql.bind(pattern);
-    }
-    if let Some(ref pattern) = network_param {
-        data_sql = data_sql.bind(pattern);
-    }
-    if let Some(ref pattern) = ip_address_param {
-        data_sql = data_sql.bind(pattern);
-    }
-    if let Some(ref nid) = network_id_param {
-        data_sql = data_sql.bind(nid);
-    }
-    data_sql = data_sql.bind(page_size as i32).bind(offset as i32);
-
-    let mappings = data_sql.fetch_all(&state.pool()?.get_conn()).await?;
+    push_ip_filters(&mut data_builder, &filters);
+    data_builder
+        .push(" ")
+        .push(order_clause)
+        .push(" LIMIT ")
+        .push_bind(pagination.page_size as i32)
+        .push(" OFFSET ")
+        .push_bind(pagination.offset as i32);
+    let mappings = data_builder
+        .build_query_as::<IpManagerWithNames>()
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
     Ok(crate::error::ok_json(
-        serde_json::json!({
-            "data": mappings,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) / page_size
-        }),
+        paged_response(mappings, total, &pagination),
         "IP获取成功",
     ))
 }
@@ -423,7 +407,7 @@ async fn sync_switch_macs(
     }
 
     let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        r"SELECT host(sm.ip_address), sm.mac_address FROM switch_macs sm
+        r"SELECT host(sm.ip_address), sm.mac_address FROM device_macs sm
           INNER JOIN ips i ON sm.ip_address = i.ip_address
           WHERE sm.device_id = $1 AND i.network_id = $2",
     )
@@ -434,7 +418,7 @@ async fn sync_switch_macs(
 
     if switch_macs.is_empty() {
         let total_macs: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM switch_macs WHERE device_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM device_macs WHERE device_id = $1")
                 .bind(device_id)
                 .fetch_one(&mut *tx)
                 .await?;
