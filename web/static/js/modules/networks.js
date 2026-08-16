@@ -164,7 +164,7 @@ export async function loadNetworksData(
         {
           field: "id",
           render: (v) => `
-          ${iconButton({ icon: "list", label: t("network.usage"), cls: "btn-warning btn-usage", attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: "chart", label: t("network.usage"), cls: "btn-secondary btn-usage", attrs: `data-id="${v}"` })}
           ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
           ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-id="${v}"` })}
         `
