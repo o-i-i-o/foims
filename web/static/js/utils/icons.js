@@ -86,6 +86,21 @@ export function getIcon(name) {
 }
 
 /**
+ * 生成"列表 + 顶部字母角标"的单体组合图标
+ * 角标绘制在 SVG 内部（白底圆 + currentColor 字母），随图标整体居中，
+ * 相比绝对定位的 DOM 角标不会出现定位偏移
+ * @param {string} letter 角标字母（ASCII）
+ * @returns {string} SVG HTML
+ */
+function listBadgeIcon(letter) {
+  return svg(
+    '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'
+      + `<circle cx="12" cy="5.5" r="5.5" fill="var(--color-bg-white)" stroke="none"/>`
+      + `<text x="12" y="8.2" text-anchor="middle" font-size="7.5" font-weight="700" font-family="inherit" fill="currentColor" stroke="none">${letter}</text>`
+  );
+}
+
+/**
  * 生成图标按钮 HTML
  * 悬浮提示由全局 tooltip 组件读取 data-tooltip 渲染
  * @param {Object} options
@@ -93,9 +108,13 @@ export function getIcon(name) {
  * @param {string} options.label 按钮文字（用于提示与 aria-label，调用方保证已本地化）
  * @param {string} [options.cls] 附加的功能类名（如 btn-edit，供事件委托识别）
  * @param {string} [options.attrs] 附加的 HTML 属性字符串（如 data-id="..."）
+ * @param {string} [options.badge] 左上角字母角标（如 'P'，用于同图标按钮的快捷区分）
  * @returns {string} 按钮 HTML
  */
-export function iconButton({ icon, label, cls = "", attrs = "" }) {
+export function iconButton({ icon, label, cls = "", attrs = "", badge = "" }) {
   const safeLabel = escapeHtml(label);
-  return `<button type="button" class="icon-btn${cls ? ` ${cls}` : ""}" data-tooltip="${safeLabel}" aria-label="${safeLabel}"${attrs ? ` ${attrs}` : ""}>${getIcon(icon)}</button>`;
+  const badgeHtml = badge
+    ? `<span class="icon-badge" aria-hidden="true">${escapeHtml(badge)}</span>`
+    : "";
+  return `<button type="button" class="icon-btn${cls ? ` ${cls}` : ""}" data-tooltip="${safeLabel}" aria-label="${safeLabel}"${attrs ? ` ${attrs}` : ""}>${getIcon(icon)}${badgeHtml}</button>`;
 }

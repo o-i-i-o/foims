@@ -113,6 +113,7 @@
 
 /* 图标按钮：用于表格行内操作，文字含义通过 data-tooltip 悬浮提示展示 */
 .icon-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -133,6 +134,26 @@
 .icon-btn svg {
   width: 16px;
   height: 16px;
+  pointer-events: none;
+}
+
+/* 图标左上角字母角标：白底 + 字母继承按钮语义色（与图标同色），
+   位置内移压住图标左上角；不可用 currentColor 做背景（会被自身 color 覆盖） */
+.icon-btn .icon-badge {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-bg-white);
+  color: inherit;
+  font-size: 7px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 8px;
+  text-align: center;
   pointer-events: none;
 }
 
