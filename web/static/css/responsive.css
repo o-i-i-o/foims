@@ -180,9 +180,9 @@
     padding: 0.5rem 0.35rem;
   }
 
+  /* th-actions 已恢复 table-cell 布局，移动端仅重置居中 */
   .th-actions {
-    flex-direction: column;
-    gap: 0.5rem;
+    text-align: center;
   }
 
   /* 模态框响应式 */

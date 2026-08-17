@@ -23,11 +23,10 @@
   box-shadow: var(--shadow-sm);
 }
 
-.data-table th,
 .data-table td {
   padding: 0.35rem;
   padding-top: 0.3rem;
-  text-align: left;
+  text-align: center;
   vertical-align: middle;
   border-bottom: 1px solid var(--color-border-light);
 }
@@ -39,7 +38,6 @@
   text-transform: uppercase;
   font-size: 0.875rem;
   letter-spacing: 0.05em;
-  /* 所有表头水平居中（数据单元格保持左对齐，由 col-center 单独控制） */
   text-align: center;
 }
 
@@ -49,29 +47,14 @@
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
   border-top: 2px solid var(--color-border);
+  text-align: center;
 }
 
 .data-table th .btn {
   height: 30px;
   min-width: 60px;
-}
-
-.index-column {
-  width: 50px;
-  vertical-align: middle;
-  font-weight: 500;
-  color: var(--color-text-muted);
-}
-
-/* 序号列居中：必须用 .data-table td/th 前缀提升特异性，
-   否则被基础规则 text-align: left（0,1,1）压制 */
-.data-table td.index-column {
-  text-align: center;
-}
-
-/* 空态行的 text-center 同理会被基础 left 规则压制，此处显式恢复 */
-.data-table td.text-center {
-  text-align: center;
+  /* 固定高度下禁止换行，避免文字溢出按钮 */
+  white-space: nowrap;
 }
 
 /* 宽度可控列（序号/时间/数字/枚举/按钮）的水平垂直居中 */
@@ -94,10 +77,10 @@
   font-style: italic;
 }
 
+/* 保持 th 为 table-cell（不能用 display: flex，否则 fixed 布局下
+   列宽分配失效导致按钮错位），借助继承的 text-align: center 居中 */
 .th-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  text-align: center;
 }
 
 .th-actions .btn {
@@ -332,3 +315,139 @@
 .table-responsive {
   overflow-x: auto;
 }
+
+/* 各表格按百分比指定列宽（限定主页面表格 id，避免影响模态框动态表格）：
+   配合 table-layout: fixed 使浏览器严格按比例分配列宽 */
+#network-types-table,
+#networks-table,
+#rooms-table,
+#cabinets-table,
+#devices-table,
+#cable-links-table,
+#ip-table,
+#operation-logs-table,
+#login-logs-table,
+#notifications-table,
+#users-table,
+#scheduled-tasks-table {
+  table-layout: fixed;
+}
+
+/* 网络区域表：序号/名称/IPv4/IPv6/描述/创建时间/操作 */
+#network-types-table th:nth-child(1) { width: 5%; }
+#network-types-table th:nth-child(2) { width: 15%; }
+#network-types-table th:nth-child(3) { width: 17%; }
+#network-types-table th:nth-child(4) { width: 17%; }
+#network-types-table th:nth-child(5) { width: 20%; }
+#network-types-table th:nth-child(6) { width: 14%; }
+#network-types-table th:nth-child(7) { width: 12%; }
+
+/* 网络表：序号/名称/区域/IPv4/IPv6/创建时间/操作（含筛选输入框，列适当加宽） */
+#networks-table th:nth-child(1) { width: 5%; }
+#networks-table th:nth-child(2) { width: 14%; }
+#networks-table th:nth-child(3) { width: 14%; }
+#networks-table th:nth-child(4) { width: 17%; }
+#networks-table th:nth-child(5) { width: 17%; }
+#networks-table th:nth-child(6) { width: 17%; }
+#networks-table th:nth-child(7) { width: 16%; }
+
+/* 房间表：序号/名称/类型/组织/网络/描述/创建时间/操作 */
+#rooms-table th:nth-child(1) { width: 5%; }
+#rooms-table th:nth-child(2) { width: 13%; }
+#rooms-table th:nth-child(3) { width: 10%; }
+#rooms-table th:nth-child(4) { width: 14%; }
+#rooms-table th:nth-child(5) { width: 15%; }
+#rooms-table th:nth-child(6) { width: 17%; }
+#rooms-table th:nth-child(7) { width: 14%; }
+#rooms-table th:nth-child(8) { width: 12%; }
+
+/* 机柜表：序号/房间/名称/容量/位置数/描述/创建时间/操作 */
+#cabinets-table th:nth-child(1) { width: 5%; }
+#cabinets-table th:nth-child(2) { width: 12%; }
+#cabinets-table th:nth-child(3) { width: 14%; }
+#cabinets-table th:nth-child(4) { width: 10%; }
+#cabinets-table th:nth-child(5) { width: 12%; }
+#cabinets-table th:nth-child(6) { width: 19%; }
+#cabinets-table th:nth-child(7) { width: 16%; }
+#cabinets-table th:nth-child(8) { width: 12%; }
+
+/* 设备表：序号/名称/类型/品牌/型号/位置/房间/描述/操作 */
+#devices-table th:nth-child(1) { width: 4%; }
+#devices-table th:nth-child(2) { width: 12%; }
+#devices-table th:nth-child(3) { width: 10%; }
+#devices-table th:nth-child(4) { width: 11%; }
+#devices-table th:nth-child(5) { width: 12%; }
+#devices-table th:nth-child(6) { width: 13%; }
+#devices-table th:nth-child(7) { width: 12%; }
+#devices-table th:nth-child(8) { width: 14%; }
+#devices-table th:nth-child(9) { width: 12%; }
+
+/* 线缆连接表：序号/A端/B端/类型/标签/长度/已测/操作 */
+#cable-links-table th:nth-child(1) { width: 4%; }
+#cable-links-table th:nth-child(2) { width: 20%; }
+#cable-links-table th:nth-child(3) { width: 20%; }
+#cable-links-table th:nth-child(4) { width: 10%; }
+#cable-links-table th:nth-child(5) { width: 12%; }
+#cable-links-table th:nth-child(6) { width: 10%; }
+#cable-links-table th:nth-child(7) { width: 10%; }
+#cable-links-table th:nth-child(8) { width: 14%; }
+
+/* IP 表：序号/位置/设备名/类型/网络/IP地址/MAC/主机名/状态/最后发现/创建时间 */
+#ip-table th:nth-child(1) { width: 4%; }
+#ip-table th:nth-child(2) { width: 8%; }
+#ip-table th:nth-child(3) { width: 11%; }
+#ip-table th:nth-child(4) { width: 9%; }
+#ip-table th:nth-child(5) { width: 11%; }
+#ip-table th:nth-child(6) { width: 12%; }
+#ip-table th:nth-child(7) { width: 13%; }
+#ip-table th:nth-child(8) { width: 12%; }
+#ip-table th:nth-child(9) { width: 6%; }
+#ip-table th:nth-child(10) { width: 7%; }
+#ip-table th:nth-child(11) { width: 7%; }
+
+/* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/搜索框 */
+#operation-logs-table th:nth-child(1) { width: 4%; }
+#operation-logs-table th:nth-child(2) { width: 16%; }
+#operation-logs-table th:nth-child(3) { width: 10%; }
+#operation-logs-table th:nth-child(4) { width: 12%; }
+#operation-logs-table th:nth-child(5) { width: 12%; }
+#operation-logs-table th:nth-child(6) { width: 10%; }
+#operation-logs-table th:nth-child(7) { width: 12%; }
+#operation-logs-table th:nth-child(8) { width: 24%; }
+
+/* 登录日志表：序号/时间/用户名/IP/UA/结果/错误信息 */
+#login-logs-table th:nth-child(1) { width: 4%; }
+#login-logs-table th:nth-child(2) { width: 15%; }
+#login-logs-table th:nth-child(3) { width: 10%; }
+#login-logs-table th:nth-child(4) { width: 12%; }
+#login-logs-table th:nth-child(5) { width: 22%; }
+#login-logs-table th:nth-child(6) { width: 10%; }
+#login-logs-table th:nth-child(7) { width: 27%; }
+
+/* 通知表：序号/时间/标题/内容/状态/操作 */
+#notifications-table th:nth-child(1) { width: 4%; }
+#notifications-table th:nth-child(2) { width: 14%; }
+#notifications-table th:nth-child(3) { width: 20%; }
+#notifications-table th:nth-child(4) { width: 38%; }
+#notifications-table th:nth-child(5) { width: 12%; }
+#notifications-table th:nth-child(6) { width: 12%; }
+
+/* 用户表：序号/用户名/邮箱/角色/状态/2FA/创建时间/操作 */
+#users-table th:nth-child(1) { width: 4%; }
+#users-table th:nth-child(2) { width: 12%; }
+#users-table th:nth-child(3) { width: 22%; }
+#users-table th:nth-child(4) { width: 10%; }
+#users-table th:nth-child(5) { width: 10%; }
+#users-table th:nth-child(6) { width: 6%; }
+#users-table th:nth-child(7) { width: 20%; }
+#users-table th:nth-child(8) { width: 16%; }
+
+/* 计划任务表：序号/名称/类型/Cron/状态/上次运行/上次结果/操作 */
+#scheduled-tasks-table th:nth-child(1) { width: 4%; }
+#scheduled-tasks-table th:nth-child(2) { width: 14%; }
+#scheduled-tasks-table th:nth-child(3) { width: 10%; }
+#scheduled-tasks-table th:nth-child(4) { width: 16%; }
+#scheduled-tasks-table th:nth-child(5) { width: 10%; }
+#scheduled-tasks-table th:nth-child(6) { width: 16%; }
+#scheduled-tasks-table th:nth-child(7) { width: 16%; }
+#scheduled-tasks-table th:nth-child(8) { width: 14%; }
