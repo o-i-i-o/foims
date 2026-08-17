@@ -179,12 +179,12 @@ export async function loadIpMacData(
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
     if (result.success && result.data) {
-      const { data, total, page: currentPage, total_pages } = result.data;
+      const { items, total, page: currentPage, total_pages } = result.data;
       const pageNum = currentPage || 1;
       const startIndex = (pageNum - 1) * currentPageSize;
 
       renderTable("#ip-table", {
-        data: data || [],
+        data: items || [],
         columns: [
           {
             field: "id",
