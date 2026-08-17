@@ -1,21 +1,12 @@
 .table-container {
   width: 100%;
   overflow-x: auto;
-  margin-top: var(--space-lg);
   display: flex;
   flex-direction: column;
   min-height: 200px;
 }
 
-/* 带二级导航的页面（资源管理/日志/系统）：激活面板的首个内容上提，
-   抵消导航栏 .tabs 的 margin-bottom（main-content.css），与导航栏紧贴。
-   作用于面板第一个子元素（表格/标题/表单均适用），
-   白名单限定三个区域，可视化等其他页面不受影响 */
-#resources .tab-content.active > *:first-child,
-#logs .tab-content.active > *:first-child,
-#system .tab-content.active > *:first-child {
-  margin-top: calc(-1 * var(--space-lg));
-}
+
 
 .table-container > .data-table {
   flex: 1;
@@ -314,7 +305,7 @@
   display: block;
   width: 100%;
   margin-top: 0.3rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem 0.5rem;
   font-size: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);

@@ -379,10 +379,6 @@
     font-size: 0.75rem;
   }
 
-  .system-info-grid {
-    grid-template-columns: 1fr;
-  }
-
   .info-value {
     font-size: 1.25rem;
   }

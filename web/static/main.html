@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01297">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01297">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01297">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01297">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01297">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01297">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01297">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01297">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01297">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01297">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01297">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01297">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01298">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01298">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01298">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01298">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01298">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01298">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01298">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01298">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01298">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01298">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01298">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01298">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -639,42 +639,37 @@
         </div>
 
         <div id="system-info-tab" class="tab-content active" role="tabpanel">
-          <div class="system-info-grid">
-            <article class="info-card info-card-primary">
-              <div class="info-icon">🖥️</div>
-              <div class="info-content">
-                <h3 data-i18n="system.system_name">System Name</h3>
-                <div class="info-value" id="system-name">IPMA</div>
+          <div class="system-config-section">
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🖥️</span>
+                  <span data-i18n="system.info">System Info</span>
+                </div>
               </div>
-            </article>
-            <article class="info-card info-card-info">
-              <div class="info-icon">🏷️</div>
-              <div class="info-content">
-                <h3 data-i18n="system.version">System Version</h3>
-                <div class="info-value" id="system-version">0.2.2</div>
+              <div class="config-row">
+                <div class="config-field">
+                  <label data-i18n="system.system_name">System Name</label>
+                  <div class="field-value" id="system-name">IPMA</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.version">System Version</label>
+                  <div class="field-value" id="system-version">0.2.2</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.database_status">Database Status</label>
+                  <div class="field-value" id="database-status">-</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.system_time">System Time</label>
+                  <div class="field-value" id="system-time">-</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.uptime">System Uptime</label>
+                  <div class="field-value" id="system-uptime">-</div>
+                </div>
               </div>
-            </article>
-            <article class="info-card info-card-success">
-              <div class="info-icon">🗄️</div>
-              <div class="info-content">
-                <h3 data-i18n="system.database_status">Database Status</h3>
-                <div class="info-value" id="database-status">-</div>
-              </div>
-            </article>
-            <article class="info-card info-card-warning">
-              <div class="info-icon">🕒</div>
-              <div class="info-content">
-                <h3 data-i18n="system.system_time">System Time</h3>
-                <div class="info-value" id="system-time">-</div>
-              </div>
-            </article>
-            <article class="info-card info-card-purple">
-              <div class="info-icon">⏱️</div>
-              <div class="info-content">
-                <h3 data-i18n="system.uptime">System Uptime</h3>
-                <div class="info-value" id="system-uptime">-</div>
-              </div>
-            </article>
+            </div>
           </div>
         </div>
 
@@ -779,8 +774,6 @@
                     </select>
                   </div>
                 </div>
-              </div>
-              <div class="config-actions">
                 <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </div>
@@ -1080,6 +1073,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01297"></script>
+  <script type="module" src="/static/js/app.js?v=01298"></script>
 </body>
 </html>

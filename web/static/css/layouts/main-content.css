@@ -34,7 +34,6 @@
 
 .tabs {
   display: flex;
-  margin-bottom: var(--space-lg);
   background: var(--color-bg);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -92,14 +91,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
   flex-wrap: wrap;
 }
 
 /* IP 管理页：table-container 的顶部留白上移到搜索行上方，
    搜索行与表格上下紧贴 */
 #ip .section-header-row {
-  margin-top: var(--space-lg);
+  margin-top: var(--space-sm);
 }
 
 #ip .table-container {
