@@ -7,11 +7,13 @@
   min-height: 200px;
 }
 
-/* 带二级导航的页面（资源管理/日志/系统）：表格容器上提，
-   抵消导航栏 .tabs 的 margin-bottom（main-content.css），表头与导航栏紧贴。
-   用 :first-child 判定（表格是面板首个内容才贴合）而非相邻兄弟选择器——
-   后者只能命中 DOM 序第一个标签页，切换到其他标签时规则失效 */
-.tab-content.active > .table-container:first-child {
+/* 带二级导航的页面（资源管理/日志/系统）：激活面板的首个内容上提，
+   抵消导航栏 .tabs 的 margin-bottom（main-content.css），与导航栏紧贴。
+   作用于面板第一个子元素（表格/标题/表单均适用），
+   白名单限定三个区域，可视化等其他页面不受影响 */
+#resources .tab-content.active > *:first-child,
+#logs .tab-content.active > *:first-child,
+#system .tab-content.active > *:first-child {
   margin-top: calc(-1 * var(--space-lg));
 }
 
