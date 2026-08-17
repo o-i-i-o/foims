@@ -224,6 +224,24 @@ async function loadInitialData() {
   }
 }
 
+// 窗口尺寸变化时机柜视图按新容器高度重排（防抖），保证柜底始终贴近屏幕底部
+let cabinetResizeTimer = null;
+
+function bindCabinetResizeRelayout() {
+  window.addEventListener("resize", () => {
+    if (!cabinetVisualization) return;
+    if (getActiveSubtab("visualization") !== "cabinet-visualization") return;
+
+    clearTimeout(cabinetResizeTimer);
+    cabinetResizeTimer = setTimeout(() => {
+      const roomId = elementCache.getValue("cabinet-room-select");
+      if (roomId) {
+        cabinetVisualization.loadSavedLayout(roomId);
+      }
+    }, 200);
+  });
+}
+
 export async function initVisualization() {
   if (visualizationInitialized) return;
 
@@ -277,6 +295,7 @@ export async function initVisualization() {
     bindAutoDrawEvents();
     bindLayoutEvents();
     bindTopologyEvents();
+    bindCabinetResizeRelayout();
     loadInitialData();
     loadDeviceOptions();
 
