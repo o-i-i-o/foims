@@ -57,23 +57,15 @@ export class NetworkCardManager {
   constructor() {
     this.containerId = "device-network-cards-container";
     this.addBtnId = "add-network-card-btn";
-    this.excludeSwitchId = null;
     this.networks = [];
     this.regions = [];
-    this.devicesCache = null;
-    this.roomsCache = null;
     this.networksByRegionCache = new Map();
-    this.switchInterfacesCache = new Map();
     this.optionsLoaded = false;
     this.addHandler = null;
   }
 
   getContainer() {
     return document.getElementById(this.containerId);
-  }
-
-  setExcludeSwitchId(id) {
-    this.excludeSwitchId = id;
   }
 
   clear() {
@@ -94,36 +86,8 @@ export class NetworkCardManager {
         console.error("预取网络区域失败:", e);
       }
     };
-    const loadDevices = async () => {
-      try {
-        const result = await apiGet("/api/resources/devices?page_size=1000");
-        this.devicesCache =
-          result.success && result.data
-            ? Array.isArray(result.data)
-              ? result.data
-              : result.data.items || []
-            : [];
-      } catch (e) {
-        console.error("预取设备列表失败:", e);
-        this.devicesCache = [];
-      }
-    };
-    const loadRooms = async () => {
-      try {
-        const result = await apiGet("/api/resources/rooms?page_size=1000");
-        this.roomsCache =
-          result.success && result.data
-            ? Array.isArray(result.data)
-              ? result.data
-              : result.data.items || []
-            : [];
-      } catch (e) {
-        console.error("预取房间列表失败:", e);
-        this.roomsCache = [];
-      }
-    };
 
-    await Promise.all([loadRegions(), loadDevices(), loadRooms()]);
+    await loadRegions();
     this.optionsLoaded = true;
   }
 
@@ -285,20 +249,6 @@ export class NetworkCardManager {
           <input id="${uid}-desc" type="text" class="port-description nc-input" value="${escapeHtml(portData.description || "")}" autocomplete="off" />
         </div>
       </div>
-      <div class="nc-fields">
-        <div class="nc-field">
-          <label for="${uid}-switch">${t("device.upstream_device")}</label>
-          <select id="${uid}-switch" class="port-switch nc-input">
-            <option value="">${t("device.select_upstream_device")}</option>
-          </select>
-        </div>
-        <div class="nc-field">
-          <label for="${uid}-port">${t("device.upstream_port")}</label>
-          <select id="${uid}-port" class="port-port nc-input">
-            <option value="">${t("device.select_upstream_port")}</option>
-          </select>
-        </div>
-      </div>
       <div class="port-ips-container" aria-label="${t("device.ip_list")}"></div>
     `;
     return div;
@@ -312,19 +262,6 @@ export class NetworkCardManager {
       ipsContainer.appendChild(ipRow.element);
       await this.bindIpRowEvents(ipRow);
     });
-
-    const switchSelect = port.querySelector(".port-switch");
-    const portSelect = port.querySelector(".port-port");
-
-    await this.loadSwitches(switchSelect, portSelect);
-
-    if (portData.switch_id && switchSelect) {
-      switchSelect.value = portData.switch_id;
-      await this.handleSwitchChange(switchSelect, portSelect);
-      if (portData.uplink_interface_id && portSelect) {
-        portSelect.value = portData.uplink_interface_id;
-      }
-    }
 
     const ipsContainer = port.querySelector(".port-ips-container");
     const ips = portData.ips || [];
@@ -464,61 +401,6 @@ export class NetworkCardManager {
     return Array.from(map.values());
   }
 
-  async loadSwitches(switchSelect, portSelect) {
-    if (!switchSelect || !portSelect) return;
-    await this.ensureOptionsLoaded();
-
-    switchSelect.innerHTML = `<option value="">${t("device.select_upstream_device")}</option>`;
-    let devices = this.devicesCache || [];
-    if (this.excludeSwitchId) {
-      devices = devices.filter((d) => d.id !== this.excludeSwitchId);
-    }
-    devices.forEach((d) => {
-      const option = document.createElement("option");
-      option.value = d.id;
-      option.textContent = d.name;
-      switchSelect.appendChild(option);
-    });
-
-    switchSelect.addEventListener("change", () =>
-      this.handleSwitchChange(switchSelect, portSelect)
-    );
-  }
-
-  async handleSwitchChange(switchSelect, portSelect) {
-    const deviceId = switchSelect.value;
-    portSelect.innerHTML = `<option value="">${t("device.select_upstream_port")}</option>`;
-    if (!deviceId) return;
-
-    let interfaces;
-    if (this.switchInterfacesCache.has(deviceId)) {
-      interfaces = this.switchInterfacesCache.get(deviceId);
-    } else {
-      try {
-        const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces`);
-        if (result.success && result.data) {
-          interfaces = Array.isArray(result.data) ? result.data : result.data.items || [];
-          this.switchInterfacesCache.set(deviceId, interfaces);
-        } else {
-          interfaces = [];
-        }
-      } catch (error) {
-        console.error("加载设备接口失败:", error);
-        interfaces = [];
-      }
-    }
-
-    interfaces.forEach((iface) => {
-      const option = document.createElement("option");
-      option.value = iface.id;
-      const typeMark = iface.interface_role
-        ? `[${t(`device.interface_role_${iface.interface_role}`)}]`
-        : "";
-      option.textContent = `${iface.name}${typeMark}`;
-      portSelect.appendChild(option);
-    });
-  }
-
   async loadExisting(cards) {
     const container = this.getContainer();
     if (!container) return;
@@ -531,7 +413,7 @@ export class NetworkCardManager {
       return;
     }
 
-    // 并行预取所有依赖数据：基础选项（区域/设备/房间）+ 网卡专属数据（信息点/接口/网络）
+    // 并行预取渲染所需的外部数据（各区域网段）
     await Promise.all([this.ensureOptionsLoaded(), this.prefetchCardData(cards)]);
 
     for (const cardData of cards) {
@@ -540,15 +422,13 @@ export class NetworkCardManager {
   }
 
   /**
-   * 并行预取渲染所需的所有外部数据（上联设备接口、各区域网段）。
+   * 并行预取渲染所需的所有外部数据（各区域网段）。
    */
   async prefetchCardData(cards) {
-    const switchIds = new Set();
     const regionIds = new Set();
 
     for (const card of cards) {
       for (const port of card.ports || []) {
-        if (port.switch_id) switchIds.add(port.switch_id);
         for (const ip of port.ips || []) {
           if (ip.network_region_id) regionIds.add(ip.network_region_id);
         }
@@ -557,23 +437,6 @@ export class NetworkCardManager {
 
     const toInt = (arr) => (Array.isArray(arr) ? arr : arr.items || []);
     const tasks = [];
-
-    for (const switchId of switchIds) {
-      if (!this.switchInterfacesCache.has(switchId)) {
-        tasks.push(
-          (async () => {
-            try {
-              const result = await apiGet(`/api/resources/devices/${switchId}/interfaces`);
-              if (result.success && result.data) {
-                this.switchInterfacesCache.set(switchId, toInt(result.data));
-              }
-            } catch (error) {
-              console.error("预加载设备接口失败:", error);
-            }
-          })()
-        );
-      }
-    }
 
     for (const regionId of regionIds) {
       if (!this.networksByRegionCache.has(regionId)) {
@@ -704,9 +567,6 @@ export class NetworkCardManager {
           );
         }
 
-        const portSwitchId = portEl.querySelector(".port-switch")?.value || null;
-        const portUplinkInterfaceId = portEl.querySelector(".port-port")?.value || null;
-
         ports.push({
           id: portId,
           name: portName,
@@ -715,9 +575,7 @@ export class NetworkCardManager {
           mac_address: portMac,
           vlan_id: portVlan,
           description: portDesc,
-          ips,
-          switch_id: portSwitchId,
-          uplink_interface_id: portUplinkInterfaceId
+          ips
         });
       });
 

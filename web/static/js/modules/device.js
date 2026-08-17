@@ -657,7 +657,6 @@ export async function openDeviceModal(device = null) {
     if (device.position_id) elementCache.setValue("device-position-id", device.position_id);
 
     if (cardManager) {
-      cardManager.setExcludeSwitchId(device.id || null);
       await cardManager.loadExisting(device.cards || []);
     }
   } else {
@@ -671,7 +670,6 @@ export async function openDeviceModal(device = null) {
     if (templateNameGroup) templateNameGroup.style.display = "none";
 
     if (cardManager) {
-      cardManager.setExcludeSwitchId(null);
       await cardManager.init();
     }
   }

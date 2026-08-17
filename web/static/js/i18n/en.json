@@ -211,10 +211,6 @@
     "cidr_not_supported": "Selected network does not support this",
     "address": "address",
     "ip_not_in_cidr": "IP address is not within the network range",
-    "upstream_device": "Upstream Device",
-    "upstream_port": "Upstream Port",
-    "select_upstream_device": "Select Device",
-    "select_upstream_port": "Select Port",
     "net_outlets": "Network Outlets (multi-select, in order)",
     "select_net_outlet_to_add": "Select outlet to add",
     "select_net_outlet_first": "Please select an outlet first",
@@ -1077,7 +1073,7 @@
     "endpoint_device_port": "Device Port"
   },
   "device_type": {
-    "pc": "PC",
+    "desktop": "Desktop",
     "laptop": "Laptop",
     "printer": "Printer",
     "server": "Server",

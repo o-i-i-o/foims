@@ -101,8 +101,6 @@ pub struct PortSyncItem {
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
-    pub switch_id: Option<Uuid>,
-    pub uplink_interface_id: Option<Uuid>,
     #[serde(default)]
     pub ips: Vec<IpSyncItem>,
 }

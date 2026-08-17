@@ -3,7 +3,7 @@
 //! 接口按 `physical_type`（物理形态：rj45/sfp/.../virtual）与
 //! `interface_role`（角色：management/business/...）两个正交维度描述，
 //! 枚举校验复用 `nic` 模块的统一函数。更新时字段缺失表示不修改，
-//! 可空字段（MAC/描述/上联等）以 `Some(None)` 显式置空。
+//! 可空字段（MAC/描述等）以 `Some(None)` 显式置空。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,8 +28,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,
                 di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-                di.description, di.switch_id, di.uplink_interface_id,
-                di.sort_order, di.created_at, di.updated_at";
+                di.description, di.sort_order, di.created_at, di.updated_at";
 
 /// 分页获取指定设备的接口列表。
 pub async fn get_device_interfaces(
@@ -153,8 +152,8 @@ pub async fn create_device_interface(
 
     sqlx::query(
         r"INSERT INTO device_interfaces (
-            id, device_id, name, physical_type, interface_role, mac_address, vlan_id, description, switch_id, uplink_interface_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            id, device_id, name, physical_type, interface_role, mac_address, vlan_id, description, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
     .bind(device_id)
@@ -164,8 +163,6 @@ pub async fn create_device_interface(
     .bind(&req.mac_address)
     .bind(req.vlan_id)
     .bind(&req.description)
-    .bind(req.switch_id)
-    .bind(req.uplink_interface_id)
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
@@ -221,7 +218,7 @@ pub async fn get_device_interface(
 /// 更新网络接口。
 ///
 /// 普通字段缺失表示不修改（`COALESCE` 保留旧值）；可空字段
-/// （MAC/描述/上联交换机/上联接口）为 `Option<Option<T>>`，
+/// （MAC/描述）为 `Option<Option<T>>`，
 /// `Some(None)` 显式置空、外层 `None` 不修改。
 pub async fn update_device_interface(
     State(state): State<Arc<AppState>>,
@@ -255,13 +252,6 @@ pub async fn update_device_interface(
         sep.push(", vlan_id = ").push_bind(req.vlan_id);
         if let Some(description) = &req.description {
             sep.push(", description = ").push_bind(description);
-        }
-        if let Some(switch_id) = &req.switch_id {
-            sep.push(", switch_id = ").push_bind(switch_id);
-        }
-        if let Some(uplink_interface_id) = &req.uplink_interface_id {
-            sep.push(", uplink_interface_id = ")
-                .push_bind(uplink_interface_id);
         }
         sep.push(", updated_at = ").push_bind(Utc::now());
     }

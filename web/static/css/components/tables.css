@@ -374,13 +374,13 @@
 /* 设备表：序号/名称/类型/品牌/型号/位置/房间/描述/操作 */
 #devices-table th:nth-child(1) { width: 4%; }
 #devices-table th:nth-child(2) { width: 12%; }
-#devices-table th:nth-child(3) { width: 10%; }
+#devices-table th:nth-child(3) { width: 8%; }
 #devices-table th:nth-child(4) { width: 11%; }
 #devices-table th:nth-child(5) { width: 12%; }
 #devices-table th:nth-child(6) { width: 13%; }
 #devices-table th:nth-child(7) { width: 12%; }
 #devices-table th:nth-child(8) { width: 14%; }
-#devices-table th:nth-child(9) { width: 12%; }
+#devices-table th:nth-child(9) { width: 14%; }
 
 /* 线缆连接表：序号/A端/B端/类型/标签/长度/已测/操作 */
 #cable-links-table th:nth-child(1) { width: 4%; }

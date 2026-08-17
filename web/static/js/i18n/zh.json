@@ -211,10 +211,6 @@
     "cidr_not_supported": "所选网络不支持该",
     "address": "地址",
     "ip_not_in_cidr": "IP地址不在网段内",
-    "upstream_device": "上级设备",
-    "upstream_port": "上级端口",
-    "select_upstream_device": "选择设备",
-    "select_upstream_port": "选择端口",
     "net_outlets": "信息点（多选，按顺序连接）",
     "select_net_outlet_to_add": "选择信息点添加",
     "select_net_outlet_first": "请先选择信息点",
@@ -1077,7 +1073,7 @@
     "endpoint_device_port": "设备端口"
   },
   "device_type": {
-    "pc": "PC",
+    "desktop": "台式电脑",
     "laptop": "笔记本",
     "printer": "打印机",
     "server": "服务器",

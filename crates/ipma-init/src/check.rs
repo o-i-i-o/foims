@@ -283,8 +283,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "mac_address",
             "vlan_id",
             "description",
-            "switch_id",
-            "uplink_interface_id",
             "sort_order",
             "created_at",
             "updated_at",

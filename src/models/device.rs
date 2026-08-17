@@ -120,8 +120,6 @@ pub struct DeviceInterface {
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
-    pub switch_id: Option<Uuid>,
-    pub uplink_interface_id: Option<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -139,8 +137,6 @@ pub struct DeviceInterfaceWithDevice {
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
-    pub switch_id: Option<Uuid>,
-    pub uplink_interface_id: Option<Uuid>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -157,8 +153,6 @@ pub struct DeviceInterfaceCreate {
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
     pub description: Option<String>,
-    pub switch_id: Option<Uuid>,
-    pub uplink_interface_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -172,10 +166,6 @@ pub struct DeviceInterfaceUpdate {
     pub vlan_id: Option<i32>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub description: Option<Option<String>>,
-    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
-    pub switch_id: Option<Option<Uuid>>,
-    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
-    pub uplink_interface_id: Option<Option<Uuid>>,
 }
 
 // ==================== SNMP 相关模型 ====================
