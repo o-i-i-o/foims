@@ -94,6 +94,13 @@
     transition: none;
   }
 
+  body.sidebar-collapsed #language-selector .lang-icon {
+    max-width: 24px;
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+
   body.sidebar-collapsed .sidebar-menu li a {
     justify-content: flex-start;
     padding: 0.5rem 1rem;

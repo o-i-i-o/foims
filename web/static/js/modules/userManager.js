@@ -192,6 +192,12 @@ function initUserEvents() {
 
   initSortEvents("users-table", userTableState, loadUsersData);
 
+  // 语言切换时 updatePageTranslations 只刷新静态 data-i18n 元素，
+  // 表格行文本是渲染时固化的，需重新拉取渲染
+  window.addEventListener("languagechange", () => {
+    loadUsersData(currentUserPage);
+  });
+
   document.addEventListener("click", (e) => {
     const twoFaBtn = e.target.closest(".user-2fa");
     if (twoFaBtn) {

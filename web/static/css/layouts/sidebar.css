@@ -219,6 +219,11 @@ body.sidebar-collapsed .sidebar .nav-text {
   color: var(--color-text);
 }
 
+/* 收起时用户名归零后 gap 也要归零，否则残余间隙把图标挤离中心 */
+body.sidebar-collapsed .sidebar-footer .user-info {
+  gap: 0;
+}
+
 /* 语言/注销图标按钮：展开时图标+文字，收起后仅图标（含义由悬浮提示展示） */
 .footer-btn {
   display: flex;
@@ -265,6 +270,29 @@ body.sidebar-collapsed .footer-btn {
 /* 语言按钮文字（语言名称）：收起后仍显示，作为按钮主体 */
 .lang-name {
   white-space: nowrap;
+}
+
+/* 语言按钮图标：展开时显示，收起后隐藏（与 nav-text 同一套收起动画）。
+   必须覆盖 .nav-icon 的 min-width/flex-shrink，否则收起后仍占 20px 挤偏文字 */
+#language-selector .lang-icon {
+  max-width: 24px;
+  min-width: 0;
+  flex-shrink: 1;
+  opacity: 1;
+  visibility: visible;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+    opacity 0.18s ease 0.12s,
+    visibility 0.18s ease 0.12s;
+}
+
+body.sidebar-collapsed #language-selector .lang-icon {
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s;
 }
 
 /* 语言下拉菜单：挂在 body 上固定定位，避免被侧边栏 overflow 裁剪 */
