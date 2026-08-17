@@ -4,7 +4,7 @@ version = "0.1.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Data Management - CSV import/export and database backup functionality"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 # Workspace crates

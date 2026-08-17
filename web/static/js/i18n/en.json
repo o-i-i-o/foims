@@ -821,7 +821,13 @@
       "send_email": "Send Email",
       "create_device_port": "Create Device Port",
       "update_device_port": "Update Device Port",
-      "delete_device_port": "Delete Device Port"
+      "delete_device_port": "Delete Device Port",
+      "create_device_ip": "Create Device IP",
+      "sync": "Sync",
+      "sync_children": "Sync Children",
+      "sync_net_outlets": "Sync Network Outlets",
+      "sync_patch_panels": "Sync Patch Panels",
+      "sync_positions": "Sync Positions"
     },
     "resource_types": {
       "user": "User",
@@ -840,7 +846,13 @@
       "layout": "Layout",
       "config": "Configuration",
       "email": "Email",
-      "device_port": "Device Port"
+      "device_port": "Device Port",
+      "device": "Device",
+      "device_network_config": "Device Network Config",
+      "device_template": "Device Template",
+      "net_outlet": "Network Outlet",
+      "org_template": "Org Template",
+      "organization": "Organization"
     },
     "view_detail_failed": "Failed to view details",
     "detail_title": "Operation Log Details",

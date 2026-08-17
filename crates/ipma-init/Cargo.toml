@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Init Module - Database initialization and management"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 # Workspace crates

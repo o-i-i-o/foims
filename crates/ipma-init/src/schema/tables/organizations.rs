@@ -7,12 +7,12 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             name VARCHAR(100) NOT NULL,
             type_path VARCHAR(50) NOT NULL DEFAULT '0',
             parent_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
-            template_id UUID REFERENCES org_templates(id) ON DELETE SET NULL,
+            template_id UUID REFERENCES org_templates(id) ON DELETE RESTRICT,
             level_index INT NOT NULL DEFAULT 0,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT uq_organizations_parent_name UNIQUE (parent_id, name),
+            CONSTRAINT uq_organizations_parent_name UNIQUE NULLS NOT DISTINCT (parent_id, name),
             CONSTRAINT chk_organizations_child_has_template CHECK (parent_id IS NULL OR template_id IS NOT NULL)
         )",
     )

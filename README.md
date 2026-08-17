@@ -5,7 +5,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 ## ✨ 核心特性
 
 ### 🚀 高性能后端
-- **Rust & Actix-web**: 基于 Rust 语言开发，内存安全且性能卓越。
+- **Rust & Axum**: 基于 Rust 语言开发，内存安全且性能卓越。
 - **HTTP/3 (QUIC)**: 原生支持 HTTP/3、HTTP/2 和 HTTPS，提供极速的访问体验。
 - **PostgreSQL**: 使用 SQLx 进行异步数据库交互，确保数据的一致性与高并发处理能力。
 
@@ -33,16 +33,16 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 ## 🏗️ 技术栈
 
 **后端 (Backend)**
-- **语言**: Rust (Edition 2021)
-- **Web 框架**: Actix-web 4
+- **语言**: Rust (Edition 2024)
+- **Web 框架**: Axum 0.8
 - **数据库**: PostgreSQL (via SQLx)
-- **协议支持**: Rustls (TLS), Quinn (HTTP/3), async-snmp
+- **协议支持**: Rustls (TLS), async-snmp (SNMP 监测)
 - **工具**: Tokio, Serde, Tracing, Lettre (Email)
 
 **前端 (Frontend)**
 - **架构**: Vanilla JS (ES Modules) + HTML5 + CSS3
 - **特性**: 无构建步骤 (No Build Step)，即改即用。
-- **库**: i18next (国际化), Plotters (图表后端生成)
+- **库**: rust-i18n (国际化)，自研 SVG/Canvas 图表
 
 ## 📦 安装与部署
 
@@ -340,35 +340,23 @@ A: 在个人设置页面，点击 "启用双因素认证"，使用认证器应�
 
 ## 📝 License
 
-本项目采用 [MIT 许可证](LICENSE)。
+本项目采用 [GPL-3.0-or-later 许可证](LICENSE)。
 
-```
-MIT License
+Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 
-Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-```
+本项目为自由软件，可依据自由软件基金会发布的 GNU GPL v3（或更新版本）
+许可证重新发布或修改，详见 [LICENSE](LICENSE) 文件。
 
 ## 📦 Third-Party Components
 
-本项目使用了以下开源组件，详细信息请参阅 [NOTICE](NOTICE) 文件：
+本项目使用了以下开源组件，详细信息请参阅 [NOTICE](NOTICE) 文件，
+许可证全文见 [third-party-licenses/](third-party-licenses/) 目录：
 
-- **Actix-web** - Rust Web 框架 (Apache-2.0 OR MIT)
+- **Axum** - Rust Web 框架 (MIT)
 - **SQLx** - 异步 PostgreSQL 驱动 (Apache-2.0 OR MIT)
-- **Tokio** - 异步运行时 (Apache-2.0 OR MIT)
-- **i18next** - JavaScript 国际化框架 (MIT)
+- **Tokio** - 异步运行时 (MIT)
 - **Rustls** - TLS 实现 (Apache-2.0 OR MIT)
-- **Quinn** - HTTP/3 实现 (MIT)
-- **async-snmp** - SNMP 客户端 (MIT)
+- **async-snmp** - SNMP 客户端 (Apache-2.0 OR MIT)
 
 ## 👤 Author
 

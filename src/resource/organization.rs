@@ -5,7 +5,7 @@ use crate::error::AppError;
 use crate::models::{
     OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
 };
-use crate::resource::org_template::get_allowed_children;
+use crate::resource::org_template::{MAX_ORG_DEPTH, get_allowed_children};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -17,9 +17,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
-
-/// 最大层级深度，防止无限递归
-const MAX_DEPTH: usize = 10;
 
 // ==================== type_path 解析工具 ====================
 
@@ -42,6 +39,13 @@ pub fn resolve_type_name(levels: &serde_json::Value, type_path: &str) -> Result<
 
     if indices.is_empty() {
         return Err(AppError::Validation("类型路径不能为空".to_string()));
+    }
+
+    // 首段是根锚点，必须为 0（防止 "9.1" 之类的畸形路径被静默当作 "0.1" 解析）
+    if indices[0] != 0 {
+        return Err(AppError::Validation(format!(
+            "类型路径「{type_path}」格式错误（首段必须为 0）"
+        )));
     }
 
     // 找到根节点（不被任何其他节点的子级列表引用的节点）
@@ -156,16 +160,23 @@ async fn resolve_org_type(pool: &sqlx::PgPool, org: &Organization) -> Result<Str
     resolve_type_name(&levels, &org.type_path)
 }
 
-/// 批量加载模板 levels，用于解析 org_type
-async fn load_template_levels(
+/// 批量加载模板 levels（单条查询，避免逐模板 N+1）；加载失败时跳过该模板
+async fn load_template_levels_batch(
     pool: &sqlx::PgPool,
-    template_id: Uuid,
-) -> Result<serde_json::Value, AppError> {
-    sqlx::query_scalar("SELECT levels FROM org_templates WHERE id = $1")
-        .bind(template_id)
-        .fetch_one(pool)
-        .await
-        .map_err(|_| AppError::Internal("关联的模板不存在".to_string()))
+    template_ids: &[Uuid],
+) -> HashMap<Uuid, serde_json::Value> {
+    if template_ids.is_empty() {
+        return HashMap::new();
+    }
+    sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+        "SELECT id, levels FROM org_templates WHERE id = ANY($1)",
+    )
+    .bind(template_ids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect()
 }
 
 // ==================== API 处理函数 ====================
@@ -186,6 +197,13 @@ pub async fn get_organizations(
         .get("root_only")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
+
+    // 两个筛选条件语义互斥，同时传入时明确报错而非静默忽略 root_only
+    if parent_id.is_some() && root_only {
+        return Err(AppError::Validation(
+            "parent_id 与 root_only 不能同时使用".to_string(),
+        ));
+    }
 
     // 辅助函数：构建WHERE子句
     fn build_where_clause(
@@ -265,16 +283,18 @@ pub async fn get_organization_tree(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 批量加载所有需要的模板 levels
-    let mut template_levels_map: HashMap<Uuid, serde_json::Value> = HashMap::new();
-    for org in &all_orgs {
-        if let Some(tid) = org.template_id
-            && let std::collections::hash_map::Entry::Vacant(e) = template_levels_map.entry(tid)
-            && let Ok(levels) = load_template_levels(&state.pool()?.get_conn(), tid).await
-        {
-            e.insert(levels);
+    // 批量加载所有涉及的模板 levels（单条查询）
+    let template_ids: Vec<Uuid> = {
+        let mut ids = std::collections::HashSet::new();
+        for org in &all_orgs {
+            if let Some(tid) = org.template_id {
+                ids.insert(tid);
+            }
         }
-    }
+        ids.into_iter().collect()
+    };
+    let template_levels_map =
+        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
 
     let tree = build_tree(&all_orgs, &template_levels_map);
     Ok(crate::error::ok_json(tree, "组织树获取成功"))
@@ -314,7 +334,7 @@ fn build_tree(
             .unwrap_or_else(|| org.type_path.clone());
 
         // 深度安全检查
-        if depth > MAX_DEPTH {
+        if depth > MAX_ORG_DEPTH {
             return Some(OrganizationTreeNode {
                 id: org.id,
                 name: org.name.clone(),
@@ -494,9 +514,9 @@ pub async fn create_organization(
         }
 
         let depth = get_depth(&mut tx, parent_id).await?;
-        if depth >= MAX_DEPTH {
+        if depth >= MAX_ORG_DEPTH {
             return Err(AppError::Validation(format!(
-                "已达到最大层级深度限制({MAX_DEPTH})"
+                "已达到最大层级深度限制({MAX_ORG_DEPTH})"
             )));
         }
 
@@ -533,6 +553,18 @@ pub async fn create_organization(
             ));
         }
 
+        // 根节点同名查重（parent_id 为 NULL，应用层兜底；数据库侧由
+        // UNIQUE NULLS NOT DISTINCT 约束保证并发安全）
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM organizations WHERE parent_id IS NULL AND name = $1",
+        )
+        .bind(&req.name)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if duplicate.is_some() {
+            return Err(AppError::Conflict("同级下已存在同名组织节点".to_string()));
+        }
+
         (Some(template_id), 0i32)
     };
 
@@ -553,7 +585,16 @@ pub async fn create_organization(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发创建同名节点时由唯一约束兜底，映射为友好冲突错误
+        if let sqlx::Error::Database(db_err) = &e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict("同级下已存在同名组织节点".to_string());
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 
@@ -874,15 +915,17 @@ async fn resolve_org_list_types(
     state: &Arc<AppState>,
     orgs: &[Organization],
 ) -> Result<Vec<serde_json::Value>, AppError> {
-    let mut template_levels_map: HashMap<Uuid, serde_json::Value> = HashMap::new();
-    for org in orgs {
-        if let Some(tid) = org.template_id
-            && let std::collections::hash_map::Entry::Vacant(e) = template_levels_map.entry(tid)
-            && let Ok(levels) = load_template_levels(&state.pool()?.get_conn(), tid).await
-        {
-            e.insert(levels);
+    let template_ids: Vec<Uuid> = {
+        let mut ids = std::collections::HashSet::new();
+        for org in orgs {
+            if let Some(tid) = org.template_id {
+                ids.insert(tid);
+            }
         }
-    }
+        ids.into_iter().collect()
+    };
+    let template_levels_map =
+        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
 
     let items: Vec<serde_json::Value> = orgs
         .iter()
@@ -918,7 +961,7 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
     let mut visited = std::collections::HashSet::new();
     visited.insert(current_id);
 
-    for _ in 0..=MAX_DEPTH {
+    for _ in 0..=MAX_ORG_DEPTH {
         let parent_id: Option<Uuid> =
             sqlx::query_scalar("SELECT parent_id FROM organizations WHERE id = $1")
                 .bind(current_id)
@@ -1039,7 +1082,7 @@ mod tests {
     #[test]
     fn test_hierarchy_depth_limit() {
         const {
-            assert!(MAX_DEPTH >= 5);
+            assert!(MAX_ORG_DEPTH >= 5);
         }
     }
 
@@ -1056,6 +1099,9 @@ mod tests {
         // 子节点
         assert_eq!(resolve_type_name(&levels, "0.0").unwrap(), "a1公司");
         assert_eq!(resolve_type_name(&levels, "0.1").unwrap(), "b1公司");
+        // 首段锚点非 0 必须拒绝，不允许被静默当作根路径解析
+        assert!(resolve_type_name(&levels, "1.0").is_err());
+        assert!(resolve_type_name(&levels, "9").is_err());
     }
 
     #[test]

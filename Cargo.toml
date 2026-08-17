@@ -68,11 +68,11 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.37"
+version = "0.15.43"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 # Workspace crates

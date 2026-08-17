@@ -45,6 +45,10 @@ export class SVGCore {
     this.svg.setAttribute("width", "100%");
     this.svg.setAttribute("height", "100%");
     this.svg.setAttribute("viewBox", "0 0 2000 2000");
+    if (type === "cabinet") {
+      // 机柜视图内容锚定画布底部，保证不同窗口/分辨率下柜底始终贴近屏幕底部
+      this.svg.setAttribute("preserveAspectRatio", "xMidYMax meet");
+    }
 
     this._createDefs();
     this._createGridBackground();
@@ -58,10 +62,9 @@ export class SVGCore {
 
     this.container.appendChild(this.svg);
 
+    // 尺寸与边框由 CSS（visualization.css）控制，禁止内联 maxHeight 限制容器高度，
+    // 否则高分辨率屏幕下机柜底部无法贴近屏幕底部
     this.container.style.overflow = "auto";
-    this.container.style.maxHeight = "800px";
-    this.container.style.border = "1px solid #ddd";
-    this.container.style.borderRadius = "4px";
   }
 
   _createDefs() {

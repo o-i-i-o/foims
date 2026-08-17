@@ -166,6 +166,15 @@ body.sidebar-collapsed .sidebar-menu li a:hover {
   pointer-events: none;
 }
 
+/* 一级导航图标彩色化：按路由固定描边色，不随 hover/选中态变色 */
+.sidebar-menu .nav-link[href="#dashboard"] .nav-icon svg { stroke: #f59e0b; }
+.sidebar-menu .nav-link[href="#organization"] .nav-icon svg { stroke: #10b981; }
+.sidebar-menu .nav-link[href="#resources"] .nav-icon svg { stroke: #a855f7; }
+.sidebar-menu .nav-link[href="#ip"] .nav-icon svg { stroke: #3b82f6; }
+.sidebar-menu .nav-link[href="#visualization"] .nav-icon svg { stroke: #ec4899; }
+.sidebar-menu .nav-link[href="#logs"] .nav-icon svg { stroke: #14b8a6; }
+.sidebar-menu .nav-link[href="#system"] .nav-icon svg { stroke: #64748b; }
+
 /* 导航文字：收起时先淡出再随 max-width 归零，展开时宽度恢复后延迟淡入 */
 .nav-text {
   min-width: 0;

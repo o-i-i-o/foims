@@ -13,6 +13,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
+/// 组织层级最大深度（根为第 1 层），模板校验与组织节点创建共用
+pub const MAX_ORG_DEPTH: usize = 10;
+
 /// 获取所有可用的组织类型配置（从所有模板中提取）
 pub async fn get_available_org_types(
     State(state): State<Arc<AppState>>,
@@ -190,6 +193,31 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         ));
     }
 
+    // 层级深度不得超过组织创建上限（根为第 1 层），否则模板能建、组织节点建不全
+    let mut max_depth = 0usize;
+    fn walk_depth(
+        node: &str,
+        levels_map: &serde_json::Map<String, serde_json::Value>,
+        depth: usize,
+        max_depth: &mut usize,
+    ) {
+        *max_depth = (*max_depth).max(depth);
+        let Some(children) = levels_map.get(node).and_then(|v| v.as_array()) else {
+            return;
+        };
+        for child in children {
+            if let Some(child_str) = child.as_str() {
+                walk_depth(child_str, levels_map, depth + 1, max_depth);
+            }
+        }
+    }
+    walk_depth(&root_type, levels_map, 1, &mut max_depth);
+    if max_depth > MAX_ORG_DEPTH {
+        return Err(AppError::Validation(format!(
+            "模板层级深度 {max_depth} 超过上限 {MAX_ORG_DEPTH}"
+        )));
+    }
+
     Ok(root_type)
 }
 
@@ -224,13 +252,29 @@ pub fn validate_icons_mapping(
     Ok(())
 }
 
-/// 比较两个 levels 的树形拓扑结构是否相同（忽略类型名称）
-/// 只比较：层级深度、每个节点的子节点数量
-pub fn levels_structure_equals(
-    old_levels: &serde_json::Value,
+/// 按类型重命名映射重排 icons 键（重命名传播到图标），并清理新 levels 中不存在的悬空键
+fn remap_icons(
+    icons: &serde_json::Value,
+    mapping: Option<&std::collections::HashMap<String, String>>,
     new_levels: &serde_json::Value,
-) -> bool {
-    compute_type_name_mapping(old_levels, new_levels).is_some()
+) -> serde_json::Value {
+    let Some(levels_map) = new_levels.as_object() else {
+        return serde_json::json!({});
+    };
+
+    let mut result = serde_json::Map::new();
+    if let Some(icons_map) = icons.as_object() {
+        for (type_name, icon) in icons_map {
+            let new_name = mapping
+                .and_then(|m| m.get(type_name))
+                .map(String::as_str)
+                .unwrap_or(type_name);
+            if levels_map.contains_key(new_name) {
+                result.insert(new_name.to_string(), icon.clone());
+            }
+        }
+    }
+    serde_json::Value::Object(result)
 }
 
 /// 计算两个 levels 之间的类型名称映射（old_name → new_name）
@@ -467,23 +511,46 @@ pub async fn update_org_template(
             .fetch_one(&mut *tx)
             .await?;
 
-    // 如果有节点在使用且 levels 发生了变化，需要校验结构兼容性
-    // 允许修改类型名称（如 b1公司 → bb公司），但不允许改变层级结构（增删层级或子节点数量）
+    // 使用中模板的 levels 变更校验：
+    // 1) 拓扑结构必须一致（compute_type_name_mapping 结构不同时返回 None）
+    // 2) 仅允许"真重命名"——发生变更的旧类型名必须在新层级中彻底消失；
+    //    若旧名仍存在，说明是调换子级顺序或交换名称，索引型 type_path 会把存量节点静默改成其他类型
+    let mut rename_mapping: Option<std::collections::HashMap<String, String>> = None;
     if usage_count > 0
         && let Some(ref new_levels) = req.levels
         && new_levels != &existing.levels
-        && !levels_structure_equals(&existing.levels, new_levels)
     {
-        return Err(AppError::Validation(format!(
-            "有 {usage_count} 个组织节点正在使用此模板，且层级结构发生了变化（增删了层级或子节点），不允许修改。仅允许修改类型名称"
-        )));
+        let mapping = compute_type_name_mapping(&existing.levels, new_levels).ok_or_else(|| {
+            AppError::Validation(format!(
+                "有 {usage_count} 个组织节点正在使用此模板，且层级结构发生了变化（增删了层级或子节点），不允许修改。仅允许修改类型名称"
+            ))
+        })?;
+
+        let new_names: std::collections::HashSet<&str> = new_levels
+            .as_object()
+            .map(|m| m.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+        for (old_name, new_name) in &mapping {
+            if old_name != new_name && new_names.contains(old_name.as_str()) {
+                return Err(AppError::Validation(format!(
+                    "有 {usage_count} 个组织节点正在使用此模板，不允许调换子级顺序或交换类型名称（类型「{old_name}」仍存在于新层级中）"
+                )));
+            }
+        }
+        rename_mapping = Some(mapping);
     }
 
-    // 校验 icons 格式
-    let effective_levels = req.levels.as_ref().unwrap_or(&existing.levels);
-    if let Some(ref icons_val) = req.icons {
-        validate_icons_mapping(icons_val, effective_levels)?;
-    }
+    // 计算更新后的 icons：请求值优先；未传时按重命名映射重排现有键（重命名传播到图标），
+    // 并清理新 levels 中不存在的悬空键（避免仅改 levels 时旧图标键无限累积）
+    let effective_levels = req
+        .levels
+        .clone()
+        .unwrap_or_else(|| existing.levels.clone());
+    let effective_icons = match &req.icons {
+        Some(icons_val) => icons_val.clone(),
+        None => remap_icons(&existing.icons, rename_mapping.as_ref(), &effective_levels),
+    };
+    validate_icons_mapping(&effective_icons, &effective_levels)?;
 
     let now = Utc::now();
 
@@ -491,14 +558,14 @@ pub async fn update_org_template(
         "UPDATE org_templates SET
          name = COALESCE($1, name),
          levels = COALESCE($2, levels),
-         icons = COALESCE($3, icons),
+         icons = $3,
          description = COALESCE($4, description),
          updated_at = $5
          WHERE id = $6",
     )
     .bind(&req.name)
     .bind(&req.levels)
-    .bind(&req.icons)
+    .bind(&effective_icons)
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -587,4 +654,67 @@ pub async fn delete_org_template(
     .await;
 
     Ok(crate::error::ok_json((), "模板删除成功"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造一条深度为 depth 的线性链 levels
+    fn chain_levels(depth: usize) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        for i in 0..depth {
+            let key = format!("t{i}");
+            let children = if i + 1 < depth {
+                vec![serde_json::json!(format!("t{}", i + 1))]
+            } else {
+                vec![]
+            };
+            map.insert(key, serde_json::Value::Array(children));
+        }
+        serde_json::Value::Object(map)
+    }
+
+    #[test]
+    fn test_validate_levels_depth_within_limit() {
+        let levels = chain_levels(MAX_ORG_DEPTH);
+        assert!(validate_levels_mapping(&levels).is_ok());
+    }
+
+    #[test]
+    fn test_validate_levels_depth_exceeds_limit() {
+        let levels = chain_levels(MAX_ORG_DEPTH + 1);
+        let err = validate_levels_mapping(&levels).unwrap_err();
+        assert!(err.to_string().contains("超过上限"));
+    }
+
+    #[test]
+    fn test_remap_icons_renames_and_prunes() {
+        let old_levels = serde_json::json!({ "公司": ["楼号"], "楼号": [] });
+        let new_levels = serde_json::json!({ "园区": ["楼号"], "楼号": [] });
+        let icons = serde_json::json!({ "公司": "🏠", "楼号": "🏫", "已删除类型": "📦" });
+
+        let mapping = compute_type_name_mapping(&old_levels, &new_levels);
+        assert!(mapping.is_some());
+        let remapped = remap_icons(&icons, mapping.as_ref(), &new_levels);
+
+        // 公司 → 园区（重命名传播），楼号保留，已删除类型被清理
+        assert_eq!(remapped, serde_json::json!({ "园区": "🏠", "楼号": "🏫" }));
+    }
+
+    #[test]
+    fn test_remap_icons_without_mapping_prunes_only() {
+        let levels = serde_json::json!({ "公司": ["楼号"], "楼号": [] });
+        let icons = serde_json::json!({ "公司": "🏠", "楼号": "🏫", "悬空": "📦" });
+
+        let result = remap_icons(&icons, None, &levels);
+        assert_eq!(result, serde_json::json!({ "公司": "🏠", "楼号": "🏫" }));
+    }
+
+    #[test]
+    fn test_compute_mapping_detects_structure_change() {
+        let old_levels = serde_json::json!({ "a": ["b", "c"], "b": [], "c": [] });
+        let added = serde_json::json!({ "a": ["b", "c", "d"], "b": [], "c": [], "d": [] });
+        assert!(compute_type_name_mapping(&old_levels, &added).is_none());
+    }
 }

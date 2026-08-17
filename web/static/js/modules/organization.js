@@ -21,23 +21,43 @@ import {
 // 常量定义
 // ==========================================
 
-/** 模板图标缓存 { type_name: icon } */
-let templateIconsMap = {};
+/** 模板图标缓存 { templateId: { type_name: icon } } */
+let templateIconsById = {};
 
-/** 从所有模板中构建图标映射 */
+/** 构建按模板 ID 索引的图标映射（同名类型互不覆盖，节点按所属模板取图标） */
 function buildTemplateIconsMap(templates) {
   const map = {};
   templates.forEach((tpl) => {
     if (tpl.icons && typeof tpl.icons === "object") {
-      Object.assign(map, tpl.icons);
+      map[tpl.id] = tpl.icons;
     }
   });
-  templateIconsMap = map;
+  templateIconsById = map;
 }
 
-/** 获取节点图标：优先模板 icons → API icons → 默认 */
-async function getNodeIcon(orgType) {
-  return await getOrgIcon(orgType, templateIconsMap);
+/** 获取节点图标：所属模板 icons → API icons → 默认 */
+async function getNodeIcon(orgType, templateId) {
+  const icons = (templateId && templateIconsById[templateId]) || {};
+  return await getOrgIcon(orgType, icons);
+}
+
+/** 模板图标变更后同步刷新组织树图标（原地更新，保留展开/折叠状态） */
+async function syncTreeIcons() {
+  try {
+    buildTemplateIconsMap(await getTemplates());
+    const container = document.getElementById("organization-tree-container");
+    if (!container) return;
+    const wrappers = container.querySelectorAll(".org-node-wrapper");
+    for (const wrapper of wrappers) {
+      const nodeEl = wrapper.querySelector(":scope > .org-node");
+      const badge = nodeEl?.querySelector(".org-node-type-badge");
+      const iconEl = nodeEl?.querySelector(".org-node-icon");
+      if (!badge?.dataset.type || !iconEl) continue;
+      iconEl.textContent = await getNodeIcon(badge.dataset.type, wrapper.dataset.templateId);
+    }
+  } catch (error) {
+    console.warn("同步组织树图标失败:", error);
+  }
 }
 
 /** 获取组织类型标签（从i18n获取）*/
@@ -185,13 +205,14 @@ async function renderTreeNode(node, depth) {
   const wrapper = document.createElement("div");
   wrapper.className = "org-node-wrapper";
   wrapper.dataset.nodeId = node.id;
+  wrapper.dataset.templateId = node.template_id || "";
 
   const nodeEl = document.createElement("div");
   nodeEl.className = "org-node";
   nodeEl.style.paddingLeft = `${depth * 24 + 16}px`;
 
   const hasChildren = node.children && node.children.length > 0;
-  const icon = await getNodeIcon(node.org_type);
+  const icon = await getNodeIcon(node.org_type, node.template_id);
   const typeLabel = getOrgTypeLabel(node.org_type);
 
   const toggleBtn = hasChildren
@@ -962,6 +983,7 @@ async function deleteTemplate(id, name) {
     if (result.success) {
       showToast(t("org_template.delete_success"), "success");
       openTemplateManagement();
+      syncTreeIcons();
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -1011,6 +1033,7 @@ export async function submitOrgTemplateForm() {
       );
       closeModal("org-template-editor-modal");
       openTemplateManagement();
+      syncTreeIcons();
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }

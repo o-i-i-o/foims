@@ -23,8 +23,7 @@ import { t } from "../utils/i18n.js";
 const devicePortState = {
   currentDeviceId: null,
   currentDeviceName: null,
-  currentDeviceType: null,
-  isNetworkDevice: false
+  currentDeviceType: null
 };
 
 // SNMP 同步过程中待处理的冲突信息（供冲突对话框使用）
@@ -38,15 +37,13 @@ function setCurrentDevice(device) {
   devicePortState.currentDeviceId = device.id;
   devicePortState.currentDeviceName = device.name;
   devicePortState.currentDeviceType = device.device_type;
-  devicePortState.isNetworkDevice = ["switch", "network_device"].includes(device.device_type);
 }
 
 function getCurrentDevice() {
   return {
     id: devicePortState.currentDeviceId,
     name: devicePortState.currentDeviceName,
-    type: devicePortState.currentDeviceType,
-    isNetworkDevice: devicePortState.isNetworkDevice
+    type: devicePortState.currentDeviceType
   };
 }
 
@@ -97,10 +94,8 @@ async function renderAllPortGroups(device, cards) {
   // 1. NIC 分组（设备模态框管理的网口）
   renderNicPortGroups(container, cards);
 
-  // 2. 二层端口分组（端口模态框自身管理）—— 仅网络设备
-  if (device.isNetworkDevice) {
-    await loadAndRenderDevicePorts(device.id, container);
-  }
+  // 2. 二层端口分组（端口模态框自身管理），无端口时接口返回空数组
+  await loadAndRenderDevicePorts(device.id, container);
 
   // 若两类都为空，显示空提示
   if (!container.children.length) {

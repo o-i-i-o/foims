@@ -40,6 +40,33 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* 二级导航分割线：伪元素绘制上下渐隐的竖线（内嵌于标签高度 25%~75%），
+   比通高边框更柔和；激活标签两侧的分割线隐藏，突出选中态 */
+.tab-btn + .tab-btn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--color-border) 25%,
+    var(--color-border) 75%,
+    transparent
+  );
+  opacity: 1;
+  transition: opacity var(--transition-fast) ease;
+  pointer-events: none;
+}
+
+/* 激活标签与相邻标签之间的分割线淡出 */
+.tab-btn + .tab-btn.active::before,
+.tab-btn.active + .tab-btn::before {
+  opacity: 0;
+}
+
 .tab-btn {
   padding: var(--space-md) var(--space-lg);
   background: transparent;

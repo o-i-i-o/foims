@@ -126,7 +126,7 @@ function renderTopNetworks(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_network_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_network_data")}</li>`;
     return;
   }
 
@@ -154,7 +154,7 @@ function renderTopIPs(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_ip_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_ip_data")}</li>`;
     return;
   }
 
@@ -183,7 +183,7 @@ function renderTopRooms(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_room_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_room_data")}</li>`;
     return;
   }
 
@@ -211,7 +211,7 @@ function renderTopDevices(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_device_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_device_data")}</li>`;
     return;
   }
 
@@ -239,7 +239,7 @@ function renderTopCabinets(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_cabinet_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_cabinet_data")}</li>`;
     return;
   }
 
@@ -267,7 +267,7 @@ function renderTopLogs(items) {
   if (!container) return;
 
   if (!items || items.length === 0) {
-    container.innerHTML = `<li class=\"empty-list-item\">\${t('dashboard.no_log_data')}</li>`;
+    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_log_data")}</li>`;
     return;
   }
 
@@ -340,7 +340,7 @@ function renderDeviceTypeChart(deviceTypes) {
 
   const total = Object.values(deviceTypes).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = `<div class=\"chart-empty\">\${t('common.no_data')}</div>`;
+    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
     return;
   }
 
@@ -373,7 +373,7 @@ function renderIpStatusChart(statusData) {
 
   const total = Object.values(statusData).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = `<div class=\"chart-empty\">\${t('common.no_data')}</div>`;
+    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
     return;
   }
 
@@ -415,7 +415,7 @@ function renderRoomTypeChart(roomTypes) {
 
   const total = Object.values(roomTypes).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    container.innerHTML = `<div class=\"chart-empty\">\${t('common.no_data')}</div>`;
+    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
     return;
   }
 

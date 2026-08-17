@@ -821,7 +821,13 @@
       "send_email": "发送邮件",
       "create_device_port": "创建设备端口",
       "update_device_port": "更新设备端口",
-      "delete_device_port": "删除设备端口"
+      "delete_device_port": "删除设备端口",
+      "create_device_ip": "创建设备IP",
+      "sync": "同步",
+      "sync_children": "同步子项",
+      "sync_net_outlets": "同步信息点",
+      "sync_patch_panels": "同步配线架",
+      "sync_positions": "同步机位"
     },
     "resource_types": {
       "user": "用户",
@@ -840,7 +846,13 @@
       "layout": "布局",
       "config": "配置",
       "email": "邮件",
-      "device_port": "设备端口"
+      "device_port": "设备端口",
+      "device": "设备",
+      "device_network_config": "设备网络配置",
+      "device_template": "设备模板",
+      "net_outlet": "信息点",
+      "org_template": "组织模板",
+      "organization": "组织"
     },
     "view_detail_failed": "查看详情失败",
     "detail_title": "操作日志详情",
