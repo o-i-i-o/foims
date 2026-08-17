@@ -5,7 +5,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS devices (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(100) NOT NULL,
-            device_type VARCHAR(30) NOT NULL DEFAULT 'other',
+            device_type VARCHAR(30) NOT NULL,
             brand VARCHAR(50),
             model VARCHAR(100),
             serial_number VARCHAR(100),
