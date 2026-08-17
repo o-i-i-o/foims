@@ -6,7 +6,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 ### 🚀 高性能后端
 - **Rust & Axum**: 基于 Rust 语言开发，内存安全且性能卓越。
-- **HTTP/3 (QUIC)**: 原生支持 HTTP/3、HTTP/2 和 HTTPS，提供极速的访问体验。
+- **HTTP/3 (QUIC)**: 通过nginx代理实现 HTTP/3、HTTP/2 和 HTTPS，提供极速的访问体验。
 - **PostgreSQL**: 使用 SQLx 进行异步数据库交互，确保数据的一致性与高并发处理能力。
 
 ### 🛡️ 安全优先
@@ -50,7 +50,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 - **Rust**: 最新稳定版 (推荐通过 rustup 安装)
 - **PostgreSQL**: 版本 12 或更高
 - **OpenSSL**: 开发库 (libssl-dev)
-- **系统**: Linux (推荐 Ubuntu 20.04+ 或 Debian 10+)
+- **系统**: Linux (推荐 Ubuntu 24.04+ 或 Debian 11+)
 
 ### 开发环境运行
 
