@@ -61,12 +61,6 @@ function getLinkTypeLabel(type) {
   return LINK_TYPE_LABELS[type] || type;
 }
 
-function buildEndpointDisplay(type, label) {
-  const typeLabel = getEndpointTypeLabel(type);
-  const lbl = label ? escapeHtml(label) : "-";
-  return `${typeLabel}：<br><small>${lbl}</small>`;
-}
-
 export async function loadCableLinksData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
   if (sortBy) tableState.setSort(sortBy, sortOrder);
@@ -89,11 +83,21 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
         },
         {
           field: "a_endpoint_type",
-          render: (v, row) => buildEndpointDisplay(row.a_endpoint_type, row.a_endpoint_label)
+          render: (v) => getEndpointTypeLabel(v),
+          className: "col-center"
+        },
+        {
+          field: "a_endpoint_label",
+          render: (v) => escapeHtml(v) || "-"
         },
         {
           field: "b_endpoint_type",
-          render: (v, row) => buildEndpointDisplay(row.b_endpoint_type, row.b_endpoint_label)
+          render: (v) => getEndpointTypeLabel(v),
+          className: "col-center"
+        },
+        {
+          field: "b_endpoint_label",
+          render: (v) => escapeHtml(v) || "-"
         },
         { field: "link_type", render: (v) => getLinkTypeLabel(v), className: "col-center" },
         { field: "cable_label", render: (v) => escapeHtml(v) || "-" },

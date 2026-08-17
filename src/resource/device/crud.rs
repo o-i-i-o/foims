@@ -109,9 +109,9 @@ pub async fn get_devices(
         "SELECT COUNT(*) FROM devices_with_details d {where_clause}"
     ));
     let data_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+        "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.vendor, d.location,
+                d.template_id, d.seller, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
@@ -294,11 +294,12 @@ pub async fn create_device(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, vendor, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)",
+        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
     )
     .bind(id)
     .bind(&req.name)
+    .bind(&req.hostname)
     .bind(&final_device_type)
     .bind(&final_brand)
     .bind(&final_model)
@@ -307,7 +308,7 @@ pub async fn create_device(
     .bind(req.position_id)
     .bind(req.room_id)
     .bind(req.template_id)
-    .bind(&req.vendor)
+    .bind(&req.seller)
     .bind(&req.location)
     .bind(&snmp_version)
     .bind(&encrypted_community)
@@ -326,7 +327,9 @@ pub async fn create_device(
     // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
     let cards = req.cards.clone().unwrap_or_default();
     super::nic::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
-    let ip_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE device_id = $1")
+    let ip_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
+    )
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
@@ -369,6 +372,7 @@ pub async fn create_device(
     let device = Device {
         id,
         name: req.name.clone(),
+        hostname: req.hostname.clone(),
         device_type: final_device_type,
         brand: final_brand,
         model: final_model,
@@ -377,7 +381,7 @@ pub async fn create_device(
         position_id: req.position_id,
         room_id: req.room_id,
         template_id: req.template_id,
-        vendor: req.vendor.clone(),
+        seller: req.seller.clone(),
         location: req.location.clone(),
         snmp_version,
         snmp_community: encrypted_community,
@@ -419,9 +423,9 @@ pub async fn get_device(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let device = sqlx::query_as::<_, DeviceWithDetails>(
-        "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+        "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.vendor, d.location,
+                d.template_id, d.seller, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
@@ -553,6 +557,7 @@ pub async fn update_device(
     sqlx::query(
         "UPDATE devices SET
          name = COALESCE($1, name),
+         hostname = COALESCE($27, hostname),
          device_type = COALESCE($2, device_type),
          brand = COALESCE($3, brand),
          model = COALESCE($4, model),
@@ -560,7 +565,7 @@ pub async fn update_device(
          workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
          position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
          room_id = COALESCE($10, room_id),
-         vendor = COALESCE($11, vendor),
+         seller = COALESCE($11, seller),
          location = COALESCE($12, location),
          snmp_version = COALESCE($13, snmp_version),
          snmp_community = CASE WHEN $14::boolean THEN $15 ELSE snmp_community END,
@@ -584,7 +589,7 @@ pub async fn update_device(
     .bind(req.position_id.is_some())
     .bind(resolved_position_id)
     .bind(req.room_id)
-    .bind(&req.vendor)
+    .bind(&req.seller)
     .bind(&req.location)
     .bind(&req.snmp_version)
     .bind(req.snmp_community.is_some())
@@ -600,6 +605,7 @@ pub async fn update_device(
     .bind(&req.description)
     .bind(now)
     .bind(id)
+    .bind(&req.hostname)
     .execute(&mut *tx)
     .await?;
 
@@ -674,9 +680,9 @@ pub async fn update_device(
 
     // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
-        "SELECT d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+        "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.vendor, d.location,
+                d.template_id, d.seller, d.location,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,

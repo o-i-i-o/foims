@@ -265,7 +265,10 @@ async fn export_rooms(conn: &mut sqlx::PgConnection) -> DataResult<Vec<u8>> {
 async fn export_workstations(conn: &mut sqlx::PgConnection) -> DataResult<Vec<u8>> {
     let rows = sqlx::query(
         r"SELECT w.name, r.name as room_name, w.manager, w.description,
-                  (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.workstation_id = w.id LIMIT 1) as ip_address
+                  (SELECT host(i.ip_address) FROM ips i
+                   JOIN device_interfaces di ON i.device_interface_id = di.id
+                   JOIN devices d ON di.device_id = d.id
+                   WHERE d.workstation_id = w.id LIMIT 1) as ip_address
            FROM workstations w
            JOIN rooms r ON w.room_id = r.id
            ORDER BY r.name, w.name",
@@ -368,7 +371,10 @@ async fn export_cabinets(conn: &mut sqlx::PgConnection) -> DataResult<Vec<u8>> {
 async fn export_positions(conn: &mut sqlx::PgConnection) -> DataResult<Vec<u8>> {
     let rows = sqlx::query(
         r"SELECT p.name, c.name as cabinet_name, p.start_u, p.end_u, p.description,
-                  (SELECT host(i.ip_address) FROM ips i JOIN devices d ON i.device_id = d.id WHERE d.position_id = p.id LIMIT 1) as ip_address
+                  (SELECT host(i.ip_address) FROM ips i
+                   JOIN device_interfaces di ON i.device_interface_id = di.id
+                   JOIN devices d ON di.device_id = d.id
+                   WHERE d.position_id = p.id LIMIT 1) as ip_address
            FROM positions p
            JOIN cabinets c ON p.cabinet_id = c.id
            ORDER BY c.name, p.start_u",
@@ -405,9 +411,11 @@ async fn export_switches<P: DataProvider>(
     provider: &P,
 ) -> DataResult<Vec<u8>> {
     let rows = sqlx::query(
-        r"SELECT d.name, d.model, d.vendor, d.location, d.snmp_version, d.snmp_port,
+        r"SELECT d.name, d.model, d.brand, d.location, d.snmp_version, d.snmp_port,
            d.snmp_community, d.snmp_username, d.description,
-           (SELECT host(i.ip_address) FROM ips i WHERE i.device_id = d.id ORDER BY i.created_at LIMIT 1) as ip_address
+           (SELECT host(i.ip_address) FROM ips i
+            JOIN device_interfaces di ON i.device_interface_id = di.id
+            WHERE di.device_id = d.id ORDER BY i.created_at LIMIT 1) as ip_address
            FROM devices d
            WHERE d.device_type = 'switch'
            ORDER BY d.name",
@@ -431,7 +439,7 @@ async fn export_switches<P: DataProvider>(
             row.get::<Option<String>, _>("ip_address")
                 .unwrap_or_default(),
             row.get::<Option<String>, _>("model").unwrap_or_default(),
-            row.get::<Option<String>, _>("vendor").unwrap_or_default(),
+            row.get::<Option<String>, _>("brand").unwrap_or_default(),
             row.get::<Option<String>, _>("location").unwrap_or_default(),
             row.get::<Option<String>, _>("snmp_version")
                 .filter(|v| !v.is_empty())
@@ -452,7 +460,7 @@ async fn export_switches<P: DataProvider>(
             "名称",
             "IP地址",
             "型号",
-            "厂商",
+            "品牌",
             "位置",
             "SNMP版本",
             "SNMP端口",
@@ -469,9 +477,10 @@ async fn export_ip_managers(conn: &mut sqlx::PgConnection) -> DataResult<Vec<u8>
     let rows = sqlx::query(
         r"SELECT w.name as workstation_name, p.name as position_name,
            nr.name as network_region, n.name as network_name, host(im.ip_address) as ip_address,
-           im.mac_address, im.hostname, im.status
+           di.mac_address, d.hostname, im.status
            FROM ips im
-           JOIN devices d ON im.device_id = d.id
+           JOIN device_interfaces di ON im.device_interface_id = di.id
+           JOIN devices d ON di.device_id = d.id
            LEFT JOIN workstations w ON d.workstation_id = w.id
            LEFT JOIN positions p ON d.position_id = p.id
            LEFT JOIN network_cidrs n ON im.network_id = n.id

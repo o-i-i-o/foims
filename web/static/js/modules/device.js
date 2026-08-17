@@ -474,6 +474,9 @@ function setupRoomCascade() {
     await loadCabinetsForSelect("device-cabinet-id", roomId);
     // 机位依赖机柜选择，房间变更后重置
     await loadPositionsForSelect("device-position-id");
+    // 网络区域/网段选项跟随房间配置过滤
+    const { getNetworkCardManager } = await loadModule("networkCardManager");
+    await getNetworkCardManager().setRoomContext(roomId);
   });
   roomSelect.dataset.bound = "true";
 }
@@ -537,7 +540,7 @@ export async function submitDeviceForm() {
   const deviceType = getElementValue("device-type");
   const brand = getElementValue("device-brand");
   const model = getElementValue("device-model");
-  const vendor = getElementValue("device-vendor");
+  const seller = getElementValue("device-seller");
   const location = getElementValue("device-location");
   const serialNumber = getElementValue("device-serial-number");
   const templateId = getElementValue("device-template-id");
@@ -572,10 +575,11 @@ export async function submitDeviceForm() {
 
   const deviceData = {
     name: name.trim(),
+    hostname: getElementValue("device-hostname") || null,
     device_type: deviceType || "other",
     brand: brand?.trim() || null,
     model: model?.trim() || null,
-    vendor: vendor?.trim() || null,
+    seller: seller?.trim() || null,
     location: location?.trim() || null,
     serial_number: serialNumber?.trim() || null,
     template_id: templateId || null,
@@ -629,10 +633,11 @@ export async function openDeviceModal(device = null) {
     title.textContent = t("device.edit");
     elementCache.setValue("device-id", device.id);
     elementCache.setValue("device-name", device.name);
+    elementCache.setValue("device-hostname", device.hostname || "");
     elementCache.setValue("device-type", device.device_type || "other");
     elementCache.setValue("device-brand", device.brand || "");
     elementCache.setValue("device-model", device.model || "");
-    elementCache.setValue("device-vendor", device.vendor || "");
+    elementCache.setValue("device-seller", device.seller || "");
     elementCache.setValue("device-location", device.location || "");
     elementCache.setValue("device-serial-number", device.serial_number || "");
     elementCache.setValue("device-description", device.description || "");
@@ -657,6 +662,8 @@ export async function openDeviceModal(device = null) {
     if (device.position_id) elementCache.setValue("device-position-id", device.position_id);
 
     if (cardManager) {
+      // 网络区域/网段选项按设备所属房间过滤后再回显
+      await cardManager.setRoomContext(device.room_id || null);
       await cardManager.loadExisting(device.cards || []);
     }
   } else {
@@ -670,6 +677,7 @@ export async function openDeviceModal(device = null) {
     if (templateNameGroup) templateNameGroup.style.display = "none";
 
     if (cardManager) {
+      await cardManager.setRoomContext(null);
       await cardManager.init();
     }
   }

@@ -5,7 +5,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS device_interfaces (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-            nic_id UUID REFERENCES nics(id) ON DELETE SET NULL,
+            nic_id UUID REFERENCES device_nics(id) ON DELETE SET NULL,
             name VARCHAR(50) NOT NULL,
             physical_type VARCHAR(20) NOT NULL DEFAULT 'rj45' CHECK (physical_type IN (
                 'rj45', 'sfp', 'sfp_plus', 'sfp28', 'qsfp_plus', 'qsfp28', 'wifi', 'virtual', 'other'

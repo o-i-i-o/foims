@@ -141,7 +141,6 @@
     "save_success": "Device saved successfully",
     "delete_success": "Device deleted successfully",
     "load_failed": "Failed to load device data",
-    "vendor": "Vendor",
     "ip_config": "IP Configuration",
     "snmp_config": "SNMP Configuration",
     "snmp_version": "SNMP Version",
@@ -273,7 +272,12 @@
     "select_device": "-- Select Device --",
     "link_local": "link-local",
     "public_network": "public",
-    "default_card_name": "Card 1"
+    "default_card_name": "Card 1",
+    "hostname": "Hostname",
+    "hostname_placeholder": "Fetched via SNMP, read-only",
+    "select_room_first": "Select a room first",
+    "network_not_in_room": "Network segment does not belong to the device room",
+    "seller": "Seller"
   },
   "device_template": {
     "title": "Device Template Management",
@@ -1043,6 +1047,10 @@
     "a_endpoint_id": "A Endpoint Object",
     "b_endpoint": "B Endpoint",
     "b_endpoint_id": "B Endpoint Object",
+    "a_endpoint_type": "A Type",
+    "a_endpoint_no": "A No.",
+    "b_endpoint_type": "B Type",
+    "b_endpoint_no": "B No.",
     "endpoint_net_outlet": "Network Outlet",
     "endpoint_device_interface": "Device Interface",
     "endpoint_patch_panel": "Patch Panel",

@@ -141,7 +141,6 @@
     "save_success": "设备保存成功",
     "delete_success": "设备删除成功",
     "load_failed": "加载设备数据失败",
-    "vendor": "厂商",
     "ip_config": "IP配置",
     "snmp_config": "SNMP配置",
     "snmp_version": "SNMP版本",
@@ -273,7 +272,12 @@
     "select_device": "-- 选择设备 --",
     "link_local": "链路本地",
     "public_network": "公网",
-    "default_card_name": "网卡1"
+    "default_card_name": "网卡1",
+    "hostname": "主机名",
+    "hostname_placeholder": "经 SNMP 获取，只读",
+    "select_room_first": "请先选择房间",
+    "network_not_in_room": "网段不属于设备所在房间",
+    "seller": "销售商"
   },
   "device_template": {
     "title": "设备模板管理",
@@ -1043,6 +1047,10 @@
     "a_endpoint_id": "A 端点对象",
     "b_endpoint": "B 端点",
     "b_endpoint_id": "B 端点对象",
+    "a_endpoint_type": "A 端类型",
+    "a_endpoint_no": "A 端编号",
+    "b_endpoint_type": "B 端类型",
+    "b_endpoint_no": "B 端编号",
     "endpoint_net_outlet": "信息点",
     "endpoint_device_interface": "设备接口",
     "endpoint_patch_panel": "配线架",

@@ -13,16 +13,13 @@ use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames}
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
-use crate::utils::{get_room_id_by_position, get_room_id_by_workstation, validate_network_in_room};
+use crate::utils::validate_network_in_room;
 use chrono::Utc;
-use sqlx::Row;
 use std::net::IpAddr;
 use std::str::FromStr;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
-
-type IpMacCurrentInfo = (Option<String>, Uuid);
 
 /// IP 列表过滤条件（经解析与转义后的形态）。
 struct IpListFilters {
@@ -169,7 +166,7 @@ pub async fn get_ip_managers(
         .await?;
 
     let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, last_mac, created_at, updated_at FROM ip_with_details",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at FROM ip_with_details",
     );
     push_ip_filters(&mut data_builder, &filters);
     data_builder
@@ -205,16 +202,18 @@ pub async fn get_device_ips(
 
     let ips: Vec<IpManager> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_interface_id, m.device_id, m.network_id,
+            m.id, m.device_interface_id, di.device_id, m.network_id,
+            nc.network_region_id AS network_region_id,
             nc.name AS network_name,
             nr.name AS network_region,
             host(m.ip_address) as ip_address,
-            m.ip_version, m.mac_address, m.hostname, m.description,
-            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
+            m.ip_version, di.mac_address AS mac_address, m.description,
+            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
         FROM ips m
+        JOIN device_interfaces di ON m.device_interface_id = di.id
         LEFT JOIN network_cidrs nc ON m.network_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-        WHERE m.device_id = $1
+        WHERE di.device_id = $1
         ORDER BY m.ip_address",
     )
     .bind(id)
@@ -237,14 +236,11 @@ pub async fn create_device_ip(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let device_row = sqlx::query("SELECT workstation_id, position_id FROM devices WHERE id = $1")
+    let room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
-
-    let device_ws_id: Option<Uuid> = device_row.get("workstation_id");
-    let device_pos_id: Option<Uuid> = device_row.get("position_id");
 
     let existing_ip: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
@@ -256,26 +252,8 @@ pub async fn create_device_ip(
         return Err(AppError::Conflict("IP地址已存在".to_string()));
     }
 
-    let room_id = if let Some(ws_id) = device_ws_id {
-        sqlx::query_scalar::<_, Uuid>("SELECT room_id FROM workstations WHERE id = $1")
-            .bind(ws_id)
-            .fetch_optional(&mut *tx)
-            .await?
-    } else if let Some(pos_id) = device_pos_id {
-        sqlx::query_scalar::<_, Option<Uuid>>(
-            "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-        )
-        .bind(pos_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .flatten()
-    } else {
-        None
-    };
-
-    let network_id: Option<Uuid> = if let Some(r_id) = room_id {
-        sqlx::query_scalar(
-            r"SELECT nc.id
+    let network_id: Option<Uuid> = sqlx::query_scalar(
+        r"SELECT nc.id
             FROM room_networks rn
             JOIN network_cidrs nc ON rn.network_id = nc.id
             WHERE rn.room_id = $1
@@ -284,22 +262,43 @@ pub async fn create_device_ip(
                 OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
             )
             LIMIT 1",
-        )
-        .bind(r_id)
-        .bind(&req.ip_address)
-        .fetch_optional(&mut *tx)
-        .await?
-    } else {
-        req.network_id
+    )
+    .bind(room_id)
+    .bind(&req.ip_address)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    // 未命中房间网段时回落到请求指定的网段，但必须属于该房间
+    let network_id = match network_id {
+        Some(nid) => Some(nid),
+        None => match req.network_id {
+            Some(nid) => {
+                validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
+                Some(nid)
+            }
+            None => None,
+        },
     };
 
     let ip_version = detect_ip_version(&req.ip_address)?;
     let now = Utc::now();
     let ip_id = Uuid::new_v4();
 
-    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认物理接口
+    // 解析 device_interface_id：优先使用请求中的（须属于该设备）；
+    // 否则使用设备的默认物理接口
     let interface_id = match req.device_interface_id {
-        Some(iid) => iid,
+        Some(iid) => {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM device_interfaces WHERE id = $1 AND device_id = $2",
+            )
+            .bind(iid)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| {
+                AppError::Validation("指定的网口不存在或不属于该设备".to_string())
+            })?
+        }
         None => {
             sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
@@ -314,12 +313,11 @@ pub async fn create_device_ip(
     };
 
     sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
+        "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(ip_id)
     .bind(interface_id)
-    .bind(id)
     .bind(network_id)
     .bind(&req.ip_address)
     .bind(ip_version)
@@ -333,15 +331,17 @@ pub async fn create_device_ip(
 
     tx.commit().await?;
 
-    let (network_name, network_region): (Option<String>, Option<String>) = match network_id {
+    let (network_name, network_region, network_region_id): (Option<String>, Option<String>, Option<Uuid>) = match network_id {
         Some(nid) => sqlx::query_as(
-            "SELECT nc.name, nr.name FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
+            "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
         )
         .bind(nid)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .map_or((None, None), |(name, region)| (Some(name), Some(region))),
-        None => (None, None),
+        .map_or((None, None, None), |(name, region, region_id)| {
+            (Some(name), Some(region), Some(region_id))
+        }),
+        None => (None, None, None),
     };
 
     let mapping = IpManager {
@@ -349,16 +349,15 @@ pub async fn create_device_ip(
         device_interface_id: interface_id,
         device_id: id,
         network_id,
+        network_region_id,
         network_name,
         network_region,
         ip_address: req.ip_address.clone(),
         ip_version,
         mac_address: None,
-        hostname: None,
         description: req.description.clone(),
         status: "active".to_string(),
         last_seen: now,
-        last_mac: None,
         created_at: now,
         updated_at: now,
     };
@@ -389,6 +388,32 @@ struct MacSyncResult {
     total_macs_on_switch: i64,
 }
 
+/// 单网口的同步聚合状态：同一网口多 IP 时按网口去重，
+/// 仅执行一次 MAC 更新与一次变更通知。
+struct InterfaceSyncState {
+    device_id: Uuid,
+    workstation_id: Option<Uuid>,
+    /// 同步前的网口 MAC 快照（等价旧 ips.mac_address 语义）
+    old_mac: Option<String>,
+    /// 本次 SNMP 观测到的 MAC
+    new_mac: String,
+    /// 该网口本次观测到的 IP 行（用于刷新 last_seen 与通知内容）
+    observed_ip_ids: Vec<Uuid>,
+    observed_ip_addrs: Vec<String>,
+}
+
+/// SNMP 观测行：IP 与观测 MAC，连同其所属网口的当前快照。
+#[derive(Debug, sqlx::FromRow)]
+struct ObservedMacRow {
+    ip: String,
+    mac: String,
+    ip_row_id: Uuid,
+    iface_id: Uuid,
+    iface_mac: Option<String>,
+    iface_device_id: Uuid,
+    workstation_id: Option<Uuid>,
+}
+
 async fn sync_switch_macs(
     pool: &sqlx::PgPool,
     device_id: Uuid,
@@ -406,17 +431,23 @@ async fn sync_switch_macs(
         return Err(AppError::Validation("未找到网段信息".to_string()));
     }
 
-    let switch_macs: Vec<(String, String)> = sqlx::query_as(
-        r"SELECT host(sm.ip_address), sm.mac_address FROM device_macs sm
-          INNER JOIN ips i ON sm.ip_address = i.ip_address
-          WHERE sm.device_id = $1 AND i.network_id = $2",
+    // 一次性取出观测数据与网口快照
+    let observed: Vec<ObservedMacRow> = sqlx::query_as(
+        r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
+                  i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
+                  di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
+          FROM device_macs sm
+          INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.network_id = $2
+          INNER JOIN device_interfaces di ON i.device_interface_id = di.id
+          INNER JOIN devices dv ON di.device_id = dv.id
+          WHERE sm.device_id = $1",
     )
     .bind(device_id)
     .bind(network_id)
     .fetch_all(&mut *tx)
     .await?;
 
-    if switch_macs.is_empty() {
+    if observed.is_empty() {
         let total_macs: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM device_macs WHERE device_id = $1")
                 .bind(device_id)
@@ -436,30 +467,58 @@ async fn sync_switch_macs(
     let mut updated_count = 0usize;
     let mut unchanged_count = 0usize;
     let mut skipped_count = 0usize;
+    let mut interfaces: std::collections::HashMap<Uuid, InterfaceSyncState> =
+        std::collections::HashMap::new();
     let mut pending_notifications: Vec<(Uuid, String, String, String)> = Vec::new();
 
-    for (ip, mac) in &switch_macs {
-        let current: Option<IpMacCurrentInfo> = sqlx::query_as(
-            "SELECT mac_address, device_id FROM ips WHERE ip_address = CAST($1 AS INET)",
-        )
-        .bind(ip)
-        .fetch_optional(&mut *tx)
-        .await?;
+    for row in observed {
+        let ObservedMacRow {
+            ip,
+            mac,
+            ip_row_id,
+            iface_id,
+            iface_mac,
+            iface_device_id,
+            workstation_id,
+        } = row;
+        let entry = interfaces
+            .entry(iface_id)
+            .or_insert_with(|| InterfaceSyncState {
+                device_id: iface_device_id,
+                workstation_id,
+                old_mac: iface_mac,
+                new_mac: mac.clone(),
+                observed_ip_ids: Vec::new(),
+                observed_ip_addrs: Vec::new(),
+            });
 
-        let Some((old_mac, cur_device_id)) = current else {
+        // 同一网口在一次观测中出现不同 MAC 属异常数据，按冲突跳过处理
+        if entry.new_mac != mac {
+            warn!(
+                "MAC观测冲突: 网口 {} 同时出现 {} 与 {}，跳过 {}",
+                iface_id, entry.new_mac, mac, ip
+            );
+            skipped_count += 1;
             continue;
-        };
+        }
 
+        entry.observed_ip_ids.push(ip_row_id);
+        entry.observed_ip_addrs.push(ip.clone());
+    }
+
+    for (iface_id, iface) in &interfaces {
+        // MAC 冲突检测：同一 MAC 已被其他设备的网口使用则跳过
         let mac_conflict: Option<String> = sqlx::query_scalar(
-            r"SELECT host(ip_address) FROM ips
-               WHERE mac_address = $1
-               AND ip_address != CAST($2 AS INET)
-               AND device_id != $3
+            r"SELECT host(i.ip_address) FROM ips i
+               JOIN device_interfaces di ON i.device_interface_id = di.id
+               WHERE di.mac_address = $1
+               AND di.device_id != $2
+               AND di.id != $3
                LIMIT 1",
         )
-        .bind(mac)
-        .bind(ip)
-        .bind(cur_device_id)
+        .bind(&iface.new_mac)
+        .bind(iface.device_id)
+        .bind(iface_id)
         .fetch_optional(&mut *tx)
         .await?
         .flatten();
@@ -467,62 +526,52 @@ async fn sync_switch_macs(
         if let Some(conflict_ip) = mac_conflict {
             warn!(
                 "MAC冲突: {} 已被不同设备的 IP {} 使用，跳过更新",
-                mac, conflict_ip
+                iface.new_mac, conflict_ip
             );
-            skipped_count += 1;
+            skipped_count += iface.observed_ip_ids.len();
             continue;
         }
 
-        match old_mac.as_deref() {
+        // 观测到的 IP 行刷新 last_seen（updated_at 由触发器维护）
+        sqlx::query("UPDATE ips SET last_seen = $1 WHERE id = ANY($2)")
+            .bind(now)
+            .bind(&iface.observed_ip_ids)
+            .execute(&mut *tx)
+            .await?;
+
+        match iface.old_mac.as_deref() {
             None | Some("") => {
-                sqlx::query(
-                    r"UPDATE ips
-                       SET mac_address = $1, last_seen = $2, updated_at = $2
-                       WHERE ip_address = CAST($3 AS INET)",
-                )
-                .bind(mac)
-                .bind(now)
-                .bind(ip)
-                .execute(&mut *tx)
-                .await?;
-                updated_count += 1;
-                info!("MAC地址写入: IP={}, MAC={}", ip, mac);
+                sqlx::query("UPDATE device_interfaces SET mac_address = $1 WHERE id = $2")
+                    .bind(&iface.new_mac)
+                    .bind(iface_id)
+                    .execute(&mut *tx)
+                    .await?;
+                updated_count += iface.observed_ip_ids.len();
+                info!("MAC地址写入: 网口={}, MAC={}", iface_id, iface.new_mac);
             }
-            Some(old) if old == mac => {
-                sqlx::query(
-                    r"UPDATE ips SET last_seen = $1, updated_at = $1 WHERE ip_address = CAST($2 AS INET)"
-                )
-                .bind(now)
-                .bind(ip)
-                .execute(&mut *tx)
-                .await?;
-                unchanged_count += 1;
+            Some(old) if old == iface.new_mac => {
+                unchanged_count += iface.observed_ip_ids.len();
             }
             Some(old) => {
-                sqlx::query(
-                    r"UPDATE ips
-                       SET last_mac = $1, mac_address = $2, last_seen = $3, updated_at = $3
-                       WHERE ip_address = CAST($4 AS INET)",
-                )
-                .bind(old)
-                .bind(mac)
-                .bind(now)
-                .bind(ip)
-                .execute(&mut *tx)
-                .await?;
-                updated_count += 1;
+                sqlx::query("UPDATE device_interfaces SET mac_address = $1 WHERE id = $2")
+                    .bind(&iface.new_mac)
+                    .bind(iface_id)
+                    .execute(&mut *tx)
+                    .await?;
+                updated_count += iface.observed_ip_ids.len();
 
-                let workstation_id: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-                    "SELECT d.workstation_id FROM ips i JOIN devices d ON i.device_id = d.id WHERE i.ip_address = CAST($1 AS INET)"
-                )
-                .bind(ip)
-                .fetch_optional(&mut *tx)
-                .await?
-                .flatten();
-
-                if let Some(ws_id) = workstation_id {
-                    info!("检测到MAC地址变更: IP={}, 旧MAC={}, 新MAC={}", ip, old, mac);
-                    pending_notifications.push((ws_id, ip.clone(), old.to_string(), mac.clone()));
+                if let Some(ws_id) = iface.workstation_id {
+                    let ips = iface.observed_ip_addrs.join("、");
+                    info!(
+                        "检测到MAC地址变更: 网口={}, IP={}, 旧MAC={}, 新MAC={}",
+                        iface_id, ips, old, iface.new_mac
+                    );
+                    pending_notifications.push((
+                        ws_id,
+                        ips,
+                        old.to_string(),
+                        iface.new_mac.clone(),
+                    ));
                 }
             }
         }
@@ -573,11 +622,13 @@ pub async fn pull_ip_managers(
     }
 
     let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
-        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
+        r"SELECT m.id, m.device_interface_id, di.device_id, m.network_id,
+           nc.network_region_id AS network_region_id,
            nc.name AS network_name, nr.name AS network_region,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description, m.status,
-           m.last_seen::TIMESTAMPTZ, m.last_mac, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
+           host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
+           m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
+           JOIN device_interfaces di ON m.device_interface_id = di.id
            LEFT JOIN network_cidrs nc ON m.network_id = nc.id
            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
            WHERE m.network_id = $1",
@@ -745,26 +796,13 @@ pub async fn auto_assign_ip(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let device_row = sqlx::query("SELECT workstation_id, position_id FROM devices WHERE id = $1")
+    let room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
         .bind(device_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
 
-    let device_ws_id: Option<Uuid> = device_row.get("workstation_id");
-    let device_pos_id: Option<Uuid> = device_row.get("position_id");
-
-    let room_id = if let Some(ws_id) = device_ws_id {
-        get_room_id_by_workstation(&mut *tx, ws_id).await?
-    } else if let Some(pos_id) = device_pos_id {
-        get_room_id_by_position(&mut *tx, pos_id).await?
-    } else {
-        None
-    };
-
-    if let Some(r_id) = room_id {
-        validate_network_in_room(&mut *tx, r_id, Some(req_network_id)).await?;
-    }
+    validate_network_in_room(&mut *tx, room_id, Some(req_network_id)).await?;
 
     let network = sqlx::query(crate::utils::NETWORK_QUERY)
         .bind(req_network_id)
@@ -802,9 +840,21 @@ pub async fn auto_assign_ip(
     let now = Utc::now();
     let ip_version_num = detect_ip_version(&assigned_ip)?;
 
-    // 解析 device_interface_id：优先使用请求中的；否则使用设备的默认物理接口
+    // 解析 device_interface_id：优先使用请求中的（须属于该设备）；
+    // 否则使用设备的默认物理接口
     let interface_id = match device_interface_id {
-        Some(iid) => iid,
+        Some(iid) => {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM device_interfaces WHERE id = $1 AND device_id = $2",
+            )
+            .bind(iid)
+            .bind(device_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| {
+                AppError::Validation("指定的网口不存在或不属于该设备".to_string())
+            })?
+        }
         None => {
             sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
@@ -819,12 +869,11 @@ pub async fn auto_assign_ip(
     };
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)"
+        "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
     .bind(interface_id)
-    .bind(device_id)
     .bind(req_network_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
@@ -855,16 +904,15 @@ pub async fn auto_assign_ip(
         device_interface_id: interface_id,
         device_id,
         network_id: Some(req_network_id),
+        network_region_id: None,
         network_name: Some(network.name.clone()),
         network_region: Some(network.network_region.clone()),
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
         mac_address: None,
-        hostname: None,
         description,
         status: "active".to_string(),
         last_seen: now,
-        last_mac: None,
         created_at: now,
         updated_at: now,
     };
@@ -942,23 +990,25 @@ pub async fn batch_create_ip_managers(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     // 批量预取网段与区域名称，保证返回的每条 IP 都带所属网段/区域
+    /// 网段摘要：(网段名, 区域名, 区域ID)
+    type NetworkSummary = (Option<String>, Option<String>, Option<Uuid>);
     let network_ids: Vec<Uuid> = valid_requests
         .iter()
         .filter_map(|(_, ip_req, _, _)| ip_req.network_id)
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let mut network_names: std::collections::HashMap<Uuid, (Option<String>, Option<String>)> =
+    let mut network_names: std::collections::HashMap<Uuid, NetworkSummary> =
         std::collections::HashMap::new();
     for nid in network_ids {
-        let row: Option<(String, String)> = sqlx::query_as(
-            "SELECT nc.name, nr.name FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
+        let row: Option<(String, String, Uuid)> = sqlx::query_as(
+            "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
         )
         .bind(nid)
         .fetch_optional(tx.as_mut())
         .await?;
-        if let Some((name, region)) = row {
-            network_names.insert(nid, (Some(name), Some(region)));
+        if let Some((name, region, region_id)) = row {
+            network_names.insert(nid, (Some(name), Some(region), Some(region_id)));
         }
     }
 
@@ -1001,7 +1051,33 @@ pub async fn batch_create_ip_managers(
         };
 
         let interface_id = match ip_req.device_interface_id {
-            Some(iid) => iid,
+            Some(iid) => {
+                match sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM device_interfaces WHERE id = $1 AND device_id = $2",
+                )
+                .bind(iid)
+                .bind(device_id)
+                .fetch_optional(tx.as_mut())
+                .await
+                {
+                    Ok(Some(found)) => found,
+                    Ok(None) => {
+                        duplicate_errors.push(format!(
+                            "第{}条记录: 指定的网口不存在或不属于该设备",
+                            index + 1
+                        ));
+                        continue;
+                    }
+                    Err(err) => {
+                        duplicate_errors.push(format!(
+                            "第{}条记录: 查询接口失败 - {}",
+                            index + 1,
+                            err
+                        ));
+                        continue;
+                    }
+                }
+            }
             None => {
                 match sqlx::query_scalar::<_, Uuid>(
                     "SELECT id FROM device_interfaces WHERE device_id = $1 AND physical_type <> 'virtual' ORDER BY created_at LIMIT 1",
@@ -1031,12 +1107,11 @@ pub async fn batch_create_ip_managers(
         };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
+            "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
         )
         .bind(*id)
         .bind(interface_id)
-        .bind(device_id)
         .bind(ip_req.network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
@@ -1057,22 +1132,24 @@ pub async fn batch_create_ip_managers(
             device_interface_id: interface_id,
             device_id,
             network_id: ip_req.network_id,
+            network_region_id: ip_req
+                .network_id
+                .and_then(|nid| network_names.get(&nid))
+                .and_then(|(_, _, region_id)| *region_id),
             network_name: ip_req
                 .network_id
                 .and_then(|nid| network_names.get(&nid))
-                .and_then(|(name, _)| name.clone()),
+                .and_then(|(name, _, _)| name.clone()),
             network_region: ip_req
                 .network_id
                 .and_then(|nid| network_names.get(&nid))
-                .and_then(|(_, region)| region.clone()),
+                .and_then(|(_, region, _)| region.clone()),
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,
             mac_address: None,
-            hostname: None,
             description: ip_req.description.clone(),
             status: "active".to_string(),
             last_seen: now,
-            last_mac: None,
             created_at: now,
             updated_at: now,
         });

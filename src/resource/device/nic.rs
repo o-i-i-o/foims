@@ -81,10 +81,12 @@ pub async fn apply_network_config(
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     // 删除现有数据（顺序：IP → cable_links → 网口 → 网卡）
-    sqlx::query("DELETE FROM ips WHERE device_id = $1")
-        .bind(device_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "DELETE FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
+    )
+    .bind(device_id)
+    .execute(&mut *tx)
+    .await?;
     // 删除与设备接口相关的电缆链接
     sqlx::query(
         r"DELETE FROM cable_links
@@ -98,7 +100,7 @@ pub async fn apply_network_config(
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM nics WHERE device_id = $1")
+    sqlx::query("DELETE FROM device_nics WHERE device_id = $1")
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
@@ -117,7 +119,7 @@ pub async fn apply_network_config(
         validate_card_type(card_type)?;
 
         sqlx::query(
-            r"INSERT INTO nics (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
+            r"INSERT INTO device_nics (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(card_id)
@@ -175,6 +177,9 @@ pub async fn apply_network_config(
                 }
 
                 let network_id: Option<Uuid> = if ip.network_id.is_some() {
+                    // 显式指定网段时校验其必须属于设备所在房间，确保数据一致性
+                    crate::utils::validate_network_in_room(&mut *tx, room_id, ip.network_id)
+                        .await?;
                     ip.network_id
                 } else {
                     sqlx::query_scalar(
@@ -197,12 +202,11 @@ pub async fn apply_network_config(
                 let ip_version = detect_ip_version(&ip.ip_address)?;
 
                 sqlx::query(
-                    "INSERT INTO ips (id, device_interface_id, device_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, CAST($5 AS INET), $6, $7, $8, $9, $10, $11)",
+                    "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+                     VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
                 )
                 .bind(Uuid::new_v4())
                 .bind(port_id)
-                .bind(device_id)
                 .bind(network_id)
                 .bind(&ip.ip_address)
                 .bind(ip_version)
@@ -226,7 +230,7 @@ pub async fn fetch_device_network_config(
     device_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, AppError> {
     let cards: Vec<NetworkCard> =
-        sqlx::query_as("SELECT * FROM nics WHERE device_id = $1 ORDER BY sort_order, name")
+        sqlx::query_as("SELECT * FROM device_nics WHERE device_id = $1 ORDER BY sort_order, name")
             .bind(device_id)
             .fetch_all(pool)
             .await?;
@@ -245,13 +249,15 @@ pub async fn fetch_device_network_config(
         for port in ports {
             let ips: Vec<IpManager> = sqlx::query_as(
                 r"SELECT
-                    m.id, m.device_interface_id, m.device_id, m.network_id,
+                    m.id, m.device_interface_id, di.device_id, m.network_id,
+                    nc.network_region_id AS network_region_id,
                     nc.name AS network_name,
                     nr.name AS network_region,
                     host(m.ip_address) as ip_address,
-                    m.ip_version, m.mac_address, m.hostname, m.description,
-                    m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
+                    m.ip_version, di.mac_address AS mac_address, m.description,
+                    m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
                   FROM ips m
+                  JOIN device_interfaces di ON m.device_interface_id = di.id
                   LEFT JOIN network_cidrs nc ON m.network_id = nc.id
                   LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
                   WHERE m.device_interface_id = $1

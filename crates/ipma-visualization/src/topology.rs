@@ -46,7 +46,7 @@ pub struct TopologyNodeWithDevice {
     pub device_type: Option<String>,
     pub brand: Option<String>,
     pub model: Option<String>,
-    pub vendor: Option<String>,
+    pub seller: Option<String>,
     pub snmp_version: Option<String>,
     pub snmp_port: Option<i32>,
     pub location: Option<String>,
@@ -82,7 +82,7 @@ pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, Visualization
     let nodes = sqlx::query_as::<_, TopologyNodeWithDevice>(
         r"SELECT tn.id, tn.device_id, tn.x, tn.y, tn.width, tn.height,
                  d.name AS device_name, d.device_type, d.brand, d.model,
-                 d.vendor, d.snmp_version, d.snmp_port, d.location,
+                 d.seller, d.snmp_version, d.snmp_port, d.location,
                  w.name AS workstation_name,
                  r.name AS room_name,
                  NULL AS ip_address

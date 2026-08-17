@@ -38,7 +38,7 @@ export function getDeviceFormValues() {
     id: elementCache.getValue("device-id"),
     name: elementCache.getValue("device-name"),
     model: elementCache.getValue("device-model") || null,
-    vendor: elementCache.getValue("device-vendor") || null,
+    seller: elementCache.getValue("device-seller") || null,
     location: elementCache.getValue("device-location") || null,
     description: elementCache.getValue("device-description") || null,
     snmp_version: elementCache.getValue("device-snmp-version"),
@@ -168,8 +168,10 @@ export async function getDeviceInfoFromSnmp() {
 
     if (result.success && result.data) {
       const info = result.data;
-      if (info.vendor) elementCache.setValue("device-vendor", info.vendor);
+      if (info.brand) elementCache.setValue("device-brand", info.brand);
       if (info.model) elementCache.setValue("device-model", info.model);
+      // 主机名只读，仅由 SNMP 拉取填充
+      if (info.hostname) elementCache.setValue("device-hostname", info.hostname);
       showToast(t("device.snmp_info_success"), "success");
     } else {
       showToast(t("device.snmp_info_failed") + ": " + result.message, "error");

@@ -29,9 +29,10 @@ const PORT_WITH_DEVICE_FROM: &str = "FROM device_ports sp
             LEFT JOIN LATERAL (
                 SELECT host(im.ip_address) AS ip, nc.name AS network_name, nr.name AS network_region
                 FROM ips im
+                JOIN device_interfaces dim ON im.device_interface_id = dim.id
                 LEFT JOIN network_cidrs nc ON im.network_id = nc.id
                 LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-                WHERE im.device_id = d.id
+                WHERE dim.device_id = d.id
                 LIMIT 1
             ) dip ON true";
 
@@ -377,9 +378,10 @@ pub async fn sync_ports_from_snmp(
     .ok_or_else(|| AppError::NotFound("设备不存在".to_string()))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE device_id = $1
-           ORDER BY created_at LIMIT 1",
+        r"SELECT host(i.ip_address) FROM ips i
+           JOIN device_interfaces di ON i.device_interface_id = di.id
+           WHERE di.device_id = $1
+           ORDER BY i.created_at LIMIT 1",
     )
     .bind(device_id)
     .fetch_optional(&state.pool()?.get_conn())

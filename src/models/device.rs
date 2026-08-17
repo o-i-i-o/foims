@@ -286,6 +286,7 @@ pub struct UpdateDeviceTemplateRequest {
 pub struct Device {
     pub id: Uuid,
     pub name: String,
+    pub hostname: Option<String>,
     pub device_type: String,
     pub brand: Option<String>,
     pub model: Option<String>,
@@ -294,7 +295,7 @@ pub struct Device {
     pub position_id: Option<Uuid>,
     pub room_id: Uuid,
     pub template_id: Option<Uuid>,
-    pub vendor: Option<String>,
+    pub seller: Option<String>,
     pub location: Option<String>,
     pub snmp_version: String,
     pub snmp_community: Option<String>,
@@ -313,6 +314,7 @@ pub struct Device {
 pub struct DeviceWithDetails {
     pub id: Uuid,
     pub name: String,
+    pub hostname: Option<String>,
     pub device_type: String,
     pub brand: Option<String>,
     pub model: Option<String>,
@@ -328,7 +330,7 @@ pub struct DeviceWithDetails {
     pub end_u: Option<i32>,
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
-    pub vendor: Option<String>,
+    pub seller: Option<String>,
     pub location: Option<String>,
     pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
@@ -347,6 +349,8 @@ pub struct DeviceWithDetails {
 pub struct DeviceCreate {
     #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
     pub name: String,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
         message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
@@ -359,8 +363,8 @@ pub struct DeviceCreate {
     pub position_id: Option<Uuid>,
     pub room_id: Uuid,
     pub template_id: Option<Uuid>,
-    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
-    pub vendor: Option<String>,
+    #[validate(length(max = 50, message = "销售商长度不能超过50个字符"))]
+    pub seller: Option<String>,
     #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
     pub location: Option<String>,
     pub snmp_version: Option<String>,
@@ -387,6 +391,8 @@ pub struct DeviceCreate {
 pub struct DeviceUpdate {
     #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
     pub name: Option<String>,
+    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    pub hostname: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
         message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
@@ -400,8 +406,8 @@ pub struct DeviceUpdate {
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub position_id: Option<Option<Uuid>>,
     pub room_id: Option<Uuid>,
-    #[validate(length(max = 50, message = "厂商长度不能超过50个字符"))]
-    pub vendor: Option<String>,
+    #[validate(length(max = 50, message = "销售商长度不能超过50个字符"))]
+    pub seller: Option<String>,
     #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
     pub location: Option<String>,
     pub snmp_version: Option<String>,

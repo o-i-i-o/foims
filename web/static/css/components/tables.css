@@ -382,15 +382,17 @@
 #devices-table th:nth-child(8) { width: 14%; }
 #devices-table th:nth-child(9) { width: 14%; }
 
-/* 线缆连接表：序号/A端/B端/类型/标签/长度/已测/操作 */
+/* 线缆连接表：序号/A端类型/A端编号/B端类型/B端编号/类型/标签/长度/已测/操作 */
 #cable-links-table th:nth-child(1) { width: 4%; }
-#cable-links-table th:nth-child(2) { width: 20%; }
-#cable-links-table th:nth-child(3) { width: 20%; }
+#cable-links-table th:nth-child(2) { width: 10%; }
+#cable-links-table th:nth-child(3) { width: 16%; }
 #cable-links-table th:nth-child(4) { width: 10%; }
-#cable-links-table th:nth-child(5) { width: 12%; }
-#cable-links-table th:nth-child(6) { width: 10%; }
-#cable-links-table th:nth-child(7) { width: 10%; }
-#cable-links-table th:nth-child(8) { width: 14%; }
+#cable-links-table th:nth-child(5) { width: 16%; }
+#cable-links-table th:nth-child(6) { width: 9%; }
+#cable-links-table th:nth-child(7) { width: 11%; }
+#cable-links-table th:nth-child(8) { width: 7%; }
+#cable-links-table th:nth-child(9) { width: 7%; }
+#cable-links-table th:nth-child(10) { width: 10%; }
 
 /* IP 表：序号/位置/设备名/类型/网络/IP地址/MAC/主机名/状态/最后发现/创建时间 */
 #ip-table th:nth-child(1) { width: 4%; }

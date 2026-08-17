@@ -137,9 +137,10 @@ pub async fn get_device_ip_address(
     device_id: &Uuid,
 ) -> Result<Option<String>, SwitchConfigError> {
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(ip_address) FROM ips
-           WHERE device_id = $1
-           ORDER BY created_at LIMIT 1",
+        r"SELECT host(i.ip_address) FROM ips i
+           JOIN device_interfaces di ON i.device_interface_id = di.id
+           WHERE di.device_id = $1
+           ORDER BY i.created_at LIMIT 1",
     )
     .bind(device_id)
     .fetch_optional(pool)
@@ -311,15 +312,51 @@ pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<S
     }
 }
 
+/// 经 SNMP 获取的设备识别信息（sysDescr 推导 + sysName 主机名）。
+#[derive(Debug, Clone)]
+pub struct DeviceSnmpInfo {
+    pub brand: String,
+    pub model: String,
+    /// 设备主机名（sysName），设备不支持该 OID 时为 None
+    pub hostname: Option<String>,
+}
+
 pub async fn get_device_info_via_snmp(
     params: &SnmpParamsLegacy,
-) -> Result<(String, String), SnmpError> {
-    let sys_descr = test_snmp(params, 5).await?;
+) -> Result<DeviceSnmpInfo, SnmpError> {
+    let addr = format!("{}:{}", params.ip, params.port);
+    let auth = build_auth(params).map_err(SnmpError::Message)?;
+    let client = Client::builder(&addr, auth)
+        .timeout(Duration::from_secs(5))
+        .connect()
+        .await
+        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
 
-    let vendor = identify_vendor(&sys_descr);
-    let model = extract_model(&sys_descr);
+    let sys_descr_result = client
+        .get(&oid!(1, 3, 6, 1, 2, 1, 1, 1, 0))
+        .await
+        .map_err(|e| SnmpError::Message(format!("SNMP请求失败: {}", format_snmp_error(e))))?;
+    let sys_descr = sys_descr_result
+        .value
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| SnmpError::Message("响应格式不正确: 期望字符串类型".to_string()))?;
 
-    Ok((vendor, model))
+    // sysName（1.3.6.1.2.1.1.5.0）：部分设备不实现，异常响应时容忍为 None
+    let hostname = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 5, 0)).await {
+        Ok(v) if !v.value.is_exception() => v
+            .value
+            .as_str()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        _ => None,
+    };
+
+    Ok(DeviceSnmpInfo {
+        brand: identify_vendor(&sys_descr),
+        model: extract_model(&sys_descr),
+        hostname,
+    })
 }
 
 fn identify_vendor(sys_descr: &str) -> String {
@@ -596,11 +633,15 @@ pub async fn get_device_info_snmp(
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_info_via_snmp(&snmp_params).await {
-        Ok((vendor, model)) => Ok(crate::error::ok_json(
-            serde_json::json!({ "vendor": vendor, "model": model }),
-            "获取交换机信息成功",
+        Ok(info) => Ok(crate::error::ok_json(
+            serde_json::json!({
+                "brand": info.brand,
+                "model": info.model,
+                "hostname": info.hostname
+            }),
+            "获取设备信息成功",
         )),
-        Err(e) => Err(AppError::Snmp(format!("获取交换机信息失败: {e}"))),
+        Err(e) => Err(AppError::Snmp(format!("获取设备信息失败: {e}"))),
     }
 }
 

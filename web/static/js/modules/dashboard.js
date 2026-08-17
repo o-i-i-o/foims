@@ -227,7 +227,7 @@ function renderTopDevices(items) {
           <div class="item-meta">${escapeHtml(dev.ip_address || "-")}</div>
         </div>
       </div>
-      <span class="item-value">${escapeHtml(dev.vendor || "-")}</span>
+      <span class="item-value">${escapeHtml(dev.brand || "-")}</span>
     </li>
   `
     )

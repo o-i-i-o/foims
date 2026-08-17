@@ -6,6 +6,10 @@ function defaultCardName() {
 /**
  * 网卡配置管理器（网卡 → 网口 → IP）
  * 设备模态框使用，替换原 IpConfigManager 的扁平 IP 列表。
+ *
+ * IP 行的网络区域/网段选项按设备所属房间过滤（房间配置的网段），
+ * 确保设备 IP 与房间网络配置一致；遗留的不属于房间的网段以
+ * 带标记的选项保留显示，由 collectData 与后端校验共同拦截。
  */
 import { apiGet } from "./apiClient.js";
 import { showToast } from "./toast.js";
@@ -57,10 +61,21 @@ export class NetworkCardManager {
   constructor() {
     this.containerId = "device-network-cards-container";
     this.addBtnId = "add-network-card-btn";
-    this.networks = [];
+    /** 当前房间上下文（设备表单房间下拉的值） */
+    this.roomId = null;
+    /** 房间配置的可选网段（NetworkInfo 数组） */
+    this.roomNetworks = [];
+    /** 房间内出现的区域（去重后的 {id, name}） */
     this.regions = [];
+    /** 区域 → 网段缓存（仅房间网段） */
     this.networksByRegionCache = new Map();
-    this.optionsLoaded = false;
+    /** 房间允许的网段 ID 集合 */
+    this.roomNetworkIds = new Set();
+    /** 查询用网段全集（房间网段 + 遗留网段），供 CIDR 校验与区域回填 */
+    this.networks = [];
+    /** 遗留数据：不属于当前房间的区域/网段，保留显示并标记 */
+    this.legacyRegions = new Map();
+    this.legacyNetworks = new Map();
     this.addHandler = null;
   }
 
@@ -73,34 +88,121 @@ export class NetworkCardManager {
     if (container) container.innerHTML = "";
   }
 
-  async ensureOptionsLoaded() {
-    if (this.optionsLoaded) return;
+  /**
+   * 设置房间上下文：加载房间配置的网段并重建区域/网段选项。
+   * 设备表单房间变化与模态框打开时调用；roomId 为空时清空选项。
+   */
+  async setRoomContext(roomId) {
+    this.roomId = roomId || null;
+    this.roomNetworks = [];
+    this.regions = [];
+    this.networksByRegionCache = new Map();
+    this.roomNetworkIds = new Set();
 
-    const loadRegions = async () => {
+    if (this.roomId) {
       try {
-        const result = await apiGet("/api/resources/network-regions?page_size=1000");
-        if (result.success && result.data) {
-          this.regions = result.data.items || result.data || [];
+        const result = await apiGet(`/api/resources/rooms/${this.roomId}/networks`);
+        if (result.success && Array.isArray(result.data)) {
+          this.roomNetworks = result.data;
         }
       } catch (e) {
-        console.error("预取网络区域失败:", e);
+        console.error("加载房间网段失败:", e);
       }
-    };
+    }
 
-    await loadRegions();
-    this.optionsLoaded = true;
+    const regionMap = new Map();
+    for (const n of this.roomNetworks) {
+      this.roomNetworkIds.add(n.id);
+      const rid = n.network_region_id;
+      if (rid && !regionMap.has(rid)) {
+        regionMap.set(rid, { id: rid, name: n.network_region });
+      }
+      const bucket = this.networksByRegionCache.get(rid) || [];
+      bucket.push(n);
+      this.networksByRegionCache.set(rid, bucket);
+    }
+    this.regions = Array.from(regionMap.values());
+    this.networks = [...this.roomNetworks, ...Array.from(this.legacyNetworks.values())];
+
+    this.refreshIpRowDropdowns();
   }
 
-  async loadNetworksByRegion(regionId) {
-    if (!regionId) return [];
-    if (this.networksByRegionCache.has(regionId)) {
-      return this.networksByRegionCache.get(regionId);
+  /** 清空遗留选项记录（切换设备时调用） */
+  resetLegacyData() {
+    this.legacyRegions = new Map();
+    this.legacyNetworks = new Map();
+    this.networks = [...this.roomNetworks];
+  }
+
+  /** 刷新已渲染 IP 行的区域/网段下拉（保留当前选择） */
+  refreshIpRowDropdowns() {
+    const container = this.getContainer();
+    if (!container) return;
+    container.querySelectorAll(".nc-ip-item").forEach((el) => {
+      const regionSelect = el.querySelector(".ip-region");
+      const networkSelect = el.querySelector(".ip-network");
+      if (!regionSelect || !networkSelect) return;
+      const currentNetworkId = networkSelect.value;
+      this.renderRegionOptions(regionSelect);
+      this.renderNetworkOptions(networkSelect, regionSelect.value, currentNetworkId);
+    });
+  }
+
+  /** 区域下拉占位文案：未选房间时引导先选房间 */
+  regionPlaceholder() {
+    return this.roomId ? t("network.select_region") : t("device.select_room_first");
+  }
+
+  renderRegionOptions(select) {
+    const keep = select.value;
+    let html = `<option value="">${this.regionPlaceholder()}</option>`;
+    const included = new Set();
+    for (const r of this.regions) {
+      html += `<option value="${r.id}">${escapeHtml(r.name)}</option>`;
+      included.add(r.id);
     }
-    const result = await apiGet(`/api/resources/networks?region_id=${regionId}&page_size=1000`);
-    if (!result.success || !result.data) return [];
-    const networks = Array.isArray(result.data) ? result.data : result.data.items || [];
-    this.networksByRegionCache.set(regionId, networks);
-    return networks;
+    // 遗留数据引用的区域不在房间配置内时保留显示
+    for (const [rid, name] of this.legacyRegions) {
+      if (!included.has(rid)) {
+        html += `<option value="${rid}">${escapeHtml(name)}</option>`;
+        included.add(rid);
+      }
+    }
+    select.innerHTML = html;
+    if (keep && included.has(keep)) {
+      select.value = keep;
+    }
+  }
+
+  networkOptionLabel(n, legacy = false) {
+    const cidrs = [];
+    if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
+    if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
+    const cidrStr = cidrs.length > 0 ? ` (${cidrs.join(" / ")})` : "";
+    const mark = legacy ? ` [${t("device.network_not_in_room")}]` : "";
+    return `${escapeHtml(n.name)}${cidrStr}${mark}`;
+  }
+
+  renderNetworkOptions(select, regionId, keepNetworkId = null) {
+    const keep = keepNetworkId ?? select.value;
+    const networks = regionId ? this.networksByRegionCache.get(regionId) || [] : [];
+    let html = `<option value="">${t("network.select_network")}</option>`;
+    const included = new Set();
+    for (const n of networks) {
+      html += `<option value="${n.id}">${this.networkOptionLabel(n)}</option>`;
+      included.add(n.id);
+    }
+    // 遗留网段不属于当前房间时保留显示并标记
+    for (const [nid, ln] of this.legacyNetworks) {
+      if (ln.network_region_id === regionId && !included.has(nid)) {
+        html += `<option value="${nid}">${this.networkOptionLabel(ln, true)}</option>`;
+        included.add(nid);
+      }
+    }
+    select.innerHTML = html;
+    if (keep && included.has(keep)) {
+      select.value = keep;
+    }
   }
 
   getNetworkCidr(networkId, ipAddress) {
@@ -115,8 +217,8 @@ export class NetworkCardManager {
     const container = this.getContainer();
     if (!container) return false;
     container.innerHTML = "";
+    this.resetLegacyData();
     this.bindAddButton();
-    await this.ensureOptionsLoaded();
     await this.addCard();
     return true;
   }
@@ -130,7 +232,6 @@ export class NetworkCardManager {
   }
 
   async addCard(cardData = null) {
-    await this.ensureOptionsLoaded();
     const container = this.getContainer();
     if (!container) return;
     const data = cardData || {};
@@ -267,7 +368,7 @@ export class NetworkCardManager {
     const ips = portData.ips || [];
     if (ips.length > 0) {
       for (const ipData of ips) {
-        const ipRow = await this.createIpRowElement(ipData);
+        const ipRow = await this.createIpRowElement();
         ipsContainer.appendChild(ipRow.element);
         await this.bindIpRowEvents(ipRow, ipData);
       }
@@ -289,15 +390,10 @@ export class NetworkCardManager {
     port.remove();
   }
 
-  async createIpRowElement(ipData = null) {
-    await this.ensureOptionsLoaded();
+  createIpRowElement() {
     const div = document.createElement("div");
     div.className = "nc-ip-item";
     const uid = generateUniqueId("ip");
-
-    const regionOptions = this.regions
-      .map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`)
-      .join("");
 
     div.innerHTML = `
       <header class="ip-level-bar">
@@ -310,8 +406,7 @@ export class NetworkCardManager {
         <div class="nc-field">
           <label for="${uid}-region">${t("network.region")}</label>
           <select id="${uid}-region" class="ip-region nc-input">
-            <option value="">${t("network.select_region")}</option>
-            ${regionOptions}
+            <option value="">${this.regionPlaceholder()}</option>
           </select>
         </div>
         <div class="nc-field">
@@ -322,15 +417,16 @@ export class NetworkCardManager {
         </div>
         <div class="nc-field">
           <label for="${uid}-address">${t("ip.ip_address")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
-          <input id="${uid}-address" type="text" class="ip-address nc-input" value="${escapeHtml(ipData?.ip_address || "")}" placeholder="192.168.1.100" autocomplete="off" required />
+          <input id="${uid}-address" type="text" class="ip-address nc-input" value="" placeholder="192.168.1.100" autocomplete="off" required />
         </div>
         <div class="nc-field">
           <label for="${uid}-description">${t("common.description")}</label>
-          <input id="${uid}-description" type="text" class="ip-description nc-input" value="${escapeHtml(ipData?.description || "")}" autocomplete="off" />
+          <input id="${uid}-description" type="text" class="ip-description nc-input" value="" autocomplete="off" />
         </div>
       </div>
     `;
 
+    // IP 地址与描述在 bindIpRowEvents 中按 ipData 回填
     return { element: div };
   }
 
@@ -342,24 +438,13 @@ export class NetworkCardManager {
 
     const regionSelect = element.querySelector(".ip-region");
     const networkSelect = element.querySelector(".ip-network");
+    const addressInput = element.querySelector(".ip-address");
+    const descriptionInput = element.querySelector(".ip-description");
 
-    regionSelect?.addEventListener("change", async () => {
-      const regionId = regionSelect.value;
-      networkSelect.innerHTML = `<option value="">${t("network.select_network")}</option>`;
-      if (!regionId) return;
-      const networks = await this.loadNetworksByRegion(regionId);
-      this.networks = this.mergeNetworks(networks);
-      networkSelect.innerHTML =
-        `<option value="">${t("network.select_network")}</option>` +
-        networks
-          .map((n) => {
-            const cidrs = [];
-            if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
-            if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
-            const cidrStr = cidrs.length > 0 ? cidrs.join(" / ") : "";
-            return `<option value="${n.id}">${escapeHtml(n.name)}${cidrStr ? ` (${cidrStr})` : ""}</option>`;
-          })
-          .join("");
+    this.renderRegionOptions(regionSelect);
+
+    regionSelect?.addEventListener("change", () => {
+      this.renderNetworkOptions(networkSelect, regionSelect.value);
     });
 
     networkSelect?.addEventListener("change", () => {
@@ -369,18 +454,45 @@ export class NetworkCardManager {
         const regionId = network.network_region_id;
         if (regionId && regionSelect.value !== regionId) {
           regionSelect.value = regionId;
+          this.renderNetworkOptions(networkSelect, regionId);
         }
       }
     });
 
     if (ipData) {
+      // 遗留数据：网段/区域不属于当前房间时登记保留项，确保仍可回显
+      if (
+        ipData.network_region_id &&
+        !this.regions.some((r) => r.id === ipData.network_region_id) &&
+        !this.legacyRegions.has(ipData.network_region_id)
+      ) {
+        this.legacyRegions.set(
+          ipData.network_region_id,
+          ipData.network_region || ipData.network_region_id
+        );
+      }
+      if (
+        ipData.network_id &&
+        !this.roomNetworkIds.has(ipData.network_id) &&
+        !this.legacyNetworks.has(ipData.network_id)
+      ) {
+        const legacyNet = {
+          id: ipData.network_id,
+          name: ipData.network_name || ipData.network_id,
+          network_region_id: ipData.network_region_id || null
+        };
+        this.legacyNetworks.set(ipData.network_id, legacyNet);
+        this.networks.push(legacyNet);
+      }
+
+      this.renderRegionOptions(regionSelect);
       if (ipData.network_region_id && regionSelect) {
         regionSelect.value = ipData.network_region_id;
-        regionSelect.dispatchEvent(new Event("change"));
       }
-      if (ipData.network_id && networkSelect) {
-        networkSelect.value = ipData.network_id;
-      }
+      this.renderNetworkOptions(networkSelect, regionSelect.value, ipData.network_id || null);
+
+      if (addressInput) addressInput.value = ipData.ip_address || "";
+      if (descriptionInput) descriptionInput.value = ipData.description || "";
     }
   }
 
@@ -395,76 +507,29 @@ export class NetworkCardManager {
     ipElement.remove();
   }
 
-  mergeNetworks(newNetworks) {
-    const map = new Map(this.networks.map((n) => [n.id, n]));
-    for (const n of newNetworks) map.set(n.id, n);
-    return Array.from(map.values());
-  }
-
   async loadExisting(cards) {
     const container = this.getContainer();
     if (!container) return;
     container.innerHTML = "";
+    this.resetLegacyData();
     this.bindAddButton();
 
     if (!cards || cards.length === 0) {
-      await this.ensureOptionsLoaded();
       await this.addCard();
       return;
     }
-
-    // 并行预取渲染所需的外部数据（各区域网段）
-    await Promise.all([this.ensureOptionsLoaded(), this.prefetchCardData(cards)]);
 
     for (const cardData of cards) {
       await this.addCard(cardData);
     }
   }
 
-  /**
-   * 并行预取渲染所需的所有外部数据（各区域网段）。
-   */
-  async prefetchCardData(cards) {
-    const regionIds = new Set();
-
-    for (const card of cards) {
-      for (const port of card.ports || []) {
-        for (const ip of port.ips || []) {
-          if (ip.network_region_id) regionIds.add(ip.network_region_id);
-        }
-      }
-    }
-
-    const toInt = (arr) => (Array.isArray(arr) ? arr : arr.items || []);
-    const tasks = [];
-
-    for (const regionId of regionIds) {
-      if (!this.networksByRegionCache.has(regionId)) {
-        tasks.push(
-          (async () => {
-            try {
-              const result = await apiGet(
-                `/api/resources/networks?region_id=${regionId}&page_size=1000`
-              );
-              if (result.success && result.data) {
-                this.networksByRegionCache.set(regionId, toInt(result.data));
-              }
-            } catch (error) {
-              console.error("预加载网络失败:", error);
-            }
-          })()
-        );
-      }
-    }
-
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
-    }
-  }
-
   collectData() {
     const container = this.getContainer();
     if (!container) return { cards: [], errors: [] };
+    if (!this.roomId) {
+      return { cards: [], errors: [t("device.select_room_first")] };
+    }
     const cards = [];
     const errors = [];
     const cardElements = container.querySelectorAll(".network-card-item");
@@ -521,6 +586,12 @@ export class NetworkCardManager {
           if (!networkId) {
             errors.push(
               `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.network_required")}`
+            );
+            return;
+          }
+          if (!this.roomNetworkIds.has(networkId)) {
+            errors.push(
+              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.network_not_in_room")}`
             );
             return;
           }

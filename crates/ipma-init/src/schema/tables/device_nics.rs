@@ -1,8 +1,8 @@
-//! 设备网卡（nics）表结构创建。
+//! 设备网卡（device_nics）表结构创建。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS nics (
+        r"CREATE TABLE IF NOT EXISTS device_nics (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             name VARCHAR(50) NOT NULL,

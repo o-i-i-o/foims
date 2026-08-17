@@ -46,6 +46,12 @@
             <label for="device-serial-number" data-i18n="device.serial_number">Serial Number</label>
             <input type="text" id="device-serial-number" name="serial_number" autocomplete="off">
           </div>
+          <div class="form-group">
+            <label for="device-hostname" data-i18n="device.hostname">Hostname</label>
+            <input type="text" id="device-hostname" name="hostname" autocomplete="off" readonly
+                   data-i18n-placeholder="device.hostname_placeholder" placeholder="Fetched via SNMP, read-only"
+                   data-i18n-title="device.hostname_title" title="Fetched via SNMP, read-only">
+          </div>
           <div class="form-group" id="device-template-name-group" style="display: none;">
             <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
             <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
@@ -63,8 +69,8 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="device-vendor" data-i18n="device.vendor">Vendor</label>
-            <input type="text" id="device-vendor" name="vendor" autocomplete="off">
+            <label for="device-seller" data-i18n="device.seller">Seller</label>
+            <input type="text" id="device-seller" name="seller" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="device-location" data-i18n="device.location">Location</label>

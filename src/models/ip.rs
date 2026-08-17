@@ -12,22 +12,24 @@ use validator::Validate;
 pub struct IpManager {
     pub id: Uuid,
     pub device_interface_id: Uuid,
+    #[sqlx(default)]
     pub device_id: Uuid,
     pub network_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub network_region_id: Option<Uuid>,
     #[sqlx(default)]
     pub network_name: Option<String>,
     #[sqlx(default)]
     pub network_region: Option<String>,
     pub ip_address: String,
     pub ip_version: i16,
+    #[sqlx(default)]
     pub mac_address: Option<String>,
-    pub hostname: Option<String>,
     pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub last_mac: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -55,7 +57,6 @@ pub struct IpManagerWithNames {
     pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
-    pub last_mac: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

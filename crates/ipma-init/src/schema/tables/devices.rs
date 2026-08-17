@@ -5,6 +5,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS devices (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(100) NOT NULL,
+            hostname VARCHAR(100),
             device_type VARCHAR(30) NOT NULL,
             brand VARCHAR(50),
             model VARCHAR(100),
@@ -13,7 +14,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             position_id UUID REFERENCES positions(id) ON DELETE SET NULL,
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             template_id UUID REFERENCES device_templates(id) ON DELETE SET NULL,
-            vendor VARCHAR(50),
+            seller VARCHAR(50), -- 销售商（采购渠道）
             location VARCHAR(100),
             snmp_version VARCHAR(3) DEFAULT 'v2c',
             snmp_community VARCHAR(64),

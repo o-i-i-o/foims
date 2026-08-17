@@ -235,12 +235,14 @@ async fn fetch_position_ips(
     id: Uuid,
 ) -> Result<Vec<IpManager>, sqlx::Error> {
     sqlx::query_as(
-        r"SELECT m.id, m.device_interface_id, m.device_id, m.network_id,
+        r"SELECT m.id, m.device_interface_id, di.device_id, m.network_id,
+           nc.network_region_id AS network_region_id,
            nc.name AS network_name, nr.name AS network_region,
-           host(m.ip_address) as ip_address, m.ip_version, m.mac_address, m.hostname, m.description,
-           m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ, m.last_mac
+           host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description,
+           m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
-           JOIN devices d ON m.device_id = d.id
+           JOIN device_interfaces di ON m.device_interface_id = di.id
+           JOIN devices d ON di.device_id = d.id
            LEFT JOIN network_cidrs nc ON m.network_id = nc.id
            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
            WHERE d.position_id = $1

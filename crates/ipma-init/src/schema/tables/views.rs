@@ -17,13 +17,15 @@ const VIEWS: &[(&str, &str)] = &[
         SELECT
             imm.id,
             imm.device_interface_id,
-            imm.device_id,
+            dv.id AS device_id,
             imm.network_id,
             dv.name::text AS device_name,
             dv.device_type::text AS device_type,
+            dv.hostname::text AS hostname,
             di.name::text AS interface_name,
             di.physical_type::text AS physical_type,
             di.interface_role::text AS interface_role,
+            di.mac_address AS mac_address,
             w.name::text AS workstation_name,
             cp.name::text AS cabinet_position_name,
             r.name::text AS room_name,
@@ -33,17 +35,14 @@ const VIEWS: &[(&str, &str)] = &[
             COALESCE(nr.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
-            imm.mac_address,
-            imm.last_mac,
-            imm.hostname,
             imm.description,
             imm.status,
             imm.last_seen,
             imm.created_at,
             imm.updated_at
         FROM ips imm
-        JOIN devices dv ON imm.device_id = dv.id
-        LEFT JOIN device_interfaces di ON imm.device_interface_id = di.id
+        JOIN device_interfaces di ON imm.device_interface_id = di.id
+        JOIN devices dv ON di.device_id = dv.id
         LEFT JOIN workstations w ON dv.workstation_id = w.id
         LEFT JOIN positions cp ON dv.position_id = cp.id
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
@@ -62,15 +61,16 @@ const VIEWS: &[(&str, &str)] = &[
             sdv.name AS device_name,
             host(sm.ip_address) AS ip_address,
             sm.mac_address AS snmp_mac,
-            im.mac_address AS managed_mac,
+            di.mac_address AS managed_mac,
             CASE
-                WHEN im.id IS NULL THEN 'unmanaged'
-                WHEN sm.mac_address = im.mac_address THEN 'match'
+                WHEN i.id IS NULL OR di.id IS NULL OR di.mac_address IS NULL THEN 'unmanaged'
+                WHEN sm.mac_address = di.mac_address THEN 'match'
                 ELSE 'mismatch'
             END AS comparison_result
         FROM device_macs sm
         JOIN devices sdv ON sm.device_id = sdv.id
-        LEFT JOIN ips im ON sm.ip_address = im.ip_address AND im.device_id != sm.device_id
+        LEFT JOIN ips i ON sm.ip_address = i.ip_address
+        LEFT JOIN device_interfaces di ON i.device_interface_id = di.id AND di.device_id != sm.device_id
     ",
     ),
     (
@@ -78,9 +78,9 @@ const VIEWS: &[(&str, &str)] = &[
         r"
         CREATE VIEW devices_with_details AS
         SELECT
-            d.id, d.name, d.device_type, d.brand, d.model, d.serial_number,
+            d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
             d.workstation_id, d.position_id, d.room_id,
-            d.template_id, d.vendor, d.location,
+            d.template_id, d.seller, d.location,
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
             d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
