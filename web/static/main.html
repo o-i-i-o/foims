@@ -11,79 +11,105 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01295">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01295">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01295">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01295">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01295">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01295">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01295">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01295">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01295">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01295">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01295">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01295">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01297">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01297">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01297">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01297">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01297">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01297">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01297">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01297">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01297">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01297">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01297">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01297">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
-    <aside class="sidebar" role="navigation" aria-label="Main Navigation">
+    <aside id="app-sidebar" class="sidebar" role="navigation" aria-label="Main Navigation">
       <header class="sidebar-header">
+        <button id="sidebar-toggle-btn" type="button" class="sidebar-toggle" aria-expanded="true" aria-controls="app-sidebar" aria-label="Collapse navigation" data-i18n-aria-label="nav.collapse_sidebar" data-tooltip="Collapse navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
         <h1 class="sidebar-title" data-i18n="app.title">IP Address Management System</h1>
       </header>
-      
+
       <nav class="sidebar-nav">
         <ul class="sidebar-menu" role="menubar">
           <li role="none">
-            <a href="#dashboard" class="nav-link active" role="menuitem" aria-current="page" data-i18n="nav.dashboard">Dashboard</a>
+            <a href="#dashboard" class="nav-link active" role="menuitem" aria-current="page" data-tooltip="Dashboard" data-i18n-tooltip="nav.dashboard">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+              <span class="nav-text" data-i18n="nav.dashboard">Dashboard</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#organization" class="nav-link" role="menuitem" data-i18n="nav.organization">Organization</a>
+            <a href="#organization" class="nav-link" role="menuitem" data-tooltip="Organization" data-i18n-tooltip="nav.organization">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="nav-text" data-i18n="nav.organization">Organization</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#resources" class="nav-link" role="menuitem" data-i18n="nav.resources">Resources</a>
+            <a href="#resources" class="nav-link" role="menuitem" data-tooltip="Resources" data-i18n-tooltip="nav.resources">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+              <span class="nav-text" data-i18n="nav.resources">Resources</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#ip" class="nav-link" role="menuitem" data-i18n="nav.ip_management">IP Management</a>
+            <a href="#ip" class="nav-link" role="menuitem" data-tooltip="IP Management" data-i18n-tooltip="nav.ip_management">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></span>
+              <span class="nav-text" data-i18n="nav.ip_management">IP Management</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#visualization" class="nav-link" role="menuitem" data-i18n="nav.visualization">Visualization</a>
+            <a href="#visualization" class="nav-link" role="menuitem" data-tooltip="Visualization" data-i18n-tooltip="nav.visualization">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+              <span class="nav-text" data-i18n="nav.visualization">Visualization</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#logs" class="nav-link" role="menuitem" data-i18n="nav.logs">Logs</a>
+            <a href="#logs" class="nav-link" role="menuitem" data-tooltip="Logs" data-i18n-tooltip="nav.logs">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+              <span class="nav-text" data-i18n="nav.logs">Logs</span>
+            </a>
           </li>
           <li role="none">
-            <a href="#system" class="nav-link" role="menuitem" data-i18n="nav.system">System</a>
+            <a href="#system" class="nav-link" role="menuitem" data-tooltip="System" data-i18n-tooltip="nav.system">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+              <span class="nav-text" data-i18n="nav.system">System</span>
+            </a>
           </li>
         </ul>
       </nav>
-      
+
       <footer class="sidebar-footer">
-        <div class="user-info">
-          <span id="current-user" aria-live="polite"></span>
+        <div class="user-info" id="user-info" data-tooltip="Current user">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+          <span id="current-user" class="nav-text" aria-live="polite"></span>
         </div>
         <div class="language-section">
-          <label for="language-selector" class="language-label" data-i18n="language.title">Language:</label>
-          <select id="language-selector" class="form-control form-control-sm" aria-label="Select Language">
-            <option value="zh">中文</option>
-            <option value="en">English</option>
-          </select>
+          <button id="language-selector" type="button" class="footer-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Switch language" data-i18n-aria-label="language.toggle" data-tooltip="Language" data-i18n-tooltip="language.title">
+            <span class="lang-name">中文</span>
+          </button>
         </div>
         <div class="logout-section">
-          <button id="logout-btn" class="btn btn-secondary btn-sm" aria-label="Logout" data-i18n="auth.logout">Logout</button>
+          <button id="logout-btn" type="button" class="footer-btn" aria-label="Logout" data-i18n-aria-label="auth.logout" data-tooltip="Logout" data-i18n-tooltip="auth.logout">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+            <span class="nav-text" data-i18n="auth.logout">Logout</span>
+          </button>
         </div>
       </footer>
     </aside>
@@ -1054,6 +1080,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01295"></script>
+  <script type="module" src="/static/js/app.js?v=01297"></script>
 </body>
 </html>

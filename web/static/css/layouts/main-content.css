@@ -1,8 +1,9 @@
-/* 无内边距：内容直接铺满侧边栏右侧的全部剩余空间 */
+/* 无内边距：内容直接铺满侧边栏右侧的全部剩余空间（动画时序与侧边栏宽度同步） */
 .main-content {
   margin-left: var(--sidebar-width);
   min-height: 100vh;
   background-color: var(--color-bg);
+  transition: margin-left var(--sidebar-anim-duration) var(--sidebar-anim-easing);
 }
 
 /* 仅承担分页切换（display 切换），不再作为带边距的画布容器 */

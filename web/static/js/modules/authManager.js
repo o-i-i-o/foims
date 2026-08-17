@@ -75,15 +75,32 @@ export const checkLoginStatus = async () => {
   }
 };
 
+// 语言切换后需重渲染当前用户信息（含悬浮提示文案）
+let currentUserRenderHandler = null;
+
 export const displayCurrentUser = () => {
   const user = getUser();
+  const currentUserElement = document.getElementById("current-user");
+  const userInfoElement = document.getElementById("user-info");
 
-  if (user) {
-    const currentUserElement = document.getElementById("current-user");
-    if (currentUserElement) {
-      currentUserElement.textContent = t("auth.welcome", { username: user.username });
-    }
+  if (!user || !currentUserElement) {
+    return;
   }
+
+  const render = () => {
+    const welcome = t("auth.welcome", { username: user.username });
+    currentUserElement.textContent = welcome;
+    // 侧边栏收起后用户名不可见，由悬浮提示兜底展示
+    userInfoElement?.setAttribute("data-tooltip", welcome);
+  };
+
+  render();
+
+  if (currentUserRenderHandler) {
+    window.removeEventListener("languagechange", currentUserRenderHandler);
+  }
+  currentUserRenderHandler = render;
+  window.addEventListener("languagechange", currentUserRenderHandler);
 };
 
 export const initLogout = () => {

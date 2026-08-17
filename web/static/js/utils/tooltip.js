@@ -22,6 +22,16 @@ function showTooltip(target) {
   const text = target.dataset.tooltip;
   if (!text) return;
 
+  // 侧边栏展开时文字均可见，悬浮提示冗余；仅收起后的图标栏
+  // 与始终无文字的图标按钮（如收起/展开按钮）保留提示
+  if (
+    target.closest(".sidebar") &&
+    !target.closest(".sidebar-toggle") &&
+    !document.body.classList.contains("sidebar-collapsed")
+  ) {
+    return;
+  }
+
   const el = getTooltipElement();
   el.textContent = text;
   el.classList.add("visible");

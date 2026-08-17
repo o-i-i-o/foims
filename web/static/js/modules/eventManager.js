@@ -4,10 +4,9 @@
  */
 
 import { loadModule, getCachedModule } from "../utils/resourceLoader.js";
-import { changeLanguage } from "../utils/i18n.js";
+import { t } from "../utils/i18n.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modal.js";
-import { t } from "../utils/i18n.js";
 
 // ==========================================
 // 编辑/删除函数映射（动态加载）
@@ -154,17 +153,8 @@ const BUTTON_EVENT_BINDINGS = [
       const { logoutUser } = getModule("authManager");
       logoutUser();
     }
-  },
-  {
-    id: "language-selector",
-    event: "change",
-    handler: (e) => {
-      // i18n is a core module loaded via static import, not via loadModule(),
-      // so it is NOT in resourceLoader's module cache — getModule("i18n") would
-      // return null and throw here. Use the directly-imported changeLanguage.
-      changeLanguage(e.target.value);
-    }
   }
+  // 语言切换由 languageMenu 模块负责（下拉选择，见 modules/languageMenu.js）
 ];
 
 /**
@@ -183,7 +173,9 @@ function initButtonEventBindings() {
   });
 
   document.addEventListener("click", (e) => {
-    const handler = clickHandlers[e.target.id];
+    // 图标按钮内含 SVG 子元素，点击目标是 svg/path，需向上查找带 id 的宿主元素
+    const target = e.target.closest("[id]");
+    const handler = target ? clickHandlers[target.id] : null;
     if (handler) {
       handler(e);
     }

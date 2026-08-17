@@ -6,6 +6,7 @@
 import { loadModule } from "../utils/resourceLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
+import { t } from "../utils/i18n.js";
 
 const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {
@@ -17,6 +18,8 @@ const PAGE_LOADERS = {
   system: loadSystemPage,
   visualization: loadVisualizationPage
 };
+
+const SIDEBAR_COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
 
 // ==========================================
 // 初始化
@@ -32,6 +35,43 @@ export function initNavigation() {
   bindNavClickHandlers(navLinks);
   loadInitialPage();
   bindHashChangeHandler();
+  initSidebarCollapse();
+}
+
+// ==========================================
+// 侧边栏收起/展开
+// ==========================================
+
+/**
+ * 初始化侧边栏收起/展开功能
+ * 折叠按钮位于标题块左侧，状态持久化到 localStorage，
+ * 收起后仅保留图标导航栏，展开恢复正常显示
+ */
+export function initSidebarCollapse() {
+  const toggleBtn = document.getElementById("sidebar-toggle-btn");
+  if (!toggleBtn) {
+    return;
+  }
+
+  const applyState = (collapsed) => {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    const label = t(collapsed ? "nav.expand_sidebar" : "nav.collapse_sidebar");
+    toggleBtn.dataset.tooltip = label;
+    toggleBtn.setAttribute("aria-label", label);
+    localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, collapsed ? "1" : "0");
+  };
+
+  applyState(localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === "1");
+
+  toggleBtn.addEventListener("click", () => {
+    applyState(!document.body.classList.contains("sidebar-collapsed"));
+  });
+
+  // 语言切换后同步按钮提示与无障碍标签
+  window.addEventListener("languagechange", () => {
+    applyState(document.body.classList.contains("sidebar-collapsed"));
+  });
 }
 
 // ==========================================

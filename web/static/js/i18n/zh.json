@@ -13,7 +13,9 @@
     "visualization": "可视化",
     "logs": "日志",
     "system": "系统",
-    "organization": "组织管理"
+    "organization": "组织管理",
+    "collapse_sidebar": "收起导航栏",
+    "expand_sidebar": "展开导航栏"
   },
   "common": {
     "name": "名称",
@@ -1008,7 +1010,9 @@
     "key_password_placeholder": "私钥密码"
   },
   "language": {
-    "title": "语言"
+    "native_name": "中文",
+    "title": "语言",
+    "toggle": "切换语言"
   },
   "api": {
     "account_disabled": "账户已被禁用，请联系管理员",

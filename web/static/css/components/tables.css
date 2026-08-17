@@ -17,12 +17,6 @@
   margin-top: calc(-1 * var(--space-lg));
 }
 
-/* 资源管理页：表格紧贴导航栏，给标题行加上边框强化分界
-   （对比新增分隔线元素，直接加边框零 HTML 改动，实现更简单） */
-#resources .data-table thead th {
-  border-top: 2px solid var(--color-border);
-}
-
 .table-container > .data-table {
   flex: 1;
 }
@@ -40,7 +34,8 @@
 
 .data-table th,
 .data-table td {
-  padding: 0.55rem;
+  padding: 0.35rem;
+  padding-top: 0.3rem;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--color-border-light);
@@ -62,6 +57,7 @@
 .data-table thead th {
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
+  border-top: 2px solid var(--color-border);
 }
 
 .data-table th .btn {
@@ -78,7 +74,6 @@
 
 /* 序号列居中：必须用 .data-table td/th 前缀提升特异性，
    否则被基础规则 text-align: left（0,1,1）压制 */
-.data-table th.index-column,
 .data-table td.index-column {
   text-align: center;
 }
@@ -92,11 +87,6 @@
 .data-table td.col-center {
   text-align: center;
   vertical-align: middle;
-}
-
-/* 可排序表头：右侧箭头占位 28px，左侧补齐对称 padding，居中文字不被箭头推偏 */
-.data-table th.sortable {
-  padding-left: 28px;
 }
 
 .data-table tr:hover {
@@ -262,6 +252,7 @@
   user-select: none;
   transition: background-color 0.2s ease;
   position: relative;
+  padding-left: 28px;
   padding-right: 28px;
 }
 

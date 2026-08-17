@@ -9,6 +9,7 @@
 
 import { initI18n, t } from "./utils/i18n.js";
 import { initNavigation } from "./modules/navigation.js";
+import { initLanguageMenu } from "./modules/languageMenu.js";
 import { initModals } from "./utils/modal.js";
 import { initModalTemplates, preloadModalsOnIdle } from "./utils/modalLoader.js";
 import { initEventListeners } from "./modules/eventManager.js";
@@ -38,6 +39,7 @@ async function initApp() {
 
     initModalTemplates();
     initNavigation();
+    initLanguageMenu();
     initModals(getResourceCallbacks());
     initEventListeners();
     initUserEvents();

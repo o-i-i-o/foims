@@ -116,6 +116,14 @@ export async function initI18n() {
           }
         });
 
+        document.querySelectorAll("[data-i18n-tooltip]").forEach((el) => {
+          const key = el.getAttribute("data-i18n-tooltip");
+          const translation = this.t(key);
+          if (translation !== key) {
+            el.dataset.tooltip = translation;
+          }
+        });
+
         document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
           const key = el.getAttribute("data-i18n-aria-label");
           const translation = this.t(key);
@@ -136,8 +144,20 @@ export async function initI18n() {
       updateLanguageSelector() {
         const selector = document.getElementById("language-selector");
         if (selector) {
-          selector.value = this.language;
+          // 登录页/初始化页为 select 控件；main 页为按钮，展示当前语言名称
+          if (selector.tagName === "SELECT") {
+            selector.value = this.language;
+          } else {
+            const label = selector.querySelector(".lang-name");
+            if (label) {
+              label.textContent = this.getNativeName(this.language);
+            }
+          }
         }
+      },
+
+      getNativeName(code) {
+        return this.translations[code]?.language?.native_name || code;
       }
     };
 
@@ -181,6 +201,28 @@ export function changeLanguage(lang) {
     return;
   }
   i18nInstance.changeLanguage(lang);
+}
+
+export function getCurrentLanguage() {
+  if (!i18nInstance) {
+    return localStorage.getItem("language") === "en" ? "en" : "zh";
+  }
+  return i18nInstance.getCurrentLanguage();
+}
+
+/**
+ * 获取已加载的语言列表（含各语言的本地名称）
+ * 列表完全由已加载的翻译文件决定，新增语言文件即自动出现在选择菜单中
+ * @returns {Array<{code: string, nativeName: string}>}
+ */
+export function getSupportedLanguages() {
+  if (!i18nInstance) {
+    return [];
+  }
+  return Object.keys(i18nInstance.translations).map((code) => ({
+    code,
+    nativeName: i18nInstance.translations[code]?.language?.native_name || code
+  }));
 }
 
 export function updatePageTranslations() {

@@ -13,7 +13,9 @@
     "visualization": "Visualization",
     "logs": "Logs",
     "system": "System",
-    "organization": "Organization"
+    "organization": "Organization",
+    "collapse_sidebar": "Collapse Navigation",
+    "expand_sidebar": "Expand Navigation"
   },
   "common": {
     "name": "Name",
@@ -1008,7 +1010,9 @@
     "key_password_placeholder": "Private key password"
   },
   "language": {
-    "title": "Language"
+    "native_name": "EN",
+    "title": "Language",
+    "toggle": "Switch Language"
   },
   "api": {
     "account_disabled": "Account disabled, please contact administrator",

@@ -7,11 +7,24 @@
   top: 0;
   left: 0;
   overflow-y: auto;
+  /* 收起过渡期间裁剪尚未收缩完的文字，避免横向滚动条闪现 */
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  transition: width var(--sidebar-anim-duration) var(--sidebar-anim-easing);
+}
+
+/* 收起状态：仅保留图标导航栏 */
+body.sidebar-collapsed .sidebar {
+  width: var(--sidebar-width-collapsed);
+}
+
+body.sidebar-collapsed .main-content {
+  margin-left: var(--sidebar-width-collapsed);
 }
 
 .sidebar-header {
+  position: relative;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
   color: var(--color-bg-white);
   padding: var(--space-md) var(--space-lg);
@@ -26,11 +39,69 @@
   line-height: 1.3;
 }
 
+/* 标题收起时淡出（宽度收缩由侧边栏 overflow 裁剪），展开时延迟淡入 */
+.sidebar-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    opacity 0.18s ease 0.12s,
+    visibility 0.18s ease 0.12s;
+}
+
+body.sidebar-collapsed .sidebar-title {
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s;
+}
+
+/* 收起/展开按钮：展开与收起两种状态下位置恒定——
+   始终位于标题块左侧、贴屏幕左缘、垂直居中 */
+.sidebar-toggle {
+  position: absolute;
+  left: var(--space-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 0.2);
+  color: var(--color-bg-white);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar-toggle:hover {
+  background: rgb(255 255 255 / 0.35);
+}
+
+.sidebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.4);
+}
+
+.sidebar-toggle svg {
+  width: 18px;
+  height: 18px;
+  /* 单箭头随状态旋转 180°，代替双图标切换 */
+  transition: transform var(--sidebar-anim-duration) var(--sidebar-anim-easing);
+}
+
+body.sidebar-collapsed .sidebar-toggle svg {
+  transform: rotate(180deg);
+}
+
 .sidebar-menu {
   list-style: none;
   padding: var(--space-md) 0;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
 }
 
@@ -39,11 +110,18 @@
 }
 
 .sidebar-menu li a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   padding: 0.75rem var(--space-lg);
   color: var(--color-text);
   text-decoration: none;
-  transition: all var(--transition-fast);
+  white-space: nowrap;
+  transition:
+    padding-left var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   border-left: 3px solid transparent;
 }
 
@@ -60,88 +138,196 @@
   font-weight: 500;
 }
 
+/* 收起状态：图标精确居中——图标中心 = 边框3px + 内边距 + 图标一半，
+   令其等于条目宽度的一半，即 padding = (100% - 26px) / 2 */
+body.sidebar-collapsed .sidebar-menu li a {
+  padding-left: calc((100% - 26px) / 2);
+  padding-right: 0;
+}
+
+body.sidebar-collapsed .sidebar-menu li a:hover {
+  padding-left: calc((100% - 26px) / 2);
+}
+
+/* 导航图标：导航项与页脚控件共用 */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.nav-icon svg {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 导航文字：收起时先淡出再随 max-width 归零，展开时宽度恢复后延迟淡入 */
+.nav-text {
+  min-width: 0;
+  max-width: 165px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    max-width var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+    opacity 0.18s ease 0.12s,
+    visibility 0.18s ease 0.12s;
+}
+
+body.sidebar-collapsed .sidebar .nav-text {
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s;
+}
+
 .sidebar-footer {
   background: var(--color-bg);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md) var(--space-sm);
   border-top: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  gap: var(--space-md);
-  min-height: 150px;
+  gap: var(--space-sm);
   margin-top: auto;
 }
 
 /* 作用域限定在 .sidebar-footer 内，避免与 logs.css 的 .users-checkbox-list .user-info 冲突 */
 .sidebar-footer .user-info {
-  text-align: center;
-  padding: var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  padding: var(--space-xs) var(--space-sm);
   background: var(--color-bg-white);
   border-radius: var(--radius-md);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  /* 收起时 gap 归零配合文字 max-width 归零，图标平滑滑动到正中 */
+  transition: gap var(--sidebar-anim-duration) var(--sidebar-anim-easing);
 }
 
 #current-user {
   font-weight: 500;
   color: var(--color-text);
-  display: block;
 }
 
-.language-section {
+/* 语言/注销图标按钮：展开时图标+文字，收起后仅图标（含义由悬浮提示展示） */
+.footer-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  padding: var(--space-sm);
-  background: var(--color-bg-white);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-md);
+  background: var(--color-bg-white);
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  overflow: hidden;
+  transition:
+    gap var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
-.language-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
+.footer-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--control-border-hover);
+}
+
+.footer-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--control-shadow);
+}
+
+.logout-section .footer-btn:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+body.sidebar-collapsed .footer-btn {
+  gap: 0;
+}
+
+/* 语言按钮文字（语言名称）：收起后仍显示，作为按钮主体 */
+.lang-name {
   white-space: nowrap;
 }
 
-#language-selector {
-  width: auto;
-  min-width: 100px;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--control-border);
+/* 语言下拉菜单：挂在 body 上固定定位，避免被侧边栏 overflow 裁剪 */
+.lang-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 120px;
+  padding: 4px;
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lang-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.5rem 0.75rem;
+  border: none;
   border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  background-color: var(--control-bg);
-  color: var(--color-text-light);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.logout-section {
-  text-align: center;
-}
-
-.logout-section .btn {
-  width: 100%;
-  max-width: 200px;
-}
-
-.nav-link {
-  display: block;
-  padding: 0.75rem var(--space-xl);
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  transition: all var(--transition-fast);
-  border-left: 3px solid transparent;
-}
-
-.nav-link:hover,
-.nav-link.active {
-  background-color: var(--color-bg);
+.lang-menu-item:hover {
+  background: var(--color-bg);
   color: var(--color-primary);
-  border-left-color: var(--color-primary);
 }
 
-.nav-link.active {
-  background-color: var(--color-active-bg);
-  font-weight: 500;
+.lang-menu-item[aria-checked="true"] {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* 对勾图标占位：未选中项隐藏但保留位置，保证各项文字对齐 */
+.lang-menu-item svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.lang-menu-item[aria-checked="false"] svg {
+  visibility: hidden;
+}
+
+/* 减少动态效果偏好：关闭侧边栏相关过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .main-content,
+  .sidebar-title,
+  .sidebar-toggle svg,
+  .sidebar-menu li a,
+  .nav-text,
+  .sidebar-footer .user-info,
+  .footer-btn {
+    transition: none;
+  }
 }

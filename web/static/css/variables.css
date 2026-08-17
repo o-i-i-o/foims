@@ -71,6 +71,10 @@
   --space-lg: 1.5rem;
   --space-xl: 2rem;
   --sidebar-width: 240px;
+  --sidebar-width-collapsed: 64px;
+  /* 侧边栏收起/展开动画：宽度、外边距、内边距等共用同一时序保证同步 */
+  --sidebar-anim-duration: 0.3s;
+  --sidebar-anim-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --header-height: 80px;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
