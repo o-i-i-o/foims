@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01294">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01294">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01294">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01294">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01294">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01294">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01294">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01294">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01294">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01294">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01294">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01294">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01295">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01295">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01295">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01295">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01295">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01295">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01295">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01295">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01295">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01295">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01295">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01295">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -512,12 +512,6 @@
       </section>
 
       <section id="logs" class="content-section" aria-labelledby="logs-heading">
-        <div class="logs-header">
-          <div class="form-group">
-            <input type="text" id="logs-search" data-i18n-placeholder="logs.search_placeholder" placeholder="Search logs..." aria-label="Search logs">
-          </div>
-          <button id="refresh-logs-btn" class="btn btn-primary btn-sm" data-i18n="common.refresh">Refresh</button>
-        </div>
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="operation" role="tab" aria-selected="true" aria-controls="operation-tab" data-i18n="logs.operation_logs">Operation Logs</button>
           <button class="tab-btn" data-tab="login" role="tab" aria-selected="false" aria-controls="login-tab" data-i18n="logs.login_logs">Login Logs</button>
@@ -536,7 +530,9 @@
                   <th data-i18n="logs.resource_type" class="sortable col-center" data-sort="resource_type">Resource Type</th>
                   <th data-i18n="logs.result" class="sortable col-center" data-sort="result">Result</th>
                   <th data-i18n="logs.ip_address" class="sortable" data-sort="ip_address">IP Address</th>
-                  <th data-i18n="common.actions" class="col-center">Actions</th>
+                  <th class="th-log-search">
+                    <input type="text" id="logs-search" class="filter-input" data-i18n-placeholder="logs.search_placeholder" placeholder="Search logs..." aria-label="Search logs">
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -572,7 +568,6 @@
         </div>
 
         <div id="notifications-tab" class="tab-content" role="tabpanel">
-          <h3 data-i18n="logs.notifications">Notifications</h3>
           <div class="notifications-header">
             <div class="form-group">
               <select id="notifications-filter" aria-label="Filter notifications">
@@ -1059,6 +1054,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01294"></script>
+  <script type="module" src="/static/js/app.js?v=01295"></script>
 </body>
 </html>

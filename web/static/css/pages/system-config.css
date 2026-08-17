@@ -10,6 +10,12 @@
   box-shadow: var(--shadow-md);
 }
 
+/* SMTP 配置页：取消限宽与居中，容器横向铺满页面 */
+.smtp-config-section {
+  max-width: none;
+  margin: 0;
+}
+
 .system-config-section h3,
 .smtp-config-section h3 {
   color: var(--color-text);

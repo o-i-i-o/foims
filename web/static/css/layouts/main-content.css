@@ -95,6 +95,16 @@
   flex-wrap: wrap;
 }
 
+/* IP 管理页：table-container 的顶部留白上移到搜索行上方，
+   搜索行与表格上下紧贴 */
+#ip .section-header-row {
+  margin-top: var(--space-lg);
+}
+
+#ip .table-container {
+  margin-top: 0;
+}
+
 .toolbar {
   margin-bottom: var(--space-md);
   display: flex;

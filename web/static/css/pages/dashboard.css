@@ -5,6 +5,11 @@
   min-height: 100vh;
 }
 
+/* 内容上方预留一行留白，避免统计卡片贴住视口顶部 */
+#dashboard {
+  padding-top: var(--space-md);
+}
+
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

@@ -67,16 +67,6 @@ export async function initEventListeners() {
 
 const BUTTON_EVENT_BINDINGS = [
   {
-    id: "refresh-logs-btn",
-    event: "click",
-    handler: () => {
-      const { loadLogsData } = getModule("log");
-      const activeTabBtn = document.querySelector("#logs .tab-btn.active");
-      const logType = activeTabBtn?.getAttribute("data-tab") || "operation";
-      loadLogsData(logType);
-    }
-  },
-  {
     id: "refresh-notifications-btn",
     event: "click",
     handler: () => {

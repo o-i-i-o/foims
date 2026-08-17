@@ -264,14 +264,12 @@
     white-space: nowrap;
   }
 
-  /* 日志和通知头部响应式 */
-  .logs-header,
+  /* 通知头部响应式 */
   .notifications-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .logs-header input,
   .notifications-header select {
     width: 100%;
   }

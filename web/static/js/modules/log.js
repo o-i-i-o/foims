@@ -166,10 +166,9 @@ export function initLogTabs() {
   }
 }
 
-// 初始化日志搜索功能
+// 初始化日志搜索功能（搜索框位于操作日志表头最后一列）
 function initLogSearch() {
   const searchInput = document.getElementById("logs-search");
-  const refreshBtn = document.getElementById("refresh-logs-btn");
 
   if (searchInput) {
     // 防抖搜索
@@ -182,28 +181,9 @@ function initLogSearch() {
           const tabId = activeTab.getAttribute("data-tab");
           if (tabId === "operation") {
             loadLogsData("operation", { action: e.target.value, page: 1 });
-          } else if (tabId === "login") {
-            // 登录日志目前不支持搜索
-            loadLogsData("login");
           }
         }
       }, 500);
-    });
-  }
-
-  if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => {
-      const activeTab = document.querySelector("#logs .tab-btn.active");
-      if (activeTab) {
-        const tabId = activeTab.getAttribute("data-tab");
-        if (tabId === "notifications") {
-          loadNotificationsData();
-        } else {
-          // 保留当前搜索词
-          const searchValue = searchInput ? searchInput.value : "";
-          loadLogsData(tabId, { action: searchValue, page: 1 });
-        }
-      }
     });
   }
 }
@@ -288,11 +268,11 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             const logData = encodeURIComponent(JSON.stringify(log));
 
             rowHtml += `
-              <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
-              <td>${escapeHtml(log.username) || "-"}</td>
+              <td class="col-center col-time">${new Date(log.created_at).toLocaleString()}</td>
+              <td class="col-operator">${escapeHtml(log.username) || "-"}</td>
               <td class="col-center">${escapeHtml(operationTypeText)}</td>
               <td class="col-center">${escapeHtml(resourceTypeText) || "-"}</td>
-              <td class="col-center">${resultText}</td>
+              <td class="col-center col-result">${resultText}</td>
               <td>${escapeHtml(log.ip_address) || "-"}</td>
               <td class="col-center">
                 ${iconButton({ icon: "eye", label: t("logs.details"), cls: "btn-info view-log-details", attrs: `data-log="${logData}"` })}

@@ -17,6 +17,12 @@
   margin-top: calc(-1 * var(--space-lg));
 }
 
+/* 资源管理页：表格紧贴导航栏，给标题行加上边框强化分界
+   （对比新增分隔线元素，直接加边框零 HTML 改动，实现更简单） */
+#resources .data-table thead th {
+  border-top: 2px solid var(--color-border);
+}
+
 .table-container > .data-table {
   flex: 1;
 }
@@ -49,6 +55,18 @@
   letter-spacing: 0.05em;
   /* 所有表头水平居中（数据单元格保持左对齐，由 col-center 单独控制） */
   text-align: center;
+}
+
+/* 收紧表头行高：表头单元格单独减薄纵向内边距，
+   并同步缩小表头内的按钮与筛选输入框 */
+.data-table thead th {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.data-table th .btn {
+  height: 30px;
+  min-width: 60px;
 }
 
 .index-column {
@@ -304,7 +322,7 @@
 .data-table th .filter-input {
   display: block;
   width: 100%;
-  margin-top: 0.5rem;
+  margin-top: 0.3rem;
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   border: 1px solid var(--color-border);
