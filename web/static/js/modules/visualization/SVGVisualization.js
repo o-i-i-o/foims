@@ -117,46 +117,12 @@ export class SVGVisualization {
         return;
       }
 
-      this.core.elementsGroup.innerHTML = "";
+      const token = this.dataManager.beginCabinetRender();
+      if (token !== this.dataManager.cabinetRenderToken) return;
 
-      const cabinetWidth = 150;
-      const gap = 50;
-      const startX = 50;
-      const padding = 5;
-
-      let containerHeight = this.core.container.clientHeight;
-      if (!containerHeight || containerHeight < 100) {
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        containerHeight = this.core.container.clientHeight;
-      }
-      if (!containerHeight || containerHeight < 100) {
-        containerHeight = 600;
-      }
-
-      const availableHeight = containerHeight - padding * 2;
-
-      const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
-      const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
-
-      cabinets.forEach((cabinet, index) => {
-        cabinet.capacity = cabinet.capacity || 45;
-        const cabinetHeight = cabinet.capacity * uHeight + 40;
-
-        cabinet.position = {
-          x: startX + index * (cabinetWidth + gap),
-          y: containerHeight - padding - cabinetHeight,
-          width: cabinetWidth,
-          height: cabinetHeight
-        };
-
-        this.renderer.drawCabinet(cabinet);
-        this.dataManager.drawCabinetPositionsWithIp(cabinet);
-      });
-
-      const totalWidth = startX + cabinets.length * (cabinetWidth + gap) + 50;
-      this.core.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, totalWidth)} ${containerHeight}`);
-      this.core.svg.setAttribute("height", "100%");
+      // 复用与 loadSavedLayout 相同的布局与分批渲染（无保存布局，纯自动排列）
+      const finished = await this.dataManager.layoutAndRenderCabinets(cabinets, [], token);
+      if (!finished) return;
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
       this.core.showToast(`${t("viz.draw_positions_failed")}: ${error.message}`, "error");

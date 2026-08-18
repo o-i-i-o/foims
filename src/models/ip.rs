@@ -59,6 +59,8 @@ pub struct IpManagerWithNames {
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// 设备绑定的机位 ID（机柜可视化按机位批量过滤 IP）。
+    pub position_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]

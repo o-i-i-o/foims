@@ -1,5 +1,15 @@
 import { t } from "../../utils/i18n.js";
 
+// 机柜可视化布局常量
+/** 画布四周预留边距：首柜距左缘 / 柜底距底缘（像素，viewBox 1:1） */
+const CABINET_EDGE_PADDING = 16;
+/** 相邻机柜水平间距 */
+const CABINET_GAP = 50;
+/** 机柜宽度 */
+const CABINET_WIDTH = 150;
+/** 每渲染完一批机柜统一拉取该批机位 IP 信息 */
+const CABINET_BATCH_SIZE = 16;
+
 export class SVGDataManager {
   constructor(core, renderer) {
     this.core = core;
@@ -8,6 +18,8 @@ export class SVGDataManager {
     this.apiPost = core.apiPost;
     this.apiDelete = core.apiDelete;
     this.showToast = core.showToast;
+    // 机柜渲染代次：并发 loadSavedLayout/autoDraw/resize 重排时作废旧渲染
+    this.cabinetRenderToken = 0;
   }
 
   async fetchWorkstationsByRoom(roomId) {
@@ -191,12 +203,13 @@ export class SVGDataManager {
 
         return hasSavedLayout;
       } else if (this.core.type === "cabinet") {
-        this.core.elementsGroup.innerHTML = "";
+        const token = this.beginCabinetRender();
 
         const [layoutResult, cabinets] = await Promise.all([
           this.apiGet(`/api/resources/layouts/positions/${id}`),
           this.fetchCabinetsByRoom(id)
         ]);
+        if (token !== this.cabinetRenderToken) return false;
 
         let layoutData = [];
         let hasSavedLayout = false;
@@ -214,70 +227,7 @@ export class SVGDataManager {
         }
 
         if (hasSavedLayout && cabinets.length > 0) {
-          let containerHeight = this.core.container.clientHeight;
-          if (!containerHeight || containerHeight < 100) {
-            await new Promise((resolve) => requestAnimationFrame(resolve));
-            await new Promise((resolve) => requestAnimationFrame(resolve));
-            containerHeight = this.core.container.clientHeight;
-          }
-          if (!containerHeight || containerHeight < 100) {
-            containerHeight = 600;
-          }
-
-          const padding = 5;
-          const availableHeight = containerHeight - padding * 2;
-          const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
-          const uHeight = Math.floor((availableHeight - 40) / maxCapacity);
-
-          let maxX = 0;
-          let maxY = 0;
-
-          for (let index = 0; index < cabinets.length; index++) {
-            const cabinet = cabinets[index];
-            const savedItem = layoutData.find(
-              (item) => item.id.toLowerCase() === cabinet.id.toLowerCase()
-            );
-
-            cabinet.capacity = cabinet.capacity || 45;
-            const cabinetHeight = cabinet.capacity * uHeight + 40;
-            const cabinetWidth = 150;
-
-            if (savedItem && savedItem.position) {
-              cabinet.position = {
-                x: savedItem.position.x,
-                y: containerHeight - padding - cabinetHeight,
-                width: savedItem.position.width || cabinetWidth,
-                height: cabinetHeight
-              };
-            } else {
-              const gap = 50;
-              const startX = 50;
-
-              cabinet.position = {
-                x: startX + index * (cabinetWidth + gap),
-                y: containerHeight - padding - cabinetHeight,
-                width: cabinetWidth,
-                height: cabinetHeight
-              };
-            }
-
-            this.renderer.drawCabinet(cabinet);
-            await this.drawCabinetPositionsWithIp(cabinet);
-
-            if (cabinet.position) {
-              maxX = Math.max(maxX, cabinet.position.x + cabinet.position.width);
-              maxY = Math.max(maxY, cabinet.position.y + cabinet.position.height);
-            }
-          }
-
-          if (maxX > 0 || maxY > 0) {
-            const padding = 50;
-            this.core.svg.setAttribute(
-              "viewBox",
-              `0 0 ${Math.max(1000, maxX + padding)} ${containerHeight}`
-            );
-            this.core.svg.setAttribute("height", "100%");
-          }
+          await this.layoutAndRenderCabinets(cabinets, layoutData, token);
         }
 
         return hasSavedLayout;
@@ -290,37 +240,153 @@ export class SVGDataManager {
     }
   }
 
-  async drawCabinetPositionsWithIp(cabinet) {
-    try {
-      const positions = cabinet.positions || [];
-      const ipResult = await this.apiGet("/api/resources/ip");
-      const ipMap = new Map();
+  /**
+   * 开启一次机柜渲染：清空画布并递增渲染代次。
+   * 返回代次 token，渲染过程中的异步间隙需校验 token 是否仍有效，
+   * 避免 resize/切换房间触发的并发渲染交错绘制。
+   */
+  beginCabinetRender() {
+    this.core.elementsGroup.innerHTML = "";
+    return ++this.cabinetRenderToken;
+  }
 
-      if (ipResult.success && ipResult.data) {
-        let ipList = [];
-        if (Array.isArray(ipResult.data)) {
-          ipList = ipResult.data;
-        } else if (ipResult.data.items && Array.isArray(ipResult.data.items)) {
-          ipList = ipResult.data.items;
-        } else if (ipResult.data.data && Array.isArray(ipResult.data.data)) {
-          ipList = ipResult.data.data;
-        }
-        ipList.forEach((ipManager) => {
+  /** 等待容器获得真实高度（隐藏 tab 刚切出时可能为 0）。 */
+  async waitForContainerHeight() {
+    let height = this.core.container.clientHeight;
+    if (!height || height < 100) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      height = this.core.container.clientHeight;
+    }
+    return height >= 100 ? height : 600;
+  }
+
+  /**
+   * 计算全部机柜位置并立即定型画布，再分批渲染。
+   * 保存的 x 坐标仅保留相对排列，整体平移使最左机柜距左缘固定边距；
+   * y 按容器高度底部对齐。首帧即为最终布局（无先渲染后纠正的闪变）。
+   * @returns {Promise<boolean>} 渲染是否完整完成（false 表示已被新渲染取代）
+   */
+  async layoutAndRenderCabinets(cabinets, layoutData, token) {
+    const containerHeight = await this.waitForContainerHeight();
+    if (token !== this.cabinetRenderToken) return false;
+
+    const padding = CABINET_EDGE_PADDING;
+    const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
+    const uHeight = Math.floor((containerHeight - padding * 2 - 40) / maxCapacity);
+
+    let minX = Infinity;
+    let maxX = 0;
+    cabinets.forEach((cabinet, index) => {
+      cabinet.capacity = cabinet.capacity || 45;
+      const height = cabinet.capacity * uHeight + 40;
+      const savedItem = layoutData.find(
+        (item) => item.id.toLowerCase() === cabinet.id.toLowerCase()
+      );
+      const savedX =
+        savedItem && savedItem.position && Number.isFinite(savedItem.position.x)
+          ? savedItem.position.x
+          : null;
+      const x = savedX ?? padding + index * (CABINET_WIDTH + CABINET_GAP);
+      const width = (savedItem && savedItem.position?.width) || CABINET_WIDTH;
+
+      cabinet.position = {
+        x,
+        y: containerHeight - padding - height,
+        width,
+        height
+      };
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x + width);
+    });
+
+    // 整体平移：最左机柜距左缘固定 CABINET_EDGE_PADDING
+    const offsetX = (minX === Infinity ? 0 : minX) - padding;
+    cabinets.forEach((cabinet) => {
+      cabinet.position.x -= offsetX;
+    });
+    const totalWidth = maxX - offsetX + padding;
+
+    // 画布定型：宽度按内容像素设置（超出容器即出现横向滚动条）
+    this.core.setCabinetCanvasSize(
+      Math.max(totalWidth, this.core.container.clientWidth || 800),
+      containerHeight
+    );
+
+    // TEMP-DEBUG: 几何探针（验证后移除）
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const s = this.core.svg.getBoundingClientRect();
+      const c = this.core.container.getBoundingClientRect();
+      const sec = document.getElementById("visualization");
+      const tc = document.getElementById("cabinet-visualization");
+      const r = this.core.svg.querySelector(".cabinet-element rect");
+      const rb = r ? r.getBoundingClientRect() : null;
+      const secR = sec ? sec.getBoundingClientRect() : null;
+      const tcR = tc ? tc.getBoundingClientRect() : null;
+      document.title = `PROBE svg=${Math.round(s.width)}x${Math.round(s.height)}@${Math.round(s.top)} cont=${Math.round(c.width)}x${Math.round(c.height)}@${Math.round(c.top)} cabBottom=${rb ? Math.round(rb.bottom) : -1} vh=${innerHeight} sec=${secR ? Math.round(secR.bottom) : -1} tc=${tcR ? Math.round(tcR.bottom) : -1}`;
+    }));
+
+    return await this.renderCabinetBatches(cabinets, token);
+  }
+
+  /**
+   * 分批渲染机柜：每渲染完一批（16 个）统一拉取该批机位的 IP 信息再绘制机位，
+   * 避免逐柜请求；机柜多时用户可先看到并滚动前几批。
+   * @returns {Promise<boolean>} 是否完整完成（false 表示已被新渲染取代）
+   */
+  async renderCabinetBatches(cabinets, token) {
+    for (let i = 0; i < cabinets.length; i += CABINET_BATCH_SIZE) {
+      if (token !== this.cabinetRenderToken) return false;
+      const batch = cabinets.slice(i, i + CABINET_BATCH_SIZE);
+      batch.forEach((cabinet) => this.renderer.drawCabinet(cabinet));
+
+      const positionIds = batch.flatMap((cabinet) =>
+        (cabinet.positions || []).map((position) => position.id)
+      );
+      const ipMap = positionIds.length
+        ? await this.fetchIpMapByPositions(positionIds)
+        : new Map();
+      if (token !== this.cabinetRenderToken) return false;
+
+      batch.forEach((cabinet) => this.drawCabinetPositions(cabinet, ipMap));
+    }
+    return true;
+  }
+
+  /** 按机位 ID 批量拉取 IP 信息，返回 position_id → ipManager 映射。 */
+  async fetchIpMapByPositions(positionIds) {
+    try {
+      const ids = [...new Set(positionIds)].join(",");
+      // 单批机位上限 16 柜 × 48U = 768，page_size=1000 足够覆盖
+      const result = await this.apiGet(
+        `/api/resources/ip?page_size=1000&position_ids=${encodeURIComponent(ids)}`
+      );
+      const map = new Map();
+      if (result.success && result.data) {
+        const list = Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.data.items)
+            ? result.data.items
+            : [];
+        list.forEach((ipManager) => {
           if (ipManager.position_id) {
-            ipMap.set(ipManager.position_id, ipManager);
+            map.set(ipManager.position_id, ipManager);
           }
         });
       }
-
-      if (positions && positions.length > 0) {
-        positions.forEach((position) => {
-          position.ipManager = ipMap.get(position.id) || null;
-          this.renderer.drawCabinetPosition(position, cabinet);
-        });
-      }
+      return map;
     } catch (error) {
-      console.error("绘制机位失败:", error);
+      console.error("批量获取机位 IP 失败:", error);
+      return new Map();
     }
+  }
+
+  /** 绘制单个机柜下的全部机位（IP 信息已由批量拉取结果提供）。 */
+  drawCabinetPositions(cabinet, ipMap) {
+    (cabinet.positions || []).forEach((position) => {
+      position.ipManager = ipMap.get(position.id) || null;
+      this.renderer.drawCabinetPosition(position, cabinet);
+    });
   }
 
   async saveLayout() {

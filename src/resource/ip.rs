@@ -30,6 +30,8 @@ struct IpListFilters {
     network: Option<String>,
     ip_address: Option<String>,
     network_id: Option<Uuid>,
+    /// 机位 ID 批量过滤（机柜可视化分批拉取机位 IP）。
+    position_ids: Vec<Uuid>,
 }
 
 /// 追加 IP 列表过滤条件，供 COUNT 与数据查询共用。
@@ -101,6 +103,13 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
             .push_bind(network_id)
             .push(")");
     }
+    if !filters.position_ids.is_empty() {
+        next(builder, &mut first);
+        builder
+            .push("position_id = ANY(")
+            .push_bind(filters.position_ids.clone())
+            .push("))");
+    }
 }
 
 pub async fn get_ip_managers(
@@ -127,6 +136,15 @@ pub async fn get_ip_managers(
         network_id: query
             .get("network_id")
             .and_then(|s| uuid::Uuid::parse_str(s).ok()),
+        // 逗号分隔的机位 ID 列表，非法片段直接忽略
+        position_ids: query
+            .get("position_ids")
+            .map(|s| {
+                s.split(',')
+                    .filter_map(|part| uuid::Uuid::parse_str(part.trim()).ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
     };
 
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
@@ -166,7 +184,7 @@ pub async fn get_ip_managers(
         .await?;
 
     let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at FROM ip_with_details",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id FROM ip_with_details",
     );
     push_ip_filters(&mut data_builder, &filters);
     data_builder

@@ -39,7 +39,8 @@ const VIEWS: &[(&str, &str)] = &[
             imm.status,
             imm.last_seen,
             imm.created_at,
-            imm.updated_at
+            imm.updated_at,
+            dv.position_id
         FROM ips imm
         JOIN device_interfaces di ON imm.device_interface_id = di.id
         JOIN devices dv ON di.device_id = dv.id

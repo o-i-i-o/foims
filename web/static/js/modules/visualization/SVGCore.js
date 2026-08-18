@@ -45,9 +45,13 @@ export class SVGCore {
     this.svg.setAttribute("width", "100%");
     this.svg.setAttribute("height", "100%");
     this.svg.setAttribute("viewBox", "0 0 2000 2000");
-    if (type === "cabinet") {
-      // 机柜视图内容锚定画布底部，保证不同窗口/分辨率下柜底始终贴近屏幕底部
+    if (this.type === "cabinet") {
+      // 机柜视图内容锚定画布底部，保证不同窗口/分辨率下柜底始终贴近屏幕底部；
+      // 初始 viewBox 直接取容器尺寸，避免先渲染 2000x2000 再纠正的闪变
       this.svg.setAttribute("preserveAspectRatio", "xMidYMax meet");
+      const w = this.container.clientWidth || 800;
+      const h = this.container.clientHeight || 600;
+      this.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     }
 
     this._createDefs();
@@ -94,6 +98,7 @@ export class SVGCore {
     rect.setAttribute("width", "100%");
     rect.setAttribute("height", "100%");
     rect.setAttribute("fill", `url(#grid-${this.type})`);
+    this.gridRect = rect;
     this.svg.appendChild(rect);
   }
 
@@ -415,6 +420,65 @@ export class SVGCore {
     this.gridSize = size;
     this._createDefs();
     this._createGridBackground();
+  }
+
+  /**
+   * 机柜画布定型（虚拟横向滚动方案）。
+   *
+   * Chromium 无法光栅化超大宽度的 SVG 元素（如千柜 ~20 万像素），因此 SVG
+   * 元素始终保持视口尺寸，由占位元素撑出内容总宽度提供原生横向滚动条；
+   * 滚动时平移 viewBox 的 x 偏移，内容坐标仍按全局 1:1 布局，拖拽与对齐
+   * 逻辑经 getScreenCTM 自动适配。
+   * 必须在绘制机柜之前调用，保证首帧就是最终布局。
+   */
+  setCabinetCanvasSize(totalWidth, height) {
+    if (!this._cabinetScrollBound) {
+      this._cabinetScrollBound = true;
+      this._cabinetViewHeight = height;
+      // rAF 节流：滚动时仅更新 viewBox 与网格位置
+      this.container.addEventListener("scroll", () => {
+        if (this._cabinetScrollRaf) return;
+        this._cabinetScrollRaf = requestAnimationFrame(() => {
+          this._cabinetScrollRaf = 0;
+          this._applyCabinetScroll(this.container.scrollLeft);
+        });
+      });
+    }
+    this._cabinetViewHeight = height;
+
+    // 占位元素绝对定位需要一个定位上下文
+    if (!this.container.style.position) {
+      this.container.style.position = "relative";
+    }
+
+    if (!this.scrollSpacer || !this.scrollSpacer.isConnected) {
+      const spacer = document.createElement("div");
+      spacer.style.cssText = "position:absolute;top:0;left:0;height:1px;pointer-events:none;";
+      this.container.appendChild(spacer);
+      this.scrollSpacer = spacer;
+    }
+    this.scrollSpacer.style.width = `${totalWidth}px`;
+
+    // SVG 覆盖在占位元素之上并吸住视口左缘
+    this.svg.style.position = "sticky";
+    this.svg.style.left = "0";
+    this.svg.style.width = "100%";
+    this.svg.setAttribute("height", "100%");
+
+    this._applyCabinetScroll(this.container.scrollLeft);
+  }
+
+  /** 按横向滚动偏移更新机柜画布 viewBox 与网格窗口。 */
+  _applyCabinetScroll(scrollLeft) {
+    const viewWidth = this.container.clientWidth || 800;
+    this.svg.setAttribute(
+      "viewBox",
+      `${scrollLeft} 0 ${viewWidth} ${this._cabinetViewHeight || 600}`
+    );
+    if (this.gridRect) {
+      this.gridRect.setAttribute("x", scrollLeft);
+      this.gridRect.setAttribute("width", viewWidth);
+    }
   }
 
   toggleSnapToGrid(enabled) {
