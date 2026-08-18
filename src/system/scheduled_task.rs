@@ -19,6 +19,7 @@ use crate::auth::extractor::AdminUser;
 use crate::error::AppError;
 use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use crate::routes::static_files::AppJson;
+use ipma_common::{log_warn, msg};
 
 /// 允许通过 API 创建/更新的任务类型白名单（与 task_executors 中注册的类型保持一致）
 const ALLOWED_TASK_TYPES: &[&str] = &[
@@ -34,10 +35,11 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
     if ALLOWED_TASK_TYPES.contains(&task_type) {
         Ok(())
     } else {
-        Err(AppError::Validation(format!(
-            "不支持的任务类型: {task_type}（允许: {}）",
-            ALLOWED_TASK_TYPES.join(", ")
-        )))
+        Err(AppError::Validation(
+            msg("server.task.type_unsupported")
+                .with("task_type", task_type)
+                .with("allowed", ALLOWED_TASK_TYPES.join(", ")),
+        ))
     }
 }
 
@@ -46,9 +48,9 @@ fn validate_log_cleanup_days(config: &serde_json::Value) -> Result<(), AppError>
     if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64)
         && days < 1
     {
-        return Err(AppError::Validation(
-            "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.task.log_cleanup_days_invalid",
+        )));
     }
     Ok(())
 }
@@ -84,7 +86,7 @@ pub async fn get_scheduled_tasks(
     .await
     ?;
 
-    Ok(crate::error::ok_json(tasks, "获取定时任务列表成功"))
+    Ok(crate::error::ok_json(tasks, "server.task.list_retrieved"))
 }
 
 pub async fn get_scheduled_task(
@@ -100,8 +102,8 @@ pub async fn get_scheduled_task(
     .await?;
 
     match task {
-        Some(t) => Ok(crate::error::ok_json(t, "获取定时任务成功")),
-        None => Err(AppError::NotFound("定时任务不存在".to_string())),
+        Some(t) => Ok(crate::error::ok_json(t, "server.task.retrieved")),
+        None => Err(AppError::NotFound(msg("server.task.not_found"))),
     }
 }
 
@@ -123,11 +125,11 @@ pub async fn create_scheduled_task(
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
             Ok(Ok(time)) => Some(time),
             Ok(Err(e)) => {
-                tracing::warn!("计算下次运行时间失败: {}", e);
+                log_warn!("log.task.next_run_calc_failed", error = e);
                 None
             }
             Err(e) => {
-                tracing::warn!("计算下次运行时间任务失败: {}", e);
+                log_warn!("log.task.next_run_calc_task_failed", error = e);
                 None
             }
         };
@@ -148,7 +150,7 @@ pub async fn create_scheduled_task(
 
     Ok((
         StatusCode::CREATED,
-        Json(ApiResponse::success(task, "创建定时任务成功")),
+        Json(ApiResponse::success(task, "server.task.created")),
     )
         .into_response())
 }
@@ -190,10 +192,14 @@ pub async fn update_scheduled_task(
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr_clone)).await {
             Ok(Ok(next_run)) => Some(next_run),
             Ok(Err(e)) => {
-                return Err(AppError::Validation(format!("cron表达式无效: {e}")));
+                return Err(AppError::Validation(
+                    msg("server.task.cron_invalid").with("error", e),
+                ));
             }
             Err(e) => {
-                return Err(AppError::Internal(format!("cron校验任务失败: {e}")));
+                return Err(AppError::Internal(
+                    msg("server.task.cron_validate_task_failed").with("error", e),
+                ));
             }
         }
     } else {
@@ -223,7 +229,7 @@ pub async fn update_scheduled_task(
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("定时任务不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.task.not_found")));
     }
 
     let task: ScheduledTask = sqlx::query_as(
@@ -235,7 +241,7 @@ pub async fn update_scheduled_task(
 
     tx.commit().await?;
 
-    Ok(crate::error::ok_json(task, "更新定时任务成功"))
+    Ok(crate::error::ok_json(task, "server.task.updated"))
 }
 
 pub async fn delete_scheduled_task(
@@ -249,9 +255,9 @@ pub async fn delete_scheduled_task(
         .await?;
 
     if result.rows_affected() > 0 {
-        Ok(crate::error::ok_json((), "删除定时任务成功"))
+        Ok(crate::error::ok_json((), "server.task.deleted"))
     } else {
-        Err(AppError::NotFound("定时任务不存在".to_string()))
+        Err(AppError::NotFound(msg("server.task.not_found")))
     }
 }
 
@@ -278,9 +284,9 @@ pub async fn toggle_scheduled_task(
         .fetch_one(&conn)
         .await?;
 
-        Ok(crate::error::ok_json(task, "切换定时任务状态成功"))
+        Ok(crate::error::ok_json(task, "server.task.toggled"))
     } else {
-        Err(AppError::NotFound("定时任务不存在".to_string()))
+        Err(AppError::NotFound(msg("server.task.not_found")))
     }
 }
 
@@ -306,7 +312,7 @@ pub async fn run_scheduled_task_now(
         .await?;
 
     if !locked {
-        return Err(AppError::Conflict("任务正在执行中，请稍后再试".to_string()));
+        return Err(AppError::Conflict(msg("server.task.running_conflict")));
     }
 
     let conn = pool.get_conn();
@@ -319,7 +325,7 @@ pub async fn run_scheduled_task_now(
     .await?;
 
     let Some(task) = task else {
-        return Err(AppError::NotFound("定时任务不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.task.not_found")));
     };
 
     let start_time = Utc::now();
@@ -346,13 +352,16 @@ pub async fn run_scheduled_task_now(
     let duration = i32::try_from((end_time - start_time).num_milliseconds()).unwrap_or(i32::MAX);
 
     let (status, details) = match &result {
-        Ok(msg) => (
+        Ok(message) => (
             "success",
-            serde_json::json!({ "message": msg, "task_type": task_type }),
+            serde_json::json!({ "message": message, "task_type": task_type }),
         ),
         Err(e) => (
             "failed",
-            serde_json::json!({ "error": e.to_string(), "task_type": task_type }),
+            serde_json::json!({
+                "error": ipma_scheduler::error_message(e).log_string(),
+                "task_type": task_type
+            }),
         ),
     };
 
@@ -370,7 +379,7 @@ pub async fn run_scheduled_task_now(
     .execute(&conn)
     .await
     {
-        tracing::warn!("记录任务日志失败: {}", e);
+        log_warn!("log.task.log_record_failed", error = e);
     }
 
     let cron_expr = task.cron_expression.clone();
@@ -378,11 +387,11 @@ pub async fn run_scheduled_task_now(
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
             Ok(Ok(time)) => Some(time),
             Ok(Err(e)) => {
-                tracing::warn!("计算下次运行时间失败: {}", e);
+                log_warn!("log.task.next_run_calc_failed", error = e);
                 None
             }
             Err(e) => {
-                tracing::warn!("计算下次运行时间任务失败: {}", e);
+                log_warn!("log.task.next_run_calc_task_failed", error = e);
                 None
             }
         };
@@ -405,17 +414,21 @@ pub async fn run_scheduled_task_now(
     };
 
     if let Err(e) = update_query.execute(&conn).await {
-        tracing::warn!("更新定时任务执行结果失败: {}", e);
+        log_warn!("log.task.update_result_failed", error = e);
     }
 
     // 提交事务以释放 advisory lock
     if let Err(e) = lock_tx.commit().await {
-        tracing::warn!("释放任务锁失败: {}", e);
+        log_warn!("log.task.lock_release_failed", error = e);
     }
 
     Ok(crate::error::ok_json(
-        serde_json::json!({"result": result.map_err(|e| e.to_string())}),
-        "执行定时任务成功",
+        serde_json::json!({
+            "result": result.map_err(|e| {
+                ipma_scheduler::error_message(&e).key().to_string()
+            })
+        }),
+        "server.task.executed",
     ))
 }
 
@@ -450,5 +463,5 @@ pub async fn get_task_logs(
         ?
     };
 
-    Ok(crate::error::ok_json(logs, "获取任务日志成功"))
+    Ok(crate::error::ok_json(logs, "server.task.logs_retrieved"))
 }

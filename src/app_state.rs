@@ -8,7 +8,7 @@ use crate::auth::utils::JwtUtils;
 use crate::config::Config;
 use crate::crypto::decrypt_password_async;
 use crate::db::DbPool;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use ipma_data_manager::{DataError, DataProvider, DataResult, DatabaseConfig};
 use ipma_scheduler::TaskRegistry;
 use sqlx::PgPool;
@@ -39,7 +39,7 @@ impl AppState {
     pub fn pool(&self) -> Result<&DbPool, AppError> {
         self.pool
             .as_ref()
-            .ok_or_else(|| AppError::Internal("数据库未初始化".to_string()))
+            .ok_or_else(|| AppError::Internal(msg("server.db.not_initialized")))
     }
 }
 
@@ -49,7 +49,7 @@ impl DataProvider for AppState {
         self.pool
             .as_ref()
             .map(|p| p.get_conn())
-            .ok_or_else(|| DataError::Internal("数据库未初始化".to_string()))
+            .ok_or_else(|| DataError::Internal(msg("server.db.not_initialized")))
     }
 
     fn database_config(&self) -> DatabaseConfig {
@@ -65,6 +65,6 @@ impl DataProvider for AppState {
     async fn decrypt_password(&self, encrypted: &str) -> DataResult<String> {
         decrypt_password_async(encrypted.to_string())
             .await
-            .map_err(DataError::Internal)
+            .map_err(|e| DataError::Internal(msg("server.common.decrypt_failed").with("error", e)))
     }
 }

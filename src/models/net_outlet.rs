@@ -30,14 +30,22 @@ pub struct NetOutletWithDetails {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetOutletCreate {
-    #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 100,
+        message = "server.net_outlet.validation.name_length"
+    ))]
     pub name: String,
     pub room_id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetOutletUpdate {
-    #[validate(length(min = 1, max = 100, message = "信息点名称长度必须在1到100个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 100,
+        message = "server.net_outlet.validation.name_length"
+    ))]
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
 }

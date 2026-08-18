@@ -2,6 +2,7 @@
 
 use crate::types::{ClearLogsRequest, DataError, DataProvider, DataResult, ok_json};
 use axum::response::Response;
+use ipma_common::msg;
 use serde_json::json;
 use sqlx::PgPool;
 use validator::Validate;
@@ -9,7 +10,7 @@ use validator::Validate;
 /// 核心日志清理逻辑，返回删除的行数
 pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataResult<u64> {
     if days < 0 {
-        return Err(DataError::Validation("保留天数不能为负数".to_string()));
+        return Err(DataError::Validation(msg("server.logs.days_invalid")));
     }
 
     match log_type {
@@ -103,7 +104,7 @@ pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataRe
             tx.commit().await.map_err(DataError::from)?;
             Ok(deleted)
         }
-        _ => Err(DataError::Validation("无效的日志类型".to_string())),
+        _ => Err(DataError::Validation(msg("server.logs.type_invalid"))),
     }
 }
 
@@ -120,7 +121,7 @@ pub async fn clear_logs<P: DataProvider>(
 
     Ok(ok_json(
         json!({ "deleted": deleted }),
-        &format!("成功清理 {deleted} 条日志记录"),
+        msg("server.logs.cleared").with("count", deleted),
     ))
 }
 
@@ -162,6 +163,6 @@ pub async fn get_logs_stats<P: DataProvider>(provider: P) -> DataResult<Response
             "login_logs": { "count": login_count, "oldest": login_oldest },
             "notifications": { "count": notification_count }
         }),
-        "日志统计获取成功",
+        "server.logs.stats_retrieved",
     ))
 }

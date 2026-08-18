@@ -10,11 +10,14 @@
  */
 import { showToast, escapeHtml } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
+import { translateServerMessage } from "../../utils/apiClient.js";
 import { state } from "./state.js";
 import { goToStep, showError, showLoading, hideLoading } from "./ui.js";
 
 // 安全解析 JSON 响应：后端返回空 body / 非 JSON / 网络中断时给出可读错误，
 // 而不是抛 "Unexpected end of JSON input" 这类让用户困惑的消息。
+// 解析成功后统一翻译 message（后端返回 i18n key + message_params），
+// 保证 ui.js / index.js 展示前消息已是译文。
 const parseJsonResponse = async (response) => {
   const text = await response.text();
   if (!text || !text.trim()) {
@@ -24,7 +27,7 @@ const parseJsonResponse = async (response) => {
     return { success: false, message: msg, data: null };
   }
   try {
-    return JSON.parse(text);
+    return translateServerMessage(JSON.parse(text));
   } catch (e) {
     return {
       success: false,

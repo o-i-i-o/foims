@@ -1,4 +1,10 @@
-import { apiRequest, apiGet, apiPut, apiPost } from "../utils/apiClient.js";
+import {
+  apiRequest,
+  apiGet,
+  apiPut,
+  apiPost,
+  translateServerMessage
+} from "../utils/apiClient.js";
 
 import { showToast, escapeHtml } from "../utils/ui.js";
 
@@ -508,6 +514,8 @@ export async function exportDatabase() {
       let errorMsg = "请求失败";
       try {
         const errorData = await response.json();
+        // 该处为直接 fetch，需手动翻译后端 i18n 消息
+        translateServerMessage(errorData);
         errorMsg = errorData.message || errorMsg;
       } catch (e) {}
       showToast(t("import_export.export_db_failed") + ": " + errorMsg, "error");

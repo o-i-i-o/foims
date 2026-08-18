@@ -12,6 +12,7 @@ use crate::utils::parse_network_from_row;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::{log_error, log_info, msg};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -257,7 +258,7 @@ pub async fn get_networks(
 
     Ok(crate::error::ok_json(
         paged_response(networks, total, &pagination),
-        "网络获取成功",
+        "server.network.fetched",
     ))
 }
 
@@ -275,7 +276,7 @@ pub async fn create_network(
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(req.network_region_id)
     .fetch_optional(&state.pool()?.get_conn()).await?
-    .ok_or_else(|| AppError::NotFound("网络区域不存在".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.network.region_not_found")))?;
 
     let full_network_name = req.name.clone();
 
@@ -288,9 +289,7 @@ pub async fn create_network(
     .await?;
 
     if existing_network.is_some() {
-        return Err(AppError::Conflict(
-            "同一网络区域内网络名称已存在".to_string(),
-        ));
+        return Err(AppError::Conflict(msg("server.network.name_exists")));
     }
 
     let mut ipv4_cidr_val: Option<String> = None;
@@ -304,9 +303,9 @@ pub async fn create_network(
             ipv4_cidr_val = Some(ipv4_cidr.clone());
             has_valid_cidr = true;
         } else {
-            return Err(AppError::Validation(
-                "请输入有效的IPv4 CIDR格式，例如：192.168.1.0/24".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv4_cidr_invalid",
+            )));
         }
     }
 
@@ -317,28 +316,26 @@ pub async fn create_network(
             ipv6_cidr_val = Some(ipv6_cidr.clone());
             has_valid_cidr = true;
         } else {
-            return Err(AppError::Validation(
-                "请输入有效的IPv6 CIDR格式，例如：2001:db8::/32".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv6_cidr_invalid",
+            )));
         }
     }
 
     if !has_valid_cidr {
-        return Err(AppError::Validation(
-            "至少需要提供一个有效的IPv4或IPv6 CIDR".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.network.cidr_required")));
     }
 
-    // Validate that network CIDR belongs to region CIDRs
+    // 校验网段 CIDR 是否属于所在区域的 CIDR 范围
     if let Some(ref ipv4) = ipv4_cidr_val
         && !crate::utils::cidr_belongs_to_region(
             ipv4,
             &network_region.ipv4_cidrs.clone().unwrap_or_default(),
         )
     {
-        return Err(AppError::Validation(
-            "IPv4网段不属于该网络区域的CIDR范围".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.network.ipv4_not_in_region",
+        )));
     }
 
     if let Some(ref ipv6) = ipv6_cidr_val
@@ -347,9 +344,9 @@ pub async fn create_network(
             &network_region.ipv6_cidrs.clone().unwrap_or_default(),
         )
     {
-        return Err(AppError::Validation(
-            "IPv6网段不属于该网络区域的CIDR范围".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.network.ipv6_not_in_region",
+        )));
     }
 
     if let Some(ref ipv4) = ipv4_cidr_val {
@@ -359,14 +356,12 @@ pub async fn create_network(
                 .fetch_optional(&state.pool()?.get_conn())
                 .await
                 .map_err(|e| {
-                    tracing::error!("检查IPv4网段重复时数据库查询失败: {}", e);
-                    AppError::Database(format!("检查IPv4网段重复失败: {e}"))
+                    log_error!("log.network.check_ipv4_duplicate_failed", error = e);
+                    AppError::Database(msg("server.network.check_ipv4_duplicate_failed"))
                 })?;
 
         if existing_ipv4.is_some() {
-            return Err(AppError::Conflict(
-                "IPv4网段已存在，网段不能重复".to_string(),
-            ));
+            return Err(AppError::Conflict(msg("server.network.ipv4_cidr_exists")));
         }
     }
 
@@ -377,14 +372,12 @@ pub async fn create_network(
                 .fetch_optional(&state.pool()?.get_conn())
                 .await
                 .map_err(|e| {
-                    tracing::error!("检查IPv6网段重复时数据库查询失败: {}", e);
-                    AppError::Database(format!("检查IPv6网段重复失败: {e}"))
+                    log_error!("log.network.check_ipv6_duplicate_failed", error = e);
+                    AppError::Database(msg("server.network.check_ipv6_duplicate_failed"))
                 })?;
 
         if existing_ipv6.is_some() {
-            return Err(AppError::Conflict(
-                "IPv6网段已存在，网段不能重复".to_string(),
-            ));
+            return Err(AppError::Conflict(msg("server.network.ipv6_cidr_exists")));
         }
     }
 
@@ -427,7 +420,7 @@ pub async fn create_network(
         &details,
     )
     .await;
-    tracing::info!("网络 {} 创建成功, ID: {}", full_network_name, id);
+    log_info!("log.network.created", name = full_network_name, id = id);
 
     let network = Network {
         id,
@@ -445,7 +438,7 @@ pub async fn create_network(
         updated_at: now,
     };
 
-    Ok(crate::error::ok_json(network, "网络创建成功"))
+    Ok(crate::error::ok_json(network, "server.network.created"))
 }
 
 pub async fn get_network(
@@ -467,11 +460,11 @@ pub async fn get_network(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))?;
 
     let network = parse_network_from_row(&row)?;
 
-    Ok(crate::error::ok_json(network, "网络获取成功"))
+    Ok(crate::error::ok_json(network, "server.network.fetched"))
 }
 
 pub async fn update_network(
@@ -489,7 +482,7 @@ pub async fn update_network(
             .await?;
 
     if existing_network.is_none() {
-        return Err(AppError::NotFound("网络未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.network.not_found")));
     }
 
     if let Some(network_region_id) = &req.network_region_id {
@@ -504,7 +497,7 @@ pub async fn update_network(
         .await?;
 
         if network_region.is_none() {
-            return Err(AppError::NotFound("网络区域不存在".to_string()));
+            return Err(AppError::NotFound(msg("server.network.region_not_found")));
         }
     }
 
@@ -553,17 +546,15 @@ pub async fn update_network(
     .await?;
 
     if existing_network.is_some() {
-        return Err(AppError::Conflict(
-            "同一网络区域内网络名称已存在".to_string(),
-        ));
+        return Err(AppError::Conflict(msg("server.network.name_exists")));
     }
 
-    // Validate CIDR format and check for duplicates
+    // 校验 CIDR 格式并检查重复
     if let Some(ref ipv4) = req.ipv4_cidr {
         if !crate::utils::validate_cidr(ipv4) || crate::utils::get_cidr_type(ipv4) != Some("ipv4") {
-            return Err(AppError::Validation(
-                "请输入有效的IPv4 CIDR格式，例如：192.168.1.0/24".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv4_cidr_invalid",
+            )));
         }
 
         let existing_ipv4: Option<Uuid> = sqlx::query_scalar(
@@ -574,32 +565,30 @@ pub async fn update_network(
         .fetch_optional(&state.pool()?.get_conn())
         .await
         .map_err(|e| {
-            tracing::error!("检查IPv4网段重复时数据库查询失败: {}", e);
-            AppError::Database(format!("检查IPv4网段重复失败: {e}"))
+            log_error!("log.network.check_ipv4_duplicate_failed", error = e);
+            AppError::Database(msg("server.network.check_ipv4_duplicate_failed"))
         })?;
 
         if existing_ipv4.is_some() {
-            return Err(AppError::Conflict(
-                "IPv4网段已被其他网段使用，网段不能重复".to_string(),
-            ));
+            return Err(AppError::Conflict(msg("server.network.ipv4_cidr_in_use")));
         }
 
-        // Validate that IPv4 CIDR belongs to region CIDRs
+        // 校验 IPv4 CIDR 是否属于所在区域的 CIDR 范围
         if !crate::utils::cidr_belongs_to_region(
             ipv4,
             &target_network_region.ipv4_cidrs.clone().unwrap_or_default(),
         ) {
-            return Err(AppError::Validation(
-                "IPv4网段不属于该网络区域的CIDR范围".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv4_not_in_region",
+            )));
         }
     }
 
     if let Some(ref ipv6) = req.ipv6_cidr {
         if !crate::utils::validate_cidr(ipv6) || crate::utils::get_cidr_type(ipv6) != Some("ipv6") {
-            return Err(AppError::Validation(
-                "请输入有效的IPv6 CIDR格式，例如：2001:db8::/32".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv6_cidr_invalid",
+            )));
         }
 
         let existing_ipv6: Option<Uuid> = sqlx::query_scalar(
@@ -610,24 +599,22 @@ pub async fn update_network(
         .fetch_optional(&state.pool()?.get_conn())
         .await
         .map_err(|e| {
-            tracing::error!("检查IPv6网段重复时数据库查询失败: {}", e);
-            AppError::Database(format!("检查IPv6网段重复失败: {e}"))
+            log_error!("log.network.check_ipv6_duplicate_failed", error = e);
+            AppError::Database(msg("server.network.check_ipv6_duplicate_failed"))
         })?;
 
         if existing_ipv6.is_some() {
-            return Err(AppError::Conflict(
-                "IPv6网段已被其他网段使用，网段不能重复".to_string(),
-            ));
+            return Err(AppError::Conflict(msg("server.network.ipv6_cidr_in_use")));
         }
 
-        // Validate that IPv6 CIDR belongs to region CIDRs
+        // 校验 IPv6 CIDR 是否属于所在区域的 CIDR 范围
         if !crate::utils::cidr_belongs_to_region(
             ipv6,
             &target_network_region.ipv6_cidrs.clone().unwrap_or_default(),
         ) {
-            return Err(AppError::Validation(
-                "IPv6网段不属于该网络区域的CIDR范围".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.network.ipv6_not_in_region",
+            )));
         }
     }
 
@@ -690,9 +677,9 @@ pub async fn update_network(
         &details,
     )
     .await;
-    tracing::info!("网络 {} 更新成功, ID: {}", network.name, id);
+    log_info!("log.network.updated", name = network.name, id = id);
 
-    Ok(crate::error::ok_json(network, "网络更新成功"))
+    Ok(crate::error::ok_json(network, "server.network.updated"))
 }
 
 pub async fn delete_network(
@@ -707,7 +694,7 @@ pub async fn delete_network(
             .await?;
 
     if existing_network.is_none() {
-        return Err(AppError::NotFound("网络未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.network.not_found")));
     }
 
     let ip_count: i64 =
@@ -717,9 +704,7 @@ pub async fn delete_network(
             .await?;
 
     if ip_count > 0 {
-        return Err(AppError::Validation(
-            "无法删除网络：该网络已被IP管理关联，请先解除关联关系".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.network.in_use_by_ip")));
     }
 
     let room_network_count: i64 =
@@ -729,9 +714,7 @@ pub async fn delete_network(
             .await?;
 
     if room_network_count > 0 {
-        return Err(AppError::Validation(
-            "无法删除网络：该网络已被房间关联，请先解除关联关系".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.network.in_use_by_room")));
     }
 
     let cabinet_network_count: i64 = sqlx::query_scalar::<_, i64>(
@@ -742,9 +725,9 @@ pub async fn delete_network(
         .await?;
 
     if cabinet_network_count > 0 {
-        return Err(AppError::Validation(
-            "无法删除网络：该网络已被机柜通过房间间接关联，请先解除关联关系".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.network.in_use_by_cabinet",
+        )));
     }
 
     sqlx::query("DELETE FROM network_cidrs WHERE id = $1")
@@ -764,9 +747,9 @@ pub async fn delete_network(
         &details,
     )
     .await;
-    tracing::info!("网络删除成功, ID: {}", id);
+    log_info!("log.network.deleted", id = id);
 
-    Ok(crate::error::ok_json((), "网络删除成功"))
+    Ok(crate::error::ok_json((), "server.network.deleted"))
 }
 
 pub async fn get_network_regions(
@@ -835,7 +818,7 @@ pub async fn get_network_regions(
 
     Ok(crate::error::ok_json(
         paged_response(network_regions, total, &pagination),
-        "网络区域获取成功",
+        "server.network.region_fetched",
     ))
 }
 
@@ -853,7 +836,7 @@ pub async fn create_network_region(
             .await?;
 
     if existing.is_some() {
-        return Err(AppError::Conflict("网络区域名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.network.region_name_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -897,7 +880,10 @@ pub async fn create_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json(network_region, "网络区域创建成功"))
+    Ok(crate::error::ok_json(
+        network_region,
+        "server.network.region_created",
+    ))
 }
 
 pub async fn get_network_region(
@@ -911,9 +897,12 @@ pub async fn get_network_region(
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
-    .ok_or_else(|| AppError::NotFound("网络区域未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.network.region_not_found")))?;
 
-    Ok(crate::error::ok_json(network_region, "网络区域获取成功"))
+    Ok(crate::error::ok_json(
+        network_region,
+        "server.network.region_fetched",
+    ))
 }
 
 pub async fn update_network_region(
@@ -931,7 +920,7 @@ pub async fn update_network_region(
             .await?;
 
     if existing.is_none() {
-        return Err(AppError::NotFound("网络区域未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.network.region_not_found")));
     }
 
     if let Some(name) = &req.name {
@@ -944,7 +933,7 @@ pub async fn update_network_region(
         .await?;
 
         if duplicate.is_some() {
-            return Err(AppError::Conflict("网络区域名称已存在".to_string()));
+            return Err(AppError::Conflict(msg("server.network.region_name_exists")));
         }
     }
 
@@ -990,7 +979,10 @@ pub async fn update_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json(network_region, "网络区域更新成功"))
+    Ok(crate::error::ok_json(
+        network_region,
+        "server.network.region_updated",
+    ))
 }
 
 pub async fn delete_network_region(
@@ -1005,7 +997,7 @@ pub async fn delete_network_region(
             .await?;
 
     if existing.is_none() {
-        return Err(AppError::NotFound("网络区域未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.network.region_not_found")));
     }
 
     let network_count: i64 = sqlx::query_scalar::<_, i64>(
@@ -1016,9 +1008,7 @@ pub async fn delete_network_region(
     .await?;
 
     if network_count > 0 {
-        return Err(AppError::Validation(
-            "无法删除网络区域：该区域下存在网络，请先删除相关网络".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.network.region_in_use")));
     }
 
     sqlx::query("DELETE FROM network_regions WHERE id = $1")
@@ -1039,5 +1029,5 @@ pub async fn delete_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "网络区域删除成功"))
+    Ok(crate::error::ok_json((), "server.network.region_deleted"))
 }

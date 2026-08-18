@@ -15,7 +15,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{
     IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
@@ -119,7 +119,7 @@ pub async fn get_workstations(
 
     Ok(crate::error::ok_json(
         paged_response(items, total, &pagination),
-        "工位获取成功",
+        "server.workstation.list_retrieved",
     ))
 }
 
@@ -141,7 +141,7 @@ pub async fn create_workstation(
     .fetch_optional(&mut *tx)
     .await?;
     if existing_workstation.is_some() {
-        return Err(AppError::Conflict("工位名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.workstation.name_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -190,7 +190,10 @@ pub async fn create_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json(workstation, "工位创建成功"))
+    Ok(crate::error::ok_json(
+        workstation,
+        "server.workstation.created",
+    ))
 }
 
 /// 查询工位基础信息（含房间名联表）。
@@ -244,10 +247,13 @@ pub async fn get_workstation(
     let conn = state.pool()?.get_conn();
     let mut workstation = fetch_workstation_base(&conn, id)
         .await?
-        .ok_or_else(|| AppError::NotFound("工位未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.workstation.not_found")))?;
     workstation.ips = fetch_workstation_ips(&conn, id).await?;
 
-    Ok(crate::error::ok_json(workstation, "工位获取成功"))
+    Ok(crate::error::ok_json(
+        workstation,
+        "server.workstation.fetched",
+    ))
 }
 
 /// 更新工位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
@@ -267,7 +273,7 @@ pub async fn update_workstation(
             .fetch_one(&mut *tx)
             .await?;
     if !exists {
-        return Err(AppError::NotFound("工位未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.workstation.not_found")));
     }
 
     sqlx::query(
@@ -290,7 +296,7 @@ pub async fn update_workstation(
 
     let mut result = fetch_workstation_base(&mut *tx, id)
         .await?
-        .ok_or_else(|| AppError::Internal("工位更新后查询详情失败".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.workstation.detail_query_failed")))?;
     result.ips = fetch_workstation_ips(&mut *tx, id).await?;
 
     tx.commit().await?;
@@ -311,7 +317,7 @@ pub async fn update_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json(result, "工位更新成功"))
+    Ok(crate::error::ok_json(result, "server.workstation.updated"))
 }
 
 /// 删除工位（连同布局数据一并清理，同一事务内完成）。
@@ -328,7 +334,7 @@ pub async fn delete_workstation(
             .fetch_one(&mut *tx)
             .await?;
     if !exists {
-        return Err(AppError::NotFound("工位未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.workstation.not_found")));
     }
 
     sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
@@ -356,5 +362,5 @@ pub async fn delete_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "工位删除成功"))
+    Ok(crate::error::ok_json((), "server.workstation.deleted"))
 }

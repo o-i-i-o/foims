@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AuthUser;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::Notification;
 use crate::utils::pagination::{Pagination, paged_response};
 
@@ -18,8 +18,8 @@ pub async fn get_notifications(
     auth: AuthUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let user_id =
-        Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
+    let user_id = Uuid::parse_str(&auth.sub)
+        .map_err(|_| AppError::Internal(msg("server.common.user_id_invalid")))?;
     let pagination = Pagination::from_query(&query);
     let page_size = pagination.page_size;
     let offset = pagination.offset;
@@ -69,7 +69,7 @@ pub async fn get_notifications(
 
     Ok(crate::error::ok_json(
         paged_response(notifications, total, &pagination),
-        "通知列表获取成功",
+        "server.notification.list_retrieved",
     ))
 }
 
@@ -78,8 +78,8 @@ pub async fn mark_notification_read(
     auth: AuthUser,
     Path(notification_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let user_id =
-        Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
+    let user_id = Uuid::parse_str(&auth.sub)
+        .map_err(|_| AppError::Internal(msg("server.common.user_id_invalid")))?;
     let conn = state.pool()?.get_conn();
 
     let existing_notification = sqlx::query_scalar::<_, Uuid>(
@@ -91,7 +91,7 @@ pub async fn mark_notification_read(
     .await?;
 
     if existing_notification.is_none() {
-        return Err(AppError::NotFound("通知不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.notification.not_found")));
     }
 
     sqlx::query("UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2")
@@ -100,15 +100,15 @@ pub async fn mark_notification_read(
         .execute(&conn)
         .await?;
 
-    Ok(crate::error::ok_json((), "通知已标记为已读"))
+    Ok(crate::error::ok_json((), "server.notification.marked_read"))
 }
 
 pub async fn mark_all_notifications_read(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Response, AppError> {
-    let user_id =
-        Uuid::parse_str(&auth.sub).map_err(|_| AppError::Internal("无效的用户ID".to_string()))?;
+    let user_id = Uuid::parse_str(&auth.sub)
+        .map_err(|_| AppError::Internal(msg("server.common.user_id_invalid")))?;
     let conn = state.pool()?.get_conn();
 
     sqlx::query("UPDATE notifications SET read = true WHERE user_id = $1")
@@ -116,7 +116,10 @@ pub async fn mark_all_notifications_read(
         .execute(&conn)
         .await?;
 
-    Ok(crate::error::ok_json((), "所有通知已标记为已读"))
+    Ok(crate::error::ok_json(
+        (),
+        "server.notification.all_marked_read",
+    ))
 }
 
 pub async fn create_notification(

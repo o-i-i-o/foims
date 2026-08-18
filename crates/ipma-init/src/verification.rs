@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 use axum::extract::State;
 use axum::response::Response;
+use ipma_common::{AppMessage, msg};
 use rand::RngExt;
 use tracing::info;
 
@@ -36,12 +37,16 @@ fn generate_verification_code() -> String {
 fn generate_and_print_verification_code() -> VerificationCode {
     let code = generate_verification_code();
 
+    // 分隔线为纯装饰性技术输出，内容行按 i18n 宏输出
     info!("\n======================================================================");
-    info!("                         系统初始化验证码                           ");
+    ipma_common::log_info!("log.init.verification.banner_title");
     info!("======================================================================");
-    info!("  验证码: {}", code);
-    info!("  有效期: 15分钟");
-    info!("  请在初始化页面输入此验证码以完成系统初始化");
+    ipma_common::log_info!("log.init.verification.code", code = code);
+    ipma_common::log_info!(
+        "log.init.verification.expiry",
+        minutes = VERIFICATION_CODE_EXPIRY_SECS / 60
+    );
+    ipma_common::log_info!("log.init.verification.hint");
     info!("======================================================================\n");
 
     VerificationCode::new(code)
@@ -58,25 +63,25 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     result == 0
 }
 
-pub fn verify_code(provided_code: &str) -> Result<(), String> {
+pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {
     let stored_code = get_verification_code_storage()
         .lock()
-        .map_err(|_| "无法访问验证码".to_string())?;
+        .map_err(|_| msg("server.init.verification.lock_failed"))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_else(|e| {
-            tracing::warn!("系统时间计算警告: {}", e);
+            ipma_common::log_warn!("log.init.system_time_warning", error = e);
             std::time::Duration::from_secs(0)
         })
         .as_secs();
 
     if now - stored_code.created_at > VERIFICATION_CODE_EXPIRY_SECS {
-        return Err("验证码已过期，请重新生成验证码".to_string());
+        return Err(msg("server.init.verification.expired"));
     }
 
     if !constant_time_eq(&stored_code.code, provided_code) {
-        return Err("验证码无效".to_string());
+        return Err(msg("server.init.verification.invalid"));
     }
 
     Ok(())
@@ -91,5 +96,5 @@ pub async fn get_verification_code(
         *lock = verification_code;
     }
 
-    Ok(ok_json((), "验证码生成成功，请检查服务器控制台。"))
+    Ok(ok_json((), "server.init.verification.generated"))
 }

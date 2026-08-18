@@ -47,31 +47,39 @@ pub struct DevicePortWithDevice {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DevicePortCreate {
-    #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 30,
+        message = "server.device.validation.port_number_length"
+    ))]
     pub port_number: String,
-    #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.port_name_length"))]
     pub port_name: Option<String>,
     pub port_type: Option<String>,
     pub vlan_id: Option<i32>,
     pub status: Option<String>,
-    #[validate(length(max = 20, message = "速率长度不能超过20个字符"))]
+    #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
     pub speed: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DevicePortUpdate {
-    #[validate(length(min = 1, max = 30, message = "端口号长度必须在1到30个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 30,
+        message = "server.device.validation.port_number_length"
+    ))]
     pub port_number: Option<String>,
-    #[validate(length(max = 50, message = "端口名称长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.port_name_length"))]
     pub port_name: Option<String>,
     pub port_type: Option<String>,
     pub vlan_id: Option<i32>,
     pub status: Option<String>,
-    #[validate(length(max = 20, message = "速率长度不能超过20个字符"))]
+    #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
     pub speed: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
@@ -91,16 +99,24 @@ pub struct NetworkCard {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkCardCreate {
-    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.nic_name_length"
+    ))]
     pub name: String,
     pub card_type: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkCardUpdate {
-    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.nic_name_length"
+    ))]
     pub name: Option<String>,
     pub card_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
@@ -144,20 +160,28 @@ pub struct DeviceInterfaceWithDevice {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceInterfaceCreate {
-    #[validate(length(min = 1, max = 50, message = "接口名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.interface_name_length"
+    ))]
     pub name: String,
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
-    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
+    #[validate(length(max = 20, message = "server.device.validation.mac_length"))]
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceInterfaceUpdate {
-    #[validate(length(min = 1, max = 50, message = "接口名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.interface_name_length"
+    ))]
     pub name: Option<String>,
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
@@ -271,9 +295,17 @@ pub struct DeviceTemplateSummary {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateDeviceTemplateRequest {
-    #[validate(length(min = 1, max = 100, message = "模板名称不能为空且不超过100个字符"))]
+    #[validate(length(
+        min = 1,
+        max = 100,
+        message = "server.device_template.validation.name_length"
+    ))]
     pub name: String,
-    #[validate(length(min = 1, max = 30, message = "设备类型不能为空"))]
+    #[validate(length(
+        min = 1,
+        max = 30,
+        message = "server.device_template.validation.device_type_length"
+    ))]
     pub device_type: String,
     pub brand: Option<String>,
     pub model: Option<String>,
@@ -347,13 +379,13 @@ pub struct DeviceWithDetails {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceCreate {
-    #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.device.validation.name_length"))]
     pub name: String,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.hostname_length"))]
     pub hostname: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
+        message = "server.device.validation.type_invalid"
     ))]
     pub device_type: Option<String>,
     pub brand: Option<String>,
@@ -363,39 +395,45 @@ pub struct DeviceCreate {
     pub position_id: Option<Uuid>,
     pub room_id: Uuid,
     pub template_id: Option<Uuid>,
-    #[validate(length(max = 50, message = "销售商长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.seller_length"))]
     pub seller: Option<String>,
-    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
     pub snmp_version: Option<String>,
-    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
     pub snmp_community: Option<String>,
-    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
     pub snmp_username: Option<String>,
     pub snmp_auth_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    #[validate(length(
+        max = 100,
+        message = "server.device.validation.snmp_auth_password_length"
+    ))]
     pub snmp_auth_password: Option<String>,
     pub snmp_priv_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    #[validate(length(
+        max = 100,
+        message = "server.device.validation.snmp_priv_password_length"
+    ))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
     pub cards: Option<Vec<NetworkCardSyncItem>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     pub save_as_template: Option<bool>,
-    #[validate(length(max = 100, message = "模板名称长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.template_name_length"))]
     pub template_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DeviceUpdate {
-    #[validate(length(min = 1, max = 100, message = "设备名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.device.validation.name_length"))]
     pub name: Option<String>,
-    #[validate(length(max = 100, message = "主机名长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.hostname_length"))]
     pub hostname: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
-        message = "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other"
+        message = "server.device.validation.type_invalid"
     ))]
     pub device_type: Option<String>,
     pub brand: Option<String>,
@@ -406,26 +444,32 @@ pub struct DeviceUpdate {
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub position_id: Option<Option<Uuid>>,
     pub room_id: Option<Uuid>,
-    #[validate(length(max = 50, message = "销售商长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.seller_length"))]
     pub seller: Option<String>,
-    #[validate(length(max = 100, message = "位置长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
     pub snmp_version: Option<String>,
-    #[validate(length(max = 100, message = "SNMP团体字符串长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
     pub snmp_community: Option<String>,
-    #[validate(length(max = 50, message = "SNMP用户名长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
     pub snmp_username: Option<String>,
     pub snmp_auth_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP认证密码长度不能超过100个字符"))]
+    #[validate(length(
+        max = 100,
+        message = "server.device.validation.snmp_auth_password_length"
+    ))]
     pub snmp_auth_password: Option<String>,
     pub snmp_priv_protocol: Option<String>,
-    #[validate(length(max = 100, message = "SNMP隐私密码长度不能超过100个字符"))]
+    #[validate(length(
+        max = 100,
+        message = "server.device.validation.snmp_priv_password_length"
+    ))]
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
     pub cards: Option<Vec<NetworkCardSyncItem>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     pub save_as_template: Option<bool>,
-    #[validate(length(max = 100, message = "模板名称长度不能超过100个字符"))]
+    #[validate(length(max = 100, message = "server.device.validation.template_name_length"))]
     pub template_name: Option<String>,
 }

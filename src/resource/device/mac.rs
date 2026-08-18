@@ -7,12 +7,13 @@ use async_snmp::{Client, oid};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
-use tracing::{debug, error};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{ArpEntry, DeviceMac};
+use ipma_common::{log_error, log_warn};
 
 use super::snmp::{
     SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, get_device_snmp_config,
@@ -36,7 +37,7 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
     let mut map = HashMap::new();
 
     let Ok(mut walk) = client.walk(if_name_oid) else {
-        tracing::warn!("SNMP walk 接口名称映射失败");
+        log_warn!("log.device.snmp.if_name_walk_failed");
         return map;
     };
 
@@ -73,7 +74,7 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
     let mut map = HashMap::new();
 
     let Ok(mut walk) = client.walk(dot1q_tp_fdb_port_oid) else {
-        tracing::warn!("SNMP walk VLAN映射失败");
+        log_warn!("log.device.snmp.vlan_walk_failed");
         return map;
     };
 
@@ -270,13 +271,13 @@ pub async fn get_device_mac_table(
     let (switch, ip_address) = get_device_snmp_config(&conn, &device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| AppError::Validation("设备没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| AppError::Validation(msg("server.device.no_ip_configured")))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     let entries = get_arp_table_via_snmp(&snmp_params)
         .await
-        .map_err(|e| AppError::Snmp(format!("获取ARP表失败: {e}")))?;
+        .map_err(|e| AppError::Snmp(msg("server.device.snmp.arp_fetch_failed").with("error", e)))?;
 
     let now = Utc::now();
     let mut upserted_count = 0usize;
@@ -314,11 +315,11 @@ pub async fn get_device_mac_table(
             Ok(_) => {}
             Err(e) => {
                 failed_count += 1;
-                tracing::error!(
-                    "MAC记录写入失败 (ip={}, mac={}): {}",
-                    entry.ip_address,
-                    entry.mac_address,
-                    e
+                log_error!(
+                    "log.device.mac.record_write_failed",
+                    ip = entry.ip_address,
+                    mac = entry.mac_address,
+                    error = e
                 );
             }
         }
@@ -345,13 +346,16 @@ pub async fn get_device_mac_table(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
+    // 按同步结果构造消息：有失败 / 全部成功
     let message = if failed_count > 0 {
-        format!("同步 {upserted_count} 条 MAC 记录，{failed_count} 条失败")
+        msg("server.device.mac.sync_partial")
+            .with("synced", upserted_count)
+            .with("failed", failed_count)
     } else {
-        format!("同步 {upserted_count} 条 MAC 记录")
+        msg("server.device.mac.synced").with("count", upserted_count)
     };
 
-    Ok(crate::error::ok_json(saved_macs, &message))
+    Ok(crate::error::ok_json(saved_macs, message))
 }
 
 pub async fn get_device_macs_from_db(
@@ -366,7 +370,7 @@ pub async fn get_device_macs_from_db(
         .await?;
 
     if !exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     let macs: Vec<DeviceMac> = sqlx::query_as::<_, DeviceMac>(
@@ -377,9 +381,9 @@ pub async fn get_device_macs_from_db(
     .fetch_all(&conn)
     .await
     .map_err(|e| {
-        error!("查询MAC表失败: {}", e);
-        AppError::Database("查询MAC表失败".to_string())
+        log_error!("log.device.mac.query_failed", error = e);
+        AppError::Database(msg("server.error.database"))
     })?;
 
-    Ok(crate::error::ok_json(macs, "获取MAC表成功"))
+    Ok(crate::error::ok_json(macs, "server.device.mac.fetched"))
 }

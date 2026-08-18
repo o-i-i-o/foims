@@ -12,11 +12,12 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::auth::utils::hash_password;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{log_info, log_warn};
 
 pub async fn get_users(
     _admin: crate::auth::extractor::AdminUser,
@@ -86,7 +87,7 @@ pub async fn get_users(
 
     Ok(crate::error::ok_json(
         paged_response(users, total, &pagination),
-        "用户获取成功",
+        "server.user.list_retrieved",
     ))
 }
 
@@ -106,7 +107,7 @@ pub async fn create_user(
         .await?;
 
     if existing_user.is_some() {
-        return Err(AppError::Conflict("用户名已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.user.username_exists")));
     }
 
     let existing_email = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
@@ -115,7 +116,7 @@ pub async fn create_user(
         .await?;
 
     if existing_email.is_some() {
-        return Err(AppError::Conflict("邮箱已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.user.email_exists")));
     }
 
     let hashed_password = hash_password(&req.password).await?;
@@ -140,7 +141,7 @@ pub async fn create_user(
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
-    tracing::info!("用户 {} 创建成功, ID: {}", req.username, id);
+    log_info!("log.user.created", username = req.username, id = id);
 
     let user = User {
         id,
@@ -154,7 +155,7 @@ pub async fn create_user(
         updated_at: now,
     };
 
-    Ok(crate::error::ok_json(user, "用户创建成功"))
+    Ok(crate::error::ok_json(user, "server.user.created"))
 }
 
 pub async fn get_user(
@@ -170,9 +171,9 @@ pub async fn get_user(
     .bind(id)
     .fetch_optional(&conn)
     .await?
-    .ok_or_else(|| AppError::NotFound("用户未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.user.not_found")))?;
 
-    Ok(crate::error::ok_json(user, "用户获取成功"))
+    Ok(crate::error::ok_json(user, "server.user.retrieved"))
 }
 
 pub async fn update_user(
@@ -192,7 +193,7 @@ pub async fn update_user(
         .await?;
 
     if existing_user.is_none() {
-        return Err(AppError::NotFound("用户未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.user.not_found")));
     }
 
     let now = Utc::now();
@@ -220,12 +221,12 @@ pub async fn update_user(
             .execute(&conn)
             .await
     {
-        tracing::warn!("更新 tokens_invalidated_at 失败: {}", e);
+        log_warn!("log.user.invalidate_tokens_failed", error = e);
     }
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
-    tracing::info!("用户更新成功, ID: {}", id);
+    log_info!("log.user.updated", id = id);
 
     let user = sqlx::query_as::<_, User>(
         "SELECT id, username, email, role, status, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
@@ -234,7 +235,7 @@ pub async fn update_user(
     .fetch_one(&conn)
     .await?;
 
-    Ok(crate::error::ok_json(user, "用户更新成功"))
+    Ok(crate::error::ok_json(user, "server.user.updated"))
 }
 
 pub async fn delete_user(
@@ -251,7 +252,7 @@ pub async fn delete_user(
         .await?;
 
     if existing_user.is_none() {
-        return Err(AppError::NotFound("用户未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.user.not_found")));
     }
 
     let mut tx = conn.begin().await?;
@@ -275,7 +276,7 @@ pub async fn delete_user(
         &details,
     )
     .await;
-    tracing::info!("用户删除成功, ID: {}", id);
+    log_info!("log.user.deleted", id = id);
 
-    Ok(crate::error::ok_json((), "用户删除成功"))
+    Ok(crate::error::ok_json((), "server.user.deleted"))
 }

@@ -89,30 +89,30 @@ pub struct PositionBrief {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RoomCreate {
-    #[validate(length(min = 1, max = 50, message = "房间名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: String,
     #[validate(custom(
         function = "crate::models::validate_room_type_string",
-        message = "房间类型必须是office、data_center或telecom_closet"
+        message = "server.room.validation.type_invalid"
     ))]
     pub room_type: String,
     pub org_id: Option<Uuid>,
     pub network_ids: Vec<Uuid>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RoomUpdate {
-    #[validate(length(min = 1, max = 50, message = "房间名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_room_type_option",
-        message = "房间类型必须是office、data_center或telecom_closet"
+        message = "server.room.validation.type_invalid"
     ))]
     pub room_type: Option<String>,
     pub org_id: Option<Option<Uuid>>,
     pub network_ids: Option<Vec<Uuid>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }

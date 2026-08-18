@@ -1,7 +1,5 @@
 //! 跨表索引创建。
 
-use tracing::warn;
-
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let indexes = [
         "CREATE INDEX IF NOT EXISTS idx_network_cidrs_region ON network_cidrs(network_region_id)",
@@ -46,7 +44,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     for idx in &indexes {
         if let Err(e) = sqlx::query(*idx).execute(pool).await {
-            warn!("索引创建失败（可能已存在）: {}", e);
+            ipma_common::log_warn!("log.init.index_create_failed", error = e);
         }
     }
 

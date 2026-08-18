@@ -15,9 +15,10 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{DevicePortCreate, SnmpTestRequest};
 use crate::routes::static_files::AppJson;
+use ipma_common::{AppMessage, log_info, log_warn};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DeviceForSnmp {
@@ -88,24 +89,28 @@ impl From<AppError> for SnmpError {
 
 #[derive(Error, Debug)]
 pub enum SwitchConfigError {
-    #[error("{0}")]
-    NotFound(String),
-    #[error("{0}")]
-    Database(String),
+    #[error("{}", .0.key())]
+    NotFound(AppMessage),
+    #[error("{}", .0.key())]
+    Database(AppMessage),
 }
 
 impl From<SwitchConfigError> for AppError {
     fn from(e: SwitchConfigError) -> Self {
         match e {
-            SwitchConfigError::NotFound(msg) => AppError::NotFound(msg),
-            SwitchConfigError::Database(msg) => AppError::Database(msg),
+            SwitchConfigError::NotFound(m) => AppError::NotFound(m),
+            SwitchConfigError::Database(m) => AppError::Database(m),
         }
     }
 }
 
 impl From<SwitchConfigError> for SnmpError {
     fn from(e: SwitchConfigError) -> Self {
-        SnmpError::Message(e.to_string())
+        match e {
+            SwitchConfigError::NotFound(m) | SwitchConfigError::Database(m) => {
+                SnmpError::Message(m.log_string())
+            }
+        }
     }
 }
 
@@ -124,8 +129,8 @@ pub async fn get_device_snmp_config(
     .bind(device_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| SwitchConfigError::Database(e.to_string()))?
-    .ok_or_else(|| SwitchConfigError::NotFound("设备不存在".to_string()))?;
+    .map_err(|e| SwitchConfigError::Database(msg("server.error.database").with("error", e)))?
+    .ok_or_else(|| SwitchConfigError::NotFound(msg("server.device.not_found")))?;
 
     let ip_address = get_device_ip_address(pool, device_id).await?;
 
@@ -145,7 +150,7 @@ pub async fn get_device_ip_address(
     .bind(device_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| SwitchConfigError::Database(e.to_string()))?
+    .map_err(|e| SwitchConfigError::Database(msg("server.error.database").with("error", e)))?
     .flatten();
 
     Ok(ip_address.filter(|ip| !ip.is_empty()))
@@ -259,11 +264,15 @@ pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<S
     let addr = format!("{}:{}", params.ip, params.port);
     let timeout = Duration::from_secs(timeout_secs);
 
-    tracing::info!("[test_snmp] 开始连接: {} (超时: {}秒)", addr, timeout_secs);
+    log_info!(
+        "log.device.snmp.test_connecting",
+        addr = addr,
+        timeout = timeout_secs
+    );
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
-    tracing::info!("[test_snmp] 认证构建成功");
+    log_info!("log.device.snmp.auth_built");
 
     debug!("连接SNMP设备: {} (版本: {})", addr, params.version);
 
@@ -503,11 +512,15 @@ pub async fn test_snmp_connection(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<SnmpTestRequest>,
 ) -> Result<Response, AppError> {
-    tracing::info!(
-        "[test_snmp] 测试连接: device_id={:?}, ip={:?}, snmp_version={:?}",
-        req.device_id,
-        req.ip_address,
-        req.snmp_version
+    // 记录测试请求概要（Option 值先转为字符串以便日志参数化）
+    let device_id_label = req.device_id.map(|d| d.to_string()).unwrap_or_default();
+    let ip_label = req.ip_address.clone().unwrap_or_default();
+    let version_label = req.snmp_version.clone().unwrap_or_default();
+    log_info!(
+        "log.device.snmp.test_request",
+        device_id = device_id_label,
+        ip = ip_label,
+        version = version_label
     );
 
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
@@ -555,36 +568,44 @@ pub async fn test_snmp_connection(
 
     let ip = match ip {
         Some(ref s) if !s.is_empty() => s.clone(),
-        _ => return Err(AppError::Validation("IP地址不能为空".to_string())),
+        _ => return Err(AppError::Validation(msg("server.device.snmp.ip_required"))),
     };
 
     // 验证目标 IP 不是私有/回环/链路本地/组播地址，防止 SSRF
     let parsed_ip: std::net::IpAddr = ip
         .parse()
-        .map_err(|_| AppError::Validation(format!("IP地址格式无效: {ip}")))?;
+        .map_err(|_| AppError::Validation(msg("server.device.snmp.ip_invalid").with("ip", &ip)))?;
     if parsed_ip.is_loopback() {
-        return Err(AppError::Validation("不允许连接回环地址".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.device.snmp.loopback_forbidden",
+        )));
     }
     if parsed_ip.is_multicast() {
-        return Err(AppError::Validation("不允许连接组播地址".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.device.snmp.multicast_forbidden",
+        )));
     }
     match parsed_ip {
         std::net::IpAddr::V4(v4) => {
             if v4.is_link_local() {
-                return Err(AppError::Validation("不允许连接链路本地地址".to_string()));
+                return Err(AppError::Validation(msg(
+                    "server.device.snmp.link_local_forbidden",
+                )));
             }
             if v4.is_private() {
-                tracing::warn!("[test_snmp] 目标IP {} 为私有地址，允许连接", ip);
+                log_warn!("log.device.snmp.private_ip_allowed", ip = ip);
             }
             let octets = v4.octets();
             if octets[0] == 169 && octets[1] == 254 && octets[2] == 169 && octets[3] == 254 {
-                return Err(AppError::Validation("不允许连接云元数据端点".to_string()));
+                return Err(AppError::Validation(msg(
+                    "server.device.snmp.metadata_endpoint_forbidden",
+                )));
             }
         }
         std::net::IpAddr::V6(v6) => {
             // IPv6 没有与 IPv4 相同的私有/链路本地概念，但检查常用受限范围
             if v6.is_unique_local() {
-                tracing::warn!("[test_snmp] 目标IPv6 {} 为唯一本地地址，允许连接", ip);
+                log_warn!("log.device.snmp.ula_ip_allowed", ip = ip);
             }
         }
     }
@@ -602,21 +623,26 @@ pub async fn test_snmp_connection(
         timeout_secs: 10,
     };
 
-    tracing::info!(
-        "[test_snmp] 接收到的参数: ip={}, port={}, version={}, community={}, username={:?}, auth_pass=***, priv_pass=***",
-        ip,
-        port,
-        version,
-        community.as_ref().map(|_| "***").unwrap_or("None"),
-        username
+    // 记录测试参数（敏感凭据只记录是否设置，不记录明文）
+    let community_label = community.as_ref().map(|_| "set").unwrap_or("none");
+    let username_label = username.clone().unwrap_or_default();
+    log_info!(
+        "log.device.snmp.test_params",
+        ip = ip,
+        port = port,
+        version = version,
+        community = community_label,
+        username = username_label
     );
 
     match test_snmp(&snmp_params, 5).await {
         Ok(sys_descr) => Ok(crate::error::ok_json(
             serde_json::json!({ "sysDescr": sys_descr }),
-            "SNMP连接测试成功",
+            "server.device.snmp.test_success",
         )),
-        Err(e) => Err(AppError::Snmp(format!("SNMP连接测试失败: {e}"))),
+        Err(e) => Err(AppError::Snmp(
+            msg("server.device.snmp.test_failed").with("error", e),
+        )),
     }
 }
 
@@ -628,7 +654,7 @@ pub async fn get_device_info_snmp(
         get_device_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| AppError::Validation(msg("server.device.no_ip_configured")))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
@@ -639,9 +665,11 @@ pub async fn get_device_info_snmp(
                 "model": info.model,
                 "hostname": info.hostname
             }),
-            "获取设备信息成功",
+            "server.device.snmp.info_retrieved",
         )),
-        Err(e) => Err(AppError::Snmp(format!("获取设备信息失败: {e}"))),
+        Err(e) => Err(AppError::Snmp(
+            msg("server.device.snmp.info_fetch_failed").with("error", e),
+        )),
     }
 }
 
@@ -653,12 +681,17 @@ pub async fn get_device_ports_snmp(
         get_device_snmp_config(&state.pool()?.get_conn(), &device_id).await?;
 
     let ip_address =
-        ip_address.ok_or_else(|| AppError::Validation("交换机没有配置IP地址".to_string()))?;
+        ip_address.ok_or_else(|| AppError::Validation(msg("server.device.no_ip_configured")))?;
 
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_ports_via_snmp(&snmp_params).await {
-        Ok(ports) => Ok(crate::error::ok_json(ports, "获取交换机端口信息成功")),
-        Err(e) => Err(AppError::Snmp(format!("获取交换机端口信息失败: {e}"))),
+        Ok(ports) => Ok(crate::error::ok_json(
+            ports,
+            "server.device.snmp.ports_retrieved",
+        )),
+        Err(e) => Err(AppError::Snmp(
+            msg("server.device.snmp.switch_ports_fetch_failed").with("error", e),
+        )),
     }
 }

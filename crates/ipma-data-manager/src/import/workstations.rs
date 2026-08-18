@@ -2,7 +2,7 @@
 
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
-use tracing::warn;
+use ipma_common::{log_warn, msg};
 
 pub async fn import_workstations(
     conn: &mut sqlx::PgConnection,
@@ -18,8 +18,13 @@ pub async fn import_workstations(
 
     for result in rdr.records() {
         line_num += 1;
-        let record =
-            result.map_err(|e| DataError::Validation(format!("第{line_num}行解析失败: {e}")))?;
+        let record = result.map_err(|e| {
+            DataError::Validation(
+                msg("server.import_export.row_parse_failed")
+                    .with("line", line_num)
+                    .with("error", e),
+            )
+        })?;
 
         if record.get(0).is_some_and(|s| s == "名称") {
             continue;
@@ -32,35 +37,58 @@ pub async fn import_workstations(
         let description = record.get(4).unwrap_or("").trim();
 
         if name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 名称为空"));
+            results.push(
+                msg("server.import_export.row_name_empty")
+                    .with("line", line_num)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if name.len() > 50 {
-            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
+            results.push(
+                msg("server.import_export.row_name_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if manager.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 工位 '{name}' - 负责人超过50个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_manager_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!(
-                "第{line_num}行跳过: 工位 '{name}' - 描述超过255个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_description_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 255)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if room_name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 工位 '{name}' - 房间名称为空"));
+            results.push(
+                msg("server.import_export.row_room_missing")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
@@ -73,9 +101,13 @@ pub async fn import_workstations(
                 .map_err(DataError::from)?;
 
         let Some(room_id) = room_id else {
-            results.push(format!(
-                "第{line_num}行跳过: 工位 '{name}' - 房间 '{room_name}' 不存在"
-            ));
+            results.push(
+                msg("server.import_export.row_room_not_found")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("room", room_name)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         };
@@ -117,12 +149,23 @@ pub async fn import_workstations(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{line_num}行跳过: 更新工位 '{name}' 失败 - {e}"));
+                        results.push(
+                            msg("server.import_export.row_workstation_update_failed")
+                                .with("line", line_num)
+                                .with("name", name)
+                                .with("error", e)
+                                .log_string(),
+                        );
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过工位（已存在）: {name} (房间: {room_name})"));
+                results.push(
+                    msg("server.import_export.workstation_skipped_exists")
+                        .with("name", name)
+                        .with("room", room_name)
+                        .log_string(),
+                );
                 skip_count += 1;
             }
         } else {
@@ -156,16 +199,26 @@ pub async fn import_workstations(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{line_num}行跳过: 插入工位 '{name}' 失败 - {e}"));
+                    results.push(
+                        msg("server.import_export.row_workstation_insert_failed")
+                            .with("line", line_num)
+                            .with("name", name)
+                            .with("error", e)
+                            .log_string(),
+                    );
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!(
-        "工位导入完成: 成功 {success_count}, 跳过 {skip_count}, 失败 {error_count}"
-    ));
+    results.push(
+        msg("server.import_export.workstations_summary")
+            .with("success", success_count)
+            .with("skipped", skip_count)
+            .with("failed", error_count)
+            .log_string(),
+    );
     Ok(())
 }
 
@@ -194,8 +247,17 @@ async fn handle_workstation_ip(
     } = row;
 
     if ip_address.is_empty() {
-        let action = if is_update { "更新" } else { "导入" };
-        results.push(format!("{action}工位: {name} (房间: {room_name})"));
+        let key = if is_update {
+            "server.import_export.workstation_updated"
+        } else {
+            "server.import_export.workstation_imported"
+        };
+        results.push(
+            msg(key)
+                .with("name", name)
+                .with("room", room_name)
+                .log_string(),
+        );
         return;
     }
 
@@ -206,13 +268,17 @@ async fn handle_workstation_ip(
     .fetch_optional(&mut *conn)
     .await
     .unwrap_or_else(|e| {
-        warn!("查询现有IP失败: {}", e);
+        log_warn!("log.import.existing_ip_query_failed", error = e);
         None
     });
 
     let network_id = find_room_network_id(&mut *conn, room_id, ip_address).await;
     let ip_version: i16 = if ip_address.contains(':') { 6 } else { 4 };
-    let action = if is_update { "更新" } else { "导入" };
+    let key = if is_update {
+        "server.import_export.workstation_updated_with_ip"
+    } else {
+        "server.import_export.workstation_imported_with_ip"
+    };
 
     if let Some(ip_id) = existing_ip {
         match sqlx::query(
@@ -225,8 +291,20 @@ async fn handle_workstation_ip(
         .execute(&mut *conn)
         .await
         {
-            Ok(_) => results.push(format!("{action}工位: {name} (房间: {room_name}, IP: {ip_address})")),
-            Err(e) => results.push(format!("{action}工位: {name} (房间: {room_name}, IP更新失败: {e})")),
+            Ok(_) => results.push(
+                msg(key)
+                    .with("name", name)
+                    .with("room", room_name)
+                    .with("ip", ip_address)
+                    .log_string(),
+            ),
+            Err(e) => results.push(
+                msg("server.import_export.workstation_ip_update_failed")
+                    .with("name", name)
+                    .with("room", room_name)
+                    .with("error", e)
+                    .log_string(),
+            ),
         }
     } else {
         match sqlx::query(
@@ -240,8 +318,20 @@ async fn handle_workstation_ip(
         .execute(&mut *conn)
         .await
         {
-            Ok(_) => results.push(format!("{action}工位: {name} (房间: {room_name}, IP: {ip_address})")),
-            Err(e) => results.push(format!("{action}工位: {name} (房间: {room_name}, IP写入失败: {e})")),
+            Ok(_) => results.push(
+                msg(key)
+                    .with("name", name)
+                    .with("room", room_name)
+                    .with("ip", ip_address)
+                    .log_string(),
+            ),
+            Err(e) => results.push(
+                msg("server.import_export.workstation_ip_insert_failed")
+                    .with("name", name)
+                    .with("room", room_name)
+                    .with("error", e)
+                    .log_string(),
+            ),
         }
     }
 }
@@ -269,7 +359,7 @@ pub(crate) async fn find_room_network_id(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("查询房间网络失败: {}", e);
+            log_warn!("log.import.room_network_query_failed", error = e);
             None
         }
     }

@@ -1,12 +1,25 @@
 //! 调度器生命周期管理。
 
+use ipma_common::{AppMessage, log_error, log_info, msg};
 use tokio_cron_scheduler::{Job, JobScheduler};
-use tracing::{error, info};
 
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::executor::TaskRegistryRef;
 use crate::models::{DatabaseConfig, TaskContext};
 use crate::task_log::{log_task_execution, sync_user_tasks_from_db};
+
+/// 提取错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏到日志/数据库）
+pub fn error_message(e: &SchedulerError) -> AppMessage {
+    match e {
+        SchedulerError::Database(m)
+        | SchedulerError::NotFound(m)
+        | SchedulerError::Validation(m)
+        | SchedulerError::Conflict(m)
+        | SchedulerError::TaskNotFound(m)
+        | SchedulerError::Execution(m)
+        | SchedulerError::Internal(m) => m.clone(),
+    }
+}
 
 /// 调度器构建状态（添加任务后启动）
 pub struct SchedulerState {
@@ -23,9 +36,9 @@ impl SchedulerState {
         db_config: DatabaseConfig,
         registry: TaskRegistryRef,
     ) -> SchedulerResult<Self> {
-        let scheduler = JobScheduler::new()
-            .await
-            .map_err(|e| SchedulerError::Internal(format!("创建调度器失败: {e}")))?;
+        let scheduler = JobScheduler::new().await.map_err(|e| {
+            SchedulerError::Internal(msg("server.task.scheduler.create_failed").with("error", e))
+        })?;
 
         Ok(Self {
             scheduler,
@@ -58,9 +71,10 @@ impl SchedulerState {
             let task_type_owned = task_type_owned.clone();
 
             Box::pin(async move {
-                info!(
-                    "Running scheduled task: {} ({})...",
-                    task_name, task_type_owned
+                log_info!(
+                    "log.task.running",
+                    name = task_name,
+                    task_type = task_type_owned
                 );
 
                 let ctx = TaskContext {
@@ -72,23 +86,32 @@ impl SchedulerState {
                 let result = registry.execute(&task_type_owned, &ctx).await;
 
                 match &result {
-                    Ok(msg) => {
-                        info!("Task {} completed: {}", task_name, msg);
-                        log_task_execution(&pool, &task_name, "success", msg).await;
+                    Ok(result_message) => {
+                        log_info!(
+                            "log.task.completed",
+                            name = task_name,
+                            result = result_message
+                        );
+                        log_task_execution(&pool, &task_name, "success", result_message).await;
                     }
                     Err(e) => {
-                        error!("Task {} failed: {}", task_name, e);
-                        log_task_execution(&pool, &task_name, "failed", &e.to_string()).await;
+                        // 失败原因以 i18n key 形式写入日志与任务日志表，由前端翻译
+                        let error_text = error_message(e).log_string();
+                        log_error!("log.task.failed", name = task_name, error = error_text);
+                        log_task_execution(&pool, &task_name, "failed", &error_text).await;
                     }
                 }
             })
         })
-        .map_err(|e| SchedulerError::Internal(format!("创建定时任务失败: {e}")))?;
+        .map_err(|e| {
+            SchedulerError::Internal(
+                msg("server.task.scheduler.job_create_failed").with("error", e),
+            )
+        })?;
 
-        self.scheduler
-            .add(job)
-            .await
-            .map_err(|e| SchedulerError::Internal(format!("添加定时任务失败: {e}")))?;
+        self.scheduler.add(job).await.map_err(|e| {
+            SchedulerError::Internal(msg("server.task.scheduler.job_add_failed").with("error", e))
+        })?;
 
         Ok(())
     }
@@ -101,23 +124,30 @@ impl SchedulerState {
             let pool = sync_pool.clone();
             Box::pin(async move {
                 if let Err(e) = sync_user_tasks_from_db(&pool).await {
-                    error!("Failed to sync user tasks: {}", e);
+                    log_error!(
+                        "log.task.sync_failed",
+                        error = error_message(&e).log_string()
+                    );
                 }
             })
         })
-        .map_err(|e| SchedulerError::Internal(format!("创建任务同步job失败: {e}")))?;
+        .map_err(|e| {
+            SchedulerError::Internal(
+                msg("server.task.scheduler.sync_job_create_failed").with("error", e),
+            )
+        })?;
 
-        self.scheduler
-            .add(sync_job)
-            .await
-            .map_err(|e| SchedulerError::Internal(format!("添加任务同步job失败: {e}")))?;
+        self.scheduler.add(sync_job).await.map_err(|e| {
+            SchedulerError::Internal(
+                msg("server.task.scheduler.sync_job_add_failed").with("error", e),
+            )
+        })?;
 
-        self.scheduler
-            .start()
-            .await
-            .map_err(|e| SchedulerError::Internal(format!("启动调度器失败: {e}")))?;
+        self.scheduler.start().await.map_err(|e| {
+            SchedulerError::Internal(msg("server.task.scheduler.start_failed").with("error", e))
+        })?;
 
-        info!("Cron scheduler started successfully");
+        log_info!("log.task.scheduler_started");
 
         Ok(RunningScheduler {
             scheduler: self.scheduler,
@@ -133,9 +163,9 @@ pub struct RunningScheduler {
 impl RunningScheduler {
     pub async fn shutdown(mut self) {
         if let Err(e) = self.scheduler.shutdown().await {
-            error!("关闭调度器失败: {}", e);
+            log_error!("log.task.shutdown_failed", error = e);
         } else {
-            info!("调度器已关闭");
+            log_info!("log.task.shutdown_completed");
         }
     }
 }

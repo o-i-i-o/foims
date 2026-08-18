@@ -3,6 +3,7 @@
 use crate::types::{DataError, DataProvider, DataResult};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use ipma_common::{log_error, log_info, log_warn, msg};
 
 pub struct PgPassFile {
     path: std::path::PathBuf,
@@ -24,15 +25,18 @@ impl PgPassFile {
             std::process::id()
         ));
         let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        std::fs::write(&pgpass_path, &pgpass_content)
-            .map_err(|e| DataError::Internal(format!("写入 .pgpass 文件失败: {e}")))?;
+        std::fs::write(&pgpass_path, &pgpass_content).map_err(|e| {
+            DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
+        })?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&pgpass_path, std::fs::Permissions::from_mode(0o600))
                 .map_err(|e| {
                     let _ = std::fs::remove_file(&pgpass_path);
-                    DataError::Internal(format!("设置 .pgpass 权限失败: {e}"))
+                    DataError::Internal(
+                        msg("server.backup.pgpass_permission_failed").with("error", e),
+                    )
                 })?;
         }
         Ok(Self { path: pgpass_path })
@@ -75,19 +79,19 @@ pub fn pg_dump_raw(config: &crate::types::DatabaseConfig) -> DataResult<Vec<u8>>
         .env("PGPASSFILE", pgpass.path())
         .output()
         .map_err(|e| {
-            DataError::Internal(format!(
-                "执行 pg_dump 失败: {e}。请确保系统已安装 postgresql-client。"
-            ))
+            DataError::Internal(msg("server.backup.pg_dump_exec_failed").with("error", e))
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(DataError::Internal(format!("pg_dump 执行失败: {stderr}")));
+        return Err(DataError::Internal(
+            msg("server.backup.pg_dump_failed").with("error", stderr),
+        ));
     }
 
     let sql_content = output.stdout;
     if sql_content.is_empty() {
-        return Err(DataError::Internal("导出的 SQL 文件为空".to_string()));
+        return Err(DataError::Internal(msg("server.backup.dump_empty")));
     }
 
     Ok(sql_content)
@@ -99,14 +103,19 @@ pub fn backup_to_file(
     backup_dir: &str,
     file_prefix: &str,
 ) -> DataResult<String> {
-    std::fs::create_dir_all(backup_dir)
-        .map_err(|e| DataError::Internal(format!("创建备份目录失败: {e}")))?;
+    std::fs::create_dir_all(backup_dir).map_err(|e| {
+        DataError::Internal(msg("server.backup.dir_create_failed").with("error", e))
+    })?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if let Err(e) = std::fs::set_permissions(backup_dir, std::fs::Permissions::from_mode(0o700))
         {
-            tracing::warn!("设置备份目录权限失败 {}: {}", backup_dir, e);
+            log_warn!(
+                "log.backup.dir_permission_failed",
+                path = backup_dir,
+                error = e
+            );
         }
     }
 
@@ -115,13 +124,15 @@ pub fn backup_to_file(
 
     let sql_content = pg_dump_raw(config)?;
 
-    std::fs::write(&backup_file, sql_content)
-        .map_err(|e| DataError::Internal(format!("写入备份文件失败: {e}")))?;
+    std::fs::write(&backup_file, sql_content).map_err(|e| {
+        DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
+    })?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&backup_file, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| DataError::Internal(format!("设置备份文件权限失败: {e}")))?;
+        std::fs::set_permissions(&backup_file, std::fs::Permissions::from_mode(0o600)).map_err(
+            |e| DataError::Internal(msg("server.backup.file_permission_failed").with("error", e)),
+        )?;
     }
 
     Ok(backup_file)
@@ -130,7 +141,7 @@ pub fn backup_to_file(
 /// 清理超过 keep_days 天的旧备份文件
 pub fn cleanup_old_backup_files(backup_dir: &str, keep_days: u64) -> DataResult<()> {
     let entries = std::fs::read_dir(backup_dir)
-        .map_err(|e| DataError::Internal(format!("读取备份目录失败: {e}")))?;
+        .map_err(|e| DataError::Internal(msg("server.backup.dir_read_failed").with("error", e)))?;
 
     let now = std::time::SystemTime::now();
     let cutoff = std::time::Duration::from_secs(keep_days * 24 * 60 * 60);
@@ -146,9 +157,13 @@ pub fn cleanup_old_backup_files(backup_dir: &str, keep_days: u64) -> DataResult<
             && age > cutoff
         {
             if let Err(e) = std::fs::remove_file(&path) {
-                tracing::error!("删除旧备份文件失败: {} - {}", path.display(), e);
+                log_error!(
+                    "log.cleanup.old_backup_delete_failed",
+                    path = path.display(),
+                    error = e
+                );
             } else {
-                tracing::info!("删除旧备份文件: {}", path.display());
+                log_info!("log.cleanup.old_backup_deleted", path = path.display());
             }
         }
     }
@@ -162,7 +177,9 @@ pub async fn export_database<P: DataProvider>(provider: P) -> DataResult<Respons
 
     let sql_content = tokio::task::spawn_blocking(move || pg_dump_raw(&db_config))
         .await
-        .map_err(|e| DataError::Internal(format!("pg_dump 任务失败: {e}")))??;
+        .map_err(|e| {
+            DataError::Internal(msg("server.backup.pg_dump_task_failed").with("error", e))
+        })??;
 
     Ok((
         StatusCode::OK,

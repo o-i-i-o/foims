@@ -16,7 +16,7 @@ use validator::Validate;
 
 use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{DevicePort, DevicePortCreate, DevicePortUpdate, DevicePortWithDevice};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -60,7 +60,7 @@ pub async fn get_device_ports(
 
     Ok(crate::error::ok_json(
         paged_response(data, total, &pagination),
-        "获取端口列表成功",
+        "server.device.port.list_retrieved",
     ))
 }
 
@@ -106,7 +106,9 @@ pub async fn get_all_device_ports(
     let parsed_room_id = room_id
         .as_ref()
         .map(|id| {
-            Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的room_id参数".to_string()))
+            Uuid::parse_str(id).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", "room_id"))
+            })
         })
         .transpose()?;
 
@@ -145,7 +147,7 @@ pub async fn get_all_device_ports(
 
     Ok(crate::error::ok_json(
         paged_response(data, total, &pagination),
-        "获取所有端口列表成功",
+        "server.device.port.list_all_retrieved",
     ))
 }
 
@@ -166,7 +168,7 @@ pub async fn create_device_port(
             .fetch_one(&mut *tx)
             .await?;
     if !device_exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     let port_exists = sqlx::query_scalar::<_, bool>(
@@ -177,7 +179,7 @@ pub async fn create_device_port(
     .fetch_one(&mut *tx)
     .await?;
     if port_exists {
-        return Err(AppError::Conflict("该端口号已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.device.port.number_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -227,7 +229,7 @@ pub async fn create_device_port(
     )
     .await;
 
-    Ok(crate::error::ok_json(data, "创建端口成功"))
+    Ok(crate::error::ok_json(data, "server.device.port.created"))
 }
 
 /// 获取单个端口详情（含所属设备与设备首个 IP）。
@@ -249,9 +251,9 @@ pub async fn get_device_port(
         .bind(port_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .ok_or_else(|| AppError::NotFound("端口不存在".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.device.port.not_found")))?;
 
-    Ok(crate::error::ok_json(data, "获取端口成功"))
+    Ok(crate::error::ok_json(data, "server.device.port.fetched"))
 }
 
 /// 更新端口（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
@@ -288,7 +290,7 @@ pub async fn update_device_port(
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("端口不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.port.not_found")));
     }
 
     let data = sqlx::query_as::<_, DevicePort>("SELECT * FROM device_ports WHERE id = $1")
@@ -313,7 +315,7 @@ pub async fn update_device_port(
     )
     .await;
 
-    Ok(crate::error::ok_json(data, "更新端口成功"))
+    Ok(crate::error::ok_json(data, "server.device.port.updated"))
 }
 
 /// 删除端口（被物理链路引用时由外键约束拦截并转为友好提示）。
@@ -330,13 +332,13 @@ pub async fn delete_device_port(
             if let sqlx::Error::Database(db_err) = &e
                 && db_err.is_foreign_key_violation()
             {
-                return AppError::Validation("该端口已被 cable_links 引用，无法删除".to_string());
+                return AppError::Validation(msg("server.device.port.in_use"));
             }
             AppError::from(e)
         })?;
 
     if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("端口不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.port.not_found")));
     }
 
     let details = serde_json::json!({
@@ -352,7 +354,7 @@ pub async fn delete_device_port(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "删除端口成功"))
+    Ok(crate::error::ok_json((), "server.device.port.deleted"))
 }
 
 /// 从 SNMP 同步设备端口。
@@ -375,7 +377,7 @@ pub async fn sync_ports_from_snmp(
     .bind(device_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("设备不存在".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(i.ip_address) FROM ips i
@@ -390,15 +392,15 @@ pub async fn sync_ports_from_snmp(
     let ip_address = match ip_address {
         Some(ref ip) if !ip.is_empty() => ip,
         _ => {
-            return Err(AppError::Validation("设备没有配置IP地址".to_string()));
+            return Err(AppError::Validation(msg("server.device.no_ip_configured")));
         }
     };
 
     let snmp_params = switch_data.to_snmp_params_async(ip_address).await?;
 
-    let ports = get_device_ports_via_snmp(&snmp_params)
-        .await
-        .map_err(|e| AppError::Snmp(format!("获取设备端口信息失败: {e}")))?;
+    let ports = get_device_ports_via_snmp(&snmp_params).await.map_err(|e| {
+        AppError::Snmp(msg("server.device.snmp.ports_fetch_failed").with("error", e))
+    })?;
 
     let now = Utc::now();
     let mut saved_count = 0usize;
@@ -439,15 +441,18 @@ pub async fn sync_ports_from_snmp(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
+    // 按同步结果构造消息：区分无数据 / 部分保存 / 全部保存 / 全部已存在
     let message = if ports.is_empty() {
-        "未获取到端口信息".to_string()
+        msg("server.device.port.snmp_no_ports")
     } else if saved_count > 0 && skipped_count > 0 {
-        format!("成功保存 {saved_count} 个端口，跳过 {skipped_count} 个已存在的端口")
+        msg("server.device.port.sync_partial")
+            .with("saved", saved_count)
+            .with("skipped", skipped_count)
     } else if saved_count > 0 {
-        format!("成功保存 {saved_count} 个端口到数据库")
+        msg("server.device.port.sync_saved").with("saved", saved_count)
     } else {
-        format!("所有 {skipped_count} 个端口已存在，跳过保存")
+        msg("server.device.port.sync_all_skipped").with("skipped", skipped_count)
     };
 
-    Ok(crate::error::ok_json(saved_ports, &message))
+    Ok(crate::error::ok_json(saved_ports, message))
 }

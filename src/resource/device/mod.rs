@@ -18,7 +18,7 @@ pub use nic::*;
 pub use snmp::*;
 pub use template::*;
 
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 
 /// Valid device types matching the database CHECK constraint
 const VALID_DEVICE_TYPES: [&str; 9] = [
@@ -37,9 +37,8 @@ fn validate_device_type(device_type: &str) -> Result<(), AppError> {
     if VALID_DEVICE_TYPES.contains(&device_type) {
         Ok(())
     } else {
-        Err(AppError::Validation(format!(
-            "设备类型必须是以下之一: {}",
-            VALID_DEVICE_TYPES.join(", ")
-        )))
+        Err(AppError::Validation(
+            msg("server.device.type_invalid").with("types", VALID_DEVICE_TYPES.join(", ")),
+        ))
     }
 }

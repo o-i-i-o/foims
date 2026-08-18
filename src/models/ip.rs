@@ -70,10 +70,10 @@ pub struct IpManagerCreate {
     pub network_id: Option<Uuid>,
     #[validate(custom(
         function = "crate::models::validate_ip_address",
-        message = "请输入有效的IP地址"
+        message = "server.ip.validation.ip_address_invalid"
     ))]
     pub ip_address: String,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
@@ -85,24 +85,28 @@ pub struct IpSyncItem {
     pub network_id: Option<Uuid>,
     #[validate(custom(
         function = "crate::models::validate_ip_address",
-        message = "请输入有效的IP地址"
+        message = "server.ip.validation.ip_address_invalid"
     ))]
     pub ip_address: String,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct PortSyncItem {
     pub id: Option<Uuid>,
-    #[validate(length(min = 1, max = 50, message = "网口名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.interface_name_length"
+    ))]
     pub name: String,
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
-    #[validate(length(max = 20, message = "MAC地址长度不能超过20个字符"))]
+    #[validate(length(max = 20, message = "server.device.validation.mac_length"))]
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     #[serde(default)]
     pub ips: Vec<IpSyncItem>,
@@ -111,10 +115,14 @@ pub struct PortSyncItem {
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct NetworkCardSyncItem {
     pub id: Option<Uuid>,
-    #[validate(length(min = 1, max = 50, message = "网卡名称长度必须在1到50个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 50,
+        message = "server.device.validation.nic_name_length"
+    ))]
     pub name: String,
     pub card_type: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     #[serde(default)]
     pub ports: Vec<PortSyncItem>,
@@ -131,7 +139,7 @@ pub struct AutoAssignIpRequest {
     pub network_id: Uuid,
     pub device_interface_id: Option<Uuid>,
     pub device_id: Uuid,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
@@ -146,9 +154,9 @@ pub struct IpManagerUpdate {
     #[serde(default)]
     pub device_interface_id: Option<Option<Uuid>>,
     pub ip_address: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
-    #[validate(length(max = 20, message = "状态长度不能超过20个字符"))]
+    #[validate(length(max = 20, message = "server.ip.validation.status_length"))]
     pub status: Option<String>,
     pub ip_version: Option<i16>,
 }

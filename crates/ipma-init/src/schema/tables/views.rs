@@ -4,8 +4,6 @@
 //! 的统一流程重建；CREATE 失败会中止初始化。视图列名与各资源查询
 //! （如 `src/resource/ip.rs`）约定耦合，修改时需同步业务查询。
 
-use tracing::warn;
-
 /// 视图清单：`(视图名, CREATE VIEW 语句)`。
 ///
 /// 名称仅来自本内部常量，拼入 DROP/GRANT 语句无注入风险。
@@ -186,7 +184,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await
         {
-            warn!("删除旧视图 {name} 失败: {e}");
+            ipma_common::log_warn!("log.init.view_drop_failed", name = name, error = e);
         }
 
         sqlx::query(sqlx::AssertSqlSafe((*ddl).to_string()))
@@ -200,7 +198,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await
         {
-            warn!("授予视图 {name} 权限失败: {e}");
+            ipma_common::log_warn!("log.init.view_grant_failed", name = name, error = e);
         }
     }
     Ok(())

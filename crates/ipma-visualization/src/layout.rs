@@ -3,7 +3,7 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use ipma_common::DbErrorKind;
+use ipma_common::{AppMessage, DbErrorKind, msg};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sqlx::PgPool;
@@ -15,19 +15,19 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum VisualizationError {
     #[error("数据库错误: {0}")]
-    Database(String),
+    Database(AppMessage),
 
     #[error("资源未找到: {0}")]
-    NotFound(String),
+    NotFound(AppMessage),
 
     #[error("验证失败: {0}")]
-    Validation(String),
+    Validation(AppMessage),
 
     #[error("冲突: {0}")]
-    Conflict(String),
+    Conflict(AppMessage),
 
     #[error("内部错误: {0}")]
-    Internal(String),
+    Internal(AppMessage),
 }
 
 impl VisualizationError {
@@ -45,7 +45,23 @@ impl VisualizationError {
 impl IntoResponse for VisualizationError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        let body = Json(ipma_common::ApiResponse::<()>::error(self.to_string()));
+        let body = match self {
+            VisualizationError::Database(m) => {
+                ipma_common::log_error!("log.error.database_detail", detail = m.log_string());
+                Json(ipma_common::ApiResponse::<()>::error(msg(
+                    "server.error.database",
+                )))
+            }
+            VisualizationError::Internal(m) => {
+                ipma_common::log_error!("log.error.internal_detail", detail = m.log_string());
+                Json(ipma_common::ApiResponse::<()>::error(msg(
+                    "server.error.internal",
+                )))
+            }
+            VisualizationError::NotFound(m)
+            | VisualizationError::Validation(m)
+            | VisualizationError::Conflict(m) => Json(ipma_common::ApiResponse::<()>::error(m)),
+        };
         (status, body).into_response()
     }
 }
@@ -53,10 +69,10 @@ impl IntoResponse for VisualizationError {
 impl From<sqlx::Error> for VisualizationError {
     fn from(err: sqlx::Error) -> Self {
         match ipma_common::classify_db_error(&err) {
-            DbErrorKind::Conflict(msg) => VisualizationError::Conflict(msg),
-            DbErrorKind::Validation(msg) => VisualizationError::Validation(msg),
-            DbErrorKind::NotFound => VisualizationError::NotFound("资源不存在".to_string()),
-            DbErrorKind::Database(msg) => VisualizationError::Database(msg),
+            DbErrorKind::Conflict(m) => VisualizationError::Conflict(m),
+            DbErrorKind::Validation(m) => VisualizationError::Validation(m),
+            DbErrorKind::NotFound => VisualizationError::NotFound(msg("server.common.not_found")),
+            DbErrorKind::Database(m) => VisualizationError::Database(m),
         }
     }
 }
@@ -123,7 +139,9 @@ pub async fn save_layout(
 ) -> Result<Response, VisualizationError> {
     if req.r#type == "workstation" {
         let Some(room_id) = req.room_id else {
-            return Err(VisualizationError::Validation("房间ID不能为空".to_string()));
+            return Err(VisualizationError::Validation(msg(
+                "server.visualization.room_id_required",
+            )));
         };
 
         let mut tx = pool.begin().await?;
@@ -181,10 +199,12 @@ pub async fn save_layout(
 
         tx.commit().await?;
 
-        Ok(ok_json((), "工位布局保存成功"))
+        Ok(ok_json((), "server.visualization.workstation_layout_saved"))
     } else if req.r#type == "cabinet" {
         let Some(room_id) = req.room_id else {
-            return Err(VisualizationError::Validation("房间ID不能为空".to_string()));
+            return Err(VisualizationError::Validation(msg(
+                "server.visualization.room_id_required",
+            )));
         };
 
         let mut tx = pool.begin().await?;
@@ -198,9 +218,9 @@ pub async fn save_layout(
                 .await?;
 
         if existing_count as usize != cabinet_ids.len() {
-            return Err(VisualizationError::Validation(
-                "部分机柜ID不存在或不属于该房间".to_string(),
-            ));
+            return Err(VisualizationError::Validation(msg(
+                "server.visualization.cabinet_ids_invalid",
+            )));
         }
 
         for item in &req.layout {
@@ -228,11 +248,11 @@ pub async fn save_layout(
 
         tx.commit().await?;
 
-        Ok(ok_json((), "机柜布局保存成功"))
+        Ok(ok_json((), "server.visualization.cabinet_layout_saved"))
     } else {
-        Err(VisualizationError::Validation(
-            "不支持的布局类型".to_string(),
-        ))
+        Err(VisualizationError::Validation(msg(
+            "server.visualization.type_unsupported",
+        )))
     }
 }
 
@@ -250,7 +270,7 @@ pub async fn delete_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, Vis
         .execute(pool)
         .await?;
 
-    Ok(ok_json((), "布局删除成功"))
+    Ok(ok_json((), "server.visualization.layout_deleted"))
 }
 
 pub async fn delete_positions_layout(
@@ -264,7 +284,7 @@ pub async fn delete_positions_layout(
     .execute(pool)
     .await?;
 
-    Ok(ok_json((), "机柜布局删除成功"))
+    Ok(ok_json((), "server.visualization.cabinet_layout_deleted"))
 }
 
 pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, VisualizationError> {
@@ -319,7 +339,10 @@ pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, Visual
         })
     }));
 
-    Ok(ok_json(layout_data, "布局获取成功"))
+    Ok(ok_json(
+        layout_data,
+        "server.visualization.layout_retrieved",
+    ))
 }
 
 pub async fn get_positions_layout(
@@ -353,7 +376,10 @@ pub async fn get_positions_layout(
         })
         .collect();
 
-    Ok(ok_json(items, "获取机柜布局成功"))
+    Ok(ok_json(
+        items,
+        "server.visualization.cabinet_layout_retrieved",
+    ))
 }
 
 pub async fn get_room_cabinets_with_positions(
@@ -411,5 +437,8 @@ pub async fn get_room_cabinets_with_positions(
         }));
     }
 
-    Ok(ok_json(result, "获取房间机柜数据成功"))
+    Ok(ok_json(
+        result,
+        "server.visualization.room_cabinets_retrieved",
+    ))
 }

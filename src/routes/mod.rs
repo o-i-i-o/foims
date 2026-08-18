@@ -132,7 +132,7 @@ async fn data_get_logs_stats(
 }
 
 async fn health_check() -> Response {
-    crate::error::ok_json(serde_json::json!({"status": "ok"}), "Success")
+    crate::error::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
 }
 
 /// 公开的初始化状态查询（不需要认证）
@@ -143,7 +143,7 @@ pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
         serde_json::json!({
             "init_enabled": state.config.init.enabled,
         }),
-        "Success",
+        "server.common.success",
     )
 }
 

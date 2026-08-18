@@ -4,7 +4,7 @@ use std::fs;
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::error;
 
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request};
@@ -20,7 +20,6 @@ use tower_http::trace::TraceLayer;
 use ipma::app_state::AppState;
 use ipma::config::Config;
 use ipma::db::DbPool;
-use ipma::log::setup_logging;
 use ipma::routes::get_init_status;
 use ipma::routes::init_routes;
 use ipma::routes::static_files::get_web_dir;
@@ -30,7 +29,6 @@ use ipma::system::task_executors::{
     BackupTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor, TokenCleanupTaskExecutor,
     TokenUsageCleanupTaskExecutor,
 };
-use ipma::utils::log_bilingual;
 use ipma::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
 };
@@ -328,51 +326,52 @@ fn configure_app_services(
 async fn main() -> std::io::Result<()> {
     setup_panic_handler();
 
-    setup_logging();
-
-    log_bilingual("log.output_to");
-    log_bilingual("system.start");
-
+    // 先加载配置：日志系统的语言（log_language / logfiles_i18n_out）依赖配置。
+    // 配置加载失败时尚无订阅器，先以默认英文初始化日志系统，记录错误后退出
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
-            error!("加载配置文件失败: {:?}", e);
+            let _ = ipma::log::setup_logging(None);
+            ipma_common::log_error!("system.config_load_failed", error = e);
             std::process::exit(1);
         }
     };
 
-    log_bilingual("system.config_loaded");
+    let log_files = ipma::log::setup_logging(config.i18n.as_ref());
+
+    ipma_common::log_info!("log.output_to", path = log_files.join(", "));
+    ipma_common::log_info!("system.start");
+
+    ipma_common::log_info!("system.config_loaded");
 
     if let Err(e) = ipma::crypto::check_key_integrity() {
-        error!("加密密钥完整性检查失败: {}", e);
+        ipma_common::log_error!("system.key_integrity_check_failed", error = e);
     }
 
     let shutdown = ShutdownSignal::new();
 
     let pool = if config.init.enabled {
-        log_bilingual("system.init_mode_enabled");
+        ipma_common::log_info!("system.init_mode_enabled");
         None
     } else {
         match DbPool::new(&config.database).await {
             Ok(p) => {
-                info!("数据库连接池创建成功");
+                ipma_common::log_info!("system.db_pool_created");
                 Some(p)
             }
             Err(e) => {
-                error!("创建数据库连接池失败: {:?}", e);
+                ipma_common::log_error!("system.db_pool_create_failed", error = e);
                 std::process::exit(1);
             }
         }
     };
 
     init_start_time();
-    info!("[中文] 系统启动时间初始化完成");
-    info!("[English] System startup time initialized");
+    ipma_common::log_info!("system.start_time_initialized");
 
     // 启动应用层 fail2ban 清理任务
     ipma::system::app_fail2ban::start_cleanup_task();
-    info!("[中文] 应用层 Fail2ban 清理任务已启动");
-    info!("[English] Application fail2ban cleanup task started");
+    ipma_common::log_info!("system.fail2ban_cleanup_started");
 
     let mut running_scheduler: Option<RunningScheduler> = None;
 
@@ -412,7 +411,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    error!("注册备份定时任务失败: {}", e);
+                    ipma_common::log_error!("system.register_backup_job_failed", error = e);
                 }
                 if let Err(e) = state
                     .add_system_job(
@@ -423,7 +422,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    error!("注册Token清理定时任务失败: {}", e);
+                    ipma_common::log_error!("system.register_token_cleanup_job_failed", error = e);
                 }
                 if let Err(e) = state
                     .add_system_job(
@@ -434,27 +433,27 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    error!("注册Token使用记录清理定时任务失败: {}", e);
+                    ipma_common::log_error!("system.register_usage_cleanup_job_failed", error = e);
                 }
 
                 match state.start().await {
                     Ok(running) => {
                         running_scheduler = Some(running);
-                        info!("调度器启动成功");
+                        ipma_common::log_info!("system.scheduler_started");
                     }
                     Err(e) => {
-                        error!("启动调度器失败: {}", e);
+                        ipma_common::log_error!("system.scheduler_start_failed", error = e);
                     }
                 }
             }
             Err(e) => {
-                error!("创建调度器失败: {}", e);
+                ipma_common::log_error!("system.scheduler_create_failed", error = e);
             }
         }
 
         let health_interval = config.database.health_check_interval_secs.max(1) as u64;
         db_pool.start_health_check_task(health_interval, shutdown.subscribe());
-        info!("数据库连接池健康检查任务已启动 (间隔 {health_interval}s)");
+        ipma_common::log_info!("system.db_health_check_started", interval = health_interval);
     }
 
     let rate_limiter = RateLimiter::new(
@@ -471,22 +470,26 @@ async fn main() -> std::io::Result<()> {
 
     if rate_limit_enabled {
         start_cleanup_task(rate_limiter.clone(), shutdown.subscribe());
-        info!("速率限制中间件已启用");
-        info!(
-            "IP限制: {}/{}秒",
-            config.rate_limit.ip_limit, config.rate_limit.window_secs
+        ipma_common::log_info!("system.rate_limit_enabled");
+        ipma_common::log_info!(
+            "system.rate_limit_ip",
+            limit = config.rate_limit.ip_limit,
+            window = config.rate_limit.window_secs
         );
-        info!(
-            "用户限制: {}/{}秒",
-            config.rate_limit.user_limit, config.rate_limit.window_secs
+        ipma_common::log_info!(
+            "system.rate_limit_user",
+            limit = config.rate_limit.user_limit,
+            window = config.rate_limit.window_secs
         );
-        info!(
-            "登录限制: {}/{}秒",
-            config.rate_limit.login_limit, config.rate_limit.window_secs
+        ipma_common::log_info!(
+            "system.rate_limit_login",
+            limit = config.rate_limit.login_limit,
+            window = config.rate_limit.window_secs
         );
-        info!(
-            "邮件发送限制: {}/{}秒",
-            config.rate_limit.email_limit, config.rate_limit.email_window_secs
+        ipma_common::log_info!(
+            "system.rate_limit_email",
+            limit = config.rate_limit.email_limit,
+            window = config.rate_limit.email_window_secs
         );
     }
 
@@ -495,26 +498,22 @@ async fn main() -> std::io::Result<()> {
 
     let web_dir = get_web_dir();
     if serve_static && !Path::new(web_dir).exists() {
-        info!("创建web目录: {}", web_dir);
+        ipma_common::log_info!("system.web_dir_created", path = web_dir);
         fs::create_dir_all(web_dir)?;
     }
 
     let init_enabled = config.init.enabled;
 
     if init_enabled {
-        log_bilingual("system.init_mode_enabled");
+        ipma_common::log_info!("system.init_mode_enabled");
     } else {
-        log_bilingual("system.init_mode_disabled");
+        ipma_common::log_info!("system.init_mode_disabled");
     }
 
-    info!("监听方式: UDS ({})", uds_path);
-    info!(
-        "静态文件托管: {}",
-        if serve_static {
-            "启用（axum 直接服务）"
-        } else {
-            "禁用（由 nginx 托管）"
-        }
+    ipma_common::log_info!("system.listening_uds", path = uds_path);
+    ipma_common::log_info!(
+        "system.static_serve_mode",
+        mode = if serve_static { "axum" } else { "nginx" }
     );
 
     let app_state = Arc::new(
@@ -533,18 +532,12 @@ async fn main() -> std::io::Result<()> {
     if Path::new(&uds_path).exists() {
         match tokio::net::UnixStream::connect(&uds_path).await {
             Ok(_) => {
-                error!(
-                    "UDS socket {} 已被另一个 IPMA 进程占用，拒绝启动以避免重复实例",
-                    uds_path
-                );
+                ipma_common::log_error!("system.uds_in_use", path = uds_path);
                 std::process::exit(1);
             }
             Err(_) => {
                 // 文件存在但无人监听（上次进程异常退出残留）→ 安全清理
-                tracing::info!(
-                    "检测到残留 socket 文件（无监听者），清理后继续: {}",
-                    uds_path
-                );
+                ipma_common::log_info!("system.uds_stale_cleaned", path = uds_path);
             }
         }
     }
@@ -560,8 +553,8 @@ async fn main() -> std::io::Result<()> {
         rate_limit_state,
     );
 
-    info!("UDS 服务器启动 (h2c): {}", uds_path);
-    info!("系统启动完成，等待请求...");
+    ipma_common::log_info!("system.uds_server_started", path = uds_path);
+    ipma_common::log_info!("system.ready");
 
     // 启动服务器（使用 oneshot 通道在收到第一次信号时通知主任务）
     let (signal_tx, signal_rx) = tokio::sync::oneshot::channel::<()>();
@@ -575,7 +568,7 @@ async fn main() -> std::io::Result<()> {
     let serve = axum::serve(uds_listener, app);
     let server_task = tokio::spawn(async move {
         if let Err(e) = serve.with_graceful_shutdown(graceful_shutdown).await {
-            error!("服务器运行错误: {}", e);
+            ipma_common::log_error!("system.server_run_error", error = e);
         }
     });
 
@@ -585,51 +578,51 @@ async fn main() -> std::io::Result<()> {
     // 注册强制退出信号处理（第二次 Ctrl-C）
     let force_shutdown_handle = tokio::spawn(async {
         if let Err(e) = tokio::signal::ctrl_c().await {
-            warn!("注册强制退出信号处理失败: {}", e);
+            ipma_common::log_warn!("system.force_exit_register_failed", error = e);
         }
-        warn!("收到第二次中断信号，强制退出！");
+        ipma_common::log_warn!("system.force_exit");
         std::process::exit(1);
     });
 
     // 1. 停止接收新连接并等待请求完成（graceful_shutdown 已触发，等待服务器结束）
-    info!("1. 停止接收新连接并等待请求完成...");
+    ipma_common::log_info!("system.shutdown_step_connections");
     let server_stop_timeout = tokio::time::Duration::from_secs(10);
     if let Err(e) = tokio::time::timeout(server_stop_timeout, server_task).await {
-        warn!("服务器优雅关闭超时: {}", e);
+        ipma_common::log_warn!("system.graceful_shutdown_timeout", error = e);
     }
-    info!("服务器已停止接收新连接");
+    ipma_common::log_info!("system.shutdown_connections_closed");
 
     // 2. 服务器任务已结束
-    info!("2. 等待服务器任务结束...");
-    info!("所有服务器任务已结束");
+    ipma_common::log_info!("system.shutdown_step_server");
+    ipma_common::log_info!("system.shutdown_server_done");
 
     // 3. 关闭后台任务
-    info!("3. 关闭后台任务...");
+    ipma_common::log_info!("system.shutdown_step_background");
     shutdown.request_shutdown();
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    info!("后台任务已发送关闭信号");
+    ipma_common::log_info!("system.shutdown_background_signaled");
 
     // 4. 关闭调度器
-    info!("4. 关闭调度器...");
+    ipma_common::log_info!("system.shutdown_step_scheduler");
     if let Some(scheduler) = running_scheduler
         && let Err(e) =
             tokio::time::timeout(tokio::time::Duration::from_secs(5), scheduler.shutdown()).await
     {
-        warn!("调度器关闭超时: {}", e);
+        ipma_common::log_warn!("system.scheduler_shutdown_timeout", error = e);
     }
 
     // 5. 关闭数据库连接池
-    info!("5. 关闭数据库连接池...");
+    ipma_common::log_info!("system.shutdown_step_db");
     if let Some(db_pool) = pool
         && let Err(e) =
             tokio::time::timeout(tokio::time::Duration::from_secs(5), db_pool.close()).await
     {
-        warn!("数据库连接池关闭超时: {}", e);
+        ipma_common::log_warn!("system.db_pool_close_timeout", error = e);
     }
 
     force_shutdown_handle.abort();
 
-    info!("系统已优雅关闭");
+    ipma_common::log_info!("system.shutdown_complete");
 
     Ok(())
 }

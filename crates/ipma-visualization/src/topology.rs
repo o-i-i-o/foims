@@ -2,6 +2,7 @@
 
 use axum::extract::Path;
 use axum::response::Response;
+use ipma_common::msg;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx::PgPool;
@@ -95,7 +96,10 @@ pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, Visualization
     .fetch_all(pool)
     .await?;
 
-    Ok(ok_json(nodes, "获取拓扑节点成功"))
+    Ok(ok_json(
+        nodes,
+        "server.visualization.topology_nodes_retrieved",
+    ))
 }
 
 pub async fn save_topology_nodes(
@@ -103,9 +107,9 @@ pub async fn save_topology_nodes(
     req: TopologyNodesRequest,
 ) -> Result<Response, VisualizationError> {
     if req.nodes.is_empty() {
-        return Err(VisualizationError::Validation(
-            "节点列表不能为空".to_string(),
-        ));
+        return Err(VisualizationError::Validation(msg(
+            "server.visualization.nodes_empty",
+        )));
     }
 
     let mut tx = pool.begin().await?;
@@ -117,9 +121,9 @@ pub async fn save_topology_nodes(
         .await?;
 
     if existing_count as usize != device_ids.len() {
-        return Err(VisualizationError::Validation(
-            "部分设备ID不存在".to_string(),
-        ));
+        return Err(VisualizationError::Validation(msg(
+            "server.visualization.device_ids_invalid",
+        )));
     }
 
     for node in &req.nodes {
@@ -145,7 +149,7 @@ pub async fn save_topology_nodes(
 
     tx.commit().await?;
 
-    Ok(ok_json((), "拓扑节点保存成功"))
+    Ok(ok_json((), "server.visualization.topology_nodes_saved"))
 }
 
 pub async fn delete_topology_node(
@@ -160,10 +164,12 @@ pub async fn delete_topology_node(
         .await?;
 
     if result.rows_affected() == 0 {
-        return Err(VisualizationError::NotFound("拓扑节点未找到".to_string()));
+        return Err(VisualizationError::NotFound(msg(
+            "server.visualization.topology_node_not_found",
+        )));
     }
 
-    Ok(ok_json((), "拓扑节点删除成功"))
+    Ok(ok_json((), "server.visualization.topology_node_deleted"))
 }
 
 pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, VisualizationError> {
@@ -207,7 +213,10 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
     .fetch_all(pool)
     .await?;
 
-    Ok(ok_json(connections, "获取拓扑连线成功"))
+    Ok(ok_json(
+        connections,
+        "server.visualization.topology_connections_retrieved",
+    ))
 }
 
 pub async fn create_topology_connection(
@@ -215,7 +224,9 @@ pub async fn create_topology_connection(
     req: TopologyConnectionRequest,
 ) -> Result<Response, VisualizationError> {
     if req.source_device_id == req.target_device_id {
-        return Err(VisualizationError::Validation("不允许自连接".to_string()));
+        return Err(VisualizationError::Validation(msg(
+            "server.visualization.self_connection_forbidden",
+        )));
     }
 
     let row = sqlx::query_as::<_, (Uuid,)>(
@@ -233,7 +244,7 @@ pub async fn create_topology_connection(
 
     Ok(ok_json(
         serde_json::json!({ "id": row.0 }),
-        "拓扑连线创建成功",
+        "server.visualization.topology_connection_created",
     ))
 }
 
@@ -249,10 +260,15 @@ pub async fn delete_topology_connection(
         .await?;
 
     if result.rows_affected() == 0 {
-        return Err(VisualizationError::NotFound("拓扑连线未找到".to_string()));
+        return Err(VisualizationError::NotFound(msg(
+            "server.visualization.topology_connection_not_found",
+        )));
     }
 
-    Ok(ok_json((), "拓扑连线删除成功"))
+    Ok(ok_json(
+        (),
+        "server.visualization.topology_connection_deleted",
+    ))
 }
 
 // ==================== 自动发现（基于 cable_links） ====================
@@ -392,7 +408,10 @@ async fn discover_device_pairs_via_cable_links(
 /// HTTP 处理函数：触发批量自动发现
 pub async fn trigger_auto_discover(pool: &PgPool) -> Result<Response, VisualizationError> {
     let result = auto_discover_all_topology(pool).await?;
-    Ok(ok_json(result, "自动发现完成"))
+    Ok(ok_json(
+        result,
+        "server.visualization.auto_discover_completed",
+    ))
 }
 
 /// 确保拓扑节点存在，返回是否新增

@@ -1,7 +1,7 @@
 //! 房间资源管理（含网络绑定与子资源级联）。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{
     CabinetBrief, NetOutletBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate,
     RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
@@ -157,7 +157,7 @@ pub async fn get_rooms(
 
     Ok(crate::error::ok_json(
         paged_response(rooms_with_networks, total, &pagination),
-        "房间获取成功",
+        "server.room.list_retrieved",
     ))
 }
 
@@ -174,7 +174,7 @@ pub async fn create_room(
         .await?;
 
     if existing_room.is_some() {
-        return Err(AppError::Conflict("房间名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.room.name_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -239,7 +239,7 @@ pub async fn create_room(
     )
     .await;
 
-    Ok(crate::error::ok_json(room, "房间创建成功"))
+    Ok(crate::error::ok_json(room, "server.room.created"))
 }
 
 pub async fn get_room(
@@ -250,7 +250,7 @@ pub async fn get_room(
         "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
-    .ok_or_else(|| AppError::NotFound("房间未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
 
     let room_networks = sqlx::query_as::<_, NetworkInfo>(
         r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
@@ -342,7 +342,10 @@ pub async fn get_room(
         updated_at: room.updated_at,
     };
 
-    Ok(crate::error::ok_json(room_with_networks, "房间获取成功"))
+    Ok(crate::error::ok_json(
+        room_with_networks,
+        "server.room.fetched",
+    ))
 }
 
 pub async fn update_room(
@@ -359,7 +362,7 @@ pub async fn update_room(
         .await?;
 
     if existing_room.is_none() {
-        return Err(AppError::NotFound("房间未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
     let now = Utc::now();
@@ -429,7 +432,7 @@ pub async fn update_room(
     )
     .await;
 
-    Ok(crate::error::ok_json(room, "房间更新成功"))
+    Ok(crate::error::ok_json(room, "server.room.updated"))
 }
 
 pub async fn delete_room(
@@ -443,7 +446,7 @@ pub async fn delete_room(
         .await?;
 
     if existing_room.is_none() {
-        return Err(AppError::NotFound("房间未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
     let cabinet_count: i64 =
@@ -453,9 +456,7 @@ pub async fn delete_room(
             .await?;
 
     if cabinet_count > 0 {
-        return Err(AppError::Validation(
-            "该房间已被机柜关联，无法删除".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.room.has_cabinets")));
     }
 
     let workstation_count: i64 =
@@ -465,9 +466,7 @@ pub async fn delete_room(
             .await?;
 
     if workstation_count > 0 {
-        return Err(AppError::Validation(
-            "该房间已被工位关联，无法删除".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.room.has_workstations")));
     }
 
     let net_outlet_count: i64 =
@@ -477,9 +476,7 @@ pub async fn delete_room(
             .await?;
 
     if net_outlet_count > 0 {
-        return Err(AppError::Validation(
-            "该房间已被信息点关联，无法删除".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.room.has_net_outlets")));
     }
 
     sqlx::query("DELETE FROM rooms WHERE id = $1")
@@ -500,7 +497,7 @@ pub async fn delete_room(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "房间删除成功"))
+    Ok(crate::error::ok_json((), "server.room.deleted"))
 }
 
 pub async fn get_room_networks(
@@ -513,7 +510,7 @@ pub async fn get_room_networks(
         .await?;
 
     if existing_room.is_none() {
-        return Err(AppError::NotFound("房间未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
     let room_networks = sqlx::query_as::<_, NetworkInfo>(
@@ -527,7 +524,10 @@ pub async fn get_room_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(room_networks, "房间网段获取成功"))
+    Ok(crate::error::ok_json(
+        room_networks,
+        "server.room.networks_retrieved",
+    ))
 }
 
 pub async fn sync_room_children(
@@ -542,7 +542,7 @@ pub async fn sync_room_children(
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .ok_or_else(|| AppError::NotFound("房间未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
@@ -551,7 +551,7 @@ pub async fn sync_room_children(
         let items = req
             .workstations
             .as_ref()
-            .ok_or_else(|| AppError::Validation("办公室房间需要工位数据".to_string()))?;
+            .ok_or_else(|| AppError::Validation(msg("server.room.office_requires_workstations")))?;
 
         let existing_ids: Vec<Uuid> =
             sqlx::query_scalar("SELECT id FROM workstations WHERE room_id = $1")
@@ -569,9 +569,9 @@ pub async fn sync_room_children(
                         .fetch_one(&mut *tx)
                         .await?;
                 if device_count > 0 {
-                    return Err(AppError::Validation(
-                        "工位已被设备关联，无法删除".to_string(),
-                    ));
+                    return Err(AppError::Validation(msg(
+                        "server.workstation.in_use_by_device",
+                    )));
                 }
                 sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
                     .bind(existing_id)
@@ -616,7 +616,7 @@ pub async fn sync_room_children(
         let items = req
             .cabinets
             .as_ref()
-            .ok_or_else(|| AppError::Validation("机房需要机柜数据".to_string()))?;
+            .ok_or_else(|| AppError::Validation(msg("server.room.datacenter_requires_cabinets")))?;
 
         let existing_ids: Vec<Uuid> =
             sqlx::query_scalar("SELECT id FROM cabinets WHERE room_id = $1")
@@ -634,9 +634,9 @@ pub async fn sync_room_children(
                         .fetch_one(&mut *tx)
                         .await?;
                 if position_count > 0 {
-                    return Err(AppError::Validation(
-                        "机柜已被机位关联，无法删除".to_string(),
-                    ));
+                    return Err(AppError::Validation(msg(
+                        "server.cabinet.in_use_by_positions",
+                    )));
                 }
                 sqlx::query("DELETE FROM cabinet_layouts WHERE cabinet_id = $1")
                     .bind(existing_id)
@@ -697,7 +697,7 @@ pub async fn sync_room_children(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "房间子项同步成功"))
+    Ok(crate::error::ok_json((), "server.room.children_synced"))
 }
 
 pub async fn sync_room_net_outlets(
@@ -713,7 +713,7 @@ pub async fn sync_room_net_outlets(
         .fetch_optional(&state.pool()?.get_conn())
         .await?;
     if room_exists.is_none() {
-        return Err(AppError::NotFound("房间未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
     let items = &req.net_outlets;
@@ -737,11 +737,9 @@ pub async fn sync_room_net_outlets(
                 .await
                 .map_err(|e| {
                     if let sqlx::Error::Database(db_err) = &e {
-                        let msg = db_err.message();
-                        if msg.contains("cable_links") {
-                            return AppError::Validation(
-                                "信息点已被线路引用，无法删除".to_string(),
-                            );
+                        let msg_text = db_err.message();
+                        if msg_text.contains("cable_links") {
+                            return AppError::Validation(msg("server.net_outlet.in_use"));
                         }
                     }
                     AppError::from(e)
@@ -793,7 +791,7 @@ pub async fn sync_room_net_outlets(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "房间信息点同步成功"))
+    Ok(crate::error::ok_json((), "server.room.net_outlets_synced"))
 }
 
 async fn validate_net_outlet_name(
@@ -811,7 +809,7 @@ async fn validate_net_outlet_name(
     .fetch_optional(conn)
     .await?;
     if existing.is_some() {
-        return Err(AppError::Conflict("该房间下信息点名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.net_outlet.name_exists")));
     }
     Ok(())
 }
@@ -831,7 +829,7 @@ async fn validate_workstation_name(
     .fetch_optional(conn)
     .await?;
     if existing.is_some() {
-        return Err(AppError::Conflict("工位名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.workstation.name_exists")));
     }
     Ok(())
 }
@@ -851,7 +849,7 @@ async fn validate_cabinet_name(
     .fetch_optional(conn)
     .await?;
     if existing.is_some() {
-        return Err(AppError::Conflict("机柜名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
     }
     Ok(())
 }

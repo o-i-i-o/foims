@@ -29,11 +29,11 @@ pub use ipma_scheduler::{ScheduledTask, TaskLog};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct ScheduledTaskCreate {
-    #[validate(length(min = 1, max = 100, message = "任务名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.task.validation.name_length"))]
     pub name: String,
-    #[validate(length(min = 1, max = 50, message = "任务类型长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.task.validation.type_length"))]
     pub task_type: String,
-    #[validate(length(min = 1, max = 100, message = "cron表达式长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.task.validation.cron_length"))]
     pub cron_expression: String,
     pub enabled: Option<bool>,
     pub config: Option<serde_json::Value>,
@@ -41,11 +41,11 @@ pub struct ScheduledTaskCreate {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct ScheduledTaskUpdate {
-    #[validate(length(min = 1, max = 100, message = "任务名称长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.task.validation.name_length"))]
     pub name: Option<String>,
-    #[validate(length(min = 1, max = 50, message = "任务类型长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.task.validation.type_length"))]
     pub task_type: Option<String>,
-    #[validate(length(min = 1, max = 100, message = "cron表达式长度必须在1到100个字符之间"))]
+    #[validate(length(min = 1, max = 100, message = "server.task.validation.cron_length"))]
     pub cron_expression: Option<String>,
     pub enabled: Option<bool>,
     pub config: Option<serde_json::Value>,

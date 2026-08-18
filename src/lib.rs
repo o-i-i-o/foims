@@ -8,8 +8,8 @@
 #[macro_use]
 extern crate rust_i18n;
 
-// 初始化国际化支持
-i18n!("src/i18n");
+// 初始化国际化支持（日志文案；缺失语言回退英文）
+i18n!("src/i18n", fallback = "en");
 
 pub mod app_state;
 pub mod auth;

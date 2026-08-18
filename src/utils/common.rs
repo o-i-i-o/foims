@@ -1,17 +1,18 @@
 //! 通用工具（ILIKE 转义、请求元信息、操作日志、IP 归一化等）。
 
 use std::str::FromStr;
-use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use axum::extract::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use ipma_common::{log_error, log_info, log_warn};
 use std::net::SocketAddr;
 
 use hex::encode;
 
 use crate::error::AppError;
+use ipma_common::msg;
 
 #[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
@@ -116,9 +117,9 @@ where
     .await?;
 
     if !network_in_room {
-        return Err(crate::error::AppError::Validation(
-            "所选网段不属于该房间的可用网段".to_string(),
-        ));
+        return Err(crate::error::AppError::Validation(msg(
+            "server.network.not_in_room",
+        )));
     }
 
     Ok(())
@@ -220,7 +221,7 @@ pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, 
 
     let deleted_count = result.rows_affected();
     if deleted_count > 0 {
-        info!("Cleaned up {} expired revoked tokens", deleted_count);
+        log_info!("log.token.revoked_cleaned", count = deleted_count);
     }
 
     Ok(deleted_count)
@@ -238,9 +239,10 @@ pub async fn cleanup_old_token_usage(
 
     let deleted_count = result.rows_affected();
     if deleted_count > 0 {
-        info!(
-            "Cleaned up {} old token usage records (older than {} days)",
-            deleted_count, days_to_keep
+        log_info!(
+            "log.token.usage_cleaned",
+            count = deleted_count,
+            days = days_to_keep
         );
     }
 
@@ -356,7 +358,7 @@ pub async fn log_op_best_effort(
     )
     .await
     {
-        warn!("记录操作日志失败: {}", e);
+        log_warn!("log.operation.record_failed", error = e);
     }
 }
 
@@ -459,6 +461,16 @@ fn is_ipv6_ula(v6: &std::net::Ipv6Addr) -> bool {
 
 // ==================== 通知与告警 ====================
 
+/// 组装站内通知内容：以 JSON 形式存储「消息 key + 动态参数」，
+/// 前端展示时解析并按用户语言翻译；历史遗留的纯文本内容原样展示。
+fn encode_notification_content(key: &str, params: &[(&str, &str)]) -> String {
+    let params: std::collections::HashMap<String, String> = params
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    serde_json::json!({ "key": key, "params": params }).to_string()
+}
+
 pub async fn send_mac_change_notification(
     pool: &sqlx::PgPool,
     workstation_id: &Uuid,
@@ -474,28 +486,36 @@ pub async fn send_mac_change_notification(
         {
             Ok(Some(name)) => name,
             Ok(None) => {
-                warn!("未找到工位ID: {}", workstation_id);
+                log_warn!("log.workstation.not_found", id = workstation_id);
                 workstation_id.to_string()
             }
             Err(e) => {
-                warn!("查询工位名称失败: {}", e);
+                log_warn!("log.workstation.query_name_failed", error = e);
                 workstation_id.to_string()
             }
         };
 
-    let content =
-        format!("工位 {workstation_name} {ip_address} 的MAC地址已从 {old_mac} 变更为 {new_mac}");
+    let content = encode_notification_content(
+        "server.notification.mac_change.body",
+        &[
+            ("workstation", &workstation_name),
+            ("ip", ip_address),
+            ("old_mac", old_mac),
+            ("new_mac", new_mac),
+        ],
+    );
     crate::log::notification::create_notification(
         pool,
-        "MAC地址变更",
+        "server.notification.mac_change.title",
         &content,
         "mac_change",
         None,
     )
     .await?;
-    info!(
-        "MAC地址变更站内通知创建成功: 工位={}, IP={}",
-        workstation_name, ip_address
+    log_info!(
+        "log.mac_change.notification_created",
+        workstation = workstation_name,
+        ip = ip_address
     );
 
     match crate::system::smtp::send_mac_change_email(
@@ -507,31 +527,27 @@ pub async fn send_mac_change_notification(
     )
     .await
     {
-        Ok(()) => info!("MAC地址变更邮件通知发送成功: 工位={}", workstation_name),
+        Ok(()) => {
+            log_info!("log.mac_change.email_sent", workstation = workstation_name)
+        }
         // SMTP 未配置属预期情形，降级为告警日志
-        Err(AppError::NotFound(msg)) => {
-            warn!(
-                "MAC地址变更邮件通知跳过: 工位={}, 原因: {}",
-                workstation_name, msg
+        Err(AppError::NotFound(m)) => {
+            log_warn!(
+                "log.mac_change.email_skipped",
+                workstation = workstation_name,
+                reason = m.key()
             );
         }
         Err(e) => {
-            error!(
-                "MAC地址变更邮件通知发送失败: 工位={}, 错误: {}",
-                workstation_name, e
+            log_error!(
+                "log.mac_change.email_send_failed",
+                workstation = workstation_name,
+                error = e
             );
         }
     }
 
     Ok(())
-}
-
-pub fn log_bilingual(message_key: &str) {
-    let zh_message = rust_i18n::t!(message_key, locale = "zh");
-    let en_message = rust_i18n::t!(message_key, locale = "en");
-
-    info!("[中文] {}", zh_message);
-    info!("[English] {}", en_message);
 }
 
 // ==================== 网络查询工具 ====================
@@ -566,7 +582,9 @@ pub fn parse_network_from_row(
             .get::<Option<serde_json::Value>, _>(8)
             .map(|v| {
                 serde_json::from_value(v).map_err(|e| {
-                    crate::error::AppError::Internal(format!("IPv4 DNS反序列化失败: {e}"))
+                    crate::error::AppError::Internal(
+                        msg("server.common.deserialize_failed").with("error", e),
+                    )
                 })
             })
             .transpose()?,
@@ -574,7 +592,9 @@ pub fn parse_network_from_row(
             .get::<Option<serde_json::Value>, _>(9)
             .map(|v| {
                 serde_json::from_value(v).map_err(|e| {
-                    crate::error::AppError::Internal(format!("IPv6 DNS反序列化失败: {e}"))
+                    crate::error::AppError::Internal(
+                        msg("server.common.deserialize_failed").with("error", e),
+                    )
                 })
             })
             .transpose()?,

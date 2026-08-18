@@ -8,8 +8,10 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
-use tracing::{error, info, warn};
 use uuid::Uuid;
+
+use crate::error::{AppError, msg};
+use ipma_common::{log_error, log_info, log_warn};
 
 static GLOBAL_TOKEN_CACHE: LazyLock<Arc<DashMap<String, TokenCacheValue>>> =
     LazyLock::new(|| Arc::new(DashMap::new()));
@@ -65,7 +67,7 @@ impl JwtUtils {
         let secret = Self::get_jwt_secret(&config.jwt.secret);
 
         Self::validate_secret_strength(&secret).map_err(|e| {
-            error!("{}", e);
+            log_error!("log.auth.jwt_secret_invalid", detail = e);
             e
         })?;
 
@@ -91,7 +93,7 @@ impl JwtUtils {
         if let Ok(env_secret) = std::env::var("IPMA_JWT_SECRET")
             && !env_secret.is_empty()
         {
-            info!("从环境变量获取JWT密钥");
+            log_info!("log.auth.jwt_secret_from_env");
             return env_secret;
         }
 
@@ -99,7 +101,7 @@ impl JwtUtils {
         if config_secret.is_empty() {
             // 如果配置文件中也没有密钥，生成一个临时密钥（仅用于开发）
             let temp_secret = Self::generate_secure_secret();
-            error!("JWT密钥未配置，生成临时密钥（仅用于开发环境）");
+            log_error!("log.auth.jwt_secret_missing_temp");
             temp_secret
         } else {
             config_secret.to_string()
@@ -121,7 +123,7 @@ impl JwtUtils {
         let has_special = secret.chars().any(|c| !c.is_alphanumeric());
 
         if !has_uppercase || !has_lowercase || !has_digit || !has_special {
-            warn!("JWT密钥复杂度不足，建议包含大小写字母、数字和特殊字符");
+            log_warn!("log.auth.jwt_secret_weak");
         }
 
         Ok(())
@@ -272,7 +274,7 @@ impl JwtUtils {
                         });
                     }
                     _ = shutdown_rx.recv() => {
-                        tracing::info!("JWT缓存清理任务收到关闭信号，停止运行");
+                        log_info!("log.auth.jwt_cache_cleanup_stopped");
                         break;
                     }
                 }
@@ -347,10 +349,14 @@ pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String
 }
 
 // 异步密码哈希函数，使用 spawn_blocking 避免阻塞 tokio 线程
-pub async fn hash_password(password: &str) -> Result<String, crate::error::AppError> {
+pub async fn hash_password(password: &str) -> Result<String, AppError> {
     let password = password.to_string();
     tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
         .await
-        .map_err(|e| crate::error::AppError::Internal(format!("密码哈希任务失败: {e}")))?
-        .map_err(|err| crate::error::AppError::Internal(format!("密码哈希错误: {err}")))
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_hash_task_failed").with("error", e))
+        })?
+        .map_err(|err| {
+            AppError::Internal(msg("server.auth.password_hash_failed").with("error", err))
+        })
 }

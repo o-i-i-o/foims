@@ -41,26 +41,34 @@ pub struct CabinetPositionWithDetails {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetPositionCreate {
-    #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
     pub name: String,
     pub cabinet_id: Option<Uuid>,
-    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
+    #[validate(range(
+        min = 1,
+        max = 48,
+        message = "server.position.validation.start_u_range"
+    ))]
     pub start_u: i32,
-    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
+    #[validate(range(min = 1, max = 48, message = "server.position.validation.end_u_range"))]
     pub end_u: i32,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetPositionUpdate {
-    #[validate(length(min = 1, max = 50, message = "机位名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
     pub name: Option<String>,
     pub cabinet_id: Option<Uuid>,
-    #[validate(range(min = 1, max = 48, message = "起始U位必须在1到48之间"))]
+    #[validate(range(
+        min = 1,
+        max = 48,
+        message = "server.position.validation.start_u_range"
+    ))]
     pub start_u: Option<i32>,
-    #[validate(range(min = 1, max = 48, message = "结束U位必须在1到48之间"))]
+    #[validate(range(min = 1, max = 48, message = "server.position.validation.end_u_range"))]
     pub end_u: Option<i32>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }

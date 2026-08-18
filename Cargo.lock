@@ -1905,7 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.46"
+version = "0.15.47"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -1959,11 +1959,12 @@ dependencies = [
  "serde",
  "sqlx",
  "tracing",
+ "validator",
 ]
 
 [[package]]
 name = "ipma-data-manager"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes-gcm",
  "async-trait",

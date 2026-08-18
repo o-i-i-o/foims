@@ -4,6 +4,19 @@ use async_trait::async_trait;
 use ipma_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
 use uuid::Uuid;
 
+use ipma_common::{AppMessage, log_info, msg};
+
+/// 提取数据层错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏）
+pub(crate) fn data_error_message(e: ipma_data_manager::DataError) -> AppMessage {
+    match e {
+        ipma_data_manager::DataError::Database(m)
+        | ipma_data_manager::DataError::NotFound(m)
+        | ipma_data_manager::DataError::Validation(m)
+        | ipma_data_manager::DataError::Conflict(m)
+        | ipma_data_manager::DataError::Internal(m) => m,
+    }
+}
+
 /// 数据库备份任务执行器
 pub struct BackupTaskExecutor;
 
@@ -21,17 +34,23 @@ impl TaskExecutor for BackupTaskExecutor {
             let path = ipma_data_manager::backup_to_file(&db_config, backup_dir, "ipma_backup")?;
             ipma_data_manager::cleanup_old_backup_files(backup_dir, 7)?;
             let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            Ok::<String, ipma_data_manager::DataError>(format!(
-                "备份成功: {path} ({:.2} MB)",
-                file_size as f64 / (1024.0 * 1024.0)
+            Ok::<(String, String), ipma_data_manager::DataError>((
+                path,
+                format!("{:.2}", file_size as f64 / (1024.0 * 1024.0)),
             ))
         })
         .await;
 
         match result {
-            Ok(Ok(msg)) => Ok(msg),
-            Ok(Err(e)) => Err(SchedulerError::Execution(e.to_string())),
-            Err(e) => Err(SchedulerError::Execution(format!("备份任务执行异常: {e}"))),
+            // 备份路径与体积写入运维日志，任务结果仅保留消息 key
+            Ok(Ok((path, size_mb))) => {
+                log_info!("log.task.backup_completed", path = path, size_mb = size_mb);
+                Ok("server.task.backup_completed".to_string())
+            }
+            Ok(Err(e)) => Err(SchedulerError::Execution(data_error_message(e))),
+            Err(e) => Err(SchedulerError::Execution(
+                msg("server.task.backup_task_failed").with("error", e),
+            )),
         }
     }
 }
@@ -48,8 +67,11 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
         let count = crate::utils::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
-            .map_err(|e| SchedulerError::Execution(format!("Token清理失败: {e}")))?;
-        Ok(format!("清理了 {count} 个过期token"))
+            .map_err(|e| {
+                SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))
+            })?;
+        log_info!("log.task.token_cleanup_completed", count = count);
+        Ok("server.task.token_cleanup_completed".to_string())
     }
 }
 
@@ -71,8 +93,17 @@ impl TaskExecutor for TokenUsageCleanupTaskExecutor {
 
         let count = crate::utils::cleanup_old_token_usage(&ctx.pool, days)
             .await
-            .map_err(|e| SchedulerError::Execution(format!("Token使用记录清理失败: {e}")))?;
-        Ok(format!("清理了 {count} 条{days}天前的token_usage记录"))
+            .map_err(|e| {
+                SchedulerError::Execution(
+                    msg("server.task.token_usage_cleanup_failed").with("error", e),
+                )
+            })?;
+        log_info!(
+            "log.task.token_usage_cleanup_completed",
+            count = count,
+            days = days
+        );
+        Ok("server.task.token_usage_cleanup_completed".to_string())
     }
 }
 
@@ -94,9 +125,14 @@ impl TaskExecutor for LogCleanupTaskExecutor {
 
         let deleted = ipma_data_manager::clear_logs_core(&ctx.pool, days, "all")
             .await
-            .map_err(|e| SchedulerError::Execution(e.to_string()))?;
+            .map_err(|e| SchedulerError::Execution(data_error_message(e)))?;
 
-        Ok(format!("清理了 {deleted} 条日志记录"))
+        log_info!(
+            "log.task.log_cleanup_completed",
+            count = deleted,
+            days = days
+        );
+        Ok("server.task.log_cleanup_completed".to_string())
     }
 }
 
@@ -125,12 +161,12 @@ impl TaskExecutor for MacSyncTaskExecutor {
             (Some(device_id), Some(network_id)) => {
                 crate::resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
                     .await
-                    .map(|()| "MAC同步成功".to_string())
-                    .map_err(|e| SchedulerError::Execution(format!("MAC同步失败: {e}")))
+                    .map(|()| "server.task.mac_sync_completed".to_string())
+                    .map_err(|e| SchedulerError::Execution(ipma_common::AppMessage::new(e)))
             }
-            _ => Err(SchedulerError::Validation(
-                "MAC同步任务需要配置device_id和network_id".to_string(),
-            )),
+            _ => Err(SchedulerError::Validation(msg(
+                "server.task.mac_sync_missing_config",
+            ))),
         }
     }
 }

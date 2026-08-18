@@ -8,7 +8,7 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::OperationLog;
 use crate::utils::pagination::{Pagination, paged_response};
 
@@ -55,22 +55,22 @@ pub async fn get_operation_logs(
     let conn = state.pool()?.get_conn();
 
     let (total, logs) = if has_filters {
-        let parsed_resource_id =
-            if resource_id.is_empty() {
-                None
-            } else {
-                Some(Uuid::parse_str(&resource_id).map_err(|_| {
-                    AppError::Validation(format!("resource_id格式无效: {resource_id}"))
-                })?)
-            };
+        let parsed_resource_id = if resource_id.is_empty() {
+            None
+        } else {
+            Some(Uuid::parse_str(&resource_id).map_err(|_| {
+                AppError::Validation(
+                    msg("server.logs.invalid_resource_id").with("value", &resource_id),
+                )
+            })?)
+        };
 
         let parsed_user_id = if user_id.is_empty() {
             None
         } else {
-            Some(
-                Uuid::parse_str(&user_id)
-                    .map_err(|_| AppError::Validation(format!("user_id格式无效: {user_id}")))?,
-            )
+            Some(Uuid::parse_str(&user_id).map_err(|_| {
+                AppError::Validation(msg("server.logs.invalid_user_id").with("value", &user_id))
+            })?)
         };
 
         let total: i64 = sqlx::query_scalar::<_, i64>(
@@ -129,6 +129,6 @@ pub async fn get_operation_logs(
 
     Ok(crate::error::ok_json(
         paged_response(logs, total, &pagination),
-        "操作日志获取成功",
+        "server.logs.operation_retrieved",
     ))
 }

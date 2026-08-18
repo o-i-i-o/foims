@@ -34,23 +34,23 @@ pub fn get_web_dir() -> &'static str {
 
 // ==================== JSON 提取器包装器 ====================
 
-/// 将 axum `JsonRejection` 转换为带友好中文提示的 `AppError`
+/// 将 axum `JsonRejection` 转换为带 i18n key 的 `AppError`
 fn map_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> AppError {
     let err_str = rejection.to_string();
-    let friendly_message = if err_str.contains("missing field") {
+    let message = if err_str.contains("missing field") {
         let field_name = err_str.split('`').nth(1).unwrap_or("");
-        format!("缺少必填字段: {field_name}")
+        ipma_common::msg("server.common.missing_field").with("field", field_name)
     } else if err_str.contains("invalid type") {
         let field_info = err_str.split(": ").nth(1).unwrap_or("");
-        format!("字段类型错误: {field_info}")
+        ipma_common::msg("server.common.invalid_type").with("info", field_info)
     } else {
-        format!("JSON格式错误: {err_str}")
+        ipma_common::msg("server.common.json_error").with("error", err_str)
     };
 
-    AppError::Validation(friendly_message)
+    AppError::Validation(message)
 }
 
-/// JSON 请求体提取器（带友好的中文错误提示）
+/// JSON 请求体提取器（带 i18n key 错误提示）
 ///
 /// 替代 actix-web 中的 `web::JsonConfig::error_handler` 配置。
 /// 所有需要解析 JSON 请求体的 handler 应使用 `AppJson<T>` 而不是 `Json<T>`。

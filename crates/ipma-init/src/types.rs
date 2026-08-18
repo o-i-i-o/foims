@@ -18,7 +18,7 @@ impl VerificationCode {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|e| {
-                tracing::warn!("系统时间计算警告: {}", e);
+                ipma_common::log_warn!("log.init.system_time_warning", error = e);
                 std::time::Duration::from_secs(0)
             })
             .as_secs();
@@ -31,15 +31,19 @@ impl VerificationCode {
 
 #[derive(Debug, Serialize, Deserialize, validator::Validate)]
 pub struct InitRequest {
-    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    #[validate(length(min = 3, max = 50, message = "server.init.validation.username_length"))]
     pub username: String,
-    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "server.init.validation.password_length"))]
     pub password: String,
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.init.validation.email_invalid"))]
     pub email: String,
-    #[validate(length(min = 1, max = 20, message = "角色长度必须在1到20个字符之间"))]
+    #[validate(length(min = 1, max = 20, message = "server.init.validation.role_length"))]
     pub role: String,
-    #[validate(length(min = 16, max = 16, message = "验证码长度必须为16个字符"))]
+    #[validate(length(
+        min = 16,
+        max = 16,
+        message = "server.init.validation.verification_length"
+    ))]
     pub verification: String,
 }
 
@@ -56,6 +60,7 @@ pub struct ImportDatabaseRequest {
 #[derive(Debug, Serialize)]
 pub struct CreateDatabaseResponse {
     pub backup_file: Option<String>,
+    /// 消息 key（由前端翻译），与外层 ApiResponse.message 一致
     pub message: String,
 }
 

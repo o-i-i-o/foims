@@ -6,8 +6,8 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use ipma_common::msg;
 use sqlx::PgPool;
-use tracing::info;
 
 use crate::check::{check_has_data, check_required_tables_exist};
 use crate::connection::ensure_database_and_schema;
@@ -29,7 +29,7 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
                     "has_tables": false,
                     "required_tables_exist": false,
                     "has_data": false,
-                    "error": e
+                    "error": e.log_string()
                 }
             })));
         }
@@ -87,11 +87,13 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
 }
 
 pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
-    info!("收到重启程序请求，正在准备重启...");
-    (ctx.restart_fn)().await.map_err(InitError::Internal)?;
+    ipma_common::log_info!("log.init.restart_requested");
+    (ctx.restart_fn)()
+        .await
+        .map_err(|e| InitError::Internal(msg("server.init.restart_failed").with("error", e)))?;
     Ok(json_ok(serde_json::json!({
         "success": true,
-        "message": "服务重启命令已发送，服务正在重启...",
+        "message": "server.init.restart_command_sent",
         "data": null,
     })))
 }
@@ -104,7 +106,7 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
     {
         Ok(s) => s.success(),
         Err(e) => {
-            tracing::warn!("检查 psql 安装状态失败: {}", e);
+            ipma_common::log_warn!("log.init.psql_check_failed", error = e);
             false
         }
     };
@@ -113,7 +115,7 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
         return Ok(json_ok(serde_json::json!({
             "installed": false,
             "running": false,
-            "error": "PostgreSQL is not installed. Please install PostgreSQL first."
+            "error": "server.init.pgsql_not_installed"
         })));
     }
 
@@ -126,7 +128,7 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
         Ok(_) => Ok(json_ok(serde_json::json!({
             "installed": true,
             "running": true,
-            "message": "PostgreSQL is running and connection is successful."
+            "message": "server.init.pgsql_running"
         }))),
         Err(e) => {
             let error_str = e.to_string();

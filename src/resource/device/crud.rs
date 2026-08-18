@@ -2,7 +2,7 @@
 
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -171,8 +171,9 @@ pub async fn get_devices(
     let items: Vec<serde_json::Value> = devices
         .into_iter()
         .map(|d| {
-            let mut v = serde_json::to_value(&d)
-                .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
+            let mut v = serde_json::to_value(&d).map_err(|e| {
+                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+            })?;
             v["snmp_community"] = serde_json::Value::Null;
             v["snmp_auth_password"] = serde_json::Value::Null;
             v["snmp_priv_password"] = serde_json::Value::Null;
@@ -182,7 +183,7 @@ pub async fn get_devices(
 
     Ok(crate::error::ok_json(
         paged_response(items, total, &pagination),
-        "设备列表获取成功",
+        "server.device.list_retrieved",
     ))
 }
 
@@ -202,7 +203,9 @@ pub async fn create_device(
     };
 
     if req.workstation_id.is_some() && req.position_id.is_some() {
-        return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.device.workstation_position_exclusive",
+        )));
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -214,7 +217,7 @@ pub async fn create_device(
                 .fetch_one(&mut *tx)
                 .await?;
         if !exists {
-            return Err(AppError::NotFound("工位未找到".to_string()));
+            return Err(AppError::NotFound(msg("server.workstation.not_found")));
         }
     }
 
@@ -225,7 +228,7 @@ pub async fn create_device(
                 .fetch_one(&mut *tx)
                 .await?;
         if !exists {
-            return Err(AppError::NotFound("机位未找到".to_string()));
+            return Err(AppError::NotFound(msg("server.position.not_found")));
         }
     }
 
@@ -236,7 +239,7 @@ pub async fn create_device(
                 .fetch_one(&mut *tx)
                 .await?;
         if !template_exists {
-            return Err(AppError::NotFound("设备模板未找到".to_string()));
+            return Err(AppError::NotFound(msg("server.device_template.not_found")));
         }
 
         let tmpl_device_type: Option<String> =
@@ -355,7 +358,7 @@ pub async fn create_device(
             if let sqlx::Error::Database(db_err) = &e
                 && db_err.is_unique_violation()
             {
-                return AppError::Conflict("设备模板名称已存在".to_string());
+                return AppError::Conflict(msg("server.device_template.name_exists"));
             }
             AppError::from(e)
         })?;
@@ -415,7 +418,7 @@ pub async fn create_device(
     )
     .await;
 
-    Ok(crate::error::ok_json(device, "设备创建成功"))
+    Ok(crate::error::ok_json(device, "server.device.created"))
 }
 
 pub async fn get_device(
@@ -440,15 +443,15 @@ pub async fn get_device(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     // Fetch associated network cards (with nested ports and IPs)
     let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&device)
-        .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["cards"] = serde_json::to_value(cards)
-        .map_err(|e| AppError::Internal(format!("序列化网卡数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 
     let decrypted_community =
         crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await?;
@@ -457,13 +460,13 @@ pub async fn get_device(
     let decrypted_priv =
         crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()).await?;
     result["snmp_community"] = serde_json::to_value(decrypted_community)
-        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["snmp_auth_password"] = serde_json::to_value(decrypted_auth)
-        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["snmp_priv_password"] = serde_json::to_value(decrypted_priv)
-        .map_err(|e| AppError::Internal(format!("序列化SNMP数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 
-    Ok(crate::error::ok_json(result, "设备获取成功"))
+    Ok(crate::error::ok_json(result, "server.device.fetched"))
 }
 
 pub async fn update_device(
@@ -488,7 +491,7 @@ pub async fn update_device(
             .await?;
 
     if existing.is_none() {
-        return Err(AppError::NotFound("设备未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     // Fetch current device data for business validations
@@ -512,7 +515,7 @@ pub async fn update_device(
                     .fetch_one(&mut *tx)
                     .await?;
             if !exists {
-                return Err(AppError::NotFound("工位未找到".to_string()));
+                return Err(AppError::NotFound(msg("server.workstation.not_found")));
             }
             Some(*ws_id)
         }
@@ -528,7 +531,7 @@ pub async fn update_device(
                     .fetch_one(&mut *tx)
                     .await?;
             if !exists {
-                return Err(AppError::NotFound("机位未找到".to_string()));
+                return Err(AppError::NotFound(msg("server.position.not_found")));
             }
             Some(*pos_id)
         }
@@ -536,7 +539,9 @@ pub async fn update_device(
     };
 
     if resolved_workstation_id.is_some() && resolved_position_id.is_some() {
-        return Err(AppError::Validation("工位和机位不能同时指定".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.device.workstation_position_exclusive",
+        )));
     }
 
     let now = Utc::now();
@@ -664,7 +669,7 @@ pub async fn update_device(
             if let sqlx::Error::Database(db_err) = &e
                 && db_err.is_unique_violation()
             {
-                return AppError::Conflict("设备模板名称已存在".to_string());
+                return AppError::Conflict(msg("server.device_template.name_exists"));
             }
             AppError::from(e)
         })?;
@@ -702,9 +707,9 @@ pub async fn update_device(
     let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     let mut result = serde_json::to_value(&updated_device)
-        .map_err(|e| AppError::Internal(format!("序列化设备数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["cards"] = serde_json::to_value(cards)
-        .map_err(|e| AppError::Internal(format!("序列化网卡数据失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 
     let details = serde_json::json!({
         "name": updated_device.name,
@@ -723,7 +728,7 @@ pub async fn update_device(
     )
     .await;
 
-    Ok(crate::error::ok_json(result, "设备更新成功"))
+    Ok(crate::error::ok_json(result, "server.device.updated"))
 }
 
 pub async fn delete_device(
@@ -740,7 +745,7 @@ pub async fn delete_device(
             .await?;
 
     if existing.is_none() {
-        return Err(AppError::NotFound("设备未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     sqlx::query("DELETE FROM devices WHERE id = $1")
@@ -763,5 +768,5 @@ pub async fn delete_device(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "设备删除成功"))
+    Ok(crate::error::ok_json((), "server.device.deleted"))
 }

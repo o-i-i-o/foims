@@ -8,9 +8,10 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
 
 use crate::config::DatabaseConfig;
+use ipma_common::{log_error, log_info, log_warn};
 
 pub fn url_encode_component(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
@@ -72,7 +73,7 @@ impl PoolMetrics {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or_else(|e| {
-                tracing::warn!("系统时间异常: {}, 使用0作为时间戳", e);
+                log_warn!("log.db.system_time_abnormal", error = e);
                 0
             });
         self.last_updated.store(now, Ordering::Relaxed);
@@ -250,13 +251,13 @@ impl DbPool {
 
         let pool = Self::create_pool(&url, &pool_config).await?;
 
-        info!(
-            "数据库连接池创建成功: max={}, min={}, acquire_timeout={}s, idle_timeout={}s, max_lifetime={}s",
-            pool_config.max_connections,
-            pool_config.min_connections,
-            pool_config.acquire_timeout_secs,
-            pool_config.idle_timeout_secs,
-            pool_config.max_lifetime_secs
+        log_info!(
+            "system.db_pool_created",
+            max = pool_config.max_connections,
+            min = pool_config.min_connections,
+            acquire_timeout = pool_config.acquire_timeout_secs,
+            idle_timeout = pool_config.idle_timeout_secs,
+            max_lifetime = pool_config.max_lifetime_secs
         );
 
         Ok(Self {
@@ -335,20 +336,20 @@ impl DbPool {
 
         if utilization >= threshold {
             self.metrics.record_leak_warning();
-            warn!(
-                "连接池接近耗尽，可能存在连接泄漏! 活跃: {}/{}, 利用率: {:.1}%, 阈值: {:.1}%",
-                active,
-                total,
-                utilization * 100.0,
-                threshold * 100.0
+            log_warn!(
+                "log.db.pool_near_exhausted",
+                active = active,
+                total = total,
+                utilization = format!("{:.1}", utilization * 100.0),
+                threshold = format!("{:.1}", threshold * 100.0)
             );
         }
 
         if active == total && total > 0 {
-            error!(
-                "连接池已完全耗尽! 所有 {} 个连接都在使用中，等待队列: {}",
-                total,
-                self.metrics.waiting_requests.load(Ordering::Relaxed)
+            log_error!(
+                "log.db.pool_exhausted",
+                total = total,
+                waiting = self.metrics.waiting_requests.load(Ordering::Relaxed)
             );
         }
     }
@@ -381,14 +382,17 @@ impl DbPool {
                     _ = interval.tick() => {
                         let check_result = pool_clone.health_check().await;
                         match check_result {
-                            Ok(_) => debug!("数据库连接池健康检查通过"),
+                            Ok(_) => debug!("db pool health check passed"),
                             Err(e) => {
                                 let metrics = pool_clone.get_metrics();
                                 let status = pool_clone.get_pool_status();
-                                error!(
-                                    "数据库连接池健康检查失败: {} (活跃: {}, 空闲: {}, 等待: {}, 池大小: {})",
-                                    e, metrics.active_connections, metrics.idle_connections,
-                                    metrics.waiting_requests, status.size
+                                log_error!(
+                                    "log.db.health_check_failed",
+                                    error = e,
+                                    active = metrics.active_connections,
+                                    idle = metrics.idle_connections,
+                                    waiting = metrics.waiting_requests,
+                                    size = status.size
                                 );
                             }
                         }
@@ -399,15 +403,17 @@ impl DbPool {
                         let metrics = pool_clone.get_metrics();
                         let status = pool_clone.get_pool_status();
                         if metrics.waiting_requests > 0 || (status.size > 0 && metrics.active_connections as f32 / status.size as f32 > 0.8) {
-                            info!(
-                                "连接池状态 - 活跃: {}, 空闲: {}, 等待: {}, 池大小: {}",
-                                metrics.active_connections, metrics.idle_connections,
-                                metrics.waiting_requests, status.size
+                            log_info!(
+                                "log.db.pool_status",
+                                active = metrics.active_connections,
+                                idle = metrics.idle_connections,
+                                waiting = metrics.waiting_requests,
+                                size = status.size
                             );
                         }
                     }
                     _ = shutdown_rx.recv() => {
-                        info!("数据库连接池健康检查任务收到关闭信号，停止运行");
+                        log_info!("log.db.health_check_stopped");
                         break;
                     }
                 }
@@ -418,7 +424,7 @@ impl DbPool {
     pub async fn close(&self) {
         let pool = self.get_pool();
         pool.close().await;
-        info!("数据库连接池已关闭");
+        log_info!("log.db.pool_closed");
     }
 }
 

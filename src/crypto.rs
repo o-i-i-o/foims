@@ -10,9 +10,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::OnceLock;
-use tracing::{error, info, warn};
 
-use crate::error::AppError;
+use crate::error::{AppError, msg};
+use ipma_common::{log_error, log_info, log_warn};
 
 const NONCE_SIZE: usize = 12;
 
@@ -21,7 +21,7 @@ static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
 /// 将文件权限设置为 0600,仅所有者可读写,防止敏感密钥被其他用户读取
 fn secure_file_permissions(path: &str) {
     if let Err(e) = fs::set_permissions(path, fs::Permissions::from_mode(0o600)) {
-        warn!("设置文件权限失败 {}: {}", path, e);
+        log_warn!("log.crypto.set_permissions_failed", path = path, error = e);
     }
 }
 
@@ -48,10 +48,10 @@ fn load_encryption_key() -> Vec<u8> {
         match fs::read(&key_path) {
             Ok(key) if key.len() == 32 => {
                 if let Err(e) = fs::copy(&key_path, &key_backup_path) {
-                    warn!("无法创建密钥备份: {}，不影响正常运行", e);
+                    log_warn!("log.crypto.backup_create_failed", error = e);
                 } else {
                     secure_file_permissions(&key_backup_path);
-                    info!("加密密钥已备份到: {}", key_backup_path);
+                    log_info!("log.crypto.key_backed_up", path = key_backup_path);
                 }
                 return key;
             }
@@ -62,14 +62,14 @@ fn load_encryption_key() -> Vec<u8> {
                 );
             }
             Err(e) => {
-                error!("读取加密密钥文件失败: {}", e);
+                log_error!("log.crypto.key_read_failed", error = e);
                 if Path::new(&key_backup_path).exists() {
-                    warn!("尝试从备份密钥恢复...");
+                    log_warn!("log.crypto.restore_from_backup");
                     match fs::read(&key_backup_path) {
                         Ok(key) if key.len() == 32 => {
-                            info!("成功从备份恢复密钥!");
+                            log_info!("log.crypto.key_restored");
                             if let Err(e) = fs::write(&key_path, &key) {
-                                error!("恢复密钥后无法重新保存: {}", e);
+                                log_error!("log.crypto.key_resave_failed", error = e);
                             } else {
                                 secure_file_permissions(&key_path);
                             }
@@ -89,27 +89,27 @@ fn load_encryption_key() -> Vec<u8> {
     }
 
     if Path::new(&key_backup_path).exists() {
-        warn!("检测到备份密钥但主密钥不存在，正在从备份恢复...");
+        log_warn!("log.crypto.backup_only_detected");
         match fs::read(&key_backup_path) {
             Ok(key) if key.len() == 32 => {
-                info!("成功从备份恢复密钥!");
+                log_info!("log.crypto.key_restored");
                 if let Err(e) = fs::write(&key_path, &key) {
-                    error!("恢复密钥后无法重新保存: {}", e);
+                    log_error!("log.crypto.key_resave_failed", error = e);
                 } else {
                     secure_file_permissions(&key_path);
                 }
                 return key;
             }
             Ok(_) => {
-                warn!("备份密钥长度不正确，将生成新密钥");
+                log_warn!("log.crypto.backup_length_invalid");
             }
             Err(e) => {
-                warn!("读取备份密钥失败: {}，将生成新密钥", e);
+                log_warn!("log.crypto.backup_read_failed", error = e);
             }
         }
     }
 
-    info!("加密密钥文件不存在，正在自动生成新密钥: {}", key_path);
+    log_info!("log.crypto.key_generating", path = key_path);
     let mut key = vec![0u8; 32];
     rand::rng().fill(&mut key);
 
@@ -119,12 +119,12 @@ fn load_encryption_key() -> Vec<u8> {
     secure_file_permissions(&key_path);
 
     if let Err(e) = fs::write(&key_backup_path, &key) {
-        warn!("保存密钥备份失败: {}，不影响正常运行", e);
+        log_warn!("log.crypto.backup_save_failed", error = e);
     } else {
         secure_file_permissions(&key_backup_path);
     }
 
-    info!("加密密钥已生成并保存到: {}", key_path);
+    log_info!("log.crypto.key_generated", path = key_path);
     key
 }
 
@@ -139,26 +139,26 @@ pub fn check_key_integrity() -> Result<(), String> {
     }
 
     let (key_path, backup_path) = get_key_paths();
-    info!("加密密钥完整性检查通过");
-    info!("主密钥路径: {}", key_path);
-    info!("备份密钥路径: {}", backup_path);
+    log_info!("log.crypto.integrity_check_passed");
+    log_info!("log.crypto.main_key_path", path = key_path);
+    log_info!("log.crypto.backup_key_path", path = backup_path);
 
     if Path::new(&backup_path).exists() {
         match fs::read(&backup_path) {
             Ok(backup_key) if backup_key == key => {
-                info!("密钥备份完整性检查通过（与主密钥一致）");
+                log_info!("log.crypto.backup_integrity_passed");
             }
             Ok(_) => {
-                warn!("警告: 备份密钥与主密钥不一致!");
-                warn!("这可能是正常的（如果主密钥是最近更新的）");
-                warn!("也可能是数据损坏的信号（如果主密钥丢失后从备份恢复过）");
+                log_warn!("log.crypto.backup_mismatch");
+                log_warn!("log.crypto.backup_mismatch_recent");
+                log_warn!("log.crypto.backup_mismatch_corruption");
             }
             Err(e) => {
-                warn!("警告: 无法读取备份密钥进行完整性检查: {}", e);
+                log_warn!("log.crypto.backup_read_failed", error = e);
             }
         }
     } else {
-        warn!("警告: 未找到密钥备份文件");
+        log_warn!("log.crypto.backup_missing");
     }
 
     Ok(())
@@ -167,8 +167,8 @@ pub fn check_key_integrity() -> Result<(), String> {
 pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     let key = get_encryption_key();
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| {
-        error!("创建加密器失败: {}", e);
-        AppError::Internal(format!("创建加密器失败: {e}"))
+        log_error!("log.crypto.cipher_init_failed", error = e);
+        AppError::Internal(msg("server.common.cipher_init_failed").with("error", e))
     })?;
 
     let mut nonce_bytes = [0u8; NONCE_SIZE];
@@ -176,8 +176,8 @@ pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     let nonce = aes_gcm::Nonce::from(nonce_bytes);
 
     let ciphertext = cipher.encrypt(&nonce, password.as_bytes()).map_err(|e| {
-        error!("加密失败: {}", e);
-        AppError::Internal(format!("加密失败: {e}"))
+        log_error!("log.crypto.encrypt_failed", error = e);
+        AppError::Internal(msg("server.common.encrypt_failed").with("error", e))
     })?;
 
     let mut result = nonce_bytes.to_vec();
@@ -210,18 +210,14 @@ pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     let nonce = aes_gcm::Nonce::from(nonce_arr);
 
     let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
-        warn!("解密失败: AES-GCM解密错误");
-        warn!("可能原因:");
-        warn!("1. 数据库中的加密数据使用了旧密钥");
-        warn!("2. 密钥文件(/etc/ipma/encryption.key)在程序运行后被修改或删除");
-        warn!("3. 系统重启或容器重建导致密钥丢失");
-        warn!("解决方案:");
-        warn!("- 检查/etc/ipma/encryption.key.backup是否有旧密钥备份");
-        warn!("- 如果有备份，尝试恢复到encryption.key");
-        warn!("- 如果没有备份，受影响的加密数据(如SNMP密码、SMTP密码、2FA密钥)需要重新设置");
-        warn!("密钥长度: {}字节", key.len());
-        warn!("Nonce长度: {}字节", nonce_bytes.len());
-        warn!("密文长度: {}字节", ciphertext.len());
+        // 静态排查提示 + 关键长度参数，便于定位密钥不一致类问题
+        log_warn!("log.crypto.decrypt_failed_hint");
+        log_warn!(
+            "log.crypto.decrypt_detail",
+            key_len = key.len(),
+            nonce_len = nonce_bytes.len(),
+            ciphertext_len = ciphertext.len()
+        );
         "解密失败: AES-GCM解密错误".to_string()
     })?;
 
@@ -231,7 +227,9 @@ pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
 pub async fn encrypt_password_async(password: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || encrypt_password(&password))
         .await
-        .map_err(|e| AppError::Internal(format!("加密任务失败: {e}")))?
+        .map_err(|e| {
+            AppError::Internal(msg("server.common.encrypt_task_failed").with("error", e))
+        })?
 }
 
 pub async fn decrypt_password_async(encrypted: String) -> Result<String, String> {
@@ -245,7 +243,7 @@ pub async fn decrypt_credential_async(value: Option<String>) -> Result<Option<St
         Some(v) => decrypt_password_async(v)
             .await
             .map(Some)
-            .map_err(AppError::Internal),
+            .map_err(|e| AppError::Internal(msg("server.common.decrypt_failed").with("error", e))),
         None => Ok(None),
     }
 }

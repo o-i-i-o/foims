@@ -16,7 +16,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
 };
@@ -55,7 +55,7 @@ pub async fn get_device_interfaces(
 
     Ok(crate::error::ok_json(
         paged_response(data, total, &pagination),
-        "获取接口列表成功",
+        "server.device.interface.list_retrieved",
     ))
 }
 
@@ -107,7 +107,7 @@ pub async fn get_all_device_interfaces(
 
     Ok(crate::error::ok_json(
         paged_response(data, total, &pagination),
-        "获取所有接口列表成功",
+        "server.device.interface.list_all_retrieved",
     ))
 }
 
@@ -133,7 +133,7 @@ pub async fn create_device_interface(
             .fetch_one(&mut *tx)
             .await?;
     if !device_exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     let interface_exists = sqlx::query_scalar::<_, bool>(
@@ -144,7 +144,9 @@ pub async fn create_device_interface(
     .fetch_one(&mut *tx)
     .await?;
     if interface_exists {
-        return Err(AppError::Conflict("该接口名已存在".to_string()));
+        return Err(AppError::Conflict(msg(
+            "server.device.interface.name_exists",
+        )));
     }
 
     let id = Uuid::new_v4();
@@ -193,7 +195,10 @@ pub async fn create_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json(data, "创建接口成功"))
+    Ok(crate::error::ok_json(
+        data,
+        "server.device.interface.created",
+    ))
 }
 
 /// 获取单个接口详情（含所属设备名）。
@@ -210,9 +215,12 @@ pub async fn get_device_interface(
     .bind(interface_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("接口不存在".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.device.interface.not_found")))?;
 
-    Ok(crate::error::ok_json(data, "获取接口成功"))
+    Ok(crate::error::ok_json(
+        data,
+        "server.device.interface.fetched",
+    ))
 }
 
 /// 更新网络接口。
@@ -259,7 +267,7 @@ pub async fn update_device_interface(
 
     let result = builder.build().execute(&state.pool()?.get_conn()).await?;
     if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("接口不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.interface.not_found")));
     }
 
     let data =
@@ -285,7 +293,10 @@ pub async fn update_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json(data, "更新接口成功"))
+    Ok(crate::error::ok_json(
+        data,
+        "server.device.interface.updated",
+    ))
 }
 
 /// 删除网络接口。
@@ -321,7 +332,7 @@ pub async fn delete_device_interface(
         .execute(&mut *tx)
         .await?;
     if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("接口不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.interface.not_found")));
     }
 
     tx.commit().await?;
@@ -339,5 +350,5 @@ pub async fn delete_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "删除接口成功"))
+    Ok(crate::error::ok_json((), "server.device.interface.deleted"))
 }

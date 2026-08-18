@@ -15,9 +15,9 @@ use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use crate::utils::validate_network_in_room;
 use chrono::Utc;
+use ipma_common::{AppMessage, log_error, log_info, log_warn, msg};
 use std::net::IpAddr;
 use std::str::FromStr;
-use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -201,7 +201,7 @@ pub async fn get_ip_managers(
 
     Ok(crate::error::ok_json(
         paged_response(mappings, total, &pagination),
-        "IP获取成功",
+        "server.ip.fetched",
     ))
 }
 
@@ -215,7 +215,9 @@ pub async fn get_device_ips(
         .await?;
 
     if !exists {
-        return Err(AppError::NotFound("设备未找到".to_string()));
+        return Err(AppError::NotFound(
+            msg("server.device.not_found").with("id", id),
+        ));
     }
 
     let ips: Vec<IpManager> = sqlx::query_as(
@@ -240,7 +242,7 @@ pub async fn get_device_ips(
 
     Ok(crate::error::ok_json(
         serde_json::json!({ "items": ips }),
-        "设备IP列表获取成功",
+        "server.ip.device_list_fetched",
     ))
 }
 
@@ -258,7 +260,7 @@ pub async fn create_device_ip(
         .bind(id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.device.not_found").with("id", id)))?;
 
     let existing_ip: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
@@ -267,7 +269,9 @@ pub async fn create_device_ip(
             .await?;
 
     if existing_ip.is_some() {
-        return Err(AppError::Conflict("IP地址已存在".to_string()));
+        return Err(AppError::Conflict(
+            msg("server.ip.already_exists").with("ip", &req.ip_address),
+        ));
     }
 
     let network_id: Option<Uuid> = sqlx::query_scalar(
@@ -314,7 +318,7 @@ pub async fn create_device_ip(
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| {
-                AppError::Validation("指定的网口不存在或不属于该设备".to_string())
+                AppError::Validation(msg("server.ip.interface_invalid"))
             })?
         }
         None => {
@@ -324,9 +328,9 @@ pub async fn create_device_ip(
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?
-            .ok_or_else(|| AppError::Validation(
-                "设备没有可用的物理接口，请先创建接口或指定 device_interface_id".to_string()
-            ))?
+            .ok_or_else(|| {
+                AppError::Validation(msg("server.ip.no_physical_interface"))
+            })?
         }
     };
 
@@ -395,7 +399,7 @@ pub async fn create_device_ip(
     )
     .await;
 
-    Ok(crate::error::ok_json(mapping, "设备IP创建成功"))
+    Ok(crate::error::ok_json(mapping, "server.ip.created"))
 }
 
 struct MacSyncResult {
@@ -446,7 +450,7 @@ async fn sync_switch_macs(
             .await?;
 
     if !network_exists {
-        return Err(AppError::Validation("未找到网段信息".to_string()));
+        return Err(AppError::Validation(msg("server.network.not_found")));
     }
 
     // 一次性取出观测数据与网口快照
@@ -512,9 +516,12 @@ async fn sync_switch_macs(
 
         // 同一网口在一次观测中出现不同 MAC 属异常数据，按冲突跳过处理
         if entry.new_mac != mac {
-            warn!(
-                "MAC观测冲突: 网口 {} 同时出现 {} 与 {}，跳过 {}",
-                iface_id, entry.new_mac, mac, ip
+            log_warn!(
+                "log.ip.mac_observation_conflict",
+                interface = iface_id,
+                existing_mac = entry.new_mac,
+                new_mac = mac,
+                ip = ip
             );
             skipped_count += 1;
             continue;
@@ -542,10 +549,7 @@ async fn sync_switch_macs(
         .flatten();
 
         if let Some(conflict_ip) = mac_conflict {
-            warn!(
-                "MAC冲突: {} 已被不同设备的 IP {} 使用，跳过更新",
-                iface.new_mac, conflict_ip
-            );
+            log_warn!("log.ip.mac_conflict", mac = iface.new_mac, ip = conflict_ip);
             skipped_count += iface.observed_ip_ids.len();
             continue;
         }
@@ -565,7 +569,11 @@ async fn sync_switch_macs(
                     .execute(&mut *tx)
                     .await?;
                 updated_count += iface.observed_ip_ids.len();
-                info!("MAC地址写入: 网口={}, MAC={}", iface_id, iface.new_mac);
+                log_info!(
+                    "log.ip.mac_written",
+                    interface = iface_id,
+                    mac = iface.new_mac
+                );
             }
             Some(old) if old == iface.new_mac => {
                 unchanged_count += iface.observed_ip_ids.len();
@@ -579,10 +587,14 @@ async fn sync_switch_macs(
                 updated_count += iface.observed_ip_ids.len();
 
                 if let Some(ws_id) = iface.workstation_id {
-                    let ips = iface.observed_ip_addrs.join("、");
-                    info!(
-                        "检测到MAC地址变更: 网口={}, IP={}, 旧MAC={}, 新MAC={}",
-                        iface_id, ips, old, iface.new_mac
+                    // 多个 IP 以逗号连接作为通知参数值，避免语言相关分隔符
+                    let ips = iface.observed_ip_addrs.join(", ");
+                    log_info!(
+                        "log.ip.mac_changed",
+                        interface = iface_id,
+                        ip = ips,
+                        old_mac = old,
+                        new_mac = iface.new_mac
                     );
                     pending_notifications.push((
                         ws_id,
@@ -601,8 +613,10 @@ async fn sync_switch_macs(
         match crate::utils::send_mac_change_notification(pool, &ws_id, &ip, &old_mac, &new_mac)
             .await
         {
-            Ok(()) => info!("MAC地址变更通知发送成功: IP={}", ip),
-            Err(e) => error!("MAC地址变更通知发送失败: IP={}, 错误: {}", ip, e),
+            Ok(()) => log_info!("log.ip.mac_change_notification_sent", ip = ip),
+            Err(e) => {
+                log_error!("log.ip.mac_change_notification_failed", ip = ip, error = e)
+            }
         }
     }
 
@@ -627,15 +641,15 @@ pub async fn pull_ip_managers(
         if result.total_macs_on_switch == 0 {
             return Ok((
                 StatusCode::OK,
-                Json(ApiResponse::<Vec<IpManager>>::error(
-                    "该设备暂无MAC数据，请先在设备管理中同步MAC表",
-                )),
+                Json(ApiResponse::<Vec<IpManager>>::error(msg(
+                    "server.ip.no_mac_data",
+                ))),
             )
                 .into_response());
         }
         return Ok(crate::error::ok_json(
             Vec::<IpManager>::new(),
-            "未发现属于该网段的已管理IP地址",
+            "server.ip.no_managed_ips",
         ));
     }
 
@@ -655,24 +669,18 @@ pub async fn pull_ip_managers(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    let mut message_parts = Vec::new();
-    if result.updated_count > 0 {
-        message_parts.push(format!("更新 {} 条MAC地址", result.updated_count));
-    }
-    if result.unchanged_count > 0 {
-        message_parts.push(format!("{} 条MAC无变化", result.unchanged_count));
-    }
-    if result.skipped_count > 0 {
-        message_parts.push(format!("{} 条MAC冲突跳过", result.skipped_count));
-    }
+    // 同步结果以 key + 计数参数返回，由前端按语言翻译汇总文案
+    let message =
+        if result.updated_count == 0 && result.unchanged_count == 0 && result.skipped_count == 0 {
+            msg("server.ip.mac_sync_no_change")
+        } else {
+            msg("server.ip.mac_sync_completed")
+                .with("updated", result.updated_count)
+                .with("unchanged", result.unchanged_count)
+                .with("skipped", result.skipped_count)
+        };
 
-    let message = if message_parts.is_empty() {
-        "MAC地址无变化".to_string()
-    } else {
-        message_parts.join("，")
-    };
-
-    Ok(crate::error::ok_json(results, &message))
+    Ok(crate::error::ok_json(results, message))
 }
 
 pub async fn pull_ip_managers_internal(
@@ -682,10 +690,13 @@ pub async fn pull_ip_managers_internal(
 ) -> Result<(), String> {
     let result = sync_switch_macs(pool, device_id, network_id)
         .await
-        .map_err(|e| format!("MAC同步失败: {e}"))?;
+        .map_err(|e| {
+            log_error!("log.ip.mac_sync_failed", error = e);
+            "server.ip.mac_sync_failed".to_string()
+        })?;
 
     if result.switch_macs_empty {
-        return Err("未发现属于该网段的已管理IP地址".to_string());
+        return Err("server.ip.no_managed_ips".to_string());
     }
 
     Ok(())
@@ -695,10 +706,9 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     match IpAddr::from_str(ip) {
         Ok(IpAddr::V6(_)) => Ok(6),
         Ok(IpAddr::V4(_)) => Ok(4),
-        Err(e) => Err(AppError::Validation(format!(
-            "IP地址格式无效 '{}': {}",
-            ip, e
-        ))),
+        Err(e) => Err(AppError::Validation(
+            msg("server.ip.invalid_ip").with("ip", ip).with("error", e),
+        )),
     }
 }
 
@@ -709,7 +719,7 @@ pub fn find_available_ips_in_cidr(
     max_count: Option<usize>,
 ) -> Vec<String> {
     let Ok(network_cidr) = ipnetwork::IpNetwork::from_str(cidr_str) else {
-        tracing::warn!("CIDR格式无效，无法查找可用IP: '{}'", cidr_str);
+        log_warn!("log.ip.invalid_cidr", cidr = cidr_str);
         return Vec::new();
     };
 
@@ -757,7 +767,7 @@ pub async fn get_available_ips(
         .bind(network_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
+        .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
         .and_then(|row| crate::utils::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
@@ -796,7 +806,7 @@ pub async fn get_available_ips(
             "available_count": available_ips.len(),
             "available_ips": available_ips
         }),
-        "获取可用IP列表成功",
+        "server.ip.available_fetched",
     ))
 }
 
@@ -818,7 +828,7 @@ pub async fn auto_assign_ip(
         .bind(device_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.device.not_found").with("id", device_id)))?;
 
     validate_network_in_room(&mut *tx, room_id, Some(req_network_id)).await?;
 
@@ -826,7 +836,7 @@ pub async fn auto_assign_ip(
         .bind(req_network_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("网络未找到".to_string()))
+        .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
         .and_then(|row| crate::utils::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
@@ -852,7 +862,7 @@ pub async fn auto_assign_ip(
                     .next()
             })
         })
-        .ok_or_else(|| AppError::Validation("该网络没有可用的IP地址".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.ip.no_available_ips")))?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -870,7 +880,7 @@ pub async fn auto_assign_ip(
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| {
-                AppError::Validation("指定的网口不存在或不属于该设备".to_string())
+                AppError::Validation(msg("server.ip.interface_invalid"))
             })?
         }
         None => {
@@ -880,9 +890,9 @@ pub async fn auto_assign_ip(
             .bind(device_id)
             .fetch_optional(&mut *tx)
             .await?
-            .ok_or_else(|| AppError::Validation(
-                "设备没有可用的物理接口，请先创建接口或指定 device_interface_id".to_string()
-            ))?
+            .ok_or_else(|| {
+                AppError::Validation(msg("server.ip.no_physical_interface"))
+            })?
         }
     };
 
@@ -909,7 +919,7 @@ pub async fn auto_assign_ip(
             if let sqlx::Error::Database(ref db_err) = e
                 && db_err.code().as_deref() == Some("23505")
             {
-                return Err(AppError::Validation("IP地址已被分配，请重试".to_string()));
+                return Err(AppError::Validation(msg("server.ip.already_assigned")));
             }
             return Err(AppError::from(e));
         }
@@ -951,7 +961,7 @@ pub async fn auto_assign_ip(
     )
     .await;
 
-    Ok(crate::error::ok_json(mapping, "IP地址自动分配成功"))
+    Ok(crate::error::ok_json(mapping, "server.ip.auto_assigned"))
 }
 
 pub async fn auto_assign_device_ip(
@@ -972,16 +982,18 @@ pub async fn batch_create_ip_managers(
 ) -> Result<Response, AppError> {
     let now = Utc::now();
     let mut valid_requests: Vec<(usize, &IpManagerCreate, Uuid, i16)> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
+    // 逐条错误以「key + 参数」记录，随响应返回由前端翻译
+    let mut errors: Vec<AppMessage> = Vec::new();
 
     for (index, ip_req) in req.iter().enumerate() {
         if let Err(e) = ip_req.validate() {
-            errors.push(format!("第{}条记录验证失败: {:?}", index + 1, e));
+            log_warn!("log.ip.batch_record_failed", index = index + 1, error = e);
+            errors.push(msg("server.ip.batch_record_validation_failed").with("index", index + 1));
             continue;
         }
 
         if ip_req.device_id.is_none() {
-            errors.push(format!("第{}条记录: device_id不能为空", index + 1));
+            errors.push(msg("server.ip.batch_record_device_id_required").with("index", index + 1));
             continue;
         }
 
@@ -989,7 +1001,8 @@ pub async fn batch_create_ip_managers(
         let ip_version_num = match detect_ip_version(&ip_req.ip_address) {
             Ok(v) => v,
             Err(e) => {
-                errors.push(format!("第{}条记录: {}", index + 1, e));
+                log_warn!("log.ip.batch_record_failed", index = index + 1, error = e);
+                errors.push(msg("server.ip.batch_record_invalid_ip").with("index", index + 1));
                 continue;
             }
         };
@@ -997,12 +1010,9 @@ pub async fn batch_create_ip_managers(
     }
 
     if valid_requests.is_empty() {
-        let error_msg = if errors.is_empty() {
-            "没有有效的记录".to_string()
-        } else {
-            errors.join("; ")
-        };
-        return Err(AppError::Validation(error_msg));
+        return Err(AppError::Validation(msg(
+            "server.ip.batch_no_valid_records",
+        )));
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -1031,7 +1041,7 @@ pub async fn batch_create_ip_managers(
     }
 
     let mut created_ips = Vec::new();
-    let mut duplicate_errors = Vec::new();
+    let mut duplicate_errors: Vec<AppMessage> = Vec::new();
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
         let existing: Option<Uuid> =
@@ -1042,28 +1052,28 @@ pub async fn batch_create_ip_managers(
             {
                 Ok(opt) => opt,
                 Err(err) => {
-                    duplicate_errors.push(format!(
-                        "第{}条记录: 数据库查询错误 - {}",
-                        index + 1,
-                        err
-                    ));
+                    log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                    duplicate_errors
+                        .push(msg("server.ip.batch_record_query_failed").with("index", index + 1));
                     continue;
                 }
             };
 
         if existing.is_some() {
-            duplicate_errors.push(format!(
-                "第{}条记录: IP地址 {} 已存在",
-                index + 1,
-                ip_req.ip_address
-            ));
+            duplicate_errors.push(
+                msg("server.ip.batch_record_ip_exists")
+                    .with("index", index + 1)
+                    .with("ip", &ip_req.ip_address),
+            );
             continue;
         }
 
         let device_id = match ip_req.device_id {
             Some(d) => d,
             None => {
-                duplicate_errors.push(format!("第{}条记录: device_id不能为空", index + 1));
+                duplicate_errors.push(
+                    msg("server.ip.batch_record_device_id_required").with("index", index + 1),
+                );
                 continue;
             }
         };
@@ -1080,18 +1090,17 @@ pub async fn batch_create_ip_managers(
                 {
                     Ok(Some(found)) => found,
                     Ok(None) => {
-                        duplicate_errors.push(format!(
-                            "第{}条记录: 指定的网口不存在或不属于该设备",
-                            index + 1
-                        ));
+                        duplicate_errors.push(
+                            msg("server.ip.batch_record_interface_invalid")
+                                .with("index", index + 1),
+                        );
                         continue;
                     }
                     Err(err) => {
-                        duplicate_errors.push(format!(
-                            "第{}条记录: 查询接口失败 - {}",
-                            index + 1,
-                            err
-                        ));
+                        log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                        duplicate_errors.push(
+                            msg("server.ip.batch_record_query_failed").with("index", index + 1),
+                        );
                         continue;
                     }
                 }
@@ -1106,18 +1115,17 @@ pub async fn batch_create_ip_managers(
                 {
                     Ok(Some(iid)) => iid,
                     Ok(None) => {
-                        duplicate_errors.push(format!(
-                            "第{}条记录: 设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
-                            index + 1
-                        ));
+                        duplicate_errors.push(
+                            msg("server.ip.batch_record_no_physical_interface")
+                                .with("index", index + 1),
+                        );
                         continue;
                     }
                     Err(err) => {
-                        duplicate_errors.push(format!(
-                            "第{}条记录: 查询接口失败 - {}",
-                            index + 1,
-                            err
-                        ));
+                        log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                        duplicate_errors.push(
+                            msg("server.ip.batch_record_query_failed").with("index", index + 1),
+                        );
                         continue;
                     }
                 }
@@ -1141,7 +1149,10 @@ pub async fn batch_create_ip_managers(
         .execute(tx.as_mut())
         .await
         {
-            duplicate_errors.push(format!("第{}条记录: 插入失败 - {}", index + 1, err));
+            log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+            duplicate_errors.push(
+                msg("server.ip.batch_record_insert_failed").with("index", index + 1),
+            );
             continue;
         }
 
@@ -1177,10 +1188,11 @@ pub async fn batch_create_ip_managers(
 
     errors.extend(duplicate_errors);
 
+    // 操作日志中的错误明细以 key(k=v) 诊断串形式记录，便于排查
     let details = serde_json::json!({
         "created_count": created_ips.len(),
         "error_count": errors.len(),
-        "errors": errors
+        "errors": errors.iter().map(AppMessage::log_string).collect::<Vec<_>>()
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),
@@ -1192,17 +1204,21 @@ pub async fn batch_create_ip_managers(
     )
     .await;
 
+    // 响应中的错误列表序列化为 {key, params} 结构，由前端翻译展示
+    let error_items: Vec<serde_json::Value> = errors
+        .iter()
+        .map(|e| serde_json::json!({ "key": e.key(), "params": e.params_map() }))
+        .collect();
+
     Ok(crate::error::ok_json(
         serde_json::json!({
             "created": created_ips,
             "created_count": created_ips.len(),
-            "errors": errors,
+            "errors": error_items,
             "error_count": errors.len()
         }),
-        &format!(
-            "批量创建完成，成功 {} 条，失败 {} 条",
-            created_ips.len(),
-            errors.len()
-        ),
+        msg("server.ip.batch_created")
+            .with("created", created_ips.len())
+            .with("failed", errors.len()),
     ))
 }

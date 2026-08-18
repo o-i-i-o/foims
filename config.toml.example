@@ -54,11 +54,15 @@ refresh_token_expiry = "7d"
 enabled = false
 
 [i18n]
-default_language = "zh"
+# 控制台日志语言（缺省 "en"），取值须属于 supported_languages
+log_language = "en"
 supported_languages = [
     "zh",
     "en",
 ]
+# 日志文件输出语言（可选，每个语言一个独立文件；缺省跟随 log_language，
+# 取值须为 supported_languages 的子集）
+#logfiles_i18n_out = ["zh", "en"]
 
 [rate_limit]
 ip_limit = 1000

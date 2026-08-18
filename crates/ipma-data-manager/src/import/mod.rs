@@ -3,6 +3,7 @@
 use crate::types::{DataError, DataProvider, DataResult, ok_json};
 use axum::extract::{Multipart, Query};
 use axum::response::Response;
+use ipma_common::{log_error, log_warn, msg};
 use serde_json::json;
 use sqlx::Acquire;
 use std::collections::HashMap;
@@ -71,22 +72,21 @@ pub async fn import_csv<P: DataProvider>(
     let mut filename: Option<String> = None;
     const MAX_UPLOAD_SIZE: usize = 50 * 1024 * 1024;
 
-    while let Some(mut field) = payload
-        .next_field()
-        .await
-        .map_err(|e| DataError::Internal(format!("读取文件失败: {e}")))?
-    {
+    while let Some(mut field) = payload.next_field().await.map_err(|e| {
+        DataError::Internal(msg("server.import_export.file_read_failed").with("error", e))
+    })? {
         if field.name() == Some("file") {
             filename = field.file_name().map(std::string::ToString::to_string);
             let mut data = Vec::new();
-            while let Some(chunk) = field
-                .chunk()
-                .await
-                .map_err(|e| DataError::Internal(format!("读取文件块失败: {e}")))?
-            {
+            while let Some(chunk) = field.chunk().await.map_err(|e| {
+                DataError::Internal(msg("server.import_export.chunk_read_failed").with("error", e))
+            })? {
                 data.extend_from_slice(&chunk);
                 if data.len() > MAX_UPLOAD_SIZE {
-                    return Err(DataError::Validation("文件大小超过50MB限制".to_string()));
+                    return Err(DataError::Validation(
+                        msg("server.import_export.file_too_large")
+                            .with("limit", MAX_UPLOAD_SIZE / 1024 / 1024),
+                    ));
                 }
             }
             file_data = Some(data);
@@ -94,8 +94,8 @@ pub async fn import_csv<P: DataProvider>(
         }
     }
 
-    let file_data =
-        file_data.ok_or_else(|| DataError::Validation("请选择要导入的CSV文件".to_string()))?;
+    let file_data = file_data
+        .ok_or_else(|| DataError::Validation(msg("server.import_export.no_file_selected")))?;
     let file_data = Arc::new(file_data);
 
     let pool = provider.pool()?;
@@ -112,9 +112,11 @@ pub async fn import_csv<P: DataProvider>(
         let mut entries = Vec::new();
         if let Ok(mut zip) = zip::ZipArchive::new(Cursor::new((*file_data_clone).clone())) {
             for i in 0..zip.len() {
-                let mut file = zip
-                    .by_index(i)
-                    .map_err(|e| DataError::Internal(format!("读取ZIP文件项失败: {e}")))?;
+                let mut file = zip.by_index(i).map_err(|e| {
+                    DataError::Internal(
+                        msg("server.import_export.zip_entry_read_failed").with("error", e),
+                    )
+                })?;
 
                 let zip_filename = file.name().to_string();
                 if zip_filename.contains("..")
@@ -126,23 +128,27 @@ pub async fn import_csv<P: DataProvider>(
                 if zip_filename.ends_with(".csv") {
                     let mut limited = (&mut file).take(MAX_DECOMPRESSED_SIZE);
                     let mut content = String::new();
-                    limited
-                        .read_to_string(&mut content)
-                        .map_err(|e| DataError::Internal(format!("读取CSV文件失败: {e}")))?;
+                    limited.read_to_string(&mut content).map_err(|e| {
+                        DataError::Internal(
+                            msg("server.import_export.zip_csv_read_failed").with("error", e),
+                        )
+                    })?;
                     let entry_size = content.len() as u64;
                     total_decompressed = total_decompressed.saturating_add(entry_size);
                     if total_decompressed > MAX_TOTAL_DECOMPRESSED {
-                        return Err(DataError::Internal(format!(
-                            "ZIP解压总大小超过限制({}MB),可能为ZIP炸弹",
-                            MAX_TOTAL_DECOMPRESSED / 1024 / 1024
-                        )));
+                        return Err(DataError::Internal(
+                            msg("server.import_export.zip_bomb_detected")
+                                .with("limit", MAX_TOTAL_DECOMPRESSED / 1024 / 1024),
+                        ));
                     }
                     entries.push((zip_filename.trim_end_matches(".csv").to_string(), content));
                 }
             }
         } else {
             let content = String::from_utf8(file_data_clone.as_ref().clone()).map_err(|e| {
-                DataError::Validation(format!("解析CSV文件失败: 文件编码必须是UTF-8 - {e}"))
+                DataError::Validation(
+                    msg("server.import_export.utf8_required").with("error", e.utf8_error()),
+                )
             })?;
             let table_name = filename_clone
                 .as_ref()
@@ -154,7 +160,9 @@ pub async fn import_csv<P: DataProvider>(
         Ok::<Vec<(String, String)>, DataError>(entries)
     })
     .await
-    .map_err(|e| DataError::Internal(format!("ZIP解压任务失败: {e}")))??;
+    .map_err(|e| {
+        DataError::Internal(msg("server.import_export.zip_decompress_task_failed").with("error", e))
+    })??;
 
     for (table_name, content) in csv_entries {
         let mut tx = conn.begin().await.map_err(DataError::from)?;
@@ -162,19 +170,45 @@ pub async fn import_csv<P: DataProvider>(
         {
             Ok(()) => {
                 if let Err(e) = tx.commit().await {
-                    results.push(format!("提交 {table_name}.csv 事务失败: {e}"));
+                    log_error!(
+                        "log.import.tx_commit_failed",
+                        file = format!("{table_name}.csv"),
+                        error = e
+                    );
+                    results.push(
+                        msg("server.import_export.tx_commit_failed")
+                            .with("file", format!("{table_name}.csv"))
+                            .log_string(),
+                    );
                 }
             }
             Err(e) => {
-                results.push(format!("导入 {table_name}.csv 失败: {e}"));
+                log_warn!(
+                    "log.import.file_failed",
+                    file = format!("{table_name}.csv"),
+                    error = e.message().log_string()
+                );
+                results.push(
+                    msg("server.import_export.file_import_failed")
+                        .with("file", format!("{table_name}.csv"))
+                        .with("error", e.message().key())
+                        .log_string(),
+                );
                 if let Err(rb_err) = tx.rollback().await {
-                    tracing::warn!("回滚 {table_name}.csv 事务失败: {rb_err}");
+                    log_warn!(
+                        "log.import.tx_rollback_failed",
+                        file = format!("{table_name}.csv"),
+                        error = rb_err
+                    );
                 }
             }
         }
     }
 
-    Ok(ok_json(json!({ "results": results }), "导入完成"))
+    Ok(ok_json(
+        json!({ "results": results }),
+        "server.import_export.completed",
+    ))
 }
 
 async fn process_csv_by_filename(
@@ -197,7 +231,11 @@ async fn process_csv_by_filename(
         "positions" => positions::import_positions(conn, content, overwrite, results).await,
         "switches" => switches::import_switches(conn, content, overwrite, results).await,
         _ => {
-            results.push(format!("跳过未知文件: {filename}.csv (支持的文件: network_regions, networks, rooms, workstations, cabinets, positions, switches)"));
+            results.push(
+                msg("server.import_export.unknown_file_skipped")
+                    .with("file", format!("{filename}.csv"))
+                    .log_string(),
+            );
             Ok(())
         }
     }

@@ -1,7 +1,7 @@
 //! 配线架资源管理。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{CabinetPatchPanelsSync, PatchPanelWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -37,8 +37,9 @@ pub async fn get_patch_panels(
     let parsed_cabinet_id = cabinet_id
         .as_ref()
         .map(|id| {
-            Uuid::parse_str(id)
-                .map_err(|_| AppError::Validation("无效的cabinet_id参数".to_string()))
+            Uuid::parse_str(id).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", "cabinet_id"))
+            })
         })
         .transpose()?;
 
@@ -105,7 +106,7 @@ pub async fn get_patch_panels(
 
     Ok(crate::error::ok_json(
         paged_response(patch_panels, total, &pagination),
-        "配线架列表获取成功",
+        "server.patch_panel.list_retrieved",
     ))
 }
 
@@ -124,7 +125,7 @@ pub async fn sync_cabinet_patch_panels(
             .fetch_one(&state.pool()?.get_conn())
             .await?;
     if !cabinet_exists {
-        return Err(AppError::NotFound("机柜未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let items = &req.patch_panels;
@@ -149,11 +150,9 @@ pub async fn sync_cabinet_patch_panels(
                 .await
                 .map_err(|e| {
                     if let sqlx::Error::Database(db_err) = &e {
-                        let msg = db_err.message();
-                        if msg.contains("cable_links") {
-                            return AppError::Validation(
-                                "配线架已被线路引用，无法删除".to_string(),
-                            );
+                        let msg_text = db_err.message();
+                        if msg_text.contains("cable_links") {
+                            return AppError::Validation(msg("server.patch_panel.in_use"));
                         }
                     }
                     AppError::from(e)
@@ -172,7 +171,7 @@ pub async fn sync_cabinet_patch_panels(
         .fetch_optional(&mut *tx)
         .await?;
         if dup.is_some() {
-            return Err(AppError::Conflict("配线架名称在该机柜内已存在".to_string()));
+            return Err(AppError::Conflict(msg("server.patch_panel.name_exists")));
         }
 
         if let Some(item_id) = item.id {
@@ -216,5 +215,5 @@ pub async fn sync_cabinet_patch_panels(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "机柜配线架同步成功"))
+    Ok(crate::error::ok_json((), "server.patch_panel.synced"))
 }

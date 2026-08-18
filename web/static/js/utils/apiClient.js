@@ -5,6 +5,22 @@
 import { clearSession } from "./sessionManager.js";
 import { t } from "./i18n.js";
 
+/**
+ * 集中翻译服务端返回的 i18n 消息。
+ *
+ * 后端约定：API 响应形如 { success, message: "<i18n key>",
+ * message_params: { name: "value" }（可选）, data }。此函数就地翻译
+ * message 并删除 message_params；key 不在翻译目录时 t() 返回 key 本身。
+ * 直接使用 fetch 的代码解析 JSON 后也应调用该函数。
+ */
+export function translateServerMessage(data) {
+  if (data && typeof data === "object" && typeof data.message === "string") {
+    data.message = t(data.message, data.message_params || {});
+    delete data.message_params;
+  }
+  return data;
+}
+
 export class ApiClient {
   static #pendingRequests = new Map();
   static #requestTimestamps = new Map();
@@ -149,6 +165,7 @@ export class ApiClient {
           if (this.isPublicAuthEndpoint(url)) {
             try {
               const errorData = await response.json();
+              translateServerMessage(errorData);
               return {
                 success: false,
                 message: errorData.message || t("api.auth_failed"),
@@ -188,6 +205,7 @@ export class ApiClient {
 
         try {
           const errorData = await response.json();
+          translateServerMessage(errorData);
           return {
             success: false,
             message: errorData.message || `${t("api.request_failed")}: ${response.status}`,
@@ -208,7 +226,7 @@ export class ApiClient {
 
       // 优先处理 JSON 响应
       if (contentType && contentType.includes("application/json")) {
-        return await response.json();
+        return translateServerMessage(await response.json());
       }
 
       // 处理文件下载类型
@@ -240,7 +258,7 @@ export class ApiClient {
 
       // 默认尝试解析为 JSON
       try {
-        return await response.json();
+        return translateServerMessage(await response.json());
       } catch {
         // 如果不是 JSON，返回文本
         const text = await response.text();

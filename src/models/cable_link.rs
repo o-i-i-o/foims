@@ -55,7 +55,7 @@ pub struct CableLinkCreate {
     pub b_endpoint_type: String,
     pub b_endpoint_id: Uuid,
     pub link_type: Option<String>,
-    #[validate(length(max = 50, message = "线缆标签长度不能超过50个字符"))]
+    #[validate(length(max = 50, message = "server.cable_link.validation.cable_label_length"))]
     pub cable_label: Option<String>,
     pub length_m: Option<f64>,
     pub tested: Option<bool>,

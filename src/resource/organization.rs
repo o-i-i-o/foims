@@ -12,6 +12,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::msg;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,25 +28,30 @@ use validator::Validate;
 pub fn resolve_type_name(levels: &serde_json::Value, type_path: &str) -> Result<String, AppError> {
     let levels_map = levels
         .as_object()
-        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
 
     let indices: Vec<usize> = type_path
         .split('.')
         .map(|s| {
-            s.parse::<usize>()
-                .map_err(|_| AppError::Validation(format!("类型路径「{type_path}」格式错误")))
+            s.parse::<usize>().map_err(|_| {
+                AppError::Validation(
+                    msg("server.organization.validation.type_path_format").with("path", type_path),
+                )
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
 
     if indices.is_empty() {
-        return Err(AppError::Validation("类型路径不能为空".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.organization.validation.type_path_required",
+        )));
     }
 
     // 首段是根锚点，必须为 0（防止 "9.1" 之类的畸形路径被静默当作 "0.1" 解析）
     if indices[0] != 0 {
-        return Err(AppError::Validation(format!(
-            "类型路径「{type_path}」格式错误（首段必须为 0）"
-        )));
+        return Err(AppError::Validation(
+            msg("server.organization.validation.type_path_root_anchor").with("path", type_path),
+        ));
     }
 
     // 找到根节点（不被任何其他节点的子级列表引用的节点）
@@ -67,12 +73,14 @@ pub fn resolve_type_name(levels: &serde_json::Value, type_path: &str) -> Result<
         let children = levels_map
             .get(current_type)
             .and_then(|v| v.as_array())
-            .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+            .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
 
         current_type = children.get(idx).and_then(|v| v.as_str()).ok_or_else(|| {
-            AppError::Validation(format!(
-                "类型路径「{type_path}」在模板中不存在（索引 {idx} 超出范围）"
-            ))
+            AppError::Validation(
+                msg("server.organization.validation.type_path_out_of_range")
+                    .with("path", type_path)
+                    .with("index", idx),
+            )
         })?;
     }
 
@@ -98,13 +106,16 @@ pub fn parent_type_path(type_path: &str) -> Option<String> {
 ///
 /// 例如 "0.1" → 1，"0.1.2" → 2
 pub fn type_path_index(type_path: &str) -> Result<usize, AppError> {
-    let last_segment = type_path
-        .rsplit('.')
-        .next()
-        .ok_or_else(|| AppError::Validation(format!("类型路径「{type_path}」格式错误")))?;
-    last_segment
-        .parse::<usize>()
-        .map_err(|_| AppError::Validation(format!("类型路径「{type_path}」格式错误")))
+    let last_segment = type_path.rsplit('.').next().ok_or_else(|| {
+        AppError::Validation(
+            msg("server.organization.validation.type_path_format").with("path", type_path),
+        )
+    })?;
+    last_segment.parse::<usize>().map_err(|_| {
+        AppError::Validation(
+            msg("server.organization.validation.type_path_format").with("path", type_path),
+        )
+    })
 }
 
 /// 从模板的 levels 中找根节点 key
@@ -125,7 +136,7 @@ fn find_root_in_levels(
         .keys()
         .find(|key| !child_types.contains(key.as_str()))
         .map(|v| v.as_str())
-        .ok_or_else(|| AppError::Internal("模板 levels 中未找到根节点".to_string()))
+        .ok_or_else(|| AppError::Internal(msg("server.org_template.root_not_found")))
 }
 
 /// 根据 type_path 获取允许的子类型列表（带 type_path）
@@ -148,14 +159,14 @@ pub fn get_allowed_children_with_path(
 async fn resolve_org_type(pool: &sqlx::PgPool, org: &Organization) -> Result<String, AppError> {
     let template_id = org
         .template_id
-        .ok_or_else(|| AppError::Internal("组织节点未关联模板".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.organization.template_missing")))?;
 
     let levels: serde_json::Value =
         sqlx::query_scalar("SELECT levels FROM org_templates WHERE id = $1")
             .bind(template_id)
             .fetch_one(pool)
             .await
-            .map_err(|_| AppError::Internal("关联的模板不存在".to_string()))?;
+            .map_err(|_| AppError::Internal(msg("server.org_template.not_found")))?;
 
     resolve_type_name(&levels, &org.type_path)
 }
@@ -200,9 +211,9 @@ pub async fn get_organizations(
 
     // 两个筛选条件语义互斥，同时传入时明确报错而非静默忽略 root_only
     if parent_id.is_some() && root_only {
-        return Err(AppError::Validation(
-            "parent_id 与 root_only 不能同时使用".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.organization.parent_root_only_conflict",
+        )));
     }
 
     // 辅助函数：构建WHERE子句
@@ -268,7 +279,7 @@ pub async fn get_organizations(
 
     Ok(crate::error::ok_json(
         paged_response(items, total, &pagination),
-        "组织列表获取成功",
+        "server.organization.list_fetched",
     ))
 }
 
@@ -297,7 +308,10 @@ pub async fn get_organization_tree(
         load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
 
     let tree = build_tree(&all_orgs, &template_levels_map);
-    Ok(crate::error::ok_json(tree, "组织树获取成功"))
+    Ok(crate::error::ok_json(
+        tree,
+        "server.organization.tree_fetched",
+    ))
 }
 
 /// 从扁平列表构建树形结构（优化版本）
@@ -395,7 +409,7 @@ pub async fn get_organization(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("组织节点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.organization.not_found")))?;
 
     let org_type = resolve_org_type(&state.pool()?.get_conn(), &org).await?;
 
@@ -442,7 +456,7 @@ pub async fn get_organization(
         "updated_at": org.updated_at,
     });
 
-    Ok(crate::error::ok_json(result, "组织节点获取成功"))
+    Ok(crate::error::ok_json(result, "server.organization.fetched"))
 }
 
 /// 创建组织节点
@@ -464,11 +478,11 @@ pub async fn create_organization(
         .bind(parent_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::NotFound("父级组织节点未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.organization.parent_not_found")))?;
 
         // 子节点继承父节点的模板
         let parent_template_id = parent.template_id.ok_or_else(|| {
-            AppError::Validation("父级节点未关联模板，无法添加子节点".to_string())
+            AppError::Validation(msg("server.organization.parent_template_missing"))
         })?;
 
         let parent_level = parent.level_index;
@@ -481,16 +495,17 @@ pub async fn create_organization(
         .bind(parent_template_id)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or_else(|| AppError::Validation("关联的模板不存在".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.org_template.not_found")))?;
 
         // 使用 type_path 校验
         let parent_type_name = resolve_type_name(&template.levels, &parent.type_path)?;
         let allowed_children = get_allowed_children(&template.levels, &parent_type_name)?;
         if allowed_children.is_empty() {
-            return Err(AppError::Validation(format!(
-                "类型「{}」不允许添加下级节点（模板「{}」）",
-                parent_type_name, template.name
-            )));
+            return Err(AppError::Validation(
+                msg("server.organization.type_children_forbidden")
+                    .with("type", &parent_type_name)
+                    .with("template", &template.name),
+            ));
         }
 
         // 校验 type_path 是否在父节点的允许子级中
@@ -500,24 +515,25 @@ pub async fn create_organization(
             .iter()
             .any(|(_, path)| path == &req.type_path);
         if !is_valid {
-            return Err(AppError::Validation(format!(
-                "根据模板「{}」，类型「{}」的下级路径应为 {}，实际为「{}」",
-                template.name,
-                parent_type_name,
-                allowed_with_path
-                    .iter()
-                    .map(|(_, p)| format!("「{p}」"))
-                    .collect::<Vec<_>>()
-                    .join("、"),
-                req.type_path
-            )));
+            let expected = allowed_with_path
+                .iter()
+                .map(|(_, p)| format!("「{p}」"))
+                .collect::<Vec<_>>()
+                .join("、");
+            return Err(AppError::Validation(
+                msg("server.organization.type_path_mismatch")
+                    .with("template", &template.name)
+                    .with("type", &parent_type_name)
+                    .with("expected", expected)
+                    .with("actual", &req.type_path),
+            ));
         }
 
         let depth = get_depth(&mut tx, parent_id).await?;
         if depth >= MAX_ORG_DEPTH {
-            return Err(AppError::Validation(format!(
-                "已达到最大层级深度限制({MAX_ORG_DEPTH})"
-            )));
+            return Err(AppError::Validation(
+                msg("server.organization.depth_exceeded").with("max", MAX_ORG_DEPTH),
+            ));
         }
 
         let duplicate: Option<Uuid> =
@@ -527,15 +543,15 @@ pub async fn create_organization(
                 .fetch_optional(&mut *tx)
                 .await?;
         if duplicate.is_some() {
-            return Err(AppError::Conflict("同级下已存在同名组织节点".to_string()));
+            return Err(AppError::Conflict(msg("server.organization.name_exists")));
         }
 
         (Some(parent_template_id), parent_level + 1)
     } else {
         // 根节点：必须指定 template_id，type_path 必须为 "0"
-        let template_id = req
-            .template_id
-            .ok_or_else(|| AppError::Validation("创建根节点时必须指定模板".to_string()))?;
+        let template_id = req.template_id.ok_or_else(|| {
+            AppError::Validation(msg("server.organization.root_template_required"))
+        })?;
 
         let template_exists: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1")
@@ -543,14 +559,14 @@ pub async fn create_organization(
                 .fetch_optional(&mut *tx)
                 .await?;
         if template_exists.is_none() {
-            return Err(AppError::NotFound("指定的模板不存在".to_string()));
+            return Err(AppError::NotFound(msg("server.org_template.not_found")));
         }
 
         // 根节点 type_path 必须是 "0"
         if req.type_path != "0" {
-            return Err(AppError::Validation(
-                "根节点的类型路径必须为「0」".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.organization.root_type_path_invalid",
+            )));
         }
 
         // 根节点同名查重（parent_id 为 NULL，应用层兜底；数据库侧由
@@ -562,7 +578,7 @@ pub async fn create_organization(
         .fetch_optional(&mut *tx)
         .await?;
         if duplicate.is_some() {
-            return Err(AppError::Conflict("同级下已存在同名组织节点".to_string()));
+            return Err(AppError::Conflict(msg("server.organization.name_exists")));
         }
 
         (Some(template_id), 0i32)
@@ -591,7 +607,7 @@ pub async fn create_organization(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("同级下已存在同名组织节点".to_string());
+            return AppError::Conflict(msg("server.organization.name_exists"));
         }
         AppError::from(e)
     })?;
@@ -647,7 +663,7 @@ pub async fn create_organization(
             "created_at": now,
             "updated_at": now,
         }),
-        "组织节点创建成功",
+        "server.organization.created",
     ))
 }
 
@@ -672,15 +688,15 @@ pub async fn update_organization(
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| AppError::NotFound("组织节点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.organization.not_found")))?;
 
     // type_path 不允许通过此接口修改（由模板结构决定）
     if let Some(ref new_type_path) = req.type_path
         && new_type_path != &existing.type_path
     {
-        return Err(AppError::Validation(
-            "类型路径不允许修改（由模板结构决定）".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.organization.type_path_immutable",
+        )));
     }
 
     // 名称变更校验：同级下不能重名
@@ -696,7 +712,7 @@ pub async fn update_organization(
         .fetch_optional(&mut *tx)
         .await?;
         if duplicate.is_some() {
-            return Err(AppError::Conflict("同级下已存在同名组织节点".to_string()));
+            return Err(AppError::Conflict(msg("server.organization.name_exists")));
         }
     }
 
@@ -758,7 +774,7 @@ pub async fn update_organization(
             "created_at": org.created_at,
             "updated_at": org.updated_at,
         }),
-        "组织节点更新成功",
+        "server.organization.updated",
     ))
 }
 
@@ -775,7 +791,7 @@ pub async fn delete_organization(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("组织节点未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.organization.not_found")));
     }
 
     let child_count: i64 =
@@ -784,9 +800,9 @@ pub async fn delete_organization(
             .fetch_one(&mut *tx)
             .await?;
     if child_count > 0 {
-        return Err(AppError::Validation(format!(
-            "该节点下还有 {child_count} 个子节点，请先删除所有子节点"
-        )));
+        return Err(AppError::Validation(
+            msg("server.organization.has_children").with("count", child_count),
+        ));
     }
 
     let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE org_id = $1")
@@ -794,9 +810,9 @@ pub async fn delete_organization(
         .fetch_one(&mut *tx)
         .await?;
     if room_count > 0 {
-        return Err(AppError::Validation(format!(
-            "该节点下还有 {room_count} 个机房，请先解除关联后再删除"
-        )));
+        return Err(AppError::Validation(
+            msg("server.organization.has_rooms").with("count", room_count),
+        ));
     }
 
     sqlx::query("DELETE FROM organizations WHERE id = $1")
@@ -819,7 +835,7 @@ pub async fn delete_organization(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "组织节点删除成功"))
+    Ok(crate::error::ok_json((), "server.organization.deleted"))
 }
 
 /// 获取指定节点的下级类型信息（基于模板）
@@ -834,11 +850,11 @@ pub async fn get_allowed_child_types(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("组织节点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.organization.not_found")))?;
 
     let template_id = org
         .template_id
-        .ok_or_else(|| AppError::Validation("该节点未关联模板".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.organization.template_missing")))?;
 
     let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
         "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
@@ -847,7 +863,7 @@ pub async fn get_allowed_child_types(
     .bind(template_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::Validation("关联的模板不存在".to_string()))?;
+    .ok_or_else(|| AppError::Validation(msg("server.org_template.not_found")))?;
 
     let org_type = resolve_type_name(&template.levels, &org.type_path)?;
     let allowed_with_path = get_allowed_children_with_path(&template.levels, &org.type_path)?;
@@ -878,7 +894,7 @@ pub async fn get_allowed_child_types(
             "type_count": type_count,
             "allowed_child_types": allowed
         }),
-        "允许的下级类型获取成功",
+        "server.organization.allowed_child_types_fetched",
     ))
 }
 
@@ -892,7 +908,7 @@ pub async fn get_children(
         .fetch_optional(&state.pool()?.get_conn())
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("组织节点未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.organization.not_found")));
     }
 
     let children = sqlx::query_as::<_, Organization>(
@@ -905,7 +921,10 @@ pub async fn get_children(
 
     let items = resolve_org_list_types(&state, &children).await?;
 
-    Ok(crate::error::ok_json(items, "子节点列表获取成功"))
+    Ok(crate::error::ok_json(
+        items,
+        "server.organization.children_fetched",
+    ))
 }
 
 // ==================== 内部辅助函数 ====================
@@ -972,9 +991,9 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
         match parent_id {
             Some(pid) => {
                 if !visited.insert(pid) {
-                    return Err(AppError::Internal(format!(
-                        "组织节点存在循环引用（检测到节点 {pid} 被重复访问）"
-                    )));
+                    return Err(AppError::Internal(
+                        msg("server.organization.cycle_detected").with("id", pid),
+                    ));
                 }
                 depth += 1;
                 current_id = pid;
@@ -996,7 +1015,7 @@ pub async fn get_org_rooms(
         .fetch_optional(&state.pool()?.get_conn())
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("组织节点未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.organization.not_found")));
     }
     let rooms = sqlx::query_as::<_, Room>(
         "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
@@ -1005,7 +1024,10 @@ pub async fn get_org_rooms(
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
-    Ok(crate::error::ok_json(rooms, "组织节点房间列表获取成功"))
+    Ok(crate::error::ok_json(
+        rooms,
+        "server.organization.rooms_fetched",
+    ))
 }
 
 #[cfg(test)]

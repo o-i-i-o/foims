@@ -2,7 +2,7 @@
 
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
-use tracing::warn;
+use ipma_common::{log_warn, msg};
 
 pub async fn import_switches(
     conn: &mut sqlx::PgConnection,
@@ -18,8 +18,13 @@ pub async fn import_switches(
 
     for result in rdr.records() {
         line_num += 1;
-        let record =
-            result.map_err(|e| DataError::Validation(format!("第{line_num}行解析失败: {e}")))?;
+        let record = result.map_err(|e| {
+            DataError::Validation(
+                msg("server.import_export.row_parse_failed")
+                    .with("line", line_num)
+                    .with("error", e),
+            )
+        })?;
 
         if record.get(0).is_some_and(|s| s == "名称") {
             continue;
@@ -37,61 +42,95 @@ pub async fn import_switches(
         let description = record.get(9).unwrap_or("").trim();
 
         if name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 名称为空"));
+            results.push(
+                msg("server.import_export.row_name_empty")
+                    .with("line", line_num)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if name.len() > 100 {
-            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过100个字符"));
+            results.push(
+                msg("server.import_export.row_name_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 100)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if model.len() > 100 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - 型号超过100个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_model_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 100)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if vendor.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - 厂商超过50个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_vendor_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if location.len() > 100 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - 位置超过100个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_location_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 100)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if snmp_community.len() > 100 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - SNMP Community超过100个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_snmp_community_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 100)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if snmp_username.len() > 50 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - SNMP用户名超过50个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_snmp_username_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!(
-                "第{line_num}行跳过: 交换机 '{name}' - 描述超过255个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_description_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 255)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
@@ -99,9 +138,13 @@ pub async fn import_switches(
         let snmp_port: i32 = match snmp_port_str.parse() {
             Ok(v) if v > 0 && v <= 65535 => v,
             Ok(v) => {
-                results.push(format!(
-                    "第{line_num}行跳过: 交换机 '{name}' - SNMP端口 '{v}' 超出范围(1-65535)"
-                ));
+                results.push(
+                    msg("server.import_export.row_snmp_port_out_of_range")
+                        .with("line", line_num)
+                        .with("name", name)
+                        .with("value", v)
+                        .log_string(),
+                );
                 error_count += 1;
                 continue;
             }
@@ -112,9 +155,13 @@ pub async fn import_switches(
             "v1" | "v2c" | "v3" => snmp_version.to_string(),
             "" => "v2c".to_string(),
             _ => {
-                results.push(format!(
-                    "第{line_num}行跳过: 交换机 '{name}' - 无效的SNMP版本 '{snmp_version}' (支持: v1, v2c, v3)"
-                ));
+                results.push(
+                    msg("server.import_export.row_snmp_version_invalid")
+                        .with("line", line_num)
+                        .with("name", name)
+                        .with("value", snmp_version)
+                        .log_string(),
+                );
                 error_count += 1;
                 continue;
             }
@@ -154,14 +201,22 @@ pub async fn import_switches(
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!(
-                            "第{line_num}行跳过: 更新交换机 '{name}' 失败 - {e}"
-                        ));
+                        results.push(
+                            msg("server.import_export.row_switch_update_failed")
+                                .with("line", line_num)
+                                .with("name", name)
+                                .with("error", e)
+                                .log_string(),
+                        );
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过交换机（已存在）: {name}"));
+                results.push(
+                    msg("server.import_export.switch_skipped_exists")
+                        .with("name", name)
+                        .log_string(),
+                );
                 skip_count += 1;
             }
         } else {
@@ -176,7 +231,7 @@ pub async fn import_switches(
             .execute(&mut *conn)
             .await
             {
-                warn!("创建交换机位置记录失败: {}", e);
+                log_warn!("log.import.switch_position_create_failed", error = e);
             }
 
             let insert_result = sqlx::query(
@@ -206,18 +261,26 @@ pub async fn import_switches(
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!(
-                        "第{line_num}行跳过: 插入交换机 '{name}' 失败 - {e}"
-                    ));
+                    results.push(
+                        msg("server.import_export.row_switch_insert_failed")
+                            .with("line", line_num)
+                            .with("name", name)
+                            .with("error", e)
+                            .log_string(),
+                    );
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!(
-        "交换机导入完成: 成功 {success_count}, 跳过 {skip_count}, 失败 {error_count}"
-    ));
+    results.push(
+        msg("server.import_export.switches_summary")
+            .with("success", success_count)
+            .with("skipped", skip_count)
+            .with("failed", error_count)
+            .log_string(),
+    );
     Ok(())
 }
 
@@ -230,8 +293,12 @@ async fn handle_switch_ip(
     results: &mut Vec<String>,
 ) {
     if ip_address.is_empty() {
-        let action = if is_update { "更新" } else { "导入" };
-        results.push(format!("{action}交换机: {name}"));
+        let key = if is_update {
+            "server.import_export.switch_updated"
+        } else {
+            "server.import_export.switch_imported"
+        };
+        results.push(msg(key).with("name", name).log_string());
         return;
     }
 
@@ -242,7 +309,7 @@ async fn handle_switch_ip(
     .fetch_optional(&mut *conn)
     .await
     .unwrap_or_else(|e| {
-        warn!("查询现有IP失败: {}", e);
+        log_warn!("log.import.existing_ip_query_failed", error = e);
         None
     });
 
@@ -260,8 +327,18 @@ async fn handle_switch_ip(
         .execute(&mut *conn)
         .await
         {
-            Ok(_) => results.push(format!("更新交换机: {name} (IP: {ip_address})")),
-            Err(e) => results.push(format!("更新交换机: {name} (IP更新失败: {e})")),
+            Ok(_) => results.push(
+                msg("server.import_export.switch_updated_with_ip")
+                    .with("name", name)
+                    .with("ip", ip_address)
+                    .log_string(),
+            ),
+            Err(e) => results.push(
+                msg("server.import_export.switch_ip_update_failed")
+                    .with("name", name)
+                    .with("error", e)
+                    .log_string(),
+            ),
         }
     } else {
         match sqlx::query(
@@ -275,8 +352,18 @@ async fn handle_switch_ip(
         .execute(&mut *conn)
         .await
         {
-            Ok(_) => results.push(format!("更新交换机: {name} (IP: {ip_address})")),
-            Err(e) => results.push(format!("更新交换机: {name} (IP写入失败: {e})")),
+            Ok(_) => results.push(
+                msg("server.import_export.switch_updated_with_ip")
+                    .with("name", name)
+                    .with("ip", ip_address)
+                    .log_string(),
+            ),
+            Err(e) => results.push(
+                msg("server.import_export.switch_ip_insert_failed")
+                    .with("name", name)
+                    .with("error", e)
+                    .log_string(),
+            ),
         }
     }
 }
@@ -289,7 +376,11 @@ async fn handle_new_switch_ip(
     results: &mut Vec<String>,
 ) {
     if ip_address.is_empty() {
-        results.push(format!("导入交换机: {name}"));
+        results.push(
+            msg("server.import_export.switch_imported")
+                .with("name", name)
+                .log_string(),
+        );
         return;
     }
 
@@ -304,8 +395,18 @@ async fn handle_new_switch_ip(
     .execute(&mut *conn)
     .await
     {
-        Ok(_) => results.push(format!("导入交换机: {name} (IP: {ip_address})")),
-        Err(e) => results.push(format!("导入交换机: {name} (IP写入失败: {e})")),
+        Ok(_) => results.push(
+            msg("server.import_export.switch_imported_with_ip")
+                .with("name", name)
+                .with("ip", ip_address)
+                .log_string(),
+        ),
+        Err(e) => results.push(
+            msg("server.import_export.switch_ip_insert_failed")
+                .with("name", name)
+                .with("error", e)
+                .log_string(),
+        ),
     }
 }
 
@@ -335,7 +436,7 @@ async fn find_switch_network_id(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("查询交换机网络失败: {}", e);
+            log_warn!("log.import.switch_network_query_failed", error = e);
             None
         }
     }

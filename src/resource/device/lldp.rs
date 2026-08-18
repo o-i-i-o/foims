@@ -10,15 +10,17 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{DeviceLldp, LldpNeighbor};
+use ipma_common::log_error;
 
 use super::snmp::{DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
 
+/// 获取设备的 LLDP 邻居（先校验设备/IP/SNMP 配置，再走 SNMP 采集）。
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
     device_id: &Uuid,
-) -> Result<Vec<LldpNeighbor>, SnmpError> {
+) -> Result<Vec<LldpNeighbor>, AppError> {
     let switch = sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
             id, name, snmp_version, snmp_community,
@@ -29,9 +31,8 @@ pub async fn get_lldp_neighbors(
     )
     .bind(device_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
-    .ok_or_else(|| SnmpError::Message("设备不存在".to_string()))?;
+    .await?
+    .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
         r"SELECT host(i.ip_address) FROM ips i
@@ -41,20 +42,23 @@ pub async fn get_lldp_neighbors(
     )
     .bind(device_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| SnmpError::Message(e.to_string()))?
+    .await?
     .flatten();
 
     let ip_address = ip_address
         .filter(|ip| !ip.is_empty())
-        .ok_or_else(|| SnmpError::Message("设备没有配置IP地址".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.device.no_ip_configured")))?;
 
     if switch.snmp_community.is_none() && switch.snmp_username.is_none() {
-        return Err(SnmpError::Message("该设备未配置SNMP".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.device.snmp.not_configured",
+        )));
     }
 
     let params = switch.to_snmp_params_async(&ip_address).await?;
-    get_lldp_neighbors_via_snmp(&params).await
+    get_lldp_neighbors_via_snmp(&params)
+        .await
+        .map_err(|e| AppError::Snmp(msg("server.device.snmp.lldp_fetch_failed").with("error", e)))
 }
 
 async fn snmp_walk<F>(
@@ -394,7 +398,7 @@ pub async fn get_device_lldp_neighbors(
         .await?;
 
     if !exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     let lldps: Vec<DeviceLldp> = sqlx::query_as::<_, DeviceLldp>(
@@ -404,7 +408,7 @@ pub async fn get_device_lldp_neighbors(
     .fetch_all(&conn)
     .await?;
 
-    Ok(crate::error::ok_json(lldps, "获取LLDP邻居成功"))
+    Ok(crate::error::ok_json(lldps, "server.device.lldp.fetched"))
 }
 
 pub async fn sync_lldp_from_snmp(
@@ -413,9 +417,8 @@ pub async fn sync_lldp_from_snmp(
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
-    let neighbors = get_lldp_neighbors(&conn, &device_id)
-        .await
-        .map_err(|e| AppError::Snmp(format!("获取LLDP邻居失败: {e}")))?;
+    // 邻居采集失败（含设备/IP/SNMP 配置问题）已带语义化错误，直接透传
+    let neighbors = get_lldp_neighbors(&conn, &device_id).await?;
 
     let now = chrono::Utc::now();
     let synced_count = neighbors.len();
@@ -448,10 +451,10 @@ pub async fn sync_lldp_from_snmp(
         .execute(&mut *tx)
         .await
         {
-            tracing::error!(
-                "LLDP记录写入失败 (local_port={}): {}",
-                neighbor.local_port,
-                e
+            log_error!(
+                "log.device.lldp.record_write_failed",
+                port = neighbor.local_port,
+                error = e
             );
         }
     }
@@ -478,11 +481,14 @@ pub async fn sync_lldp_from_snmp(
     .fetch_all(&conn)
     .await?;
 
+    // 按同步结果构造消息：有变化 / 无变化
     let message = if synced_count > 0 {
-        format!("同步 {synced_count} 条 LLDP 记录，清理 {stale_removed} 条过期记录")
+        msg("server.device.lldp.sync_changed")
+            .with("synced", synced_count)
+            .with("removed", stale_removed)
     } else {
-        format!("LLDP 数据无变化，清理 {stale_removed} 条过期记录")
+        msg("server.device.lldp.sync_unchanged").with("removed", stale_removed)
     };
 
-    Ok(crate::error::ok_json(saved_lldps, &message))
+    Ok(crate::error::ok_json(saved_lldps, message))
 }

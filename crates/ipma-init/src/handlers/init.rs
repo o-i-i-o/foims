@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::extract::{Json, State};
 use axum::response::Response;
-use tracing::info;
+use ipma_common::msg;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -25,7 +25,7 @@ pub async fn init_system(
     req.validate()?;
 
     if !ctx.init_enabled {
-        return Err(InitError::Forbidden("系统初始化已在配置中禁用".to_string()));
+        return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
     if let Err(e) = verify_code(&req.verification) {
@@ -45,44 +45,44 @@ pub async fn init_system(
     {
         Ok(count) => count,
         Err(e) => {
-            if let Some(db_err) = e.as_database_error() {
-                if db_err.to_string().contains("UndefinedTable") {
-                    0
-                } else {
-                    return Err(InitError::Database(format!("数据库查询错误: {e}")));
-                }
+            if let Some(db_err) = e.as_database_error()
+                && db_err.to_string().contains("UndefinedTable")
+            {
+                0
             } else {
-                return Err(InitError::Database(format!("数据库查询错误: {e}")));
+                return Err(InitError::Database(
+                    msg("server.init.db.query_failed").with("error", e),
+                ));
             }
         }
     };
 
     if count > 0 {
-        return Err(InitError::Validation(
-            "数据库已有用户数据，请先通过新建或导入功能初始化数据库。".to_string(),
-        ));
+        return Err(InitError::Validation(msg("server.init.db.has_user_data")));
     }
 
     if !check_required_tables_exist(&pool).await
         && let Err(e) = create_tables(&pool).await
     {
-        return Err(InitError::Internal(format!("创建表失败: {e}")));
+        return Err(InitError::Internal(
+            msg("server.init.db.create_tables_failed").with("error", e),
+        ));
     }
 
     let password_hash = hash_password(&req.password).await?;
 
     let user_id = Uuid::new_v4();
 
-    tracing::info!(
-        "正在创建管理员用户，ID: {}, 用户名: {}, 邮箱: {}, 角色: {}",
-        user_id,
-        req.username,
-        req.email,
-        req.role
+    ipma_common::log_info!(
+        "log.init.creating_admin",
+        id = user_id,
+        username = req.username,
+        email = req.email,
+        role = req.role
     );
 
     if let Err(e) = sqlx::query(
-        r"INSERT INTO users (id, username, password_hash, email, role, status) 
+        r"INSERT INTO users (id, username, password_hash, email, role, status)
                VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(user_id)
@@ -94,20 +94,21 @@ pub async fn init_system(
     .execute(&pool)
     .await
     {
-        tracing::error!("创建管理员用户失败: {:?}", e);
-        return Err(InitError::Database(format!("创建管理员用户失败: {e}")));
+        ipma_common::log_error!("log.init.admin_create_failed", error = e);
+        return Err(InitError::Internal(
+            msg("server.init.admin_create_failed").with("error", e),
+        ));
     }
 
     if let Err(e) = update_config_enabled(&ctx.config_path, false).await {
-        return Err(InitError::Internal(format!("更新配置失败: {e}")));
+        return Err(InitError::Internal(
+            msg("server.init.config_update_failed").with("error", e),
+        ));
     }
 
-    info!(
-        "系统初始化成功，管理员用户已创建: {}, 初始化模式已禁用",
-        req.username
-    );
+    ipma_common::log_info!("log.init.system_initialized", username = req.username);
 
-    Ok(ok_json((), "系统初始化成功"))
+    Ok(ok_json((), "server.init.completed"))
 }
 
 pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
@@ -121,13 +122,15 @@ pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, In
     let required_tables_exist = check_required_tables_exist(&pool).await;
 
     if required_tables_exist {
-        info!("数据库表结构已存在，跳过初始化");
+        ipma_common::log_info!("log.init.db.schema_exists");
     } else {
         if let Err(e) = create_tables(&pool).await {
-            return Err(InitError::Internal(format!("创建表失败: {e}")));
+            return Err(InitError::Internal(
+                msg("server.init.db.create_tables_failed").with("error", e),
+            ));
         }
-        info!("数据库表结构初始化成功");
+        ipma_common::log_info!("log.init.db.schema_created");
     }
 
-    Ok(ok_json((), "数据库初始化成功"))
+    Ok(ok_json((), "server.init.db.completed"))
 }

@@ -10,7 +10,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{
     DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
     PortSyncItem,
@@ -40,7 +40,7 @@ pub async fn sync_device_network_config(
         .fetch_one(&mut *tx)
         .await?;
     if !exists {
-        return Err(AppError::NotFound("设备不存在".to_string()));
+        return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
     let room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
@@ -68,7 +68,7 @@ pub async fn sync_device_network_config(
     .await;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), device_id).await?;
-    Ok(crate::error::ok_json(cards, "网卡配置同步成功"))
+    Ok(crate::error::ok_json(cards, "server.device.nic.synced"))
 }
 
 /// 应用网卡配置：先删除设备下所有 IP/网口/网卡，再按 cards 重建。
@@ -170,10 +170,9 @@ pub async fn apply_network_config(
                 .fetch_optional(&mut *tx)
                 .await?;
                 if existing_ip.is_some() {
-                    return Err(AppError::Conflict(format!(
-                        "IP地址 {} 已存在",
-                        ip.ip_address
-                    )));
+                    return Err(AppError::Conflict(
+                        msg("server.ip.already_exists").with("ip", &ip.ip_address),
+                    ));
                 }
 
                 let network_id: Option<Uuid> = if ip.network_id.is_some() {
@@ -267,17 +266,21 @@ pub async fn fetch_device_network_config(
             .fetch_all(pool)
             .await?;
 
-            let mut port_json = serde_json::to_value(&port)
-                .map_err(|e| AppError::Internal(format!("序列化网口数据失败: {e}")))?;
-            port_json["ips"] = serde_json::to_value(&ips)
-                .map_err(|e| AppError::Internal(format!("序列化IP数据失败: {e}")))?;
+            let mut port_json = serde_json::to_value(&port).map_err(|e| {
+                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+            })?;
+            port_json["ips"] = serde_json::to_value(&ips).map_err(|e| {
+                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+            })?;
             ports_json.push(port_json);
         }
 
-        let mut card_json = serde_json::to_value(&card)
-            .map_err(|e| AppError::Internal(format!("序列化网卡数据失败: {e}")))?;
-        card_json["ports"] = serde_json::to_value(ports_json)
-            .map_err(|e| AppError::Internal(format!("序列化网口数据失败: {e}")))?;
+        let mut card_json = serde_json::to_value(&card).map_err(|e| {
+            AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+        })?;
+        card_json["ports"] = serde_json::to_value(ports_json).map_err(|e| {
+            AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+        })?;
         result.push(card_json);
     }
 
@@ -293,12 +296,12 @@ pub async fn get_device_nics(
         .bind(id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .ok_or_else(|| AppError::NotFound("设备未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
     Ok(crate::error::ok_json(
         serde_json::json!({ "device_type": device_type, "cards": cards }),
-        "网卡配置获取成功",
+        "server.device.nic.fetched",
     ))
 }
 
@@ -326,9 +329,9 @@ fn validate_card_type(card_type: &str) -> Result<(), AppError> {
         card_type,
         "pcie" | "onboard" | "usb" | "virtual" | "wwan" | "wifi" | "other"
     ) {
-        return Err(AppError::Validation(
-            "网卡类型必须是pcie、onboard、usb、virtual、wwan、wifi或other".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.device.nic.card_type_invalid",
+        )));
     }
     Ok(())
 }
@@ -346,10 +349,9 @@ pub fn validate_physical_type(physical_type: &str) -> Result<(), AppError> {
             | "virtual"
             | "other"
     ) {
-        return Err(AppError::Validation(
-            "网口物理形态必须是rj45、sfp、sfp_plus、sfp28、qsfp_plus、qsfp28、wifi、virtual或other"
-                .to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.device.nic.physical_type_invalid",
+        )));
     }
     Ok(())
 }
@@ -359,9 +361,9 @@ pub fn validate_interface_role(interface_role: &str) -> Result<(), AppError> {
         interface_role,
         "management" | "business" | "loopback" | "uplink" | "other"
     ) {
-        return Err(AppError::Validation(
-            "网口接口角色必须是management、business、loopback、uplink或other".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.device.nic.interface_role_invalid",
+        )));
     }
     Ok(())
 }

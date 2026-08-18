@@ -74,6 +74,6 @@ pub async fn get_login_logs(
 
     Ok(crate::error::ok_json(
         paged_response(logs, total, &pagination),
-        "登录日志获取成功",
+        "server.logs.login_retrieved",
     ))
 }

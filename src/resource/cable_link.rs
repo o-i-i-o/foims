@@ -11,6 +11,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::msg;
 use sqlx::{PgExecutor, Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 use validator::Validate;
@@ -43,10 +44,10 @@ fn validate_endpoint_type(endpoint_type: &str) -> Result<(), AppError> {
     if VALID_ENDPOINT_TYPES.contains(&endpoint_type) {
         Ok(())
     } else {
-        Err(AppError::Validation(format!(
-            "端点类型必须是以下之一: {}",
-            VALID_ENDPOINT_TYPES.join(", ")
-        )))
+        Err(AppError::Validation(
+            msg("server.cable_link.invalid_endpoint_type")
+                .with("types", VALID_ENDPOINT_TYPES.join(", ")),
+        ))
     }
 }
 
@@ -54,10 +55,9 @@ fn validate_link_type(link_type: &str) -> Result<(), AppError> {
     if VALID_LINK_TYPES.contains(&link_type) {
         Ok(())
     } else {
-        Err(AppError::Validation(format!(
-            "链路类型必须是以下之一: {}",
-            VALID_LINK_TYPES.join(", ")
-        )))
+        Err(AppError::Validation(
+            msg("server.cable_link.invalid_link_type").with("types", VALID_LINK_TYPES.join(", ")),
+        ))
     }
 }
 
@@ -178,7 +178,7 @@ pub async fn get_cable_links(
 
     Ok(crate::error::ok_json(
         paged_response(links, total, &pagination),
-        "物理链路列表获取成功",
+        "server.cable_link.fetched",
     ))
 }
 
@@ -194,13 +194,15 @@ pub async fn create_cable_link(
     validate_endpoint_type(&req.b_endpoint_type)?;
 
     if req.a_endpoint_type == req.b_endpoint_type && req.a_endpoint_id == req.b_endpoint_id {
-        return Err(AppError::Validation("不允许自连接链路".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.cable_link.self_connection_forbidden",
+        )));
     }
 
     if req.a_endpoint_type == "device_interface" && req.b_endpoint_type == "device_interface" {
-        return Err(AppError::Validation(
-            "不允许两台设备直连，必须经过交换机或信息点".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.cable_link.direct_connection_forbidden",
+        )));
     }
 
     let link_type = req.link_type.as_deref().unwrap_or("ethernet");
@@ -239,7 +241,7 @@ pub async fn create_cable_link(
 
     let link = fetch_link_by_id(&mut *tx, id)
         .await?
-        .ok_or_else(|| AppError::Internal("链路创建后查询详情失败".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.cable_link.fetch_after_create_failed")))?;
 
     tx.commit().await?;
 
@@ -260,7 +262,7 @@ pub async fn create_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json(link, "物理链路创建成功"))
+    Ok(crate::error::ok_json(link, "server.cable_link.created"))
 }
 
 /// 获取单条物理链路详情。
@@ -270,9 +272,9 @@ pub async fn get_cable_link(
 ) -> Result<Response, AppError> {
     let link = fetch_link_by_id(&state.pool()?.get_conn(), id)
         .await?
-        .ok_or_else(|| AppError::NotFound("物理链路未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.cable_link.not_found")))?;
 
-    Ok(crate::error::ok_json(link, "物理链路获取成功"))
+    Ok(crate::error::ok_json(link, "server.cable_link.fetched"))
 }
 
 /// 更新物理链路。
@@ -302,20 +304,22 @@ pub async fn update_cable_link(
             validate_endpoint_type(a_type)?;
             validate_endpoint_type(b_type)?;
             if a_type == b_type && a_id == b_id {
-                return Err(AppError::Validation("不允许自连接链路".to_string()));
+                return Err(AppError::Validation(msg(
+                    "server.cable_link.self_connection_forbidden",
+                )));
             }
             if a_type == "device_interface" && b_type == "device_interface" {
-                return Err(AppError::Validation(
-                    "不允许两台设备直连，必须经过交换机或信息点".to_string(),
-                ));
+                return Err(AppError::Validation(msg(
+                    "server.cable_link.direct_connection_forbidden",
+                )));
             }
             Some(sort_endpoints(a_type, a_id, b_type, b_id))
         }
         (None, None, None, None) => None,
         _ => {
-            return Err(AppError::Validation(
-                "更新端点时 A/B 两端的类型与 id 必须同时提供".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.cable_link.endpoints_partial_update",
+            )));
         }
     };
 
@@ -326,7 +330,7 @@ pub async fn update_cable_link(
         .fetch_one(&mut *tx)
         .await?;
     if !exists {
-        return Err(AppError::NotFound("物理链路未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cable_link.not_found")));
     }
 
     let has_field_update = req.link_type.is_some()
@@ -335,7 +339,9 @@ pub async fn update_cable_link(
         || req.tested.is_some()
         || new_endpoints.is_some();
     if !has_field_update {
-        return Err(AppError::Validation("没有需要更新的字段".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.cable_link.no_fields_to_update",
+        )));
     }
 
     let mut builder = QueryBuilder::<Postgres>::new("UPDATE cable_links SET ");
@@ -372,7 +378,7 @@ pub async fn update_cable_link(
 
     let link = fetch_link_by_id(&mut *tx, id)
         .await?
-        .ok_or_else(|| AppError::Internal("链路更新后查询详情失败".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.cable_link.fetch_after_update_failed")))?;
 
     tx.commit().await?;
 
@@ -387,7 +393,7 @@ pub async fn update_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json(link, "物理链路更新成功"))
+    Ok(crate::error::ok_json(link, "server.cable_link.updated"))
 }
 
 /// 删除物理链路。
@@ -403,7 +409,7 @@ pub async fn delete_cable_link(
         .fetch_one(&mut *tx)
         .await?;
     if !exists {
-        return Err(AppError::NotFound("物理链路未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cable_link.not_found")));
     }
 
     sqlx::query("DELETE FROM cable_links WHERE id = $1")
@@ -424,7 +430,7 @@ pub async fn delete_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "物理链路删除成功"))
+    Ok(crate::error::ok_json((), "server.cable_link.deleted"))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -468,11 +474,11 @@ pub async fn get_cable_path(
         .collect();
 
     if path.is_empty() {
-        return Err(AppError::NotFound("未找到连接路径".to_string()));
+        return Err(AppError::NotFound(msg("server.cable_link.path_not_found")));
     }
 
     Ok(crate::error::ok_json(
         serde_json::json!({ "path": path, "hop_count": path.len() }),
-        "链路路径查询成功",
+        "server.cable_link.path_fetched",
     ))
 }

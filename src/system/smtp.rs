@@ -10,11 +10,11 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
-use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::error::AppError;
+use ipma_common::{log_error, log_warn, msg};
 
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
 const SPAWN_BLOCKING_TIMEOUT: Duration = Duration::from_secs(60);
@@ -26,16 +26,21 @@ async fn send_with_timeout(transport: SmtpTransport, email: Message) -> Result<(
         tokio::task::spawn_blocking(move || transport.send(&email)),
     )
     .await
-    .map_err(|_| AppError::Internal("邮件发送超时".to_string()))?
-    .map_err(|e| AppError::Internal(format!("邮件发送任务失败: {e}")))?
-    .map_err(|e| AppError::Internal(format!("发送邮件失败: {e:?}")))?;
+    .map_err(|_| AppError::Internal(msg("server.smtp.send_timeout")))?
+    .map_err(|e| AppError::Internal(msg("server.smtp.send_task_failed").with("error", e)))?
+    .map_err(|e| AppError::Internal(msg("server.smtp.send_failed").with("error", e)))?;
     Ok(())
 }
 
 /// 解析邮箱地址，失败时返回携带原始地址的验证错误。
 fn parse_address(raw: &str) -> Result<Address, AppError> {
-    raw.parse()
-        .map_err(|e| AppError::Validation(format!("邮箱地址无效: {raw}: {e}")))
+    raw.parse().map_err(|e| {
+        AppError::Validation(
+            msg("server.smtp.invalid_address")
+                .with("address", raw)
+                .with("error", e),
+        )
+    })
 }
 
 /// 使用数据库中的 SMTP 配置发送邮件。
@@ -47,14 +52,14 @@ pub async fn send_email_async(
 ) -> Result<(), AppError> {
     let smtp_config = get_smtp_config_from_db(pool)
         .await
-        .ok_or_else(|| AppError::NotFound("SMTP未配置".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.smtp.not_configured")))?;
 
     let email = Message::builder()
         .from(parse_address(&smtp_config.from)?.into())
         .to(parse_address(to_address)?.into())
         .subject(subject)
         .body(body.to_string())
-        .map_err(|e| AppError::Internal(format!("邮件构建失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.smtp.build_failed").with("error", e)))?;
 
     let transport = build_smtp_transport(&smtp_config)?;
 
@@ -70,17 +75,14 @@ fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AppError> 
 
     if config.secure || config.host == "smtp.qq.com" {
         let transport = SmtpTransport::relay(&config.host)
-            .map_err(|e| AppError::Internal(format!("邮件服务连接失败: {e}")))?
+            .map_err(|e| AppError::Internal(msg("server.smtp.connect_failed").with("error", e)))?
             .port(config.port)
             .credentials(credentials)
             .timeout(Some(SMTP_TIMEOUT))
             .build();
         Ok(transport)
     } else {
-        warn!(
-            "使用非加密SMTP连接发送邮件，凭据可能以明文传输 (host: {})",
-            config.host
-        );
+        log_warn!("log.smtp.insecure_connection", host = config.host);
         Ok(SmtpTransport::builder_dangerous(&config.host)
             .port(config.port)
             .credentials(credentials)
@@ -113,11 +115,11 @@ pub async fn get_smtp_config_from_db(pool: &PgPool) -> Option<SmtpConfig> {
         Ok(config) => config,
         Err(SmtpConfigError::NotConfigured) => None,
         Err(SmtpConfigError::QueryFailed(e)) => {
-            error!("查询SMTP配置失败: {e}");
+            log_error!("log.smtp.query_failed", error = e);
             None
         }
         Err(SmtpConfigError::Incomplete) => {
-            warn!("SMTP配置不完整，缺少必要字段");
+            log_warn!("log.smtp.incomplete");
             None
         }
     }
@@ -151,21 +153,21 @@ async fn get_smtp_config_from_db_inner(
             match key.as_str() {
                 "host" => host = value,
                 "port" => {
-                    port = value
-                        .parse()
-                        .map_err(|e| SmtpConfigError::QueryFailed(format!("port解析失败: {e}")))?
+                    port = value.parse().map_err(|e| {
+                        SmtpConfigError::QueryFailed(format!("port parse failed: {e}"))
+                    })?
                 }
                 "username" => username = value,
                 "password" => {
-                    password = decrypt_password_async(value)
-                        .await
-                        .map_err(|e| SmtpConfigError::QueryFailed(format!("密码解密失败: {e}")))?
+                    password = decrypt_password_async(value).await.map_err(|e| {
+                        SmtpConfigError::QueryFailed(format!("password decrypt failed: {e}"))
+                    })?
                 }
                 "from" => from = value,
                 "secure" => {
-                    secure = value
-                        .parse()
-                        .map_err(|e| SmtpConfigError::QueryFailed(format!("secure解析失败: {e}")))?
+                    secure = value.parse().map_err(|e| {
+                        SmtpConfigError::QueryFailed(format!("secure parse failed: {e}"))
+                    })?
                 }
                 _ => {}
             }
@@ -192,7 +194,9 @@ pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Resul
 
     let encrypted_password = encrypt_password_async(config.password.clone())
         .await
-        .map_err(|e| AppError::Internal(format!("SMTP密码加密失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.smtp.password_encrypt_failed").with("error", e))
+        })?;
 
     let smtp_configs = [
         ("host", config.host.clone()),
@@ -227,7 +231,7 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<(), AppError> {
         .to(parse_address(&config.from)?.into())
         .subject("SMTP连接测试")
         .body("这是一封SMTP连接测试邮件，无需回复".to_string())
-        .map_err(|e| AppError::Internal(format!("邮件构建失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.smtp.build_failed").with("error", e)))?;
 
     let transport = build_smtp_transport(config)?;
 
@@ -242,8 +246,8 @@ pub async fn send_email_to_users(
     body: &str,
 ) -> Result<(), AppError> {
     let Some(smtp_config) = get_smtp_config_from_db(pool).await else {
-        warn!("SMTP配置未设置");
-        return Err(AppError::NotFound("SMTP配置未设置".to_string()));
+        log_warn!("log.smtp.not_configured");
+        return Err(AppError::NotFound(msg("server.smtp.not_configured")));
     };
 
     let users = sqlx::query("SELECT email FROM users WHERE id = ANY($1)")
@@ -252,7 +256,7 @@ pub async fn send_email_to_users(
         .await?;
 
     if users.is_empty() {
-        return Err(AppError::NotFound("未找到指定用户".to_string()));
+        return Err(AppError::NotFound(msg("server.smtp.recipients_not_found")));
     }
 
     let mut recipients: Vec<String> = Vec::new();
@@ -264,9 +268,7 @@ pub async fn send_email_to_users(
     }
 
     if recipients.is_empty() {
-        return Err(AppError::Validation(
-            "指定用户没有有效的邮箱地址".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.smtp.recipients_no_email")));
     }
 
     let mut email_builder = Message::builder()
@@ -279,7 +281,7 @@ pub async fn send_email_to_users(
 
     let email = email_builder
         .body(body.to_string())
-        .map_err(|e| AppError::Internal(format!("邮件构建失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.smtp.build_failed").with("error", e)))?;
 
     let transport = build_smtp_transport(&smtp_config)?;
 
@@ -308,17 +310,17 @@ pub async fn send_mac_change_email(
             serde_json::from_str::<Vec<Uuid>>(&recips).unwrap_or_default()
         }
         Ok(None) => {
-            warn!("未配置邮件收件人，跳过MAC变更邮件通知");
+            log_warn!("log.smtp.no_recipients_configured");
             return Ok(());
         }
         Err(e) => {
-            error!("查询邮件收件人配置失败: {e}");
+            log_error!("log.smtp.recipients_query_failed", error = e);
             return Ok(());
         }
     };
 
     if user_ids.is_empty() {
-        warn!("邮件收件人列表为空，跳过MAC变更邮件通知");
+        log_warn!("log.smtp.recipients_empty");
         return Ok(());
     }
 

@@ -24,6 +24,32 @@ const logSortStates = {
 };
 const notificationTableState = createSortState("created_at", "desc");
 
+// 登录日志 error_message 与通知 title：后端新数据存 i18n key（server.* 前缀），
+// 历史数据为中文/英文原文——key 形式翻译展示，原文原样展示。
+function translateServerKey(value) {
+  if (typeof value === "string" && value.startsWith("server.")) {
+    return t(value);
+  }
+  return value;
+}
+
+// 通知 content：新格式为 JSON 字符串 {"key":"...","params":{...}}，
+// 历史数据为纯文本——解析成功且含 key 字段则按参数翻译，否则原样展示。
+function translateNotificationContent(content) {
+  if (typeof content !== "string") {
+    return content;
+  }
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === "object" && typeof parsed.key === "string") {
+      return t(parsed.key, parsed.params || {});
+    }
+  } catch (e) {
+    // 历史纯文本内容，原样展示
+  }
+  return content;
+}
+
 // 获取操作类型文本（支持多语言）
 function getOperationTypeText(type) {
   if (typeof type === "string") {
@@ -287,7 +313,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
               <td>${escapeHtml(log.ip_address)}</td>
               <td>${escapeHtml(log.user_agent) || "-"}</td>
               <td class="col-center">${loginResultText}</td>
-              <td>${escapeHtml(log.error_message) || "-"}</td>
+              <td>${escapeHtml(translateServerKey(log.error_message)) || "-"}</td>
             `;
           }
           return rowHtml;
@@ -368,8 +394,8 @@ export async function loadNotificationsData(
         row.innerHTML = `
           <td class="index-column">${startIndex + index + 1}</td>
           <td class="col-center">${new Date(notification.created_at).toLocaleString()}</td>
-          <td>${escapeHtml(notification.title)}</td>
-          <td>${escapeHtml(notification.content)}</td>
+          <td>${escapeHtml(translateServerKey(notification.title))}</td>
+          <td>${escapeHtml(translateNotificationContent(notification.content))}</td>
           <td class="col-center">
             <span class="status-badge ${notification.read ? "status-active" : "status-inactive"}">
               ${notification.read ? t("notifications.read") : t("notifications.unread")}

@@ -1,7 +1,7 @@
 //! 设备模板管理。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -24,7 +24,7 @@ pub async fn get_device_templates(
 
     Ok(crate::error::ok_json(
         json!({ "items": templates }),
-        "设备模板列表获取成功",
+        "server.device_template.list_retrieved",
     ))
 }
 
@@ -40,9 +40,12 @@ pub async fn get_device_template(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("设备模板未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.device_template.not_found")))?;
 
-    Ok(crate::error::ok_json(template, "设备模板获取成功"))
+    Ok(crate::error::ok_json(
+        template,
+        "server.device_template.fetched",
+    ))
 }
 
 /// 删除设备模板
@@ -59,7 +62,7 @@ pub async fn delete_device_template(
             .fetch_optional(&mut *tx)
             .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("设备模板未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.device_template.not_found")));
     }
 
     let usage_count: i64 =
@@ -68,9 +71,9 @@ pub async fn delete_device_template(
             .fetch_one(&mut *tx)
             .await?;
     if usage_count > 0 {
-        return Err(AppError::Validation(format!(
-            "有 {usage_count} 个设备正在使用此模板，不允许删除。请先修改相关设备的模板"
-        )));
+        return Err(AppError::Validation(
+            msg("server.device_template.in_use").with("count", usage_count),
+        ));
     }
 
     sqlx::query("DELETE FROM device_templates WHERE id = $1")
@@ -91,7 +94,7 @@ pub async fn delete_device_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "设备模板删除成功"))
+    Ok(crate::error::ok_json((), "server.device_template.deleted"))
 }
 
 /// 更新设备模板
@@ -109,7 +112,7 @@ pub async fn update_device_template(
             .fetch_optional(&state.pool()?.get_conn())
             .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("设备模板未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.device_template.not_found")));
     }
 
     let name_conflict: bool = sqlx::query_scalar(
@@ -120,7 +123,9 @@ pub async fn update_device_template(
     .fetch_one(&state.pool()?.get_conn())
     .await?;
     if name_conflict {
-        return Err(AppError::Conflict("模板名称已存在".to_string()));
+        return Err(AppError::Conflict(msg(
+            "server.device_template.name_exists",
+        )));
     }
 
     sqlx::query(
@@ -146,5 +151,5 @@ pub async fn update_device_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "设备模板更新成功"))
+    Ok(crate::error::ok_json((), "server.device_template.updated"))
 }

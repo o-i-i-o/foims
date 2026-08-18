@@ -23,9 +23,13 @@ pub struct NetworkRegion {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkRegionCreate {
-    #[validate(length(min = 1, max = 20, message = "网络区域名称长度必须在1到20个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 20,
+        message = "server.network.validation.region_name_length"
+    ))]
     pub name: String,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     pub ipv4_cidrs: Option<Vec<String>>,
     pub ipv6_cidrs: Option<Vec<String>>,
@@ -33,9 +37,13 @@ pub struct NetworkRegionCreate {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkRegionUpdate {
-    #[validate(length(min = 1, max = 20, message = "网络区域名称长度必须在1到20个字符之间"))]
+    #[validate(length(
+        min = 1,
+        max = 20,
+        message = "server.network.validation.region_name_length"
+    ))]
     pub name: Option<String>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     pub ipv4_cidrs: Option<Vec<String>>,
     pub ipv6_cidrs: Option<Vec<String>>,
@@ -74,7 +82,7 @@ pub struct NetworkInfo {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkCreate {
-    #[validate(length(min = 1, max = 50, message = "网络名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]
     pub name: String,
     pub network_region_id: Uuid,
     pub ipv4_cidr: Option<String>,
@@ -83,21 +91,21 @@ pub struct NetworkCreate {
     pub ipv6_gateway: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
-        message = "DNS服务器数量不能超过5个"
+        message = "server.network.validation.dns_count"
     ))]
     pub ipv4_dns: Option<Vec<String>>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
-        message = "DNS服务器数量不能超过5个"
+        message = "server.network.validation.dns_count"
     ))]
     pub ipv6_dns: Option<Vec<String>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct NetworkUpdate {
-    #[validate(length(min = 1, max = 50, message = "网络名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]
     pub name: Option<String>,
     pub network_region_id: Option<Uuid>,
     pub ipv4_cidr: Option<String>,
@@ -106,14 +114,14 @@ pub struct NetworkUpdate {
     pub ipv6_gateway: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
-        message = "DNS服务器数量不能超过5个"
+        message = "server.network.validation.dns_count"
     ))]
     pub ipv4_dns: Option<Vec<String>>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
-        message = "DNS服务器数量不能超过5个"
+        message = "server.network.validation.dns_count"
     ))]
     pub ipv6_dns: Option<Vec<String>>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }

@@ -10,6 +10,7 @@ use validator::Validate;
 
 use crate::error::AppError;
 use crate::routes::static_files::AppJson;
+use ipma_common::{log_warn, msg};
 
 /// 应用层 Fail2ban 日志文件路径（供 OS fail2ban 监控）
 const AUTH_LOG_PATH: &str = "/var/log/ipma/auth.log";
@@ -176,11 +177,15 @@ fn write_auth_log(success: bool, ip: &str, username: &str, reason: Option<&str>)
         {
             Ok(mut file) => {
                 if let Err(e) = file.write_all(line.as_bytes()).await {
-                    tracing::warn!("写入认证日志失败: {}", e);
+                    log_warn!("log.fail2ban.auth_log_write_failed", error = e);
                 }
             }
             Err(e) => {
-                tracing::warn!("打开认证日志文件 {} 失败: {}", AUTH_LOG_PATH, e);
+                log_warn!(
+                    "log.fail2ban.auth_log_open_failed",
+                    path = AUTH_LOG_PATH,
+                    error = e
+                );
             }
         }
     });
@@ -214,11 +219,11 @@ pub fn record_login_failure(ip: &str, username: &str, reason: &str) -> bool {
         // 检查是否达到封禁阈值
         if record.failures.len() as u64 >= config.max_retry {
             record.banned_until = Some(now + Duration::from_secs(config.bantime));
-            tracing::warn!(
-                "IP {} 登录失败 {} 次，已封禁 {} 秒",
-                ip,
-                record.failures.len(),
-                config.bantime
+            log_warn!(
+                "log.fail2ban.ip_banned",
+                ip = ip,
+                count = record.failures.len(),
+                seconds = config.bantime
             );
             return true;
         }
@@ -265,11 +270,23 @@ pub struct TrackedIpInfo {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateFail2banConfigRequest {
     pub enabled: Option<bool>,
-    #[validate(range(min = 60, max = 86400, message = "检测时间必须在60到86400秒之间"))]
+    #[validate(range(
+        min = 60,
+        max = 86400,
+        message = "server.fail2ban.validation.findtime_range"
+    ))]
     pub findtime: Option<u64>,
-    #[validate(range(min = 1, max = 100, message = "最大重试次数必须在1到100之间"))]
+    #[validate(range(
+        min = 1,
+        max = 100,
+        message = "server.fail2ban.validation.max_retry_range"
+    ))]
     pub max_retry: Option<u64>,
-    #[validate(range(min = 60, max = 604800, message = "封禁时长必须在60到604800秒之间"))]
+    #[validate(range(
+        min = 60,
+        max = 604800,
+        message = "server.fail2ban.validation.bantime_range"
+    ))]
     pub bantime: Option<u64>,
 }
 
@@ -328,7 +345,7 @@ pub async fn get_app_fail2ban_status(
             banned_ips,
             tracked_ips,
         },
-        "success",
+        "server.common.success",
     ))
 }
 
@@ -356,8 +373,8 @@ pub async fn update_app_fail2ban_config(
     }
 
     Ok(crate::error::ok_json(
-        serde_json::json!({"message": "配置已更新"}),
-        "success",
+        serde_json::json!({"message": "server.fail2ban.config_updated"}),
+        "server.fail2ban.config_updated",
     ))
 }
 
@@ -368,7 +385,9 @@ pub async fn app_unban_ip(
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
     if ip.parse::<std::net::IpAddr>().is_err() {
-        return Err(AppError::Validation(format!("无效的IP地址: {ip}")));
+        return Err(AppError::Validation(
+            msg("server.fail2ban.invalid_ip").with("ip", &ip),
+        ));
     }
 
     let store = app_fail2ban();
@@ -379,9 +398,10 @@ pub async fn app_unban_ip(
         record.failures.clear();
     }
 
+    let response = msg("server.fail2ban.ip_unbanned").with("ip", &ip);
     Ok(crate::error::ok_json(
-        serde_json::json!({"message": format!("IP {ip} 已解封"), "ip": ip}),
-        "success",
+        serde_json::json!({"message": "server.fail2ban.ip_unbanned", "ip": ip}),
+        response,
     ))
 }
 
@@ -392,7 +412,9 @@ pub async fn app_ban_ip(
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
     if ip.parse::<std::net::IpAddr>().is_err() {
-        return Err(AppError::Validation(format!("无效的IP地址: {ip}")));
+        return Err(AppError::Validation(
+            msg("server.fail2ban.invalid_ip").with("ip", &ip),
+        ));
     }
 
     let store = app_fail2ban();
@@ -403,8 +425,11 @@ pub async fn app_ban_ip(
         record.banned_until = Some(Instant::now() + Duration::from_secs(config.bantime));
     }
 
+    let response = msg("server.fail2ban.ip_banned")
+        .with("ip", &ip)
+        .with("seconds", config.bantime);
     Ok(crate::error::ok_json(
-        serde_json::json!({"message": format!("IP {ip} 已封禁 {} 秒", config.bantime), "ip": ip}),
-        "success",
+        serde_json::json!({"message": "server.fail2ban.ip_banned", "ip": ip}),
+        response,
     ))
 }

@@ -3,6 +3,7 @@
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::models::TaskContext;
 use async_trait::async_trait;
+use ipma_common::msg;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -39,9 +40,9 @@ impl TaskRegistry {
     pub async fn execute(&self, task_type: &str, ctx: &TaskContext) -> SchedulerResult<String> {
         match self.executors.get(task_type) {
             Some(executor) => executor.execute(ctx).await,
-            None => Err(SchedulerError::TaskNotFound(format!(
-                "未知的任务类型: {task_type}"
-            ))),
+            None => Err(SchedulerError::TaskNotFound(
+                msg("server.task.type_unknown").with("task_type", task_type),
+            )),
         }
     }
 }

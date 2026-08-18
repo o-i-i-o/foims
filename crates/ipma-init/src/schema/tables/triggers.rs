@@ -1,7 +1,5 @@
 //! 跨表触发器创建。
 
-use tracing::warn;
-
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
@@ -51,7 +49,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await
         {
-            warn!("updated_at触发器创建失败（可能已存在） {}: {}", table, e);
+            ipma_common::log_warn!("log.init.trigger_create_failed", table = table, error = e);
         }
     }
 
@@ -84,7 +82,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await
     {
-        warn!("删除旧触发器失败: {}", e);
+        ipma_common::log_warn!("log.init.trigger_drop_failed", error = e);
     }
 
     sqlx::query(

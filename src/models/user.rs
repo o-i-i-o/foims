@@ -23,26 +23,26 @@ pub struct User {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserCreate {
-    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
-    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub password: String,
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.user.validation.email_invalid"))]
     pub email: String,
     #[validate(custom(
         function = "crate::models::validate_role",
-        message = "角色必须是admin或user"
+        message = "server.user.validation.role_invalid"
     ))]
     pub role: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserUpdate {
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.user.validation.email_invalid"))]
     pub email: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_role_option",
-        message = "角色必须是admin或user"
+        message = "server.user.validation.role_invalid"
     ))]
     pub role: Option<String>,
     pub status: Option<bool>,
@@ -50,16 +50,16 @@ pub struct UserUpdate {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserLogin {
-    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
-    #[validate(length(min = 8, message = "登录密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub password: String,
     pub remember_me: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct ForgotPasswordRequest {
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.user.validation.email_invalid"))]
     pub email: String,
 }
 
@@ -67,7 +67,7 @@ pub struct ForgotPasswordRequest {
 pub struct ResetPasswordRequest {
     #[validate(length(min = 1))]
     pub token: String,
-    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub new_password: String,
 }
 
@@ -75,33 +75,33 @@ pub struct ResetPasswordRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TwoFactorLoginRequest {
-    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
-    #[validate(length(min = 8, message = "密码长度必须至少8个字符"))]
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub password: Option<String>,
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub two_factor_code: String,
     pub remember_me: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendTwoFactorCodeRequest {
-    #[validate(length(min = 3, max = 50, message = "用户名长度必须在3到50个字符之间"))]
+    #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
     pub password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendLoginCodeRequest {
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.user.validation.email_invalid"))]
     pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct EmailLoginRequest {
-    #[validate(email(message = "请输入有效的邮箱地址"))]
+    #[validate(email(message = "server.user.validation.email_invalid"))]
     pub email: String,
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
     pub remember_me: Option<bool>,
 }

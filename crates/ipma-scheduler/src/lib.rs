@@ -11,5 +11,5 @@ pub use cron::calculate_next_run;
 pub use error::{SchedulerError, SchedulerResult};
 pub use executor::{TaskExecutor, TaskRegistry, TaskRegistryRef};
 pub use models::{DatabaseConfig, ScheduledTask, TaskContext, TaskLog};
-pub use scheduler::{RunningScheduler, SchedulerState};
+pub use scheduler::{RunningScheduler, SchedulerState, error_message};
 pub use task_log::{log_task_execution, sync_user_tasks_from_db};

@@ -8,6 +8,7 @@ use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::msg;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -68,7 +69,7 @@ pub async fn get_available_org_types(
             "types": types,
             "icons": icons
         }),
-        "获取组织类型配置成功",
+        "server.org_template.types_fetched",
     ))
 }
 
@@ -76,55 +77,71 @@ pub async fn get_available_org_types(
 /// levels 格式: { "type_a": ["type_b"], "type_b": ["type_c", "type_d"], ... }
 pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, AppError> {
     let levels_map = levels.as_object().ok_or_else(|| {
-        AppError::Validation("levels 必须是一个对象（类型→子级映射）".to_string())
+        AppError::Validation(msg("server.org_template.validation.levels_must_be_object"))
     })?;
 
     if levels_map.is_empty() {
-        return Err(AppError::Validation("levels 映射不能为空".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.org_template.validation.levels_empty",
+        )));
     }
 
     if levels_map.len() > 50 {
-        return Err(AppError::Validation(
-            "levels 映射的类型数量不能超过50".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.org_template.validation.levels_too_many_types",
+        )));
     }
 
     let mut all_child_types: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (key, value) in levels_map {
         if key.trim().is_empty() {
-            return Err(AppError::Validation("类型名称不能为空".to_string()));
-        }
-        if key.len() > 50 {
-            return Err(AppError::Validation(format!(
-                "类型名称「{key}」长度不能超过50个字符"
+            return Err(AppError::Validation(msg(
+                "server.org_template.validation.type_name_required",
             )));
         }
+        if key.len() > 50 {
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.type_name_too_long").with("name", key),
+            ));
+        }
 
-        let children = value
-            .as_array()
-            .ok_or_else(|| AppError::Validation(format!("类型「{key}」的子级必须是数组")))?;
+        let children = value.as_array().ok_or_else(|| {
+            AppError::Validation(
+                msg("server.org_template.validation.children_not_array").with("name", key),
+            )
+        })?;
 
         let mut seen_in_this_key: std::collections::HashSet<&str> =
             std::collections::HashSet::new();
         for (idx, child) in children.iter().enumerate() {
             let child_str = child.as_str().ok_or_else(|| {
-                AppError::Validation(format!("类型「{key}」的子级[{idx}]必须是字符串"))
+                AppError::Validation(
+                    msg("server.org_template.validation.child_not_string")
+                        .with("name", key)
+                        .with("index", idx),
+                )
             })?;
             if child_str.trim().is_empty() {
-                return Err(AppError::Validation(format!(
-                    "类型「{key}」的子级[{idx}]不能为空"
-                )));
+                return Err(AppError::Validation(
+                    msg("server.org_template.validation.child_empty")
+                        .with("name", key)
+                        .with("index", idx),
+                ));
             }
             if child_str.len() > 50 {
-                return Err(AppError::Validation(format!(
-                    "类型「{key}」的子级[{idx}]长度不能超过50个字符"
-                )));
+                return Err(AppError::Validation(
+                    msg("server.org_template.validation.child_too_long")
+                        .with("name", key)
+                        .with("index", idx),
+                ));
             }
             if !seen_in_this_key.insert(child_str) {
-                return Err(AppError::Validation(format!(
-                    "类型「{key}」的子级中存在重复类型「{child_str}」"
-                )));
+                return Err(AppError::Validation(
+                    msg("server.org_template.validation.child_duplicate")
+                        .with("name", key)
+                        .with("child", child_str),
+                ));
             }
             all_child_types.insert(child_str.to_string());
         }
@@ -133,9 +150,9 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
     // 所有子类型必须在映射中定义
     for child_type in &all_child_types {
         if !levels_map.contains_key(child_type) {
-            return Err(AppError::Validation(format!(
-                "子类型「{child_type}」未在映射中定义，请添加该类型作为 key"
-            )));
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.child_type_undefined").with("type", child_type),
+            ));
         }
     }
 
@@ -147,15 +164,19 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
     let root_type = match root_types.len() {
         1 => root_types[0].clone(),
         0 => {
-            return Err(AppError::Validation(
-                "未找到根类型（所有类型都作为子级出现，存在循环引用）".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.org_template.validation.root_type_missing",
+            )));
         }
         _ => {
-            return Err(AppError::Validation(format!(
-                "存在多个根类型: {:?}，请确保只有一个根类型",
-                root_types
-            )));
+            let types = root_types
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("、");
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.root_type_multiple").with("types", types),
+            ));
         }
     };
 
@@ -188,9 +209,9 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         false
     }
     if has_cycle(&root_type, levels_map, &mut visited) {
-        return Err(AppError::Validation(
-            "模板层级存在循环引用，请检查类型间的父子关系".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.org_template.validation.levels_cycle",
+        )));
     }
 
     // 层级深度不得超过组织创建上限（根为第 1 层），否则模板能建、组织节点建不全
@@ -213,9 +234,11 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
     }
     walk_depth(&root_type, levels_map, 1, &mut max_depth);
     if max_depth > MAX_ORG_DEPTH {
-        return Err(AppError::Validation(format!(
-            "模板层级深度 {max_depth} 超过上限 {MAX_ORG_DEPTH}"
-        )));
+        return Err(AppError::Validation(
+            msg("server.org_template.validation.levels_depth_exceeded")
+                .with("depth", max_depth)
+                .with("max", MAX_ORG_DEPTH),
+        ));
     }
 
     Ok(root_type)
@@ -228,24 +251,24 @@ pub fn validate_icons_mapping(
     icons: &serde_json::Value,
     levels: &serde_json::Value,
 ) -> Result<(), AppError> {
-    let icons_map = icons
-        .as_object()
-        .ok_or_else(|| AppError::Validation("icons 必须是一个对象（类型→图标映射）".to_string()))?;
+    let icons_map = icons.as_object().ok_or_else(|| {
+        AppError::Validation(msg("server.org_template.validation.icons_must_be_object"))
+    })?;
 
     let levels_map = levels
         .as_object()
-        .ok_or_else(|| AppError::Internal("levels 格式错误".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
 
     for (key, value) in icons_map {
         if !levels_map.contains_key(key) {
-            return Err(AppError::Validation(format!(
-                "图标映射中的类型「{key}」未在 levels 中定义"
-            )));
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.icon_type_undefined").with("type", key),
+            ));
         }
         if !value.is_string() {
-            return Err(AppError::Validation(format!(
-                "类型「{key}」的图标必须是字符串"
-            )));
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.icon_not_string").with("type", key),
+            ));
         }
     }
 
@@ -362,20 +385,24 @@ pub fn get_allowed_children(
 ) -> Result<Vec<String>, AppError> {
     let levels_map = levels
         .as_object()
-        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
 
     let children = levels_map
         .get(type_str)
-        .ok_or_else(|| AppError::Validation(format!("类型「{type_str}」未在模板中定义")))?
+        .ok_or_else(|| {
+            AppError::Validation(
+                msg("server.org_template.validation.type_not_defined").with("type", type_str),
+            )
+        })?
         .as_array()
-        .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
 
     children
         .iter()
         .map(|c| {
             c.as_str()
                 .map(String::from)
-                .ok_or_else(|| AppError::Internal("模板 levels 格式错误".to_string()))
+                .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))
         })
         .collect()
 }
@@ -390,7 +417,7 @@ pub async fn get_org_templates(State(state): State<Arc<AppState>>) -> Result<Res
 
     Ok(crate::error::ok_json(
         json!({ "items": templates }),
-        "模板列表获取成功",
+        "server.org_template.list_fetched",
     ))
 }
 
@@ -406,9 +433,12 @@ pub async fn get_org_template(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("模板未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.org_template.not_found")))?;
 
-    Ok(crate::error::ok_json(template, "模板获取成功"))
+    Ok(crate::error::ok_json(
+        template,
+        "server.org_template.fetched",
+    ))
 }
 
 /// 创建模板
@@ -446,7 +476,7 @@ pub async fn create_org_template(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("模板名称已存在".to_string());
+            return AppError::Conflict(msg("server.org_template.already_exists"));
         }
         AppError::from(e)
     })?;
@@ -476,7 +506,10 @@ pub async fn create_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json(template, "模板创建成功"))
+    Ok(crate::error::ok_json(
+        template,
+        "server.org_template.created",
+    ))
 }
 
 /// 更新模板
@@ -502,7 +535,7 @@ pub async fn update_org_template(
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| AppError::NotFound("模板未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.org_template.not_found")))?;
 
     // 检查是否有关联的组织节点正在使用此模板
     let usage_count: i64 =
@@ -521,9 +554,9 @@ pub async fn update_org_template(
         && new_levels != &existing.levels
     {
         let mapping = compute_type_name_mapping(&existing.levels, new_levels).ok_or_else(|| {
-            AppError::Validation(format!(
-                "有 {usage_count} 个组织节点正在使用此模板，且层级结构发生了变化（增删了层级或子节点），不允许修改。仅允许修改类型名称"
-            ))
+            AppError::Validation(
+                msg("server.org_template.in_use_structure_changed").with("count", usage_count),
+            )
         })?;
 
         let new_names: std::collections::HashSet<&str> = new_levels
@@ -532,9 +565,11 @@ pub async fn update_org_template(
             .unwrap_or_default();
         for (old_name, new_name) in &mapping {
             if old_name != new_name && new_names.contains(old_name.as_str()) {
-                return Err(AppError::Validation(format!(
-                    "有 {usage_count} 个组织节点正在使用此模板，不允许调换子级顺序或交换类型名称（类型「{old_name}」仍存在于新层级中）"
-                )));
+                return Err(AppError::Validation(
+                    msg("server.org_template.in_use_swap_forbidden")
+                        .with("count", usage_count)
+                        .with("name", old_name),
+                ));
             }
         }
         rename_mapping = Some(mapping);
@@ -575,7 +610,7 @@ pub async fn update_org_template(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("模板名称已存在".to_string());
+            return AppError::Conflict(msg("server.org_template.already_exists"));
         }
         AppError::from(e)
     })?;
@@ -605,7 +640,10 @@ pub async fn update_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json(template, "模板更新成功"))
+    Ok(crate::error::ok_json(
+        template,
+        "server.org_template.updated",
+    ))
 }
 
 /// 删除模板
@@ -621,7 +659,7 @@ pub async fn delete_org_template(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("模板未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.org_template.not_found")));
     }
 
     let usage_count: i64 =
@@ -630,9 +668,9 @@ pub async fn delete_org_template(
             .fetch_one(&mut *tx)
             .await?;
     if usage_count > 0 {
-        return Err(AppError::Validation(format!(
-            "有 {usage_count} 个组织节点正在使用此模板，不允许删除。请先删除或迁移相关节点"
-        )));
+        return Err(AppError::Validation(
+            msg("server.org_template.in_use_delete_forbidden").with("count", usage_count),
+        ));
     }
 
     sqlx::query("DELETE FROM org_templates WHERE id = $1")
@@ -653,7 +691,7 @@ pub async fn delete_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "模板删除成功"))
+    Ok(crate::error::ok_json((), "server.org_template.deleted"))
 }
 
 #[cfg(test)]
@@ -685,7 +723,8 @@ mod tests {
     fn test_validate_levels_depth_exceeds_limit() {
         let levels = chain_levels(MAX_ORG_DEPTH + 1);
         let err = validate_levels_mapping(&levels).unwrap_err();
-        assert!(err.to_string().contains("超过上限"));
+        // 错误消息已 key 化，AppError Display 仅展示 key
+        assert!(err.to_string().contains("levels_depth_exceeded"));
     }
 
     #[test]

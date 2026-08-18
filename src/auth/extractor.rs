@@ -4,7 +4,7 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
 use crate::auth::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::utils::common::is_secure_from_parts;
 
 pub struct AuthUser {
@@ -27,7 +27,7 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
                 device_fingerprint: c.device_fingerprint.clone(),
                 ip_address: c.ip_address.clone(),
             }),
-            None => Err(AppError::Unauthorized("未授权访问".to_string())),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
         }
     }
 }
@@ -46,8 +46,8 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
                 sub: c.sub.clone(),
                 username: c.username.clone(),
             }),
-            Some(_) => Err(AppError::Forbidden("需要管理员权限".to_string())),
-            None => Err(AppError::Unauthorized("未授权访问".to_string())),
+            Some(_) => Err(AppError::Forbidden(msg("server.auth.admin_required"))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
         }
     }
 }

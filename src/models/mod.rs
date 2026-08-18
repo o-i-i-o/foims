@@ -13,8 +13,9 @@ pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationEr
     match device_type {
         "pc" | "laptop" | "printer" | "server" | "network_device" | "switch" | "camera"
         | "phone" | "other" => Ok(()),
+        // code 仅作错误标识；实际返回给前端的消息 key 由调用点的 message 属性覆盖
         _ => Err(ValidationError::new(
-            "设备类型必须是pc/laptop/printer/server/network_device/switch/camera/phone/other",
+            "server.device.validation.type_invalid",
         )),
     }
 }
@@ -31,9 +32,7 @@ pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError>
     {
         Ok(())
     } else {
-        Err(ValidationError::new(
-            "房间类型必须是office、data_center或telecom_closet",
-        ))
+        Err(ValidationError::new("server.room.validation.type_invalid"))
     }
 }
 
@@ -44,7 +43,7 @@ pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationEr
 pub fn validate_role(role: &str) -> Result<(), ValidationError> {
     match role {
         "admin" | "user" => Ok(()),
-        _ => Err(ValidationError::new("角色必须是admin或user")),
+        _ => Err(ValidationError::new("server.user.validation.role_invalid")),
     }
 }
 

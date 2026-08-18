@@ -14,6 +14,7 @@ use dashmap::DashMap;
 use serde_json::json;
 
 use crate::utils::{get_real_ip_from_parts, normalize_ipv4_address};
+use ipma_common::{log_info, log_warn, msg};
 
 const DEFAULT_EMAIL_LIMIT: u32 = 5;
 const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
@@ -56,7 +57,7 @@ fn extract_user_id_from_parts(parts: &Parts) -> Option<String> {
 
 #[derive(Debug, Clone)]
 pub struct RateLimitError {
-    pub message: String,
+    pub message: ipma_common::AppMessage,
     pub retry_after: u64,
 }
 
@@ -69,15 +70,20 @@ impl std::fmt::Display for RateLimitError {
 impl RateLimitError {
     /// 构造 429 速率限制响应（带 Retry-After 头）
     fn into_response(self) -> Response {
+        // 与 ApiResponse 保持一致的结构：message 为 i18n key，动态参数放 message_params
+        let mut body = json!({
+            "success": false,
+            "message": self.message.key(),
+            "error_type": "rate_limit_exceeded",
+            "retry_after": self.retry_after
+        });
+        if let Some(params) = self.message.params_map() {
+            body["message_params"] = json!(params);
+        }
         (
             StatusCode::TOO_MANY_REQUESTS,
             [("Retry-After", self.retry_after.to_string())],
-            Json(json!({
-                "success": false,
-                "message": &self.message,
-                "error_type": "rate_limit_exceeded",
-                "retry_after": self.retry_after
-            })),
+            Json(body),
         )
             .into_response()
     }
@@ -232,18 +238,19 @@ impl RateLimiter {
                 let weighted = entry.weighted_count(window_secs);
                 if weighted >= limit {
                     let retry_after = window_secs - entry.window_start.elapsed().as_secs();
-                    tracing::warn!(
-                        "速率限制触发: key={}, 当前计数={}, 加权计数={}, 限制={}, 窗口={}s, 重试等待={}s",
-                        key,
-                        entry.count,
-                        weighted,
-                        limit,
-                        window_secs,
-                        retry_after
+                    log_warn!(
+                        "log.rate_limit.triggered",
+                        key = key,
+                        count = entry.count,
+                        weighted = weighted,
+                        limit = limit,
+                        window = window_secs,
+                        retry_after = retry_after
                     );
+                    let retry_after = retry_after.max(1);
                     return Err(RateLimitError {
-                        message: format!("请求过于频繁，请在 {retry_after} 秒后重试"),
-                        retry_after: retry_after.max(1),
+                        message: msg("server.common.rate_limited").with("seconds", retry_after),
+                        retry_after,
                     });
                 }
                 entry.increment();
@@ -346,15 +353,15 @@ pub async fn rate_limit_middleware(
         .limiter
         .check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email)
     {
-        tracing::warn!(
-            "请求被速率限制拦截: method={}, path={}, ip={}, user_id={}, is_strict={}, is_email={}, retry_after={}s",
-            method,
-            path,
-            ip,
-            user_id.as_deref().unwrap_or("-"),
-            is_strict,
-            is_email,
-            e.retry_after
+        log_warn!(
+            "log.rate_limit.blocked",
+            method = method,
+            path = path,
+            ip = ip,
+            user_id = user_id.as_deref().unwrap_or("-"),
+            is_strict = is_strict,
+            is_email = is_email,
+            retry_after = e.retry_after
         );
         return e.into_response();
     }
@@ -374,7 +381,7 @@ pub fn start_cleanup_task(
                     limiter.cleanup_expired();
                 }
                 _ = shutdown_rx.recv() => {
-                    tracing::info!("速率限制清理任务收到关闭信号，停止运行");
+                    log_info!("log.rate_limit.cleanup_stopped");
                     break;
                 }
             }

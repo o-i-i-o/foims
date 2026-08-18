@@ -19,6 +19,7 @@ use crate::routes::static_files::AppJson;
 use crate::system::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
+use ipma_common::{log_error, log_info, log_warn, msg};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
@@ -46,19 +47,16 @@ pub fn init_start_time() {
 
 async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = crate::config::get_config_file_path();
-    tracing::info!("[save_config] 开始保存配置到: {}", config_path);
+    log_info!("log.config.save_start", path = config_path);
 
     let toml_str = toml::to_string_pretty(config)?;
-    tracing::info!("[save_config] TOML 内容长度: {}", toml_str.len());
+    log_info!("log.config.toml_length", count = toml_str.len());
 
     tokio::fs::write(&config_path, &toml_str).await?;
-    tracing::info!("[save_config] 配置已写入文件");
+    log_info!("log.config.file_written");
 
     let verify_content = tokio::fs::read_to_string(&config_path).await?;
-    tracing::info!(
-        "[save_config] 验证读取成功，内容长度: {}",
-        verify_content.len()
-    );
+    log_info!("log.config.verify_read", count = verify_content.len());
 
     Ok(())
 }
@@ -73,7 +71,7 @@ pub async fn get_system_info(
     {
         Ok(_) => "connected".to_string(),
         Err(e) => {
-            tracing::error!("数据库连接检查失败: {}", e);
+            log_error!("log.system.db_check_failed", error = e);
             format!("disconnected: {}", e)
         }
     };
@@ -100,7 +98,10 @@ pub async fn get_system_info(
         }
     });
 
-    Ok(crate::error::ok_json(system_info, "系统信息获取成功"))
+    Ok(crate::error::ok_json(
+        system_info,
+        "server.system.info_retrieved",
+    ))
 }
 
 pub async fn get_system_config(
@@ -110,7 +111,10 @@ pub async fn get_system_config(
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
-    Ok(crate::error::ok_json(config, "系统配置获取成功"))
+    Ok(crate::error::ok_json(
+        config,
+        "server.system.config_retrieved",
+    ))
 }
 
 pub async fn update_system_config(
@@ -144,9 +148,9 @@ pub async fn update_system_config(
 
     if let Some(init) = &req.init {
         if init.enabled != state.config.init.enabled {
-            return Err(AppError::Validation(
-                "禁止通过API修改初始化模式状态，请直接编辑配置文件".to_string(),
-            ));
+            return Err(AppError::Validation(msg(
+                "server.system.init_mode_api_forbidden",
+            )));
         }
         new_config.init = init.clone();
     }
@@ -160,14 +164,17 @@ pub async fn update_system_config(
     }
 
     let config_path = crate::config::get_config_file_path();
-    tracing::info!("[update_config] 准备保存配置到: {}", config_path);
+    log_info!("log.config.save_start", path = config_path);
 
-    save_config_to_file(&new_config)
-        .await
-        .map_err(|e| AppError::Internal(format!("配置保存失败: {e:?}")))?;
-    tracing::info!("配置已保存到: {}", config_path);
+    save_config_to_file(&new_config).await.map_err(|e| {
+        AppError::Internal(msg("server.system.config_save_failed").with("error", e))
+    })?;
+    log_info!("log.config.saved", path = config_path);
 
-    Ok(crate::error::ok_json(new_config, "配置更新成功"))
+    Ok(crate::error::ok_json(
+        new_config,
+        "server.system.config_updated",
+    ))
 }
 
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
@@ -177,9 +184,9 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
         .await
         .unwrap_or(false);
 
-    tracing::info!(
-        "触发服务重启, is_running_as_service: {}",
-        is_running_as_service
+    log_info!(
+        "log.system.restart_triggered",
+        as_service = is_running_as_service
     );
 
     if is_running_as_service {
@@ -196,14 +203,14 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
             Err(_) => true,
         };
 
-        tracing::info!("服务当前状态: active={}", is_active);
+        log_info!("log.system.service_state", active = is_active);
 
         // 在后台延迟执行 systemctl restart：若直接 await，成功重启会杀死本进程导致响应不可达。
         // 先返回响应，由后台任务触发重启；若 systemctl 因权限等原因未能终止进程，则回退到进程退出方式。
         let service_name_owned = service_name.to_string();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            tracing::info!("执行 systemctl restart {}...", service_name_owned);
+            log_info!("log.system.systemctl_restart", service = service_name_owned);
             let _ = Command::new("systemctl")
                 .arg("restart")
                 .arg(&service_name_owned)
@@ -211,16 +218,16 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
                 .await;
             // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            tracing::info!("systemctl 未终止进程，使用退出方式重启...");
+            log_info!("log.system.systemctl_exit_fallback");
             std::process::exit(0);
         });
 
         Ok(crate::error::ok_json(
             (),
-            "服务重启命令已发送，服务正在重启...",
+            "server.system.restart_command_sent",
         ))
     } else {
-        tracing::info!("非服务模式运行，使用独立进程重启");
+        log_info!("log.system.standalone_restart");
         restart_standalone_process().await
     }
 }
@@ -228,7 +235,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 pub async fn restart_application(
     _admin: crate::auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    tracing::info!("收到重启应用请求");
+    log_info!("log.system.restart_requested");
     trigger_service_restart().await
 }
 
@@ -248,18 +255,18 @@ fn check_if_running_as_service() -> bool {
 
 async fn restart_standalone_process() -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
-        .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;
 
     let exe_path_str = exe_path
         .to_str()
-        .ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.system.exe_path_invalid")))?;
 
     let working_dir = std::env::current_dir()
-        .map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.system.workdir_failed").with("error", e)))?;
 
     let working_dir_str = working_dir
         .to_str()
-        .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.system.workdir_invalid")))?;
 
     let restart_script = r#"#!/bin/bash
 sleep 3
@@ -270,17 +277,21 @@ exec "$2"
     let script_path = "/tmp/ipma_restart.sh";
     tokio::fs::write(script_path, restart_script)
         .await
-        .map_err(|e| AppError::Internal(format!("创建重启脚本失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.restart_script_create_failed").with("error", e))
+        })?;
 
     let output = Command::new("chmod")
         .arg("+x")
         .arg(script_path)
         .output()
         .await
-        .map_err(|e| AppError::Internal(format!("设置脚本权限失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.script_chmod_failed").with("error", e))
+        })?;
 
     if !output.status.success() {
-        return Err(AppError::Internal("设置脚本权限失败".to_string()));
+        return Err(AppError::Internal(msg("server.system.script_chmod_failed")));
     }
 
     if let Err(e) = Command::new("nohup")
@@ -289,7 +300,7 @@ exec "$2"
         .arg(exe_path_str)
         .spawn()
     {
-        tracing::warn!("启动重启脚本失败: {}", e);
+        log_warn!("log.system.restart_script_spawn_failed", error = e);
     }
 
     tokio::spawn(async {
@@ -299,7 +310,7 @@ exec "$2"
 
     Ok(crate::error::ok_json(
         (),
-        "服务重启命令已发送，服务正在重启",
+        "server.system.restart_command_sent",
     ))
 }
 
@@ -307,20 +318,23 @@ pub async fn disable_init_mode(
     State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    tracing::info!("收到关闭初始化模式请求");
+    log_info!("log.system.disable_init_requested");
 
     let mut new_config = state.config.clone();
     new_config.init.enabled = false;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&new_config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&new_config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     tokio::fs::write(&config_path, config_str)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_write_failed").with("error", e))
+        })?;
 
-    tracing::info!("初始化模式已关闭，配置已保存，正在触发服务重启");
+    log_info!("log.system.init_disabled_restarting");
 
     trigger_service_restart().await
 }
@@ -332,8 +346,9 @@ pub async fn backup_config(
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
-    let config_json = serde_json::to_string_pretty(&config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     Ok((
         StatusCode::OK,
@@ -363,9 +378,9 @@ pub async fn restore_config(
     let mut new_config = payload;
 
     if new_config.init.enabled {
-        return Err(AppError::Validation(
-            "禁止通过API恢复配置启用初始化模式，请直接编辑配置文件".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.system.init_mode_restore_forbidden",
+        )));
     }
 
     // 防止脱敏值覆写真实密钥
@@ -377,19 +392,22 @@ pub async fn restore_config(
     }
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&new_config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&new_config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     tokio::fs::write(&config_path, config_str)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_write_failed").with("error", e))
+        })?;
 
-    Ok(crate::error::ok_json((), "系统配置恢复成功"))
+    Ok(crate::error::ok_json((), "server.system.config_restored"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateLanguageRequest {
-    #[validate(length(min = 2, max = 5, message = "语言代码长度必须在2到5个字符之间"))]
+    #[validate(length(min = 2, max = 5, message = "server.system.validation.language_length"))]
     pub language: String,
 }
 
@@ -410,7 +428,7 @@ pub async fn get_session_timeout_config(
         serde_json::json!({
             "session_timeout": state.config.server.session_timeout
         }),
-        "会话超时配置获取成功",
+        "server.system.session_timeout_retrieved",
     ))
 }
 
@@ -421,20 +439,30 @@ pub async fn update_session_timeout_config(
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
-        .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
 
     current_config.server.session_timeout = req.session_timeout;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     tokio::fs::write(&config_path, config_str)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_write_failed").with("error", e))
+        })?;
 
-    Ok(crate::error::ok_json((), "会话超时配置更新成功"))
+    Ok(crate::error::ok_json(
+        (),
+        "server.system.session_timeout_updated",
+    ))
 }
 
 pub async fn get_supported_languages() -> Result<Response, AppError> {
@@ -453,7 +481,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 
     Ok(crate::error::ok_json(
         supported_languages,
-        "获取支持的语言列表成功",
+        "server.system.languages_retrieved",
     ))
 }
 
@@ -466,30 +494,43 @@ pub async fn update_language_setting(
 
     let language = req.language.to_lowercase();
     if language != "en" && language != "zh" {
-        return Err(AppError::Validation(
-            "不支持的语言代码，请使用 'en' 或 'zh'".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.system.language_unsupported",
+        )));
     }
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
-        .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
 
-    current_config.i18n = Some(I18nConfig {
-        default_language: language,
+    // 该端点设置的是日志语言：在已加载配置基础上仅更新 log_language 字段，
+    // 保留 supported_languages / logfiles_i18n_out 等其余 i18n 设置；
+    // 配置中尚无 [i18n] 段时新建并带默认支持语言列表。
+    let mut i18n = current_config.i18n.clone().unwrap_or_else(|| I18nConfig {
+        log_language: String::new(),
         supported_languages: vec!["zh".to_string(), "en".to_string()],
+        logfiles_i18n_out: None,
     });
+    i18n.log_language = language;
+    current_config.i18n = Some(i18n);
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     tokio::fs::write(&config_path, config_str)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_write_failed").with("error", e))
+        })?;
 
-    Ok(crate::error::ok_json((), "语言设置更新成功"))
+    Ok(crate::error::ok_json((), "server.system.language_updated"))
 }
 
 pub async fn get_page_timeout_config(
@@ -499,7 +540,7 @@ pub async fn get_page_timeout_config(
         serde_json::json!({
             "page_timeout": state.config.server.page_timeout
         }),
-        "页面超时配置获取成功",
+        "server.system.page_timeout_retrieved",
     ))
 }
 
@@ -510,20 +551,30 @@ pub async fn update_page_timeout_config(
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
-        .map_err(|e| AppError::Internal(format!("配置加载任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(format!("Failed to load current config: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
 
     current_config.server.page_timeout = req.page_timeout;
 
     let config_path = crate::config::get_config_file_path();
-    let config_str = toml::to_string(&current_config)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize config: {e}")))?;
+    let config_str = toml::to_string(&current_config).map_err(|e| {
+        AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
+    })?;
 
     tokio::fs::write(&config_path, config_str)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to write config file: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_write_failed").with("error", e))
+        })?;
 
-    Ok(crate::error::ok_json((), "页面超时配置更新成功"))
+    Ok(crate::error::ok_json(
+        (),
+        "server.system.page_timeout_updated",
+    ))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -550,7 +601,7 @@ pub async fn get_notification_settings(
         NotificationSettings {
             email_recipients: recipients,
         },
-        "通知设置获取成功",
+        "server.notification.settings_retrieved",
     ))
 }
 
@@ -560,7 +611,7 @@ pub async fn update_notification_settings(
     AppJson(req): AppJson<NotificationSettings>,
 ) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
-        .map_err(|e| AppError::Internal(format!("序列化失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
 
     sqlx::query(
         "INSERT INTO system_configs (config_type, key, value) VALUES ('notification', 'email_recipients', $1)
@@ -569,9 +620,12 @@ pub async fn update_notification_settings(
     .bind(&value)
     .execute(&state.pool()?.get_conn())
     .await
-    .map_err(|e| AppError::Internal(format!("数据库操作失败: {e}")))?;
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
-    Ok(crate::error::ok_json((), "通知设置更新成功"))
+    Ok(crate::error::ok_json(
+        (),
+        "server.notification.settings_updated",
+    ))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -591,8 +645,8 @@ pub async fn get_smtp_config(
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
         None => {
-            tracing::warn!("SMTP配置未设置");
-            return Err(AppError::NotFound("SMTP配置未设置".to_string()));
+            log_warn!("log.smtp.not_configured");
+            return Err(AppError::NotFound(msg("server.smtp.not_configured")));
         }
     };
 
@@ -605,19 +659,19 @@ pub async fn get_smtp_config(
         has_password: !config.password.is_empty(),
     };
 
-    Ok(crate::error::ok_json(resp, "SMTP配置获取成功"))
+    Ok(crate::error::ok_json(resp, "server.smtp.config_retrieved"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSmtpConfigRequest {
-    #[validate(length(min = 1, max = 255, message = "SMTP主机不能为空且不超过255个字符"))]
+    #[validate(length(min = 1, max = 255, message = "server.smtp.validation.host_length"))]
     pub host: String,
     pub port: u16,
-    #[validate(length(min = 1, max = 100, message = "SMTP用户名不能为空且不超过100个字符"))]
+    #[validate(length(min = 1, max = 100, message = "server.smtp.validation.username_length"))]
     pub username: String,
-    #[validate(length(max = 200, message = "SMTP密码长度不能超过200个字符"))]
+    #[validate(length(max = 200, message = "server.smtp.validation.password_length"))]
     pub password: String,
-    #[validate(email(message = "发件人邮箱格式不正确"))]
+    #[validate(email(message = "server.common.validation.email_format"))]
     pub from: String,
     pub secure: bool,
 }
@@ -629,14 +683,14 @@ pub async fn update_smtp_config(
 ) -> Result<Response, AppError> {
     req.validate()?;
     if req.port == 0 {
-        return Err(AppError::Validation("SMTP端口不能为0".to_string()));
+        return Err(AppError::Validation(msg("server.smtp.port_zero")));
     }
     let password = if req.password.is_empty() {
         let existing = get_smtp_config_from_db(&state.pool()?.get_conn())
             .await
             .ok_or_else(|| {
-                tracing::warn!("SMTP配置未设置，请填写密码");
-                AppError::NotFound("SMTP配置未设置，请填写密码".to_string())
+                log_warn!("log.smtp.not_configured_password");
+                AppError::NotFound(msg("server.smtp.not_configured_password"))
             })?;
         existing.password
     } else {
@@ -654,12 +708,12 @@ pub async fn update_smtp_config(
 
     save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await?;
 
-    Ok(crate::error::ok_json((), "SMTP配置更新成功"))
+    Ok(crate::error::ok_json((), "server.smtp.config_updated"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TestSmtpRequest {
-    #[validate(email(message = "邮箱格式不正确"))]
+    #[validate(email(message = "server.common.validation.email_format"))]
     pub to: String,
 }
 
@@ -673,23 +727,23 @@ pub async fn test_smtp_connection(
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
         None => {
-            tracing::warn!("SMTP配置未设置");
-            return Err(AppError::NotFound("SMTP配置未设置".to_string()));
+            log_warn!("log.smtp.not_configured");
+            return Err(AppError::NotFound(msg("server.smtp.not_configured")));
         }
     };
 
     crate::system::smtp::test_smtp_connection(&config).await?;
 
-    Ok(crate::error::ok_json((), "SMTP连接测试成功"))
+    Ok(crate::error::ok_json((), "server.smtp.test_success"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendSystemEmailRequest {
-    #[validate(length(min = 1, message = "收件人不能为空"))]
+    #[validate(length(min = 1, message = "server.smtp.validation.recipients_required"))]
     pub user_ids: Vec<Uuid>,
-    #[validate(length(min = 1, max = 255, message = "主题长度必须在1到255个字符之间"))]
+    #[validate(length(min = 1, max = 255, message = "server.smtp.validation.subject_length"))]
     pub subject: String,
-    #[validate(length(min = 1, message = "邮件内容不能为空"))]
+    #[validate(length(min = 1, message = "server.smtp.validation.body_required"))]
     pub body: String,
 }
 
@@ -708,7 +762,7 @@ pub async fn send_system_email(
     )
     .await?;
 
-    Ok(crate::error::ok_json((), "邮件发送成功"))
+    Ok(crate::error::ok_json((), "server.smtp.email_sent"))
 }
 
 #[derive(Debug, Serialize)]
@@ -797,7 +851,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
             enabled,
             uptime_seconds,
         },
-        "服务状态获取成功",
+        "server.system.service_status_retrieved",
     ))
 }
 
@@ -805,16 +859,16 @@ pub async fn register_service(
     _admin: crate::auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
-        .map_err(|e| AppError::Internal(format!("获取可执行文件路径失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;
     let exe_path_str = exe_path
         .to_str()
-        .ok_or_else(|| AppError::Internal("无法将可执行文件路径转换为字符串".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.system.exe_path_invalid")))?;
 
     let working_dir = std::env::current_dir()
-        .map_err(|e| AppError::Internal(format!("获取工作目录失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.system.workdir_failed").with("error", e)))?;
     let working_dir_str = working_dir
         .to_str()
-        .ok_or_else(|| AppError::Internal("无法将工作目录路径转换为字符串".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.system.workdir_invalid")))?;
 
     let service_content = format!(
         r#"[Unit]
@@ -837,7 +891,9 @@ WantedBy=multi-user.target
     let service_path = "/etc/systemd/system/ipma.service";
     tokio::fs::write(service_path, service_content)
         .await
-        .map_err(|e| AppError::Internal(format!("写入服务文件失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.service_file_write_failed").with("error", e))
+        })?;
 
     let daemon_reload = Command::new("systemctl")
         .arg("daemon-reload")
@@ -845,7 +901,7 @@ WantedBy=multi-user.target
         .await;
 
     if let Err(e) = daemon_reload {
-        tracing::warn!("daemon-reload 执行失败: {}", e);
+        log_warn!("log.system.daemon_reload_failed", error = e);
     }
 
     let enable_output = Command::new("systemctl")
@@ -854,7 +910,7 @@ WantedBy=multi-user.target
         .await;
 
     if let Err(e) = enable_output {
-        tracing::warn!("enable 服务失败: {}", e);
+        log_warn!("log.system.service_enable_failed", error = e);
     }
 
     let start_output = Command::new("systemctl")
@@ -863,17 +919,19 @@ WantedBy=multi-user.target
         .await;
 
     match start_output {
-        Ok(output) if output.status.success() => {
-            Ok(crate::error::ok_json((), "服务注册并启动成功"))
-        }
+        Ok(output) if output.status.success() => Ok(crate::error::ok_json(
+            (),
+            "server.system.service_registered",
+        )),
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(AppError::Internal(format!(
-                "启动服务失败: {}",
-                stderr.trim()
-            )))
+            Err(AppError::Internal(
+                msg("server.system.service_start_failed").with("error", stderr.trim()),
+            ))
         }
-        Err(e) => Err(AppError::Internal(format!("启动服务失败: {e}"))),
+        Err(e) => Err(AppError::Internal(
+            msg("server.system.service_start_failed").with("error", e),
+        )),
     }
 }
 
@@ -935,5 +993,8 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<R
         }
     });
 
-    Ok(crate::error::ok_json(stats, "仪表盘统计获取成功"))
+    Ok(crate::error::ok_json(
+        stats,
+        "server.system.dashboard_stats_retrieved",
+    ))
 }

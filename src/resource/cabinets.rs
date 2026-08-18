@@ -15,6 +15,7 @@ use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use chrono::Utc;
+use ipma_common::msg;
 use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -155,7 +156,7 @@ pub async fn get_cabinets(
 
     Ok(crate::error::ok_json(
         paged_response(cabinets_with_networks, total, &pagination),
-        "机柜获取成功",
+        "server.cabinet.fetched",
     ))
 }
 
@@ -165,7 +166,9 @@ pub async fn get_cabinets_by_network_region(
     Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let Ok(region_id) = Uuid::parse_str(&region_id_str) else {
-        return Err(AppError::Validation("无效的网络区域ID".to_string()));
+        return Err(AppError::Validation(msg(
+            "server.network.region_id_invalid",
+        )));
     };
 
     let network_id_filter = query
@@ -199,7 +202,7 @@ pub async fn get_cabinets_by_network_region(
         .await?
     };
 
-    Ok(crate::error::ok_json(cabinets, "机柜获取成功"))
+    Ok(crate::error::ok_json(cabinets, "server.cabinet.fetched"))
 }
 
 pub async fn create_cabinet(
@@ -217,7 +220,7 @@ pub async fn create_cabinet(
             .await?;
 
     if existing_cabinet.is_some() {
-        return Err(AppError::Conflict("机柜名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -263,7 +266,7 @@ pub async fn create_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json(cabinet, "机柜创建成功"))
+    Ok(crate::error::ok_json(cabinet, "server.cabinet.created"))
 }
 
 pub async fn get_cabinet(
@@ -274,7 +277,7 @@ pub async fn get_cabinet(
         "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
-    .ok_or_else(|| AppError::NotFound("机柜未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
 
     let position_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
@@ -332,7 +335,10 @@ pub async fn get_cabinet(
         updated_at: cabinet.updated_at,
     };
 
-    Ok(crate::error::ok_json(cabinet_with_networks, "机柜获取成功"))
+    Ok(crate::error::ok_json(
+        cabinet_with_networks,
+        "server.cabinet.fetched",
+    ))
 }
 
 pub async fn update_cabinet(
@@ -349,13 +355,13 @@ pub async fn update_cabinet(
         .await?;
 
     if existing_cabinet.is_none() {
-        return Err(AppError::NotFound("机柜未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let now = Utc::now();
 
     sqlx::query(
-        "UPDATE cabinets SET 
+        "UPDATE cabinets SET
          name = COALESCE($1, name), 
          room_id = COALESCE($2, room_id), 
          capacity = COALESCE($3, capacity), 
@@ -393,7 +399,7 @@ pub async fn update_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json(cabinet, "机柜更新成功"))
+    Ok(crate::error::ok_json(cabinet, "server.cabinet.updated"))
 }
 
 pub async fn delete_cabinet(
@@ -407,7 +413,7 @@ pub async fn delete_cabinet(
         .await?;
 
     if existing_cabinet.is_none() {
-        return Err(AppError::NotFound("机柜未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let position_count =
@@ -417,9 +423,7 @@ pub async fn delete_cabinet(
             .await?;
 
     if position_count > 0 {
-        return Err(AppError::Validation(
-            "该机柜已被机位关联，无法删除".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.cabinet.has_positions")));
     }
 
     // 配线架被线路引用时禁止删除（未引用的配线架随外键级联删除）
@@ -436,9 +440,9 @@ pub async fn delete_cabinet(
     .fetch_one(&state.pool()?.get_conn())
     .await?;
     if linked_pp_count > 0 {
-        return Err(AppError::Validation(
-            "该机柜存在被线路引用的配线架，无法删除".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.cabinet.patch_panel_linked",
+        )));
     }
 
     sqlx::query("DELETE FROM cabinets WHERE id = $1")
@@ -459,7 +463,7 @@ pub async fn delete_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "机柜删除成功"))
+    Ok(crate::error::ok_json((), "server.cabinet.deleted"))
 }
 
 pub async fn get_cabinet_networks(
@@ -472,7 +476,7 @@ pub async fn get_cabinet_networks(
         .await?;
 
     if existing_cabinet.is_none() {
-        return Err(AppError::NotFound("机柜未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let cabinet_networks = sqlx::query_as::<_, NetworkInfo>(
@@ -488,7 +492,10 @@ pub async fn get_cabinet_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(cabinet_networks, "机柜网段获取成功"))
+    Ok(crate::error::ok_json(
+        cabinet_networks,
+        "server.cabinet.networks_fetched",
+    ))
 }
 
 pub async fn sync_cabinet_positions(
@@ -505,7 +512,7 @@ pub async fn sync_cabinet_positions(
             .fetch_one(&state.pool()?.get_conn())
             .await?;
     if !cabinet_exists {
-        return Err(AppError::NotFound("机柜未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -528,9 +535,7 @@ pub async fn sync_cabinet_positions(
                     .fetch_one(&mut *tx)
                     .await?;
             if device_count > 0 {
-                return Err(AppError::Validation(
-                    "机位已被设备关联，无法删除".to_string(),
-                ));
+                return Err(AppError::Validation(msg("server.cabinet.position_in_use")));
             }
             sqlx::query("DELETE FROM positions WHERE id = $1")
                 .bind(existing_id)
@@ -549,7 +554,9 @@ pub async fn sync_cabinet_positions(
         .fetch_optional(&mut *tx)
         .await?;
         if existing.is_some() {
-            return Err(AppError::Conflict("机位名称已存在".to_string()));
+            return Err(AppError::Conflict(msg(
+                "server.cabinet.position_name_exists",
+            )));
         }
 
         if let Some(item_id) = item.id {
@@ -599,5 +606,5 @@ pub async fn sync_cabinet_positions(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "机位同步成功"))
+    Ok(crate::error::ok_json((), "server.cabinet.positions_synced"))
 }

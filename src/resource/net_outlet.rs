@@ -9,6 +9,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::msg;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -36,7 +37,8 @@ pub async fn get_net_outlets(
     let parsed_room_id = room_id
         .as_ref()
         .map(|id| {
-            Uuid::parse_str(id).map_err(|_| AppError::Validation("无效的room_id参数".to_string()))
+            Uuid::parse_str(id)
+                .map_err(|_| AppError::Validation(msg("server.net_outlet.room_id_invalid")))
         })
         .transpose()?;
 
@@ -103,7 +105,7 @@ pub async fn get_net_outlets(
 
     Ok(crate::error::ok_json(
         paged_response(net_outlets, total, &pagination),
-        "信息点列表获取成功",
+        "server.net_outlet.fetched",
     ))
 }
 
@@ -118,7 +120,7 @@ pub async fn create_net_outlet(
         .bind(req.room_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
-        .ok_or_else(|| AppError::Validation("房间不存在".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.room.not_found")))?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -138,7 +140,7 @@ pub async fn create_net_outlet(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下信息点名称已存在".to_string());
+            return AppError::Conflict(msg("server.net_outlet.name_exists"));
         }
         AppError::from(e)
     })?;
@@ -165,7 +167,10 @@ pub async fn create_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json(net_outlet, "信息点创建成功"))
+    Ok(crate::error::ok_json(
+        net_outlet,
+        "server.net_outlet.created",
+    ))
 }
 
 pub async fn get_net_outlet(
@@ -180,9 +185,12 @@ pub async fn get_net_outlet(
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
-    .ok_or_else(|| AppError::NotFound("信息点未找到".to_string()))?;
+    .ok_or_else(|| AppError::NotFound(msg("server.net_outlet.not_found")))?;
 
-    Ok(crate::error::ok_json(net_outlet, "信息点获取成功"))
+    Ok(crate::error::ok_json(
+        net_outlet,
+        "server.net_outlet.fetched",
+    ))
 }
 
 pub async fn update_net_outlet(
@@ -200,7 +208,7 @@ pub async fn update_net_outlet(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("信息点未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.net_outlet.not_found")));
     }
 
     if let Some(room_id) = req.room_id {
@@ -209,7 +217,7 @@ pub async fn update_net_outlet(
             .fetch_optional(&mut *tx)
             .await?;
         if room_exists.is_none() {
-            return Err(AppError::Validation("房间不存在".to_string()));
+            return Err(AppError::Validation(msg("server.room.not_found")));
         }
     }
 
@@ -232,7 +240,7 @@ pub async fn update_net_outlet(
         if let sqlx::Error::Database(db_err) = &e
             && db_err.is_unique_violation()
         {
-            return AppError::Conflict("该房间下信息点名称已存在".to_string());
+            return AppError::Conflict(msg("server.net_outlet.name_exists"));
         }
         AppError::from(e)
     })?;
@@ -262,7 +270,10 @@ pub async fn update_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json(net_outlet, "信息点更新成功"))
+    Ok(crate::error::ok_json(
+        net_outlet,
+        "server.net_outlet.updated",
+    ))
 }
 
 pub async fn delete_net_outlet(
@@ -277,7 +288,7 @@ pub async fn delete_net_outlet(
         .fetch_optional(&mut *tx)
         .await?;
     if existing.is_none() {
-        return Err(AppError::NotFound("信息点未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.net_outlet.not_found")));
     }
 
     sqlx::query("DELETE FROM net_outlets WHERE id = $1")
@@ -286,9 +297,9 @@ pub async fn delete_net_outlet(
         .await
         .map_err(|e| {
             if let sqlx::Error::Database(db_err) = &e {
-                let msg = db_err.message();
-                if msg.contains("cable_links") {
-                    return AppError::Validation("信息点已被线路引用，无法删除".to_string());
+                let db_msg = db_err.message();
+                if db_msg.contains("cable_links") {
+                    return AppError::Validation(msg("server.net_outlet.linked_by_cable"));
                 }
             }
             AppError::from(e)
@@ -307,5 +318,5 @@ pub async fn delete_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "信息点删除成功"))
+    Ok(crate::error::ok_json((), "server.net_outlet.deleted"))
 }

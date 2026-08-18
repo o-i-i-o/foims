@@ -25,11 +25,12 @@ use crate::auth::utils::{
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::error::AppError;
 use crate::models::{
-    ApiResponse, EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    SendLoginCodeRequest, SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
+    EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, SendLoginCodeRequest,
+    SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, detect_user_language_from_parts};
+use crate::utils::common::RequestMeta;
+use ipma_common::msg;
 use totp_rs::{Algorithm, Builder, Secret};
 
 type TotpReplayStore =
@@ -41,18 +42,6 @@ fn totp_replay_store() -> &'static TotpReplayStore {
 }
 
 const TOTP_REPLAY_TTL: std::time::Duration = std::time::Duration::from_secs(90);
-
-/// 构造按用户语言本地化的失败响应（登录链路使用 rust_i18n 翻译消息键）。
-fn error_i18n(message_key: &str, lang: &str) -> ApiResponse<()> {
-    rust_i18n::set_locale(lang);
-    ApiResponse::error(rust_i18n::t!(message_key).to_string())
-}
-
-/// 构造按用户语言本地化的成功响应。
-fn success_i18n<T: serde::Serialize>(data: T, message_key: &str, lang: &str) -> ApiResponse<T> {
-    rust_i18n::set_locale(lang);
-    ApiResponse::success(data, &rust_i18n::t!(message_key))
-}
 
 fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
     let store = totp_replay_store();
@@ -82,10 +71,11 @@ pub async fn auth_middleware(
     let (mut parts, body) = req.into_parts();
 
     let Some(token) = extract_token_from_parts(&parts) else {
-        let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(error_i18n("api.auth_failed", &user_lang)),
+            Json(ipma_common::ApiResponse::<()>::error(msg(
+                "server.auth.auth_failed",
+            ))),
         )
             .into_response();
     };
@@ -93,24 +83,24 @@ pub async fn auth_middleware(
     let claims = match state.jwt_utils.validate_token(&token) {
         Ok(claims) => claims,
         Err(err) => {
-            let user_lang = detect_user_language_from_parts(&parts);
-            let error_msg = match err.kind() {
-                ErrorKind::ExpiredSignature => "api.token_expired",
-                _ => "api.invalid_token",
+            let error_key = match err.kind() {
+                ErrorKind::ExpiredSignature => "server.auth.token_expired",
+                _ => "server.auth.invalid_token",
             };
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(error_i18n(error_msg, &user_lang)),
+                Json(ipma_common::ApiResponse::<()>::error(msg(error_key))),
             )
                 .into_response();
         }
     };
 
     if claims.token_type != "access" {
-        let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(error_i18n("api.invalid_token", &user_lang)),
+            Json(ipma_common::ApiResponse::<()>::error(msg(
+                "server.auth.invalid_token",
+            ))),
         )
             .into_response();
     }
@@ -120,10 +110,11 @@ pub async fn auth_middleware(
         && let Ok(revoked) = crate::utils::common::is_token_revoked(&pool.get_conn(), &token).await
         && revoked
     {
-        let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(error_i18n("api.token_revoked", &user_lang)),
+            Json(ipma_common::ApiResponse::<()>::error(msg(
+                "server.auth.token_revoked",
+            ))),
         )
             .into_response();
     }
@@ -134,10 +125,11 @@ pub async fn auth_middleware(
     if let Some(token_fingerprint) = &claims.device_fingerprint
         && token_fingerprint != &current_fingerprint
     {
-        let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::UNAUTHORIZED,
-            Json(error_i18n("api.device_validation_failed", &user_lang)),
+            Json(ipma_common::ApiResponse::<()>::error(msg(
+                "server.auth.device_validation_failed",
+            ))),
         )
             .into_response();
     }
@@ -169,10 +161,11 @@ pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
         .unwrap_or(false);
 
     if !is_localhost {
-        let user_lang = detect_user_language_from_parts(&parts);
         return (
             StatusCode::FORBIDDEN,
-            Json(error_i18n("api.access_denied", &user_lang)),
+            Json(ipma_common::ApiResponse::<()>::error(msg(
+                "server.auth.access_denied",
+            ))),
         )
             .into_response();
     }
@@ -186,7 +179,6 @@ pub async fn login(
     meta: RequestMeta,
     AppJson(req): AppJson<UserLogin>,
 ) -> Result<Response, AppError> {
-    let user_lang = meta.user_lang.clone();
     let conn = state.pool()?.get_conn();
 
     req.validate()?;
@@ -195,9 +187,9 @@ pub async fn login(
     let client_ip = meta.ip_address.clone();
     if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
-        return Err(AppError::Forbidden(format!(
-            "登录尝试过于频繁，IP 已被封禁，请 {remaining} 秒后重试"
-        )));
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
     }
 
     let user_row = match sqlx::query_as::<
@@ -212,11 +204,15 @@ pub async fn login(
     {
         Some(row) => row,
         None => {
-            crate::system::app_fail2ban::record_login_failure(&client_ip, &req.username, "用户未找到");
-            if let Err(e) = log_login(&conn, &req.username, &meta.ip_address, &meta.user_agent, false, Some("用户未找到")).await {
-                tracing::warn!("记录登录日志失败: {}", e);
+            crate::system::app_fail2ban::record_login_failure(
+                &client_ip,
+                &req.username,
+                "server.login_log.user_not_found",
+            );
+            if let Err(e) = log_login(&conn, &req.username, &meta.ip_address, &meta.user_agent, false, Some("server.login_log.user_not_found")).await {
+                ipma_common::log_warn!("log.login.record_failed", error = e);
             }
-            return Err(AppError::Unauthorized("登录失败".to_string()));
+            return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
         }
     };
 
@@ -226,7 +222,7 @@ pub async fn login(
         crate::system::app_fail2ban::record_login_failure(
             &client_ip,
             &username,
-            "Account disabled",
+            "server.login_log.account_disabled",
         );
         if let Err(e) = log_login(
             &conn,
@@ -234,26 +230,30 @@ pub async fn login(
             &meta.ip_address,
             &meta.user_agent,
             false,
-            Some("Account disabled"),
+            Some("server.login_log.account_disabled"),
         )
         .await
         {
-            tracing::warn!("记录登录日志失败: {}", e);
+            ipma_common::log_warn!("log.login.record_failed", error = e);
         }
-        return Err(AppError::Unauthorized("登录失败".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
     let password_for_verify = req.password.clone();
     let hash_for_verify = password_hash.clone();
     let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
         .await
-        .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
+        })?;
     if !valid {
         crate::system::app_fail2ban::record_login_failure(
             &client_ip,
             &username,
-            "Invalid password",
+            "server.login_log.invalid_password",
         );
         if let Err(e) = log_login(
             &conn,
@@ -261,19 +261,19 @@ pub async fn login(
             &meta.ip_address,
             &meta.user_agent,
             false,
-            Some("Invalid password"),
+            Some("server.login_log.invalid_password"),
         )
         .await
         {
-            tracing::warn!("记录登录日志失败: {}", e);
+            ipma_common::log_warn!("log.login.record_failed", error = e);
         }
-        return Err(AppError::Unauthorized("登录失败".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
     if two_factor_enabled {
         return Ok(crate::error::ok_json(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
-            "api.success",
+            "server.common.success",
         ));
     }
 
@@ -314,12 +314,12 @@ pub async fn login(
     )
     .await
     {
-        tracing::warn!("记录登录日志失败: {}", e);
+        ipma_common::log_warn!("log.login.record_failed", error = e);
     }
     crate::system::app_fail2ban::record_login_success(&client_ip, &username);
-    tracing::info!("用户 {} 登录成功", username);
+    ipma_common::log_info!("log.login.success", username = username);
 
-    build_login_response(user, login_tokens, &user_lang, meta.is_secure)
+    build_login_response(user, login_tokens, meta.is_secure)
 }
 
 pub async fn login_with_email_code(
@@ -327,7 +327,6 @@ pub async fn login_with_email_code(
     meta: RequestMeta,
     AppJson(req): AppJson<EmailLoginRequest>,
 ) -> Result<Response, AppError> {
-    let user_lang = meta.user_lang.clone();
     let conn = state.pool()?.get_conn();
 
     req.validate()?;
@@ -345,10 +344,10 @@ pub async fn login_with_email_code(
     {
         Some(row) => row,
         None => {
-            if let Err(e) = log_login(&conn, email, &meta.ip_address, &meta.user_agent, false, Some("用户未找到")).await {
-                tracing::warn!("记录登录日志失败: {}", e);
+            if let Err(e) = log_login(&conn, email, &meta.ip_address, &meta.user_agent, false, Some("server.login_log.user_not_found")).await {
+                ipma_common::log_warn!("log.login.record_failed", error = e);
             }
-            return Err(AppError::Unauthorized("邮箱或验证码无效".to_string()));
+            return Err(AppError::Unauthorized(msg("server.auth.email_or_code_invalid")));
         }
     };
 
@@ -361,13 +360,15 @@ pub async fn login_with_email_code(
             &meta.ip_address,
             &meta.user_agent,
             false,
-            Some("Account disabled"),
+            Some("server.login_log.account_disabled"),
         )
         .await
         {
-            tracing::warn!("记录登录日志失败: {}", e);
+            ipma_common::log_warn!("log.login.record_failed", error = e);
         }
-        return Err(AppError::Unauthorized("邮箱或验证码无效".to_string()));
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.email_or_code_invalid",
+        )));
     }
 
     let mut verified = false;
@@ -379,7 +380,7 @@ pub async fn login_with_email_code(
             if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
                 .bind(id).execute(&conn).await
             {
-                tracing::warn!("清除2FA邮箱验证码失败: {}", e);
+                ipma_common::log_warn!("log.auth.clear_2fa_code_failed", error = e);
             }
         }
     }
@@ -391,19 +392,21 @@ pub async fn login_with_email_code(
             &meta.ip_address,
             &meta.user_agent,
             false,
-            Some("Invalid email code"),
+            Some("server.login_log.invalid_email_code"),
         )
         .await
         {
-            tracing::warn!("记录登录日志失败: {}", e);
+            ipma_common::log_warn!("log.login.record_failed", error = e);
         }
-        return Err(AppError::Unauthorized("验证码无效或已过期".to_string()));
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.code_invalid_or_expired",
+        )));
     }
 
     if two_factor_enabled {
         return Ok(crate::error::ok_json(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
-            "api.success",
+            "server.common.success",
         ));
     }
 
@@ -444,10 +447,10 @@ pub async fn login_with_email_code(
     )
     .await
     {
-        tracing::warn!("记录登录日志失败: {}", e);
+        ipma_common::log_warn!("log.login.record_failed", error = e);
     }
 
-    build_login_response(user, login_tokens, &user_lang, meta.is_secure)
+    build_login_response(user, login_tokens, meta.is_secure)
 }
 
 pub async fn send_login_code(
@@ -468,14 +471,14 @@ pub async fn send_login_code(
     {
         Some(row) => row,
         None => {
-            return Ok(crate::error::ok_json((), "验证码已发送"));
+            return Ok(crate::error::ok_json((), "server.auth.code_sent"));
         }
     };
 
     let (id, _username, status) = user_row;
 
     if !status {
-        return Ok(crate::error::ok_json((), "验证码已发送"));
+        return Ok(crate::error::ok_json((), "server.auth.code_sent"));
     }
 
     let code: String = {
@@ -492,7 +495,7 @@ pub async fn send_login_code(
     let email_body = format!("您的登录验证码是：{code}");
     crate::system::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
 
-    Ok(crate::error::ok_json((), "验证码已发送"))
+    Ok(crate::error::ok_json((), "server.auth.code_sent"))
 }
 
 pub async fn login_with_two_factor(
@@ -500,16 +503,15 @@ pub async fn login_with_two_factor(
     meta: RequestMeta,
     AppJson(req): AppJson<TwoFactorLoginRequest>,
 ) -> Result<Response, AppError> {
-    let user_lang = meta.user_lang.clone();
     let conn = state.pool()?.get_conn();
 
     // 应用层 fail2ban: 检查 IP 是否被封禁
     let client_ip = meta.ip_address.clone();
     if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
-        return Err(AppError::Forbidden(format!(
-            "登录尝试过于频繁，IP 已被封禁，请 {remaining} 秒后重试"
-        )));
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
     }
 
     let user_row = match sqlx::query_as::<
@@ -524,8 +526,12 @@ pub async fn login_with_two_factor(
     {
         Some(row) => row,
         None => {
-            crate::system::app_fail2ban::record_login_failure(&client_ip, &req.username, "用户未找到");
-            return Err(AppError::Unauthorized("登录失败".to_string()));
+            crate::system::app_fail2ban::record_login_failure(
+                &client_ip,
+                &req.username,
+                "server.login_log.user_not_found",
+            );
+            return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
         }
     };
 
@@ -534,40 +540,46 @@ pub async fn login_with_two_factor(
     let password = req
         .password
         .as_deref()
-        .ok_or_else(|| AppError::Validation("2FA登录必须提供密码".to_string()))?;
+        .ok_or_else(|| AppError::Validation(msg("server.auth.2fa_password_required")))?;
     let password_for_verify = password.to_string();
     let hash_for_verify = password_hash.clone();
     let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
         .await
-        .map_err(|e| AppError::Internal(format!("密码验证任务失败: {e}")))?
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
+        })?;
     if !valid {
         crate::system::app_fail2ban::record_login_failure(
             &client_ip,
             &username,
-            "Invalid password",
+            "server.login_log.invalid_password",
         );
-        return Err(AppError::Unauthorized("登录失败".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
     if !status {
         crate::system::app_fail2ban::record_login_failure(
             &client_ip,
             &username,
-            "Account disabled",
+            "server.login_log.account_disabled",
         );
-        return Err(AppError::Unauthorized("账户已禁用".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.account_disabled")));
     }
 
     if !two_factor_enabled {
-        return Err(AppError::Validation("2FA not enabled".to_string()));
+        return Err(AppError::Validation(msg("server.auth.2fa_not_enabled")));
     }
 
     let mut verified = false;
     if let Some(encrypted_secret) = secret {
         let secret = decrypt_password_async(encrypted_secret)
             .await
-            .map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
+            .map_err(|e| {
+                AppError::Internal(msg("server.auth.2fa_secret_decrypt_failed").with("error", e))
+            })?;
         let secret = match Secret::try_from_base32(&secret) {
             Ok(s) => s,
             Err(e) => {
@@ -577,13 +589,15 @@ pub async fn login_with_two_factor(
                     &meta.ip_address,
                     &meta.user_agent,
                     false,
-                    Some("Invalid 2FA secret format"),
+                    Some("server.login_log.invalid_2fa_secret_format"),
                 )
                 .await
                 {
-                    tracing::warn!("记录登录日志失败: {}", e);
+                    ipma_common::log_warn!("log.login.record_failed", error = e);
                 }
-                return Err(AppError::Internal(format!("2FA密钥格式错误: {e}")));
+                return Err(AppError::Internal(
+                    msg("server.auth.2fa_secret_format_invalid").with("error", e),
+                ));
             }
         };
         match Builder::new()
@@ -603,22 +617,22 @@ pub async fn login_with_two_factor(
                         &meta.ip_address,
                         &meta.user_agent,
                         false,
-                        Some("TOTP code replayed"),
+                        Some("server.login_log.totp_code_replayed"),
                     )
                     .await
                     {
-                        tracing::warn!("记录登录日志失败: {}", e);
+                        ipma_common::log_warn!("log.login.record_failed", error = e);
                     }
-                    return Err(AppError::Unauthorized(
-                        "2FA验证码已使用，请等待新验证码".to_string(),
-                    ));
+                    return Err(AppError::Unauthorized(msg("server.auth.2fa_code_reused")));
                 }
                 let code_for_check = code.clone();
                 let valid = tokio::task::spawn_blocking(move || {
                     totp.check_current(&code_for_check).is_some()
                 })
                 .await
-                .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
+                .map_err(|e| {
+                    AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
+                })?;
                 if valid {
                     record_totp_usage(id, &code);
                     verified = true;
@@ -631,15 +645,15 @@ pub async fn login_with_two_factor(
                     &meta.ip_address,
                     &meta.user_agent,
                     false,
-                    Some("2FA secret too short"),
+                    Some("server.login_log.secret_too_short"),
                 )
                 .await
                 {
-                    tracing::warn!("记录登录日志失败: {}", e);
+                    ipma_common::log_warn!("log.login.record_failed", error = e);
                 }
-                return Err(AppError::Internal(format!(
-                    "2FA密钥长度不足，请重新设置: {e}"
-                )));
+                return Err(AppError::Internal(
+                    msg("server.auth.2fa_secret_too_short").with("error", e),
+                ));
             }
         }
     }
@@ -648,7 +662,7 @@ pub async fn login_with_two_factor(
         crate::system::app_fail2ban::record_login_failure(
             &client_ip,
             &username,
-            "Invalid 2FA code",
+            "server.login_log.invalid_2fa_code",
         );
         if let Err(e) = log_login(
             &conn,
@@ -656,13 +670,13 @@ pub async fn login_with_two_factor(
             &meta.ip_address,
             &meta.user_agent,
             false,
-            Some("Invalid 2FA code"),
+            Some("server.login_log.invalid_2fa_code"),
         )
         .await
         {
-            tracing::warn!("记录登录日志失败: {}", e);
+            ipma_common::log_warn!("log.login.record_failed", error = e);
         }
-        return Err(AppError::Unauthorized("验证码无效".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.code_invalid")));
     }
 
     let jwt_utils = &state.jwt_utils;
@@ -701,12 +715,12 @@ pub async fn login_with_two_factor(
     )
     .await
     {
-        tracing::warn!("记录登录日志失败: {}", e);
+        ipma_common::log_warn!("log.login.record_failed", error = e);
     }
     crate::system::app_fail2ban::record_login_success(&client_ip, &user.username);
-    tracing::info!("用户 {} 2FA验证登录成功", user.username);
+    ipma_common::log_info!("log.login.2fa_success", username = user.username);
 
-    build_login_response(user, login_tokens, &user_lang, meta.is_secure)
+    build_login_response(user, login_tokens, meta.is_secure)
 }
 
 pub async fn send_two_factor_code(
@@ -722,7 +736,7 @@ pub async fn send_two_factor_code(
     .fetch_optional(&conn)
     .await?
     else {
-        return Ok(crate::error::ok_json((), "发送成功"));
+        return Ok(crate::error::ok_json((), "server.auth.send_ok"));
     };
 
     let code: String = {
@@ -738,7 +752,7 @@ pub async fn send_two_factor_code(
     let email_body = format!("您的两步验证码是：{code}");
     crate::system::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
 
-    Ok(crate::error::ok_json((), "验证码已发送"))
+    Ok(crate::error::ok_json((), "server.auth.code_sent"))
 }
 
 pub async fn logout(
@@ -762,7 +776,7 @@ pub async fn logout(
         )
         .await
         {
-            tracing::warn!("撤销access_token失败: {}", e);
+            ipma_common::log_warn!("log.auth.revoke_access_token_failed", error = e);
         }
     }
 
@@ -781,14 +795,14 @@ pub async fn logout(
         )
         .await
         {
-            tracing::warn!("撤销refresh_token失败: {}", e);
+            ipma_common::log_warn!("log.auth.revoke_refresh_token_failed", error = e);
         }
     }
 
     let access_cookie = create_clear_cookie("access_token", secure);
     let refresh_cookie = create_clear_cookie("refresh_token", secure);
 
-    let mut response = crate::error::ok_json((), "Success");
+    let mut response = crate::error::ok_json((), "server.common.success");
     append_cookie_to_response(&mut response, &access_cookie)?;
     append_cookie_to_response(&mut response, &refresh_cookie)?;
     Ok(response)
@@ -803,31 +817,33 @@ pub async fn refresh_token(
 
     let token = match token {
         Some(t) => t,
-        None => return Err(AppError::Unauthorized("认证失败".to_string())),
+        None => return Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
     };
 
     let jwt_utils = &state.jwt_utils;
 
     let claims = jwt_utils.validate_token(&token).map_err(|err| {
-        let msg = match err.kind() {
-            ErrorKind::ExpiredSignature => "令牌已过期",
-            _ => "无效令牌",
+        let key = match err.kind() {
+            ErrorKind::ExpiredSignature => "server.auth.token_expired",
+            _ => "server.auth.invalid_token",
         };
-        AppError::Unauthorized(msg.to_string())
+        AppError::Unauthorized(msg(key))
     })?;
 
     if claims.token_type != "refresh" {
-        return Err(AppError::Unauthorized("无效的刷新令牌".to_string()));
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.refresh_token_invalid",
+        )));
     }
 
     if crate::utils::is_token_revoked(&conn, &token)
         .await
         .map_err(|e| {
-            tracing::error!("检查令牌撤销状态失败: {}", e);
-            AppError::Database(e.to_string())
+            ipma_common::log_error!("log.auth.check_revoke_failed", error = e);
+            AppError::Database(msg("server.db.operation_failed"))
         })?
     {
-        return Err(AppError::Unauthorized("令牌已撤销".to_string()));
+        return Err(AppError::Unauthorized(msg("server.auth.token_revoked")));
     }
 
     let ip_address = &meta.ip_address;
@@ -837,11 +853,13 @@ pub async fn refresh_token(
     if let Some(ref token_fingerprint) = claims.device_fingerprint
         && token_fingerprint != &current_fingerprint
     {
-        return Err(AppError::Unauthorized("设备验证失败".to_string()));
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.device_validation_failed",
+        )));
     }
 
     let user_id = Uuid::parse_str(&claims.sub)
-        .map_err(|e| AppError::Internal(format!("无效的用户标识: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.auth.user_id_invalid").with("error", e)))?;
 
     // 重新校验用户当前状态与角色（防止禁用/降权/删除后旧令牌仍可刷新），
     // 并强制在 tokens_invalidated_at 之后签发的令牌才能刷新（密码重置/权限变更后吊销历史令牌）
@@ -851,26 +869,28 @@ pub async fn refresh_token(
     .bind(user_id)
     .fetch_optional(&conn)
     .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
     let current_role = match user_state {
         Some((role, status, invalidated_at)) => {
             if !status {
-                return Err(AppError::Unauthorized("账户已禁用".to_string()));
+                return Err(AppError::Unauthorized(msg("server.auth.account_disabled")));
             }
             // 令牌签发时间早于吊销时间点 → 已被吊销
             if (claims.iat as i64) < invalidated_at.timestamp() {
-                return Err(AppError::Unauthorized("令牌已失效，请重新登录".to_string()));
+                return Err(AppError::Unauthorized(msg(
+                    "server.auth.token_invalidated_relogin",
+                )));
             }
             role
         }
-        None => return Err(AppError::Unauthorized("账户不存在".to_string())),
+        None => return Err(AppError::Unauthorized(msg("server.auth.account_not_found"))),
     };
 
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
     if let Err(e) = crate::utils::revoke_token(&conn, &token, Some(user_id), token_expiry).await {
-        tracing::error!("撤销令牌失败: {}", e);
+        ipma_common::log_error!("log.auth.revoke_token_failed", error = e);
     }
 
     let token_duration = claims.exp.saturating_sub(claims.iat);
@@ -884,7 +904,9 @@ pub async fn refresh_token(
             Some(&current_fingerprint),
             Some(ip_address),
         )
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.token_generate_failed").with("error", e))
+        })?;
     let new_refresh_token = jwt_utils
         .generate_refresh_token(
             &user_id,
@@ -894,12 +916,14 @@ pub async fn refresh_token(
             Some(ip_address),
             remember_me,
         )
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.token_generate_failed").with("error", e))
+        })?;
 
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
-    tracing::debug!("用户 {} 令牌刷新成功", claims.username);
+    ipma_common::log_debug!("log.login.token_refreshed", username = claims.username);
 
     let secure = meta.is_secure;
     let access_cookie = create_auth_cookie(
@@ -917,7 +941,7 @@ pub async fn refresh_token(
 
     let mut response = crate::error::ok_json(
         serde_json::json!({ "expires_in": access_token_expiry, "remember_me": remember_me }),
-        "Success",
+        "server.common.success",
     );
     append_cookie_to_response(&mut response, &access_cookie)?;
     append_cookie_to_response(&mut response, &refresh_cookie)?;
@@ -929,7 +953,7 @@ pub async fn get_current_user(
 ) -> Result<Response, AppError> {
     Ok(crate::error::ok_json(
         serde_json::json!({ "id": auth.sub, "username": auth.username, "role": auth.role }),
-        "Success",
+        "server.common.success",
     ))
 }
 
@@ -949,8 +973,6 @@ pub async fn forgot_password(
     .fetch_optional(&conn)
     .await;
 
-    let success_msg = "如果该邮箱已注册，重置邮件已发送";
-
     if let Ok(Some((_user_id, _username, _two_factor_enabled))) = user_result {
         let reset_token = Uuid::new_v4().to_string();
         let expiry = Utc::now() + chrono::Duration::hours(1);
@@ -964,7 +986,7 @@ pub async fn forgot_password(
         .execute(&conn)
         .await
         {
-            tracing::error!("保存重置令牌失败: {}", e);
+            ipma_common::log_error!("log.auth.save_reset_token_failed", error = e);
         } else {
             let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
             if let Some(ref _config) = smtp_config {
@@ -976,13 +998,16 @@ pub async fn forgot_password(
                     crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body)
                         .await
                 {
-                    tracing::error!("发送重置邮件失败: {}", e);
+                    ipma_common::log_error!("log.auth.send_reset_email_failed", error = e);
                 }
             }
         }
     }
 
-    Ok(crate::error::ok_json((), success_msg))
+    Ok(crate::error::ok_json(
+        (),
+        "server.auth.forgot_password_sent",
+    ))
 }
 
 pub async fn reset_password(
@@ -1014,9 +1039,12 @@ pub async fn reset_password(
 
             tx.commit().await?;
 
-            Ok(crate::error::ok_json((), "密码重置成功"))
+            Ok(crate::error::ok_json(
+                (),
+                "server.auth.reset_password_success",
+            ))
         }
-        None => Err(AppError::Validation("重置链接无效或已过期".to_string())),
+        None => Err(AppError::Validation(msg("server.auth.reset_link_invalid"))),
     }
 }
 
@@ -1031,14 +1059,13 @@ pub async fn init_two_factor(
 
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
-            return Err(AppError::Forbidden(
-                "只有管理员可以为其他用户初始化2FA".to_string(),
-            ));
+            return Err(AppError::Forbidden(msg("server.auth.2fa_admin_only_init")));
         }
         user_id
     } else {
-        Uuid::parse_str(&auth.sub)
-            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
+        Uuid::parse_str(&auth.sub).map_err(|e| {
+            AppError::Validation(msg("server.common.user_id_invalid").with("error", e))
+        })?
     };
 
     let target_username: String =
@@ -1049,7 +1076,7 @@ pub async fn init_two_factor(
         {
             Some(name) => name,
             None => {
-                return Err(AppError::NotFound("用户不存在".to_string()));
+                return Err(AppError::NotFound(msg("server.user.not_found")));
             }
         };
 
@@ -1059,9 +1086,7 @@ pub async fn init_two_factor(
             .fetch_one(&conn)
             .await?;
     if two_factor_enabled {
-        return Err(AppError::Conflict(
-            "2FA已启用，请先禁用后再重新初始化".to_string(),
-        ));
+        return Err(AppError::Conflict(msg("server.auth.2fa_already_enabled")));
     }
 
     let secret_bytes: Vec<u8> = {
@@ -1082,7 +1107,9 @@ pub async fn init_two_factor(
         .with_issuer(Some("IPMA"))
         .with_account_name(target_username.clone())
         .build()
-        .map_err(|e| AppError::Internal(format!("生成TOTP失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.totp_generate_failed").with("error", e))
+        })?;
 
     let encrypted_secret = encrypt_password_async(secret_base32).await?;
     sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
@@ -1093,19 +1120,21 @@ pub async fn init_two_factor(
 
     let otpauth_url = totp
         .to_url()
-        .map_err(|e| AppError::Internal(format!("生成otpauth URL失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.auth.otpauth_url_failed").with("error", e)))?;
     let totp_for_qr = totp;
     let qr_code_base64 =
         tokio::task::spawn_blocking(move || totp_for_qr.to_qr_base64().unwrap_or_default())
             .await
-            .map_err(|e| AppError::Internal(format!("QR码生成任务失败: {e}")))?;
+            .map_err(|e| {
+                AppError::Internal(msg("server.auth.qr_generate_task_failed").with("error", e))
+            })?;
 
     Ok(crate::error::ok_json(
         serde_json::json!({
             "otpauth_url": otpauth_url,
             "qr_code_base64": qr_code_base64,
         }),
-        "2FA初始化成功，请使用认证器应用扫描二维码",
+        "server.auth.2fa_init_success",
     ))
 }
 
@@ -1120,14 +1149,15 @@ pub async fn enable_two_factor(
 
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
-            return Err(AppError::Forbidden(
-                "只有管理员可以为其他用户启用2FA".to_string(),
-            ));
+            return Err(AppError::Forbidden(msg(
+                "server.auth.2fa_admin_only_enable",
+            )));
         }
         user_id
     } else {
-        Uuid::parse_str(&auth.sub)
-            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
+        Uuid::parse_str(&auth.sub).map_err(|e| {
+            AppError::Validation(msg("server.common.user_id_invalid").with("error", e))
+        })?
     };
 
     let secret: Option<String> =
@@ -1138,17 +1168,19 @@ pub async fn enable_two_factor(
         {
             Some(s) => s,
             None => {
-                return Err(AppError::Validation("请先初始化2FA".to_string()));
+                return Err(AppError::Validation(msg("server.auth.2fa_not_initialized")));
             }
         };
 
     let Some(encrypted_secret) = secret else {
-        return Err(AppError::Validation("请先初始化2FA".to_string()));
+        return Err(AppError::Validation(msg("server.auth.2fa_not_initialized")));
     };
 
     let secret = decrypt_password_async(encrypted_secret)
         .await
-        .map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.2fa_secret_decrypt_failed").with("error", e))
+        })?;
 
     let target_username: String =
         match sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
@@ -1158,12 +1190,12 @@ pub async fn enable_two_factor(
         {
             Some(name) => name,
             None => {
-                return Err(AppError::NotFound("用户不存在".to_string()));
+                return Err(AppError::NotFound(msg("server.user.not_found")));
             }
         };
 
     let secret = Secret::try_from_base32(&secret)
-        .map_err(|_| AppError::Validation("密钥格式错误".to_string()))?;
+        .map_err(|_| AppError::Validation(msg("server.auth.2fa_secret_format_invalid")))?;
 
     let totp = Builder::new()
         .with_algorithm(Algorithm::SHA1)
@@ -1174,20 +1206,20 @@ pub async fn enable_two_factor(
         .with_issuer(Some("IPMA"))
         .with_account_name(target_username)
         .build()
-        .map_err(|e| AppError::Internal(format!("TOTP创建失败: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.auth.totp_create_failed").with("error", e)))?;
 
     let code = req.code.clone();
     if is_totp_code_replayed(target_user_id, &code) {
-        return Err(AppError::Validation(
-            "验证码已使用，请等待新验证码".to_string(),
-        ));
+        return Err(AppError::Validation(msg("server.auth.2fa_code_reused")));
     }
     let code_for_check = code.clone();
     let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
         .await
-        .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
+        })?;
     if !valid {
-        return Err(AppError::Validation("验证码错误".to_string()));
+        return Err(AppError::Validation(msg("server.auth.code_wrong")));
     }
     record_totp_usage(target_user_id, &code);
 
@@ -1198,7 +1230,7 @@ pub async fn enable_two_factor(
     .execute(&conn)
     .await?;
 
-    Ok(crate::error::ok_json((), "2FA已启用"))
+    Ok(crate::error::ok_json((), "server.auth.2fa_enabled"))
 }
 
 pub async fn disable_two_factor(
@@ -1212,14 +1244,15 @@ pub async fn disable_two_factor(
 
     let target_user_id = if let Some(user_id) = req.user_id {
         if auth.sub != user_id.to_string() && auth.role != "admin" {
-            return Err(AppError::Forbidden(
-                "只有管理员可以为其他用户禁用2FA".to_string(),
-            ));
+            return Err(AppError::Forbidden(msg(
+                "server.auth.2fa_admin_only_disable",
+            )));
         }
         user_id
     } else {
-        Uuid::parse_str(&auth.sub)
-            .map_err(|e| AppError::Validation(format!("无效的用户ID: {e}")))?
+        Uuid::parse_str(&auth.sub).map_err(|e| {
+            AppError::Validation(msg("server.common.user_id_invalid").with("error", e))
+        })?
     };
 
     let (secret, two_factor_enabled): (Option<String>, bool) =
@@ -1229,7 +1262,7 @@ pub async fn disable_two_factor(
             .await?;
 
     if !two_factor_enabled {
-        return Err(AppError::Validation("2FA未启用".to_string()));
+        return Err(AppError::Validation(msg("server.auth.2fa_not_enabled")));
     }
 
     let target_username: String =
@@ -1240,7 +1273,7 @@ pub async fn disable_two_factor(
         {
             Some(name) => name,
             None => {
-                return Err(AppError::NotFound("用户不存在".to_string()));
+                return Err(AppError::NotFound(msg("server.user.not_found")));
             }
         };
 
@@ -1249,9 +1282,12 @@ pub async fn disable_two_factor(
     if let Some(encrypted_secret) = secret {
         let secret = decrypt_password_async(encrypted_secret)
             .await
-            .map_err(|e| AppError::Internal(format!("2FA密钥解密失败: {e}")))?;
-        let secret = Secret::try_from_base32(&secret)
-            .map_err(|e| AppError::Internal(format!("2FA密钥格式错误: {e}")))?;
+            .map_err(|e| {
+                AppError::Internal(msg("server.auth.2fa_secret_decrypt_failed").with("error", e))
+            })?;
+        let secret = Secret::try_from_base32(&secret).map_err(|e| {
+            AppError::Validation(msg("server.auth.2fa_secret_format_invalid").with("error", e))
+        })?;
         let totp = Builder::new()
             .with_algorithm(Algorithm::SHA1)
             .with_digits(6)
@@ -1261,18 +1297,20 @@ pub async fn disable_two_factor(
             .with_issuer(Some("IPMA"))
             .with_account_name(target_username)
             .build()
-            .map_err(|e| AppError::Internal(format!("2FA密钥长度不足: {e}")))?;
+            .map_err(|e| {
+                AppError::Internal(msg("server.auth.2fa_secret_too_short").with("error", e))
+            })?;
         let code = req.code.clone();
         if is_totp_code_replayed(target_user_id, &code) {
-            return Err(AppError::Validation(
-                "验证码已使用，请等待新验证码".to_string(),
-            ));
+            return Err(AppError::Validation(msg("server.auth.2fa_code_reused")));
         }
         let code_for_check = code.clone();
         let valid =
             tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
                 .await
-                .map_err(|e| AppError::Internal(format!("2FA验证任务失败: {e}")))?;
+                .map_err(|e| {
+                    AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
+                })?;
         if valid {
             record_totp_usage(target_user_id, &code);
             verified = true;
@@ -1280,7 +1318,7 @@ pub async fn disable_two_factor(
     }
 
     if !verified {
-        return Err(AppError::Validation("验证码错误".to_string()));
+        return Err(AppError::Validation(msg("server.auth.code_wrong")));
     }
 
     sqlx::query(
@@ -1290,7 +1328,7 @@ pub async fn disable_two_factor(
     .execute(&conn)
     .await?;
 
-    Ok(crate::error::ok_json((), "2FA已禁用"))
+    Ok(crate::error::ok_json((), "server.auth.2fa_disabled"))
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -1300,14 +1338,14 @@ pub struct TwoFactorInitRequest {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct TwoFactorEnableRequest {
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
     pub user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct TwoFactorDisableRequest {
-    #[validate(length(min = 6, max = 6, message = "验证码长度必须为6个字符"))]
+    #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
     pub user_id: Option<Uuid>,
 }
@@ -1322,7 +1360,6 @@ struct LoginTokens {
 fn build_login_response(
     user: User,
     login_tokens: LoginTokens,
-    user_lang: &str,
     secure: bool,
 ) -> Result<Response, AppError> {
     let access_cookie = create_auth_cookie(
@@ -1340,10 +1377,9 @@ fn build_login_response(
 
     let mut response = (
         StatusCode::OK,
-        Json(success_i18n(
+        Json(ipma_common::ApiResponse::success(
             serde_json::json!({ "user": user, "expires_in": login_tokens.access_token_expiry }),
-            "api.success",
-            user_lang,
+            msg("server.common.success"),
         )),
     )
         .into_response();
@@ -1371,7 +1407,9 @@ fn generate_login_tokens(
             Some(device_fingerprint),
             Some(ip_address),
         )
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.token_generate_failed").with("error", e))
+        })?;
     let refresh_token = jwt_utils
         .generate_refresh_token(
             id,
@@ -1381,7 +1419,9 @@ fn generate_login_tokens(
             Some(ip_address),
             remember_me,
         )
-        .map_err(|e| AppError::Internal(format!("令牌生成失败: {e}")))?;
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.token_generate_failed").with("error", e))
+        })?;
     let access_token_expiry = jwt_utils.get_access_token_expiry();
     let refresh_token_expiry = jwt_utils.get_actual_refresh_token_expiry(remember_me);
 
@@ -1456,7 +1496,7 @@ fn create_clear_cookie(name: &str, secure: bool) -> Cookie<'static> {
 
 fn append_cookie_to_response(response: &mut Response, cookie: &Cookie) -> Result<(), AppError> {
     let header_value = HeaderValue::from_str(&cookie.to_string())
-        .map_err(|e| AppError::Internal(format!("无效的cookie值: {e}")))?;
+        .map_err(|e| AppError::Internal(msg("server.common.cookie_invalid").with("error", e)))?;
     response.headers_mut().append(SET_COOKIE, header_value);
     Ok(())
 }

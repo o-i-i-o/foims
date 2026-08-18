@@ -1,6 +1,6 @@
 [package]
 name = "ipma-data-manager"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Data Management - CSV import/export and database backup functionality"

@@ -15,7 +15,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, msg};
 use crate::models::{
     CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
     IpManager,
@@ -133,7 +133,7 @@ pub async fn get_positions(
 
     Ok(crate::error::ok_json(
         paged_response(items, total, &pagination),
-        "机位获取成功",
+        "server.position.list_retrieved",
     ))
 }
 
@@ -155,7 +155,7 @@ pub async fn create_cabinet_position(
     .fetch_optional(&mut *tx)
     .await?;
     if existing_position.is_some() {
-        return Err(AppError::Conflict("机位名称已存在".to_string()));
+        return Err(AppError::Conflict(msg("server.position.name_exists")));
     }
 
     let id = Uuid::new_v4();
@@ -206,7 +206,7 @@ pub async fn create_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json(position, "机位创建成功"))
+    Ok(crate::error::ok_json(position, "server.position.created"))
 }
 
 /// 查询机位基础信息（含机柜/机房名称联表）。
@@ -261,10 +261,10 @@ pub async fn get_cabinet_position(
     let conn = state.pool()?.get_conn();
     let mut position = fetch_position_base(&conn, id)
         .await?
-        .ok_or_else(|| AppError::NotFound("机位未找到".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(msg("server.position.not_found")))?;
     position.ips = fetch_position_ips(&conn, id).await?;
 
-    Ok(crate::error::ok_json(position, "机位获取成功"))
+    Ok(crate::error::ok_json(position, "server.position.fetched"))
 }
 
 /// 更新机位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
@@ -284,7 +284,7 @@ pub async fn update_cabinet_position(
             .fetch_one(&mut *tx)
             .await?;
     if !position_exists {
-        return Err(AppError::NotFound("机位未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.position.not_found")));
     }
 
     sqlx::query(
@@ -309,7 +309,7 @@ pub async fn update_cabinet_position(
 
     let mut result = fetch_position_base(&mut *tx, id)
         .await?
-        .ok_or_else(|| AppError::Internal("机位更新后查询详情失败".to_string()))?;
+        .ok_or_else(|| AppError::Internal(msg("server.position.detail_query_failed")))?;
     result.ips = fetch_position_ips(&mut *tx, id).await?;
 
     tx.commit().await?;
@@ -331,7 +331,7 @@ pub async fn update_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json(result, "机位更新成功"))
+    Ok(crate::error::ok_json(result, "server.position.updated"))
 }
 
 /// 删除机位（被设备占用时拒绝删除）。
@@ -348,7 +348,7 @@ pub async fn delete_cabinet_position(
             .fetch_optional(&mut *tx)
             .await?;
     if existing_position.is_none() {
-        return Err(AppError::NotFound("机位未找到".to_string()));
+        return Err(AppError::NotFound(msg("server.position.not_found")));
     }
 
     let device_using_position: Option<Uuid> =
@@ -357,9 +357,9 @@ pub async fn delete_cabinet_position(
             .fetch_optional(&mut *tx)
             .await?;
     if device_using_position.is_some() {
-        return Err(AppError::Validation(
-            "该机位被设备占用，请先删除对应的设备".to_string(),
-        ));
+        return Err(AppError::Validation(msg(
+            "server.position.occupied_by_device",
+        )));
     }
 
     sqlx::query("DELETE FROM positions WHERE id = $1")
@@ -382,5 +382,5 @@ pub async fn delete_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "机位删除成功"))
+    Ok(crate::error::ok_json((), "server.position.deleted"))
 }

@@ -2,7 +2,7 @@
 
 use crate::import::find_network_id;
 use crate::types::{DataError, DataResult};
-use tracing::warn;
+use ipma_common::{log_warn, msg};
 
 pub async fn import_rooms(
     conn: &mut sqlx::PgConnection,
@@ -18,8 +18,13 @@ pub async fn import_rooms(
 
     for result in rdr.records() {
         line_num += 1;
-        let record =
-            result.map_err(|e| DataError::Validation(format!("第{line_num}行解析失败: {e}")))?;
+        let record = result.map_err(|e| {
+            DataError::Validation(
+                msg("server.import_export.row_parse_failed")
+                    .with("line", line_num)
+                    .with("error", e),
+            )
+        })?;
 
         if record.get(0).is_some_and(|s| s == "名称") {
             continue;
@@ -29,13 +34,23 @@ pub async fn import_rooms(
         let room_type_str = record.get(1).unwrap_or("").trim();
 
         if name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 名称为空"));
+            results.push(
+                msg("server.import_export.row_name_empty")
+                    .with("line", line_num)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if name.len() > 50 {
-            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
+            results.push(
+                msg("server.import_export.row_name_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
@@ -45,9 +60,13 @@ pub async fn import_rooms(
             "数据中心" | "DATA_CENTER" | "data_center" => "DATA_CENTER",
             "弱电井" | "TELECOM_CLOSET" | "telecom_closet" => "TELECOM_CLOSET",
             _ => {
-                results.push(format!(
-                    "第{line_num}行跳过: 房间 '{name}' - 无效的类型 '{room_type_str}'"
-                ));
+                results.push(
+                    msg("server.import_export.row_room_type_invalid")
+                        .with("line", line_num)
+                        .with("name", name)
+                        .with("type", room_type_str)
+                        .log_string(),
+                );
                 error_count += 1;
                 continue;
             }
@@ -85,7 +104,7 @@ pub async fn import_rooms(
                                 .execute(&mut *conn)
                                 .await;
                         if let Err(e) = delete_result {
-                            warn!("操作失败: {}", e);
+                            log_warn!("log.import.room_network_delete_failed", error = e);
                         }
 
                         let mut linked_networks = Vec::new();
@@ -101,31 +120,45 @@ pub async fn import_rooms(
                                     .execute(&mut *conn)
                                     .await;
                                     if let Err(e) = insert_result {
-                                        warn!("操作失败: {}", e);
+                                        log_warn!(
+                                            "log.import.room_network_insert_failed",
+                                            error = e
+                                        );
                                     }
                                     linked_networks.push(*network_name);
                                 }
                                 Ok(None) => {}
                                 Err(e) => {
-                                    warn!("查找网络失败: {}", e);
+                                    log_warn!("log.import.network_lookup_failed", error = e);
                                 }
                             }
                         }
-                        results.push(format!(
-                            "更新房间: {} (类型: {}, 网络: {})",
-                            name,
-                            room_type_str,
-                            linked_networks.join(", ")
-                        ));
+                        results.push(
+                            msg("server.import_export.room_updated")
+                                .with("name", name)
+                                .with("type", room_type_str)
+                                .with("networks", linked_networks.join("; "))
+                                .log_string(),
+                        );
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{line_num}行跳过: 更新房间 '{name}' 失败 - {e}"));
+                        results.push(
+                            msg("server.import_export.row_room_update_failed")
+                                .with("line", line_num)
+                                .with("name", name)
+                                .with("error", e)
+                                .log_string(),
+                        );
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过房间（已存在）: {name}"));
+                results.push(
+                    msg("server.import_export.room_skipped_exists")
+                        .with("name", name)
+                        .log_string(),
+                );
                 skip_count += 1;
             }
         } else {
@@ -155,7 +188,7 @@ pub async fn import_rooms(
                                 .execute(&mut *conn)
                                 .await
                                 {
-                                    warn!("关联房间网络失败: {}", e);
+                                    log_warn!("log.import.room_network_insert_failed", error = e);
                                 }
                                 linked_networks.push(*network_name);
                             }
@@ -163,44 +196,59 @@ pub async fn import_rooms(
                                 missing_networks.push(*network_name);
                             }
                             Err(e) => {
-                                warn!("查找网络失败: {}", e);
+                                log_warn!("log.import.network_lookup_failed", error = e);
                                 missing_networks.push(*network_name);
                             }
                         }
                     }
 
                     if !missing_networks.is_empty() {
-                        results.push(format!(
-                            "导入房间: {} (类型: {}, 网络: {}, 未找到网络: {})",
-                            name,
-                            room_type_str,
-                            linked_networks.join(", "),
-                            missing_networks.join(", ")
-                        ));
+                        results.push(
+                            msg("server.import_export.room_imported_missing_networks")
+                                .with("name", name)
+                                .with("type", room_type_str)
+                                .with("networks", linked_networks.join("; "))
+                                .with("missing", missing_networks.join("; "))
+                                .log_string(),
+                        );
                     } else if linked_networks.is_empty() {
-                        results.push(format!(
-                            "导入房间: {name} (类型: {room_type_str}, 无网络关联)"
-                        ));
+                        results.push(
+                            msg("server.import_export.room_imported_no_network")
+                                .with("name", name)
+                                .with("type", room_type_str)
+                                .log_string(),
+                        );
                     } else {
-                        results.push(format!(
-                            "导入房间: {} (类型: {}, 网络: {})",
-                            name,
-                            room_type_str,
-                            linked_networks.join(", ")
-                        ));
+                        results.push(
+                            msg("server.import_export.room_imported")
+                                .with("name", name)
+                                .with("type", room_type_str)
+                                .with("networks", linked_networks.join("; "))
+                                .log_string(),
+                        );
                     }
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{line_num}行跳过: 插入房间 '{name}' 失败 - {e}"));
+                    results.push(
+                        msg("server.import_export.row_room_insert_failed")
+                            .with("line", line_num)
+                            .with("name", name)
+                            .with("error", e)
+                            .log_string(),
+                    );
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!(
-        "房间导入完成: 成功 {success_count}, 跳过 {skip_count}, 失败 {error_count}"
-    ));
+    results.push(
+        msg("server.import_export.rooms_summary")
+            .with("success", success_count)
+            .with("skipped", skip_count)
+            .with("failed", error_count)
+            .log_string(),
+    );
     Ok(())
 }

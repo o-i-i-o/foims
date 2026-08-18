@@ -146,10 +146,29 @@ pub struct InitConfig {
     pub enabled: bool,
 }
 
+fn default_log_language() -> String {
+    "en".to_string()
+}
+
+fn default_supported_languages() -> Vec<String> {
+    vec!["zh".to_string(), "en".to_string()]
+}
+
+/// i18n / 日志语言配置。
+///
+/// - `log_language`：控制台日志语言，缺省为 `"en"`；
+/// - `supported_languages`：系统支持的语言集合（同时约束日志语言取值）；
+/// - `logfiles_i18n_out`：日志文件输出的语言集合（每个语言一个独立文件），
+///   缺省时跟随 `log_language`；取值必须是 `supported_languages` 的子集，
+///   否则视为配置错误，控制台与日志文件均回退为仅输出英文日志。
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct I18nConfig {
-    pub default_language: String,
+    #[serde(default = "default_log_language")]
+    pub log_language: String,
+    #[serde(default = "default_supported_languages")]
     pub supported_languages: Vec<String>,
+    #[serde(default)]
+    pub logfiles_i18n_out: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

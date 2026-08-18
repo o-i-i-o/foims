@@ -521,7 +521,7 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
 }
 
 /// 逐表逐列校验必需列完整性，首个缺失项以错误消息返回。
-pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
+pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), ipma_common::AppMessage> {
     for (table, columns) in get_table_columns() {
         let table_exists: bool = match sqlx::query_scalar(
             sqlx::AssertSqlSafe(format!(
@@ -532,11 +532,15 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
         .await
         {
             Ok(exists) => exists,
-            Err(e) => return Err(format!("检查表 {table} 是否存在时出错: {e}")),
+            Err(e) => {
+                return Err(ipma_common::msg("server.init.db.table_check_failed")
+                    .with("table", table)
+                    .with("error", e))
+            }
         };
 
         if !table_exists {
-            return Err(format!("表 {table} 不存在"));
+            return Err(ipma_common::msg("server.init.db.table_missing").with("table", table));
         }
 
         for column in columns {
@@ -549,11 +553,18 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), String> {
             .await
             {
                 Ok(exists) => exists,
-                Err(e) => return Err(format!("检查列 {table}.{column} 是否存在时出错: {e}")),
+                Err(e) => {
+                    return Err(ipma_common::msg("server.init.db.column_check_failed")
+                        .with("table", table)
+                        .with("column", column)
+                        .with("error", e))
+                }
             };
 
             if !column_exists {
-                return Err(format!("表 {table} 缺少必需的列: {column}"));
+                return Err(ipma_common::msg("server.init.db.column_missing")
+                    .with("table", table)
+                    .with("column", column));
             }
         }
     }

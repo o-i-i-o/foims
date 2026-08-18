@@ -1,9 +1,9 @@
 //! 优雅退出处理。
 
+use ipma_common::{log_error, log_info, log_warn};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::broadcast;
-use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct ShutdownSignal {
@@ -30,7 +30,7 @@ impl ShutdownSignal {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
         {
-            info!("收到关闭信号，开始优雅关闭...");
+            log_info!("log.shutdown.requested");
             drop(self.sender.send(()));
         }
     }
@@ -47,7 +47,7 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
     {
         Ok(s) => s,
         Err(e) => {
-            error!("无法注册 SIGINT 信号处理器: {}", e);
+            log_error!("log.shutdown.sigint_register_failed", error = e);
             return;
         }
     };
@@ -56,7 +56,7 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
     {
         Ok(s) => s,
         Err(e) => {
-            error!("无法注册 SIGTERM 信号处理器: {}", e);
+            log_error!("log.shutdown.sigterm_register_failed", error = e);
             return;
         }
     };
@@ -64,7 +64,7 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
     let mut sighup = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
         Ok(s) => s,
         Err(e) => {
-            error!("无法注册 SIGHUP 信号处理器: {}", e);
+            log_error!("log.shutdown.sighup_register_failed", error = e);
             return;
         }
     };
@@ -72,17 +72,17 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
     loop {
         tokio::select! {
             _ = sigint.recv() => {
-                info!("收到 SIGINT 信号");
+                log_info!("log.shutdown.sigint_received");
                 shutdown.request_shutdown();
                 break;
             }
             _ = sigterm.recv() => {
-                info!("收到 SIGTERM 信号");
+                log_info!("log.shutdown.sigterm_received");
                 shutdown.request_shutdown();
                 break;
             }
             _ = sighup.recv() => {
-                warn!("收到 SIGHUP 信号，忽略 (如需重载配置请使用 API)");
+                log_warn!("log.shutdown.sighup_ignored");
                 continue;
             }
         }

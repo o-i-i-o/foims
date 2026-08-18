@@ -8,6 +8,7 @@ use crate::types::{DataError, DataProvider, DataResult};
 use axum::extract::Query;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use ipma_common::msg;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
@@ -21,15 +22,17 @@ const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 /// csv crate 的默认引号策略（仅在必要时转义）与原手写
 /// `escape_csv_field` 语义一致，且覆盖 `\r` 等更多控制字符。
 fn build_csv(header: &[&str], rows: Vec<Vec<String>>) -> DataResult<Vec<u8>> {
-    let write_err = |e: csv::Error| DataError::Internal(format!("生成CSV失败: {e}"));
+    let write_err = |e: csv::Error| {
+        DataError::Internal(msg("server.import_export.csv_build_failed").with("error", e))
+    };
     let mut writer = csv::WriterBuilder::new().from_writer(Vec::new());
     writer.write_record(header).map_err(write_err)?;
     for row in rows {
         writer.write_record(row).map_err(write_err)?;
     }
-    let data = writer
-        .into_inner()
-        .map_err(|e| DataError::Internal(format!("生成CSV失败: {e}")))?;
+    let data = writer.into_inner().map_err(|e| {
+        DataError::Internal(msg("server.import_export.csv_build_failed").with("error", e))
+    })?;
 
     let mut out = UTF8_BOM.to_vec();
     out.extend_from_slice(&data);
@@ -45,13 +48,16 @@ fn zip_files(files: Vec<(&str, Vec<u8>)>) -> DataResult<Vec<u8>> {
 
     let mut zip = ZipWriter::new(&mut buf);
     for (filename, data) in files {
-        zip.start_file(filename, options)
-            .map_err(|e| DataError::Internal(format!("创建ZIP文件失败: {e}")))?;
-        zip.write_all(&data)
-            .map_err(|e| DataError::Internal(format!("写入ZIP文件失败: {e}")))?;
+        zip.start_file(filename, options).map_err(|e| {
+            DataError::Internal(msg("server.import_export.zip_create_failed").with("error", e))
+        })?;
+        zip.write_all(&data).map_err(|e| {
+            DataError::Internal(msg("server.import_export.zip_write_failed").with("error", e))
+        })?;
     }
-    zip.finish()
-        .map_err(|e| DataError::Internal(format!("完成ZIP文件失败: {e}")))?;
+    zip.finish().map_err(|e| {
+        DataError::Internal(msg("server.import_export.zip_finish_failed").with("error", e))
+    })?;
 
     Ok(buf.into_inner())
 }
@@ -103,7 +109,11 @@ pub async fn export_csv<P: DataProvider>(
 
     let buf = tokio::task::spawn_blocking(move || zip_files(csv_data))
         .await
-        .map_err(|e| DataError::Internal(format!("ZIP压缩任务失败: {e}")))??;
+        .map_err(|e| {
+            DataError::Internal(
+                msg("server.import_export.zip_compress_task_failed").with("error", e),
+            )
+        })??;
 
     Ok((
         StatusCode::OK,

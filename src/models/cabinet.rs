@@ -40,22 +40,30 @@ pub struct CabinetWithNetworks {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetCreate {
-    #[validate(length(min = 1, max = 50, message = "机柜名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.cabinet.validation.name_length"))]
     pub name: String,
     pub room_id: Uuid,
-    #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
+    #[validate(range(
+        min = 1,
+        max = 48,
+        message = "server.cabinet.validation.capacity_range"
+    ))]
     pub capacity: i32,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetUpdate {
-    #[validate(length(min = 1, max = 50, message = "机柜名称长度必须在1到50个字符之间"))]
+    #[validate(length(min = 1, max = 50, message = "server.cabinet.validation.name_length"))]
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
-    #[validate(range(min = 1, max = 48, message = "机柜容量必须在1到48U之间"))]
+    #[validate(range(
+        min = 1,
+        max = 48,
+        message = "server.cabinet.validation.capacity_range"
+    ))]
     pub capacity: Option<i32>,
-    #[validate(length(max = 255, message = "描述长度不能超过255个字符"))]
+    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }

@@ -2,6 +2,7 @@
 
 use crate::import::empty_to_none;
 use crate::types::{DataError, DataResult};
+use ipma_common::msg;
 
 pub async fn import_networks(
     conn: &mut sqlx::PgConnection,
@@ -17,8 +18,13 @@ pub async fn import_networks(
 
     for result in rdr.records() {
         line_num += 1;
-        let record =
-            result.map_err(|e| DataError::Validation(format!("第{line_num}行解析失败: {e}")))?;
+        let record = result.map_err(|e| {
+            DataError::Validation(
+                msg("server.import_export.row_parse_failed")
+                    .with("line", line_num)
+                    .with("error", e),
+            )
+        })?;
 
         if record.get(0).is_some_and(|s| s == "名称") {
             continue;
@@ -35,27 +41,46 @@ pub async fn import_networks(
         let description = record.get(8).unwrap_or("").trim();
 
         if name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 名称为空"));
+            results.push(
+                msg("server.import_export.row_name_empty")
+                    .with("line", line_num)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if name.len() > 50 {
-            results.push(format!("第{line_num}行跳过: 名称 '{name}' 超过50个字符"));
+            results.push(
+                msg("server.import_export.row_name_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 50)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if description.len() > 255 {
-            results.push(format!(
-                "第{line_num}行跳过: 网络 '{name}' - 描述超过255个字符"
-            ));
+            results.push(
+                msg("server.import_export.row_description_too_long")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("max", 255)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
 
         if region_name.is_empty() {
-            results.push(format!("第{line_num}行跳过: 网络 '{name}' - 网络区域为空"));
+            results.push(
+                msg("server.import_export.row_region_missing")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         }
@@ -68,9 +93,13 @@ pub async fn import_networks(
                 .map_err(DataError::from)?;
 
         let Some(region_id) = region_id else {
-            results.push(format!(
-                "第{line_num}行跳过: 网络 '{name}' - 网络区域 '{region_name}' 不存在"
-            ));
+            results.push(
+                msg("server.import_export.row_region_not_found")
+                    .with("line", line_num)
+                    .with("name", name)
+                    .with("region", region_name)
+                    .log_string(),
+            );
             error_count += 1;
             continue;
         };
@@ -107,16 +136,30 @@ pub async fn import_networks(
 
                 match update_result {
                     Ok(_) => {
-                        results.push(format!("更新网络: {name}"));
+                        results.push(
+                            msg("server.import_export.network_updated")
+                                .with("name", name)
+                                .log_string(),
+                        );
                         success_count += 1;
                     }
                     Err(e) => {
-                        results.push(format!("第{line_num}行跳过: 更新网络 '{name}' 失败 - {e}"));
+                        results.push(
+                            msg("server.import_export.row_network_update_failed")
+                                .with("line", line_num)
+                                .with("name", name)
+                                .with("error", e)
+                                .log_string(),
+                        );
                         error_count += 1;
                     }
                 }
             } else {
-                results.push(format!("跳过网络（已存在）: {name}"));
+                results.push(
+                    msg("server.import_export.network_skipped_exists")
+                        .with("name", name)
+                        .log_string(),
+                );
                 skip_count += 1;
             }
         } else {
@@ -144,19 +187,33 @@ pub async fn import_networks(
 
             match insert_result {
                 Ok(_) => {
-                    results.push(format!("导入网络: {name}"));
+                    results.push(
+                        msg("server.import_export.network_imported")
+                            .with("name", name)
+                            .log_string(),
+                    );
                     success_count += 1;
                 }
                 Err(e) => {
-                    results.push(format!("第{line_num}行跳过: 插入网络 '{name}' 失败 - {e}"));
+                    results.push(
+                        msg("server.import_export.row_network_insert_failed")
+                            .with("line", line_num)
+                            .with("name", name)
+                            .with("error", e)
+                            .log_string(),
+                    );
                     error_count += 1;
                 }
             }
         }
     }
 
-    results.push(format!(
-        "网络导入完成: 成功 {success_count}, 跳过 {skip_count}, 失败 {error_count}"
-    ));
+    results.push(
+        msg("server.import_export.networks_summary")
+            .with("success", success_count)
+            .with("skipped", skip_count)
+            .with("failed", error_count)
+            .log_string(),
+    );
     Ok(())
 }
