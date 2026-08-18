@@ -157,7 +157,7 @@ pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
     //      覆盖式设置，客户端无法伪造（$remote_addr 取自 TCP 对端）。
     //      切勿使用 X-Forwarded-For：其经 `$proxy_add_x_forwarded_for` 会保留客户端
     //      伪造的首段值（如 "127.0.0.1, <真实IP>"），而取首段判断即可被绕过。
-    //   2. fail-close：缺失可信来源 IP 头时默认拒绝（旧实现为 fail-open 默认放行）。
+    //   2. fail-close：缺失可信来源 IP 头时默认拒绝。
     let is_localhost = parts
         .headers
         .get("X-Real-IP")
