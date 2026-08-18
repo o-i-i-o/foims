@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler"]
+members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler", "crates/ipma-x509-manager"]
 resolver = "2"
 
 [workspace.package]
@@ -68,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.47"
+version = "0.15.48"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -81,6 +81,7 @@ ipma-init = { path = "crates/ipma-init" }
 ipma-visualization = { path = "crates/ipma-visualization" }
 ipma-data-manager = { path = "crates/ipma-data-manager" }
 ipma-scheduler = { path = "crates/ipma-scheduler" }
+ipma-x509-manager = { path = "crates/ipma-x509-manager" }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }

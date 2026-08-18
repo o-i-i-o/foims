@@ -1,3 +1,5 @@
+import { MODULE_VERSION } from "./resourceLoader.js";
+
 const loadedStyles = new Set();
 const loadingStyles = new Map();
 
@@ -8,36 +10,42 @@ const PAGE_STYLES = {
   visualization: ["/static/css/pages/visualization.css"]
 };
 
+// 拼接资源版本号，与 main.html 静态资源的 ?v= 缓存穿透机制保持一致
+function withVersion(href) {
+  return href.includes("?") ? `${href}&v=${MODULE_VERSION}` : `${href}?v=${MODULE_VERSION}`;
+}
+
 async function loadStyle(href) {
-  if (loadedStyles.has(href)) {
+  const url = withVersion(href);
+  if (loadedStyles.has(url)) {
     return true;
   }
 
-  if (loadingStyles.has(href)) {
-    return loadingStyles.get(href);
+  if (loadingStyles.has(url)) {
+    return loadingStyles.get(url);
   }
 
   const promise = new Promise((resolve, reject) => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = href;
+    link.href = url;
 
     link.onload = () => {
-      loadedStyles.add(href);
-      loadingStyles.delete(href);
+      loadedStyles.add(url);
+      loadingStyles.delete(url);
       resolve(true);
     };
 
     link.onerror = () => {
-      loadingStyles.delete(href);
-      console.error(`Failed to load style: ${href}`);
-      reject(new Error(`Failed to load style: ${href}`));
+      loadingStyles.delete(url);
+      console.error(`Failed to load style: ${url}`);
+      reject(new Error(`Failed to load style: ${url}`));
     };
 
     document.head.appendChild(link);
   });
 
-  loadingStyles.set(href, promise);
+  loadingStyles.set(url, promise);
   return promise;
 }
 

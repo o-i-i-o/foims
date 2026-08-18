@@ -313,19 +313,6 @@ export class SVGDataManager {
       containerHeight
     );
 
-    // TEMP-DEBUG: 几何探针（验证后移除）
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const s = this.core.svg.getBoundingClientRect();
-      const c = this.core.container.getBoundingClientRect();
-      const sec = document.getElementById("visualization");
-      const tc = document.getElementById("cabinet-visualization");
-      const r = this.core.svg.querySelector(".cabinet-element rect");
-      const rb = r ? r.getBoundingClientRect() : null;
-      const secR = sec ? sec.getBoundingClientRect() : null;
-      const tcR = tc ? tc.getBoundingClientRect() : null;
-      document.title = `PROBE svg=${Math.round(s.width)}x${Math.round(s.height)}@${Math.round(s.top)} cont=${Math.round(c.width)}x${Math.round(c.height)}@${Math.round(c.top)} cabBottom=${rb ? Math.round(rb.bottom) : -1} vh=${innerHeight} sec=${secR ? Math.round(secR.bottom) : -1} tc=${tcR ? Math.round(tcR.bottom) : -1}`;
-    }));
-
     return await this.renderCabinetBatches(cabinets, token);
   }
 

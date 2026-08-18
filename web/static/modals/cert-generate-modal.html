@@ -1,0 +1,51 @@
+<template id="cert-generate-modal-template">
+<div id="cert-generate-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cert.generate_title">Generate Self-signed Certificate</h3>
+      <span class="close" data-modal-id="cert-generate-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="cert-generate-form">
+        <div class="form-group">
+          <label for="cert-common-name" data-i18n="cert.common_name">Common Name (CN)</label>
+          <input type="text" id="cert-common-name" name="common_name" placeholder="e.g., example.com" required />
+        </div>
+        <div class="form-group">
+          <label for="cert-organization" data-i18n="cert.organization">Organization (O)</label>
+          <input type="text" id="cert-organization" name="organization" data-i18n-placeholder="cert.organization_placeholder" placeholder="Organization name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-organizational-unit" data-i18n="cert.organizational_unit">Organizational Unit (OU)</label>
+          <input type="text" id="cert-organizational-unit" name="organizational_unit" data-i18n-placeholder="cert.ou_placeholder" placeholder="Organizational unit" />
+        </div>
+        <div class="form-group">
+          <label for="cert-country" data-i18n="cert.country">Country (C)</label>
+          <input type="text" id="cert-country" name="country" data-i18n-placeholder="cert.country_placeholder" placeholder="Country code, e.g., CN" maxlength="2" />
+        </div>
+        <div class="form-group">
+          <label for="cert-state" data-i18n="cert.state">State (ST)</label>
+          <input type="text" id="cert-state" name="state" data-i18n-placeholder="cert.state_placeholder" placeholder="State name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-locality" data-i18n="cert.locality">Locality (L)</label>
+          <input type="text" id="cert-locality" name="locality" data-i18n-placeholder="cert.locality_placeholder" placeholder="City name" />
+        </div>
+        <div class="form-group">
+          <label for="cert-validity" data-i18n="cert.validity">Validity (days)</label>
+          <input type="number" id="cert-validity" name="validity_days" placeholder="Validity days" min="1" max="36500" value="3650" />
+        </div>
+        <div class="form-group">
+          <label for="cert-san" data-i18n="cert.subject_alt_names">Subject Alt Names</label>
+          <input type="text" id="cert-san" name="subject_alt_names" data-i18n-placeholder="cert.san_placeholder" placeholder="Comma-separated IPs or domains" />
+          <span class="hint-text" data-i18n="cert.san_hint">Comma-separated IP addresses or domain names; the public URL host is added automatically</span>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="cert-generate-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="cert-generate-form" data-i18n="cert.generate">Generate Certificate</button>
+    </footer>
+  </div>
+</div>
+</template>

@@ -1,0 +1,22 @@
+[package]
+name = "ipma-x509-manager"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "IPMA X.509 证书管理：自签名证书生成、导入、清点与下载"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+ipma-common = { path = "../ipma-common" }
+rcgen = "0.14"
+pem = "3"
+x509-parser = "0.17"
+tokio = { version = "1", features = ["fs", "rt"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+
+[lints]
+workspace = true

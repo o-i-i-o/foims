@@ -131,6 +131,16 @@ impl From<ipma_visualization::VisualizationError> for AppError {
     }
 }
 
+impl From<ipma_x509_manager::CertManagerError> for AppError {
+    fn from(err: ipma_x509_manager::CertManagerError) -> Self {
+        match err {
+            ipma_x509_manager::CertManagerError::Validation(m) => AppError::Validation(m),
+            ipma_x509_manager::CertManagerError::NotFound(m) => AppError::NotFound(m),
+            ipma_x509_manager::CertManagerError::Internal(m) => AppError::Internal(m),
+        }
+    }
+}
+
 impl From<ipma_scheduler::SchedulerError> for AppError {
     fn from(err: ipma_scheduler::SchedulerError) -> Self {
         match err {

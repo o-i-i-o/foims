@@ -43,6 +43,13 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
+    // 物理限制：同两端点之间只允许一根线路（去重）
+    sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_cable_links_endpoint_pair ON cable_links(a_endpoint_type, a_endpoint_id, b_endpoint_type, b_endpoint_id)",
+    )
+    .execute(pool)
+    .await?;
+
     create_triggers(pool).await?;
     create_path_function(pool).await?;
 

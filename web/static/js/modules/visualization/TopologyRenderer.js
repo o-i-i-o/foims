@@ -28,6 +28,12 @@ const DEVICE_TYPE_I18N_KEYS = {
   other: "device_type.other"
 };
 
+// 中间节点样式：信息点（圆形/橙）与配线架（方形/蓝紫）
+const HOP_STYLES = {
+  net_outlet: { kind: "circle", fill: "#fff3e0", stroke: "#f57c00" },
+  patch_panel: { kind: "rect", fill: "#ede7f6", stroke: "#5e35b1" }
+};
+
 function getDeviceTypeLabel(type) {
   const key = DEVICE_TYPE_I18N_KEYS[type];
   return key ? t(key) : type;
@@ -71,7 +77,6 @@ export class TopologyRenderer {
     nameText.setAttribute("text-anchor", "middle");
     nameText.setAttribute("dominant-baseline", "middle");
     nameText.dataset.relX = 0;
-    nameText.dataset.relY = 22 - h / 2 + h / 2;
     nameText.dataset.relY = 22;
     g.appendChild(nameText);
 
@@ -137,6 +142,10 @@ export class TopologyRenderer {
     return g;
   }
 
+  /// 绘制连线：按类型分派
+  /// - 派生物理连线（derived，含 hops/cables）：折线穿过中间节点，逐段标注线路
+  /// - 手动物理示意（manual）：正交折线 + 虚线
+  /// - 逻辑连接（logical）：加粗紫色虚线 + LAG 徽标 + 成员端口
   drawConnection(connection) {
     const sourcePos = this.core.getNodePosition(connection.source_device_id);
     const targetPos = this.core.getNodePosition(connection.target_device_id);
@@ -153,36 +162,21 @@ export class TopologyRenderer {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("topology-connection-group");
     g.dataset.connectionId = connection.id;
+    g.dataset.connectionType = connection.connection_type;
+    g.dataset.derived = connection.derived ? "true" : "false";
 
     const path = document.createElementNS(SVG_NS, "path");
     path.classList.add("topology-connection");
-    if (connection.auto_discovered) {
-      path.classList.add("auto-discovered");
-    }
-    const pathD = this._calculateOrthogonalPath(sourceAnchor, targetAnchor, parallelOffset);
-    path.setAttribute("d", pathD);
-    g.appendChild(path);
-
-    const sourceLabel = this._createConnectionLabel(
-      sourceAnchor.x,
-      sourceAnchor.y,
-      connection.source_port_number || connection.source_port_name || "",
-      "source"
-    );
-    if (sourceLabel) g.appendChild(sourceLabel);
-
-    const targetLabel = this._createConnectionLabel(
-      targetAnchor.x,
-      targetAnchor.y,
-      connection.target_port_number || connection.target_port_name || "",
-      "target"
-    );
-    if (targetLabel) g.appendChild(targetLabel);
-
-    // 渲染信息点链（设备 → 信息点[0] → 信息点[1] → ... → 目标设备）
-    const chain = Array.isArray(connection.outlet_chain) ? connection.outlet_chain : [];
-    if (chain.length > 0) {
-      this._drawOutletChain(g, sourceAnchor, targetAnchor, chain, parallelOffset);
+    if (connection.connection_type === "logical") {
+      path.classList.add("logical");
+      this._drawLogicalConnection(g, path, connection, sourceAnchor, targetAnchor, parallelOffset);
+    } else {
+      if (connection.derived) {
+        path.classList.add("auto-discovered");
+      } else {
+        path.classList.add("manual");
+      }
+      this._drawPhysicalConnection(g, path, connection, sourceAnchor, targetAnchor, parallelOffset);
     }
 
     path.addEventListener("click", (e) => {
@@ -196,50 +190,220 @@ export class TopologyRenderer {
     return g;
   }
 
-  /// 在连接线上绘制信息点链的中间节点
-  /// 沿着 sourceAnchor → targetAnchor 的直线路径均匀分布
-  _drawOutletChain(group, sourceAnchor, targetAnchor, chain, parallelOffset = 0) {
-    const n = chain.length;
-    // 在 source 和 target 之间均匀分布 n 个点
-    for (let i = 0; i < n; i++) {
-      const t = (i + 1) / (n + 1);
-      const x = sourceAnchor.x + (targetAnchor.x - sourceAnchor.x) * t;
-      const y = sourceAnchor.y + (targetAnchor.y - sourceAnchor.y) * t + parallelOffset;
+  /// 物理连线：途经信息点/配线架时按多段折线绘制
+  _drawPhysicalConnection(group, path, connection, sourceAnchor, targetAnchor, parallelOffset) {
+    const hops = Array.isArray(connection.hops) ? connection.hops : [];
+    const cables = Array.isArray(connection.cables) ? connection.cables : [];
 
-      const node = document.createElementNS(SVG_NS, "g");
-      node.classList.add("topology-outlet-node");
+    if (hops.length === 0) {
+      path.setAttribute(
+        "d",
+        this._calculateOrthogonalPath(sourceAnchor, targetAnchor, parallelOffset)
+      );
+      group.appendChild(path);
+    } else {
+      // 中间节点在两锚点之间均匀分布，路径逐段折线连接
+      const points = [sourceAnchor];
+      const hopPoints = hops.map((hop, i) => {
+        const ratio = (i + 1) / (hops.length + 1);
+        return {
+          x: sourceAnchor.x + (targetAnchor.x - sourceAnchor.x) * ratio,
+          y: sourceAnchor.y + (targetAnchor.y - sourceAnchor.y) * ratio + parallelOffset
+        };
+      });
+      points.push(...hopPoints, targetAnchor);
 
+      path.setAttribute(
+        "d",
+        points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")
+      );
+      group.appendChild(path);
+
+      hops.forEach((hop, i) => {
+        this._drawHopNode(group, hop, hopPoints[i], i, hops.length);
+        this._drawCableLabel(group, cables[i], points[i], points[i + 1]);
+      });
+      this._drawCableLabel(
+        group,
+        cables[hops.length],
+        points[hops.length],
+        points[hops.length + 1]
+      );
+    }
+
+    const sourceLabel = this._createConnectionLabel(
+      sourceAnchor.x,
+      sourceAnchor.y,
+      connection.source_port_label || "",
+      "source"
+    );
+    if (sourceLabel) group.appendChild(sourceLabel);
+
+    const targetLabel = this._createConnectionLabel(
+      targetAnchor.x,
+      targetAnchor.y,
+      connection.target_port_label || "",
+      "target"
+    );
+    if (targetLabel) group.appendChild(targetLabel);
+  }
+
+  /// 逻辑连接（链路聚合）：加粗虚线 + 中点徽标 + 成员端口摘要
+  _drawLogicalConnection(group, path, connection, sourceAnchor, targetAnchor, parallelOffset) {
+    path.setAttribute(
+      "d",
+      this._calculateOrthogonalPath(sourceAnchor, targetAnchor, parallelOffset)
+    );
+    group.appendChild(path);
+
+    const midX = (sourceAnchor.x + targetAnchor.x) / 2;
+    const midY = (sourceAnchor.y + targetAnchor.y) / 2 + parallelOffset;
+
+    const badge = document.createElementNS(SVG_NS, "g");
+    badge.classList.add("topology-lag-badge");
+
+    const badgeText = connection.label || t("viz.lag_badge");
+    const badgeRect = document.createElementNS(SVG_NS, "rect");
+    const textWidth = Math.max(badgeText.length * 8 + 20, 64);
+    badgeRect.setAttribute("x", midX - textWidth / 2);
+    badgeRect.setAttribute("y", midY - 12);
+    badgeRect.setAttribute("width", textWidth);
+    badgeRect.setAttribute("height", 24);
+    badgeRect.setAttribute("rx", 12);
+    badge.appendChild(badgeRect);
+
+    const badgeLabel = document.createElementNS(SVG_NS, "text");
+    badgeLabel.textContent = badgeText;
+    badgeLabel.setAttribute("x", midX);
+    badgeLabel.setAttribute("y", midY + 4);
+    badgeLabel.setAttribute("text-anchor", "middle");
+    badgeLabel.setAttribute("dominant-baseline", "middle");
+    badge.appendChild(badgeLabel);
+    group.appendChild(badge);
+
+    const summary = [
+      connection.source_members?.length || 0,
+      connection.target_members?.length || 0
+    ].join(" + ");
+    const countLabel = document.createElementNS(SVG_NS, "text");
+    countLabel.classList.add("topology-lag-members");
+    countLabel.textContent = `${t("viz.member_ports")}: ${summary}`;
+    countLabel.setAttribute("x", midX);
+    countLabel.setAttribute("y", midY + 26);
+    countLabel.setAttribute("text-anchor", "middle");
+    group.appendChild(countLabel);
+
+    const memberLabel = (anchor, members, type) => {
+      if (!members || members.length === 0) return null;
+      const text = members
+        .slice(0, 4)
+        .map((m) => m.port_number || m.port_id.slice(0, 8))
+        .join(", ");
+      return this._createConnectionLabel(
+        anchor.x,
+        anchor.y,
+        members.length > 4 ? `${text}…` : text,
+        type
+      );
+    };
+    const srcLabel = memberLabel(sourceAnchor, connection.source_members, "source");
+    if (srcLabel) group.appendChild(srcLabel);
+    const tgtLabel = memberLabel(targetAnchor, connection.target_members, "target");
+    if (tgtLabel) group.appendChild(tgtLabel);
+  }
+
+  /// 绘制途经的中间节点（信息点=圆形，配线架=方形）
+  _drawHopNode(group, hop, point, index, total) {
+    const style = HOP_STYLES[hop.node_type] || HOP_STYLES.net_outlet;
+    const node = document.createElementNS(SVG_NS, "g");
+    node.classList.add(
+      "topology-hop-node",
+      hop.node_type === "patch_panel" ? "hop-patch-panel" : "hop-net-outlet"
+    );
+
+    if (style.kind === "rect") {
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("x", point.x - 9);
+      rect.setAttribute("y", point.y - 9);
+      rect.setAttribute("width", 18);
+      rect.setAttribute("height", 18);
+      rect.setAttribute("rx", 3);
+      rect.setAttribute("fill", style.fill);
+      rect.setAttribute("stroke", style.stroke);
+      rect.setAttribute("stroke-width", 1.5);
+      node.appendChild(rect);
+    } else {
       const circle = document.createElementNS(SVG_NS, "circle");
-      circle.setAttribute("cx", x);
-      circle.setAttribute("cy", y);
-      circle.setAttribute("r", 8);
-      circle.setAttribute("fill", "#fff3e0");
-      circle.setAttribute("stroke", "#f57c00");
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", 9);
+      circle.setAttribute("fill", style.fill);
+      circle.setAttribute("stroke", style.stroke);
       circle.setAttribute("stroke-width", 1.5);
       node.appendChild(circle);
-
-      const label = document.createElementNS(SVG_NS, "text");
-      label.classList.add("topology-outlet-label");
-      const outletName = chain[i].name || chain[i].id || "";
-      label.textContent = outletName;
-      label.setAttribute("x", x);
-      label.setAttribute("y", y - 14);
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("dominant-baseline", "middle");
-      node.appendChild(label);
-
-      const indexLabel = document.createElementNS(SVG_NS, "text");
-      indexLabel.classList.add("topology-outlet-index");
-      indexLabel.textContent = String(i + 1);
-      indexLabel.setAttribute("x", x);
-      indexLabel.setAttribute("y", y + 3);
-      indexLabel.setAttribute("text-anchor", "middle");
-      indexLabel.setAttribute("dominant-baseline", "middle");
-      node.appendChild(indexLabel);
-
-      node.dataset.tooltip = `${outletName} - ${t("viz.link_order")}: ${i + 1}/${n}`;
-      group.appendChild(node);
     }
+
+    const label = document.createElementNS(SVG_NS, "text");
+    label.classList.add("topology-outlet-label");
+    const hopName = hop.node_label || hop.node_id || "";
+    label.textContent = hopName;
+    label.setAttribute("x", point.x);
+    label.setAttribute("y", point.y - 15);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("dominant-baseline", "middle");
+    node.appendChild(label);
+
+    const indexLabel = document.createElementNS(SVG_NS, "text");
+    indexLabel.classList.add("topology-outlet-index");
+    indexLabel.textContent = String(index + 1);
+    indexLabel.setAttribute("x", point.x);
+    indexLabel.setAttribute("y", point.y + 3.5);
+    indexLabel.setAttribute("text-anchor", "middle");
+    indexLabel.setAttribute("dominant-baseline", "middle");
+    node.appendChild(indexLabel);
+
+    const typeLabel =
+      hop.node_type === "patch_panel" ? t("viz.patch_panel_node") : t("viz.net_outlet_node");
+    node.dataset.tooltip = `${typeLabel} ${hopName} - ${t("viz.link_order")}: ${index + 1}/${total}`;
+    group.appendChild(node);
+  }
+
+  /// 在一段线路中点标注线缆标签
+  _drawCableLabel(group, cable, from, to) {
+    if (!cable || !cable.cable_label) return;
+    const label = document.createElementNS(SVG_NS, "text");
+    label.classList.add("topology-cable-label");
+    label.textContent = cable.cable_label;
+    label.setAttribute("x", (from.x + to.x) / 2);
+    label.setAttribute("y", (from.y + to.y) / 2 - 6);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("dominant-baseline", "middle");
+    group.appendChild(label);
+  }
+
+  /// 在连线上叠加删除标记（仅存储连线可删，派生物理连线由线路管理）
+  drawDeleteMarker(group, connectionId, midPoint) {
+    const marker = document.createElementNS(SVG_NS, "g");
+    marker.classList.add("conn-delete-marker");
+    marker.dataset.connectionId = connectionId;
+
+    const circle = document.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("cx", midPoint.x);
+    circle.setAttribute("cy", midPoint.y - 26);
+    circle.setAttribute("r", 9);
+    marker.appendChild(circle);
+
+    const cross = document.createElementNS(SVG_NS, "text");
+    cross.textContent = "×";
+    cross.setAttribute("x", midPoint.x);
+    cross.setAttribute("y", midPoint.y - 22.5);
+    cross.setAttribute("text-anchor", "middle");
+    cross.setAttribute("dominant-baseline", "middle");
+    marker.appendChild(cross);
+
+    marker.dataset.tooltip = t("viz.delete_connection");
+    group.appendChild(marker);
+    return marker;
   }
 
   _getPairKey(id1, id2) {
@@ -328,6 +492,7 @@ export class TopologyRenderer {
   }
 
   clearAll() {
+    this.core.containersGroup.innerHTML = "";
     this.core.elementsGroup.innerHTML = "";
     this.core.connectionsGroup.innerHTML = "";
     this.core.tempConnectionGroup.innerHTML = "";

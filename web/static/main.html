@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01318">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01318">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01318">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01318">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01318">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01318">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01318">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01318">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01318">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01318">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01318">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01318">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01321">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01321">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01321">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01321">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01321">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01321">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01321">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01321">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01321">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01321">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01321">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01321">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -494,7 +494,7 @@
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="workstation-visualization" role="tab" aria-selected="true" aria-controls="workstation-visualization" data-i18n="visualization.workstation">Workstation Visualization</button>
           <button class="tab-btn" data-tab="cabinet-visualization" role="tab" aria-selected="false" aria-controls="cabinet-visualization" data-i18n="visualization.cabinet">Cabinet Visualization</button>
-          <button class="tab-btn" data-tab="global-visualization" role="tab" aria-selected="false" aria-controls="global-visualization" data-i18n="visualization.global">Global Visualization</button>
+          <button class="tab-btn" data-tab="global-visualization" role="tab" aria-selected="false" aria-controls="global-visualization" data-i18n="visualization.device">Device Visualization</button>
         </div>
 
         <div id="workstation-visualization" class="tab-content active" role="tabpanel">
@@ -530,13 +530,14 @@
               <button id="add-device-to-topology" class="btn btn-primary btn-sm" data-i18n="visualization.add_device">Add Device</button>
             </div>
             <button id="toggle-connection-mode" class="btn btn-warning btn-sm" data-i18n="visualization.connection_mode">Connection Mode</button>
+            <button id="open-topology-connection-modal" class="btn btn-primary btn-sm" data-i18n="viz.create_connection">Create Connection</button>
             <button id="topology-auto-discover" class="btn btn-info btn-sm" data-i18n="visualization.auto_discover">Auto Discover</button>
             <button id="topology-auto-layout" class="btn btn-primary btn-sm" data-i18n="visualization.auto_layout">Auto Layout</button>
             <button id="save-topology-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
             <button id="delete-topology-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
             <span id="topology-zoom-level" class="zoom-indicator">100%</span>
           </div>
-          <div id="global-visualization-container" role="img" aria-label="Global topology visualization"></div>
+          <div id="global-visualization-container" role="img" aria-label="Device topology visualization"></div>
         </div>
       </section>
 
@@ -730,6 +731,61 @@
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </div>
             </form>
+
+            <div class="config-card cert-manager-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🔐</span>
+                  <span data-i18n="cert.manager_title">Certificate Management</span>
+                </div>
+                <div class="cert-manager-actions">
+                  <button type="button" id="cert-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.generate_title">Generate Self-signed Certificate</button>
+                  <button type="button" id="cert-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.import_title">Import Certificate</button>
+                  <button type="button" id="cert-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
+                </div>
+              </div>
+              <p class="config-hint" data-i18n="cert.manager_hint">Generated certificates are stored in /etc/ssl/ipma-certs, imported ones in /etc/ssl/ipma-import-certs.</p>
+
+              <div class="cert-section">
+                <h4 class="cert-section-title" data-i18n="cert.generated_section">Self-signed Certificates</h4>
+                <div class="table-container cert-table-container">
+                  <table id="cert-generated-table" class="data-table" aria-label="Self-signed certificates">
+                    <thead>
+                      <tr>
+                        <th data-i18n="cert.col_file">File</th>
+                        <th data-i18n="cert.col_subject">Subject (CN)</th>
+                        <th data-i18n="cert.col_validity">Validity</th>
+                        <th data-i18n="cert.col_remaining">Days Remaining</th>
+                        <th class="th-actions" data-i18n="common.actions">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="empty-row"><td colspan="5" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="cert-section">
+                <h4 class="cert-section-title" data-i18n="cert.imported_section">Imported Certificates</h4>
+                <div class="table-container cert-table-container">
+                  <table id="cert-imported-table" class="data-table" aria-label="Imported certificates">
+                    <thead>
+                      <tr>
+                        <th data-i18n="cert.col_file">File</th>
+                        <th data-i18n="cert.col_subject">Subject (CN)</th>
+                        <th data-i18n="cert.col_validity">Validity</th>
+                        <th data-i18n="cert.col_remaining">Days Remaining</th>
+                        <th class="th-actions" data-i18n="common.actions">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="empty-row"><td colspan="5" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1076,6 +1132,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01318"></script>
+  <script type="module" src="/static/js/app.js?v=01321"></script>
 </body>
 </html>

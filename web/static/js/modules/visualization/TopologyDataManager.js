@@ -102,7 +102,9 @@ export class TopologyDataManager {
 
   async fetchDevicePorts(deviceId) {
     try {
-      const result = await this.apiGet(`/api/resources/devices/${deviceId}/ports?page_size=100`);
+      const result = await this.apiGet(
+        `/api/resources/devices/${deviceId}/device-ports?page_size=200`
+      );
       if (result.success && result.data) {
         return result.data.items || result.data || [];
       }

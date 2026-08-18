@@ -8,7 +8,7 @@ import {
 
 import { showToast, escapeHtml } from "../utils/ui.js";
 
-import { loadModal, openModal } from "../utils/modalLoader.js";
+import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { loadUsersData } from "./userManager.js";
 import { initSecurityTab } from "./fail2banManager.js";
@@ -86,6 +86,7 @@ export function initSystemTabs() {
     systemConfigTab.addEventListener("click", async () => {
       setTimeout(async () => {
         await loadSystemConfig();
+        await loadCertificateInventory();
       }, 100);
     });
   }
@@ -107,6 +108,8 @@ export function initSystemTabs() {
   if (clearLogsBtn) {
     clearLogsBtn.addEventListener("click", clearLogs);
   }
+
+  initCertificateManager();
 
   systemContainer.dataset.eventsInitialized = "true";
 }
@@ -689,4 +692,219 @@ async function initScheduledTasksTab() {
   } catch (error) {
     console.error("初始化定时任务模块失败:", error);
   }
+}
+
+// ==================== 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs） ====================
+
+// 可选字段：空串转 null
+function certOptionalField(value) {
+  const s = (value || "").trim();
+  return s ? s : null;
+}
+
+function formatCertValidity(info) {
+  if (!info.not_before || !info.not_after) return "-";
+  const fmt = (iso) => new Date(iso).toLocaleDateString();
+  return `${fmt(info.not_before)} ~ ${fmt(info.not_after)}`;
+}
+
+function renderCertTable(tableId, items, kind) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  if (!tbody) return;
+
+  if (!items || items.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t("common.no_data")}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+  items.forEach((info) => {
+    const tr = document.createElement("tr");
+
+    const days = info.days_remaining;
+    const daysText = days === null || days === undefined ? "-" : String(days);
+    const daysClass =
+      days != null && days < 0 ? "cert-days-expired" : days != null && days < 30 ? "cert-days-warning" : "";
+
+    tr.innerHTML = `
+      <td title="${escapeHtml(info.cert_filename)}">${escapeHtml(info.file_stem)}</td>
+      <td>${escapeHtml(info.subject_cn || "-")}</td>
+      <td>${formatCertValidity(info)}</td>
+      <td class="${daysClass}">${daysText}</td>
+      <td class="cert-actions-cell"></td>`;
+
+    const actions = tr.querySelector(".cert-actions-cell");
+
+    const downloadCertBtn = document.createElement("button");
+    downloadCertBtn.type = "button";
+    downloadCertBtn.className = "btn btn-secondary btn-sm";
+    downloadCertBtn.textContent = t("cert.download_cert");
+    downloadCertBtn.addEventListener("click", () => downloadCertFile(kind, info.cert_filename));
+    actions.appendChild(downloadCertBtn);
+
+    if (info.key_filename) {
+      const downloadKeyBtn = document.createElement("button");
+      downloadKeyBtn.type = "button";
+      downloadKeyBtn.className = "btn btn-secondary btn-sm";
+      downloadKeyBtn.textContent = t("cert.download_key");
+      downloadKeyBtn.addEventListener("click", () => downloadCertFile(kind, info.key_filename));
+      actions.appendChild(downloadKeyBtn);
+    }
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger btn-sm";
+    deleteBtn.textContent = t("common.delete");
+    deleteBtn.addEventListener("click", async () => {
+      const confirmed = await showConfirm(t("cert.delete_confirm", { file: info.file_stem }));
+      if (!confirmed) return;
+      try {
+        const result = await apiRequest(
+          `/api/system/certificate/${kind}/${encodeURIComponent(info.file_stem)}`,
+          { method: "DELETE" }
+        );
+        if (result.success) {
+          showToast(result.message, "success");
+          loadCertificateInventory();
+        } else {
+          showToast(result.message, "error");
+        }
+      } catch (error) {
+        console.error("删除证书失败:", error);
+        showToast(t("cert.delete_failed"), "error");
+      }
+    });
+    actions.appendChild(deleteBtn);
+
+    tbody.appendChild(tr);
+  });
+}
+
+export async function loadCertificateInventory() {
+  try {
+    const result = await apiGet("/api/system/certificate/list");
+    if (!result.success || !result.data) return;
+    renderCertTable("cert-generated-table", result.data.generated, "generated");
+    renderCertTable("cert-imported-table", result.data.imported, "imported");
+  } catch (error) {
+    console.error("加载证书列表失败:", error);
+  }
+}
+
+async function downloadCertFile(kind, filename) {
+  try {
+    const result = await apiRequest(
+      `/api/system/certificate/download/${kind}/${encodeURIComponent(filename)}`
+    );
+    if (!result.success) {
+      showToast(result.message, "error");
+      return;
+    }
+    if (result.isBlob) {
+      const url = window.URL.createObjectURL(result.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename || filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    }
+  } catch (error) {
+    console.error("下载证书失败:", error);
+    showToast(t("cert.download_failed"), "error");
+  }
+}
+
+async function openCertGenerateModal() {
+  const modal = await loadModal("cert-generate-modal");
+  if (!modal) return;
+
+  const form = elementCache.get("cert-generate-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const sans = String(fd.get("subject_alt_names") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const body = {
+      common_name: String(fd.get("common_name") || "").trim(),
+      organization: certOptionalField(fd.get("organization")),
+      organizational_unit: certOptionalField(fd.get("organizational_unit")),
+      country: certOptionalField(fd.get("country")),
+      state: certOptionalField(fd.get("state")),
+      locality: certOptionalField(fd.get("locality")),
+      validity_days: parseInt(fd.get("validity_days"), 10) || null,
+      subject_alt_names: sans.length > 0 ? sans : null
+    };
+    if (!body.common_name) {
+      showToast(t("cert.common_name_required"), "warning");
+      return;
+    }
+
+    const result = await apiPost("/api/system/certificate/generate", body);
+    if (result.success) {
+      showToast(result.message, "success");
+      closeModal("cert-generate-modal");
+      form.reset();
+      loadCertificateInventory();
+    } else {
+      showToast(result.message, "error");
+    }
+  };
+
+  openModal("cert-generate-modal");
+}
+
+async function openCertImportModal() {
+  const modal = await loadModal("cert-import-modal");
+  if (!modal) return;
+
+  const form = elementCache.get("cert-import-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const certFile = elementCache.get("cert-file")?.files[0];
+    const keyFile = elementCache.get("key-file")?.files[0];
+    if (!certFile || !keyFile) {
+      showToast(t("cert.file_required"), "warning");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("cert", certFile);
+    fd.append("key", keyFile);
+
+    try {
+      const result = await apiRequest("/api/system/certificate/import", {
+        method: "POST",
+        body: fd
+      });
+      if (result.success) {
+        showToast(result.message, "success");
+        closeModal("cert-import-modal");
+        form.reset();
+        loadCertificateInventory();
+      } else {
+        showToast(result.message, "error");
+      }
+    } catch (error) {
+      console.error("导入证书失败:", error);
+      showToast(t("cert.import_failed"), "error");
+    }
+  };
+
+  openModal("cert-import-modal");
+}
+
+function initCertificateManager() {
+  const generateBtn = elementCache.get("cert-generate-btn");
+  if (generateBtn) generateBtn.addEventListener("click", openCertGenerateModal);
+
+  const importBtn = elementCache.get("cert-import-btn");
+  if (importBtn) importBtn.addEventListener("click", openCertImportModal);
+
+  const refreshBtn = elementCache.get("cert-refresh-btn");
+  if (refreshBtn) refreshBtn.addEventListener("click", loadCertificateInventory);
 }

@@ -300,3 +300,49 @@
     width: 100%;
   }
 }
+
+/* ==================== 证书管理卡片 ==================== */
+
+.cert-manager-card {
+  margin-top: 16px;
+}
+
+.cert-manager-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cert-section {
+  margin-top: 16px;
+}
+
+.cert-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #333);
+  margin: 0 0 8px;
+}
+
+.cert-table-container {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.cert-actions-cell {
+  white-space: nowrap;
+}
+
+.cert-actions-cell .btn {
+  margin-right: 6px;
+}
+
+.cert-days-warning {
+  color: #e65100;
+  font-weight: 600;
+}
+
+.cert-days-expired {
+  color: #c62828;
+  font-weight: 700;
+}

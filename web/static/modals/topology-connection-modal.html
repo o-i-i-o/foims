@@ -1,0 +1,46 @@
+<template id="topology-connection-modal-template">
+<div id="topology-connection-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="viz.create_connection_title">Create Connection</h3>
+      <span class="close" data-modal-id="topology-connection-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="topology-connection-form">
+        <div class="form-group">
+          <label for="topo-conn-type" data-i18n="viz.connection_type">Connection Type</label>
+          <select id="topo-conn-type" name="connection_type" class="form-control" aria-label="Connection type">
+            <option value="physical" data-i18n="viz.connection_type_physical">Physical (sketch)</option>
+            <option value="logical" data-i18n="viz.connection_type_logical">Logical (Link Aggregation)</option>
+          </select>
+          <span class="hint-text" id="topo-conn-type-hint" data-i18n="viz.connection_type_hint">Physical connections between devices are derived from cable links automatically</span>
+        </div>
+        <div class="form-group">
+          <label for="topo-conn-source-device" data-i18n="viz.source_device">Source Device</label>
+          <select id="topo-conn-source-device" class="form-control" aria-label="Source device"></select>
+        </div>
+        <div class="form-group">
+          <label for="topo-conn-target-device" data-i18n="viz.target_device">Target Device</label>
+          <select id="topo-conn-target-device" class="form-control" aria-label="Target device"></select>
+        </div>
+        <div class="form-group topo-conn-ports-group" id="topo-conn-source-ports-group">
+          <label for="topo-conn-source-ports" data-i18n="viz.source_member_ports">Source Member Ports</label>
+          <select id="topo-conn-source-ports" class="form-control" multiple size="6" aria-label="Source member ports"></select>
+        </div>
+        <div class="form-group topo-conn-ports-group" id="topo-conn-target-ports-group">
+          <label for="topo-conn-target-ports" data-i18n="viz.target_member_ports">Target Member Ports</label>
+          <select id="topo-conn-target-ports" class="form-control" multiple size="6" aria-label="Target member ports"></select>
+        </div>
+        <div class="form-group">
+          <label for="topo-conn-label" data-i18n="viz.connection_label">Label</label>
+          <input type="text" id="topo-conn-label" name="label" maxlength="100" data-i18n-placeholder="viz.connection_label_placeholder" placeholder="e.g., LAG1 / bond0" />
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="topology-connection-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" form="topology-connection-form" data-i18n="common.confirm">Confirm</button>
+    </footer>
+  </div>
+</div>
+</template>

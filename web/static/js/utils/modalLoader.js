@@ -29,7 +29,10 @@ const MODAL_REGISTRY = {
   "device-template-modal": "/static/modals/device-template-modal.html",
   "room-children-list-modal": "/static/modals/room-children-list-modal.html",
   "room-net-outlets-list-modal": "/static/modals/room-net-outlets-list-modal.html",
-  "cabinet-positions-list-modal": "/static/modals/cabinet-positions-list-modal.html"
+  "cabinet-positions-list-modal": "/static/modals/cabinet-positions-list-modal.html",
+  "topology-connection-modal": "/static/modals/topology-connection-modal.html",
+  "cert-generate-modal": "/static/modals/cert-generate-modal.html",
+  "cert-import-modal": "/static/modals/cert-import-modal.html"
 };
 
 async function fetchModalHtml(modalId) {

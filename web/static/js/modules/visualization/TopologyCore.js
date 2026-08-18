@@ -46,6 +46,10 @@ export class TopologyCore {
     bg.setAttribute("fill", "url(#topology-grid)");
     this.svg.appendChild(bg);
 
+    this.containersGroup = document.createElementNS(SVG_NS, "g");
+    this.containersGroup.className.baseVal = "containers-group";
+    this.svg.appendChild(this.containersGroup);
+
     this.connectionsGroup = document.createElementNS(SVG_NS, "g");
     this.connectionsGroup.className.baseVal = "connections-group";
     this.svg.appendChild(this.connectionsGroup);

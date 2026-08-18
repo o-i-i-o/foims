@@ -5,12 +5,14 @@ import { showConfirm } from "../../utils/confirm.js";
 import { showToast } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 export class TopologyVisualization {
   constructor(containerId) {
     this.core = new TopologyCore(containerId, {
       onNodeClick: (deviceId) => this.openDeviceDetail(deviceId),
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
-      onNodeDragEnd: () => {},
+      onNodeDragEnd: () => this._renderContainers(),
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
@@ -39,6 +41,7 @@ export class TopologyVisualization {
 
     nodes.forEach((node) => this.renderer.drawDeviceNode(node));
     connections.forEach((conn) => this.renderer.drawConnection(conn));
+    this._renderContainers();
 
     this._fitView();
     this.core._updateZoomIndicator();
@@ -65,6 +68,7 @@ export class TopologyVisualization {
     if (saved) {
       this.nodes.push(node);
       this.renderer.drawDeviceNode(node);
+      this._renderContainers();
     }
   }
 
@@ -86,10 +90,11 @@ export class TopologyVisualization {
 
   async _createConnection(sourceDeviceId, sourcePortId, targetDeviceId, targetPortId) {
     const result = await this.dataManager.createConnection({
+      connection_type: "physical",
       source_device_id: sourceDeviceId,
       target_device_id: targetDeviceId,
-      source_port_id: sourcePortId || null,
-      target_port_id: targetPortId || null
+      source_device_port_id: sourcePortId || null,
+      target_device_port_id: targetPortId || null
     });
 
     if (result) {
@@ -98,20 +103,59 @@ export class TopologyVisualization {
   }
 
   async _handleConnectionClick(connectionId) {
+    this._deselectConnection();
     this.selectedConnectionId = connectionId;
-    const path = this.core.connectionsGroup.querySelector(
-      `[data-connection-id="${connectionId}"] .topology-connection`
+
+    const g = this.core.connectionsGroup.querySelector(
+      `[data-connection-id="${CSS.escape(connectionId)}"]`
     );
+    if (!g) return;
+
+    const path = g.querySelector(".topology-connection");
     if (path) path.classList.add("selected");
+
+    const conn = this.connectionsMap.get(connectionId);
+    if (!conn) return;
+
+    // 派生物理连线来源于线路数据，需在线路模块删除
+    if (conn.derived) {
+      showToast(t("viz.physical_derived_hint"), "info");
+      return;
+    }
+
+    g.classList.add("selected-group");
+    const bbox = path.getBBox();
+    const midPoint = { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 };
+    const marker = this.renderer.drawDeleteMarker(g, connectionId, midPoint);
+    marker.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await this._deleteConnection(connectionId);
+    });
   }
 
-  async _deselectConnection() {
-    if (this.selectedConnectionId) {
-      this.core.connectionsGroup
-        .querySelectorAll(".selected")
-        .forEach((el) => el.classList.remove("selected"));
+  async _deleteConnection(connectionId) {
+    const confirmed = await showConfirm(t("viz.connection_delete_confirm"));
+    if (!confirmed) return;
+
+    const success = await this.dataManager.deleteConnection(connectionId);
+    if (success) {
       this.selectedConnectionId = null;
+      await this.loadTopology();
     }
+  }
+
+  _deselectConnection() {
+    if (!this.selectedConnectionId) return;
+    this.core.connectionsGroup
+      .querySelectorAll(".selected, .selected-group, .conn-delete-marker")
+      .forEach((el) => {
+        if (el.classList.contains("conn-delete-marker")) {
+          el.remove();
+        } else {
+          el.classList.remove("selected", "selected-group");
+        }
+      });
+    this.selectedConnectionId = null;
   }
 
   async saveLayout() {
@@ -162,7 +206,7 @@ export class TopologyVisualization {
       await this.loadTopology();
       this.hierarchicalLayout();
       showToast(
-        `${t("viz.auto_discover_done", { count: result.added_nodes })}，${result.added_connections} ${t("viz.connections_unit")}`,
+        `${t("viz.auto_discover_done", { count: result.added_nodes })}，${result.discovered_connections ?? 0} ${t("viz.connections_unit")}`,
         "success"
       );
     }
@@ -170,6 +214,76 @@ export class TopologyVisualization {
 
   autoLayout() {
     this.hierarchicalLayout();
+  }
+
+  /// 区域容器：同一组织/房间/机柜的设备放入同一容器框
+  _renderContainers() {
+    const container = this.core.containersGroup;
+    container.innerHTML = "";
+
+    const groups = new Map();
+    this.core.elementsGroup.querySelectorAll("[data-device-id]").forEach((el) => {
+      const rect = el.querySelector("rect");
+      if (!rect) return;
+      const node = this.nodes.find((n) => n.device_id === el.dataset.deviceId);
+      if (!node) return;
+
+      const org = node.org_name || t("viz.group_no_org");
+      const room = node.room_name || t("viz.group_no_room");
+      const cabinet = node.cabinet_name || t("viz.group_no_cabinet");
+      const key = `${org} / ${room} / ${cabinet}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({
+        x: parseFloat(rect.getAttribute("x")),
+        y: parseFloat(rect.getAttribute("y")),
+        width: parseFloat(rect.getAttribute("width")) || 200,
+        height: parseFloat(rect.getAttribute("height")) || 100
+      });
+    });
+
+    const PADDING = 40;
+    const TOP = 52;
+
+    groups.forEach((members, key) => {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      members.forEach((m) => {
+        minX = Math.min(minX, m.x);
+        minY = Math.min(minY, m.y);
+        maxX = Math.max(maxX, m.x + m.width);
+        maxY = Math.max(maxY, m.y + m.height);
+      });
+
+      const g = document.createElementNS(SVG_NS, "g");
+      g.classList.add("topology-container-group");
+
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.classList.add("topology-container");
+      rect.setAttribute("x", minX - PADDING);
+      rect.setAttribute("y", minY - PADDING - TOP);
+      rect.setAttribute("width", maxX - minX + PADDING * 2);
+      rect.setAttribute("height", maxY - minY + PADDING * 2 + TOP);
+      rect.setAttribute("rx", 10);
+      g.appendChild(rect);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.classList.add("topology-container-label");
+      label.textContent = key;
+      label.setAttribute("x", minX - PADDING + 14);
+      label.setAttribute("y", minY - PADDING - TOP + 20);
+      g.appendChild(label);
+
+      const count = document.createElementNS(SVG_NS, "text");
+      count.classList.add("topology-container-count");
+      count.textContent = `${members.length} ${t("viz.device_unit")}`;
+      count.setAttribute("x", minX - PADDING + 14);
+      count.setAttribute("y", minY - PADDING - TOP + 38);
+      g.appendChild(count);
+
+      container.appendChild(g);
+    });
   }
 
   hierarchicalLayout() {
@@ -282,6 +396,7 @@ export class TopologyVisualization {
     this.renderer.clearAll();
     this.nodes.forEach((node) => this.renderer.drawDeviceNode(node));
     this.connections.forEach((conn) => this.renderer.drawConnection(conn));
+    this._renderContainers();
     this._fitView();
     this.saveLayout();
   }
@@ -291,7 +406,8 @@ export class TopologyVisualization {
       (c) => c.source_device_id === deviceId || c.target_device_id === deviceId
     );
     for (const c of conns) {
-      const num = c.source_device_id === deviceId ? c.source_port_number : c.target_port_number;
+      const num =
+        c.source_device_id === deviceId ? c.source_port_label : c.target_port_label;
       if (num) {
         const parsed = parseInt(num, 10);
         if (!isNaN(parsed)) return parsed;
@@ -359,13 +475,24 @@ export class TopologyVisualization {
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    this.nodes.forEach((n) => {
-      minX = Math.min(minX, n.x);
-      minY = Math.min(minY, n.y);
-      maxX = Math.max(maxX, n.x + (n.width || 200));
-      maxY = Math.max(maxY, n.y + (n.height || 100));
-    });
-    const padding = 100;
+    // 视野包含区域容器（组织/房间/机柜分组框）
+    const containerRects = this.core.containersGroup.querySelectorAll(".topology-container");
+    if (containerRects.length > 0) {
+      containerRects.forEach((rect) => {
+        minX = Math.min(minX, parseFloat(rect.getAttribute("x")));
+        minY = Math.min(minY, parseFloat(rect.getAttribute("y")));
+        maxX = Math.max(maxX, parseFloat(rect.getAttribute("x")) + parseFloat(rect.getAttribute("width")));
+        maxY = Math.max(maxY, parseFloat(rect.getAttribute("y")) + parseFloat(rect.getAttribute("height")));
+      });
+    } else {
+      this.nodes.forEach((n) => {
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + (n.width || 200));
+        maxY = Math.max(maxY, n.y + (n.height || 100));
+      });
+    }
+    const padding = 60;
     this.core.svg.setAttribute(
       "viewBox",
       `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`

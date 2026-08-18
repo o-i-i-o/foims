@@ -561,3 +561,128 @@
   background: rgb(0 0 0 / 0.5);
   z-index: 9999;
 }
+
+/* ==================== 设备可视化：连线类型 ==================== */
+
+/* 手动物理示意连线（未录入线路时的草图） */
+.topology-connection.manual {
+  stroke: #78909c;
+  stroke-dasharray: 3 3;
+}
+
+/* 逻辑连接（链路聚合） */
+.topology-connection.logical {
+  stroke: #7c3aed;
+  stroke-width: 3.5;
+  stroke-dasharray: 10 5;
+}
+
+.topology-connection.logical:hover {
+  stroke: #5b21b6;
+}
+
+.topology-lag-badge rect {
+  fill: #f3e8ff;
+  stroke: #7c3aed;
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+
+.topology-lag-badge text {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #5b21b6;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.topology-lag-members {
+  font-size: 9px;
+  fill: #7c3aed;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+/* 途经节点：配线架（方形） */
+.topology-hop-node.hop-patch-panel rect {
+  transition:
+    fill var(--transition-fast),
+    stroke var(--transition-fast);
+}
+
+.topology-hop-node.hop-patch-panel:hover rect {
+  fill: #d1c4e9;
+  stroke: #4527a0;
+}
+
+.topology-hop-node.hop-patch-panel .topology-outlet-label {
+  fill: #4527a0;
+}
+
+/* 逐段线路标签 */
+.topology-cable-label {
+  font-size: 9px;
+  fill: #00695c;
+  font-weight: 600;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+/* 连线删除标记（选中后显示，派生物理连线不显示） */
+.conn-delete-marker {
+  cursor: pointer;
+}
+
+.conn-delete-marker circle {
+  fill: #ffebee;
+  stroke: #e53935;
+  stroke-width: 1.5;
+}
+
+.conn-delete-marker:hover circle {
+  fill: #ffcdd2;
+}
+
+.conn-delete-marker text {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #c62828;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+/* ==================== 设备可视化：区域容器（组织/房间/机柜） ==================== */
+
+.containers-group {
+  pointer-events: none;
+}
+
+.topology-container {
+  fill: rgb(25 118 210 / 0.04);
+  stroke: #90a4ae;
+  stroke-width: 1.2;
+  stroke-dasharray: 8 4;
+}
+
+.topology-container-label {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #455a64;
+  dominant-baseline: middle;
+}
+
+.topology-container-count {
+  font-size: 11px;
+  fill: #78909c;
+  dominant-baseline: middle;
+}
+
+/* 设备可视化工具栏：按钮较多，改为在子标签行下方换行排布，
+   避免设备选择组与绝对定位的子标签行重叠（原单行 + padding-left 布局） */
+#global-visualization .toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-left: 0;
+  padding-top: 44px;
+  row-gap: var(--space-sm);
+}

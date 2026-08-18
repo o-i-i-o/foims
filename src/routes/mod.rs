@@ -61,6 +61,7 @@ use crate::routes::static_files::AppJson;
 use crate::system::app_fail2ban::{
     app_ban_ip, app_unban_ip, get_app_fail2ban_status, update_app_fail2ban_config,
 };
+use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
     get_page_timeout_config, get_service_status, get_session_timeout_config, get_smtp_config,
@@ -507,6 +508,21 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/config/backup", get(backup_config))
         .route("/api/system/config/restore", post(restore_config))
+        // 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs）
+        .route("/api/system/certificate/list", get(certificate::list))
+        .route(
+            "/api/system/certificate/generate",
+            post(certificate::generate),
+        )
+        .route("/api/system/certificate/import", post(certificate::import))
+        .route(
+            "/api/system/certificate/download/{kind}/{filename}",
+            get(certificate::download),
+        )
+        .route(
+            "/api/system/certificate/{kind}/{file_stem}",
+            delete(certificate::delete),
+        )
         // 语言设置
         .route("/api/system/languages", get(get_supported_languages))
         .route("/api/system/language", put(update_language_setting))

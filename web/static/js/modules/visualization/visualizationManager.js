@@ -7,6 +7,7 @@ import { editCabinetPosition } from "../position.js";
 import { showToast } from "../../utils/ui.js";
 import { apiGet } from "../../utils/apiClient.js";
 import { t } from "../../utils/i18n.js";
+import { loadModal, openModal, closeModal } from "../../utils/modalLoader.js";
 
 let workstationVisualization = null;
 let cabinetVisualization = null;
@@ -173,6 +174,132 @@ function bindTopologyEvents() {
       topologyVisualization.deleteLayout();
     });
   }
+
+  const openConnModalBtn = elementCache.get("open-topology-connection-modal");
+  if (openConnModalBtn) {
+    openConnModalBtn.addEventListener("click", openTopologyConnectionModal);
+  }
+}
+
+// ==================== 创建连线（手动物理示意 / 逻辑链路聚合） ====================
+
+function fillTopologyConnectionDeviceOptions(selectEl, excludeId) {
+  const devices = topologyVisualization.nodes.slice();
+  selectEl.innerHTML = "";
+  devices.forEach((d) => {
+    if (excludeId && d.device_id === excludeId) return;
+    const option = document.createElement("option");
+    option.value = d.device_id;
+    option.textContent = d.device_name || d.device_id;
+    selectEl.appendChild(option);
+  });
+}
+
+async function loadTopologyConnectionPorts(selectEl, deviceId) {
+  selectEl.innerHTML = "";
+  if (!deviceId) return;
+  try {
+    const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=200`);
+    if (!result.success || !result.data) return;
+    const ports = result.data.items || result.data || [];
+    ports.forEach((p) => {
+      const option = document.createElement("option");
+      option.value = p.id;
+      option.textContent = p.port_name
+        ? `${p.port_number} (${p.port_name})`
+        : p.port_number || p.id;
+      selectEl.appendChild(option);
+    });
+  } catch (error) {
+    console.error("加载设备端口失败:", error);
+  }
+}
+
+function updateTopologyConnectionFormVisibility() {
+  const type = elementCache.getValue("topo-conn-type");
+  const isLogical = type === "logical";
+  document
+    .querySelectorAll(".topo-conn-ports-group")
+    .forEach((el) => el.classList.toggle("hidden", !isLogical));
+}
+
+async function openTopologyConnectionModal() {
+  const modal = await loadModal("topology-connection-modal");
+  if (!modal) return;
+
+  const typeSelect = elementCache.get("topo-conn-type");
+  const sourceSelect = elementCache.get("topo-conn-source-device");
+  const targetSelect = elementCache.get("topo-conn-target-device");
+  const sourcePorts = elementCache.get("topo-conn-source-ports");
+  const targetPorts = elementCache.get("topo-conn-target-ports");
+  const labelInput = elementCache.get("topo-conn-label");
+  const form = elementCache.get("topology-connection-form");
+
+  fillTopologyConnectionDeviceOptions(sourceSelect, null);
+  fillTopologyConnectionDeviceOptions(targetSelect, null);
+  updateTopologyConnectionFormVisibility();
+  if (typeSelect.value === "logical") {
+    await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
+    await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
+  }
+  labelInput.value = "";
+
+  typeSelect.onchange = async () => {
+    updateTopologyConnectionFormVisibility();
+    if (typeSelect.value === "logical") {
+      await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
+      await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
+    }
+  };
+  sourceSelect.onchange = async () => {
+    if (typeSelect.value === "logical") {
+      await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
+    }
+  };
+  targetSelect.onchange = async () => {
+    if (typeSelect.value === "logical") {
+      await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
+    }
+  };
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+
+    const sourceDeviceId = sourceSelect.value;
+    const targetDeviceId = targetSelect.value;
+    if (!sourceDeviceId || !targetDeviceId) {
+      showToast(t("viz.connection_device_required"), "warning");
+      return;
+    }
+    if (sourceDeviceId === targetDeviceId) {
+      showToast(t("viz.no_self_connection"), "warning");
+      return;
+    }
+
+    const body = {
+      connection_type: typeSelect.value,
+      source_device_id: sourceDeviceId,
+      target_device_id: targetDeviceId,
+      label: labelInput.value.trim() || null
+    };
+
+    if (typeSelect.value === "logical") {
+      body.source_port_ids = [...sourcePorts.selectedOptions].map((o) => o.value);
+      body.target_port_ids = [...targetPorts.selectedOptions].map((o) => o.value);
+      if (body.source_port_ids.length === 0 || body.target_port_ids.length === 0) {
+        showToast(t("viz.logical_members_required"), "warning");
+        return;
+      }
+    }
+
+    const result = await topologyVisualization.dataManager.createConnection(body);
+    if (result) {
+      closeModal("topology-connection-modal");
+      await topologyVisualization.loadTopology();
+    }
+  };
+
+  openModal("topology-connection-modal");
 }
 
 async function loadDeviceOptions() {

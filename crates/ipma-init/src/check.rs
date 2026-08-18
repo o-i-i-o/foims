@@ -44,6 +44,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 拓扑
         "topology_nodes",
         "topology_connections",
+        "topology_connection_members",
         // 日志/令牌/通知/任务/布局
         "operation_logs",
         "task_logs",
@@ -371,8 +372,20 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "target_device_port_id",
             "label",
             "auto_discovered",
+            "connection_type",
             "created_at",
             "updated_at",
+        ],
+    );
+    columns.insert(
+        "topology_connection_members",
+        vec![
+            "id",
+            "connection_id",
+            "device_id",
+            "device_port_id",
+            "side",
+            "created_at",
         ],
     );
     columns.insert(
