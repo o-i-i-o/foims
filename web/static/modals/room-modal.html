@@ -8,8 +8,7 @@
     <div class="modal-body">
       <form id="room-form">
         <input type="hidden" id="room-id">
-        <div class="form-row">
-          <div class="form-group">
+        <div class="form-group">
             <label for="room-org-id"><span data-i18n="organization.parent_org">Organization Node</span></label>
             <select id="room-org-id" name="org_id">
               <option value="" data-i18n="organization.select_org">Select Organization Node</option>
@@ -22,33 +21,24 @@
               <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
               <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
             </select>
-          </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
+        <div class="form-group">
             <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
             <input type="text" id="room-name" name="name" autocomplete="off" required>
-          </div>
         </div>
-        <div class="form-row">
-          <div class="form-group network-config-wrapper">
+        <div class="form-group network-config-wrapper">
             <label data-i18n="network.network_config">Network Config</label>
             <div id="network-configs-container"></div>
-          </div>
         </div>
         <!-- 工位/机柜动态管理区域 -->
-        <div class="form-row">
-          <div class="form-group">
+        <div class="form-group">
             <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
             <div id="room-children-container"></div>
-          </div>
         </div>
         <!-- 信息点动态管理区域（所有房型通用） -->
-        <div class="form-row">
-          <div class="form-group">
+        <div class="form-group">
             <label id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</label>
             <div id="room-net-outlets-container"></div>
-          </div>
         </div>
         <div class="form-group">
           <label for="room-description" data-i18n="common.description">Description</label>
