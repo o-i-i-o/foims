@@ -191,6 +191,14 @@
   transform: translateY(0);
 }
 
+/* 用户管理 2fa 二维码居中 */
+.qr-code-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
 @media (max-width: 768px) {
   .config-row {
     grid-template-columns: 1fr;

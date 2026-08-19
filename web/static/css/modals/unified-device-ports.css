@@ -1,6 +1,6 @@
-/* 统一设备端口管理样式（以 2026年5月版本 端口分组模态框 样式为准） */
+/* 统一设备端口管理样式 */
 
-/* ============ 端口分组容器（5月版 .port-groups-container） ============ */
+/* ============ 端口分组容器 ============ */
 .port-groups-container {
   display: flex;
   flex-wrap: wrap;
@@ -9,7 +9,7 @@
   overflow-y: auto;
 }
 
-/* ============ 单个端口分组（5月版 .port-group） ============ */
+/* ============ 单个端口分组 ============ */
 .port-group {
   flex: 1;
   min-width: 250px;
@@ -36,14 +36,14 @@
   color: #ff9800;
 }
 
-/* ============ 端口网格（5月版 .port-grid，40px 最小列） ============ */
+/* ============ 端口网格 ============ */
 .port-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   gap: 8px;
 }
 
-/* ============ 单个端口项（5月版 .port-item：40x40 方块 + 状态色边框/底色） ============ */
+/* ============ 单个端口项 ============ */
 .port-item {
   width: 40px;
   height: 40px;
@@ -92,7 +92,7 @@
   background-color: #e3f2fd;
 }
 
-/* ============ 端口悬停提示（5月版 .port-tooltip） ============ */
+/* ============ 端口悬停提示 ============ */
 .port-tooltip {
   position: absolute;
   bottom: 100%;
