@@ -1021,7 +1021,6 @@
     "key_password": "Private Key Password (optional)",
     "key_password_placeholder": "Private key password",
     "manager_title": "Certificate Management",
-    "manager_hint": "Generated self-signed certificates are stored in /etc/ssl/ipma-certs/, imported ones in /etc/ssl/ipma-import-certs/.",
     "generated_section": "Self-signed Certificates (/etc/ssl/ipma-certs)",
     "imported_section": "Imported Certificates (/etc/ssl/ipma-import-certs)",
     "col_file": "File",

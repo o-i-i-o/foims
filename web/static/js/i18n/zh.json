@@ -1021,7 +1021,6 @@
     "key_password": "私钥密码(可选)",
     "key_password_placeholder": "私钥密码",
     "manager_title": "证书管理",
-    "manager_hint": "生成的自签名证书保存在 /etc/ssl/ipma-certs/，导入的证书保存在 /etc/ssl/ipma-import-certs/。",
     "generated_section": "自签名证书（/etc/ssl/ipma-certs）",
     "imported_section": "导入证书（/etc/ssl/ipma-import-certs）",
     "col_file": "文件",
