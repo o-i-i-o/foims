@@ -13,16 +13,14 @@
           <input type="text" id="org-template-editor-name" name="name" autocomplete="off" required>
         </div>
         <div class="form-group">
-          <label data-i18n="org_template.levels">Hierarchy</label>
-          <div class="org-template-quick-fill-row">
-            <span class="org-template-quick-fill-label" data-i18n="org_template.quick_fill">Quick Fill</span>
-            <select id="org-template-quick-fill">
-              <option value="" data-i18n="org_template.select_quick_fill">Select a preset...</option>
-            </select>
-          </div>
-          <div id="org-template-editor-levels-container" class="org-template-tree-container"></div>
+          <label for="org-template-quick-fill" data-i18n="org_template.quick_fill">Quick Fill</label>
+          <select id="org-template-quick-fill">
+            <option value="" data-i18n="org_template.select_quick_fill">Select a preset...</option>
+          </select>
         </div>
         <div class="form-group">
+          <label data-i18n="org_template.levels">Hierarchy</label>
+          <div id="org-template-editor-levels-container" class="org-template-tree-container"></div>
           <label class="checkbox-label">
             <input type="checkbox" id="org-template-save-preset">
             <span data-i18n="org_template.save_as_preset">Save as Preset Template</span>
