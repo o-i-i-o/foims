@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01321">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01321">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01321">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01321">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01321">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01321">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01321">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01321">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01321">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01321">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01321">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01321">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01322">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01322">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01322">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01322">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01322">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01322">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01322">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01322">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01322">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01322">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01322">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01322">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -499,7 +499,15 @@
 
         <div id="workstation-visualization" class="tab-content active" role="tabpanel">
           <div class="toolbar">
-            <div>
+            <div class="viz-filter-group">
+              <select id="viz-org-select" class="form-control" aria-label="Select organization"></select>
+              <select id="viz-room-type" class="form-control" aria-label="Select room type">
+                <option value="" data-i18n="viz.all_room_types">All Room Types</option>
+                <option value="office" data-i18n="room.type_office">Office</option>
+                <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
+                <option value="reception" data-i18n="room.type_reception">Reception</option>
+                <option value="other" data-i18n="room.type_other">Other</option>
+              </select>
               <select id="room-select" class="form-control" aria-label="Select room"></select>
             </div>
             <button id="auto-draw-workstations" class="btn btn-primary btn-sm" data-i18n="visualization.auto_draw">Auto Draw</button>
@@ -511,7 +519,14 @@
 
         <div id="cabinet-visualization" class="tab-content" role="tabpanel">
           <div class="toolbar">
-            <div>
+            <div class="viz-filter-group">
+              <select id="cabinet-viz-org-select" class="form-control" aria-label="Select organization for cabinets"></select>
+              <select id="cabinet-room-type" class="form-control" aria-label="Select room type for cabinets">
+                <option value="" data-i18n="viz.all_room_types">All Room Types</option>
+                <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
+                <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
+                <option value="other" data-i18n="room.type_other">Other</option>
+              </select>
               <select id="cabinet-room-select" class="form-control" aria-label="Select room for cabinets"></select>
             </div>
             <button id="auto-draw-cabinet-positions" class="btn btn-primary btn-sm" data-i18n="visualization.auto_draw">Auto Draw</button>
@@ -636,7 +651,7 @@
           <button class="tab-btn active" data-tab="system-info" role="tab" aria-selected="true" aria-controls="system-info-tab" data-i18n="system.info">System Info</button>
           <button class="tab-btn" data-tab="users" role="tab" aria-selected="false" aria-controls="users-tab" data-i18n="system.users">User Management</button>
           <button class="tab-btn" data-tab="system-config" role="tab" aria-selected="false" aria-controls="system-config-tab" data-i18n="system.config">System Config</button>
-          <button class="tab-btn" data-tab="system-smtp" role="tab" aria-selected="false" aria-controls="system-smtp-tab" data-i18n="system.smtp">SMTP Config</button>
+          <button class="tab-btn" data-tab="system-notification" role="tab" aria-selected="false" aria-controls="system-notification-tab" data-i18n="system.notification">SMTP Config</button>
           <button class="tab-btn" data-tab="import-export" role="tab" aria-selected="false" aria-controls="import-export-tab" data-i18n="system.import_export">Import/Export</button>
           <button class="tab-btn" data-tab="scheduled-tasks" role="tab" aria-selected="false" aria-controls="scheduled-tasks-tab" data-i18n="system.scheduled_tasks">Scheduled Tasks</button>
           <button class="tab-btn" data-tab="security" role="tab" aria-selected="false" aria-controls="security-tab" data-i18n="system.security">Security</button>
@@ -657,10 +672,6 @@
                   <div class="field-value" id="system-name">IPMA</div>
                 </div>
                 <div class="config-field">
-                  <label data-i18n="system.version">System Version</label>
-                  <div class="field-value" id="system-version">0.2.2</div>
-                </div>
-                <div class="config-field">
                   <label data-i18n="system.database_status">Database Status</label>
                   <div class="field-value" id="database-status">-</div>
                 </div>
@@ -672,6 +683,36 @@
                   <label data-i18n="system.uptime">System Uptime</label>
                   <div class="field-value" id="system-uptime">-</div>
                 </div>
+              </div>
+            </div>
+
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">ℹ️</span>
+                  <span data-i18n="system.about">About</span>
+                </div>
+              </div>
+              <div class="config-row">
+                <div class="config-field">
+                  <label data-i18n="system.version">System Version</label>
+                  <div class="field-value" id="system-version">-</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.project_url">Project URL</label>
+                  <div class="field-value" id="about-project-url"></div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.author">Author</label>
+                  <div class="field-value">oi-io</div>
+                </div>
+                <div class="config-field">
+                  <label data-i18n="system.contact">Contact</label>
+                  <div class="field-value">boss@oi-io.cc</div>
+                </div>
+              </div>
+              <div class="config-actions">
+                <button type="button" id="open-source-btn" class="btn btn-secondary" data-i18n="system.open_source_components">Open Source Components</button>
               </div>
             </div>
           </div>
@@ -787,8 +828,8 @@
           </div>
         </div>
 
-        <div id="system-smtp-tab" class="tab-content" role="tabpanel">
-          <div class="smtp-config-section">
+        <div id="system-notification-tab" class="tab-content" role="tabpanel">
+          <div class="notification-config-section">
             <form id="smtp-config-form">
               <div class="config-card">
                 <div class="config-card-header">
@@ -1130,6 +1171,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01321"></script>
+  <script type="module" src="/static/js/app.js?v=01322"></script>
 </body>
 </html>

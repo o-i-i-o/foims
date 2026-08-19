@@ -18,8 +18,11 @@
             <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
             <select id="room-type" name="room_type" required>
               <option value="office" data-i18n="room.type_office">Office</option>
+              <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
+              <option value="reception" data-i18n="room.type_reception">Reception</option>
               <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
               <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
+              <option value="other" data-i18n="room.type_other">Other</option>
             </select>
         </div>
         <div class="form-group">
@@ -30,10 +33,14 @@
             <label data-i18n="network.network_config">Network Config</label>
             <div id="network-configs-container"></div>
         </div>
-        <!-- 工位/机柜动态管理区域 -->
-        <div class="form-group">
+        <!-- 工位/机柜动态管理区域："其他"类型房间两者皆可管理 -->
+        <div class="form-group" id="room-workstations-group">
             <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
             <div id="room-children-container"></div>
+        </div>
+        <div class="form-group" id="room-cabinets-group" style="display: none;">
+            <label id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</label>
+            <div id="room-cabinets-container"></div>
         </div>
         <!-- 信息点动态管理区域（所有房型通用） -->
         <div class="form-group">

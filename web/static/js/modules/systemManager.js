@@ -43,7 +43,7 @@ export function initSystemTabs() {
         } else if (tabId === "system-info") {
           loadSystemInfo();
           loadSystemConfig();
-        } else if (tabId === "system-smtp") {
+        } else if (tabId === "system-notification") {
           loadSmtpConfig();
           loadNotificationSettings();
         } else if (tabId === "import-export") {
@@ -109,9 +109,84 @@ export function initSystemTabs() {
     clearLogsBtn.addEventListener("click", clearLogs);
   }
 
+  const openSourceBtn = elementCache.get("open-source-btn");
+  if (openSourceBtn) {
+    openSourceBtn.addEventListener("click", openOpenSourceModal);
+  }
+
   initCertificateManager();
 
   systemContainer.dataset.eventsInitialized = "true";
+}
+
+// ==================== 关于卡片：开源组件清单（与 NOTICE 同步维护） ====================
+
+const OPEN_SOURCE_COMPONENTS = [
+  {
+    license: "MIT",
+    components: [
+      { name: "axum / axum-extra / tower / tower-http", url: "https://github.com/tokio-rs/axum" },
+      { name: "validator", url: "https://github.com/Keats/validator" },
+      { name: "bcrypt", url: "https://github.com/Keats/rust-bcrypt" },
+      { name: "jsonwebtoken", url: "https://github.com/Keats/jsonwebtoken" },
+      { name: "tracing / tracing-subscriber", url: "https://github.com/tokio-rs/tracing" },
+      { name: "tokio", url: "https://github.com/tokio-rs/tokio" },
+      { name: "dashmap", url: "https://github.com/xacrimon/dashmap" },
+      { name: "zip", url: "https://github.com/zip-rs/zip2" },
+      { name: "lettre", url: "https://github.com/lettre/lettre" },
+      { name: "totp-rs", url: "https://github.com/constantoine/totp-rs" },
+      { name: "rust-i18n", url: "https://github.com/longbridgeapp/rust-i18n" },
+      { name: "pem / flate2 / bytes", url: "" }
+    ]
+  },
+  {
+    license: "Apache-2.0 OR MIT",
+    components: [
+      { name: "sqlx", url: "https://github.com/launchbadge/sqlx" },
+      { name: "serde / serde_json", url: "https://github.com/serde-rs/serde" },
+      { name: "regex", url: "https://github.com/rust-lang/regex" },
+      { name: "RustCrypto: sha2 / aes-gcm / aes / hex", url: "https://github.com/RustCrypto" },
+      { name: "futures-util / async-trait", url: "https://github.com/rust-lang/futures-rs" },
+      { name: "tokio-cron-scheduler", url: "https://github.com/mvniekerk/tokio-cron-scheduler" },
+      { name: "ipnetwork / macaddr", url: "https://github.com/achanda/ipnetwork" },
+      { name: "pnet", url: "https://github.com/libpnet/libpnet" },
+      { name: "async-snmp", url: "https://github.com/rdklibansky/async-snmp" },
+      { name: "config / toml", url: "https://github.com/mehcode/config-rs" },
+      { name: "thiserror / chrono / time / uuid", url: "" },
+      { name: "base64 / rand / arc-swap", url: "" },
+      { name: "rustls", url: "https://github.com/rustls/rustls" },
+      { name: "http / log", url: "" }
+    ]
+  },
+  {
+    license: "Unlicense OR MIT",
+    components: [{ name: "csv", url: "https://github.com/BurntSushi/rust-csv" }]
+  }
+];
+
+async function openOpenSourceModal() {
+  const modal = await loadModal("open-source-modal");
+  if (!modal) return;
+
+  const listEl = document.getElementById("open-source-list");
+  if (listEl) {
+    listEl.innerHTML = OPEN_SOURCE_COMPONENTS.map(
+      (group) => `
+      <div class="open-source-group">
+        <h4 class="open-source-license">${escapeHtml(group.license)}</h4>
+        <ul class="open-source-items">
+          ${group.components
+            .map(
+              (c) =>
+                `<li>${c.url ? `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.name)}</a>` : escapeHtml(c.name)}</li>`
+            )
+            .join("")}
+        </ul>
+      </div>`
+    ).join("");
+  }
+
+  openModal("open-source-modal");
 }
 
 // 格式化系统运行时间（秒 -> X天X小时X分钟X秒）
@@ -258,20 +333,10 @@ async function saveSmtpConfig() {
   }
 }
 
-// 测试SMTP连接
+// 测试SMTP连接（后端基于已保存配置测试，无需请求体）
 export async function testSmtpConnection() {
   try {
-    const secureType = elementCache.getValue("smtp-secure-type");
-    const smtpConfig = {
-      host: elementCache.getValue("smtp-host"),
-      port: parseInt(elementCache.getValue("smtp-port")),
-      username: elementCache.getValue("smtp-username"),
-      password: elementCache.getValue("smtp-password"),
-      from: elementCache.getValue("smtp-from"),
-      secure: secureType !== "none"
-    };
-
-    const result = await apiPost("/api/system/smtp/test", smtpConfig);
+    const result = await apiPost("/api/system/smtp/test", {});
     if (result.success) {
       showToast(t("smtp.test_success"), "success");
     } else {
@@ -293,7 +358,7 @@ export async function loadNotificationSettings() {
   try {
     // 加载用户列表
     const usersResult = await apiGet("/api/users");
-    const settingsResult = await apiGet("/api/system/notification/settings");
+    const settingsResult = await apiGet("/api/system/smtp/settings");
 
     const usersList = elementCache.get("notification-users-list");
     if (!usersList) return;
@@ -356,7 +421,7 @@ export async function saveNotificationSettings() {
     );
     const userIds = Array.from(checkboxes).map((cb) => cb.value);
 
-    const result = await apiPut("/api/system/notification/settings", {
+    const result = await apiPut("/api/system/smtp/settings", {
       email_recipients: userIds
     });
 

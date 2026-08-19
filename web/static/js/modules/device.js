@@ -24,7 +24,8 @@ import {
   loadDeviceTemplatesForSelect,
   loadWorkstationsForSelect,
   loadCabinetsForSelect,
-  loadPositionsForSelect
+  loadPositionsForSelect,
+  loadOrgsForSelect
 } from "../utils/resources.js";
 import { loadModule } from "../utils/resourceLoader.js";
 import { toggleSnmpConfig, testSnmpConnection, getDeviceInfoFromSnmp } from "./deviceSnmp.js";
@@ -193,32 +194,35 @@ export async function deleteDevice(id) {
   await handleDelete(id, "/api/resources/devices", t("device.delete_success"), loadDevicesData);
 }
 
-let deviceListenersBound = false;
+// 注意：设备模态框每次关闭都会移除 DOM（modalLoader.closeModal），
+// 监听绑定必须走元素级 dataset.bound 防重，不能使用模块级标志位，
+// 否则第二次打开时新 DOM 上没有任何事件监听（曾导致选中的房间失效）。
 
 function setupMutualExclusion() {
   const workstationSelect = elementCache.get("device-workstation-id");
   const positionSelect = elementCache.get("device-position-id");
+  if (!workstationSelect || !positionSelect) return;
+  if (workstationSelect.dataset.bound || positionSelect.dataset.bound) return;
 
-  if (workstationSelect) {
-    workstationSelect.addEventListener("change", () => {
-      if (workstationSelect.value) {
-        positionSelect.value = "";
-      }
-    });
-  }
+  workstationSelect.addEventListener("change", () => {
+    if (workstationSelect.value) {
+      positionSelect.value = "";
+    }
+  });
 
-  if (positionSelect) {
-    positionSelect.addEventListener("change", () => {
-      if (positionSelect.value) {
-        workstationSelect.value = "";
-      }
-    });
-  }
+  positionSelect.addEventListener("change", () => {
+    if (positionSelect.value) {
+      workstationSelect.value = "";
+    }
+  });
+
+  workstationSelect.dataset.bound = "true";
+  positionSelect.dataset.bound = "true";
 }
 
 function setupTemplateAutoFill() {
   const templateSelect = elementCache.get("device-template-id");
-  if (!templateSelect) return;
+  if (!templateSelect || templateSelect.dataset.bound) return;
 
   templateSelect.addEventListener("change", async () => {
     const templateId = templateSelect.value;
@@ -236,12 +240,13 @@ function setupTemplateAutoFill() {
       console.error("加载模板详情失败:", error);
     }
   });
+  templateSelect.dataset.bound = "true";
 }
 
 function setupSaveAsTemplateToggle() {
   const checkbox = document.getElementById("device-save-as-template");
   const nameGroup = document.getElementById("device-template-name-group");
-  if (!checkbox || !nameGroup) return;
+  if (!checkbox || !nameGroup || checkbox.dataset.bound) return;
 
   checkbox.addEventListener("change", () => {
     nameGroup.style.display = checkbox.checked ? "" : "none";
@@ -250,6 +255,7 @@ function setupSaveAsTemplateToggle() {
       if (nameInput) nameInput.value = "";
     }
   });
+  checkbox.dataset.bound = "true";
 }
 
 function setupTemplateManageBtn() {
@@ -481,6 +487,45 @@ function setupRoomCascade() {
   roomSelect.dataset.bound = "true";
 }
 
+/** 组织/房间类型筛选变化后按条件重新加载房间选项并重置下游级联。 */
+async function reloadDeviceRooms() {
+  const orgId = elementCache.getValue("device-org-id") || null;
+  const roomType = elementCache.getValue("device-room-type") || null;
+  await loadRoomsForSelect("device-room-id", { orgId, roomType });
+
+  // 房间值可能被保留（仍在过滤结果中）也可能失效，按最终值重载下游
+  const roomId = elementCache.getValue("device-room-id") || null;
+  await loadWorkstationsForSelect("device-workstation-id", roomId);
+  await loadCabinetsForSelect("device-cabinet-id", roomId);
+  const cabinetId = elementCache.getValue("device-cabinet-id") || null;
+  if (cabinetId || roomId) {
+    await loadPositionsForSelect("device-position-id", cabinetId, roomId);
+  } else {
+    await loadPositionsForSelect("device-position-id");
+  }
+  const { getNetworkCardManager } = await loadModule("networkCardManager");
+  await getNetworkCardManager().setRoomContext(roomId);
+}
+
+function setupRoomFilterCascade() {
+  const orgSelect = elementCache.get("device-org-id");
+  const typeSelect = elementCache.get("device-room-type");
+
+  if (orgSelect && !orgSelect.dataset.bound) {
+    orgSelect.addEventListener("change", () => {
+      reloadDeviceRooms();
+    });
+    orgSelect.dataset.bound = "true";
+  }
+
+  if (typeSelect && !typeSelect.dataset.bound) {
+    typeSelect.addEventListener("change", () => {
+      reloadDeviceRooms();
+    });
+    typeSelect.dataset.bound = "true";
+  }
+}
+
 function setupCabinetCascade() {
   const cabinetSelect = elementCache.get("device-cabinet-id");
   if (!cabinetSelect || cabinetSelect.dataset.bound) return;
@@ -493,7 +538,6 @@ function setupCabinetCascade() {
 }
 
 function ensureDeviceListeners() {
-  if (deviceListenersBound) return;
   setupMutualExclusion();
   setupTemplateAutoFill();
   setupSaveAsTemplateToggle();
@@ -502,7 +546,7 @@ function ensureDeviceListeners() {
   setupSnmpButtons();
   setupRoomCascade();
   setupCabinetCascade();
-  deviceListenersBound = true;
+  setupRoomFilterCascade();
 }
 
 function setSnmpFieldValues(device) {
@@ -619,6 +663,7 @@ export async function openDeviceModal(device = null) {
   const form = elementCache.get("device-form");
 
   await loadDeviceTemplatesForSelect("device-template-id");
+  await loadOrgsForSelect("device-org-id");
   await loadRoomsForSelect("device-room-id");
   await loadWorkstationsForSelect("device-workstation-id");
   await loadCabinetsForSelect("device-cabinet-id");
@@ -646,6 +691,20 @@ export async function openDeviceModal(device = null) {
 
     if (device.template_id) elementCache.setValue("device-template-id", device.template_id);
     if (device.room_id) {
+      // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列
+      try {
+        const roomResult = await apiGet(`/api/resources/rooms/${device.room_id}`);
+        if (roomResult.success && roomResult.data) {
+          const room = roomResult.data;
+          const orgId = room.org_id || null;
+          const roomType = room.room_type ? room.room_type.toLowerCase() : null;
+          if (orgId) elementCache.setValue("device-org-id", orgId);
+          if (roomType) elementCache.setValue("device-room-type", roomType);
+          await loadRoomsForSelect("device-room-id", { orgId, roomType });
+        }
+      } catch (error) {
+        console.error("加载设备所属房间失败:", error);
+      }
       elementCache.setValue("device-room-id", device.room_id);
       await loadWorkstationsForSelect("device-workstation-id", device.room_id);
       await loadCabinetsForSelect("device-cabinet-id", device.room_id);

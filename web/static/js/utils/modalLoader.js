@@ -32,7 +32,8 @@ const MODAL_REGISTRY = {
   "cabinet-positions-list-modal": "/static/modals/cabinet-positions-list-modal.html",
   "topology-connection-modal": "/static/modals/topology-connection-modal.html",
   "cert-generate-modal": "/static/modals/cert-generate-modal.html",
-  "cert-import-modal": "/static/modals/cert-import-modal.html"
+  "cert-import-modal": "/static/modals/cert-import-modal.html",
+  "open-source-modal": "/static/modals/open-source-modal.html"
 };
 
 async function fetchModalHtml(modalId) {

@@ -11,11 +11,11 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import {
-  AVAILABLE_ICONS,
   getOrgIcon,
   getAllOrgTypes,
   loadOrgTypesFromAPI
 } from "../config/org-config.js";
+import { ORG_ICON_GROUPS, renderOrgIcon, DEFAULT_ORG_ICON } from "../config/org-icons.js";
 
 // ==========================================
 // 常量定义
@@ -39,25 +39,6 @@ function buildTemplateIconsMap(templates) {
 async function getNodeIcon(orgType, templateId) {
   const icons = (templateId && templateIconsById[templateId]) || {};
   return await getOrgIcon(orgType, icons);
-}
-
-/** 模板图标变更后同步刷新组织树图标（原地更新，保留展开/折叠状态） */
-async function syncTreeIcons() {
-  try {
-    buildTemplateIconsMap(await getTemplates());
-    const container = document.getElementById("organization-tree-container");
-    if (!container) return;
-    const wrappers = container.querySelectorAll(".org-node-wrapper");
-    for (const wrapper of wrappers) {
-      const nodeEl = wrapper.querySelector(":scope > .org-node");
-      const badge = nodeEl?.querySelector(".org-node-type-badge");
-      const iconEl = nodeEl?.querySelector(".org-node-icon");
-      if (!badge?.dataset.type || !iconEl) continue;
-      iconEl.textContent = await getNodeIcon(badge.dataset.type, wrapper.dataset.templateId);
-    }
-  } catch (error) {
-    console.warn("同步组织树图标失败:", error);
-  }
 }
 
 /** 获取组织类型标签（从i18n获取）*/
@@ -225,7 +206,7 @@ async function renderTreeNode(node, depth) {
 
   nodeEl.innerHTML = `
     ${toggleBtn}
-    <span class="org-node-icon">${icon}</span>
+    <span class="org-node-icon">${renderOrgIcon(icon)}</span>
     <span class="org-node-name">${escapeHtml(node.name)}</span>
     <span class="org-node-type-badge" data-type="${node.org_type}">${typeLabel}</span>
     ${node.description ? `<span class="org-node-desc" title="${escapeHtml(node.description)}">${escapeHtml(node.description)}</span>` : ""}
@@ -750,13 +731,12 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
     row.appendChild(rootBadge);
   }
 
-  // 图标选择按钮（同步获取默认图标）
+  // 图标选择按钮（存储图标 key，未设置时用默认图标）
   const iconBtn = document.createElement("button");
   iconBtn.type = "button";
   iconBtn.className = "org-template-icon-btn";
-  // 如果没有提供图标，使用默认图标（同步）
-  iconBtn.dataset.icon = icon || "📁";
-  iconBtn.textContent = iconBtn.dataset.icon;
+  iconBtn.dataset.icon = icon || DEFAULT_ORG_ICON;
+  iconBtn.innerHTML = renderOrgIcon(iconBtn.dataset.icon);
   iconBtn.title = t("org_template.select_icon");
   iconBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -822,7 +802,7 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
   return wrapper;
 }
 
-/** 显示图标选择面板 */
+/** 显示图标选择面板（按 业务组织/物理地点/功能空间 分组的 SVG 图标） */
 function showIconPicker(iconBtn) {
   // 关闭已有面板
   document.querySelectorAll(".org-icon-picker").forEach((p) => p.remove());
@@ -830,19 +810,35 @@ function showIconPicker(iconBtn) {
   const picker = document.createElement("div");
   picker.className = "org-icon-picker";
 
-  AVAILABLE_ICONS.forEach((emoji) => {
-    const item = document.createElement("span");
-    item.className = "org-icon-picker-item";
-    item.textContent = emoji;
-    if (emoji === iconBtn.dataset.icon) item.classList.add("active");
-    item.addEventListener("click", (e) => {
-      e.stopPropagation();
-      iconBtn.dataset.icon = emoji;
-      iconBtn.textContent = emoji;
-      picker.remove();
-    });
-    picker.appendChild(item);
-  });
+  for (const group of ORG_ICON_GROUPS) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "org-icon-picker-group";
+    const groupTitle = document.createElement("div");
+    groupTitle.className = "org-icon-picker-group-title";
+    groupTitle.textContent = t(group.groupKey);
+    groupEl.appendChild(groupTitle);
+
+    const grid = document.createElement("div");
+    grid.className = "org-icon-picker-grid";
+    for (const item of group.icons) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "org-icon-picker-item";
+      btn.dataset.icon = item.key;
+      btn.title = t(item.labelKey);
+      btn.innerHTML = renderOrgIcon(item.key);
+      if (item.key === iconBtn.dataset.icon) btn.classList.add("active");
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        iconBtn.dataset.icon = item.key;
+        iconBtn.innerHTML = renderOrgIcon(item.key);
+        picker.remove();
+      });
+      grid.appendChild(btn);
+    }
+    groupEl.appendChild(grid);
+    picker.appendChild(groupEl);
+  }
 
   // 定位面板
   iconBtn.style.position = "relative";
@@ -983,7 +979,8 @@ async function deleteTemplate(id, name) {
     if (result.success) {
       showToast(t("org_template.delete_success"), "success");
       openTemplateManagement();
-      syncTreeIcons();
+      // 模板变更可能影响节点类型解析（重命名/层级变化），重载组织树保证徽标一致
+      await loadOrganizationTree();
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -1033,7 +1030,8 @@ export async function submitOrgTemplateForm() {
       );
       closeModal("org-template-editor-modal");
       openTemplateManagement();
-      syncTreeIcons();
+      // 模板变更可能影响节点类型解析（重命名/层级变化），重载组织树保证徽标一致
+      await loadOrganizationTree();
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }

@@ -224,7 +224,9 @@ export { initUserEvents };
 
 // 打开2FA模态框
 window.openTwoFactorModal = async function (userId, username, isEnabled) {
-  const modal = openModal("two-factor-modal");
+  // openModal 是异步的（按需拉取模板再挂载），必须 await 拿到真实 DOM，
+  // 否则后续 querySelector 全部失效，二维码与密钥不会加载
+  const modal = await openModal("two-factor-modal");
 
   if (!modal) {
     showToast(t("two_factor.open_modal_failed"), "error");

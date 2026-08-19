@@ -159,10 +159,11 @@ pub async fn save_layout(
 
         for item in &workstation_items {
             sqlx::query(
-                "INSERT INTO workstation_layouts (workstation_id, x, y, width, height, rotation)
-                 VALUES ($1, $2, $3, $4, $5, $6)
+                "INSERT INTO workstation_layouts (workstation_id, room_id, x, y, width, height, rotation)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                  ON CONFLICT (workstation_id)
                  DO UPDATE SET
+                     room_id = EXCLUDED.room_id,
                      x = EXCLUDED.x,
                      y = EXCLUDED.y,
                      width = EXCLUDED.width,
@@ -171,6 +172,7 @@ pub async fn save_layout(
                      updated_at = NOW()",
             )
             .bind(item.id)
+            .bind(room_id)
             .bind(item.position.x_i32())
             .bind(item.position.y_i32())
             .bind(item.position.width_i32())
@@ -184,7 +186,14 @@ pub async fn save_layout(
             sqlx::query(
                 "INSERT INTO element_layouts (room_id, element_type, x, y, width, height, rotation)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT DO NOTHING",
+                 ON CONFLICT (room_id, element_type)
+                 DO UPDATE SET
+                     x = EXCLUDED.x,
+                     y = EXCLUDED.y,
+                     width = EXCLUDED.width,
+                     height = EXCLUDED.height,
+                     rotation = EXCLUDED.rotation,
+                     updated_at = NOW()",
             )
             .bind(room_id)
             .bind(&item.element_type)

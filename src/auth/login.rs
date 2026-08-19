@@ -1111,7 +1111,7 @@ pub async fn init_two_factor(
             AppError::Internal(msg("server.auth.totp_generate_failed").with("error", e))
         })?;
 
-    let encrypted_secret = encrypt_password_async(secret_base32).await?;
+    let encrypted_secret = encrypt_password_async(secret_base32.clone()).await?;
     sqlx::query("UPDATE users SET two_factor_secret = $1 WHERE id = $2")
         .bind(&encrypted_secret)
         .bind(target_user_id)
@@ -1123,16 +1123,20 @@ pub async fn init_two_factor(
         .map_err(|e| AppError::Internal(msg("server.auth.otpauth_url_failed").with("error", e)))?;
     let totp_for_qr = totp;
     let qr_code_base64 =
-        tokio::task::spawn_blocking(move || totp_for_qr.to_qr_base64().unwrap_or_default())
+        tokio::task::spawn_blocking(move || totp_for_qr.to_qr_base64().map_err(|e| e.to_string()))
             .await
             .map_err(|e| {
                 AppError::Internal(msg("server.auth.qr_generate_task_failed").with("error", e))
+            })?
+            .map_err(|e| {
+                AppError::Internal(msg("server.auth.qr_generate_failed").with("error", e))
             })?;
 
     Ok(crate::error::ok_json(
         serde_json::json!({
             "otpauth_url": otpauth_url,
             "qr_code_base64": qr_code_base64,
+            "secret": secret_base32,
         }),
         "server.auth.2fa_init_success",
     ))

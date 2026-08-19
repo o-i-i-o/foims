@@ -545,34 +545,56 @@ pub async fn update_org_template(
             .await?;
 
     // 使用中模板的 levels 变更校验：
-    // 1) 拓扑结构必须一致（compute_type_name_mapping 结构不同时返回 None）
-    // 2) 仅允许"真重命名"——发生变更的旧类型名必须在新层级中彻底消失；
-    //    若旧名仍存在，说明是调换子级顺序或交换名称，索引型 type_path 会把存量节点静默改成其他类型
+    // 允许任意增加层级/子类型（同层或下层）与删除未被引用的类型，
+    // 但存量组织节点的类型语义不得改变，具体规则：
+    // 1) 结构一致时（compute_type_name_mapping 返回 Some）：仅允许"真重命名"，
+    //    发生变更的旧类型名必须在新层级中彻底消失；若旧名仍存在，说明是调换
+    //    子级顺序或交换名称，索引型 type_path 会把存量节点静默改成其他类型
+    // 2) 结构变化时：逐个校验存量节点的 type_path 在新层级中解析出的类型名
+    //    与旧层级一致（等价于：被引用的类型不可删除、不可重命名，且同层
+    //    新类型的插入位置不得位于被引用索引之前）
     let mut rename_mapping: Option<std::collections::HashMap<String, String>> = None;
     if usage_count > 0
         && let Some(ref new_levels) = req.levels
         && new_levels != &existing.levels
     {
-        let mapping = compute_type_name_mapping(&existing.levels, new_levels).ok_or_else(|| {
-            AppError::Validation(
-                msg("server.org_template.in_use_structure_changed").with("count", usage_count),
-            )
-        })?;
-
-        let new_names: std::collections::HashSet<&str> = new_levels
-            .as_object()
-            .map(|m| m.keys().map(String::as_str).collect())
-            .unwrap_or_default();
-        for (old_name, new_name) in &mapping {
-            if old_name != new_name && new_names.contains(old_name.as_str()) {
-                return Err(AppError::Validation(
-                    msg("server.org_template.in_use_swap_forbidden")
-                        .with("count", usage_count)
-                        .with("name", old_name),
-                ));
+        if let Some(mapping) = compute_type_name_mapping(&existing.levels, new_levels) {
+            let new_names: std::collections::HashSet<&str> = new_levels
+                .as_object()
+                .map(|m| m.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            for (old_name, new_name) in &mapping {
+                if old_name != new_name && new_names.contains(old_name.as_str()) {
+                    return Err(AppError::Validation(
+                        msg("server.org_template.in_use_swap_forbidden")
+                            .with("count", usage_count)
+                            .with("name", old_name),
+                    ));
+                }
+            }
+            rename_mapping = Some(mapping);
+        } else {
+            let node_paths: Vec<String> =
+                sqlx::query_scalar("SELECT type_path FROM organizations WHERE template_id = $1")
+                    .bind(id)
+                    .fetch_all(&mut *tx)
+                    .await?;
+            for path in &node_paths {
+                let old_name = super::organization::resolve_type_name(&existing.levels, path)?;
+                let new_name = super::organization::resolve_type_name(new_levels, path);
+                let broken = match &new_name {
+                    Ok(name) => name != &old_name,
+                    Err(_) => true,
+                };
+                if broken {
+                    return Err(AppError::Validation(
+                        msg("server.org_template.in_use_path_broken")
+                            .with("count", usage_count)
+                            .with("name", old_name),
+                    ));
+                }
             }
         }
-        rename_mapping = Some(mapping);
     }
 
     // 计算更新后的 icons：请求值优先；未传时按重命名映射重排现有键（重命名传播到图标），

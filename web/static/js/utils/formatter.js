@@ -27,8 +27,11 @@ export function getDeviceTypeName(type) {
 export function getRoomTypeName(type) {
   const typeNames = {
     OFFICE: t("room.type_office"),
+    LOBBY: t("room.type_lobby"),
+    RECEPTION: t("room.type_reception"),
     DATA_CENTER: t("room.type_datacenter"),
-    TELECOM_CLOSET: t("room.type_telecom_closet")
+    TELECOM_CLOSET: t("room.type_telecom_closet"),
+    OTHER: t("room.type_other")
   };
   return typeNames[type] || type || "-";
 }

@@ -1,5 +1,8 @@
 import { loadModule } from "../../utils/resourceLoader.js";
-import { loadRoomsForSelect, loadDataCenterRoomsForSelect } from "../../utils/resources.js";
+import {
+  loadOrgsForSelect,
+  loadVisualizationRoomsForSelect
+} from "../../utils/resources.js";
 import { elementCache, setActiveSubtab, getActiveSubtab } from "../../utils/helpers.js";
 import { editWorkstation } from "../workstation.js";
 import { editCabinet } from "../cabinet.js";
@@ -76,6 +79,49 @@ function bindSelectEvents() {
       cabinetVisualization.loadSavedLayout(roomId);
     }
   });
+
+  // 组织/房间类型筛选变化 → 重载房间列表并自动加载第一个房间
+  const filterTargets = [
+    ["viz-org-select", "workstation"],
+    ["viz-room-type", "workstation"],
+    ["cabinet-viz-org-select", "cabinet"],
+    ["cabinet-room-type", "cabinet"]
+  ];
+  for (const [selectId, kind] of filterTargets) {
+    elementCache.get(selectId).addEventListener("change", () => {
+      refreshVisualizationRooms(kind);
+    });
+  }
+}
+
+/**
+ * 按当前组织/房间类型筛选重载可视化房间选择器，并自动加载第一个房间。
+ * @param {"workstation"|"cabinet"} kind 可视化视图类型
+ */
+async function refreshVisualizationRooms(kind) {
+  const isWorkstation = kind === "workstation";
+  const orgSelectId = isWorkstation ? "viz-org-select" : "cabinet-viz-org-select";
+  const typeSelectId = isWorkstation ? "viz-room-type" : "cabinet-room-type";
+  const roomSelectId = isWorkstation ? "room-select" : "cabinet-room-select";
+
+  const orgId = elementCache.getValue(orgSelectId) || null;
+  const selectedType = elementCache.getValue(typeSelectId) || null;
+  // 未选具体类型时按视图类别全集过滤（工位=办公类、机柜=机房类，均含"其他"）
+  const roomTypes = selectedType || (isWorkstation ? "office" : "datacenter");
+
+  await loadVisualizationRoomsForSelect(roomSelectId, roomTypes, orgId);
+
+  // 列表含空占位项，取第一个真实房间并自动加载其布局
+  const roomSelect = elementCache.get(roomSelectId);
+  const firstRoomId = [...(roomSelect?.options || [])].find((opt) => opt.value)?.value;
+  if (firstRoomId) {
+    roomSelect.value = firstRoomId;
+    if (isWorkstation) {
+      workstationVisualization.loadSavedLayout(firstRoomId);
+    } else {
+      cabinetVisualization.loadSavedLayout(firstRoomId);
+    }
+  }
 }
 
 function bindAutoDrawEvents() {
@@ -329,26 +375,12 @@ async function loadDeviceOptions() {
 }
 
 async function loadInitialData() {
-  await Promise.all([loadRoomsForSelect(), loadDataCenterRoomsForSelect("cabinet-room-select")]);
-
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-
-  const visualizationSelect = elementCache.get("room-select");
-  if (visualizationSelect && visualizationSelect.options.length > 0) {
-    const firstRoomId = visualizationSelect.options[0].value;
-    if (firstRoomId) {
-      workstationVisualization.loadSavedLayout(firstRoomId);
-    }
-  }
-
-  const cabinetRoomSelect = elementCache.get("cabinet-room-select");
-  if (cabinetRoomSelect && cabinetRoomSelect.options.length > 1) {
-    const firstRoomId = cabinetRoomSelect.options[1].value;
-    if (firstRoomId) {
-      cabinetVisualization.loadSavedLayout(firstRoomId);
-    }
-  }
+  // 先填充组织选项，再按默认筛选（全类别）加载两个视图的房间列表
+  await Promise.all([
+    loadOrgsForSelect("viz-org-select"),
+    loadOrgsForSelect("cabinet-viz-org-select")
+  ]);
+  await Promise.all([refreshVisualizationRooms("workstation"), refreshVisualizationRooms("cabinet")]);
 }
 
 // 窗口尺寸变化时机柜视图按新容器高度重排（防抖），保证柜底始终贴近屏幕底部

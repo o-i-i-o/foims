@@ -8,7 +8,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            CONSTRAINT uq_net_outlets_name UNIQUE (room_id, name)
+            -- 信息点名称全局唯一（跨房间不可重名）
+            CONSTRAINT uq_net_outlets_name UNIQUE (name)
         )",
     )
     .execute(pool)

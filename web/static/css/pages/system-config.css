@@ -1,7 +1,7 @@
-/* 系统配置 / SMTP 配置样式 */
+/* 系统配置 / 通知配置样式 */
 
 .system-config-section,
-.smtp-config-section {
+.notification-config-section {
   max-width: 960px;
   margin: 0 auto;
   padding: var(--space-lg);
@@ -12,7 +12,7 @@
 }
 
 .system-config-section h3,
-.smtp-config-section h3 {
+.notification-config-section h3 {
   color: var(--color-text);
   font-size: 1.1rem;
   font-weight: 600;
@@ -25,7 +25,7 @@
 }
 
 .system-config-section h3::before,
-.smtp-config-section h3::before {
+.notification-config-section h3::before {
   content: "";
   width: 4px;
   height: 20px;
@@ -345,4 +345,46 @@
 .cert-days-expired {
   color: #c62828;
   font-weight: 700;
+}
+
+/* ==================== 关于卡片：开源组件清单模态框 ==================== */
+
+.open-source-intro {
+  margin: 0 0 var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.open-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.open-source-group .open-source-license {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-xs);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--color-primary-light);
+}
+
+.open-source-items {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.open-source-items li {
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.open-source-items a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.open-source-items a:hover {
+  text-decoration: underline;
 }

@@ -20,7 +20,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         r"CREATE TABLE IF NOT EXISTS workstation_layouts (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             workstation_id UUID NOT NULL REFERENCES workstations(id) ON DELETE CASCADE,
-            room_id UUID REFERENCES rooms(id) ON DELETE CASCADE,
+            room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
             x INTEGER NOT NULL DEFAULT 0,
             y INTEGER NOT NULL DEFAULT 0,
             width INTEGER NOT NULL DEFAULT 160,

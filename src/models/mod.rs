@@ -26,10 +26,10 @@ pub fn validate_device_type_option(device_type: &&String) -> Result<(), Validati
 
 pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError> {
     let room_type_lower = room_type.to_lowercase();
-    if room_type_lower == "office"
-        || room_type_lower == "data_center"
-        || room_type_lower == "telecom_closet"
-    {
+    if matches!(
+        room_type_lower.as_str(),
+        "office" | "lobby" | "reception" | "data_center" | "telecom_closet" | "other"
+    ) {
         Ok(())
     } else {
         Err(ValidationError::new("server.room.validation.type_invalid"))

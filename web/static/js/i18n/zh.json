@@ -277,7 +277,9 @@
     "hostname_placeholder": "经 SNMP 获取，只读",
     "select_room_first": "请先选择房间",
     "network_not_in_room": "网段不属于设备所在房间",
-    "seller": "销售商"
+    "seller": "销售商",
+    "room_type_filter": "房间类型",
+    "all_room_types": "全部房间类型"
   },
   "device_template": {
     "title": "设备模板管理",
@@ -328,7 +330,10 @@
     "add": "添加房间",
     "keep_one_network": "至少需要保留一个网段配置",
     "select_option": "选择选项",
-    "delete_success": "房间删除成功"
+    "delete_success": "房间删除成功",
+    "type_lobby": "大厅",
+    "type_reception": "前台",
+    "type_other": "其他"
   },
   "time": {
     "just_now": "刚刚",
@@ -542,7 +547,32 @@
     "delete_success": "模板删除成功",
     "create_success": "模板创建成功",
     "update_success": "模板更新成功",
-    "select_icon": "选择图标"
+    "select_icon": "选择图标",
+    "icon_group_business": "业务组织",
+    "icon_group_location": "物理地点",
+    "icon_group_space": "功能空间",
+    "icon_corp": "集团/总公司",
+    "icon_division": "事业部/板块",
+    "icon_subsidiary": "子公司/分公司",
+    "icon_center": "中心/大部门",
+    "icon_department": "部门",
+    "icon_team": "科室/小组",
+    "icon_person": "岗位/人员",
+    "icon_region": "区域（大区）",
+    "icon_city": "城市",
+    "icon_campus": "园区/基地",
+    "icon_building": "楼宇",
+    "icon_floor": "楼层",
+    "icon_zone": "区域分区",
+    "icon_hall": "大厅",
+    "icon_reception": "前台",
+    "icon_office": "办公室",
+    "icon_data_center": "机房",
+    "icon_telecom_closet": "弱电井",
+    "icon_workstation": "工位",
+    "icon_cabinet": "机柜",
+    "icon_cabinet_position": "机位",
+    "icon_org": "通用节点"
   },
   "workstation": {
     "name": "工位名称",
@@ -616,7 +646,6 @@
     "info": "系统信息",
     "users": "用户管理",
     "config": "系统配置",
-    "smtp": "SMTP配置",
     "import_export": "数据管理",
     "system_name": "系统名称",
     "version": "系统版本",
@@ -629,7 +658,14 @@
     "security": "安全",
     "config_save_success": "系统配置保存成功",
     "config_save_failed": "系统配置保存失败",
-    "config_saved_restart_needed": "配置已更新，需要重启应用系统以使配置生效"
+    "config_saved_restart_needed": "配置已更新，需要重启应用系统以使配置生效",
+    "about": "关于",
+    "project_url": "项目地址",
+    "author": "作者",
+    "contact": "联系方式",
+    "open_source_components": "开源组件",
+    "open_source_intro": "本项目以 GPL-3.0-or-later 授权发布，使用了以下开源组件（完整清单见 NOTICE 文件）。",
+    "notification": "通知配置"
   },
   "security": {
     "title": "安全管理",
@@ -1064,11 +1100,12 @@
     "select_net_outlet": "选择信息点",
     "add": "添加信息点",
     "edit": "编辑信息点",
-    "name_required": "信息点名称不能为空",
+    "name_required": "请填写信息点名称",
     "room_required": "请选择房间",
     "save_success": "信息点保存成功",
     "delete_success": "信息点删除成功",
-    "load_failed": "加载信息点数据失败"
+    "load_failed": "加载信息点数据失败",
+    "name_duplicate": "信息点名称「{{name}}」重复（信息点名称在所有房间内唯一）"
   },
   "cable_link": {
     "name": "线路",
@@ -1262,7 +1299,8 @@
     "member_ports": "成员端口",
     "patch_panel_node": "配线架",
     "net_outlet_node": "信息点",
-    "device_unit": "台设备"
+    "device_unit": "台设备",
+    "all_room_types": "全部类型"
   },
   "init": {
     "page_title": "IPMA - 系统初始化",
@@ -1379,7 +1417,8 @@
       "user_id_invalid": "无效的用户标识",
       "validation": {
         "code_length": "验证码长度必须为6位"
-      }
+      },
+      "qr_generate_failed": "登录二次验证二维码生成失败：{{error}}"
     },
     "backup": {
       "dir_create_failed": "创建备份目录失败",
@@ -1828,7 +1867,7 @@
       "fetched": "信息点获取成功",
       "in_use": "信息点已被线路引用，无法删除",
       "linked_by_cable": "信息点已被线路引用，无法删除",
-      "name_exists": "该房间下信息点名称已存在",
+      "name_exists": "信息点名称已存在（信息点名称在所有房间内唯一）",
       "not_found": "信息点未找到",
       "room_id_invalid": "无效的room_id参数",
       "updated": "信息点更新成功",
@@ -1890,7 +1929,6 @@
       "deleted": "模板删除成功",
       "fetched": "模板获取成功",
       "in_use_delete_forbidden": "有 {{count}} 个组织节点正在使用此模板，不允许删除。请先删除或迁移相关节点",
-      "in_use_structure_changed": "有 {{count}} 个组织节点正在使用此模板，且层级结构发生了变化（增删了层级或子节点），不允许修改。仅允许修改类型名称",
       "in_use_swap_forbidden": "有 {{count}} 个组织节点正在使用此模板，不允许调换子级顺序或交换类型名称（类型「{{name}}」仍存在于新层级中）",
       "levels_format_invalid": "模板 levels 格式错误",
       "list_fetched": "模板列表获取成功",
@@ -1919,7 +1957,8 @@
         "type_name_required": "类型名称不能为空",
         "type_name_too_long": "类型名称「{{name}}」长度不能超过50个字符",
         "type_not_defined": "类型「{{type}}」未在模板中定义"
-      }
+      },
+      "in_use_path_broken": "类型「{{name}}」正被 {{count}} 个组织节点使用，无法删除、重命名或调整其在层级中的位置"
     },
     "organization": {
       "allowed_child_types_fetched": "允许的下级类型获取成功",
@@ -1998,7 +2037,7 @@
       "updated": "房间更新成功",
       "validation": {
         "name_length": "房间名称长度必须在1到50个字符之间",
-        "type_invalid": "房间类型必须是office、data_center或telecom_closet"
+        "type_invalid": "房间类型必须是 office、lobby、reception、data_center、telecom_closet 或 other"
       }
     },
     "smtp": {

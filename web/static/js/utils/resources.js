@@ -92,43 +92,73 @@ export function loadNetworkTypeOptions(selectId = "network-type") {
 }
 
 /**
- * 加载房间选项。
+ * 房间类型分类。
  *
- * onlyOffice 仅保留办公室；includeVisualization 时同步填充可视化
- * 房间选择器（room-select，排除数据中心/弱电井）。
+ * 办公类（工位管理范围）：办公室、大厅、前台；机房类（机柜管理范围）：
+ * 机房、弱电井。"其他"无固定性质，两类筛选均包含。
+ */
+const OFFICE_ROOM_TYPE_LIST = "office,lobby,reception,other";
+const DATA_CENTER_ROOM_TYPE_LIST = "data_center,telecom_closet,other";
+
+/** 构造房间列表 API 地址（org_id / room_type 过滤由后端执行）。 */
+function buildRoomsUrl(orgId, roomTypes) {
+  const params = new URLSearchParams({ page_size: "1000" });
+  if (orgId) params.set("org_id", orgId);
+  if (roomTypes) params.set("room_type", roomTypes);
+  return `/api/resources/rooms?${params.toString()}`;
+}
+
+/** 判断是否办公类房间（含"其他"）。 */
+export function isOfficeRoomType(roomType) {
+  return OFFICE_ROOM_TYPE_LIST.split(",").includes((roomType || "").toLowerCase());
+}
+
+/** 判断是否机房类房间（含"其他"）。 */
+export function isDataCenterRoomType(roomType) {
+  return DATA_CENTER_ROOM_TYPE_LIST.split(",").includes((roomType || "").toLowerCase());
+}
+
+/**
+ * 加载房间选项（可按组织与房间类型过滤）。
+ *
+ * onlyOffice 仅保留办公类房间（含"其他"）。
  */
 export async function loadRoomsForSelect(selectId = "workstation-room", options = {}) {
-  const { onlyOffice = false, includeVisualization = true } = options;
-  await fillSelect(selectId, "/api/resources/rooms?page_size=1000", {
+  const { onlyOffice = false, orgId = null, roomType = null } = options;
+  const typeList = onlyOffice ? OFFICE_ROOM_TYPE_LIST : roomType;
+  await fillSelect(selectId, buildRoomsUrl(orgId, typeList), {
     placeholderKey: onlyOffice ? "room.select_office" : "room.select_room",
     emptyKey: onlyOffice ? "room.no_office_data" : "room.no_room_data",
-    errorLabel: "房间",
-    filter: (room) => {
-      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
-      return onlyOffice ? roomType === "office" : true;
-    }
-  });
-
-  if (!includeVisualization) return;
-  await fillSelect("room-select", "/api/resources/rooms?page_size=1000", {
-    errorLabel: "可视化房间",
-    filter: (room) => {
-      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
-      return roomType !== "data_center" && roomType !== "telecom_closet";
-    }
+    errorLabel: "房间"
   });
 }
 
-/** 加载机房类房间（数据中心/弱电井）选项。 */
-export function loadDataCenterRoomsForSelect(selectId = "cabinet-room") {
-  return fillSelect(selectId, "/api/resources/rooms?page_size=1000", {
+/** 加载机房类房间（数据中心/弱电井/其他）选项。 */
+export function loadDataCenterRoomsForSelect(selectId = "cabinet-room", orgId = null) {
+  return fillSelect(selectId, buildRoomsUrl(orgId, DATA_CENTER_ROOM_TYPE_LIST), {
     placeholderKey: "room.select_datacenter",
     emptyKey: "room.no_datacenter_data",
-    errorLabel: "机房",
-    filter: (room) => {
-      const roomType = room.room_type ? room.room_type.toLowerCase() : "";
-      return roomType === "data_center" || roomType === "telecom_closet";
-    }
+    errorLabel: "机房"
+  });
+}
+
+/**
+ * 可视化页房间选择器。
+ *
+ * roomTypes 为 "office"（工位可视化全类别）、"datacenter"（机柜可视化全类别）
+ * 或具体类型（如 "office"/"other"），可叠加组织过滤。
+ */
+export function loadVisualizationRoomsForSelect(selectId, roomTypes, orgId = null) {
+  const resolved =
+    roomTypes === "office"
+      ? OFFICE_ROOM_TYPE_LIST
+      : roomTypes === "datacenter"
+        ? DATA_CENTER_ROOM_TYPE_LIST
+        : roomTypes;
+  return fillSelect(selectId, buildRoomsUrl(orgId, resolved), {
+    placeholderKey: "room.select_room",
+    emptyKey: "room.no_room_data",
+    errorLabel: "可视化房间"
   });
 }
 

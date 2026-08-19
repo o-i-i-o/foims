@@ -386,70 +386,16 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 // 房间子项（工位/机柜）动态管理模块
 // ==========================================
 
-class RoomChildrenManager extends DynamicRowManager {
-  constructor() {
-    super({
-      containerId: "room-children-container",
-      itemSelector: ".room-child-item",
-      emptyClassName: "room-child-empty",
-      removeBtnSelector: ".remove-child-btn",
-      addBtnSelector: ".add-child-btn",
-      emptyMode: "button",
-      showInRowAddButton: true
-    });
-    this.roomType = "office";
-    this.typeChangeHandler = null;
+/** 单类子项（工位或机柜）的动态行管理器。 */
+class RoomChildListManager extends DynamicRowManager {
+  constructor(config, kind) {
+    super(config);
+    // kind: "workstation" | "cabinet"
+    this.kind = kind;
   }
 
   addLabel() {
-    return this.roomType === "office" ? t("room.add_workstation") : t("room.add_cabinet");
-  }
-
-  init() {
-    this.ensureContainer();
-    if (!this.container) return false;
-
-    this.container.innerHTML = "";
-    this.bindTypeChange();
-    this.updateLabels();
-    this.updateEmptyState();
-    return true;
-  }
-
-  bindTypeChange() {
-    const typeSelect = document.getElementById("room-type");
-    if (!typeSelect) return;
-    if (this.typeChangeHandler) {
-      typeSelect.removeEventListener("change", this.typeChangeHandler);
-    }
-    this.typeChangeHandler = (e) => this.onTypeChange(e.target.value);
-    typeSelect.addEventListener("change", this.typeChangeHandler);
-  }
-
-  onTypeChange(newType) {
-    this.roomType = newType;
-    this.updateLabels();
-    // 类型切换时清空列表
-    if (this.ensureContainer()) {
-      this.container.innerHTML = "";
-      this.updateEmptyState();
-    }
-  }
-
-  updateLabels() {
-    const label = document.getElementById("room-children-label");
-    if (this.roomType === "office") {
-      if (label) label.textContent = t("room.workstations");
-    } else {
-      if (label) label.textContent = t("room.cabinets");
-    }
-  }
-
-  // 按房间类型派发到对应的行构造器
-  createRow(data = {}) {
-    return this.roomType === "office"
-      ? this.createWorkstationRow(data)
-      : this.createCabinetRow(data);
+    return this.kind === "workstation" ? t("room.add_workstation") : t("room.add_cabinet");
   }
 
   createWorkstationRow(data = {}) {
@@ -504,56 +450,160 @@ class RoomChildrenManager extends DynamicRowManager {
     return div;
   }
 
-  loadExisting(children) {
-    // closeModal 会移除模态框 DOM，需重新获取 container
-    this.ensureContainer();
-    if (!this.container) return;
-    this.container.innerHTML = "";
-    this.bindTypeChange();
-
-    if (this.roomType === "office" && children?.workstations?.length) {
-      children.workstations.forEach((ws) => this.addItem(ws));
-    } else if (
-      (this.roomType === "data_center" || this.roomType === "telecom_closet") &&
-      children?.cabinets?.length
-    ) {
-      children.cabinets.forEach((cab) => this.addItem(cab));
-    }
-    this.updateLabels();
-    this.updateEmptyState();
-    this.updateAddButtons();
+  // 按子项类型派发到对应的行构造器
+  createRow(data = {}) {
+    return this.kind === "workstation"
+      ? this.createWorkstationRow(data)
+      : this.createCabinetRow(data);
   }
 
-  collectData() {
-    if (!this.ensureContainer())
-      return this.roomType === "office" ? { workstations: [] } : { cabinets: [] };
+  collectItems() {
+    if (!this.ensureContainer()) return [];
     const items = this.container.querySelectorAll(".room-child-item");
-    if (this.roomType === "office") {
-      const workstations = [];
-      for (const item of items) {
+    if (this.kind === "workstation") {
+      return Array.from(items).map((item) => {
         const idInput = item.querySelector(".child-id");
         const nameInput = item.querySelector(".child-name");
         const managerInput = item.querySelector(".child-manager");
-        workstations.push({
+        return {
           id: idInput?.value || null,
           name: (nameInput?.value || "").trim(),
           manager: (managerInput?.value || "").trim() || null
-        });
-      }
-      return { workstations };
+        };
+      });
     }
-    const cabinets = [];
-    for (const item of items) {
+    return Array.from(items).map((item) => {
       const idInput = item.querySelector(".child-id");
       const nameInput = item.querySelector(".child-name");
       const capacityInput = item.querySelector(".child-capacity");
-      cabinets.push({
+      return {
         id: idInput?.value || null,
         name: (nameInput?.value || "").trim(),
         capacity: parseInt(capacityInput?.value || "42", 10)
-      });
+      };
+    });
+  }
+}
+
+/**
+ * 房间子项协调器：按房间类型决定显示工位列表、机柜列表或两者。
+ * 办公类（办公室/大厅/前台）仅工位；机房类（机房/弱电井）仅机柜；
+ * "其他"无固定性质，工位与机柜列表同时展示。
+ */
+class RoomChildrenManager {
+  constructor() {
+    this.workstationList = new RoomChildListManager(
+      {
+        containerId: "room-children-container",
+        itemSelector: ".room-child-item",
+        emptyClassName: "room-child-empty",
+        removeBtnSelector: ".remove-child-btn",
+        addBtnSelector: ".add-child-btn",
+        emptyMode: "button",
+        showInRowAddButton: true
+      },
+      "workstation"
+    );
+    this.cabinetList = new RoomChildListManager(
+      {
+        containerId: "room-cabinets-container",
+        itemSelector: ".room-child-item",
+        emptyClassName: "room-child-empty",
+        removeBtnSelector: ".remove-child-btn",
+        addBtnSelector: ".add-child-btn",
+        emptyMode: "button",
+        showInRowAddButton: true
+      },
+      "cabinet"
+    );
+    this.roomType = "office";
+    this.typeChangeHandler = null;
+  }
+
+  get isOfficeRoom() {
+    return ["office", "lobby", "reception"].includes(this.roomType);
+  }
+
+  get isCabinetRoom() {
+    return ["data_center", "telecom_closet"].includes(this.roomType);
+  }
+
+  // "其他"房间工位与机柜均可管理
+  get isMixedRoom() {
+    return this.roomType === "other";
+  }
+
+  clearLists() {
+    for (const list of [this.workstationList, this.cabinetList]) {
+      if (list.ensureContainer()) {
+        list.container.innerHTML = "";
+        list.updateEmptyState();
+      }
     }
-    return { cabinets };
+  }
+
+  bindTypeChange() {
+    const typeSelect = document.getElementById("room-type");
+    if (!typeSelect) return;
+    if (this.typeChangeHandler) {
+      typeSelect.removeEventListener("change", this.typeChangeHandler);
+    }
+    this.typeChangeHandler = (e) => this.onTypeChange(e.target.value);
+    typeSelect.addEventListener("change", this.typeChangeHandler);
+  }
+
+  onTypeChange(newType) {
+    this.roomType = newType;
+    // 类型切换时清空列表并按新类型展示对应分区
+    this.updateSections();
+    this.clearLists();
+  }
+
+  updateSections() {
+    const wsGroup = document.getElementById("room-workstations-group");
+    const cabGroup = document.getElementById("room-cabinets-group");
+    const showWorkstations = this.isOfficeRoom || this.isMixedRoom;
+    const showCabinets = this.isCabinetRoom || this.isMixedRoom;
+    if (wsGroup) wsGroup.style.display = showWorkstations ? "" : "none";
+    if (cabGroup) cabGroup.style.display = showCabinets ? "" : "none";
+  }
+
+  init() {
+    this.bindTypeChange();
+    this.updateSections();
+    this.clearLists();
+  }
+
+  loadExisting(children) {
+    // closeModal 会移除模态框 DOM，需重新获取 container
+    this.bindTypeChange();
+    this.updateSections();
+    this.clearLists();
+
+    if ((this.isOfficeRoom || this.isMixedRoom) && children?.workstations?.length) {
+      children.workstations.forEach((ws) => this.workstationList.addItem(ws));
+    }
+    if ((this.isCabinetRoom || this.isMixedRoom) && children?.cabinets?.length) {
+      children.cabinets.forEach((cab) => this.cabinetList.addItem(cab));
+    }
+
+    for (const list of [this.workstationList, this.cabinetList]) {
+      list.updateEmptyState();
+      list.updateAddButtons();
+    }
+  }
+
+  collectData() {
+    if (this.isCabinetRoom) {
+      return { cabinets: this.cabinetList.collectItems() };
+    }
+    if (this.isMixedRoom) {
+      return {
+        workstations: this.workstationList.collectItems(),
+        cabinets: this.cabinetList.collectItems()
+      };
+    }
+    return { workstations: this.workstationList.collectItems() };
   }
 }
 
@@ -674,11 +724,15 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
           field: "room_type",
           className: "col-center",
           render: (v) => {
-            const roomTypeLower = v ? v.toLowerCase() : "";
-            if (roomTypeLower === "office") return t("room.type_office");
-            if (roomTypeLower === "data_center") return t("room.type_datacenter");
-            if (roomTypeLower === "telecom_closet") return t("room.type_telecom_closet");
-            return v || "-";
+            const typeMap = {
+              office: t("room.type_office"),
+              lobby: t("room.type_lobby"),
+              reception: t("room.type_reception"),
+              data_center: t("room.type_datacenter"),
+              telecom_closet: t("room.type_telecom_closet"),
+              other: t("room.type_other")
+            };
+            return typeMap[(v || "").toLowerCase()] || v || "-";
           }
         },
         { field: "org_name", render: (v) => escapeHtml(v) || "-" },
@@ -698,9 +752,8 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
         {
           field: "id",
           render: (v, row) => {
-            const isCabinetRoom =
-              (row.room_type || "").toLowerCase() === "data_center" ||
-              (row.room_type || "").toLowerCase() === "telecom_closet";
+            const roomTypeLower = (row.room_type || "").toLowerCase();
+            const isCabinetRoom = roomTypeLower === "data_center" || roomTypeLower === "telecom_closet";
             return `
           ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
           ${iconButton({ icon: "list", label: isCabinetRoom ? t("room.cabinets") : t("room.workstations"), cls: "btn-primary btn-room-children-list", attrs: `data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || "")}"` })}
@@ -780,7 +833,13 @@ export async function openRoomChildrenListModal(roomId) {
     const extraTh = document.getElementById("room-children-list-extra-th");
     const tbody = document.getElementById("room-children-list-tbody");
 
-    if (roomType === "office") {
+    // "其他"房间工位与机柜均可能存在，优先展示有数据的一类
+    const isCabinetList =
+      roomType === "data_center" ||
+      roomType === "telecom_closet" ||
+      (roomType === "other" && !(room.workstations || []).length);
+
+    if (!isCabinetList) {
       if (titleEl) titleEl.textContent = `${room.name} - ${t("room.workstations")}`;
       if (extraTh) extraTh.textContent = t("workstation.manager");
       const workstations = room.workstations || [];
@@ -801,7 +860,7 @@ export async function openRoomChildrenListModal(roomId) {
             .join("");
         }
       }
-    } else if (roomType === "data_center" || roomType === "telecom_closet") {
+    } else {
       if (titleEl) titleEl.textContent = `${room.name} - ${t("room.cabinets")}`;
       if (extraTh) extraTh.textContent = t("cabinet.capacity");
       const cabinets = room.cabinets || [];
@@ -925,16 +984,16 @@ export async function submitRoomForm() {
     return;
   }
 
-  let formattedRoomType;
-  if (roomType === "office") {
-    formattedRoomType = "OFFICE";
-  } else if (roomType === "data_center") {
-    formattedRoomType = "DATA_CENTER";
-  } else if (roomType === "telecom_closet") {
-    formattedRoomType = "TELECOM_CLOSET";
-  } else {
-    formattedRoomType = roomType;
+  // 信息点名称在所有房间范围内唯一：先做本地非空/查重校验，跨房间冲突由后端兜底
+  const netOutletsForCheck = roomNetOutletsManager.collectData();
+  const netOutletsError = validateNetOutletsLocal(netOutletsForCheck);
+  if (netOutletsError) {
+    showToast(netOutletsError, "warning");
+    return;
   }
+
+  // 后端统一按大写存储房型
+  const formattedRoomType = roomType.toUpperCase();
 
   const orgId = getElementValue("room-org-id");
 
@@ -978,7 +1037,7 @@ export async function submitRoomForm() {
     }
 
     // 同步信息点（所有房型通用）
-    const netOutletsData = roomNetOutletsManager.collectData();
+    const netOutletsData = netOutletsForCheck;
     const noSyncResult = await apiPut(`/api/resources/rooms/${roomId}/net-outlets`, {
       net_outlets: netOutletsData
     });
@@ -996,18 +1055,21 @@ export async function submitRoomForm() {
   }
 }
 
-// 校验房间子项数据
+// 校验房间子项数据（办公类含"其他"校验工位；机房类含"其他"校验机柜）
 function validateRoomChildren(childrenData, roomType) {
-  if (roomType === "office") {
-    const workstations = childrenData.workstations || [];
-    for (const ws of workstations) {
+  const type = (roomType || "").toLowerCase();
+  const checkWorkstations = ["office", "lobby", "reception", "other"].includes(type);
+  const checkCabinets = ["data_center", "telecom_closet", "other"].includes(type);
+
+  if (checkWorkstations) {
+    for (const ws of childrenData.workstations || []) {
       if (!ws.name) {
         return t("room.child_name_required");
       }
     }
-  } else if (roomType === "data_center" || roomType === "telecom_closet") {
-    const cabinets = childrenData.cabinets || [];
-    for (const cab of cabinets) {
+  }
+  if (checkCabinets) {
+    for (const cab of childrenData.cabinets || []) {
       if (!cab.name) {
         return t("room.child_name_required");
       }
@@ -1015,6 +1077,21 @@ function validateRoomChildren(childrenData, roomType) {
         return t("room.child_capacity_invalid");
       }
     }
+  }
+  return null;
+}
+
+// 信息点本地校验：名称非空且不重复（全局唯一，跨房间重名由后端校验）
+function validateNetOutletsLocal(netOutlets) {
+  const seen = new Set();
+  for (const outlet of netOutlets) {
+    if (!outlet.name) {
+      return t("net_outlet.name_required");
+    }
+    if (seen.has(outlet.name)) {
+      return t("net_outlet.name_duplicate", { name: outlet.name });
+    }
+    seen.add(outlet.name);
   }
   return null;
 }

@@ -26,6 +26,20 @@
   flex-shrink: 0;
 }
 
+/* 工具栏内 组织→房间类型→房间 级联筛选组 */
+#visualization .viz-filter-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-right: auto;
+}
+
+#visualization .viz-filter-group .form-control {
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
 #visualization .tab-content {
   display: none;
 }

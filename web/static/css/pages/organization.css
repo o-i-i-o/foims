@@ -105,7 +105,16 @@
 /* 节点图标和名称 */
 .org-node-icon {
   font-size: 1.2rem;
+  color: var(--color-text);
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.org-node-icon svg {
+  width: 1.25em;
+  height: 1.25em;
 }
 
 .org-node-name {
@@ -377,9 +386,10 @@
   padding: 3px 0;
 }
 
-/* 图标选择按钮 */
+/* 图标选择按钮（内嵌 SVG 图标） */
 .org-template-icon-btn {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
+  color: var(--color-text);
   flex-shrink: 0;
   width: 2em;
   height: 2em;
@@ -397,21 +407,34 @@
   position: relative;
 }
 
+.org-template-icon-btn svg {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+.org-template-icon-btn .org-icon-legacy {
+  font-size: 1em;
+  line-height: 1;
+}
+
 .org-template-icon-btn:hover {
   border-color: var(--color-primary);
   background: var(--color-primary-light);
 }
 
-/* 图标选择面板 */
+/* 图标选择面板：按 业务组织/物理地点/功能空间 分组 */
 .org-icon-picker {
   position: absolute;
   top: 100%;
   left: 0;
   z-index: 1000;
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  width: 264px;
+  max-height: 320px;
+  overflow: auto;
   background: var(--color-bg-white);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
@@ -419,16 +442,38 @@
   margin-top: 4px;
 }
 
+.org-icon-picker-group-title {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.org-icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
 .org-icon-picker-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  font-size: 1.1rem;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  font-size: 1.2rem;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--transition-fast);
+}
+
+.org-icon-picker-item svg {
+  width: 1.35rem;
+  height: 1.35rem;
 }
 
 .org-icon-picker-item:hover {

@@ -38,49 +38,89 @@ pub async fn get_rooms(
     let search_pattern = crate::utils::escape_like(&search);
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
-        ("name", "desc") => "ORDER BY r.name DESC",
-        ("created_at", "desc") => "ORDER BY r.created_at DESC",
-        ("created_at", _) => "ORDER BY r.created_at ASC",
-        ("room_type", "desc") => "ORDER BY r.room_type DESC, r.name ASC",
-        ("room_type", _) => "ORDER BY r.room_type ASC, r.name ASC",
-        ("org_name", "desc") => "ORDER BY o.name DESC NULLS LAST, r.name ASC",
-        ("org_name", _) => "ORDER BY o.name ASC NULLS LAST, r.name ASC",
-        _ => "ORDER BY r.name ASC",
+        ("name", "desc") => " ORDER BY r.name DESC",
+        ("created_at", "desc") => " ORDER BY r.created_at DESC",
+        ("created_at", _) => " ORDER BY r.created_at ASC",
+        ("room_type", "desc") => " ORDER BY r.room_type DESC, r.name ASC",
+        ("room_type", _) => " ORDER BY r.room_type ASC, r.name ASC",
+        ("org_name", "desc") => " ORDER BY o.name DESC NULLS LAST, r.name ASC",
+        ("org_name", _) => " ORDER BY o.name ASC NULLS LAST, r.name ASC",
+        _ => " ORDER BY r.name ASC",
     };
 
-    let (total, rooms) = if search.is_empty() {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
-            .fetch_one(&state.pool()?.get_conn())
-            .await?;
+    // 可选过滤：org_id（组织节点）、room_type（逗号分隔的类型集合）
+    let org_filter: Option<Uuid> = match query.get("org_id") {
+        Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
+            AppError::Validation(msg("server.common.invalid_param").with("param", "org_id"))
+        })?),
+        _ => None,
+    };
+    let room_types: Vec<String> = query
+        .get("room_type")
+        .map(|v| {
+            v.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_uppercase())
+                .collect()
+        })
+        .unwrap_or_default();
 
-        let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT r.id, r.name, r.room_type, r.org_id, r.description, r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id {order_clause} LIMIT $1 OFFSET $2"))
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+    // 动态拼接过滤条件（count 与列表两侧保持一致）
+    let mut count_builder: sqlx::QueryBuilder<sqlx::Postgres> =
+        sqlx::QueryBuilder::new("SELECT COUNT(*) FROM rooms r");
+    let mut list_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+        "SELECT r.id, r.name, r.room_type, r.org_id, r.description, \
+         r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ \
+         FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id",
+    );
 
-        (total, rooms)
-    } else {
-        let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM rooms WHERE name ILIKE $1 OR room_type ILIKE $1 OR description ILIKE $1"
-        )
-        .bind(&search_pattern)
+    let mut has_where = false;
+    if !search.is_empty() {
+        for builder in [&mut count_builder, &mut list_builder] {
+            builder.push(" WHERE r.name ILIKE ");
+            builder.push_bind(search_pattern.clone());
+            builder.push(" OR r.room_type ILIKE ");
+            builder.push_bind(search_pattern.clone());
+            builder.push(" OR r.description ILIKE ");
+            builder.push_bind(search_pattern.clone());
+        }
+        has_where = true;
+    }
+    if org_filter.is_some() || !room_types.is_empty() {
+        let conjunction = if has_where { " AND" } else { " WHERE" };
+        if let Some(org_id) = org_filter {
+            for builder in [&mut count_builder, &mut list_builder] {
+                builder.push(conjunction);
+                builder.push(" r.org_id = ");
+                builder.push_bind(org_id);
+            }
+        }
+        if !room_types.is_empty() {
+            for builder in [&mut count_builder, &mut list_builder] {
+                builder.push(conjunction);
+                builder.push(" r.room_type = ANY(");
+                builder.push_bind(room_types.clone());
+                builder.push(")");
+            }
+        }
+    }
+
+    let total: i64 = count_builder
+        .build_query_scalar()
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-        let rooms = sqlx::query_as::<_, Room>(
-            sqlx::AssertSqlSafe(format!("SELECT r.id, r.name, r.room_type, r.org_id, r.description, r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id WHERE r.name ILIKE $1 OR r.room_type ILIKE $1 OR r.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
-        )
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
+    list_builder.push(order_clause);
+    list_builder.push(" LIMIT ");
+    list_builder.push_bind(page_size);
+    list_builder.push(" OFFSET ");
+    list_builder.push_bind(offset);
+
+    let rooms = list_builder
+        .build_query_as::<Room>()
         .fetch_all(&state.pool()?.get_conn())
         .await?;
-
-        (total, rooms)
-    };
 
     // 批量查询（避免逐房间 N+1）：一次取全部房间的网络、工位数、组织名
     let conn = state.pool()?.get_conn();
@@ -547,136 +587,31 @@ pub async fn sync_room_children(
     let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
-    if room_type == "OFFICE" {
+    // 按房型性质同步子项：办公类（办公室/大厅/前台）同步工位；
+    // 机房类（机房/弱电井）同步机柜；"其他"无固定性质，两类均同步
+    let sync_workstations = matches!(
+        room_type.as_str(),
+        "OFFICE" | "LOBBY" | "RECEPTION" | "OTHER"
+    );
+    let sync_cabinets = matches!(
+        room_type.as_str(),
+        "DATA_CENTER" | "TELECOM_CLOSET" | "OTHER"
+    );
+
+    if sync_workstations {
         let items = req
             .workstations
             .as_ref()
             .ok_or_else(|| AppError::Validation(msg("server.room.office_requires_workstations")))?;
+        sync_workstation_children(&mut tx, id, items, now).await?;
+    }
 
-        let existing_ids: Vec<Uuid> =
-            sqlx::query_scalar("SELECT id FROM workstations WHERE room_id = $1")
-                .bind(id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
-
-        for existing_id in &existing_ids {
-            if !request_ids.contains(existing_id) {
-                let device_count: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE workstation_id = $1")
-                        .bind(existing_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-                if device_count > 0 {
-                    return Err(AppError::Validation(msg(
-                        "server.workstation.in_use_by_device",
-                    )));
-                }
-                sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
-                    .bind(existing_id)
-                    .execute(&mut *tx)
-                    .await?;
-                sqlx::query("DELETE FROM workstations WHERE id = $1")
-                    .bind(existing_id)
-                    .execute(&mut *tx)
-                    .await?;
-            }
-        }
-
-        for item in items {
-            validate_workstation_name(&mut tx, &item.name, id, item.id).await?;
-            if let Some(item_id) = item.id {
-                sqlx::query(
-                    "UPDATE workstations SET name = $1, manager = $2, room_id = $3, updated_at = $4 WHERE id = $5",
-                )
-                .bind(&item.name)
-                .bind(&item.manager)
-                .bind(id)
-                .bind(now)
-                .bind(item_id)
-                .execute(&mut *tx)
-                .await?;
-            } else {
-                let new_id = Uuid::new_v4();
-                sqlx::query(
-                    "INSERT INTO workstations (id, name, room_id, manager, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
-                )
-                .bind(new_id)
-                .bind(&item.name)
-                .bind(id)
-                .bind(&item.manager)
-                .bind(now)
-                .bind(now)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
-    } else if room_type == "DATA_CENTER" || room_type == "TELECOM_CLOSET" {
+    if sync_cabinets {
         let items = req
             .cabinets
             .as_ref()
             .ok_or_else(|| AppError::Validation(msg("server.room.datacenter_requires_cabinets")))?;
-
-        let existing_ids: Vec<Uuid> =
-            sqlx::query_scalar("SELECT id FROM cabinets WHERE room_id = $1")
-                .bind(id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
-
-        for existing_id in &existing_ids {
-            if !request_ids.contains(existing_id) {
-                let position_count: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
-                        .bind(existing_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-                if position_count > 0 {
-                    return Err(AppError::Validation(msg(
-                        "server.cabinet.in_use_by_positions",
-                    )));
-                }
-                sqlx::query("DELETE FROM cabinet_layouts WHERE cabinet_id = $1")
-                    .bind(existing_id)
-                    .execute(&mut *tx)
-                    .await?;
-                sqlx::query("DELETE FROM cabinets WHERE id = $1")
-                    .bind(existing_id)
-                    .execute(&mut *tx)
-                    .await?;
-            }
-        }
-
-        for item in items {
-            validate_cabinet_name(&mut tx, &item.name, id, item.id).await?;
-            if let Some(item_id) = item.id {
-                sqlx::query(
-                    "UPDATE cabinets SET name = $1, capacity = $2, room_id = $3, updated_at = $4 WHERE id = $5",
-                )
-                .bind(&item.name)
-                .bind(item.capacity)
-                .bind(id)
-                .bind(now)
-                .bind(item_id)
-                .execute(&mut *tx)
-                .await?;
-            } else {
-                let new_id = Uuid::new_v4();
-                sqlx::query(
-                    "INSERT INTO cabinets (id, name, room_id, capacity, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
-                )
-                .bind(new_id)
-                .bind(&item.name)
-                .bind(id)
-                .bind(item.capacity)
-                .bind(now)
-                .bind(now)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
+        sync_cabinet_children(&mut tx, id, items, now).await?;
     }
 
     tx.commit().await?;
@@ -749,7 +684,7 @@ pub async fn sync_room_net_outlets(
 
     // 新增或更新
     for item in items {
-        validate_net_outlet_name(&mut tx, &item.name, id, item.id).await?;
+        validate_net_outlet_name(&mut tx, &item.name, item.id).await?;
         if let Some(item_id) = item.id {
             sqlx::query(
                 "UPDATE net_outlets SET name = $1, room_id = $2, updated_at = $3 WHERE id = $4",
@@ -794,17 +729,153 @@ pub async fn sync_room_net_outlets(
     Ok(crate::error::ok_json((), "server.room.net_outlets_synced"))
 }
 
+/// 同步房间工位：删除请求中缺失的（被设备引用的拒绝），再新增/更新。
+async fn sync_workstation_children(
+    tx: &mut sqlx::PgConnection,
+    room_id: Uuid,
+    items: &[crate::models::WorkstationSyncItem],
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let existing_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM workstations WHERE room_id = $1")
+            .bind(room_id)
+            .fetch_all(&mut *tx)
+            .await?;
+
+    let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+    for existing_id in &existing_ids {
+        if !request_ids.contains(existing_id) {
+            let device_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE workstation_id = $1")
+                    .bind(existing_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if device_count > 0 {
+                return Err(AppError::Validation(msg(
+                    "server.workstation.in_use_by_device",
+                )));
+            }
+            sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM workstations WHERE id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    for item in items {
+        validate_workstation_name(tx, &item.name, room_id, item.id).await?;
+        if let Some(item_id) = item.id {
+            sqlx::query(
+                "UPDATE workstations SET name = $1, manager = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+            )
+            .bind(&item.name)
+            .bind(&item.manager)
+            .bind(room_id)
+            .bind(now)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            let new_id = Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO workstations (id, name, room_id, manager, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(new_id)
+            .bind(&item.name)
+            .bind(room_id)
+            .bind(&item.manager)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// 同步房间机柜：删除请求中缺失的（含机位的拒绝），再新增/更新。
+async fn sync_cabinet_children(
+    tx: &mut sqlx::PgConnection,
+    room_id: Uuid,
+    items: &[crate::models::CabinetSyncItem],
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let existing_ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM cabinets WHERE room_id = $1")
+        .bind(room_id)
+        .fetch_all(&mut *tx)
+        .await?;
+
+    let request_ids: Vec<Uuid> = items.iter().filter_map(|i| i.id).collect();
+
+    for existing_id in &existing_ids {
+        if !request_ids.contains(existing_id) {
+            let position_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
+                    .bind(existing_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if position_count > 0 {
+                return Err(AppError::Validation(msg(
+                    "server.cabinet.in_use_by_positions",
+                )));
+            }
+            sqlx::query("DELETE FROM cabinet_layouts WHERE cabinet_id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM cabinets WHERE id = $1")
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    for item in items {
+        validate_cabinet_name(tx, &item.name, room_id, item.id).await?;
+        if let Some(item_id) = item.id {
+            sqlx::query(
+                "UPDATE cabinets SET name = $1, capacity = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+            )
+            .bind(&item.name)
+            .bind(item.capacity)
+            .bind(room_id)
+            .bind(now)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            let new_id = Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO cabinets (id, name, room_id, capacity, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(new_id)
+            .bind(&item.name)
+            .bind(room_id)
+            .bind(item.capacity)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
 async fn validate_net_outlet_name(
     conn: &mut sqlx::PgConnection,
     name: &str,
-    room_id: Uuid,
     exclude_id: Option<Uuid>,
 ) -> Result<(), AppError> {
+    // 信息点名称在所有房间范围内唯一（不再限定同一房间）
     let existing: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM net_outlets WHERE name = $1 AND room_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+        "SELECT id FROM net_outlets WHERE name = $1 AND ($2::uuid IS NULL OR id != $2)",
     )
     .bind(name)
-    .bind(room_id)
     .bind(exclude_id)
     .fetch_optional(conn)
     .await?;

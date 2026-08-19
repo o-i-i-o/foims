@@ -277,7 +277,9 @@
     "hostname_placeholder": "Fetched via SNMP, read-only",
     "select_room_first": "Select a room first",
     "network_not_in_room": "Network segment does not belong to the device room",
-    "seller": "Seller"
+    "seller": "Seller",
+    "room_type_filter": "Room Type",
+    "all_room_types": "All Room Types"
   },
   "device_template": {
     "title": "Device Template Management",
@@ -328,7 +330,10 @@
     "add": "Add Room",
     "keep_one_network": "At least one network configuration must be kept",
     "select_option": "Select an option",
-    "delete_success": "Room deleted successfully"
+    "delete_success": "Room deleted successfully",
+    "type_lobby": "Lobby",
+    "type_reception": "Reception",
+    "type_other": "Other"
   },
   "time": {
     "just_now": "Just now",
@@ -542,7 +547,32 @@
     "delete_success": "Template deleted successfully",
     "create_success": "Template created successfully",
     "update_success": "Template updated successfully",
-    "select_icon": "Select Icon"
+    "select_icon": "Select Icon",
+    "icon_group_business": "Business Organization",
+    "icon_group_location": "Physical Locations",
+    "icon_group_space": "Functional Spaces",
+    "icon_corp": "Group / Headquarters",
+    "icon_division": "Division / Segment",
+    "icon_subsidiary": "Subsidiary / Branch",
+    "icon_center": "Center / Major Dept.",
+    "icon_department": "Department",
+    "icon_team": "Team",
+    "icon_person": "Position / Person",
+    "icon_region": "Region",
+    "icon_city": "City",
+    "icon_campus": "Campus / Base",
+    "icon_building": "Building",
+    "icon_floor": "Floor",
+    "icon_zone": "Zone",
+    "icon_hall": "Hall",
+    "icon_reception": "Reception",
+    "icon_office": "Office",
+    "icon_data_center": "Data Center",
+    "icon_telecom_closet": "Telecom Closet",
+    "icon_workstation": "Workstation",
+    "icon_cabinet": "Cabinet",
+    "icon_cabinet_position": "Cabinet Position",
+    "icon_org": "Generic Node"
   },
   "workstation": {
     "name": "Workstation Name",
@@ -616,7 +646,6 @@
     "info": "System Info",
     "users": "User Management",
     "config": "System Config",
-    "smtp": "SMTP Config",
     "import_export": "Data Management",
     "system_name": "System Name",
     "version": "System Version",
@@ -629,7 +658,14 @@
     "security": "Security",
     "config_save_success": "System configuration saved successfully",
     "config_save_failed": "Failed to save system configuration",
-    "config_saved_restart_needed": "Configuration updated. The application must be restarted for it to take effect."
+    "config_saved_restart_needed": "Configuration updated. The application must be restarted for it to take effect.",
+    "about": "About",
+    "project_url": "Project URL",
+    "author": "Author",
+    "contact": "Contact",
+    "open_source_components": "Open Source Components",
+    "open_source_intro": "This project is licensed under GPL-3.0-or-later and uses the following open source components (see the NOTICE file for details).",
+    "notification": "Notification"
   },
   "security": {
     "title": "Security Management",
@@ -1064,11 +1100,12 @@
     "select_net_outlet": "Select Network Outlet",
     "add": "Add Network Outlet",
     "edit": "Edit Network Outlet",
-    "name_required": "Network outlet name is required",
+    "name_required": "Outlet name is required",
     "room_required": "Please select a room",
     "save_success": "Network outlet saved successfully",
     "delete_success": "Network outlet deleted successfully",
-    "load_failed": "Failed to load network outlet data"
+    "load_failed": "Failed to load network outlet data",
+    "name_duplicate": "Outlet name \"{{name}}\" is duplicated (outlet names must be unique across all rooms)"
   },
   "cable_link": {
     "name": "Cable Link",
@@ -1262,7 +1299,8 @@
     "member_ports": "Member ports",
     "patch_panel_node": "Patch Panel",
     "net_outlet_node": "Outlet",
-    "device_unit": "devices"
+    "device_unit": "devices",
+    "all_room_types": "All Types"
   },
   "init": {
     "page_title": "IPMA - System Initialization",
@@ -1379,7 +1417,8 @@
       "user_id_invalid": "Invalid user identifier",
       "validation": {
         "code_length": "Code must be 6 digits"
-      }
+      },
+      "qr_generate_failed": "Failed to generate 2FA QR code: {{error}}"
     },
     "backup": {
       "dir_create_failed": "Failed to create backup directory",
@@ -1828,7 +1867,7 @@
       "fetched": "Net outlet fetched successfully",
       "in_use": "Net outlet is referenced by cable links and cannot be deleted",
       "linked_by_cable": "Net outlet is referenced by cable links and cannot be deleted",
-      "name_exists": "Net outlet name already exists in this room",
+      "name_exists": "Outlet name already exists (outlet names must be unique across all rooms)",
       "not_found": "Net outlet not found",
       "room_id_invalid": "Invalid room_id parameter",
       "updated": "Net outlet updated successfully",
@@ -1890,7 +1929,6 @@
       "deleted": "Template deleted",
       "fetched": "Template fetched",
       "in_use_delete_forbidden": "{{count}} organization nodes use this template; delete or migrate them first",
-      "in_use_structure_changed": "{{count}} organization nodes use this template and the hierarchy changed (levels/children added or removed); only type names may be changed",
       "in_use_swap_forbidden": "{{count}} organization nodes use this template; reordering children or swapping type names is not allowed (type \"{{name}}\" still exists in the new hierarchy)",
       "levels_format_invalid": "Invalid template levels format",
       "list_fetched": "Template list fetched",
@@ -1919,7 +1957,8 @@
         "type_name_required": "Type name is required",
         "type_name_too_long": "Type name \"{{name}}\" must not exceed 50 characters",
         "type_not_defined": "Type \"{{type}}\" is not defined in the template"
-      }
+      },
+      "in_use_path_broken": "Type \"{{name}}\" is used by {{count}} organization node(s) and cannot be deleted, renamed, or repositioned in the hierarchy"
     },
     "organization": {
       "allowed_child_types_fetched": "Allowed child types fetched",
@@ -1998,7 +2037,7 @@
       "updated": "Room updated successfully",
       "validation": {
         "name_length": "Room name must be 1 to 50 characters",
-        "type_invalid": "Room type must be office, data_center, or telecom_closet"
+        "type_invalid": "Room type must be one of: office, lobby, reception, data_center, telecom_closet, other"
       }
     },
     "smtp": {

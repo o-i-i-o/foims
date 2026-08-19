@@ -711,19 +711,11 @@ pub async fn update_smtp_config(
     Ok(crate::error::ok_json((), "server.smtp.config_updated"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct TestSmtpRequest {
-    #[validate(email(message = "server.common.validation.email_format"))]
-    pub to: String,
-}
-
+/// 测试已保存的通知邮件（SMTP）配置连通性。无需请求体。
 pub async fn test_smtp_connection(
     State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
-    AppJson(req): AppJson<TestSmtpRequest>,
 ) -> Result<Response, AppError> {
-    req.validate()?;
-
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
         None => {

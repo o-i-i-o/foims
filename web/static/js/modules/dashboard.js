@@ -421,14 +421,20 @@ function renderRoomTypeChart(roomTypes) {
 
   const typeNames = {
     office: t("room.type_office"),
+    lobby: t("room.type_lobby"),
+    reception: t("room.type_reception"),
     data_center: t("room.type_datacenter"),
-    telecom_closet: t("room.type_telecom_closet")
+    telecom_closet: t("room.type_telecom_closet"),
+    other: t("room.type_other")
   };
 
   const colors = {
     office: "var(--room-office)",
+    lobby: "var(--room-office)",
+    reception: "var(--room-office)",
     data_center: "var(--room-data-center)",
-    telecom_closet: "var(--room-telecom-closet)"
+    telecom_closet: "var(--room-telecom-closet)",
+    other: "var(--status-fallback)"
   };
 
   let html = '<div class="chart-donut">';
