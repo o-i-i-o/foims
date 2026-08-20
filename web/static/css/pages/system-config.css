@@ -198,6 +198,10 @@
   justify-content: center;
 }
 
+/* 2fa 提示居中 */
+#two-factor-modal .hint-text {
+  text-align: center;
+}
 
 @media (max-width: 768px) {
   .config-row {
