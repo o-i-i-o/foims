@@ -1,0 +1,38 @@
+<template id="arp-modal-template">
+<div id="arp-modal" class="modal">
+  <div class="modal-content modal-xl">
+    <header class="modal-header">
+      <h3 class="modal-title"><span data-i18n="device.mac_table">MAC Table</span> <span id="arp-device-name"></span></h3>
+      <button type="button" class="close arp-modal-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body modal-body-scroll">
+      <div id="arp-loading" class="modal-loading">
+        <div class="spinner"></div>
+        <p class="loading-text" data-i18n="device.loading_mac_table">Loading MAC table</p>
+      </div>
+      <div id="arp-content" style="display: none;">
+        <div class="tab-container">
+          <div class="tab-toolbar">
+            <div class="tab-buttons">
+              <button type="button" class="tab-btn active" data-tab="ipv4">IPv4</button>
+              <button type="button" class="tab-btn" data-tab="ipv6">IPv6</button>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="sync-mac-btn" data-i18n="device.sync_from_snmp">Sync from SNMP</button>
+          </div>
+          <div class="tab-content active" id="ipv4-tab">
+            <input type="text" id="ipv4-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC">
+            <div id="ipv4-table-container" class="tab-table-container"></div>
+          </div>
+          <div class="tab-content" id="ipv6-tab">
+            <input type="text" id="ipv6-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC">
+            <div id="ipv6-table-container" class="tab-table-container"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary arp-modal-close" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

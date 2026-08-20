@@ -26,7 +26,22 @@ export class TopologyCore {
 
   _init() {
     this._initSVG();
+    this._initTooltip();
     this._initEventListeners();
+  }
+
+  _initTooltip() {
+    const tooltipId = "visualization-tooltip-topology";
+    const existing = document.getElementById(tooltipId);
+    if (existing) {
+      this.tooltip = existing;
+      return;
+    }
+    const tooltip = document.createElement("div");
+    tooltip.id = tooltipId;
+    tooltip.className = "tooltip";
+    document.body.appendChild(tooltip);
+    this.tooltip = tooltip;
   }
 
   _initSVG() {
@@ -96,6 +111,7 @@ export class TopologyCore {
     this.svg.addEventListener("wheel", this._handleWheel.bind(this), { passive: false });
     this.svg.addEventListener("mouseleave", () => {
       this._handleMouseUp();
+      this._hideTooltip();
       this.tempConnectionGroup.innerHTML = "";
     });
 
@@ -166,6 +182,7 @@ export class TopologyCore {
 
   _handleMouseMove(e) {
     if (this.isPanning) {
+      this._hideTooltip();
       const vb = this.svg.viewBox.baseVal;
       const scale = vb.width / this.container.clientWidth;
       const dx = (e.clientX - this.panStart.x) * scale;
@@ -183,6 +200,7 @@ export class TopologyCore {
       const dy = currentPos.y - this.mouseStartPos.y;
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
         this.hasMoved = true;
+        this._hideTooltip();
         const newX = this.elementStartPos.x + dx;
         const newY = this.elementStartPos.y + dy;
         this._setElementPosition(this.selectedElement, newX, newY);
@@ -194,6 +212,7 @@ export class TopologyCore {
     }
 
     if (this.isConnectionMode && this.connectionSource) {
+      this._hideTooltip();
       const svgPos = this._getSvgCoordinates(e);
       this._drawTempConnection(
         this.connectionSource.x,
@@ -201,6 +220,42 @@ export class TopologyCore {
         svgPos.x,
         svgPos.y
       );
+      return;
+    }
+
+    this._updateTooltip(e);
+  }
+
+  _updateTooltip(e) {
+    if (!this.tooltip) return;
+    const target = e.target.closest("[data-tooltip]");
+    if (!target || !target.dataset.tooltip) {
+      this._hideTooltip();
+      return;
+    }
+
+    this.tooltip.textContent = target.dataset.tooltip;
+    this.tooltip.classList.add("visible");
+
+    // 按鼠标在画布内的象限决定浮窗展开方向，使其始终朝画布内侧显示
+    const TOOLTIP_MARGIN = 12;
+    const canvasRect = this.container.getBoundingClientRect();
+    const onLeftHalf = e.clientX - canvasRect.left < canvasRect.width / 2;
+    const onTopHalf = e.clientY - canvasRect.top < canvasRect.height / 2;
+    const left = onLeftHalf
+      ? e.clientX + TOOLTIP_MARGIN
+      : e.clientX - this.tooltip.offsetWidth - TOOLTIP_MARGIN;
+    const top = onTopHalf
+      ? e.clientY + TOOLTIP_MARGIN
+      : e.clientY - this.tooltip.offsetHeight - TOOLTIP_MARGIN;
+
+    this.tooltip.style.left = `${Math.max(8, Math.min(left, window.innerWidth - this.tooltip.offsetWidth - 8))}px`;
+    this.tooltip.style.top = `${Math.max(8, Math.min(top, window.innerHeight - this.tooltip.offsetHeight - 8))}px`;
+  }
+
+  _hideTooltip() {
+    if (this.tooltip) {
+      this.tooltip.classList.remove("visible");
     }
   }
 
@@ -228,6 +283,7 @@ export class TopologyCore {
 
   _handleWheel(e) {
     e.preventDefault();
+    this._hideTooltip();
     const delta = e.deltaY > 0 ? 1.1 : 0.9;
     const vb = this.svg.viewBox.baseVal;
     const mousePos = this._getSvgCoordinates(e);

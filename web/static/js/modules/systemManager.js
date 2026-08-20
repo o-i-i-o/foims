@@ -358,7 +358,7 @@ export async function loadNotificationSettings() {
   try {
     // 加载用户列表
     const usersResult = await apiGet("/api/users");
-    const settingsResult = await apiGet("/api/system/smtp/settings");
+    const settingsResult = await apiGet("/api/system/notification/settings");
 
     const usersList = elementCache.get("notification-users-list");
     if (!usersList) return;
@@ -421,7 +421,7 @@ export async function saveNotificationSettings() {
     );
     const userIds = Array.from(checkboxes).map((cb) => cb.value);
 
-    const result = await apiPut("/api/system/smtp/settings", {
+    const result = await apiPut("/api/system/notification/settings", {
       email_recipients: userIds
     });
 
@@ -491,14 +491,11 @@ export async function downloadTemplate() {
   }
 }
 
-// 导入CSV数据
-export async function importCsvData() {
-  const modeSelect = elementCache.get("csv-import-mode");
-  const mode = modeSelect ? modeSelect.value : "skip";
-
+// 导入 JSON 模块数据（单模块 JSON 或多模块 ZIP）
+export async function importJsonData() {
   const fileInput = document.createElement("input");
   fileInput.type = "file";
-  fileInput.accept = ".zip,.csv";
+  fileInput.accept = ".zip,.json";
   fileInput.click();
 
   fileInput.addEventListener("change", async (e) => {
@@ -511,7 +508,7 @@ export async function importCsvData() {
     try {
       showToast(t("import_export.importing"), "info");
 
-      const result = await apiRequest(`/api/system/import-export/import/csv?mode=${mode}`, {
+      const result = await apiRequest("/api/system/import-export/import/json", {
         method: "POST",
         body: formData
       });
@@ -523,7 +520,10 @@ export async function importCsvData() {
           const contentDiv = elementCache.get("import-result-content");
           if (contentDiv) {
             contentDiv.innerHTML = results
-              .map((r) => `<div class="import-result-item">${escapeHtml(r)}</div>`)
+              .map(
+                (r) =>
+                  `<div class="import-result-item">${escapeHtml(r.module || "")}: ${escapeHtml(String(r.rows ?? 0))} ${t("import_export.rows_unit")}</div>`
+              )
               .join("");
             await openModal("import-result-modal");
           }
@@ -533,20 +533,20 @@ export async function importCsvData() {
         showToast(t("import_export.import_failed") + ": " + result.message, "error");
       }
     } catch (error) {
-      console.error("导入CSV数据失败:", error);
+      console.error("导入JSON数据失败:", error);
       showToast(t("import_export.import_failed") + ": " + error.message, "error");
     }
   });
 }
 
-// 导出CSV数据
-export async function exportCsvData() {
+// 按模块导出 JSON 数据（all 为 ZIP，单模块为 JSON 文件）
+export async function exportJsonData() {
   try {
-    const exportType = elementCache.getValue("csv-export-type");
-    const result = await apiRequest(`/api/system/import-export/export/csv?type=${exportType}`);
+    const exportType = elementCache.getValue("json-export-type") || "all";
+    const result = await apiRequest(`/api/system/import-export/export/json?type=${encodeURIComponent(exportType)}`);
 
     if (!result.success) {
-      showToast(t("import_export.export_csv_failed") + ": " + result.message, "error");
+      showToast(t("import_export.export_json_failed") + ": " + result.message, "error");
       return;
     }
 
@@ -554,19 +554,20 @@ export async function exportCsvData() {
       const url = window.URL.createObjectURL(result.data);
       const a = document.createElement("a");
       a.href = url;
-      // 如果 ApiClient 没有解析出文件名，则使用默认生成的文件名
       a.download =
         result.filename && result.filename !== "download"
           ? result.filename
-          : `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`;
+          : `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.${
+              exportType === "all" ? "zip" : "json"
+            }`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     }
   } catch (error) {
-    console.error("导出CSV数据失败:", error);
-    showToast(t("import_export.export_csv_failed") + ": " + error.message, "error");
+    console.error("导出JSON数据失败:", error);
+    showToast(t("import_export.export_json_failed") + ": " + error.message, "error");
   }
 }
 

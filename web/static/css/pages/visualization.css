@@ -180,8 +180,9 @@
   dominant-baseline: middle;
 }
 
+/* 可视化浮窗：fixed 定位配合鼠标视口坐标，按画布四象限翻转显示 */
 .tooltip {
-  position: absolute;
+  position: fixed;
   background-color: rgb(0 0 0 / 0.8);
   color: var(--color-bg-white);
   padding: 8px 12px;

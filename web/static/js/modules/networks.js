@@ -21,32 +21,32 @@ import { openModal, closeModal } from "../utils/modal.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 
-import { loadNetworkTypeOptions } from "../utils/resources.js";
+import { loadNetworkRegionOptions } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
 
-let currentNetworkTypePage = 1;
-const NETWORK_TYPE_PAGE_SIZE = 20;
-let currentNetworkTypePageSize = NETWORK_TYPE_PAGE_SIZE;
+let currentNetworkRegionPage = 1;
+const NETWORK_REGION_PAGE_SIZE = 20;
+let currentNetworkRegionPageSize = NETWORK_REGION_PAGE_SIZE;
 const networkRegionTableState = createSortState("created_at", "desc");
 
 // 加载网络区域数据并填充表格
-export async function loadNetworkTypesData(
-  page = currentNetworkTypePage,
+export async function loadNetworkRegionsData(
+  page = currentNetworkRegionPage,
   sortBy = null,
   sortOrder = null
 ) {
-  currentNetworkTypePage = page;
+  currentNetworkRegionPage = page;
   if (sortBy) networkRegionTableState.setSort(sortBy, sortOrder);
   try {
     const result = await apiGet(
-      `/api/resources/network-regions?page=${page}&page_size=${currentNetworkTypePageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`
+      `/api/resources/network-regions?page=${page}&page_size=${currentNetworkRegionPageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`
     );
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
-    const startIndex = (page - 1) * currentNetworkTypePageSize;
+    const startIndex = (page - 1) * currentNetworkRegionPageSize;
 
-    renderTable("#network-types-table", {
+    renderTable("#network-regions-table", {
       data: items,
       columns: [
         {
@@ -83,18 +83,18 @@ export async function loadNetworkTypesData(
     });
 
     if (data.total !== undefined) {
-      appendPaginationToTable("#network-types-table", data, loadNetworkTypesData, {
-        pageSize: currentNetworkTypePageSize,
+      appendPaginationToTable("#network-regions-table", data, loadNetworkRegionsData, {
+        pageSize: currentNetworkRegionPageSize,
         onPageSizeChange: (size) => {
-          currentNetworkTypePageSize = size;
-          loadNetworkTypesData(1);
+          currentNetworkRegionPageSize = size;
+          loadNetworkRegionsData(1);
         }
       });
     }
-    updateSortIcons("network-types-table", networkRegionTableState);
+    updateSortIcons("network-regions-table", networkRegionTableState);
   } catch (error) {
     console.error("加载网络区域数据失败:", error);
-    renderTable("#network-types-table", {
+    renderTable("#network-regions-table", {
       data: [],
       columns: [],
       emptyMessage: t("common.load_failed_retry")
@@ -212,7 +212,7 @@ export function initNetworksFilters() {
   });
 
   // 网络区域与网段两张表的排序事件（resourceTabs 每模块仅初始化一次）
-  initSortEvents("network-types-table", networkRegionTableState, loadNetworkTypesData);
+  initSortEvents("network-regions-table", networkRegionTableState, loadNetworkRegionsData);
   initSortEvents("networks-table", networkTableState, (page, sortBy, sortOrder) =>
     loadNetworksData(page, currentFilters, sortBy, sortOrder)
   );
@@ -364,16 +364,26 @@ export async function showNetworkUsage(id) {
     const ipv4Ips = allNetworkIps.filter((ip) => !isIPv6(ip));
     const ipv6Ips = allNetworkIps.filter((ip) => isIPv6(ip));
 
-    let tabsHtml = "";
-    let contentHtml = "";
+    const modal = await openModal("subnet-usage-modal");
+    if (!modal) {
+      return;
+    }
 
+    // 网段名置于 IPv4/IPv6 切换按钮行左侧，仅用于标识当前查看的网段
+    const nameEl = modal.querySelector("#subnet-usage-network-name");
+    if (nameEl) {
+      nameEl.textContent = network.name;
+    }
+
+    // 单栈网段没有切换意义，隐藏按钮组仅保留网段名
+    const tabButtonsWrap = modal.querySelector(".usage-tab-buttons");
+    if (tabButtonsWrap) {
+      tabButtonsWrap.classList.toggle("hidden", !(hasIPv4 && hasIPv6));
+    }
+
+    const contentsEl = modal.querySelector("#subnet-usage-contents");
+    let contentHtml = "";
     if (hasIPv4 && hasIPv6) {
-      tabsHtml = `
-        <div class="usage-tabs">
-          <button class="usage-tab-btn active" data-tab="ipv4">IPv4</button>
-          <button class="usage-tab-btn" data-tab="ipv6">IPv6</button>
-        </div>
-      `;
       contentHtml = `
         <div class="usage-tab-content active" id="ipv4-content">
           ${buildIPv4Content(network, ipv4Ips, id)}
@@ -403,57 +413,16 @@ export async function showNetworkUsage(id) {
         </div>
       `;
     }
+    contentsEl.innerHTML = contentHtml;
 
-    const usageHtml = `
-      <div class="network-usage-container">
-        <h4>${escapeHtml(network.name)} - ${t("network.usage")}</h4>
-        ${tabsHtml}
-        ${contentHtml}
-      </div>
-    `;
-
-    const modalContainer = document.createElement("div");
-    modalContainer.className = "modal active";
-    modalContainer.id = "network-usage-modal";
-    modalContainer.setAttribute("role", "dialog");
-    modalContainer.setAttribute("aria-modal", "true");
-    modalContainer.innerHTML = `
-      <div class="modal-content modal-lg">
-        <header class="modal-header">
-          <h3 class="modal-title">${t("network.usage")}</h3>
-          <button type="button" class="close" data-modal-id="network-usage-modal" aria-label="Close">&times;</button>
-        </header>
-        <div class="modal-body">
-          ${usageHtml}
-        </div>
-        <footer class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-modal-id="network-usage-modal">${t("common.close")}</button>
-        </footer>
-      </div>
-    `;
-
-    document.body.appendChild(modalContainer);
-    document.body.style.overflow = "hidden";
-
-    const cleanup = () => {
-      modalContainer.remove();
-      document.body.style.overflow = "";
-    };
-
-    modalContainer.addEventListener("click", (e) => {
-      if (e.target === modalContainer || e.target.hasAttribute("data-modal-id")) {
-        cleanup();
-      }
-    });
-
-    const tabButtons = modalContainer.querySelectorAll(".usage-tab-btn");
+    const tabButtons = modal.querySelectorAll(".usage-tab-btn");
     tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         tabButtons.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
 
         const tabId = btn.dataset.tab;
-        const contents = modalContainer.querySelectorAll(".usage-tab-content");
+        const contents = modal.querySelectorAll(".usage-tab-content");
         contents.forEach((content) => {
           content.classList.remove("active");
           if (content.id === `${tabId}-content`) {
@@ -463,8 +432,8 @@ export async function showNetworkUsage(id) {
       });
     });
 
-    bindIPv4Events(modalContainer, network, ipv4Ips, id);
-    bindIPv6Events(modalContainer, network, ipv6Ips, id);
+    bindIPv4Events(modal, network, ipv4Ips, id);
+    bindIPv6Events(modal, network, ipv6Ips, id);
   } catch (error) {
     console.error("获取网段使用情况失败:", error);
     showToast(t("common.load_failed_retry"), "error");
@@ -496,20 +465,8 @@ function buildIPv4Content(network, networkIps, networkId) {
   return `
     <div class="usage-stats">
       <div class="stat-item">
-        <span class="stat-label">${t("network.ipv4_cidr")}:</span>
-        <span class="stat-value">${escapeHtml(cidr) || "-"}</span>
-      </div>
-      <div class="stat-item">
         <span class="stat-label">${t("network.region")}:</span>
         <span class="stat-value">${escapeHtml(network.network_region) || "-"}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">${t("network.ipv4_gateway")}:</span>
-        <span class="stat-value">${escapeHtml(network.ipv4_gateway) || "-"}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">${t("network.ipv4_dns")}:</span>
-        <span class="stat-value">${Array.isArray(network.ipv4_dns) ? network.ipv4_dns.map((d) => escapeHtml(d)).join(", ") : escapeHtml(network.ipv4_dns) || "-"}</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">${t("network.total_ips")}:</span>
@@ -625,32 +582,6 @@ function buildIPv6Content(network, networkIps, networkId) {
   const totalAssigned = networkIps.length;
 
   return `
-    <div class="ipv6-info-section">
-      <h5>${t("network.ipv6_info")}</h5>
-      <div class="ipv6-info-grid">
-        <div class="ipv6-info-item">
-          <span class="info-label">${t("network.ipv6_cidr")}</span>
-          <span class="info-value ipv6-address">${escapeHtml(network.ipv6_cidr)}</span>
-        </div>
-        <div class="ipv6-info-item">
-          <span class="info-label">${t("network.ipv6_gateway")}</span>
-          <span class="info-value ipv6-address">${escapeHtml(network.ipv6_gateway) || "-"}</span>
-        </div>
-        <div class="ipv6-info-item">
-          <span class="info-label">DNS</span>
-          <span class="info-value ipv6-address">${Array.isArray(network.ipv6_dns) ? network.ipv6_dns.map((d) => escapeHtml(d)).join(", ") : escapeHtml(network.ipv6_dns) || "-"}</span>
-        </div>
-        <div class="ipv6-info-item">
-          <span class="info-label">${t("network.connection_status")}</span>
-          <span class="info-value">
-            <span class="connection-status ${totalAssigned > 0 ? "status-enabled" : "status-disabled"}">
-              ${totalAssigned > 0 ? t("network.enabled") : t("network.unused")}
-            </span>
-          </span>
-        </div>
-      </div>
-    </div>
-    
     <div class="ipv6-stats-section">
       <h5>${t("network.ipv6_stats")}</h5>
       <div class="ipv6-stats-grid">
@@ -927,11 +858,11 @@ export async function deleteNetwork(id) {
   await handleDelete(id, "/api/resources/networks", t("network.delete_success"), loadNetworksData);
 }
 // 编辑网络区域
-export async function editNetworkType(id) {
+export async function editNetworkRegion(id) {
   try {
     const result = await apiGet(`/api/resources/network-regions/${id}`);
     if (result.success) {
-      openNetworkTypeModal(result.data);
+      openNetworkRegionModal(result.data);
     } else {
       showToast(`${t("network.fetch_region_failed")}: ${result.message}`, "error");
     }
@@ -941,12 +872,12 @@ export async function editNetworkType(id) {
 }
 
 // 删除网络区域
-export async function deleteNetworkType(id) {
+export async function deleteNetworkRegion(id) {
   await handleDelete(
     id,
     "/api/resources/network-regions",
     t("network.region_delete_success"),
-    loadNetworkTypesData
+    loadNetworkRegionsData
   );
 }
 
@@ -1016,19 +947,19 @@ function clearCidrInputs(containerId) {
 }
 
 // ====== 提交网络区域表单 ======
-export async function submitNetworkTypeForm() {
-  const id = getElementValue("network-type-id");
-  const name = getElementValue("network-type-name");
-  const description = getElementValue("network-type-description");
-  const ipv4_cidrs = getCidrValues("network-type-ipv4-cidrs-list");
-  const ipv6_cidrs = getCidrValues("network-type-ipv6-cidrs-list");
+export async function submitNetworkRegionForm() {
+  const id = getElementValue("network-region-id");
+  const name = getElementValue("network-region-name");
+  const description = getElementValue("network-region-description");
+  const ipv4_cidrs = getCidrValues("network-region-ipv4-cidrs-list");
+  const ipv6_cidrs = getCidrValues("network-region-ipv6-cidrs-list");
 
   if (!name) {
     showToast(t("network.region_name_required"), "warning");
     return;
   }
 
-  const networkTypeData = {
+  const networkRegionData = {
     name,
     description: description || null,
     ipv4_cidrs,
@@ -1036,14 +967,14 @@ export async function submitNetworkTypeForm() {
   };
 
   const success = await handleFormSubmit({
-    formData: networkTypeData,
+    formData: networkRegionData,
     id,
     baseUrl: "/api/resources/network-regions",
     successMessage: t("network.region_save_success"),
-    modalId: "network-type-modal",
+    modalId: "network-region-modal",
     reloadFunction: () => {
-      loadNetworkTypesData();
-      loadNetworkTypeOptions();
+      loadNetworkRegionsData();
+      loadNetworkRegionOptions();
     }
   });
 
@@ -1054,7 +985,7 @@ export async function submitNetworkTypeForm() {
 export async function submitNetworkForm() {
   const id = getElementValue("network-id");
   const name = getElementValue("network-name");
-  const networkType = getElementValue("network-type");
+  const networkRegion = getElementValue("network-region");
   const ipv4_cidr = getElementValue("network-ipv4-cidr");
   const ipv6_cidr = getElementValue("network-ipv6-cidr");
   const ipv4_gateway = getElementValue("network-ipv4-gateway");
@@ -1068,7 +999,7 @@ export async function submitNetworkForm() {
     return;
   }
 
-  if (!networkType) {
+  if (!networkRegion) {
     showToast(t("network.region_required"), "warning");
     return;
   }
@@ -1099,7 +1030,7 @@ export async function submitNetworkForm() {
 
   const networkData = {
     name,
-    network_region_id: networkType,
+    network_region_id: networkRegion,
     ipv4_cidr: ipv4_cidr || null,
     ipv6_cidr: ipv6_cidr || null,
     ipv4_gateway: ipv4_gateway || null,
@@ -1122,41 +1053,41 @@ export async function submitNetworkForm() {
 }
 
 // ====== 网络区域管理模态框 ======
-export async function openNetworkTypeModal(networkType = null) {
-  await openModal("network-type-modal");
+export async function openNetworkRegionModal(networkRegion = null) {
+  await openModal("network-region-modal");
 
-  const title = elementCache.get("network-type-modal-title");
-  const form = elementCache.get("network-type-form");
+  const title = elementCache.get("network-region-modal-title");
+  const form = elementCache.get("network-region-form");
 
-  clearCidrInputs("network-type-ipv4-cidrs-list");
-  clearCidrInputs("network-type-ipv6-cidrs-list");
+  clearCidrInputs("network-region-ipv4-cidrs-list");
+  clearCidrInputs("network-region-ipv6-cidrs-list");
 
-  if (networkType) {
+  if (networkRegion) {
     title.textContent = t("network.edit_region");
-    elementCache.setValue("network-type-id", networkType.id);
-    elementCache.setValue("network-type-name", networkType.name);
-    elementCache.setValue("network-type-description", networkType.description || "");
+    elementCache.setValue("network-region-id", networkRegion.id);
+    elementCache.setValue("network-region-name", networkRegion.name);
+    elementCache.setValue("network-region-description", networkRegion.description || "");
 
-    const ipv4Cidrs = Array.isArray(networkType.ipv4_cidrs) ? networkType.ipv4_cidrs : [];
-    const ipv6Cidrs = Array.isArray(networkType.ipv6_cidrs) ? networkType.ipv6_cidrs : [];
+    const ipv4Cidrs = Array.isArray(networkRegion.ipv4_cidrs) ? networkRegion.ipv4_cidrs : [];
+    const ipv6Cidrs = Array.isArray(networkRegion.ipv6_cidrs) ? networkRegion.ipv6_cidrs : [];
 
     if (ipv4Cidrs.length > 0) {
-      ipv4Cidrs.forEach((cidr) => addCidrInputRow("network-type-ipv4-cidrs-list", "ipv4", cidr));
+      ipv4Cidrs.forEach((cidr) => addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4", cidr));
     } else {
-      addCidrInputRow("network-type-ipv4-cidrs-list", "ipv4");
+      addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4");
     }
 
     if (ipv6Cidrs.length > 0) {
-      ipv6Cidrs.forEach((cidr) => addCidrInputRow("network-type-ipv6-cidrs-list", "ipv6", cidr));
+      ipv6Cidrs.forEach((cidr) => addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6", cidr));
     } else {
-      addCidrInputRow("network-type-ipv6-cidrs-list", "ipv6");
+      addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6");
     }
   } else {
     title.textContent = t("network.add_region");
     if (form) form.reset();
-    elementCache.setValue("network-type-id", "");
-    addCidrInputRow("network-type-ipv4-cidrs-list", "ipv4");
-    addCidrInputRow("network-type-ipv6-cidrs-list", "ipv6");
+    elementCache.setValue("network-region-id", "");
+    addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4");
+    addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6");
   }
 }
 
@@ -1167,13 +1098,13 @@ export async function openNetworkModal(network = null) {
   const title = elementCache.get("network-modal-title");
   const form = elementCache.get("network-form");
 
-  await loadNetworkTypeOptions();
+  await loadNetworkRegionOptions();
 
   if (network) {
     title.textContent = t("network.edit_network");
     elementCache.setValue("network-id", network.id);
     elementCache.setValue("network-name", network.name);
-    elementCache.setValue("network-type", network.network_region_id);
+    elementCache.setValue("network-region", network.network_region_id);
     elementCache.setValue("network-ipv4-cidr", network.ipv4_cidr || "");
     elementCache.setValue("network-ipv6-cidr", network.ipv6_cidr || "");
     elementCache.setValue("network-ipv4-gateway", network.ipv4_gateway || "");

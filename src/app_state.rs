@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use crate::auth::utils::JwtUtils;
 use crate::config::Config;
-use crate::crypto::decrypt_password_async;
+use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::db::DbPool;
 use crate::error::{AppError, msg};
 use ipma_data_manager::{DataError, DataProvider, DataResult, DatabaseConfig};
@@ -66,5 +66,11 @@ impl DataProvider for AppState {
         decrypt_password_async(encrypted.to_string())
             .await
             .map_err(|e| DataError::Internal(msg("server.common.decrypt_failed").with("error", e)))
+    }
+
+    async fn encrypt_password(&self, plain: &str) -> DataResult<String> {
+        encrypt_password_async(plain.to_string())
+            .await
+            .map_err(|e| DataError::Internal(msg("server.common.encrypt_failed").with("error", e)))
     }
 }

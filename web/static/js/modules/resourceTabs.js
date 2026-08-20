@@ -15,7 +15,7 @@ const TAB_CONFIG = {
   "network-regions": {
     module: "networks",
     initFn: "initNetworksFilters",
-    loadFn: "loadNetworkTypesData"
+    loadFn: "loadNetworkRegionsData"
   },
   networks: { module: "networks", initFn: "initNetworksFilters", loadFn: "loadNetworksData" },
   cabinets: { module: "cabinet", initFn: "initCabinetSortEvents", loadFn: "loadCabinetsData" },

@@ -84,7 +84,7 @@ export async function fillSelect(selectId, url, opts = {}) {
 }
 
 /** 加载网络区域选项（无空值占位，空列表时提示先建区域）。 */
-export function loadNetworkTypeOptions(selectId = "network-type") {
+export function loadNetworkRegionOptions(selectId = "network-region") {
   return fillSelect(selectId, "/api/resources/network-regions?page_size=1000", {
     emptyKey: "network.add_region_first",
     errorLabel: "网络区域"

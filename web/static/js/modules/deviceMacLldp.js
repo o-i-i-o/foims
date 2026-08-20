@@ -3,58 +3,34 @@
 import { apiGet, apiPost } from "../utils/apiClient.js";
 
 import { elementCache } from "../utils/helpers.js";
-import { escapeHtml } from "../utils/ui.js";
-import { t } from "../utils/i18n.js";
+import { escapeHtml, showToast } from "../utils/ui.js";
+import { t, updatePageTranslations } from "../utils/i18n.js";
+import { fetchModalHtml } from "../utils/modalLoader.js";
+
+
+// 从独立模板文件创建一次性模态框（ARP / LLDP），创建后由调用方自行关闭
+async function createModalFromTemplate(modalId) {
+  const html = await fetchModalHtml(modalId);
+  if (!html) {
+    return null;
+  }
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html;
+  const modal = wrap.firstElementChild;
+  document.body.appendChild(modal);
+  modal.classList.add("active");
+  updatePageTranslations();
+  return modal;
+}
 
 // ==================== MAC 表函数 ====================
 
 async function viewArpTable(deviceId) {
-  const modal = document.createElement("div");
-  modal.className = "modal active";
-  modal.id = "arp-modal-" + Date.now();
-  modal.innerHTML = `
-    <div class="modal-content" style="max-width: 800px;">
-      <div class="modal-header">
-        <h3>${t("device.mac_table")} <span id="arp-device-name"></span></h3>
-        <span class="close arp-modal-close">&times;</span>
-      </div>
-      <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
-        <div id="arp-loading" style="text-align: center; padding: 40px;">
-          <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">${t("device.loading_mac_table")}</p>
-        </div>
-        <div id="arp-content" style="display: none;">
-          <div class="tab-container">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <div class="tab-buttons" style="display: flex; gap: 5px;">
-                <button class="tab-btn active" data-tab="ipv4">IPv4</button>
-                <button class="tab-btn" data-tab="ipv6">IPv6</button>
-              </div>
-              <button class="btn btn-sm btn-primary" id="sync-mac-btn">
-                <span>${t("device.sync_from_snmp")}</span>
-              </button>
-            </div>
-            <div class="tab-content active" id="ipv4-tab">
-              <div style="margin-bottom: 10px;">
-                <input type="text" id="ipv4-search" placeholder="${t("device.search_ip_mac")}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-              </div>
-              <div id="ipv4-table-container" style="max-height: 350px; overflow-y: auto;"></div>
-            </div>
-            <div class="tab-content" id="ipv6-tab">
-              <div style="margin-bottom: 10px;">
-                <input type="text" id="ipv6-search" placeholder="${t("device.search_ip_mac")}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-              </div>
-              <div id="ipv6-table-container" style="max-height: 350px; overflow-y: auto;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary arp-modal-close">${t("common.close")}</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+  const modal = await createModalFromTemplate("arp-modal");
+  if (!modal) {
+    showToast(t("common.load_failed"), "error");
+    return;
+  }
 
   const closeButtons = modal.querySelectorAll(".arp-modal-close");
   closeButtons.forEach((btn) => {
@@ -320,29 +296,11 @@ function filterEntries(entries, searchTerm) {
 // ==================== LLDP 函数 ====================
 
 async function viewLldpNeighbors(deviceId) {
-  const modal = document.createElement("div");
-  modal.className = "modal active";
-  modal.id = "lldp-modal-" + Date.now();
-  modal.innerHTML = `
-    <div class="modal-content" style="max-width: 900px;">
-      <div class="modal-header">
-        <h3>${t("device.lldp_neighbors")} <span id="lldp-device-name"></span></h3>
-        <span class="close lldp-modal-close">&times;</span>
-      </div>
-      <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
-        <div id="lldp-loading" style="text-align: center; padding: 40px;">
-          <div class="spinner"></div>
-          <p style="margin-top: 10px; color: #666;">${t("device.loading_lldp")}</p>
-        </div>
-        <div id="lldp-content" style="display: none;"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="sync-lldp-btn">${t("device.sync_from_snmp")}</button>
-        <button class="btn btn-secondary lldp-modal-close">${t("common.close")}</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+  const modal = await createModalFromTemplate("lldp-modal");
+  if (!modal) {
+    showToast(t("common.load_failed"), "error");
+    return;
+  }
 
   const closeButtons = modal.querySelectorAll(".lldp-modal-close");
   closeButtons.forEach((btn) => {

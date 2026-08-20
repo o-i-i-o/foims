@@ -13,7 +13,7 @@ import { closeModal } from "../utils/modal.js";
 // ==========================================
 
 const EDIT_FUNCTIONS = {
-  "network-types-table": { module: "networks", fn: "editNetworkType" },
+  "network-regions-table": { module: "networks", fn: "editNetworkRegion" },
   "networks-table": { module: "networks", fn: "editNetwork" },
   "rooms-table": { module: "room", fn: "editRoom" },
   "cabinets-table": { module: "cabinet", fn: "editCabinet" },
@@ -23,7 +23,7 @@ const EDIT_FUNCTIONS = {
 };
 
 const DELETE_FUNCTIONS = {
-  "network-types-table": { module: "networks", fn: "deleteNetworkType" },
+  "network-regions-table": { module: "networks", fn: "deleteNetworkRegion" },
   "networks-table": { module: "networks", fn: "deleteNetwork" },
   "rooms-table": { module: "room", fn: "deleteRoom" },
   "cabinets-table": { module: "cabinet", fn: "deleteCabinet" },
@@ -99,11 +99,11 @@ const BUTTON_EVENT_BINDINGS = [
     }
   },
   {
-    id: "import-csv-btn",
+    id: "import-json-btn",
     event: "click",
     handler: () => {
-      const { importCsvData } = getModule("systemManager");
-      importCsvData();
+      const { importJsonData } = getModule("systemManager");
+      importJsonData();
     }
   },
   {
@@ -115,11 +115,11 @@ const BUTTON_EVENT_BINDINGS = [
     }
   },
   {
-    id: "export-csv-btn",
+    id: "export-json-btn",
     event: "click",
     handler: () => {
-      const { exportCsvData } = getModule("systemManager");
-      exportCsvData();
+      const { exportJsonData } = getModule("systemManager");
+      exportJsonData();
     }
   },
   {

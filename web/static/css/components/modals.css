@@ -358,3 +358,68 @@
   gap: var(--space-sm);
   margin-top: var(--space-sm);
 }
+
+/* ==================== 宽幅与滚动辅助（MAC/LLDP 等数据表模态框） ==================== */
+
+.modal-content.modal-xl {
+  max-width: 900px;
+}
+
+.modal-body.modal-body-scroll {
+  max-height: 31.25rem;
+  overflow-y: auto;
+}
+
+.modal-loading {
+  text-align: center;
+  padding: 2.5rem 1rem;
+}
+
+.modal-loading .loading-text {
+  margin-top: 0.625rem;
+  color: var(--color-text-muted);
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 0.25rem solid var(--color-border-light, #ddd);
+  border-top-color: var(--color-primary, #3b82f6);
+  border-radius: 50%;
+  animation: modalSpinnerSpin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes modalSpinnerSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 模态框内工具行：左侧 tab 切换 + 右侧操作按钮 */
+.tab-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.tab-toolbar .tab-buttons {
+  display: flex;
+  gap: 0.3125rem;
+}
+
+.tab-search {
+  width: 100%;
+  padding: 0.5rem;
+  border: 0.0625rem solid var(--color-border-light, #ccc);
+  border-radius: var(--radius-sm, 4px);
+  margin-bottom: 0.625rem;
+}
+
+.tab-table-container {
+  max-height: 21.875rem;
+  overflow-y: auto;
+}

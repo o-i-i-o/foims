@@ -75,23 +75,22 @@ use crate::system::scheduled_task::{
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
 
-async fn data_export_csv(
+async fn data_export_json(
     _admin: crate::auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::export_csv(state.as_ref().clone(), type_param)
+    ipma_data_manager::export_json(state.as_ref().clone(), type_param)
         .await
         .map_err(AppError::from)
 }
 
-async fn data_import_csv(
+async fn data_import_json(
     _admin: crate::auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
-    query: Query<HashMap<String, String>>,
     payload: Multipart,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::import_csv(state.as_ref().clone(), payload, query)
+    ipma_data_manager::import_json(state.as_ref().clone(), payload)
         .await
         .map_err(AppError::from)
 }
@@ -543,10 +542,13 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         // 导入导出功能
         .route(
-            "/api/system/import-export/import/csv",
-            post(data_import_csv).layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)),
+            "/api/system/import-export/import/json",
+            post(data_import_json).layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)),
         )
-        .route("/api/system/import-export/export/csv", get(data_export_csv))
+        .route(
+            "/api/system/import-export/export/json",
+            get(data_export_json),
+        )
         .route(
             "/api/system/import-export/export/database",
             get(data_export_database),

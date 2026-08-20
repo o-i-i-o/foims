@@ -1,36 +1,36 @@
-<template id="network-type-modal-template">
-<div id="network-type-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="network-type-modal-title">
+<template id="network-region-modal-template">
+<div id="network-region-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="network-region-modal-title">
   <div class="modal-content">
     <header class="modal-header">
-      <h3 class="modal-title" id="network-type-modal-title" data-i18n="network.add_region">Add Network Region</h3>
-      <button type="button" class="close" data-modal-id="network-type-modal" aria-label="Close">&times;</button>
+      <h3 class="modal-title" id="network-region-modal-title" data-i18n="network.add_region">Add Network Region</h3>
+      <button type="button" class="close" data-modal-id="network-region-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
-      <form id="network-type-form">
-        <input type="hidden" id="network-type-id">
+      <form id="network-region-form">
+        <input type="hidden" id="network-region-id">
         <div class="form-group">
-          <label for="network-type-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
-          <input type="text" id="network-type-name" name="name" autocomplete="off" required aria-required="true">
+          <label for="network-region-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
+          <input type="text" id="network-region-name" name="name" autocomplete="off" required aria-required="true">
         </div>
         <div class="form-row">
           <div class="form-group">
             <label data-i18n="network.ipv4_cidrs">IPv4 CIDRs</label>
-            <div id="network-type-ipv4-cidrs-list" class="cidr-input-list"></div>
+            <div id="network-region-ipv4-cidrs-list" class="cidr-input-list"></div>
           </div>
           <div class="form-group">
             <label data-i18n="network.ipv6_cidrs">IPv6 CIDRs</label>
-            <div id="network-type-ipv6-cidrs-list" class="cidr-input-list"></div>
+            <div id="network-region-ipv6-cidrs-list" class="cidr-input-list"></div>
           </div>
         </div>
         <div class="form-group">
-          <label for="network-type-description" data-i18n="common.description">Description</label>
-          <textarea id="network-type-description" name="description" rows="3" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+          <label for="network-region-description" data-i18n="common.description">Description</label>
+          <textarea id="network-region-description" name="description" rows="3" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
         </div>
       </form>
     </div>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" data-modal-id="network-type-modal" data-i18n="common.cancel">Cancel</button>
-      <button type="submit" form="network-type-form" class="btn btn-primary" data-i18n="common.save">Save</button>
+      <button type="button" class="btn btn-secondary" data-modal-id="network-region-modal" data-i18n="common.cancel">Cancel</button>
+      <button type="submit" form="network-region-form" class="btn btn-primary" data-i18n="common.save">Save</button>
     </footer>
   </div>
 </div>

@@ -57,13 +57,19 @@ function hideTooltip() {
   }
 }
 
+function isVisualizationTarget(target) {
+  // 可视化画布（工位/机柜/拓扑 SVG）自带跟随鼠标的纵向浮窗，
+  // 全局横向浮窗须让位，避免悬浮时同时出现两个浮窗
+  return Boolean(target.closest(".visualization-svg"));
+}
+
 /**
  * 初始化全局 tooltip（应用启动时调用一次）
  */
 export function initTooltip() {
   document.addEventListener("mouseover", (e) => {
     const target = e.target.closest("[data-tooltip]");
-    if (target) {
+    if (target && !isVisualizationTarget(target)) {
       if (target !== currentTarget) {
         currentTarget = target;
         showTooltip(target);
@@ -75,7 +81,7 @@ export function initTooltip() {
 
   document.addEventListener("focusin", (e) => {
     const target = e.target.closest("[data-tooltip]");
-    if (target) {
+    if (target && !isVisualizationTarget(target)) {
       currentTarget = target;
       showTooltip(target);
     }

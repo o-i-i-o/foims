@@ -1,5 +1,6 @@
 import { TopologyDataManager } from "./TopologyDataManager.js";
-import { t } from "../../utils/i18n.js";
+import { t, updatePageTranslations } from "../../utils/i18n.js";
+import { fetchModalHtml } from "../../utils/modalLoader.js";
 
 export class TopologyModal {
   constructor() {
@@ -18,11 +19,21 @@ export class TopologyModal {
     this.currentDeviceName = deviceName || deviceId;
     this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.activePanel = "ports";
-    this._render();
-    this._loadData();
+    // 先完成模板渲染再拉取面板数据，保证 _loadPanelData 能拿到容器节点
+    this._render().then(() => this._loadData());
   }
 
   close() {
+    this._removeDom();
+    this.currentDeviceId = null;
+  }
+
+  isOpen() {
+    return this.currentDeviceId !== null;
+  }
+
+  /** 仅移除浮窗 DOM；_render 重建时不能走 close()，否则会清空 currentDeviceId 导致面板数据不加载 */
+  _removeDom() {
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
@@ -31,42 +42,26 @@ export class TopologyModal {
       this.modal.remove();
       this.modal = null;
     }
-    this.currentDeviceId = null;
   }
 
-  isOpen() {
-    return this.currentDeviceId !== null;
-  }
+  // 模态框结构位于 modals/visualization/topology-detail-modal.html
+  async _render() {
+    this._removeDom();
 
-  _render() {
-    this.close();
+    const html = await fetchModalHtml("topology-detail-modal");
+    if (!html) {
+      return;
+    }
 
     this.overlay = document.createElement("div");
     this.overlay.className = "topology-detail-overlay";
     this.overlay.addEventListener("click", () => this.close());
 
-    this.modal = document.createElement("div");
-    this.modal.className = "topology-detail-modal";
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    this.modal = wrap.firstElementChild;
 
-    this.modal.innerHTML = `
-      <div class="topology-detail-header">
-        <h3>${this._escapeHtml(this.currentDeviceName)}</h3>
-        <button class="topology-detail-close" aria-label="Close">&times;</button>
-      </div>
-      <div class="topology-detail-tabs">
-        <button class="toggle-ports active" data-panel="ports">${t("visualization.show_ports")}</button>
-        <button class="toggle-macs" data-panel="macs">${t("visualization.show_macs")}</button>
-        <button class="toggle-lldp" data-panel="lldp">${t("visualization.show_lldp")}</button>
-      </div>
-      <div class="topology-detail-body">
-        <div class="topology-panel ports-panel"></div>
-        <div class="topology-panel macs-panel" style="display:none"></div>
-        <div class="topology-panel lldp-panel" style="display:none"></div>
-      </div>
-      <div class="topology-detail-footer">
-        <button class="btn btn-danger btn-sm topology-remove-btn">${t("visualization.remove_from_topology")}</button>
-      </div>
-    `;
+    this.modal.querySelector("#topology-detail-title").textContent = this.currentDeviceName;
 
     this.modal
       .querySelector(".topology-detail-close")
@@ -85,6 +80,7 @@ export class TopologyModal {
 
     document.body.appendChild(this.overlay);
     document.body.appendChild(this.modal);
+    updatePageTranslations();
   }
 
   _togglePanel(panel) {

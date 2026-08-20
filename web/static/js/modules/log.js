@@ -17,6 +17,7 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
 import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
+import { openModal } from "../utils/modal.js";
 
 const logSortStates = {
   operation: createSortState("created_at", "desc"),
@@ -564,78 +565,44 @@ function initLogSortEvents() {
   );
 }
 
-// 显示日志详情弹窗
-function showLogDetails(log) {
+// 显示日志详情弹窗（模板位于 modals/log/log-details-modal.html）
+async function showLogDetails(log) {
   const operationTypeText = getOperationTypeText(log.operation_type);
   const resourceTypeText = getResourceTypeText(log.resource_type);
   const resultText = log.result ? t("common.success") : t("common.failed");
 
-  let detailsHtml = "";
-  if (log.details) {
-    try {
-      const details = typeof log.details === "string" ? JSON.parse(log.details) : log.details;
-      detailsHtml = `<pre class="log-details-json">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
-    } catch (e) {
-      detailsHtml = `<p>${escapeHtml(String(log.details))}</p>`;
-    }
-  } else {
-    detailsHtml = `<p class="text-muted">${t("logs.no_detail")}</p>`;
+  const modal = await openModal("log-details-modal");
+  if (!modal) return;
+
+  const setText = (selector, text) => {
+    const el = modal.querySelector(selector);
+    if (el) el.textContent = text;
+  };
+
+  setText("#log-detail-time", new Date(log.created_at).toLocaleString());
+  setText("#log-detail-user", log.username || "-");
+  setText("#log-detail-type", operationTypeText);
+  setText("#log-detail-resource-type", resourceTypeText || "-");
+  setText("#log-detail-resource-id", log.resource_id ? String(log.resource_id) : "-");
+  setText("#log-detail-ip", log.ip_address || "-");
+
+  const resultEl = modal.querySelector("#log-detail-result");
+  if (resultEl) {
+    resultEl.innerHTML = `<span class="status-badge ${log.result ? "status-active" : "status-inactive"}">${resultText}</span>`;
   }
 
-  const modalHtml = `
-    <div id="log-details-modal" class="modal modal-flex">
-      <div class="modal-content modal-md">
-        <div class="modal-header">
-          <h3 class="modal-title">${t("logs.detail_title")}</h3>
-          <span class="close" data-action="close-modal">&times;</span>
-        </div>
-        <div class="modal-body">
-          <div class="log-detail-row">
-            <label>${t("logs.operation_time")}:</label>
-            <span>${new Date(log.created_at).toLocaleString()}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.operator")}:</label>
-            <span>${escapeHtml(log.username || "-")}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.operation_type")}:</label>
-            <span>${escapeHtml(operationTypeText)}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.resource_type")}:</label>
-            <span>${escapeHtml(resourceTypeText || "-")}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.resource_id")}:</label>
-            <span>${escapeHtml(String(log.resource_id || "-"))}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.result")}:</label>
-            <span class="status-badge ${log.result ? "status-active" : "status-inactive"}">${resultText}</span>
-          </div>
-          <div class="log-detail-row">
-            <label>${t("logs.ip_address")}:</label>
-            <span>${escapeHtml(log.ip_address || "-")}</span>
-          </div>
-          <div class="log-detail-section">
-            <label>${t("logs.details")}:</label>
-            ${detailsHtml}
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-action="close-modal">${t("common.close")}</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.insertAdjacentHTML("beforeend", modalHtml);
-
-  const modal = document.getElementById("log-details-modal");
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal || e.target.dataset.action === "close-modal") {
-      modal.remove();
+  const detailsEl = modal.querySelector("#log-detail-details");
+  if (detailsEl) {
+    if (log.details) {
+      try {
+        const details = typeof log.details === "string" ? JSON.parse(log.details) : log.details;
+        detailsEl.innerHTML = `<pre class="log-details-json">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
+      } catch (e) {
+        detailsEl.innerHTML = `<p>${escapeHtml(String(log.details))}</p>`;
+      }
+    } else {
+      detailsEl.innerHTML = `<p class="text-muted">${t("logs.no_detail")}</p>`;
     }
-  });
+  }
 }
+

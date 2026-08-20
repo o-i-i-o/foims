@@ -6,7 +6,7 @@
 
 // ES模块导入
 import { apiGet, apiPost, refreshToken } from "./utils/apiClient.js";
-import { closeModal, openModal } from "./utils/modal.js";
+import { closeModal, openModal, loadModal } from "./utils/modal.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n, changeLanguage } from "./utils/i18n.js";
 import { hasSession, clearSession } from "./utils/sessionManager.js";
@@ -72,11 +72,11 @@ class LoginManager {
       twoFactorSubmitBtn: document.getElementById("two-factor-submit-btn"),
       backToLoginBtn: document.getElementById("back-to-login-btn"),
 
-      // Forgot Password
+      // Forgot Password（模态框模板位于 modals/auth/，init 时加载后再取元素）
       forgotPasswordLink: document.getElementById("forgot-password-link"),
-      forgotPasswordForm: document.getElementById("forgot-password-form"),
-      forgotPasswordError: document.getElementById("forgot-password-error"),
-      forgotPasswordSuccess: document.getElementById("forgot-password-success")
+      forgotPasswordForm: null,
+      forgotPasswordError: null,
+      forgotPasswordSuccess: null
     };
 
     // 绑定方法上下文
@@ -124,12 +124,17 @@ class LoginManager {
     // 绑定返回按钮事件
     this.dom.backToLoginBtn.addEventListener("click", this.resetToInitState);
 
-    // 绑定忘记密码事件
+    // 绑定忘记密码事件（先加载独立模板模态框，再缓存其内部元素）
+    await loadModal("forgot-password-modal");
+    this.dom.forgotPasswordForm = document.getElementById("forgot-password-form");
+    this.dom.forgotPasswordError = document.getElementById("forgot-password-error");
+    this.dom.forgotPasswordSuccess = document.getElementById("forgot-password-success");
+
     this.dom.forgotPasswordLink.addEventListener("click", (e) => {
       e.preventDefault();
       openModal("forgot-password-modal");
     });
-    this.dom.forgotPasswordForm.addEventListener("submit", this.handleForgotPassword);
+    this.dom.forgotPasswordForm?.addEventListener("submit", this.handleForgotPassword);
 
     // 初始化表单验证规则
     this.updateFormValidation();
@@ -526,6 +531,9 @@ class LoginManager {
   async handleForgotPassword(e) {
     e.preventDefault();
     const { forgotPasswordError, forgotPasswordSuccess } = this.dom;
+    if (!forgotPasswordError || !forgotPasswordSuccess) {
+      return;
+    }
 
     forgotPasswordError.textContent = "";
     forgotPasswordError.classList.remove("show");

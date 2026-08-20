@@ -1,0 +1,21 @@
+<template id="lldp-modal-template">
+<div id="lldp-modal" class="modal">
+  <div class="modal-content modal-xl">
+    <header class="modal-header">
+      <h3 class="modal-title"><span data-i18n="device.lldp_neighbors">LLDP Neighbors</span> <span id="lldp-device-name"></span></h3>
+      <button type="button" class="close lldp-modal-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body modal-body-scroll">
+      <div id="lldp-loading" class="modal-loading">
+        <div class="spinner"></div>
+        <p class="loading-text" data-i18n="device.loading_lldp">Loading LLDP</p>
+      </div>
+      <div id="lldp-content" style="display: none;"></div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-primary" id="sync-lldp-btn" data-i18n="device.sync_from_snmp">Sync from SNMP</button>
+      <button type="button" class="btn btn-secondary lldp-modal-close" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

@@ -1,0 +1,47 @@
+<template id="log-details-modal-template">
+<div id="log-details-modal" class="modal modal-flex">
+  <div class="modal-content modal-md">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="logs.detail_title">Log Details</h3>
+      <span class="close" data-modal-id="log-details-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <div class="log-detail-row">
+        <label data-i18n="logs.operation_time">Time</label>
+        <span id="log-detail-time"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.operator">Operator</label>
+        <span id="log-detail-user"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.operation_type">Type</label>
+        <span id="log-detail-type"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.resource_type">Resource Type</label>
+        <span id="log-detail-resource-type"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.resource_id">Resource ID</label>
+        <span id="log-detail-resource-id"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.result">Result</label>
+        <span id="log-detail-result"></span>
+      </div>
+      <div class="log-detail-row">
+        <label data-i18n="logs.ip_address">IP Address</label>
+        <span id="log-detail-ip"></span>
+      </div>
+      <div class="log-detail-section">
+        <label data-i18n="logs.details">Details</label>
+        <div id="log-detail-details"></div>
+      </div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="log-details-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

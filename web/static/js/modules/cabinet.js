@@ -12,7 +12,8 @@ import {
   DEFAULT_PAGE_SIZE,
   createSortState,
   updateSortIcons,
-  initSortEvents
+  initSortEvents,
+  openSimpleListModal
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -313,33 +314,22 @@ export async function openCabinetPositionsListModal(cabinetId) {
       return;
     }
     const cabinet = result.data;
-    await openModal("cabinet-positions-list-modal");
-
-    const titleEl = document.getElementById("cabinet-positions-list-modal-title");
-    const tbody = document.getElementById("cabinet-positions-list-tbody");
-
-    if (titleEl) titleEl.textContent = `${cabinet.name} - ${t("cabinet.positions_list")}`;
-
     const positions = cabinet.positions || [];
-    if (tbody) {
-      if (positions.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t("common.no_data")}</td></tr>`;
-      } else {
-        tbody.innerHTML = positions
-          .map(
-            (pos, idx) => `
-          <tr>
-            <td class="index-column">${idx + 1}</td>
-            <td>${escapeHtml(pos.name || "")}</td>
-            <td>${pos.start_u ?? "-"}</td>
-            <td>${pos.end_u ?? "-"}</td>
-            <td>${escapeHtml(pos.description || "-")}</td>
-          </tr>
-        `
-          )
-          .join("");
-      }
-    }
+    await openSimpleListModal({
+      title: `${cabinet.name} - ${t("cabinet.positions_list")}`,
+      columns: [
+        { label: t("common.name") },
+        { label: t("cabinet_position.start_u") },
+        { label: t("cabinet_position.end_u") },
+        { label: t("common.description") }
+      ],
+      rows: positions.map((pos) => [
+        escapeHtml(pos.name || "-"),
+        pos.start_u ?? "-",
+        pos.end_u ?? "-",
+        escapeHtml(pos.description || "-")
+      ])
+    });
   } catch (error) {
     handleError(error, t("cabinet.load_failed"));
   }

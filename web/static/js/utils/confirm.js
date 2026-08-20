@@ -1,49 +1,42 @@
 import { t } from "./i18n.js";
+import { loadModal } from "./modalLoader.js";
 
 let confirmResolve = null;
 let confirmModal = null;
+let bound = false;
 
-function createConfirmModal() {
-  if (confirmModal) return confirmModal;
+// 模态框 HTML 位于 modals/common/confirm-modal.html，首次调用时懒加载
+async function ensureConfirmModal() {
+  if (confirmModal && confirmModal.isConnected) {
+    return confirmModal;
+  }
 
-  confirmModal = document.createElement("div");
-  confirmModal.id = "confirm-modal";
-  confirmModal.className = "modal";
-  confirmModal.innerHTML = `
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3 class="modal-title">${t("common.confirm")}</h3>
-                <button class="modal-close" data-modal-id="confirm-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="confirm-message"></p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" id="confirm-cancel">${t("common.cancel")}</button>
-                <button type="button" class="btn btn-danger" id="confirm-ok">${t("common.confirm")}</button>
-            </div>
-        </div>
-    `;
+  confirmModal = await loadModal("confirm-modal");
+  if (!confirmModal) {
+    return null;
+  }
 
-  document.body.appendChild(confirmModal);
-
-  confirmModal.querySelector("#confirm-cancel").addEventListener("click", () => {
-    hideConfirm(false);
-  });
-
-  confirmModal.querySelector("#confirm-ok").addEventListener("click", () => {
-    hideConfirm(true);
-  });
-
-  confirmModal.querySelector(".modal-close").addEventListener("click", () => {
-    hideConfirm(false);
-  });
-
-  confirmModal.addEventListener("click", (e) => {
-    if (e.target === confirmModal) {
+  if (!bound) {
+    bound = true;
+    confirmModal.querySelector("#confirm-cancel")?.addEventListener("click", () => {
       hideConfirm(false);
-    }
-  });
+    });
+
+    confirmModal.querySelector("#confirm-ok")?.addEventListener("click", () => {
+      hideConfirm(true);
+    });
+
+    // 关闭按钮不走全局 data-modal-id 逻辑，必须经由 hideConfirm 结束 Promise
+    confirmModal.querySelector("#confirm-close")?.addEventListener("click", () => {
+      hideConfirm(false);
+    });
+
+    confirmModal.addEventListener("click", (e) => {
+      if (e.target === confirmModal) {
+        hideConfirm(false);
+      }
+    });
+  }
 
   return confirmModal;
 }
@@ -62,30 +55,37 @@ export function showConfirm(message, options = {}) {
   return new Promise((resolve) => {
     confirmResolve = resolve;
 
-    const modal = createConfirmModal();
-    const messageEl = modal.querySelector("#confirm-message");
+    ensureConfirmModal().then((modal) => {
+      if (!modal) {
+        // 模板加载失败时直接返回取消，避免调用方永久挂起
+        confirmResolve = null;
+        resolve(false);
+        return;
+      }
 
-    if (messageEl) {
-      messageEl.textContent = message;
-    }
+      const messageEl = modal.querySelector("#confirm-message");
+      if (messageEl) {
+        messageEl.textContent = message;
+      }
 
-    const titleEl = modal.querySelector(".modal-title");
-    if (titleEl && options.title) {
-      titleEl.textContent = options.title;
-    }
+      const titleEl = modal.querySelector(".modal-title");
+      if (titleEl && options.title) {
+        titleEl.textContent = options.title;
+      }
 
-    const okBtn = modal.querySelector("#confirm-ok");
-    if (okBtn) {
-      okBtn.textContent = options.confirmText || t("common.confirm");
-      okBtn.className = `btn ${options.danger ? "btn-danger" : "btn-primary"}`;
-    }
+      const okBtn = modal.querySelector("#confirm-ok");
+      if (okBtn) {
+        okBtn.textContent = options.confirmText || t("common.confirm");
+        okBtn.className = `btn ${options.danger ? "btn-danger" : "btn-primary"}`;
+      }
 
-    const cancelBtn = modal.querySelector("#confirm-cancel");
-    if (cancelBtn) {
-      cancelBtn.textContent = options.cancelText || t("common.cancel");
-    }
+      const cancelBtn = modal.querySelector("#confirm-cancel");
+      if (cancelBtn) {
+        cancelBtn.textContent = options.cancelText || t("common.cancel");
+      }
 
-    modal.classList.add("active");
+      modal.classList.add("active");
+    });
   });
 }
 

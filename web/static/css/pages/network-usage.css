@@ -4,9 +4,26 @@
 
 .usage-tabs {
   display: flex;
-  gap: 0.3125rem;
+  align-items: flex-end;
+  gap: 0.9375rem;
   margin-bottom: 1.25rem;
   border-bottom: 0.125rem solid var(--color-border-dark);
+}
+
+/* 网段名：置于 IPv4/IPv6 切换按钮左侧的纯文本，仅标识当前网段 */
+.usage-network-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-text-light);
+  padding-bottom: 0.625rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usage-tab-buttons {
+  display: flex;
+  gap: 0.3125rem;
 }
 
 .usage-tab-btn {
@@ -436,7 +453,12 @@
 @media (max-width: 768px) {
   .usage-tabs {
     flex-direction: column;
+    align-items: stretch;
     border-bottom: none;
+  }
+
+  .usage-network-name {
+    padding-bottom: 0;
   }
 
   .usage-tab-btn {

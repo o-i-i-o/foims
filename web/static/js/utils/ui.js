@@ -2,7 +2,7 @@ import { showToast as showToastFn } from "./toast.js";
 import { showConfirm, confirmDelete } from "./confirm.js";
 import { renderPagination as renderPaginationFn } from "./pagination.js";
 import { formatDateTime } from "./formatter.js";
-import { closeModal as closeModalFn } from "./modal.js";
+import { closeModal as closeModalFn, openModal as openModalFn } from "./modal.js";
 import { apiPost, apiPut, apiDelete } from "./apiClient.js";
 import { escapeHtml } from "./helpers.js";
 import { t } from "./i18n.js";
@@ -359,4 +359,50 @@ export function appendPaginationToTable(container, data, onPageChange, options =
 
   paginationContainer.innerHTML = "";
   paginationContainer.appendChild(paginationWrapper);
+}
+
+/**
+ * 通用简单列表模态框（模板 modals/common/simple-list-modal.html）。
+ * 自动追加序号列，适合工位/信息点/机位这类无复杂交互的只读列表。
+ * @param {Object} options
+ * @param {string} options.title 标题（通常为 "名称 - 列表类型"）
+ * @param {Array<{label: string}>} options.columns 数据列定义（不含序号列）
+ * @param {Array<string[]>} options.rows 行数据，单元格为已转义的 HTML 文本
+ * @returns {Promise<HTMLElement|null>} 模态框根节点
+ */
+export async function openSimpleListModal({ title, columns, rows }) {
+  const modal = await openModalFn("simple-list-modal");
+  if (!modal) {
+    return null;
+  }
+
+  const titleEl = modal.querySelector("#simple-list-modal-title");
+  if (titleEl) {
+    titleEl.textContent = title;
+  }
+
+  const theadTr = modal.querySelector("#simple-list-thead-tr");
+  if (theadTr) {
+    theadTr.innerHTML = `<th data-i18n="common.index">No.</th>${columns
+      .map((col) => `<th>${col.label}</th>`)
+      .join("")}`;
+  }
+
+  const tbody = modal.querySelector("#simple-list-tbody");
+  if (tbody) {
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${columns.length + 1}" class="text-center">${t("common.no_data")}</td></tr>`;
+    } else {
+      tbody.innerHTML = rows
+        .map(
+          (cells, idx) =>
+            `<tr><td class="index-column">${idx + 1}</td>${cells
+              .map((cell) => `<td>${cell}</td>`)
+              .join("")}</tr>`
+        )
+        .join("");
+    }
+  }
+
+  return modal;
 }

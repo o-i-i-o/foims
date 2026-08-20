@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.49"
+version = "0.15.50"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -2027,15 +2027,11 @@ dependencies = [
 
 [[package]]
 name = "ipma-data-manager"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
- "aes-gcm",
  "async-trait",
  "axum",
- "base64 0.23.1",
  "chrono",
- "csv",
- "hex",
  "ipma-common",
  "serde",
  "serde_json",

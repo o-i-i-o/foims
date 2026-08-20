@@ -5,38 +5,54 @@ const loadedModals = new Set();
 const loadingModals = new Map();
 const htmlCache = new Map();
 
+// 模态框清单：按功能模块分组存放于 modals/ 对应子目录
 const MODAL_REGISTRY = {
-  "network-type-modal": "/static/modals/network-type-modal.html",
-  "network-modal": "/static/modals/network-modal.html",
-  "room-modal": "/static/modals/room-modal.html",
-  "workstation-modal": "/static/modals/workstation-modal.html",
-  "cabinet-modal": "/static/modals/cabinet-modal.html",
-  "cabinet-position-modal": "/static/modals/cabinet-position-modal.html",
-  "device-ports-group-modal": "/static/modals/device-ports-group-modal.html",
-  "device-port-detail-modal": "/static/modals/device-port-detail-modal.html",
-  "unified-device-ports-modal": "/static/modals/unified-device-ports-modal.html",
-  "port-conflict-modal": "/static/modals/port-conflict-modal.html",
-  "user-modal": "/static/modals/user-modal.html",
-  "two-factor-modal": "/static/modals/two-factor-modal.html",
-  "import-result-modal": "/static/modals/import-result-modal.html",
-  "scheduled-task-modal": "/static/modals/scheduled-task-modal.html",
-  "task-logs-modal": "/static/modals/task-logs-modal.html",
-  "organization-modal": "/static/modals/organization-modal.html",
-  "org-template-modal": "/static/modals/org-template-modal.html",
-  "org-template-editor-modal": "/static/modals/org-template-editor-modal.html",
-  "cable-link-modal": "/static/modals/cable-link-modal.html",
-  "device-modal": "/static/modals/device-modal.html",
-  "device-template-modal": "/static/modals/device-template-modal.html",
-  "room-children-list-modal": "/static/modals/room-children-list-modal.html",
-  "room-net-outlets-list-modal": "/static/modals/room-net-outlets-list-modal.html",
-  "cabinet-positions-list-modal": "/static/modals/cabinet-positions-list-modal.html",
-  "topology-connection-modal": "/static/modals/topology-connection-modal.html",
-  "cert-generate-modal": "/static/modals/cert-generate-modal.html",
-  "cert-import-modal": "/static/modals/cert-import-modal.html",
-  "open-source-modal": "/static/modals/open-source-modal.html"
+  // 公共
+  "confirm-modal": "/static/modals/common/confirm-modal.html",
+  "simple-list-modal": "/static/modals/common/simple-list-modal.html",
+  "import-result-modal": "/static/modals/common/import-result-modal.html",
+  // 网段模块（网络区域 / 网段编辑 / 使用详情）
+  "network-region-modal": "/static/modals/network/network-region-modal.html",
+  "network-modal": "/static/modals/network/network-modal.html",
+  "subnet-usage-modal": "/static/modals/network/subnet-usage-modal.html",
+  // 组织模块
+  "organization-modal": "/static/modals/organization/organization-modal.html",
+  "org-template-modal": "/static/modals/organization/org-template-modal.html",
+  "org-template-editor-modal": "/static/modals/organization/org-template-editor-modal.html",
+  // 房间 / 工位 / 机柜
+  "room-modal": "/static/modals/room/room-modal.html",
+  "workstation-modal": "/static/modals/workstation/workstation-modal.html",
+  "cabinet-modal": "/static/modals/cabinet/cabinet-modal.html",
+  "cabinet-position-modal": "/static/modals/cabinet/cabinet-position-modal.html",
+  // 设备模块
+  "device-modal": "/static/modals/device/device-modal.html",
+  "device-template-modal": "/static/modals/device/device-template-modal.html",
+  "device-ports-group-modal": "/static/modals/device/device-ports-group-modal.html",
+  "device-port-detail-modal": "/static/modals/device/device-port-detail-modal.html",
+  "unified-device-ports-modal": "/static/modals/device/unified-device-ports-modal.html",
+  "port-conflict-modal": "/static/modals/device/port-conflict-modal.html",
+  "arp-modal": "/static/modals/device/arp-modal.html",
+  "lldp-modal": "/static/modals/device/lldp-modal.html",
+  // 线路
+  "cable-link-modal": "/static/modals/cable/cable-link-modal.html",
+  // 可视化
+  "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
+  "topology-detail-modal": "/static/modals/visualization/topology-detail-modal.html",
+  // 日志
+  "log-details-modal": "/static/modals/log/log-details-modal.html",
+  "task-logs-modal": "/static/modals/log/task-logs-modal.html",
+  // 系统
+  "user-modal": "/static/modals/system/user-modal.html",
+  "two-factor-modal": "/static/modals/system/two-factor-modal.html",
+  "scheduled-task-modal": "/static/modals/system/scheduled-task-modal.html",
+  "cert-generate-modal": "/static/modals/system/cert-generate-modal.html",
+  "cert-import-modal": "/static/modals/system/cert-import-modal.html",
+  "open-source-modal": "/static/modals/system/open-source-modal.html",
+  // 登录页
+  "forgot-password-modal": "/static/modals/auth/forgot-password-modal.html"
 };
 
-async function fetchModalHtml(modalId) {
+export async function fetchModalHtml(modalId) {
   const cacheKey = `${modalId}_${MODULE_VERSION}`;
 
   if (htmlCache.has(cacheKey)) {
@@ -89,7 +105,6 @@ export async function loadModal(id) {
     }
     loadedModals.delete(id);
   }
-
   const innerHtml = await fetchModalHtml(id);
   if (!innerHtml) {
     return null;

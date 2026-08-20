@@ -84,7 +84,7 @@ function getResourceCallbacks() {
   };
 
   return {
-    openNetworkTypeModal: createCallback("networks", "openNetworkTypeModal"),
+    openNetworkRegionModal: createCallback("networks", "openNetworkRegionModal"),
     openNetworkModal: createCallback("networks", "openNetworkModal"),
     openRoomModal: createCallback("room", "openRoomModal"),
     openCabinetModal: createCallback("cabinet", "openCabinetModal"),
@@ -93,7 +93,7 @@ function getResourceCallbacks() {
     openCableLinkModal: createCallback("cableLink", "openCableLinkModal"),
     openDeviceModal: createCallback("device", "openDeviceModal"),
     submitOrgTemplateForm: createCallback("organization", "submitOrgTemplateForm"),
-    submitNetworkTypeForm: createCallback("networks", "submitNetworkTypeForm"),
+    submitNetworkRegionForm: createCallback("networks", "submitNetworkRegionForm"),
     submitNetworkForm: createCallback("networks", "submitNetworkForm"),
     submitRoomForm: createCallback("room", "submitRoomForm"),
     submitWorkstationForm: createCallback("workstation", "submitWorkstationForm"),

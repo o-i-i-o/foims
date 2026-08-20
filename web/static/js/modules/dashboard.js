@@ -51,7 +51,7 @@ export async function loadDashboardData(forceRefresh = false) {
 function updateDashboardUI(data) {
   const elements = {
     "total-networks": data.networks?.networks || 0,
-    "total-network-types": data.networks?.regions || 0,
+    "total-network-regions": data.networks?.regions || 0,
     "total-ip-addresses": data.ips?.total || 0,
     "active-devices": data.ips?.active || 0,
     "today-operations": data.activity?.operations_24h || 0,

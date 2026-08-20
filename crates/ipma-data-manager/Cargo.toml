@@ -1,9 +1,9 @@
 [package]
 name = "ipma-data-manager"
-version = "0.1.2"
+version = "0.2.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "IPMA Data Management - CSV import/export and database backup functionality"
+description = "IPMA Data Management - module-based JSON import/export and database backup functionality"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -23,8 +23,7 @@ serde_json = { workspace = true }
 # Validation
 validator = { workspace = true }
 
-# CSV and ZIP
-csv = { workspace = true }
+# ZIP
 zip = { workspace = true }
 
 # Async
@@ -44,11 +43,6 @@ thiserror = { workspace = true }
 
 # Async trait
 async-trait = { workspace = true }
-
-# Crypto (for decrypting SNMP community in export)
-aes-gcm = { workspace = true }
-hex = { workspace = true }
-base64 = { workspace = true }
 
 [lints]
 workspace = true

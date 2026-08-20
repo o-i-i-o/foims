@@ -313,8 +313,9 @@ pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, Visual
     .fetch_all(pool)
     .await?;
 
-    let element_layouts = sqlx::query_as::<_, (String, serde_json::Value)>(
-        r"SELECT element_type,
+    let element_layouts = sqlx::query_as::<_, (Uuid, String, serde_json::Value)>(
+        r"SELECT id,
+                  element_type,
                   json_build_object(
                       'x', x,
                       'y', y,
@@ -340,13 +341,17 @@ pub async fn get_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, Visual
         })
         .collect();
 
-    layout_data.extend(element_layouts.into_iter().map(|(element_type, position)| {
-        serde_json::json!({
-            "id": Uuid::nil(),
-            "element_type": element_type,
-            "position": position
-        })
-    }));
+    layout_data.extend(
+        element_layouts
+            .into_iter()
+            .map(|(id, element_type, position)| {
+                serde_json::json!({
+                    "id": id,
+                    "element_type": element_type,
+                    "position": position
+                })
+            }),
+    );
 
     Ok(ok_json(
         layout_data,

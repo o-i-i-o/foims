@@ -238,10 +238,16 @@ export class SVGRenderer {
     return group;
   }
 
-  drawDoor() {
+  /**
+   * 绘制门元素。
+   * @param {string|null} id element_layouts 已保存记录的主键；未保存过的门
+   *   生成随机 UUID 仅作 DOM 标识（后端按 room_id+element_type 落库，不使用该 id）
+   */
+  drawDoor(id = null) {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.className.baseVal = "door-element";
     group.dataset.elementType = "door";
+    group.dataset.id = id || crypto.randomUUID();
 
     const x = 50;
     const y = 100;

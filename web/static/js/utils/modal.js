@@ -6,7 +6,7 @@ import {
 } from "./modalLoader.js";
 
 const BUTTON_CALLBACK_MAP = {
-  "add-network-type-btn": "openNetworkTypeModal",
+  "add-network-region-btn": "openNetworkRegionModal",
   "add-network-btn": "openNetworkModal",
   "add-room-btn": "openRoomModal",
   "add-cabinet-btn": "openCabinetModal",
@@ -16,7 +16,7 @@ const BUTTON_CALLBACK_MAP = {
 };
 
 const FORM_CALLBACK_MAP = {
-  "network-type-form": "submitNetworkTypeForm",
+  "network-region-form": "submitNetworkRegionForm",
   "network-form": "submitNetworkForm",
   "room-form": "submitRoomForm",
   "workstation-form": "submitWorkstationForm",

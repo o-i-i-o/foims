@@ -107,6 +107,8 @@ pub trait DataProvider: Clone + Send + Sync + 'static {
     fn pool(&self) -> DataResult<PgPool>;
     fn database_config(&self) -> DatabaseConfig;
     async fn decrypt_password(&self, encrypted: &str) -> DataResult<String>;
+    /// 将明文凭据加密为本实例密文（导入设备 SNMP 凭据列时使用）。
+    async fn encrypt_password(&self, plain: &str) -> DataResult<String>;
 }
 
 /// 导入结果：`message` 为 i18n key，`details` 每项为 `key(k1=v1, k2=v2)`

@@ -405,9 +405,23 @@ export class SVGCore {
     }
 
     this.tooltip.textContent = target.dataset.tooltip;
-    this.tooltip.style.left = `${e.clientX + 12}px`;
-    this.tooltip.style.top = `${e.clientY + 12}px`;
     this.tooltip.classList.add("visible");
+
+    // 按鼠标在画布内的象限决定浮窗展开方向，使其始终朝画布内侧显示：
+    // 鼠标位于左半/上半时浮窗放右下，位于右半/下半时放左上，以此类推
+    const TOOLTIP_MARGIN = 12;
+    const canvasRect = this.container.getBoundingClientRect();
+    const onLeftHalf = e.clientX - canvasRect.left < canvasRect.width / 2;
+    const onTopHalf = e.clientY - canvasRect.top < canvasRect.height / 2;
+    const left = onLeftHalf
+      ? e.clientX + TOOLTIP_MARGIN
+      : e.clientX - this.tooltip.offsetWidth - TOOLTIP_MARGIN;
+    const top = onTopHalf
+      ? e.clientY + TOOLTIP_MARGIN
+      : e.clientY - this.tooltip.offsetHeight - TOOLTIP_MARGIN;
+
+    this.tooltip.style.left = `${Math.max(8, Math.min(left, window.innerWidth - this.tooltip.offsetWidth - 8))}px`;
+    this.tooltip.style.top = `${Math.max(8, Math.min(top, window.innerHeight - this.tooltip.offsetHeight - 8))}px`;
   }
 
   _hideTooltip() {

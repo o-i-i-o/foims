@@ -119,12 +119,13 @@ export class SVGDataManager {
           hasSavedLayout = true;
         }
 
-        const doorElement = this.renderer.drawDoor();
+        const doorItem = layoutData.find((item) => item.element_type === "door");
+        // 门布局存于 element_layouts，绘制时带上已保存记录的主键，保证可拖拽、可保存
+        const doorElement = this.renderer.drawDoor(doorItem?.id);
 
         let maxX = 0;
         let maxY = 0;
 
-        const doorItem = layoutData.find((item) => item.element_type === "door");
         if (doorItem && doorItem.position) {
           const rect = doorElement.querySelector("rect");
           if (rect) {

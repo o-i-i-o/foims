@@ -1,0 +1,25 @@
+<template id="subnet-usage-modal-template">
+<div id="subnet-usage-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="subnet-usage-modal-title">
+  <div class="modal-content modal-lg">
+    <header class="modal-header">
+      <h3 class="modal-title" id="subnet-usage-modal-title" data-i18n="network.usage">Usage</h3>
+      <button type="button" class="close" data-modal-id="subnet-usage-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <div class="network-usage-container">
+        <div class="usage-tabs" id="subnet-usage-tabs">
+          <span class="usage-network-name" id="subnet-usage-network-name"></span>
+          <div class="usage-tab-buttons">
+            <button type="button" class="usage-tab-btn active" data-tab="ipv4">IPv4</button>
+            <button type="button" class="usage-tab-btn" data-tab="ipv6">IPv6</button>
+          </div>
+        </div>
+        <div id="subnet-usage-contents"></div>
+      </div>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-modal-id="subnet-usage-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

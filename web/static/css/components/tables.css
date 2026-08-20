@@ -318,7 +318,7 @@
 
 /* 各表格按百分比指定列宽（限定主页面表格 id，避免影响模态框动态表格）：
    配合 table-layout: fixed 使浏览器严格按比例分配列宽 */
-#network-types-table,
+#network-regions-table,
 #networks-table,
 #rooms-table,
 #cabinets-table,
@@ -334,13 +334,13 @@
 }
 
 /* 网络区域表：序号/名称/IPv4/IPv6/描述/创建时间/操作 */
-#network-types-table th:nth-child(1) { width: 5%; }
-#network-types-table th:nth-child(2) { width: 15%; }
-#network-types-table th:nth-child(3) { width: 17%; }
-#network-types-table th:nth-child(4) { width: 17%; }
-#network-types-table th:nth-child(5) { width: 20%; }
-#network-types-table th:nth-child(6) { width: 14%; }
-#network-types-table th:nth-child(7) { width: 12%; }
+#network-regions-table th:nth-child(1) { width: 5%; }
+#network-regions-table th:nth-child(2) { width: 15%; }
+#network-regions-table th:nth-child(3) { width: 17%; }
+#network-regions-table th:nth-child(4) { width: 17%; }
+#network-regions-table th:nth-child(5) { width: 20%; }
+#network-regions-table th:nth-child(6) { width: 14%; }
+#network-regions-table th:nth-child(7) { width: 12%; }
 
 /* 网络表：序号/名称/区域/IPv4/IPv6/创建时间/操作（含筛选输入框，列适当加宽） */
 #networks-table th:nth-child(1) { width: 5%; }

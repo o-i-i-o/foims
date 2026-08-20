@@ -12,7 +12,8 @@ import {
   DEFAULT_PAGE_SIZE,
   createSortState,
   updateSortIcons,
-  initSortEvents
+  initSortEvents,
+  openSimpleListModal
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modal.js";
@@ -827,11 +828,6 @@ export async function openRoomChildrenListModal(roomId) {
     }
     const room = result.data;
     const roomType = (room.room_type || "").toLowerCase();
-    await openModal("room-children-list-modal");
-
-    const titleEl = document.getElementById("room-children-list-modal-title");
-    const extraTh = document.getElementById("room-children-list-extra-th");
-    const tbody = document.getElementById("room-children-list-tbody");
 
     // "其他"房间工位与机柜均可能存在，优先展示有数据的一类
     const isCabinetList =
@@ -840,47 +836,19 @@ export async function openRoomChildrenListModal(roomId) {
       (roomType === "other" && !(room.workstations || []).length);
 
     if (!isCabinetList) {
-      if (titleEl) titleEl.textContent = `${room.name} - ${t("room.workstations")}`;
-      if (extraTh) extraTh.textContent = t("workstation.manager");
       const workstations = room.workstations || [];
-      if (tbody) {
-        if (workstations.length === 0) {
-          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.no_data")}</td></tr>`;
-        } else {
-          tbody.innerHTML = workstations
-            .map(
-              (ws, idx) => `
-            <tr>
-              <td class="index-column">${idx + 1}</td>
-              <td>${escapeHtml(ws.name || "")}</td>
-              <td>${escapeHtml(ws.manager || "-")}</td>
-            </tr>
-          `
-            )
-            .join("");
-        }
-      }
+      await openSimpleListModal({
+        title: `${room.name} - ${t("room.workstations")}`,
+        columns: [{ label: t("common.name") }, { label: t("workstation.manager") }],
+        rows: workstations.map((ws) => [escapeHtml(ws.name || "-"), escapeHtml(ws.manager || "-")])
+      });
     } else {
-      if (titleEl) titleEl.textContent = `${room.name} - ${t("room.cabinets")}`;
-      if (extraTh) extraTh.textContent = t("cabinet.capacity");
       const cabinets = room.cabinets || [];
-      if (tbody) {
-        if (cabinets.length === 0) {
-          tbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.no_data")}</td></tr>`;
-        } else {
-          tbody.innerHTML = cabinets
-            .map(
-              (cab, idx) => `
-            <tr>
-              <td class="index-column">${idx + 1}</td>
-              <td>${escapeHtml(cab.name || "")}</td>
-              <td>${cab.capacity ?? "-"}</td>
-            </tr>
-          `
-            )
-            .join("");
-        }
-      }
+      await openSimpleListModal({
+        title: `${room.name} - ${t("room.cabinets")}`,
+        columns: [{ label: t("common.name") }, { label: t("cabinet.capacity") }],
+        rows: cabinets.map((cab) => [escapeHtml(cab.name || "-"), cab.capacity ?? "-"])
+      });
     }
   } catch (error) {
     handleError(error, t("room.load_failed"));
@@ -895,30 +863,12 @@ export async function openRoomNetOutletsListModal(roomId) {
       return;
     }
     const room = result.data;
-    await openModal("room-net-outlets-list-modal");
-
-    const titleEl = document.getElementById("room-net-outlets-list-modal-title");
-    const tbody = document.getElementById("room-net-outlets-list-tbody");
-
-    if (titleEl) titleEl.textContent = `${room.name} - ${t("room.net_outlets")}`;
-
     const netOutlets = room.net_outlets || [];
-    if (tbody) {
-      if (netOutlets.length === 0) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.no_data")}</td></tr>`;
-      } else {
-        tbody.innerHTML = netOutlets
-          .map(
-            (no, idx) => `
-          <tr>
-            <td class="index-column">${idx + 1}</td>
-            <td>${escapeHtml(no.name || "")}</td>
-          </tr>
-        `
-          )
-          .join("");
-      }
-    }
+    await openSimpleListModal({
+      title: `${room.name} - ${t("room.net_outlets")}`,
+      columns: [{ label: t("common.name") }],
+      rows: netOutlets.map((no) => [escapeHtml(no.name || "-")])
+    });
   } catch (error) {
     handleError(error, t("room.load_failed"));
   }
