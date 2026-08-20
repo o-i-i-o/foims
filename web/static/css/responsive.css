@@ -2,10 +2,6 @@
 
 /* 中等屏幕 */
 @media (max-width: 992px) {
-  .import-export-container {
-    grid-template-columns: 1fr;
-  }
-
   .sidebar {
     width: 200px;
   }
@@ -187,11 +183,6 @@
     padding: 0.5rem 0.35rem;
   }
 
-  /* th-actions 已恢复 table-cell 布局，移动端仅重置居中 */
-  .th-actions {
-    text-align: center;
-  }
-
   /* 模态框响应式 */
   .modal.active {
     padding: 1rem 0.5rem;
@@ -332,22 +323,9 @@
   }
 
   /* 导入导出响应式 */
-  .import-export-container {
-    grid-template-columns: 1fr;
-  }
-
   .import-actions,
   .export-actions {
     flex-direction: column;
-  }
-
-  .backup-actions {
-    flex-direction: column;
-  }
-
-  .restore-actions {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   /* 操作按钮响应式 */

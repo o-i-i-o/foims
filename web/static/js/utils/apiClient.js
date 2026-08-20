@@ -2,7 +2,7 @@
  * API客户端类 - 处理所有API请求
  * 使用 HttpOnly Cookie 进行认证，彻底防止 XSS 窃取 token
  */
-import { clearSession } from "./sessionManager.js";
+import { SessionManager } from "./sessionManager.js";
 import { t } from "./i18n.js";
 
 /**
@@ -332,7 +332,7 @@ export class ApiClient {
   }
 
   static redirectToLogin() {
-    clearSession();
+    SessionManager.clear();
     window.location.href = "/index.html";
   }
 

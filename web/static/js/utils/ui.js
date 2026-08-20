@@ -1,20 +1,17 @@
-import { showToast as showToastFn } from "./toast.js";
+import { showToast } from "./toast.js";
 import { showConfirm, confirmDelete } from "./confirm.js";
-import { renderPagination as renderPaginationFn } from "./pagination.js";
+import { renderPagination } from "./pagination.js";
 import { formatDateTime } from "./formatter.js";
-import { closeModal as closeModalFn, openModal as openModalFn } from "./modal.js";
+import { closeModal, openModal } from "./modalLoader.js";
 import { apiPost, apiPut, apiDelete } from "./apiClient.js";
 import { escapeHtml } from "./helpers.js";
 import { t } from "./i18n.js";
 
-export {
-  showToastFn as showToast,
-  showConfirm,
-  confirmDelete,
-  renderPaginationFn as renderPagination,
-  formatDateTime,
-  escapeHtml
-};
+export { showToast } from "./toast.js";
+export { showConfirm, confirmDelete } from "./confirm.js";
+export { renderPagination } from "./pagination.js";
+export { formatDateTime } from "./formatter.js";
+export { escapeHtml } from "./helpers.js";
 
 export const DEFAULT_PAGE_SIZE = 20;
 
@@ -198,11 +195,11 @@ export function handleError(error, defaultMessage = t("common.operation_failed")
   console.error("Error:", error);
 
   if (error.message) {
-    showToastFn(error.message, "error");
+    showToast(error.message, "error");
   } else if (typeof error === "string") {
-    showToastFn(error, "error");
+    showToast(error, "error");
   } else {
-    showToastFn(defaultMessage, "error");
+    showToast(defaultMessage, "error");
   }
 }
 
@@ -226,10 +223,10 @@ export async function handleFormSubmit(config) {
     }
 
     if (result.success) {
-      showToastFn(successMessage, "success");
+      showToast(successMessage, "success");
 
       if (modalId) {
-        closeModalFn(modalId);
+        closeModal(modalId);
       }
 
       if (reloadFunction) {
@@ -238,7 +235,7 @@ export async function handleFormSubmit(config) {
 
       return true;
     } else {
-      showToastFn(result.message || errorMessage, "error");
+      showToast(result.message || errorMessage, "error");
       return false;
     }
   } catch (error) {
@@ -287,13 +284,13 @@ export async function handleDelete(
     }
 
     if (result.success) {
-      showToastFn(successMessage, "success");
+      showToast(successMessage, "success");
       if (refreshCallback) {
         await refreshCallback();
       }
       return { success: true };
     } else {
-      showToastFn(result.message || errorMessage, "error");
+      showToast(result.message || errorMessage, "error");
       return { success: false, message: result.message };
     }
   } catch (error) {
@@ -351,7 +348,7 @@ export function appendPaginationToTable(container, data, onPageChange, options =
   const paginationWrapper = document.createElement("div");
   paginationWrapper.className = "pagination-wrapper";
 
-  renderPaginationFn(paginationWrapper, currentPage, totalPages, onPageChange, total, {
+  renderPagination(paginationWrapper, currentPage, totalPages, onPageChange, total, {
     pageSize,
     pageSizeOptions: options.pageSizeOptions,
     onPageSizeChange: options.onPageSizeChange
@@ -371,7 +368,7 @@ export function appendPaginationToTable(container, data, onPageChange, options =
  * @returns {Promise<HTMLElement|null>} 模态框根节点
  */
 export async function openSimpleListModal({ title, columns, rows }) {
-  const modal = await openModalFn("simple-list-modal");
+  const modal = await openModal("simple-list-modal");
   if (!modal) {
     return null;
   }

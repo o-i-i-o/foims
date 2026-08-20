@@ -16,7 +16,7 @@ import {
   openSimpleListModal
 } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";

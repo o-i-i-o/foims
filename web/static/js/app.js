@@ -10,9 +10,7 @@
 import { initI18n, t } from "./utils/i18n.js";
 import { initNavigation } from "./modules/navigation.js";
 import { initLanguageMenu } from "./modules/languageMenu.js";
-import { initModals } from "./utils/modal.js";
-import { initModalTemplates, preloadModalsOnIdle } from "./utils/modalLoader.js";
-import { initEventListeners } from "./modules/eventManager.js";
+import { initEventListeners, initModals } from "./modules/eventManager.js";
 import { initUserEvents } from "./modules/userManager.js";
 import { initTooltip } from "./utils/tooltip.js";
 import {
@@ -37,7 +35,6 @@ async function initApp() {
 
     await checkLoginStatus();
 
-    initModalTemplates();
     initNavigation();
     initLanguageMenu();
     initModals(getResourceCallbacks());
@@ -128,8 +125,6 @@ function initResourcePreloading() {
   );
 
   lazyLoad("dashboard", { when: "idle" });
-
-  preloadModalsOnIdle();
 }
 
 // 等待所有样式表加载完成，避免 FOUC

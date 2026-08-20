@@ -6,12 +6,7 @@
             避免污染 main.html
    ============================================================ */
 
-/* ============ 颜色变量（自包含，不依赖 variables.css） ============ */
-.login-body {
-  --color-bg-white: #fff;
-}
-
-/* ============ 基础重置（仅登录页 body） ============ */
+/* ============ 基础样式（自包含颜色变量，不依赖 variables.css） ============ */
 .login-body,
 .login-body *,
 .login-body *::before,
@@ -22,6 +17,7 @@
 }
 
 .login-body {
+  --color-bg-white: #fff;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;

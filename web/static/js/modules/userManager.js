@@ -11,8 +11,8 @@ import {
   initSortEvents
 } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modal.js";
-import { getUser } from "../utils/sessionManager.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
+import { SessionManager } from "../utils/sessionManager.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
@@ -295,7 +295,7 @@ window.openTwoFactorModal = async function (userId, username, isEnabled) {
 // 初始化2FA配置
 async function initTwoFactorConfig(userId) {
   try {
-    const currentUser = getUser();
+    const currentUser = SessionManager.getUser();
     if (currentUser && currentUser.id !== userId) {
       // 不是当前用户，需要检查是否是管理员
       if (currentUser.role !== "admin") {

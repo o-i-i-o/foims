@@ -2,7 +2,7 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-export const MODULE_VERSION = "01323";
+export const MODULE_VERSION = "01324";
 
 function withVersion(path) {
   if (!path) return path;
@@ -16,7 +16,6 @@ const MODULE_REGISTRY = {
   helpers: "/static/js/utils/helpers.js",
   i18n: "/static/js/utils/i18n.js",
   networkCardManager: "/static/js/utils/networkCardManager.js",
-  modal: "/static/js/utils/modal.js",
   modalLoader: "/static/js/utils/modalLoader.js",
   pagination: "/static/js/utils/pagination.js",
   resources: "/static/js/utils/resources.js",

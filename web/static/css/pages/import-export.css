@@ -1,12 +1,5 @@
 /* 导入导出 / 数据管理 / 备份恢复样式 */
 
-.import-export-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg);
-  margin-bottom: var(--space-lg);
-}
-
 .import-export-section {
   margin-bottom: var(--space-xl);
   padding: var(--space-lg);
@@ -78,7 +71,6 @@
   margin-bottom: var(--space-md);
 }
 
-.import-actions input[type="file"],
 .export-actions select {
   flex: 1;
   padding: 0.5rem;
@@ -125,24 +117,6 @@
   margin-bottom: 2px;
 }
 
-.backup-actions {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-  flex-wrap: wrap;
-}
-
-.restore-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.restore-actions input[type="file"] {
-  min-width: 200px;
-  flex: 1;
-}
-
 .import-result-list {
   max-height: 400px;
   overflow-y: auto;
@@ -164,7 +138,6 @@
 }
 
 @media (max-width: 768px) {
-  .import-export-container,
   .data-management-container,
   .database-management-container {
     grid-template-columns: 1fr;

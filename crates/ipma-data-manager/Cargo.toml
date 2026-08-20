@@ -3,7 +3,7 @@ name = "ipma-data-manager"
 version = "0.2.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "IPMA Data Management - module-based JSON import/export and database backup functionality"
+description = "IPMA Data Management - module-based CSV import/export and database backup functionality"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -23,8 +23,9 @@ serde_json = { workspace = true }
 # Validation
 validator = { workspace = true }
 
-# ZIP
+# ZIP / CSV
 zip = { workspace = true }
+csv = { workspace = true }
 
 # Async
 tokio = { workspace = true }

@@ -568,15 +568,3 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* 复选框样式修复 - 覆盖继承的min-width */
-#org-template-editor-form .checkbox-label {
-  min-width: 0;
-  width: auto;
-}
-
-#org-template-editor-form .checkbox-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-}

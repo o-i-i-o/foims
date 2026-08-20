@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01323">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01323">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01323">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01323">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01323">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01323">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01323">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01323">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01323">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01323">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01323">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01323">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01324">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01324">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01324">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01324">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01324">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01324">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01324">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01324">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01324">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01324">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01324">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01324">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -907,35 +907,35 @@
             <h2 data-i18n="import_export.data_management">Data Management</h2>
             <div class="data-management-container">
               <section class="section">
-                <h3 data-i18n="import_export.json_import">JSON Data Import</h3>
+                <h3 data-i18n="import_export.csv_import">CSV Data Import</h3>
                 <div class="import-actions">
-                  <button id="import-json-btn" class="btn btn-primary btn-sm" data-i18n="import_export.import_json">Import JSON</button>
+                  <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.import_csv">Import CSV</button>
                   <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="import_export.download_template">Download Template</button>
                 </div>
                 <div class="import-hint">
                   <p data-i18n="import_export.instructions">Instructions:</p>
                   <ul>
-                    <li data-i18n="import_export.hint_module1">Supports a single module JSON file or a ZIP containing multiple module JSON files</li>
-                    <li data-i18n="import_export.hint_module2">Full import runs in order: Organization &rarr; Network Region &rarr; Subnet &rarr; Room &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
-                    <li data-i18n="import_export.hint_module3">Partial import validates dependencies first (e.g. cabinets require rooms to exist); missing references abort and roll back</li>
-                    <li data-i18n="import_export.hint_module4">Re-importing the same data updates rows by primary key (idempotent), UUIDs are preserved</li>
+                    <li data-i18n="import_export.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
+                    <li data-i18n="import_export.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
+                    <li data-i18n="import_export.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
+                    <li data-i18n="import_export.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
                   </ul>
                 </div>
               </section>
               <section class="section">
-                <h3 data-i18n="import_export.json_export">JSON Data Export</h3>
+                <h3 data-i18n="import_export.csv_export">CSV Data Export</h3>
                 <div class="export-actions">
-                  <select id="json-export-type" class="form-control" aria-label="Select export module">
+                  <select id="export-type" class="form-control" aria-label="Select export module">
                     <option value="all" data-i18n="import_export.module_all">All Modules (ZIP)</option>
                     <option value="organization" data-i18n="import_export.module_organization">Organization</option>
-                    <option value="network" data-i18n="import_export.module_network">Network Regions &amp; Subnets</option>
+                    <option value="network" data-i18n="import_export.module_network">Network Regions &amp; Subnets (incl. room bindings)</option>
                     <option value="room" data-i18n="import_export.module_room">Rooms (incl. workstations &amp; outlets)</option>
                     <option value="cabinet" data-i18n="import_export.module_cabinet">Cabinets (incl. positions &amp; patch panels)</option>
                     <option value="device" data-i18n="import_export.module_device">Devices (incl. ports, NICs, interfaces &amp; IPs)</option>
                     <option value="cable-link" data-i18n="import_export.module_cable_link">Cable Links</option>
                     <option value="visualization" data-i18n="import_export.module_visualization">Visualization Layouts &amp; Topology</option>
                   </select>
-                  <button id="export-json-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_json">Export JSON</button>
+                  <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_csv">Export CSV</button>
                 </div>
               </section>
             </div>
@@ -1168,6 +1168,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01323"></script>
+  <script type="module" src="/static/js/app.js?v=01324"></script>
 </body>
 </html>

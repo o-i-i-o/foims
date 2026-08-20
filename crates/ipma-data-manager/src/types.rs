@@ -5,7 +5,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use ipma_common::{ApiResponse, AppMessage, DbErrorKind, msg};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::PgPool;
 use thiserror::Error;
 use validator::Validate;
@@ -109,15 +109,6 @@ pub trait DataProvider: Clone + Send + Sync + 'static {
     async fn decrypt_password(&self, encrypted: &str) -> DataResult<String>;
     /// 将明文凭据加密为本实例密文（导入设备 SNMP 凭据列时使用）。
     async fn encrypt_password(&self, plain: &str) -> DataResult<String>;
-}
-
-/// 导入结果：`message` 为 i18n key，`details` 每项为 `key(k1=v1, k2=v2)`
-/// 格式的字符串（复用 [`AppMessage::log_string`]），由前端解析后翻译。
-#[derive(Debug, Serialize)]
-pub struct ImportResult {
-    pub success: bool,
-    pub message: String,
-    pub details: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Validate)]

@@ -562,8 +562,12 @@
 .topology-error {
   text-align: center;
   padding: 24px;
-  color: var(--color-text-secondary);
   font-size: 13px;
+}
+
+.topology-loading,
+.topology-empty {
+  color: var(--color-text-secondary);
 }
 
 .topology-error {

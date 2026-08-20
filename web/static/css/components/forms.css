@@ -6,7 +6,7 @@
   flex-wrap: wrap;
 }
 
-.form-group label {
+.form-group label:not(.checkbox-label) {
   display: block;
   min-width: 100px;
   width: auto;
@@ -40,9 +40,19 @@
     background-color var(--transition-fast);
   background-color: var(--control-bg);
   color: var(--color-text-light);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.05);
+}
+
+.form-group input:not([type="checkbox"]),
+.form-group select {
   height: var(--control-height);
   line-height: 1.2;
-  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.05);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
 }
 
 .form-group input:focus,
@@ -52,13 +62,6 @@
   border-color: var(--control-border-focus);
   box-shadow: var(--control-shadow);
   background-color: var(--control-bg);
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 120px;
-  height: auto;
-  line-height: 1.5;
 }
 
 .form-group input[type="password"] {

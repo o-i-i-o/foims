@@ -2,7 +2,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import { showToast, handleError } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 import { t } from "../utils/i18n.js";

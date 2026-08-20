@@ -6,10 +6,10 @@
 
 // ES模块导入
 import { apiGet, apiPost, refreshToken } from "./utils/apiClient.js";
-import { closeModal, openModal, loadModal } from "./utils/modal.js";
+import { closeModal, openModal, loadModal } from "./utils/modalLoader.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n, changeLanguage } from "./utils/i18n.js";
-import { hasSession, clearSession } from "./utils/sessionManager.js";
+import { SessionManager } from "./utils/sessionManager.js";
 
 /**
  * 登录管理器类
@@ -593,7 +593,7 @@ class LoginManager {
   }
 
   async checkLoginStatus() {
-    if (!hasSession()) return;
+    if (!SessionManager.hasSession()) return;
 
     try {
       const response = await fetch("/api/auth/me", {
@@ -611,7 +611,7 @@ class LoginManager {
           window.location.href = "/main.html";
           return;
         }
-        clearSession();
+        SessionManager.clear();
       }
     } catch (e) {
       // Ignore check login status errors
@@ -619,7 +619,7 @@ class LoginManager {
   }
 
   clearStorage() {
-    clearSession();
+    SessionManager.clear();
   }
 
   // ============================================================

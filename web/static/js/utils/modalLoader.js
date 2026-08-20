@@ -180,7 +180,3 @@ export function closeModal(id) {
   modal.remove();
   loadedModals.delete(id);
 }
-
-export function initModalTemplates() {}
-
-export function preloadModalsOnIdle() {}

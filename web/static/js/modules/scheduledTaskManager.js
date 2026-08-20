@@ -10,7 +10,7 @@ import {
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
-import { openModal, closeModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
@@ -63,11 +63,6 @@ function setupEventListeners() {
   const form = document.getElementById("scheduled-task-form");
   if (form) {
     form.addEventListener("submit", handleScheduledTaskSubmit);
-  }
-
-  const cancelBtn = document.getElementById("scheduled-task-cancel-btn");
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", closeScheduledTaskModal);
   }
 
   const modalContainer = document.getElementById("modal-container");
@@ -278,13 +273,14 @@ window.editScheduledTask = async function (id) {
   }
 };
 
-window.closeScheduledTaskModal = function () {
+// 隐藏并清空 modal-container（任务模态框直接渲染在容器内，非 template 加载）
+function closeScheduledTaskModal() {
   const modalContainer = document.getElementById("modal-container");
   if (modalContainer) {
     modalContainer.style.display = "none";
     modalContainer.innerHTML = "";
   }
-};
+}
 
 async function handleScheduledTaskSubmit(e) {
   e.preventDefault();
@@ -438,13 +434,5 @@ window.viewTaskLogs = async function (taskName) {
     } catch (error) {
       console.error("Failed to load task logs:", error);
     }
-  }
-};
-
-window.closeTaskLogsModal = function () {
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer) {
-    modalContainer.style.display = "none";
-    modalContainer.innerHTML = "";
   }
 };

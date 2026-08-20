@@ -3,7 +3,7 @@ import { apiPost, apiGet, redirectToLogin, refreshToken, ApiClient } from "../ut
 import { showToast } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
-import { getUser, setUser, hasSession } from "../utils/sessionManager.js";
+import { SessionManager } from "../utils/sessionManager.js";
 
 const parseDuration = (durationStr) => {
   const match = durationStr.match(/^(\d+)([smhd])$/);
@@ -29,7 +29,7 @@ const parseDuration = (durationStr) => {
 export const loginUser = (data, rememberMe) => {
   const { user } = data;
 
-  setUser(user, rememberMe);
+  SessionManager.setUser(user, rememberMe);
 
   window.location.href = "/main.html";
 };
@@ -45,7 +45,7 @@ export const logoutUser = async () => {
 };
 
 export const checkLoginStatus = async () => {
-  if (!hasSession()) {
+  if (!SessionManager.hasSession()) {
     return;
   }
 
@@ -79,7 +79,7 @@ export const checkLoginStatus = async () => {
 let currentUserRenderHandler = null;
 
 export const displayCurrentUser = () => {
-  const user = getUser();
+  const user = SessionManager.getUser();
   const currentUserElement = document.getElementById("current-user");
   const userInfoElement = document.getElementById("user-info");
 
@@ -179,7 +179,7 @@ const resetTimeout = (timeoutMinutes) => {
 };
 
 const startPageTimeout = async () => {
-  if (!hasSession()) return;
+  if (!SessionManager.hasSession()) return;
 
   // 移除旧的监听器
   if (boundResetTimeout && boundEvents) {

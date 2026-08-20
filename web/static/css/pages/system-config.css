@@ -2,13 +2,11 @@
 
 .system-config-section,
 .notification-config-section {
-  max-width: 960px;
   margin: 0 auto;
   padding: var(--space-lg);
   background: var(--color-bg-white);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
-  max-width: none;
 }
 
 .system-config-section h3,

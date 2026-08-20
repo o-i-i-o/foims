@@ -3,7 +3,7 @@ import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
 import { showToast, handleError } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modal.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 
 import { t } from "../utils/i18n.js";
 

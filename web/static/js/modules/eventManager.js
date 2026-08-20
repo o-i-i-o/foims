@@ -6,7 +6,7 @@
 import { loadModule, getCachedModule } from "../utils/resourceLoader.js";
 import { t } from "../utils/i18n.js";
 import { showToast } from "../utils/ui.js";
-import { closeModal } from "../utils/modal.js";
+import { closeModal } from "../utils/modalLoader.js";
 
 // ==========================================
 // 编辑/删除函数映射（动态加载）
@@ -61,6 +61,72 @@ export async function initEventListeners() {
 }
 
 // ==========================================
+// 资源新建按钮 / 表单提交委托（回调由 app.js 提供懒加载实现）
+// ==========================================
+
+const RESOURCE_BUTTON_CALLBACK_MAP = {
+  "add-network-region-btn": "openNetworkRegionModal",
+  "add-network-btn": "openNetworkModal",
+  "add-room-btn": "openRoomModal",
+  "add-cabinet-btn": "openCabinetModal",
+  "add-user-btn": "openUserModal",
+  "add-cable-link-btn": "openCableLinkModal",
+  "add-device-btn": "openDeviceModal"
+};
+
+const RESOURCE_FORM_CALLBACK_MAP = {
+  "network-region-form": "submitNetworkRegionForm",
+  "network-form": "submitNetworkForm",
+  "room-form": "submitRoomForm",
+  "workstation-form": "submitWorkstationForm",
+  "cabinet-form": "submitCabinetForm",
+  "cabinet-position-form": "submitCabinetPositionForm",
+  "user-form": "submitUserForm",
+  "device-port-form-expanded": "submitDevicePortForm",
+  "organization-form": "submitOrgForm",
+  "org-template-editor-form": "submitOrgTemplateForm",
+  "cable-link-form": "submitCableLinkForm",
+  "device-form": "submitDeviceForm"
+};
+
+/**
+ * 初始化资源按钮与表单的委托监听
+ * @param {Object} callbacks 懒加载回调集合（见 app.js getResourceCallbacks）
+ */
+export function initModals(callbacks = {}) {
+  document.addEventListener("click", (e) => {
+    if (e.target.classList.contains("modal")) {
+      closeModal(e.target.id);
+      return;
+    }
+
+    const callbackName = RESOURCE_BUTTON_CALLBACK_MAP[e.target.id];
+    if (callbackName && callbacks[callbackName]) {
+      e.preventDefault();
+      callbacks[callbackName]();
+      return;
+    }
+
+    // 页脚按钮通过 form 属性关联表单时，拦截 submit 类型按钮的点击
+    if (e.target.type === "submit" && e.target.hasAttribute("form")) {
+      const formCallbackName = RESOURCE_FORM_CALLBACK_MAP[e.target.getAttribute("form")];
+      if (formCallbackName && callbacks[formCallbackName]) {
+        e.preventDefault();
+        callbacks[formCallbackName]();
+      }
+    }
+  });
+
+  document.addEventListener("submit", (e) => {
+    const callbackName = RESOURCE_FORM_CALLBACK_MAP[e.target.id];
+    if (callbackName && callbacks[callbackName]) {
+      e.preventDefault();
+      callbacks[callbackName]();
+    }
+  });
+}
+
+// ==========================================
 // 按钮事件绑定
 // ==========================================
 
@@ -99,11 +165,11 @@ const BUTTON_EVENT_BINDINGS = [
     }
   },
   {
-    id: "import-json-btn",
+    id: "import-csv-btn",
     event: "click",
     handler: () => {
-      const { importJsonData } = getModule("systemManager");
-      importJsonData();
+      const { importCsvData } = getModule("systemManager");
+      importCsvData();
     }
   },
   {
@@ -115,11 +181,11 @@ const BUTTON_EVENT_BINDINGS = [
     }
   },
   {
-    id: "export-json-btn",
+    id: "export-csv-btn",
     event: "click",
     handler: () => {
-      const { exportJsonData } = getModule("systemManager");
-      exportJsonData();
+      const { exportCsvData } = getModule("systemManager");
+      exportCsvData();
     }
   },
   {

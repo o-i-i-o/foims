@@ -17,7 +17,7 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
 import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
-import { openModal } from "../utils/modal.js";
+import { openModal } from "../utils/modalLoader.js";
 
 const logSortStates = {
   operation: createSortState("created_at", "desc"),

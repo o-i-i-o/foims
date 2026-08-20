@@ -2,8 +2,7 @@ import {
   apiRequest,
   apiGet,
   apiPut,
-  apiPost,
-  translateServerMessage
+  apiPost
 } from "../utils/apiClient.js";
 
 import { showToast, escapeHtml } from "../utils/ui.js";
@@ -465,6 +464,52 @@ export async function loadSystemInfo() {
   }
 }
 
+// 触发浏览器下载 apiClient 返回的 blob 结果
+function downloadBlobResult(result, fallbackName) {
+  if (!result.isBlob) return;
+  const url = window.URL.createObjectURL(result.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = result.filename && result.filename !== "download" ? result.filename : fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// 导入文件大小上限（与后端一致）
+const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
+
+// 前端校验上传文件的真实类型：扩展名 + magic bytes（zip 为 PK 头，
+// csv 须为不含 NUL 的 UTF-8 文本），与后端校验形成双重防线
+async function validateImportFile(file) {
+  const name = file.name.toLowerCase();
+  const isZipName = name.endsWith(".zip");
+  const isCsvName = name.endsWith(".csv");
+  if (!isZipName && !isCsvName) {
+    showToast(t("import_export.invalid_file_type"), "error");
+    return false;
+  }
+  if (file.size > MAX_IMPORT_SIZE) {
+    showToast(t("import_export.file_too_large"), "error");
+    return false;
+  }
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  const isZipContent = head[0] === 0x50 && head[1] === 0x4b;
+  if (isZipContent !== isZipName) {
+    showToast(t("import_export.invalid_file_type"), "error");
+    return false;
+  }
+  if (isCsvName) {
+    const text = await file.slice(0, 64 * 1024).text();
+    if (text.includes("\u0000")) {
+      showToast(t("import_export.invalid_file_type"), "error");
+      return false;
+    }
+  }
+  return true;
+}
+
 // 下载模板
 export async function downloadTemplate() {
   try {
@@ -475,32 +520,24 @@ export async function downloadTemplate() {
       return;
     }
 
-    if (result.isBlob) {
-      const url = window.URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.filename || "template.zip";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    }
+    downloadBlobResult(result, "template.zip");
   } catch (error) {
     console.error("下载模板失败:", error);
     showToast(t("import_export.download_template_failed") + ": " + error.message, "error");
   }
 }
 
-// 导入 JSON 模块数据（单模块 JSON 或多模块 ZIP）
-export async function importJsonData() {
+// 导入 CSV 模块数据（ZIP 内多个 表名.csv，或按表头识别的单个 CSV）
+export async function importCsvData() {
   const fileInput = document.createElement("input");
   fileInput.type = "file";
-  fileInput.accept = ".zip,.json";
+  fileInput.accept = ".zip,.csv";
   fileInput.click();
 
   fileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!(await validateImportFile(file))) return;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -508,7 +545,7 @@ export async function importJsonData() {
     try {
       showToast(t("import_export.importing"), "info");
 
-      const result = await apiRequest("/api/system/import-export/import/json", {
+      const result = await apiRequest("/api/system/import-export/import/csv", {
         method: "POST",
         body: formData
       });
@@ -520,10 +557,14 @@ export async function importJsonData() {
           const contentDiv = elementCache.get("import-result-content");
           if (contentDiv) {
             contentDiv.innerHTML = results
-              .map(
-                (r) =>
-                  `<div class="import-result-item">${escapeHtml(r.module || "")}: ${escapeHtml(String(r.rows ?? 0))} ${t("import_export.rows_unit")}</div>`
+              .map((r) =>
+                t("import_export.result_item", {
+                  table: r.table || "",
+                  inserted: r.inserted ?? 0,
+                  updated: r.updated ?? 0
+                })
               )
+              .map((text) => `<div class="import-result-item">${escapeHtml(text)}</div>`)
               .join("");
             await openModal("import-result-modal");
           }
@@ -533,85 +574,41 @@ export async function importJsonData() {
         showToast(t("import_export.import_failed") + ": " + result.message, "error");
       }
     } catch (error) {
-      console.error("导入JSON数据失败:", error);
+      console.error("导入CSV数据失败:", error);
       showToast(t("import_export.import_failed") + ": " + error.message, "error");
     }
   });
 }
 
-// 按模块导出 JSON 数据（all 为 ZIP，单模块为 JSON 文件）
-export async function exportJsonData() {
+// 按模块导出 CSV 数据（ZIP 打包，每张业务表一个 表名.csv）
+export async function exportCsvData() {
   try {
-    const exportType = elementCache.getValue("json-export-type") || "all";
-    const result = await apiRequest(`/api/system/import-export/export/json?type=${encodeURIComponent(exportType)}`);
+    const exportType = elementCache.getValue("export-type") || "all";
+    const result = await apiRequest(`/api/system/import-export/export/csv?type=${encodeURIComponent(exportType)}`);
 
     if (!result.success) {
-      showToast(t("import_export.export_json_failed") + ": " + result.message, "error");
+      showToast(t("import_export.export_failed") + ": " + result.message, "error");
       return;
     }
 
-    if (result.isBlob) {
-      const url = window.URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        result.filename && result.filename !== "download"
-          ? result.filename
-          : `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.${
-              exportType === "all" ? "zip" : "json"
-            }`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    }
+    downloadBlobResult(result, `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`);
   } catch (error) {
-    console.error("导出JSON数据失败:", error);
-    showToast(t("import_export.export_json_failed") + ": " + error.message, "error");
+    console.error("导出CSV数据失败:", error);
+    showToast(t("import_export.export_failed") + ": " + error.message, "error");
   }
 }
 
 // 导出数据库 (SQL 格式)
 export async function exportDatabase() {
   try {
-    const response = await fetch("/api/system/import-export/export/database", {
-      method: "GET",
-      credentials: "include"
-    });
+    const result = await apiRequest("/api/system/import-export/export/database");
 
-    if (!response.ok) {
-      let errorMsg = "请求失败";
-      try {
-        const errorData = await response.json();
-        // 该处为直接 fetch，需手动翻译后端 i18n 消息
-        translateServerMessage(errorData);
-        errorMsg = errorData.message || errorMsg;
-      } catch (e) {}
-      showToast(t("import_export.export_db_failed") + ": " + errorMsg, "error");
+    if (!result.success) {
+      showToast(t("import_export.export_db_failed") + ": " + result.message, "error");
       return;
     }
 
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-
-    const disposition = response.headers.get("Content-Disposition");
-    let filename = `ipma_backup_${new Date().toISOString().slice(0, 10)}.sql`;
-    if (disposition && disposition.indexOf("attachment") !== -1) {
-      const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-      const matches = filenameRegex.exec(disposition);
-      if (matches !== null && matches[1]) {
-        filename = matches[1].replace(/['"]/g, "");
-      }
-    }
-
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-
+    downloadBlobResult(result, `ipma_backup_${new Date().toISOString().slice(0, 10)}.sql`);
     showToast(t("import_export.export_db_success"), "success");
   } catch (error) {
     console.error("导出数据库失败:", error);
@@ -629,19 +626,7 @@ export async function backupConfig() {
       return;
     }
 
-    if (result.isBlob) {
-      const url = window.URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        result.filename && result.filename !== "download"
-          ? result.filename
-          : `ipma-config-${new Date().toISOString().slice(0, 10)}.toml`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    }
+    downloadBlobResult(result, `ipma-config-${new Date().toISOString().slice(0, 10)}.toml`);
   } catch (error) {
     console.error("备份配置失败:", error);
     showToast(t("import_export.backup_failed") + ": " + error.message, "error");

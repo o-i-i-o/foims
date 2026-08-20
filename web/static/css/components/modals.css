@@ -205,9 +205,13 @@
   transition: all var(--transition-fast);
   background-color: var(--control-bg);
   color: var(--color-text-light);
+  box-sizing: border-box;
+}
+
+.modal.active .modal-content .modal-body .form-group input,
+.modal.active .modal-content .modal-body .form-group select {
   height: var(--control-height);
   line-height: 1.2;
-  box-sizing: border-box;
 }
 
 .modal.active .modal-content .modal-body .form-group select {
@@ -223,7 +227,6 @@
 .modal.active .modal-content .modal-body .form-group textarea {
   resize: vertical;
   min-height: 80px;
-  height: auto;
   line-height: 1.5;
   align-self: flex-start;
 }

@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.50"
+version = "0.15.51"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -2032,6 +2032,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "csv",
  "ipma-common",
  "serde",
  "serde_json",
