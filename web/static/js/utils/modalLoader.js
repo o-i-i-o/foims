@@ -39,6 +39,7 @@ const MODAL_REGISTRY = {
   "cable-link-modal": "/static/modals/cable/cable-link-modal.html",
   // 可视化
   "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
+  "topology-connection-detail-modal": "/static/modals/visualization/topology-connection-detail-modal.html",
   "topology-detail-modal": "/static/modals/visualization/topology-detail-modal.html",
   // 日志
   "log-details-modal": "/static/modals/log/log-details-modal.html",

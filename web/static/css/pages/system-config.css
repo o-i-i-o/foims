@@ -398,3 +398,21 @@
 .open-source-items a:hover {
   text-decoration: underline;
 }
+
+/* 认证配置卡片头部的启用开关（LDAP / SSO） */
+.config-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.config-switch input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}

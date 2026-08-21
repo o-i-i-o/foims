@@ -9,6 +9,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             email VARCHAR(100) UNIQUE NOT NULL,
             role VARCHAR(20) NOT NULL,
             status BOOLEAN NOT NULL DEFAULT TRUE,
+            auth_provider VARCHAR(20) NOT NULL DEFAULT 'local',
             reset_token VARCHAR(255),
             reset_token_expiry TIMESTAMP WITH TIME ZONE,
             two_factor_secret VARCHAR(255),

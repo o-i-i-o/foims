@@ -99,9 +99,18 @@ pub struct SendLoginCodeRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct EmailLoginRequest {
-    #[validate(email(message = "server.user.validation.email_invalid"))]
+    #[validate(email(message = "server.common.validation.email_format"))]
     pub email: String,
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
+    pub remember_me: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct LdapLoginRequest {
+    #[validate(length(min = 1, max = 50, message = "server.user.validation.username_length"))]
+    pub username: String,
+    #[validate(length(min = 1, message = "server.auth.validation.password_required"))]
+    pub password: String,
     pub remember_me: Option<bool>,
 }

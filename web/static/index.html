@@ -72,10 +72,13 @@
             <p data-i18n="login.subtitle">请输入您的账号信息</p>
           </div>
 
-          <!-- 登录模式 Tabs：用户名密码 / 邮箱验证码 -->
+          <!-- 登录模式 Tabs：用户名密码 / 邮箱验证码 / LDAP / SSO（LDAP 与 SSO 默认隐藏，
+               由 /api/auth/methods 按配置开关显示） -->
           <div class="login-tabs" role="tablist">
             <button type="button" class="tab-btn active" data-tab="password-login" role="tab" aria-selected="true" aria-controls="password-login-section" data-i18n="login.password_auth">密码认证</button>
             <button type="button" class="tab-btn" data-tab="email-login" role="tab" aria-selected="false" aria-controls="email-login-section" data-i18n="login.email_auth">邮箱认证</button>
+            <button type="button" class="tab-btn" data-tab="ldap-login" role="tab" aria-selected="false" aria-controls="ldap-login-section" data-i18n="login.ldap_auth" hidden>LDAP认证</button>
+            <button type="button" class="tab-btn" data-tab="sso-login" role="tab" aria-selected="false" aria-controls="sso-login-section" data-i18n="login.sso_auth" hidden>SSO认证</button>
           </div>
 
           <!-- 视图容器 -->
@@ -166,6 +169,46 @@
                         pattern="[0-9]{6}">
                       <button type="button" id="send-login-code-btn" class="btn-send-code" data-i18n="login.send_code">发送验证码</button>
                     </div>
+                  </div>
+                </div>
+
+                <!-- LDAP 登录区域（使用 LDAP 目录账户） -->
+                <div id="ldap-login-section" class="login-section">
+                  <div class="form-group">
+                    <label for="ldap-username" data-i18n="login.ldap_username">LDAP 用户名</label>
+                    <div class="input-wrapper">
+                      <input
+                        type="text"
+                        id="ldap-username"
+                        name="ldap_username"
+                        placeholder="请输入LDAP用户名"
+                        data-i18n-placeholder="login.ldap_username_placeholder"
+                        autocomplete="username"
+                        aria-label="LDAP用户名"
+                        data-i18n-aria-label="login.ldap_username">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="ldap-password" data-i18n="auth.password">密码</label>
+                    <div class="input-wrapper">
+                      <input
+                        type="password"
+                        id="ldap-password"
+                        name="ldap_password"
+                        placeholder="请输入LDAP密码"
+                        data-i18n-placeholder="login.ldap_password_placeholder"
+                        autocomplete="current-password"
+                        aria-label="密码"
+                        data-i18n-aria-label="auth.password">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SSO 登录区域（跳转 OIDC 认证平台） -->
+                <div id="sso-login-section" class="login-section">
+                  <div class="form-group">
+                    <p class="hint-text" data-i18n="login.sso_hint">跳转到企业统一认证平台完成登录</p>
                   </div>
                 </div>
 

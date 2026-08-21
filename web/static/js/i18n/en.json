@@ -395,7 +395,13 @@
     "system_not_init": "The system is not initialized. Please contact the administrator.",
     "email_service_not_configed": "The email service is not configured. Unable to send verification codes.",
     "toggle_password": "Show or hide password",
-    "email_required_error": "Please enter an email address"
+    "email_required_error": "Please enter an email address",
+    "ldap_auth": "LDAP Authentication",
+    "sso_auth": "SSO Authentication",
+    "ldap_username": "LDAP Username",
+    "ldap_username_placeholder": "Enter LDAP username",
+    "ldap_password_placeholder": "Enter LDAP password",
+    "sso_hint": "You will be redirected to the enterprise identity platform to sign in"
   },
   "dashboard": {
     "total_networks": "Total Networks",
@@ -778,11 +784,6 @@
     "mac_change_settings": "MAC Address Change Notification",
     "email_recipients": "Email Recipients",
     "recipients_hint": "Select users who will receive email notifications when MAC address changes are detected.",
-    "invalid_email": "Please enter a valid email address",
-    "smtp_not_configed": "Please configure the SMTP server in system settings first",
-    "email_saved": "MAC-change notification emails saved",
-    "email_cleared": "MAC-change notification emails cleared",
-    "check_smtp_failed": "Failed to check SMTP configuration. Please retry.",
     "save_success": "Notification settings saved successfully",
     "save_failed": "Failed to save notification settings",
     "save_error": "Failed to save notification settings"
@@ -1296,6 +1297,13 @@
     "connection_delete_confirm": "Delete this connection?",
     "physical_derived_hint": "This physical connection is derived from cable links; delete the corresponding cable link instead",
     "delete_connection": "Delete connection",
+    "connection_detail": "Connection Details",
+    "connection_source": "Source Device",
+    "connection_target": "Target Device",
+    "connection_port": "Port",
+    "connection_members": "Member Ports",
+    "connection_path": "Cable Path",
+    "connection_type_derived": "Physical (Derived from Cables)",
     "group_no_org": "No Organization",
     "group_no_room": "No Room",
     "group_no_cabinet": "No Cabinet",
@@ -1420,9 +1428,13 @@
       "totp_generate_failed": "Failed to generate TOTP",
       "user_id_invalid": "Invalid user identifier",
       "validation": {
-        "code_length": "Code must be 6 digits"
+        "code_length": "Code must be 6 digits",
+        "password_required": "Password is required"
       },
-      "qr_generate_failed": "Failed to generate 2FA QR code: {{error}}"
+      "qr_generate_failed": "Failed to generate 2FA QR code: {{error}}",
+      "external_account_use_provider_login": "This account uses external authentication; please sign in with the corresponding method",
+      "provider_mismatch": "This username is already bound to another sign-in method",
+      "external_username_invalid": "The username returned by external authentication is invalid"
     },
     "backup": {
       "dir_create_failed": "Failed to create backup directory",
@@ -1781,7 +1793,9 @@
       "invalid_password": "Invalid password",
       "secret_too_short": "Secret too short",
       "totp_code_replayed": "TOTP code replayed",
-      "user_not_found": "User not found"
+      "user_not_found": "User not found",
+      "ldap_auth_failed": "LDAP authentication failed",
+      "sso_login": "SSO login"
     },
     "logs": {
       "cleared": "Successfully cleared {{count}} log records",
@@ -2155,6 +2169,98 @@
         "manager_length": "Manager must not exceed 50 characters",
         "name_length": "Workstation name must be 1 to 50 characters"
       }
+    },
+    "ldap": {
+      "not_configured": "LDAP is not configured",
+      "not_configured_password": "LDAP service password not set; save a password first before leaving it empty",
+      "disabled": "LDAP authentication is disabled",
+      "connect_failed": "Failed to connect to the LDAP server",
+      "bind_failed": "LDAP bind failed; check the service account",
+      "search_failed": "LDAP search failed",
+      "password_encrypt_failed": "Failed to encrypt the LDAP password",
+      "config_retrieved": "LDAP configuration retrieved",
+      "config_updated": "LDAP configuration updated",
+      "test_success": "LDAP connection test succeeded",
+      "validation": {
+        "url_format": "Invalid LDAP URL format",
+        "bind_dn_length": "Invalid service account DN length",
+        "password_length": "Invalid password length",
+        "base_dn_length": "Base DN is required (max 255 characters)",
+        "filter_length": "Invalid user filter length",
+        "filter_placeholder": "The user filter must contain a %s or {username} placeholder"
+      }
+    },
+    "sso": {
+      "not_configured": "SSO is not configured",
+      "not_configured_secret": "SSO client secret not set; save a secret first before leaving it empty",
+      "disabled": "SSO authentication is disabled",
+      "issuer_invalid": "Invalid issuer URL",
+      "discovery_failed": "Failed to fetch the OIDC discovery document",
+      "redirect_uri_invalid": "Invalid redirect URI",
+      "host_header_missing": "Missing Host header; cannot derive the redirect URI",
+      "state_invalid": "SSO state validation failed; please start the sign-in again",
+      "code_missing": "SSO callback is missing the authorization code",
+      "exchange_failed": "Failed to exchange the authorization code for tokens",
+      "id_token_missing": "The IdP did not return an ID Token",
+      "id_token_invalid": "ID Token validation failed",
+      "provider_error": "The identity provider returned an error",
+      "secret_encrypt_failed": "Failed to encrypt the client secret",
+      "config_retrieved": "SSO configuration retrieved",
+      "config_updated": "SSO configuration updated",
+      "test_success": "SSO discovery document fetched successfully",
+      "validation": {
+        "issuer_format": "Invalid issuer URL format",
+        "client_id_length": "Client ID is required (max 100 characters)",
+        "secret_length": "Invalid client secret length",
+        "redirect_uri_length": "Invalid redirect URI length"
+      }
     }
+  },
+  "ldap": {
+    "title": "LDAP Configuration",
+    "enabled": "Enable LDAP Authentication",
+    "server_url": "LDAP Server Address",
+    "server_url_placeholder": "ldap://ds.example.com:389",
+    "server_url_desc": "ldap:// plaintext or ldaps:// encrypted",
+    "base_dn": "Base DN",
+    "base_dn_placeholder": "dc=example,dc=com",
+    "bind_dn": "Service Account DN",
+    "bind_dn_placeholder": "cn=admin,dc=example,dc=com",
+    "bind_dn_desc": "Optional; empty for anonymous bind",
+    "bind_password": "Service Account Password",
+    "bind_password_placeholder": "LDAP service account password",
+    "password_configured": "Configured (leave empty to keep)",
+    "user_filter": "User Search Filter",
+    "user_filter_placeholder": "(&(objectClass=person)(uid=%s))",
+    "user_filter_desc": "Use %s or {username} as the username placeholder",
+    "default_role": "Default Role for New Users",
+    "test_connection": "Test Connection",
+    "test_success": "LDAP connection test succeeded",
+    "test_failed": "LDAP connection test failed",
+    "test_error": "Error testing LDAP connection",
+    "save_success": "LDAP configuration saved",
+    "save_failed": "Failed to save LDAP configuration"
+  },
+  "sso": {
+    "title": "SSO Configuration (OIDC)",
+    "enabled": "Enable SSO Authentication",
+    "issuer_url": "Issuer URL",
+    "issuer_url_placeholder": "https://sso.example.com",
+    "issuer_url_desc": "Discovery document fetched from /.well-known/openid-configuration",
+    "client_id": "Client ID",
+    "client_id_placeholder": "ipma",
+    "client_secret": "Client Secret",
+    "client_secret_placeholder": "OIDC client secret",
+    "secret_configured": "Configured (leave empty to keep)",
+    "redirect_uri": "Redirect URI",
+    "redirect_uri_placeholder": "https://ipma.example.com/api/auth/sso/callback",
+    "redirect_uri_desc": "Optional; derived from the request host when empty. Register the same URI in the IdP",
+    "default_role": "Default Role for New Users",
+    "test_connection": "Test Connection",
+    "test_success": "SSO configuration verified",
+    "test_failed": "SSO configuration verification failed",
+    "test_error": "Error testing SSO connection",
+    "save_success": "SSO configuration saved",
+    "save_failed": "Failed to save SSO configuration"
   }
 }

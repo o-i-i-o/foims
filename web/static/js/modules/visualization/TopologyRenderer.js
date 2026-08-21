@@ -34,6 +34,9 @@ const HOP_STYLES = {
   patch_panel: { kind: "rect", fill: "#ede7f6", stroke: "#5e35b1" }
 };
 
+// 同侧边缘上相邻锚点的错开间距
+const ANCHOR_SPREAD = 18;
+
 function getDeviceTypeLabel(type) {
   const key = DEVICE_TYPE_I18N_KEYS[type];
   return key ? t(key) : type;
@@ -43,6 +46,8 @@ export class TopologyRenderer {
   constructor(core) {
     this.core = core;
     this._connectionPairCount = new Map();
+    // 设备同侧边缘的锚点占用计数：多条连线共用同一锚点会导致端口标签重叠
+    this._anchorSlots = new Map();
   }
 
   drawDeviceNode(device) {
@@ -151,8 +156,8 @@ export class TopologyRenderer {
     const targetPos = this.core.getNodePosition(connection.target_device_id);
     if (!sourcePos || !targetPos) return null;
 
-    const sourceAnchor = this._getBestAnchor(sourcePos, targetPos);
-    const targetAnchor = this._getBestAnchor(targetPos, sourcePos);
+    const sourceAnchor = this._getBestAnchor(connection.source_device_id, sourcePos, targetPos);
+    const targetAnchor = this._getBestAnchor(connection.target_device_id, targetPos, sourcePos);
 
     const pairKey = this._getPairKey(connection.source_device_id, connection.target_device_id);
     const pairIndex = this._connectionPairCount.get(pairKey) || 0;
@@ -411,7 +416,7 @@ export class TopologyRenderer {
     return `${sorted[0]}|${sorted[1]}`;
   }
 
-  _getBestAnchor(sourcePos, targetPos) {
+  _getBestAnchor(deviceId, sourcePos, targetPos) {
     const cx = sourcePos.x + sourcePos.width / 2;
     const cy = sourcePos.y + sourcePos.height / 2;
     const tcx = targetPos.x + targetPos.width / 2;
@@ -420,12 +425,35 @@ export class TopologyRenderer {
     const dx = tcx - cx;
     const dy = tcy - cy;
 
+    let anchor;
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) return { x: sourcePos.x + sourcePos.width, y: cy, dir: "right" };
-      return { x: sourcePos.x, y: cy, dir: "left" };
+      if (dx > 0) anchor = { x: sourcePos.x + sourcePos.width, y: cy, dir: "right" };
+      else anchor = { x: sourcePos.x, y: cy, dir: "left" };
+    } else if (dy > 0) {
+      anchor = { x: cx, y: sourcePos.y + sourcePos.height, dir: "bottom" };
+    } else {
+      anchor = { x: cx, y: sourcePos.y, dir: "top" };
     }
-    if (dy > 0) return { x: cx, y: sourcePos.y + sourcePos.height, dir: "bottom" };
-    return { x: cx, y: sourcePos.y, dir: "top" };
+
+    // 同侧边缘按连接次序左右/上下错开，避免多条连线共用同一锚点
+    // 导致端口标签相互覆盖（次序：中心、+S、-S、+2S、-2S…）
+    const slot = this._anchorSlots.get(`${deviceId}:${anchor.dir}`) || 0;
+    this._anchorSlots.set(`${deviceId}:${anchor.dir}`, slot + 1);
+    const magnitude = Math.floor((slot + 1) / 2);
+    const offset = magnitude * (slot % 2 === 0 ? -ANCHOR_SPREAD : ANCHOR_SPREAD);
+
+    if (anchor.dir === "top" || anchor.dir === "bottom") {
+      anchor.x = Math.max(
+        sourcePos.x + 16,
+        Math.min(sourcePos.x + sourcePos.width - 16, anchor.x + offset)
+      );
+    } else {
+      anchor.y = Math.max(
+        sourcePos.y + 16,
+        Math.min(sourcePos.y + sourcePos.height - 16, anchor.y + offset)
+      );
+    }
+    return anchor;
   }
 
   _calculateOrthogonalPath(source, target, parallelOffset = 0) {
@@ -474,6 +502,7 @@ export class TopologyRenderer {
       `.topology-connection-group`
     );
     this._connectionPairCount.clear();
+    this._anchorSlots.clear();
     const toRedraw = [];
     affectedConnections.forEach((g) => {
       const connectionId = g.dataset.connectionId;
@@ -489,6 +518,7 @@ export class TopologyRenderer {
   setConnectionsMap(map) {
     this._connectionsMap = map;
     this._connectionPairCount.clear();
+    this._anchorSlots.clear();
   }
 
   clearAll() {
@@ -496,5 +526,8 @@ export class TopologyRenderer {
     this.core.elementsGroup.innerHTML = "";
     this.core.connectionsGroup.innerHTML = "";
     this.core.tempConnectionGroup.innerHTML = "";
+    // 计数器随画布清空一并重置，否则重载后平行偏移/锚点错开量会持续累加
+    this._connectionPairCount.clear();
+    this._anchorSlots.clear();
   }
 }

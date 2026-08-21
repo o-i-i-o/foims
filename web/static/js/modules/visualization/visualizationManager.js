@@ -1,7 +1,8 @@
 import { loadModule } from "../../utils/resourceLoader.js";
 import {
   loadOrgsForSelect,
-  loadVisualizationRoomsForSelect
+  loadVisualizationRoomsForSelect,
+  getOrgSubtreeIds
 } from "../../utils/resources.js";
 import { elementCache, setActiveSubtab, getActiveSubtab } from "../../utils/helpers.js";
 import { editWorkstation } from "../workstation.js";
@@ -198,6 +199,16 @@ function bindTopologyEvents() {
   if (openConnModalBtn) {
     openConnModalBtn.addEventListener("click", openTopologyConnectionModal);
   }
+
+  // 组织筛选：一个组织一套布局（设备位置按组织独立保存，切换即重新渲染）
+  const topologyOrgSelect = elementCache.get("topology-org-select");
+  if (topologyOrgSelect) {
+    topologyOrgSelect.addEventListener("change", async (e) => {
+      const orgId = e.target.value || null;
+      const scope = orgId ? await getOrgSubtreeIds(orgId) : null;
+      topologyVisualization.setOrgFilter(scope);
+    });
+  }
 }
 
 // ==================== 创建连线（手动物理示意 / 逻辑链路聚合） ====================
@@ -325,7 +336,8 @@ async function loadInitialData() {
   // 先填充组织选项，再按默认筛选（全类别）加载两个视图的房间列表
   await Promise.all([
     loadOrgsForSelect("viz-org-select"),
-    loadOrgsForSelect("cabinet-viz-org-select")
+    loadOrgsForSelect("cabinet-viz-org-select"),
+    loadOrgsForSelect("topology-org-select")
   ]);
   await Promise.all([refreshVisualizationRooms("workstation"), refreshVisualizationRooms("cabinet")]);
 }

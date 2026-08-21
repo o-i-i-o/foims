@@ -393,6 +393,11 @@
   font-size: 10px;
   fill: var(--color-text-secondary);
   dominant-baseline: middle;
+  /* 白色描边光环：标签叠在连线/节点上时保持可读（端口名称不再被覆盖） */
+  paint-order: stroke;
+  stroke: var(--color-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 /* 信息点链中间节点（设备 → 信息点 → ... → 目标设备） */
@@ -646,6 +651,10 @@
   font-weight: 600;
   dominant-baseline: middle;
   pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--color-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 /* 连线删除标记（选中后显示，派生物理连线不显示） */
@@ -671,7 +680,7 @@
   pointer-events: none;
 }
 
-/* ==================== 设备可视化：区域容器（组织/房间/机柜） ==================== */
+/* ==================== 设备可视化：区域容器（房间外框 + 机柜内框） ==================== */
 
 .containers-group {
   pointer-events: none;
@@ -684,6 +693,14 @@
   stroke-dasharray: 8 4;
 }
 
+/* 机柜容器：房间内层级，样式弱于房间外框 */
+.topology-container.container-cabinet {
+  fill: rgb(94 53 177 / 0.05);
+  stroke: #b39ddb;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
 .topology-container-label {
   font-size: 13px;
   font-weight: 700;
@@ -691,10 +708,100 @@
   dominant-baseline: middle;
 }
 
+.container-cabinet .topology-container-label {
+  font-size: 11px;
+  fill: #5e35b1;
+}
+
 .topology-container-count {
   font-size: 11px;
   fill: #78909c;
   dominant-baseline: middle;
+}
+
+.container-cabinet .topology-container-count {
+  font-size: 10px;
+}
+
+/* ==================== 连线详情弹窗 ==================== */
+
+.connection-detail-type {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.connection-detail-type .badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--color-primary);
+  color: var(--color-bg-white);
+}
+
+.conn-detail-label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.connection-detail-endpoints {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.connection-detail-endpoint {
+  flex: 1;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.connection-detail-endpoint .endpoint-title {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.connection-detail-endpoint .endpoint-device {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+  word-break: break-all;
+}
+
+.connection-detail-endpoint .endpoint-port {
+  font-size: 13px;
+  color: var(--color-primary);
+  word-break: break-all;
+}
+
+.connection-detail-arrow {
+  align-self: center;
+  font-size: 20px;
+  color: var(--color-text-secondary);
+}
+
+.connection-detail-section {
+  margin-bottom: var(--space-md);
+}
+
+.connection-detail-section .section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.connection-detail-section .section-body {
+  font-size: 13px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
 }
 
 /* 设备可视化工具栏：连线模式/创建连线/自动发现 靠左，

@@ -118,7 +118,6 @@ export function initLogTabs() {
         // 加载对应类型的数据
         if (tabId === "notifications") {
           loadNotificationsData();
-          initMacNotificationEmail();
         } else {
           loadLogsData(tabId);
         }
@@ -154,7 +153,6 @@ export function initLogTabs() {
         // 加载对应类型的数据
         if (targetTabId === "notifications") {
           loadNotificationsData();
-          initMacNotificationEmail();
         } else {
           loadLogsData(targetTabId);
         }
@@ -185,7 +183,6 @@ export function initLogTabs() {
       // 根据默认标签加载对应数据
       if (defaultTabId === "notifications") {
         loadNotificationsData();
-        initMacNotificationEmail();
       } else {
         loadLogsData(defaultTabId);
       }
@@ -459,51 +456,6 @@ export async function clearReadNotifications() {
   } catch (error) {
     console.error("清除已读通知失败:", error);
     showToast(t("common.operation_failed_retry"), "error");
-  }
-}
-
-// 保存MAC变动通知邮箱
-export async function saveMacNotificationEmail() {
-  const emailInput = document.getElementById("mac-notification-email");
-  const email = emailInput.value.trim();
-
-  if (email) {
-    // 校验邮件地址格式
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      showToast(t("notification.invalid_email"), "error");
-      return;
-    }
-
-    // 检查SMTP配置是否存在
-    try {
-      const result = await apiGet("/api/system/smtp/config");
-      if (!result.success || !result.data || !result.data.host) {
-        showToast(t("notification.smtp_not_configed"), "error");
-        return;
-      }
-
-      // SMTP配置存在，保存邮箱
-      sessionStorage.setItem("macNotificationEmail", email);
-      showToast(t("notification.email_saved"), "success");
-    } catch (error) {
-      console.error("检查SMTP配置失败:", error);
-      showToast(t("notification.check_smtp_failed"), "error");
-    }
-  } else {
-    sessionStorage.removeItem("macNotificationEmail");
-    showToast(t("notification.email_cleared"), "info");
-  }
-}
-
-// 初始化MAC变动通知邮箱输入框
-function initMacNotificationEmail() {
-  const emailInput = document.getElementById("mac-notification-email");
-  if (!emailInput) return;
-
-  const savedEmail = sessionStorage.getItem("macNotificationEmail");
-  if (savedEmail) {
-    emailInput.value = savedEmail;
   }
 }
 

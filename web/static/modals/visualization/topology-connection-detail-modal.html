@@ -1,0 +1,49 @@
+<template id="topology-connection-detail-modal-template">
+<div id="topology-connection-detail-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="viz.connection_detail">Connection Details</h3>
+      <span class="close" data-modal-id="topology-connection-detail-modal" role="button">&times;</span>
+    </header>
+    <div class="modal-body">
+      <div class="connection-detail-type">
+        <span id="topo-conn-detail-type" class="badge"></span>
+        <span id="topo-conn-detail-label" class="conn-detail-label"></span>
+      </div>
+      <div class="connection-detail-endpoints">
+        <div class="connection-detail-endpoint">
+          <div class="endpoint-title" data-i18n="viz.connection_source">Source Device</div>
+          <div id="topo-conn-detail-source-device" class="endpoint-device"></div>
+          <div class="endpoint-port">
+            <span data-i18n="viz.connection_port">Port</span>:
+            <span id="topo-conn-detail-source-port"></span>
+          </div>
+        </div>
+        <div class="connection-detail-arrow">&rarr;</div>
+        <div class="connection-detail-endpoint">
+          <div class="endpoint-title" data-i18n="viz.connection_target">Target Device</div>
+          <div id="topo-conn-detail-target-device" class="endpoint-device"></div>
+          <div class="endpoint-port">
+            <span data-i18n="viz.connection_port">Port</span>:
+            <span id="topo-conn-detail-target-port"></span>
+          </div>
+        </div>
+      </div>
+      <div id="topo-conn-detail-members" class="connection-detail-section hidden">
+        <div class="section-title" data-i18n="viz.connection_members">Member Ports</div>
+        <div id="topo-conn-detail-source-members" class="section-body"></div>
+        <div id="topo-conn-detail-target-members" class="section-body"></div>
+      </div>
+      <div id="topo-conn-detail-path" class="connection-detail-section hidden">
+        <div class="section-title" data-i18n="viz.connection_path">Cable Path</div>
+        <div id="topo-conn-detail-cables" class="section-body"></div>
+      </div>
+      <p id="topo-conn-detail-derived-hint" class="text-muted hidden" data-i18n="viz.physical_derived_hint"></p>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" id="topo-conn-detail-delete" class="btn btn-danger btn-sm" data-i18n="viz.delete_connection">Delete</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-modal-id="topology-connection-detail-modal" data-i18n="common.close">Close</button>
+    </footer>
+  </div>
+</div>
+</template>

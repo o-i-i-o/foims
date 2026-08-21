@@ -4,15 +4,26 @@ import { TopologyDataManager } from "./TopologyDataManager.js";
 import { showConfirm } from "../../utils/confirm.js";
 import { showToast } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
+import { loadModal, openModal, closeModal } from "../../utils/modalLoader.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+// 房间容器留白：左右下内边距与顶部标题区高度
+const ROOM_PADDING = 40;
+const ROOM_HEADER = 52;
+// 机柜容器留白
+const CABINET_PADDING = 24;
+const CABINET_HEADER = 36;
+// 房间容器之间的最小间距（推开重叠分组时使用）
+const ROOM_GAP = 80;
+const CABINET_GAP = 40;
 
 export class TopologyVisualization {
   constructor(containerId) {
     this.core = new TopologyCore(containerId, {
       onNodeClick: (deviceId) => this.openDeviceDetail(deviceId),
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
-      onNodeDragEnd: () => this._renderContainers(),
+      onNodeDragEnd: (deviceId) => this._handleNodeDragEnd(deviceId),
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
@@ -24,6 +35,8 @@ export class TopologyVisualization {
     this.connections = [];
     this.connectionsMap = new Map();
     this.selectedConnectionId = null;
+    // 组织筛选：null 显示全部，否则仅渲染集合内组织的设备（一个组织一套布局）
+    this.orgFilterSet = null;
   }
 
   async loadTopology() {
@@ -39,8 +52,36 @@ export class TopologyVisualization {
     connections.forEach((c) => this.connectionsMap.set(c.id, c));
     this.renderer.setConnectionsMap(this.connectionsMap);
 
-    nodes.forEach((node) => this.renderer.drawDeviceNode(node));
-    connections.forEach((conn) => this.renderer.drawConnection(conn));
+    // 修正历史布局中房间包围盒相互覆盖的情况（整体平移分组，不动单个设备）
+    this._separateOverlappingGroups();
+
+    this._renderCurrentView();
+  }
+
+  /// 设置组织筛选（传入组织 id 集合或 null），并按筛选重新渲染
+  setOrgFilter(orgIds) {
+    this.orgFilterSet = orgIds;
+    this._renderCurrentView();
+  }
+
+  /// 当前筛选下可见的节点
+  visibleNodes() {
+    if (!this.orgFilterSet) return this.nodes;
+    return this.nodes.filter((n) => n.org_id && this.orgFilterSet.has(n.org_id));
+  }
+
+  /// 当前筛选下可见的连线（两端设备均可见才显示）
+  visibleConnections() {
+    const ids = new Set(this.visibleNodes().map((n) => n.device_id));
+    return this.connections.filter(
+      (c) => ids.has(c.source_device_id) && ids.has(c.target_device_id)
+    );
+  }
+
+  _renderCurrentView() {
+    this.renderer.clearAll();
+    this.visibleNodes().forEach((node) => this.renderer.drawDeviceNode(node));
+    this.visibleConnections().forEach((conn) => this.renderer.drawConnection(conn));
     this._renderContainers();
 
     this._fitView();
@@ -77,6 +118,20 @@ export class TopologyVisualization {
     }
   }
 
+  /// 拖拽结束后：以用户摆放位置为准，推开其他被覆盖的房间分组
+  _handleNodeDragEnd(deviceId) {
+    const node = this.nodes.find((n) => n.device_id === deviceId);
+    const fixedKey = node?.room_id ? `room:${node.room_id}` : "room:none";
+
+    this._syncPositionsFromDom();
+    const moved = this._separateOverlappingGroups(fixedKey);
+    if (moved) {
+      this._renderCurrentView();
+    } else {
+      this._renderContainers();
+    }
+  }
+
   async _handleConnectionClick(connectionId) {
     this._deselectConnection();
     this.selectedConnectionId = connectionId;
@@ -92,20 +147,82 @@ export class TopologyVisualization {
     const conn = this.connectionsMap.get(connectionId);
     if (!conn) return;
 
-    // 派生物理连线来源于线路数据，需在线路模块删除
-    if (conn.derived) {
-      showToast(t("viz.physical_derived_hint"), "info");
-      return;
+    await this._openConnectionDetail(conn);
+  }
+
+  /// 连线详情弹窗：展示两端设备与端口（逻辑连线含成员端口，派生连线含途经线路）
+  async _openConnectionDetail(conn) {
+    const modal = await loadModal("topology-connection-detail-modal");
+    if (!modal) return;
+
+    const setText = (id, text) => {
+      const el = modal.querySelector(`#${id}`);
+      if (el) el.textContent = text;
+    };
+    const toggle = (id, show) => {
+      const el = modal.querySelector(`#${id}`);
+      if (el) el.classList.toggle("hidden", !show);
+    };
+
+    const typeKey = conn.derived
+      ? "viz.connection_type_derived"
+      : conn.connection_type === "logical"
+        ? "viz.connection_type_logical"
+        : "viz.connection_type_physical";
+    setText("topo-conn-detail-type", t(typeKey));
+    setText("topo-conn-detail-label", conn.label || "");
+    toggle("topo-conn-detail-label", Boolean(conn.label));
+
+    setText(
+      "topo-conn-detail-source-device",
+      conn.source_device_name || conn.source_device_id
+    );
+    setText(
+      "topo-conn-detail-target-device",
+      conn.target_device_name || conn.target_device_id
+    );
+    setText("topo-conn-detail-source-port", conn.source_port_label || t("viz.no_port"));
+    setText("topo-conn-detail-target-port", conn.target_port_label || t("viz.no_port"));
+
+    const formatMembers = (members) =>
+      (members || []).map((m) => m.port_number || m.port_id.slice(0, 8)).join(", ");
+    const hasMembers =
+      conn.connection_type === "logical" &&
+      ((conn.source_members?.length || 0) > 0 || (conn.target_members?.length || 0) > 0);
+    toggle("topo-conn-detail-members", hasMembers);
+    if (hasMembers) {
+      setText("topo-conn-detail-source-members", formatMembers(conn.source_members));
+      setText("topo-conn-detail-target-members", formatMembers(conn.target_members));
     }
 
-    g.classList.add("selected-group");
-    const bbox = path.getBBox();
-    const midPoint = { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 };
-    const marker = this.renderer.drawDeleteMarker(g, connectionId, midPoint);
-    marker.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await this._deleteConnection(connectionId);
+    const cables = Array.isArray(conn.cables) ? conn.cables : [];
+    const hasPath = cables.length > 0;
+    toggle("topo-conn-detail-path", hasPath);
+    if (hasPath) {
+      setText(
+        "topo-conn-detail-cables",
+        cables.map((c) => c.cable_label || c.cable_id.slice(0, 8)).join("  →  ")
+      );
+    }
+
+    toggle("topo-conn-detail-derived-hint", Boolean(conn.derived));
+
+    // 仅存储连线（手动物理/逻辑）可删，派生物理连线由线路管理维护
+    const deleteBtn = modal.querySelector("#topo-conn-detail-delete");
+    if (deleteBtn) {
+      deleteBtn.classList.toggle("hidden", Boolean(conn.derived));
+      deleteBtn.onclick = async () => {
+        closeModal("topology-connection-detail-modal");
+        await this._deleteConnection(conn.id);
+      };
+    }
+
+    const closeButtons = modal.querySelectorAll('[data-modal-id="topology-connection-detail-modal"]');
+    closeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => this._deselectConnection());
     });
+
+    openModal("topology-connection-detail-modal");
   }
 
   async _deleteConnection(connectionId) {
@@ -165,7 +282,7 @@ export class TopologyVisualization {
     const result = await this.dataManager.autoDiscover();
     if (result) {
       await this.loadTopology();
-      this.hierarchicalLayout();
+      this.groupedLayout();
       showToast(
         `${t("viz.auto_discover_done", { count: result.added_nodes })}，${result.discovered_connections ?? 0} ${t("viz.connections_unit")}`,
         "success"
@@ -174,242 +291,366 @@ export class TopologyVisualization {
   }
 
   autoLayout() {
-    this.hierarchicalLayout();
+    this.groupedLayout();
   }
 
-  /// 区域容器：同一组织/房间/机柜的设备放入同一容器框
+  /// 空间分组：房间 → 机柜 两级（房间-机柜-设备层级）。
+  /// 按房间 id（缺失时归入"未分房间"）分组；房间内有机柜设备时
+  /// 各机柜成组，其余为散件。
+  _collectSpatialGroups() {
+    const rooms = new Map();
+
+    this.visibleNodes().forEach((node) => {
+      const roomKey = node.room_id ? `room:${node.room_id}` : "room:none";
+      if (!rooms.has(roomKey)) {
+        rooms.set(roomKey, {
+          key: roomKey,
+          label: node.room_name || t("viz.group_no_room"),
+          orgLabel: node.org_name || "",
+          cabinets: new Map(),
+          loose: [],
+          nodes: []
+        });
+      }
+      const room = rooms.get(roomKey);
+      room.nodes.push(node);
+
+      const cabinetKey = node.cabinet_id
+        ? `cab:${node.cabinet_id}`
+        : node.cabinet_name
+          ? `cab:name:${node.cabinet_name}`
+          : null;
+      if (cabinetKey) {
+        if (!room.cabinets.has(cabinetKey)) {
+          room.cabinets.set(cabinetKey, {
+            key: cabinetKey,
+            label: node.cabinet_name || t("viz.group_no_cabinet"),
+            nodes: []
+          });
+        }
+        room.cabinets.get(cabinetKey).nodes.push(node);
+      } else {
+        room.loose.push(node);
+      }
+    });
+
+    const list = [...rooms.values()];
+    list.forEach((room) => {
+      room.cabinets = [...room.cabinets.values()];
+    });
+    return list;
+  }
+
+  /// 节点包围盒（读节点对象；DOM 领先时由 _syncPositionsFromDom 先行同步）
+  _nodeRect(node) {
+    return {
+      x: node.x || 100,
+      y: node.y || 100,
+      width: node.width || 200,
+      height: node.height || 100
+    };
+  }
+
+  /// 分组节点包围盒（含容器留白），空分组返回 null
+  _groupBox(nodes, padding, header) {
+    if (nodes.length === 0) return null;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    nodes.forEach((node) => {
+      const r = this._nodeRect(node);
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    });
+    return {
+      minX: minX - padding,
+      minY: minY - padding - header,
+      maxX: maxX + padding,
+      maxY: maxY + padding
+    };
+  }
+
+  /// 区域容器：房间外框 + 机柜内框。
+  /// 房间内存在机柜设备时才绘制机柜容器；无机柜时不显示机柜层级。
   _renderContainers() {
     const container = this.core.containersGroup;
     container.innerHTML = "";
 
-    const groups = new Map();
-    this.core.elementsGroup.querySelectorAll("[data-device-id]").forEach((el) => {
-      const rect = el.querySelector("rect");
-      if (!rect) return;
-      const node = this.nodes.find((n) => n.device_id === el.dataset.deviceId);
-      if (!node) return;
+    this._collectSpatialGroups().forEach((room) => {
+      const roomBox = this._groupBox(room.nodes, ROOM_PADDING, ROOM_HEADER);
+      if (!roomBox) return;
 
-      const org = node.org_name || t("viz.group_no_org");
-      const room = node.room_name || t("viz.group_no_room");
-      const cabinet = node.cabinet_name || t("viz.group_no_cabinet");
-      const key = `${org} / ${room} / ${cabinet}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({
-        x: parseFloat(rect.getAttribute("x")),
-        y: parseFloat(rect.getAttribute("y")),
-        width: parseFloat(rect.getAttribute("width")) || 200,
-        height: parseFloat(rect.getAttribute("height")) || 100
+      const roomG = this._drawContainerRect(roomBox, {
+        kind: "room",
+        padding: ROOM_PADDING,
+        header: ROOM_HEADER,
+        label: room.label,
+        sublabel: room.orgLabel,
+        count: room.nodes.length
       });
-    });
+      container.appendChild(roomG);
 
-    const PADDING = 40;
-    const TOP = 52;
-
-    groups.forEach((members, key) => {
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      members.forEach((m) => {
-        minX = Math.min(minX, m.x);
-        minY = Math.min(minY, m.y);
-        maxX = Math.max(maxX, m.x + m.width);
-        maxY = Math.max(maxY, m.y + m.height);
+      room.cabinets.forEach((cabinet) => {
+        const cabBox = this._groupBox(cabinet.nodes, CABINET_PADDING, CABINET_HEADER);
+        if (!cabBox) return;
+        const cabG = this._drawContainerRect(cabBox, {
+          kind: "cabinet",
+          padding: CABINET_PADDING,
+          header: CABINET_HEADER,
+          label: cabinet.label,
+          sublabel: "",
+          count: cabinet.nodes.length
+        });
+        container.appendChild(cabG);
       });
-
-      const g = document.createElementNS(SVG_NS, "g");
-      g.classList.add("topology-container-group");
-
-      const rect = document.createElementNS(SVG_NS, "rect");
-      rect.classList.add("topology-container");
-      rect.setAttribute("x", minX - PADDING);
-      rect.setAttribute("y", minY - PADDING - TOP);
-      rect.setAttribute("width", maxX - minX + PADDING * 2);
-      rect.setAttribute("height", maxY - minY + PADDING * 2 + TOP);
-      rect.setAttribute("rx", 10);
-      g.appendChild(rect);
-
-      const label = document.createElementNS(SVG_NS, "text");
-      label.classList.add("topology-container-label");
-      label.textContent = key;
-      label.setAttribute("x", minX - PADDING + 14);
-      label.setAttribute("y", minY - PADDING - TOP + 20);
-      g.appendChild(label);
-
-      const count = document.createElementNS(SVG_NS, "text");
-      count.classList.add("topology-container-count");
-      count.textContent = `${members.length} ${t("viz.device_unit")}`;
-      count.setAttribute("x", minX - PADDING + 14);
-      count.setAttribute("y", minY - PADDING - TOP + 38);
-      g.appendChild(count);
-
-      container.appendChild(g);
     });
   }
 
-  hierarchicalLayout() {
+  _drawContainerRect(box, opts) {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.classList.add("topology-container-group", `container-${opts.kind}`);
+
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.classList.add("topology-container", `container-${opts.kind}`);
+    rect.setAttribute("x", box.minX);
+    rect.setAttribute("y", box.minY);
+    rect.setAttribute("width", box.maxX - box.minX);
+    rect.setAttribute("height", box.maxY - box.minY);
+    rect.setAttribute("rx", opts.kind === "room" ? 10 : 8);
+    g.appendChild(rect);
+
+    const label = document.createElementNS(SVG_NS, "text");
+    label.classList.add("topology-container-label");
+    label.textContent = opts.label;
+    label.setAttribute("x", box.minX + 14);
+    label.setAttribute("y", box.minY + 20);
+    label.setAttribute("dominant-baseline", "middle");
+    g.appendChild(label);
+
+    // 副标题：房间容器带组织名，机柜容器仅显示数量
+    const sub = opts.sublabel
+      ? `${opts.sublabel} · ${opts.count} ${t("viz.device_unit")}`
+      : `${opts.count} ${t("viz.device_unit")}`;
+    const count = document.createElementNS(SVG_NS, "text");
+    count.classList.add("topology-container-count");
+    count.textContent = sub;
+    count.setAttribute("x", box.minX + 14);
+    count.setAttribute("y", box.minY + 38);
+    count.setAttribute("dominant-baseline", "middle");
+    g.appendChild(count);
+
+    return g;
+  }
+
+  /// 将 DOM 中的实时位置同步回节点对象（拖拽后推挤分组前调用）
+  _syncPositionsFromDom() {
+    this.nodes.forEach((node) => {
+      const el = this.core.elementsGroup.querySelector(
+        `[data-device-id="${CSS.escape(node.device_id)}"]`
+      );
+      const rect = el?.querySelector("rect");
+      if (!rect) return;
+      node.x = Math.round(parseFloat(rect.getAttribute("x")));
+      node.y = Math.round(parseFloat(rect.getAttribute("y")));
+      node.width = parseFloat(rect.getAttribute("width")) || node.width || 200;
+      node.height = parseFloat(rect.getAttribute("height")) || node.height || 100;
+    });
+  }
+
+  /// 推开包围盒相交的分组（先房间级、再房间内机柜级），
+  /// 返回是否发生移动。fixedKey 指定的房间分组保持不动。
+  _separateOverlappingGroups(fixedKey = null) {
+    const rooms = this._collectSpatialGroups();
+    let moved = this._separateGroupBoxes(
+      rooms.map((room) => ({
+        key: room.key,
+        nodes: room.nodes,
+        padding: ROOM_PADDING,
+        header: ROOM_HEADER
+      })),
+      ROOM_GAP,
+      fixedKey
+    );
+
+    rooms.forEach((room) => {
+      const separated = this._separateGroupBoxes(
+        room.cabinets.map((cab) => ({
+          key: cab.key,
+          nodes: cab.nodes,
+          padding: CABINET_PADDING,
+          header: CABINET_HEADER
+        })),
+        CABINET_GAP
+      );
+      moved = moved || separated;
+    });
+
+    return moved;
+  }
+
+  /// 分组两两推挤：包围盒相交时沿穿透量较小的轴整体平移分组内全部节点
+  _separateGroupBoxes(entries, gap, fixedKey = null) {
+    const boxes = entries
+      .map((entry) => ({
+        ...entry,
+        box: this._groupBox(entry.nodes, entry.padding, entry.header)
+      }))
+      .filter((entry) => entry.box);
+    if (boxes.length < 2) return false;
+
+    let moved = false;
+
+    const shiftGroup = (entry, dx, dy) => {
+      if (dx === 0 && dy === 0) return;
+      entry.nodes.forEach((node) => {
+        node.x = Math.round((node.x || 0) + dx);
+        node.y = Math.round((node.y || 0) + dy);
+      });
+      entry.box.minX += dx;
+      entry.box.maxX += dx;
+      entry.box.minY += dy;
+      entry.box.maxY += dy;
+      moved = true;
+    };
+
+    for (let iter = 0; iter < 40; iter++) {
+      let adjusted = false;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          const overlapX = Math.min(a.box.maxX, b.box.maxX) - Math.max(a.box.minX, b.box.minX);
+          const overlapY = Math.min(a.box.maxY, b.box.maxY) - Math.max(a.box.minY, b.box.minY);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+
+          adjusted = true;
+          const aFixed = a.key === fixedKey;
+          const bFixed = b.key === fixedKey;
+          const aCenterX = (a.box.minX + a.box.maxX) / 2;
+          const bCenterX = (b.box.minX + b.box.maxX) / 2;
+
+          if (overlapX <= overlapY) {
+            // 水平推开：左边的向左、右边的向右
+            const push = overlapX + gap;
+            const aLeft = aCenterX <= bCenterX;
+            const aShift = aFixed ? 0 : bFixed ? push : push / 2;
+            const bShift = bFixed ? 0 : aFixed ? push : push / 2;
+            shiftGroup(a, aLeft ? -aShift : aShift, 0);
+            shiftGroup(b, aLeft ? bShift : -bShift, 0);
+          } else {
+            // 垂直推开：上边的向上、下边的向下
+            const push = overlapY + gap;
+            const aCenterY = (a.box.minY + a.box.maxY) / 2;
+            const bCenterY = (b.box.minY + b.box.maxY) / 2;
+            const aTop = aCenterY <= bCenterY;
+            const aShift = aFixed ? 0 : bFixed ? push : push / 2;
+            const bShift = bFixed ? 0 : aFixed ? push : push / 2;
+            shiftGroup(a, 0, aTop ? -aShift : aShift);
+            shiftGroup(b, 0, aTop ? bShift : -bShift);
+          }
+        }
+      }
+      if (!adjusted) break;
+    }
+
+    return moved;
+  }
+
+  /// 自动布局：按 房间 → 机柜 分组排布。
+  /// 房间内机柜横向排列（柜内设备网格），散件设备在机柜行下方网格排布；
+  /// 房间块按网格铺开，保证房间/机柜容器互不覆盖。
+  groupedLayout() {
     if (this.nodes.length === 0) {
       showToast(t("viz.no_nodes_to_layout"), "warning");
       return;
     }
 
-    const nodeMap = new Map();
-    this.nodes.forEach((n) => nodeMap.set(n.device_id, n));
+    const NODE_W = 200;
+    const NODE_H = 100;
+    const GRID_X = 40;
+    const GRID_Y = 40;
+    const CAB_COLS = 3;
+    const LOOSE_COLS = 4;
+    const CAB_GAP = 60;
+    const ROOM_COLS = 3;
+    const ROOM_GAP_X = ROOM_GAP;
+    const ROOM_GAP_Y = 100;
 
-    const adjacency = new Map();
-    this.nodes.forEach((n) => adjacency.set(n.device_id, []));
-    this.connections.forEach((conn) => {
-      if (adjacency.has(conn.source_device_id) && adjacency.has(conn.target_device_id)) {
-        adjacency.get(conn.source_device_id).push(conn.target_device_id);
-        adjacency.get(conn.target_device_id).push(conn.source_device_id);
+    const groups = this._collectSpatialGroups();
+
+    // 1) 房间内布局（局部坐标，内容区从 (0, 0) 开始）
+    const blocks = groups.map((room) => {
+      let cursorX = 0;
+      let cabinetsHeight = 0;
+
+      room.cabinets.forEach((cabinet) => {
+        const cols = Math.min(cabinet.nodes.length, CAB_COLS);
+        const rows = Math.ceil(cabinet.nodes.length / CAB_COLS);
+        const cabW = cols * (NODE_W + GRID_X) - GRID_X + CABINET_PADDING * 2;
+        const cabH = rows * (NODE_H + GRID_Y) - GRID_Y + CABINET_PADDING * 2 + CABINET_HEADER;
+
+        cabinet.nodes.forEach((node, i) => {
+          const col = i % CAB_COLS;
+          const row = Math.floor(i / CAB_COLS);
+          node.x = cursorX + CABINET_PADDING + col * (NODE_W + GRID_X);
+          node.y = CABINET_PADDING + CABINET_HEADER + row * (NODE_H + GRID_Y);
+          node.width = NODE_W;
+          node.height = NODE_H;
+        });
+
+        cabinetsHeight = Math.max(cabinetsHeight, cabH);
+        cursorX += cabW + CAB_GAP;
+      });
+
+      // 散件区：机柜行下方（无机柜时从 (0, 0) 开始）
+      let looseY = room.cabinets.length > 0 ? cabinetsHeight + ROOM_PADDING : 0;
+      room.loose.forEach((node, i) => {
+        const col = i % LOOSE_COLS;
+        const row = Math.floor(i / LOOSE_COLS);
+        node.x = col * (NODE_W + GRID_X);
+        node.y = looseY + row * (NODE_H + GRID_Y);
+        node.width = NODE_W;
+        node.height = NODE_H;
+      });
+
+      const box = this._groupBox(room.nodes, ROOM_PADDING, ROOM_HEADER);
+      return { room, box };
+    });
+
+    // 2) 房间块网格铺开（全局坐标）
+    let cursorX = 100;
+    let cursorY = 100;
+    let rowHeight = 0;
+    let column = 0;
+
+    blocks.forEach(({ room, box }) => {
+      if (!box) return;
+      if (column >= ROOM_COLS) {
+        column = 0;
+        cursorX = 100;
+        cursorY += rowHeight + ROOM_GAP_Y;
+        rowHeight = 0;
       }
-    });
 
-    const SWITCH_TYPES = ["switch", "router", "network_device"];
-    const roots = this.nodes
-      .filter((n) => SWITCH_TYPES.includes(n.device_type))
-      .map((n) => n.device_id);
-
-    if (roots.length === 0) {
-      const sorted = [...this.nodes].sort((a, b) => {
-        const aDeg = adjacency.get(a.device_id)?.length || 0;
-        const bDeg = adjacency.get(b.device_id)?.length || 0;
-        return bDeg - aDeg;
-      });
-      if (sorted.length > 0) roots.push(sorted[0].device_id);
-    }
-
-    const levels = new Map();
-    const queue = roots.map((id) => ({ id, level: 0 }));
-    const visited = new Set();
-
-    while (queue.length > 0) {
-      const { id, level } = queue.shift();
-      if (visited.has(id)) {
-        if (level < (levels.get(id) ?? Infinity)) {
-          levels.set(id, level);
-        } else {
-          continue;
-        }
-      }
-      visited.add(id);
-      levels.set(id, level);
-
-      const neighbors = adjacency.get(id) || [];
-      neighbors.forEach((neighborId) => {
-        if (!visited.has(neighborId)) {
-          queue.push({ id: neighborId, level: level + 1 });
-        }
-      });
-    }
-
-    this.nodes.forEach((n) => {
-      if (!levels.has(n.device_id)) levels.set(n.device_id, 0);
-    });
-
-    const levelGroups = new Map();
-    levels.forEach((level, id) => {
-      if (!levelGroups.has(level)) levelGroups.set(level, []);
-      levelGroups.get(level).push(id);
-    });
-
-    const NODE_WIDTH = 200;
-    const NODE_HEIGHT = 100;
-    const GAP_X = 60;
-    const GAP_Y = 100;
-    const START_X = 100;
-    const START_Y = 100;
-
-    const sortedLevels = [...levelGroups.keys()].sort((a, b) => a - b);
-    const maxLevelWidth = Math.max(
-      ...sortedLevels.map((lvl) => {
-        const group = levelGroups.get(lvl);
-        return group.length * (NODE_WIDTH + GAP_X);
-      })
-    );
-
-    sortedLevels.forEach((level) => {
-      const group = levelGroups.get(level);
-      group.sort((a, b) => {
-        const portA = this._getFirstPortNumber(a);
-        const portB = this._getFirstPortNumber(b);
-        if (portA !== null && portB !== null) return portA - portB;
-        return 0;
+      const dx = Math.round(cursorX - box.minX);
+      const dy = Math.round(cursorY - box.minY);
+      room.nodes.forEach((node) => {
+        node.x = Math.round(node.x) + dx;
+        node.y = Math.round(node.y) + dy;
       });
 
-      const totalWidth = group.length * (NODE_WIDTH + GAP_X) - GAP_X;
-      const startX = START_X + (maxLevelWidth - totalWidth) / 2;
-      const y = START_Y + level * (NODE_HEIGHT + GAP_Y);
-
-      group.forEach((id, i) => {
-        const node = nodeMap.get(id);
-        if (node) {
-          node.x = Math.round(startX + i * (NODE_WIDTH + GAP_X));
-          node.y = Math.round(y);
-          node.width = NODE_WIDTH;
-          node.height = NODE_HEIGHT;
-        }
-      });
+      const blockW = box.maxX - box.minX;
+      const blockH = box.maxY - box.minY;
+      cursorX += blockW + ROOM_GAP_X;
+      rowHeight = Math.max(rowHeight, blockH);
+      column += 1;
     });
 
-    this._resolveOverlaps(nodeMap, NODE_WIDTH, NODE_HEIGHT, GAP_X, GAP_Y);
-
-    this.renderer.clearAll();
-    this.nodes.forEach((node) => this.renderer.drawDeviceNode(node));
-    this.connections.forEach((conn) => this.renderer.drawConnection(conn));
-    this._renderContainers();
-    this._fitView();
+    this._renderCurrentView();
     this.saveLayout();
-  }
-
-  _getFirstPortNumber(deviceId) {
-    const conns = this.connections.filter(
-      (c) => c.source_device_id === deviceId || c.target_device_id === deviceId
-    );
-    for (const c of conns) {
-      const num =
-        c.source_device_id === deviceId ? c.source_port_label : c.target_port_label;
-      if (num) {
-        const parsed = parseInt(num, 10);
-        if (!isNaN(parsed)) return parsed;
-      }
-    }
-    return null;
-  }
-
-  _resolveOverlaps(nodeMap, nodeWidth, nodeHeight, gapX, gapY) {
-    const nodes = [...nodeMap.values()];
-    const minDistX = nodeWidth + gapX;
-    const minDistY = nodeHeight + gapY;
-
-    for (let iter = 0; iter < 20; iter++) {
-      let moved = false;
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const overlapX = Math.abs(dx) < minDistX;
-          const overlapY = Math.abs(dy) < minDistY;
-          if (overlapX && overlapY) {
-            const pushX = (minDistX - Math.abs(dx)) / 2 + 5;
-            const pushY = (minDistY - Math.abs(dy)) / 2 + 5;
-            if (Math.abs(dx) <= Math.abs(dy)) {
-              const sign = dx >= 0 ? 1 : -1;
-              a.x -= Math.round(sign * pushX);
-              b.x += Math.round(sign * pushX);
-            } else {
-              const sign = dy >= 0 ? 1 : -1;
-              a.y -= Math.round(sign * pushY);
-              b.y += Math.round(sign * pushY);
-            }
-            moved = true;
-          }
-        }
-      }
-      if (!moved) break;
-    }
   }
 
   openDeviceDetail(deviceId) {
@@ -427,7 +668,7 @@ export class TopologyVisualization {
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    // 视野包含区域容器（组织/房间/机柜分组框）
+    // 视野包含区域容器（房间/机柜分组框）
     const containerRects = this.core.containersGroup.querySelectorAll(".topology-container");
     if (containerRects.length > 0) {
       containerRects.forEach((rect) => {
@@ -437,11 +678,12 @@ export class TopologyVisualization {
         maxY = Math.max(maxY, parseFloat(rect.getAttribute("y")) + parseFloat(rect.getAttribute("height")));
       });
     } else {
-      this.nodes.forEach((n) => {
-        minX = Math.min(minX, n.x);
-        minY = Math.min(minY, n.y);
-        maxX = Math.max(maxX, n.x + (n.width || 200));
-        maxY = Math.max(maxY, n.y + (n.height || 100));
+      this.visibleNodes().forEach((n) => {
+        const r = this._nodeRect(n);
+        minX = Math.min(minX, r.x);
+        minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.width);
+        maxY = Math.max(maxY, r.y + r.height);
       });
     }
     const padding = 60;

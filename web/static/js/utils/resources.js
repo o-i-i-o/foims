@@ -262,6 +262,32 @@ export function loadOrgsForSelect(selectId = "room-org-id") {
   })();
 }
 
+/** 获取组织及其全部后代的 id 集合（拓扑按组织筛选用；树中未命中时退化为自身）。 */
+export async function getOrgSubtreeIds(orgId) {
+  const ids = new Set();
+  try {
+    const result = await apiGet("/api/resources/organizations/tree");
+    if (result.success && Array.isArray(result.data)) {
+      const walk = (nodes, inside) => {
+        nodes.forEach((node) => {
+          const hit = inside || node.id === orgId;
+          if (hit) ids.add(node.id);
+          if (node.children && node.children.length > 0) {
+            walk(node.children, hit);
+          }
+        });
+      };
+      walk(result.data, false);
+    }
+  } catch (error) {
+    console.error("加载组织树失败:", error);
+  }
+  if (ids.size === 0) {
+    ids.add(orgId);
+  }
+  return ids;
+}
+
 /** 加载设备模板选项。 */
 export function loadDeviceTemplatesForSelect(selectId) {
   return fillSelect(selectId, "/api/resources/device-templates", {

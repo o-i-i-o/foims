@@ -86,6 +86,8 @@ export function initSystemTabs() {
       setTimeout(async () => {
         await loadSystemConfig();
         await loadCertificateInventory();
+        await loadLdapConfig();
+        await loadSsoConfig();
       }, 100);
     });
   }
@@ -95,6 +97,22 @@ export function initSystemTabs() {
     smtpConfigForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       await saveSmtpConfig();
+    });
+  }
+
+  const ldapConfigForm = elementCache.get("ldap-config-form");
+  if (ldapConfigForm) {
+    ldapConfigForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await saveLdapConfig();
+    });
+  }
+
+  const ssoConfigForm = elementCache.get("sso-config-form");
+  if (ssoConfigForm) {
+    ssoConfigForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await saveSsoConfig();
     });
   }
 
@@ -350,6 +368,138 @@ export async function testSmtpConnection() {
 // 初始化SMTP相关功能
 export function initSmtpFunctions() {
   // 注意：test-smtp-btn 已在 eventManager.js 中绑定，此处不再重复绑定
+}
+
+// ==================== LDAP / SSO 认证配置 ====================
+
+// 加载LDAP配置（未配置时展示默认值）
+export async function loadLdapConfig() {
+  try {
+    const result = await apiGet("/api/system/ldap/config");
+    if (!result.success || !result.data) return;
+
+    const config = result.data;
+    const enabledEl = elementCache.get("ldap-enabled");
+    if (enabledEl) enabledEl.checked = Boolean(config.enabled);
+    elementCache.setValue("ldap-url", config.url || "");
+    elementCache.setValue("ldap-bind-dn", config.bind_dn || "");
+    elementCache.setValue("ldap-base-dn", config.base_dn || "");
+    elementCache.setValue("ldap-user-filter", config.user_filter || "");
+    elementCache.setValue("ldap-default-role", config.default_role || "user");
+    const pwdEl = elementCache.get("ldap-bind-password");
+    if (pwdEl) {
+      pwdEl.value = "";
+      pwdEl.placeholder = config.has_password
+        ? t("ldap.password_configured")
+        : t("ldap.bind_password_placeholder");
+    }
+  } catch (error) {
+    console.error("加载LDAP配置失败:", error);
+  }
+}
+
+// 保存LDAP配置（密码留空表示沿用已保存值）
+export async function saveLdapConfig() {
+  try {
+    const config = {
+      enabled: elementCache.get("ldap-enabled")?.checked || false,
+      url: elementCache.getValue("ldap-url"),
+      bind_dn: elementCache.getValue("ldap-bind-dn") || "",
+      bind_password: elementCache.getValue("ldap-bind-password") || "",
+      base_dn: elementCache.getValue("ldap-base-dn"),
+      user_filter: elementCache.getValue("ldap-user-filter"),
+      default_role: elementCache.getValue("ldap-default-role") || "user"
+    };
+
+    const result = await apiPut("/api/system/ldap/config", config);
+    if (result.success) {
+      showToast(t("ldap.save_success"), "success");
+    } else {
+      showToast(t("ldap.save_failed") + ": " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("保存LDAP配置失败:", error);
+    showToast(t("ldap.save_failed") + ": " + error.message, "error");
+  }
+}
+
+// 测试已保存的LDAP配置连通性
+export async function testLdapConnection() {
+  try {
+    const result = await apiPost("/api/system/ldap/test", {});
+    if (result.success) {
+      showToast(t("ldap.test_success"), "success");
+    } else {
+      showToast(t("ldap.test_failed") + ": " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("测试LDAP连接失败:", error);
+    showToast(t("ldap.test_error") + ": " + error.message, "error");
+  }
+}
+
+// 加载SSO（OIDC）配置
+export async function loadSsoConfig() {
+  try {
+    const result = await apiGet("/api/system/sso/config");
+    if (!result.success || !result.data) return;
+
+    const config = result.data;
+    const enabledEl = elementCache.get("sso-enabled");
+    if (enabledEl) enabledEl.checked = Boolean(config.enabled);
+    elementCache.setValue("sso-issuer-url", config.issuer_url || "");
+    elementCache.setValue("sso-client-id", config.client_id || "");
+    elementCache.setValue("sso-redirect-uri", config.redirect_uri || "");
+    elementCache.setValue("sso-default-role", config.default_role || "user");
+    const secretEl = elementCache.get("sso-client-secret");
+    if (secretEl) {
+      secretEl.value = "";
+      secretEl.placeholder = config.has_secret
+        ? t("sso.secret_configured")
+        : t("sso.client_secret_placeholder");
+    }
+  } catch (error) {
+    console.error("加载SSO配置失败:", error);
+  }
+}
+
+// 保存SSO（OIDC）配置（密钥留空表示沿用已保存值）
+export async function saveSsoConfig() {
+  try {
+    const config = {
+      enabled: elementCache.get("sso-enabled")?.checked || false,
+      issuer_url: elementCache.getValue("sso-issuer-url"),
+      client_id: elementCache.getValue("sso-client-id"),
+      client_secret: elementCache.getValue("sso-client-secret") || "",
+      redirect_uri: elementCache.getValue("sso-redirect-uri") || "",
+      default_role: elementCache.getValue("sso-default-role") || "user"
+    };
+
+    const result = await apiPut("/api/system/sso/config", config);
+    if (result.success) {
+      showToast(t("sso.save_success"), "success");
+    } else {
+      showToast(t("sso.save_failed") + ": " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("保存SSO配置失败:", error);
+    showToast(t("sso.save_failed") + ": " + error.message, "error");
+  }
+}
+
+// 测试已保存的SSO配置（执行OIDC发现文档获取）
+export async function testSsoConnection() {
+  try {
+    const result = await apiPost("/api/system/sso/test", {});
+    if (result.success) {
+      showToast(t("sso.test_success"), "success");
+    } else {
+      showToast(t("sso.test_failed") + ": " + result.message, "error");
+    }
+  } catch (error) {
+    console.error("测试SSO连接失败:", error);
+    showToast(t("sso.test_error") + ": " + error.message, "error");
+  }
 }
 
 // 加载通知设置

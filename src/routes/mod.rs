@@ -16,10 +16,17 @@ use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 
 use crate::app_state::AppState;
+use crate::auth::ldap::{
+    get_ldap_config, login_with_ldap, test_ldap_connection, update_ldap_config,
+};
 use crate::auth::login::{
     auth_middleware, disable_two_factor, enable_two_factor, forgot_password, get_current_user,
     init_two_factor, login, login_with_email_code, login_with_two_factor, logout, refresh_token,
     reset_password, send_login_code, send_two_factor_code,
+};
+use crate::auth::sso::{
+    get_auth_methods, get_sso_config, sso_callback, sso_login, test_sso_connection,
+    update_sso_config,
 };
 use crate::auth::user::{create_user, delete_user, get_user, get_users, update_user};
 use crate::error::AppError;
@@ -157,6 +164,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/auth/login/send-code", post(send_login_code))
         .route("/api/auth/login/two-factor", post(login_with_two_factor))
         .route("/api/auth/login/send-2fa-code", post(send_two_factor_code))
+        .route("/api/auth/login/ldap", post(login_with_ldap))
+        .route("/api/auth/sso/login", get(sso_login))
+        .route("/api/auth/sso/callback", get(sso_callback))
+        .route("/api/auth/methods", get(get_auth_methods))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/refresh", post(refresh_token))
         .route("/api/auth/forgot-password", post(forgot_password))
@@ -500,6 +511,18 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/smtp/test", post(test_smtp))
         .route("/api/system/smtp/send", post(send_system_email))
+        // LDAP 配置
+        .route(
+            "/api/system/ldap/config",
+            get(get_ldap_config).put(update_ldap_config),
+        )
+        .route("/api/system/ldap/test", post(test_ldap_connection))
+        // SSO（OIDC）配置
+        .route(
+            "/api/system/sso/config",
+            get(get_sso_config).put(update_sso_config),
+        )
+        .route("/api/system/sso/test", post(test_sso_connection))
         // 配置管理
         .route(
             "/api/system/config",

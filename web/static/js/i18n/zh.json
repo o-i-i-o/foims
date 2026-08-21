@@ -395,7 +395,13 @@
     "system_not_init": "系统未初始化，请联系管理员",
     "email_service_not_configed": "系统邮件服务未配置，无法发送验证码",
     "toggle_password": "显示或隐藏密码",
-    "email_required_error": "请输入邮箱地址"
+    "email_required_error": "请输入邮箱地址",
+    "ldap_auth": "LDAP认证",
+    "sso_auth": "SSO认证",
+    "ldap_username": "LDAP 用户名",
+    "ldap_username_placeholder": "请输入LDAP用户名",
+    "ldap_password_placeholder": "请输入LDAP密码",
+    "sso_hint": "跳转到企业统一认证平台完成登录"
   },
   "dashboard": {
     "total_networks": "网络总数",
@@ -778,11 +784,6 @@
     "mac_change_settings": "MAC地址变更通知",
     "email_recipients": "邮件收件人",
     "recipients_hint": "选择当检测到MAC地址变更时接收邮件通知的用户。",
-    "invalid_email": "请输入有效的邮箱地址",
-    "smtp_not_configed": "请先在系统设置中配置SMTP服务器",
-    "email_saved": "MAC变动通知邮箱已保存",
-    "email_cleared": "MAC变动通知邮箱已清除",
-    "check_smtp_failed": "检查SMTP配置失败，请重试",
     "save_success": "通知设置保存成功",
     "save_failed": "通知设置保存失败",
     "save_error": "保存通知设置失败"
@@ -1296,6 +1297,13 @@
     "connection_delete_confirm": "确定要删除该连线吗？",
     "physical_derived_hint": "该物理连线由线路数据实时派生，请在线路管理中删除对应线路",
     "delete_connection": "删除连线",
+    "connection_detail": "连线详情",
+    "connection_source": "源端设备",
+    "connection_target": "目标端设备",
+    "connection_port": "端口",
+    "connection_members": "成员端口",
+    "connection_path": "途经线路",
+    "connection_type_derived": "物理连线（线路派生）",
     "group_no_org": "未分组织",
     "group_no_room": "未分房间",
     "group_no_cabinet": "未分机柜",
@@ -1420,9 +1428,13 @@
       "totp_generate_failed": "生成TOTP失败",
       "user_id_invalid": "无效的用户标识",
       "validation": {
-        "code_length": "验证码长度必须为6位"
+        "code_length": "验证码长度必须为6位",
+        "password_required": "请输入密码"
       },
-      "qr_generate_failed": "登录二次验证二维码生成失败：{{error}}"
+      "qr_generate_failed": "登录二次验证二维码生成失败：{{error}}",
+      "external_account_use_provider_login": "该账户为外部认证账户，请使用对应的登录方式",
+      "provider_mismatch": "该用户名已绑定其他登录方式，无法使用当前方式登录",
+      "external_username_invalid": "外部认证返回的用户名不合法"
     },
     "backup": {
       "dir_create_failed": "创建备份目录失败",
@@ -1781,7 +1793,9 @@
       "invalid_password": "密码错误",
       "secret_too_short": "密钥长度不足",
       "totp_code_replayed": "TOTP验证码重放",
-      "user_not_found": "用户未找到"
+      "user_not_found": "用户未找到",
+      "ldap_auth_failed": "LDAP认证失败",
+      "sso_login": "SSO登录"
     },
     "logs": {
       "cleared": "成功清理 {{count}} 条日志记录",
@@ -2155,6 +2169,98 @@
         "manager_length": "管理人长度不能超过50个字符",
         "name_length": "工位名称长度必须在1到50个字符之间"
       }
+    },
+    "ldap": {
+      "not_configured": "LDAP未配置",
+      "not_configured_password": "LDAP服务账号密码未配置，留空前请先保存过密码",
+      "disabled": "LDAP认证未启用",
+      "connect_failed": "LDAP服务器连接失败",
+      "bind_failed": "LDAP绑定失败，请检查服务账号",
+      "search_failed": "LDAP搜索失败",
+      "password_encrypt_failed": "LDAP密码加密失败",
+      "config_retrieved": "LDAP配置已获取",
+      "config_updated": "LDAP配置已更新",
+      "test_success": "LDAP连接测试成功",
+      "validation": {
+        "url_format": "LDAP地址格式不正确",
+        "bind_dn_length": "服务账号DN长度不合法",
+        "password_length": "密码长度不合法",
+        "base_dn_length": "Base DN不能为空且长度不超过255",
+        "filter_length": "用户过滤器长度不合法",
+        "filter_placeholder": "用户过滤器必须包含 %s 或 {username} 占位符"
+      }
+    },
+    "sso": {
+      "not_configured": "SSO未配置",
+      "not_configured_secret": "SSO客户端密钥未配置，留空前请先保存过密钥",
+      "disabled": "SSO认证未启用",
+      "issuer_invalid": "Issuer地址不合法",
+      "discovery_failed": "OIDC发现文档获取失败",
+      "redirect_uri_invalid": "回调地址不合法",
+      "host_header_missing": "请求缺少Host头，无法推导回调地址",
+      "state_invalid": "SSO状态校验失败，请重新发起登录",
+      "code_missing": "SSO回调缺少授权码",
+      "exchange_failed": "授权码换取令牌失败",
+      "id_token_missing": "IdP未返回ID Token",
+      "id_token_invalid": "ID Token校验失败",
+      "provider_error": "认证平台返回错误",
+      "secret_encrypt_failed": "客户端密钥加密失败",
+      "config_retrieved": "SSO配置已获取",
+      "config_updated": "SSO配置已更新",
+      "test_success": "SSO发现文档获取成功",
+      "validation": {
+        "issuer_format": "Issuer地址格式不正确",
+        "client_id_length": "Client ID不能为空且长度不超过100",
+        "secret_length": "客户端密钥长度不合法",
+        "redirect_uri_length": "回调地址长度不合法"
+      }
     }
+  },
+  "ldap": {
+    "title": "LDAP 配置",
+    "enabled": "启用LDAP认证",
+    "server_url": "LDAP 服务器地址",
+    "server_url_placeholder": "ldap://ds.example.com:389",
+    "server_url_desc": "ldap:// 明文或 ldaps:// 加密",
+    "base_dn": "Base DN",
+    "base_dn_placeholder": "dc=example,dc=com",
+    "bind_dn": "服务账号 DN",
+    "bind_dn_placeholder": "cn=admin,dc=example,dc=com",
+    "bind_dn_desc": "可留空表示匿名绑定检索",
+    "bind_password": "服务账号密码",
+    "bind_password_placeholder": "LDAP服务账号密码",
+    "password_configured": "已配置（留空保持不变）",
+    "user_filter": "用户搜索过滤器",
+    "user_filter_placeholder": "(&(objectClass=person)(uid=%s))",
+    "user_filter_desc": "用 %s 或 {username} 作为用户名占位符",
+    "default_role": "自动建户默认角色",
+    "test_connection": "测试连接",
+    "test_success": "LDAP连接测试成功",
+    "test_failed": "LDAP连接测试失败",
+    "test_error": "测试LDAP连接出错",
+    "save_success": "LDAP配置保存成功",
+    "save_failed": "LDAP配置保存失败"
+  },
+  "sso": {
+    "title": "SSO 配置（OIDC）",
+    "enabled": "启用SSO认证",
+    "issuer_url": "Issuer 地址",
+    "issuer_url_placeholder": "https://sso.example.com",
+    "issuer_url_desc": "自动获取 /.well-known/openid-configuration 发现文档",
+    "client_id": "Client ID",
+    "client_id_placeholder": "ipma",
+    "client_secret": "Client Secret",
+    "client_secret_placeholder": "OIDC客户端密钥",
+    "secret_configured": "已配置（留空保持不变）",
+    "redirect_uri": "回调地址",
+    "redirect_uri_placeholder": "https://ipma.example.com/api/auth/sso/callback",
+    "redirect_uri_desc": "可留空按访问地址自动推导；需在认证平台注册相同回调地址",
+    "default_role": "自动建户默认角色",
+    "test_connection": "测试连接",
+    "test_success": "SSO配置验证成功",
+    "test_failed": "SSO配置验证失败",
+    "test_error": "测试SSO连接出错",
+    "save_success": "SSO配置保存成功",
+    "save_failed": "SSO配置保存失败"
   }
 }

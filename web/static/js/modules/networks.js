@@ -441,6 +441,12 @@ export async function showNetworkUsage(id) {
   }
 }
 
+// 构建网段使用详情弹窗的 IPv4 动态正文。
+// 说明：本函数与其后的 buildIPv6Content 生成的 HTML 为数据驱动内容
+// （行循环/条件分支/运行时计算值），按项目约定保留在 JS 渲染函数中，
+// 注入已抽离的静态骨架 modals/network/subnet-usage-modal.html 的
+// #subnet-usage-contents 空容器；静态骨架才走 modalLoader 抽离，
+// 详见 docs/code-style.md「模态框 HTML 抽离边界」。
 function buildIPv4Content(network, networkIps, networkId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);

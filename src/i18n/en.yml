@@ -3,6 +3,8 @@
 
 log:
   auth:
+    external_user_created: "External auth user created: {{username}} ({{provider}})"
+    external_email_conflict: "External auth email conflict, using placeholder: {{username}} -> {{email}}"
     check_revoke_failed: "Failed to check token revocation: {{error}}"
     clear_2fa_code_failed: "Failed to clear 2FA email code: {{error}}"
     jwt_cache_cleanup_stopped: "JWT cache cleanup task received shutdown signal, stopping"
@@ -226,6 +228,13 @@ log:
   workstation:
     not_found: "Workstation ID not found: {{id}}"
     query_name_failed: "Failed to query workstation name: {{error}}"
+  ldap:
+    query_failed: "Failed to read LDAP config: {{error}}"
+  sso:
+    login_redirect: "SSO login redirecting to authorization endpoint: {{issuer}}"
+    provider_error: "Identity provider returned an error: {{error}}"
+    query_failed: "Failed to read SSO config: {{error}}"
+
 system:
   config_load_failed: "Failed to load configuration file: {{error}}"
   config_loaded: "Configuration loaded successfully"

@@ -11,32 +11,32 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01326">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01326">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01326">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01326">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01326">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01326">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01326">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01326">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01326">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01326">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01326">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01326">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01327">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01327">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01327">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01327">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01327">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01327">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01327">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01327">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01327">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01327">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01327">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01327">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -550,6 +550,9 @@
 
         <div id="global-visualization" class="tab-content" role="tabpanel">
           <div class="toolbar">
+            <div class="viz-filter-group">
+              <select id="topology-org-select" class="form-control" aria-label="Select organization for topology"></select>
+            </div>
             <button id="toggle-connection-mode" class="btn btn-warning btn-sm" data-i18n="visualization.connection_mode">Connection Mode</button>
             <button id="open-topology-connection-modal" class="btn btn-primary btn-sm" data-i18n="viz.create_connection">Create Connection</button>
             <button id="topology-auto-discover" class="btn btn-info btn-sm" data-i18n="visualization.auto_discover">Auto Discover</button>
@@ -832,6 +835,111 @@
                 </div>
               </div>
             </div>
+
+            <form id="ldap-config-form">
+              <div class="config-card">
+                <div class="config-card-header">
+                  <div class="config-card-title">
+                    <span class="icon">🗂️</span>
+                    <span data-i18n="ldap.title">LDAP Configuration</span>
+                  </div>
+                  <label class="config-switch">
+                    <input type="checkbox" id="ldap-enabled" aria-label="Enable LDAP authentication" data-i18n-aria-label="ldap.enabled">
+                    <span data-i18n="ldap.enabled">Enable LDAP Authentication</span>
+                  </label>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="ldap-url" data-i18n="ldap.server_url">LDAP Server Address</label>
+                    <input type="text" id="ldap-url" name="url" placeholder="ldap://ds.example.com:389" data-i18n-placeholder="ldap.server_url_placeholder" aria-label="LDAP server address" data-i18n-aria-label="ldap.server_url">
+                    <span class="hint-text" data-i18n="ldap.server_url_desc">ldap:// plaintext or ldaps:// encrypted</span>
+                  </div>
+                  <div class="config-field">
+                    <label for="ldap-base-dn" data-i18n="ldap.base_dn">Base DN</label>
+                    <input type="text" id="ldap-base-dn" name="base_dn" placeholder="dc=example,dc=com" data-i18n-placeholder="ldap.base_dn_placeholder" aria-label="Base DN" data-i18n-aria-label="ldap.base_dn">
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="ldap-bind-dn" data-i18n="ldap.bind_dn">Service Account DN</label>
+                    <input type="text" id="ldap-bind-dn" name="bind_dn" placeholder="cn=admin,dc=example,dc=com" data-i18n-placeholder="ldap.bind_dn_placeholder" aria-label="Service account DN" data-i18n-aria-label="ldap.bind_dn">
+                    <span class="hint-text" data-i18n="ldap.bind_dn_desc">Optional; empty for anonymous bind</span>
+                  </div>
+                  <div class="config-field">
+                    <label for="ldap-bind-password" data-i18n="ldap.bind_password">Service Account Password</label>
+                    <input type="password" id="ldap-bind-password" name="bind_password" placeholder="LDAP service account password" data-i18n-placeholder="ldap.bind_password_placeholder" autocomplete="new-password" aria-label="Service account password" data-i18n-aria-label="ldap.bind_password">
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="ldap-user-filter" data-i18n="ldap.user_filter">User Search Filter</label>
+                    <input type="text" id="ldap-user-filter" name="user_filter" placeholder="(&amp;(objectClass=person)(uid=%s))" data-i18n-placeholder="ldap.user_filter_placeholder" aria-label="User search filter" data-i18n-aria-label="ldap.user_filter">
+                    <span class="hint-text" data-i18n="ldap.user_filter_desc">%s or {username} as the username placeholder</span>
+                  </div>
+                  <div class="config-field">
+                    <label for="ldap-default-role" data-i18n="ldap.default_role">Default Role for New Users</label>
+                    <select id="ldap-default-role" name="default_role" class="form-control" aria-label="Default role">
+                      <option value="user" data-i18n="user.role_user">User</option>
+                      <option value="admin" data-i18n="user.role_admin">Administrator</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="config-actions">
+                  <button type="button" id="test-ldap-btn" class="btn btn-secondary btn-sm" data-i18n="ldap.test_connection">Test Connection</button>
+                  <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
+                </div>
+              </div>
+            </form>
+
+            <form id="sso-config-form">
+              <div class="config-card">
+                <div class="config-card-header">
+                  <div class="config-card-title">
+                    <span class="icon">🔐</span>
+                    <span data-i18n="sso.title">SSO Configuration (OIDC)</span>
+                  </div>
+                  <label class="config-switch">
+                    <input type="checkbox" id="sso-enabled" aria-label="Enable SSO authentication" data-i18n-aria-label="sso.enabled">
+                    <span data-i18n="sso.enabled">Enable SSO Authentication</span>
+                  </label>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="sso-issuer-url" data-i18n="sso.issuer_url">Issuer URL</label>
+                    <input type="url" id="sso-issuer-url" name="issuer_url" placeholder="https://sso.example.com" data-i18n-placeholder="sso.issuer_url_placeholder" aria-label="Issuer URL" data-i18n-aria-label="sso.issuer_url">
+                    <span class="hint-text" data-i18n="sso.issuer_url_desc">Discovery document fetched from /.well-known/openid-configuration</span>
+                  </div>
+                  <div class="config-field">
+                    <label for="sso-client-id" data-i18n="sso.client_id">Client ID</label>
+                    <input type="text" id="sso-client-id" name="client_id" placeholder="ipma" data-i18n-placeholder="sso.client_id_placeholder" aria-label="Client ID" data-i18n-aria-label="sso.client_id">
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="sso-client-secret" data-i18n="sso.client_secret">Client Secret</label>
+                    <input type="password" id="sso-client-secret" name="client_secret" placeholder="OIDC client secret" data-i18n-placeholder="sso.client_secret_placeholder" autocomplete="new-password" aria-label="Client secret" data-i18n-aria-label="sso.client_secret">
+                  </div>
+                  <div class="config-field">
+                    <label for="sso-redirect-uri" data-i18n="sso.redirect_uri">Redirect URI</label>
+                    <input type="url" id="sso-redirect-uri" name="redirect_uri" placeholder="https://ipma.example.com/api/auth/sso/callback" data-i18n-placeholder="sso.redirect_uri_placeholder" aria-label="Redirect URI" data-i18n-aria-label="sso.redirect_uri">
+                    <span class="hint-text" data-i18n="sso.redirect_uri_desc">Optional; derived from the request host when empty. Register the same URI in the IdP</span>
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="sso-default-role" data-i18n="sso.default_role">Default Role for New Users</label>
+                    <select id="sso-default-role" name="default_role" class="form-control" aria-label="Default role">
+                      <option value="user" data-i18n="user.role_user">User</option>
+                      <option value="admin" data-i18n="user.role_admin">Administrator</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="config-actions">
+                  <button type="button" id="test-sso-btn" class="btn btn-secondary btn-sm" data-i18n="sso.test_connection">Test Connection</button>
+                  <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
 
@@ -1168,6 +1276,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01326"></script>
+  <script type="module" src="/static/js/app.js?v=01327"></script>
 </body>
 </html>

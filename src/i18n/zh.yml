@@ -3,6 +3,8 @@
 
 log:
   auth:
+    external_user_created: "外部认证自动建户: {{username}} ({{provider}})"
+    external_email_conflict: "外部认证用户邮箱已被占用，使用占位邮箱: {{username}} -> {{email}}"
     check_revoke_failed: "检查令牌撤销状态失败: {{error}}"
     clear_2fa_code_failed: "清除2FA邮箱验证码失败: {{error}}"
     jwt_cache_cleanup_stopped: "JWT缓存清理任务收到关闭信号，停止运行"
@@ -226,6 +228,13 @@ log:
   workstation:
     not_found: "未找到工位ID: {{id}}"
     query_name_failed: "查询工位名称失败: {{error}}"
+  ldap:
+    query_failed: "读取LDAP配置失败: {{error}}"
+  sso:
+    login_redirect: "SSO登录跳转授权端点: {{issuer}}"
+    provider_error: "认证平台返回错误: {{error}}"
+    query_failed: "读取SSO配置失败: {{error}}"
+
 system:
   config_load_failed: "加载配置文件失败: {{error}}"
   config_loaded: "加载配置成功"

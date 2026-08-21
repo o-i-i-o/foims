@@ -27,7 +27,9 @@ class LoginManager {
     // 登录模式枚举
     this.LoginMode = {
       PASSWORD: "password-login",
-      EMAIL: "email-login"
+      EMAIL: "email-login",
+      LDAP: "ldap-login",
+      SSO: "sso-login"
     };
 
     // 当前状态和模式
@@ -61,6 +63,10 @@ class LoginManager {
       emailInput: document.getElementById("email-login-input"),
       emailCodeInput: document.getElementById("email-login-code"),
       sendLoginCodeBtn: document.getElementById("send-login-code-btn"),
+
+      // LDAP Login Inputs
+      ldapUsernameInput: document.getElementById("ldap-username"),
+      ldapPasswordInput: document.getElementById("ldap-password"),
 
       // Common Inputs
       rememberMeCheckbox: document.getElementById("remember-me"),
@@ -106,8 +112,18 @@ class LoginManager {
     // 若是，则跳转到初始化页，不继续登录流程
     if (await this.checkInitMode()) return;
 
+    // SSO 回跳错误提示（须在 cleanUrlParams 清理地址栏前捕获）
+    const ssoErrorKey = new URLSearchParams(window.location.search).get("sso_error");
+
     this.cleanUrlParams();
     this.checkLoginStatus();
+
+    // 按后端配置显示 LDAP / SSO 登录方式
+    await this.setupAuthMethods();
+
+    if (ssoErrorKey) {
+      this.showError(t(ssoErrorKey));
+    }
 
     // 绑定 Tabs 事件
     this.dom.tabs.forEach((tab) => {
@@ -145,27 +161,49 @@ class LoginManager {
   }
 
   /**
+   * 按后端 /api/auth/methods 返回的开关显示 LDAP / SSO 标签
+   * （请求失败时保持隐藏，_fail-safe）
+   */
+  async setupAuthMethods() {
+    try {
+      const result = await apiGet("/api/auth/methods");
+      if (!result.success || !result.data) return;
+
+      const visibility = {
+        "ldap-login": Boolean(result.data.ldap),
+        "sso-login": Boolean(result.data.sso)
+      };
+      this.dom.tabs.forEach((tab) => {
+        const visible = visibility[tab.dataset.tab];
+        if (visible !== undefined) {
+          tab.hidden = !visible;
+        }
+      });
+    } catch (error) {
+      console.error("获取认证方式失败:", error);
+    }
+  }
+
+  /**
    * 更新表单验证规则
    * 根据当前登录模式，动态设置 input 的 required 属性
    * 避免浏览器阻止提交隐藏的 required 字段
    */
   updateFormValidation() {
-    if (this.currentMode === this.LoginMode.PASSWORD) {
-      // 启用密码登录验证
-      this.dom.usernameInput.required = true;
-      this.dom.passwordInput.required = true;
+    const mode = this.currentMode;
+    const isPassword = mode === this.LoginMode.PASSWORD;
+    const isEmail = mode === this.LoginMode.EMAIL;
+    const isLdap = mode === this.LoginMode.LDAP;
 
-      // 禁用邮箱登录验证
-      this.dom.emailInput.required = false;
-      this.dom.emailCodeInput.required = false;
-    } else {
-      // 禁用密码登录验证
-      this.dom.usernameInput.required = false;
-      this.dom.passwordInput.required = false;
+    this.dom.usernameInput.required = isPassword;
+    this.dom.passwordInput.required = isPassword;
 
-      // 启用邮箱登录验证
-      this.dom.emailInput.required = true;
-      this.dom.emailCodeInput.required = true;
+    this.dom.emailInput.required = isEmail;
+    this.dom.emailCodeInput.required = isEmail;
+
+    if (this.dom.ldapUsernameInput) {
+      this.dom.ldapUsernameInput.required = isLdap;
+      this.dom.ldapPasswordInput.required = isLdap;
     }
   }
 
@@ -176,18 +214,21 @@ class LoginManager {
     if (this.currentState === this.State.SUBMITTING) return;
 
     // 移除所有 active 类
-    this.dom.tabs.forEach((btn) => btn.classList.remove("active"));
+    this.dom.tabs.forEach((btn) => {
+      btn.classList.remove("active");
+      btn.setAttribute("aria-selected", "false");
+    });
     this.dom.loginSections.forEach((section) => section.classList.remove("active"));
 
-    // 激活当前 Tab
+    // 激活当前 Tab（区块 id 与模式名一一对应：{mode}-section）
     targetBtn.classList.add("active");
-    const mode = targetBtn.dataset.tab;
-    this.currentMode = mode;
+    targetBtn.setAttribute("aria-selected", "true");
+    this.currentMode = targetBtn.dataset.tab;
 
-    // 显示对应的内容区域
-    const sectionId =
-      mode === this.LoginMode.PASSWORD ? "password-login-section" : "email-login-section";
-    document.getElementById(sectionId).classList.add("active");
+    const section = document.getElementById(`${this.currentMode}-section`);
+    if (section) {
+      section.classList.add("active");
+    }
 
     // 更新验证规则
     this.updateFormValidation();
@@ -223,6 +264,17 @@ class LoginManager {
         return;
       }
       await this.submitPasswordLogin(username, password, rememberMe);
+    } else if (this.currentMode === this.LoginMode.LDAP) {
+      const username = this.dom.ldapUsernameInput.value.trim();
+      const password = this.dom.ldapPasswordInput.value;
+      if (!username || !password) {
+        this.showError(t("login.username_password_required"));
+        return;
+      }
+      await this.submitLdapLogin(username, password, rememberMe);
+    } else if (this.currentMode === this.LoginMode.SSO) {
+      // SSO：跳转后端发起 OIDC 授权码流程
+      window.location.href = "/api/auth/sso/login";
     } else {
       const email = this.dom.emailInput.value.trim();
       const code = this.dom.emailCodeInput.value.trim();
@@ -291,6 +343,31 @@ class LoginManager {
         } else {
           loginUser(result.data, rememberMe);
         }
+      } else {
+        this.showError(this.formatErrorMessage(result.message));
+      }
+    } catch (error) {
+      this.handleNetworkError(error);
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /**
+   * 提交 LDAP 登录
+   */
+  async submitLdapLogin(username, password, rememberMe) {
+    this.setLoading(true);
+
+    try {
+      const result = await apiPost(
+        "/api/auth/login/ldap",
+        { username, password, remember_me: rememberMe },
+        { skipAuthCheck: true }
+      );
+
+      if (result.success) {
+        loginUser(result.data, rememberMe);
       } else {
         this.showError(this.formatErrorMessage(result.message));
       }

@@ -149,19 +149,27 @@ const BUTTON_EVENT_BINDINGS = [
     }
   },
   {
-    id: "save-mac-notification-email-btn",
-    event: "click",
-    handler: async () => {
-      const { saveMacNotificationEmail } = getModule("log");
-      await saveMacNotificationEmail();
-    }
-  },
-  {
     id: "test-smtp-btn",
     event: "click",
     handler: () => {
       const { testSmtpConnection } = getModule("systemManager");
       testSmtpConnection();
+    }
+  },
+  {
+    id: "test-ldap-btn",
+    event: "click",
+    handler: () => {
+      const { testLdapConnection } = getModule("systemManager");
+      testLdapConnection();
+    }
+  },
+  {
+    id: "test-sso-btn",
+    event: "click",
+    handler: () => {
+      const { testSsoConnection } = getModule("systemManager");
+      testSsoConnection();
     }
   },
   {

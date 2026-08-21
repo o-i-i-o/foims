@@ -194,9 +194,9 @@ pub async fn login(
 
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
-        (Uuid, String, String, String, String, bool, bool),
+        (Uuid, String, String, String, String, bool, bool, String),
     >(
-        "SELECT id, username, password_hash, email, role, status, two_factor_enabled FROM users WHERE username = $1 OR email = $1",
+        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, auth_provider FROM users WHERE username = $1 OR email = $1",
     )
     .bind(&req.username)
     .fetch_optional(&conn)
@@ -216,7 +216,8 @@ pub async fn login(
         }
     };
 
-    let (id, username, password_hash, email, role, status, two_factor_enabled) = user_row;
+    let (id, username, password_hash, email, role, status, two_factor_enabled, auth_provider) =
+        user_row;
 
     if !status {
         crate::system::app_fail2ban::record_login_failure(
@@ -237,6 +238,13 @@ pub async fn login(
             ipma_common::log_warn!("log.login.record_failed", error = e);
         }
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
+    }
+
+    // 外部认证账户（LDAP/SSO）不持有本地密码，引导用户使用对应登录方式
+    if auth_provider != "local" {
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.external_account_use_provider_login",
+        )));
     }
 
     let password_for_verify = req.password.clone();
@@ -334,9 +342,19 @@ pub async fn login_with_email_code(
 
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
-        (Uuid, String, String, String, bool, bool, Option<String>, Option<DateTime<Utc>>),
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            Option<String>,
+            Option<DateTime<Utc>>,
+            String,
+        ),
     >(
-        "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry FROM users WHERE email = $1",
+        "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&conn)
@@ -351,7 +369,15 @@ pub async fn login_with_email_code(
         }
     };
 
-    let (id, username, email, role, status, two_factor_enabled, code, expiry) = user_row;
+    let (id, username, email, role, status, two_factor_enabled, code, expiry, auth_provider) =
+        user_row;
+
+    // 外部认证账户不提供邮箱验证码通道
+    if auth_provider != "local" {
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.external_account_use_provider_login",
+        )));
+    }
 
     if !status {
         if let Err(e) = log_login(
@@ -1354,14 +1380,163 @@ pub struct TwoFactorDisableRequest {
     pub user_id: Option<Uuid>,
 }
 
-struct LoginTokens {
-    access_token: String,
-    refresh_token: String,
-    access_token_expiry: u64,
-    refresh_token_expiry: u64,
+pub(crate) struct LoginTokens {
+    pub(crate) access_token: String,
+    pub(crate) refresh_token: String,
+    pub(crate) access_token_expiry: u64,
+    pub(crate) refresh_token_expiry: u64,
 }
 
-fn build_login_response(
+pub(crate) struct ExternalUser {
+    pub(crate) id: Uuid,
+    pub(crate) username: String,
+    pub(crate) email: String,
+    pub(crate) role: String,
+    pub(crate) status: bool,
+    pub(crate) two_factor_enabled: bool,
+}
+
+/// 外部认证（LDAP/SSO）用户查找或自动建户：
+/// - 本地账户（auth_provider='local'）不允许外部登录接管；
+/// - 同 provider 已存在 → 复用并同步邮箱；
+/// - 不存在 → 以随机不可用密码哈希建户（仅能通过对应外部方式登录）。
+pub(crate) async fn find_or_create_external_user(
+    conn: &sqlx::PgPool,
+    provider: &str,
+    username: &str,
+    email: Option<&str>,
+    default_role: &str,
+) -> Result<ExternalUser, AppError> {
+    let username = username.trim();
+    if username.len() < 3 || username.len() > 50 {
+        return Err(AppError::Validation(msg(
+            "server.auth.external_username_invalid",
+        )));
+    }
+
+    if let Some(row) =
+        sqlx::query_as::<sqlx::Postgres, (Uuid, String, String, String, bool, bool, String)>(
+            "SELECT id, username, email, role, status, two_factor_enabled, auth_provider
+               FROM users WHERE username = $1",
+        )
+        .bind(username)
+        .fetch_optional(conn)
+        .await?
+    {
+        let (id, db_username, db_email, role, status, two_factor_enabled, auth_provider) = row;
+        if auth_provider != provider {
+            return Err(AppError::Conflict(msg("server.auth.provider_mismatch")));
+        }
+        // 同步外部侧邮箱变化（邮箱冲突时保留原值）
+        if let Some(new_email) = email
+            && new_email != db_email
+        {
+            let _ = sqlx::query("UPDATE users SET email = $2, updated_at = NOW() WHERE id = $1")
+                .bind(id)
+                .bind(new_email)
+                .execute(conn)
+                .await;
+        }
+        return Ok(ExternalUser {
+            id,
+            username: db_username,
+            email: db_email,
+            role,
+            status,
+            two_factor_enabled,
+        });
+    }
+
+    // 角色合法性兜底（配置更新时已校验，此处防御性重验）
+    let role = if crate::models::validate_role(default_role).is_ok() {
+        default_role.to_string()
+    } else {
+        "user".to_string()
+    };
+
+    // 随机 32 字节口令的哈希：外部账户无本地密码，该哈希永不匹配任何用户输入
+    let random_secret = {
+        use rand::Rng;
+        let mut bytes = [0u8; 32];
+        rand::rng().fill_bytes(&mut bytes);
+        hex::encode(bytes)
+    };
+    let password_hash = hash_password(&random_secret).await?;
+
+    let email_value = email
+        .filter(|e| e.contains('@'))
+        .map(String::from)
+        .unwrap_or_else(|| format!("{username}@{provider}.invalid"));
+
+    let inserted = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String, String, bool, bool)>(
+        "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
+         VALUES ($1, $2, $3, $4, TRUE, $5)
+         RETURNING id, username, email, role, status, two_factor_enabled",
+    )
+    .bind(username)
+    .bind(&password_hash)
+    .bind(&email_value)
+    .bind(&role)
+    .bind(provider)
+    .fetch_one(conn)
+    .await;
+
+    match inserted {
+        Ok((id, username, email, role, status, two_factor_enabled)) => {
+            ipma_common::log_info!(
+                "log.auth.external_user_created",
+                username = username,
+                provider = provider
+            );
+            Ok(ExternalUser {
+                id,
+                username,
+                email,
+                role,
+                status,
+                two_factor_enabled,
+            })
+        }
+        Err(e) => {
+            // 邮箱已被其他账户占用：退化为占位邮箱重试，避免阻断登录
+            if e.to_string().contains("users_email_key") {
+                let placeholder = format!("{username}@{provider}.invalid");
+                let (id, username, email, role, status, two_factor_enabled) =
+                    sqlx::query_as::<
+                        sqlx::Postgres,
+                        (Uuid, String, String, String, bool, bool),
+                    >(
+                        "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
+                         VALUES ($1, $2, $3, $4, TRUE, $5)
+                         RETURNING id, username, email, role, status, two_factor_enabled",
+                    )
+                    .bind(username)
+                    .bind(&password_hash)
+                    .bind(&placeholder)
+                    .bind(&role)
+                    .bind(provider)
+                    .fetch_one(conn)
+                    .await?;
+                ipma_common::log_warn!(
+                    "log.auth.external_email_conflict",
+                    username = username,
+                    email = placeholder
+                );
+                return Ok(ExternalUser {
+                    id,
+                    username,
+                    email,
+                    role,
+                    status,
+                    two_factor_enabled,
+                });
+            }
+            Err(e.into())
+        }
+    }
+}
+
+pub(crate) fn build_login_response(
     user: User,
     login_tokens: LoginTokens,
     secure: bool,
@@ -1394,7 +1569,50 @@ fn build_login_response(
     Ok(response)
 }
 
-fn generate_login_tokens(
+/// 外部认证（LDAP/SSO）通过后的通用收尾：状态检查、签发令牌、记录登录日志。
+pub(crate) async fn issue_external_login_tokens(
+    state: &Arc<AppState>,
+    meta: &RequestMeta,
+    external: &ExternalUser,
+    remember_me: bool,
+) -> Result<LoginTokens, AppError> {
+    let conn = state.pool()?.get_conn();
+
+    if !external.status {
+        return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
+    }
+
+    let device_fingerprint =
+        JwtUtils::generate_device_fingerprint(&meta.user_agent, &meta.ip_address);
+    let login_tokens = generate_login_tokens(
+        &state.jwt_utils,
+        &external.id,
+        &external.username,
+        &external.role,
+        &device_fingerprint,
+        &meta.ip_address,
+        remember_me,
+    )?;
+
+    if let Err(e) = log_login(
+        &conn,
+        &external.username,
+        &meta.ip_address,
+        &meta.user_agent,
+        true,
+        None,
+    )
+    .await
+    {
+        ipma_common::log_warn!("log.login.record_failed", error = e);
+    }
+    crate::system::app_fail2ban::record_login_success(&meta.ip_address, &external.username);
+    ipma_common::log_info!("log.login.success", username = external.username);
+
+    Ok(login_tokens)
+}
+
+pub(crate) fn generate_login_tokens(
     jwt_utils: &JwtUtils,
     id: &Uuid,
     username: &str,
@@ -1448,7 +1666,7 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     result == 0
 }
 
-async fn log_login(
+pub(crate) async fn log_login(
     pool: &sqlx::PgPool,
     username: &str,
     ip_address: &str,
@@ -1472,7 +1690,12 @@ async fn log_login(
     Ok(())
 }
 
-fn create_auth_cookie(name: &str, value: &str, max_age: i64, secure: bool) -> Cookie<'static> {
+pub(crate) fn create_auth_cookie(
+    name: &str,
+    value: &str,
+    max_age: i64,
+    secure: bool,
+) -> Cookie<'static> {
     let mut cookie = Cookie::build((name.to_string(), value.to_string()))
         .path("/")
         .http_only(true)
@@ -1498,7 +1721,10 @@ fn create_clear_cookie(name: &str, secure: bool) -> Cookie<'static> {
     cookie
 }
 
-fn append_cookie_to_response(response: &mut Response, cookie: &Cookie) -> Result<(), AppError> {
+pub(crate) fn append_cookie_to_response(
+    response: &mut Response,
+    cookie: &Cookie,
+) -> Result<(), AppError> {
     let header_value = HeaderValue::from_str(&cookie.to_string())
         .map_err(|e| AppError::Internal(msg("server.common.cookie_invalid").with("error", e)))?;
     response.headers_mut().append(SET_COOKIE, header_value);
