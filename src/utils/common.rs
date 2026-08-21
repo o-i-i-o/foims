@@ -96,6 +96,55 @@ pub fn cidr_belongs_to_region(cidr: &str, region_cidrs: &[String]) -> bool {
         .any(|region_cidr| cidr_contains_subnet(cidr, region_cidr))
 }
 
+/// 校验网关地址：格式合法、地址族一致（family 为 "ipv4"/"ipv6"），
+/// 且必须落在同族 CIDR 网段范围内（与 PostgreSQL `inet <<= cidr` 语义一致）。
+///
+/// - 网关未提供（None 或空白）直接通过；
+/// - 网关必须能解析为与 family 一致的 IP 地址（容忍 PostgreSQL INET
+///   文本表示自带的 "/32"、"/128" 掩码后缀）；
+/// - 必须提供同族 CIDR（创建时来自请求，更新时可为库中现值）。
+pub fn validate_gateway_in_cidr(
+    gateway: Option<&str>,
+    cidr: Option<&str>,
+    family: &str,
+) -> Result<(), crate::error::AppError> {
+    let validation_error = |key: String| crate::error::AppError::Validation(msg(key));
+
+    let Some(gateway) = gateway.map(str::trim).filter(|g| !g.is_empty()) else {
+        return Ok(());
+    };
+    let gateway = gateway.split('/').next().unwrap_or_default();
+
+    let parsed: std::net::IpAddr = gateway
+        .parse()
+        .map_err(|_| validation_error(format!("server.network.{family}_gateway_invalid")))?;
+    let family_ok = match parsed {
+        std::net::IpAddr::V4(_) => family == "ipv4",
+        std::net::IpAddr::V6(_) => family == "ipv6",
+    };
+    if !family_ok {
+        return Err(validation_error(format!(
+            "server.network.{family}_gateway_invalid"
+        )));
+    }
+
+    let Some(cidr) = cidr.map(str::trim).filter(|c| !c.is_empty()) else {
+        return Err(validation_error(format!(
+            "server.network.{family}_gateway_requires_cidr"
+        )));
+    };
+
+    let network = ipnetwork::IpNetwork::from_str(cidr)
+        .map_err(|_| validation_error(format!("server.network.{family}_cidr_invalid")))?;
+    if !network.contains(parsed) {
+        return Err(validation_error(format!(
+            "server.network.{family}_gateway_not_in_cidr"
+        )));
+    }
+
+    Ok(())
+}
+
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
@@ -555,7 +604,7 @@ pub async fn send_mac_change_notification(
 pub const NETWORK_QUERY: &str = r"
     SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
            n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
-           n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+           host(n.ipv4_gateway), host(n.ipv6_gateway), 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns, 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns, 
            n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 

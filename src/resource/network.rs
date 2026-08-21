@@ -181,7 +181,7 @@ pub async fn get_networks(
         };
 
         let data_query = format!(
-            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
@@ -236,7 +236,7 @@ pub async fn get_networks(
             .collect::<Result<_, _>>()?
     } else {
         let data_query = format!(
-            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
+            r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
@@ -325,6 +325,18 @@ pub async fn create_network(
     if !has_valid_cidr {
         return Err(AppError::Validation(msg("server.network.cidr_required")));
     }
+
+    // 校验网关格式及其是否落在对应 CIDR 网段内
+    crate::utils::validate_gateway_in_cidr(
+        req.ipv4_gateway.as_deref(),
+        ipv4_cidr_val.as_deref(),
+        "ipv4",
+    )?;
+    crate::utils::validate_gateway_in_cidr(
+        req.ipv6_gateway.as_deref(),
+        ipv6_cidr_val.as_deref(),
+        "ipv6",
+    )?;
 
     // 校验网段 CIDR 是否属于所在区域的 CIDR 范围
     if let Some(ref ipv4) = ipv4_cidr_val
@@ -448,7 +460,7 @@ pub async fn get_network(
     let row = sqlx::query(
         r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, 
                   n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, 
-                  n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+                  host(n.ipv4_gateway), host(n.ipv6_gateway), 
                   (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                   (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                   n.description, 
@@ -504,7 +516,7 @@ pub async fn update_network(
     let now = Utc::now();
 
     let row = sqlx::query(
-        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT,
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
            n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
@@ -621,6 +633,31 @@ pub async fn update_network(
     let ipv4_dns_array: Option<Vec<String>> = req.ipv4_dns.clone();
     let ipv6_dns_array: Option<Vec<String>> = req.ipv6_dns.clone();
 
+    // 网关校验：以请求值（缺省回退库中现值）与最终生效的 CIDR 核对，
+    // 确保"只改 CIDR 不改网关"等部分更新后的数据仍保持一致
+    let effective_ipv4_cidr = req
+        .ipv4_cidr
+        .as_ref()
+        .or(current_network.ipv4_cidr.as_ref())
+        .map(String::as_str);
+    let effective_ipv4_gateway = req
+        .ipv4_gateway
+        .as_ref()
+        .or(current_network.ipv4_gateway.as_ref())
+        .map(String::as_str);
+    crate::utils::validate_gateway_in_cidr(effective_ipv4_gateway, effective_ipv4_cidr, "ipv4")?;
+    let effective_ipv6_cidr = req
+        .ipv6_cidr
+        .as_ref()
+        .or(current_network.ipv6_cidr.as_ref())
+        .map(String::as_str);
+    let effective_ipv6_gateway = req
+        .ipv6_gateway
+        .as_ref()
+        .or(current_network.ipv6_gateway.as_ref())
+        .map(String::as_str);
+    crate::utils::validate_gateway_in_cidr(effective_ipv6_gateway, effective_ipv6_cidr, "ipv6")?;
+
     sqlx::query(
         "UPDATE network_cidrs SET 
          name = $1, 
@@ -650,7 +687,7 @@ pub async fn update_network(
     .await?;
 
     let row = sqlx::query(
-        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, n.ipv4_gateway::TEXT, n.ipv6_gateway::TEXT, 
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway), 
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
            n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 

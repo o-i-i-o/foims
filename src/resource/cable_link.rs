@@ -346,32 +346,30 @@ pub async fn update_cable_link(
 
     let mut builder = QueryBuilder::<Postgres>::new("UPDATE cable_links SET ");
     {
+        // separated 会在非首个 push 前自动插入分隔符，因此列名片段用 push、
+        // 绑定值紧随其后用 push_bind_unseparated，避免生成 "col = , $1"
         let mut sep = builder.separated(", ");
         if let Some(link_type) = &req.link_type {
-            sep.push("link_type = ").push_bind(link_type);
+            sep.push("link_type = ").push_bind_unseparated(link_type);
         }
         // Option<Option<T>>：Some(Some(v)) 设新值；Some(None) 置空
         //（bind 对 Option 直接编码为 NULL，无需 CASE WHEN 区分）
         if let Some(label) = &req.cable_label {
-            sep.push("cable_label = ").push_bind(label);
+            sep.push("cable_label = ").push_bind_unseparated(label);
         }
         if let Some(length) = req.length_m {
-            sep.push("length_m = ").push_bind(length);
+            sep.push("length_m = ").push_bind_unseparated(length);
         }
         if let Some(tested) = req.tested {
-            sep.push("tested = ").push_bind(tested);
+            sep.push("tested = ").push_bind_unseparated(tested);
         }
         if let Some((a_type, a_id, b_type, b_id)) = &new_endpoints {
-            sep.push("a_endpoint_type = ")
-                .push_bind(a_type)
-                .push(", a_endpoint_id = ")
-                .push_bind(*a_id)
-                .push(", b_endpoint_type = ")
-                .push_bind(b_type)
-                .push(", b_endpoint_id = ")
-                .push_bind(*b_id);
+            sep.push("a_endpoint_type = ").push_bind_unseparated(a_type);
+            sep.push("a_endpoint_id = ").push_bind_unseparated(*a_id);
+            sep.push("b_endpoint_type = ").push_bind_unseparated(b_type);
+            sep.push("b_endpoint_id = ").push_bind_unseparated(*b_id);
         }
-        sep.push("updated_at = ").push_bind(Utc::now());
+        sep.push("updated_at = ").push_bind_unseparated(Utc::now());
     }
     builder.push(" WHERE id = ").push_bind(id);
     builder.build().execute(&mut *tx).await?;

@@ -245,23 +245,26 @@ pub async fn update_device_interface(
 
     let mut builder = QueryBuilder::<Postgres>::new("UPDATE device_interfaces SET ");
     {
+        // separated 会在非首个 push 前自动插入分隔符，因此列名片段用 push、
+        // 绑定值紧随其后用 push_bind_unseparated，避免生成 "col = , $1"
         let mut sep = builder.separated(", ");
-        sep.push("name = ")
-            .push_bind(&req.name)
-            .push(", physical_type = ")
-            .push_bind(&req.physical_type)
-            .push(", interface_role = ")
-            .push_bind(&req.interface_role);
+        sep.push("name = ").push_bind_unseparated(&req.name);
+        sep.push("physical_type = ")
+            .push_bind_unseparated(&req.physical_type);
+        sep.push("interface_role = ")
+            .push_bind_unseparated(&req.interface_role);
         // 可空字段：仅当请求中出现该字段时才加入 SET，bind 对 Option
         // 直接编码（Some→值，None→NULL），无需 CASE WHEN 区分
         if let Some(mac_address) = &req.mac_address {
-            sep.push(", mac_address = ").push_bind(mac_address);
+            sep.push("mac_address = ")
+                .push_bind_unseparated(mac_address);
         }
-        sep.push(", vlan_id = ").push_bind(req.vlan_id);
+        sep.push("vlan_id = ").push_bind_unseparated(req.vlan_id);
         if let Some(description) = &req.description {
-            sep.push(", description = ").push_bind(description);
+            sep.push("description = ")
+                .push_bind_unseparated(description);
         }
-        sep.push(", updated_at = ").push_bind(Utc::now());
+        sep.push("updated_at = ").push_bind_unseparated(Utc::now());
     }
     builder.push(" WHERE id = ").push_bind(interface_id);
 

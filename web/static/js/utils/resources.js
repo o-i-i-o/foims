@@ -270,21 +270,43 @@ export function loadDeviceTemplatesForSelect(selectId) {
   });
 }
 
-/** 加载工位选项（可按房间过滤）。 */
+/**
+ * 加载工位选项（按房间过滤）。
+ *
+ * 工位必属于房间：未选定房间时不发请求，仅展示"请先选择房间"占位项，
+ * 避免出现脱离房间上下文的全量工位列表。
+ */
 export function loadWorkstationsForSelect(selectId, roomId = null) {
-  const url = roomId
-    ? `/api/resources/workstations?room_id=${roomId}&page_size=1000`
-    : "/api/resources/workstations?page_size=1000";
-  return fillSelect(selectId, url, {
-    placeholderKey: "device.select_workstation",
-    errorLabel: "工位"
-  });
+  if (!roomId) {
+    return fillSelect(selectId, null, {
+      placeholderKey: "device.select_room_first",
+      errorLabel: "工位"
+    });
+  }
+  return fillSelect(
+    selectId,
+    `/api/resources/workstations?room_id=${roomId}&page_size=1000`,
+    {
+      placeholderKey: "device.select_workstation",
+      errorLabel: "工位"
+    }
+  );
 }
 
-/** 加载机柜选项（可按房间过滤）。 */
+/**
+ * 加载机柜选项（按房间过滤）。
+ *
+ * 机柜必属于房间：未选定房间时不发请求，仅展示"请先选择房间"占位项，
+ * 避免出现脱离房间上下文的全量机柜列表。
+ */
 export function loadCabinetsForSelect(selectId, roomId = null) {
-  const params = new URLSearchParams({ page_size: "1000" });
-  if (roomId) params.set("room_id", roomId);
+  if (!roomId) {
+    return fillSelect(selectId, null, {
+      placeholderKey: "device.select_room_first",
+      errorLabel: "机柜"
+    });
+  }
+  const params = new URLSearchParams({ room_id: roomId, page_size: "1000" });
   return fillSelect(selectId, `/api/resources/cabinets?${params.toString()}`, {
     placeholderKey: "device.select_cabinet",
     errorLabel: "机柜"

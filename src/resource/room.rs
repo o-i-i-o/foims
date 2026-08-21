@@ -87,22 +87,24 @@ pub async fn get_rooms(
         }
         has_where = true;
     }
-    if org_filter.is_some() || !room_types.is_empty() {
+    // 各过滤分支独立判断首条件（WHERE）与后续条件（AND），
+    // 避免 org_id 与 room_type 组合时拼出双 WHERE
+    if let Some(org_id) = org_filter {
         let conjunction = if has_where { " AND" } else { " WHERE" };
-        if let Some(org_id) = org_filter {
-            for builder in [&mut count_builder, &mut list_builder] {
-                builder.push(conjunction);
-                builder.push(" r.org_id = ");
-                builder.push_bind(org_id);
-            }
+        for builder in [&mut count_builder, &mut list_builder] {
+            builder.push(conjunction);
+            builder.push(" r.org_id = ");
+            builder.push_bind(org_id);
         }
-        if !room_types.is_empty() {
-            for builder in [&mut count_builder, &mut list_builder] {
-                builder.push(conjunction);
-                builder.push(" r.room_type = ANY(");
-                builder.push_bind(room_types.clone());
-                builder.push(")");
-            }
+        has_where = true;
+    }
+    if !room_types.is_empty() {
+        let conjunction = if has_where { " AND" } else { " WHERE" };
+        for builder in [&mut count_builder, &mut list_builder] {
+            builder.push(conjunction);
+            builder.push(" r.room_type = ANY(");
+            builder.push_bind(room_types.clone());
+            builder.push(")");
         }
     }
 

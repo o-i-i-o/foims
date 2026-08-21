@@ -22,6 +22,7 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 
 import { loadNetworkRegionOptions } from "../utils/resources.js";
+import { isValidIPv4, isValidIPv6, isIpInCidr } from "../utils/network.js";
 
 import { elementCache } from "../utils/helpers.js";
 
@@ -1007,6 +1008,28 @@ export async function submitNetworkForm() {
   if (!ipv4_cidr && !ipv6_cidr) {
     showToast(t("network.cidr_required"), "warning");
     return;
+  }
+
+  // 网关校验：格式合法、与地址族一致，且必须落在对应 CIDR 网段内
+  const gatewayChecks = [
+    { family: "4", gateway: ipv4_gateway, cidr: ipv4_cidr, isValid: isValidIPv4 },
+    { family: "6", gateway: ipv6_gateway, cidr: ipv6_cidr, isValid: isValidIPv6 }
+  ];
+  for (const { family, gateway, cidr, isValid } of gatewayChecks) {
+    const gatewayTrimmed = gateway ? gateway.trim() : "";
+    if (!gatewayTrimmed) continue;
+    if (!isValid(gatewayTrimmed)) {
+      showToast(t("network.gateway_invalid", { family }), "warning");
+      return;
+    }
+    if (!cidr || !cidr.trim()) {
+      showToast(t("network.gateway_requires_cidr", { family }), "warning");
+      return;
+    }
+    if (!isIpInCidr(gatewayTrimmed, cidr.trim())) {
+      showToast(t("network.gateway_not_in_cidr", { family }), "warning");
+      return;
+    }
   }
 
   const parseDnsList = (dnsStr) => {
