@@ -9,7 +9,7 @@
   "nav": {
     "dashboard": "仪表盘",
     "resources": "资源管理",
-    "ip_management": "IP管理",
+    "ip_management": "IP查询",
     "visualization": "可视化",
     "logs": "日志",
     "system": "系统",
@@ -76,7 +76,8 @@
     "page_size": "每页条数",
     "goto": "跳至",
     "request_failed": "请求失败",
-    "type": "类型"
+    "type": "类型",
+    "search": "搜索"
   },
   "status": {
     "active": "活跃",
@@ -873,7 +874,7 @@
       "network": "网络",
       "workstation": "工位",
       "ip": "IP地址",
-      "ip_manager": "IP管理",
+      "ip_manager": "IP查询",
       "region": "区域",
       "network_region": "网络区域",
       "room": "房间",
@@ -943,7 +944,9 @@
     "no_ip_data": "暂无IP数据",
     "server_connection_failed": "服务器连接失败，请检查网络或联系管理员",
     "load_failed_short": "加载失败",
-    "delete_ip": "删除此IP"
+    "delete_ip": "删除此IP",
+    "pull_short": "拉取",
+    "pull_device_hint": "仅列出已配置 SNMP 的设备"
   },
   "visualization": {
     "workstation": "工位可视化",
@@ -952,8 +955,6 @@
     "auto_draw": "自动绘制",
     "save_layout": "保存布局",
     "delete_layout": "删除布局",
-    "select_device": "-- 添加设备 --",
-    "add_device": "添加设备",
     "connection_mode": "连线模式",
     "exit_connection_mode": "退出连线",
     "auto_layout": "自动布局",
@@ -1268,11 +1269,8 @@
     "device_removed": "设备已从拓扑移除",
     "auto_discover_failed": "自动发现失败",
     "delete_failed": "删除失败",
-    "device_already_in_topology": "该设备已在拓扑中",
     "confirm_remove_device": "确定要从拓扑中移除该设备吗？关联连线也会被删除。",
     "no_nodes_to_save": "没有可保存的节点",
-    "confirm_delete_topology_layout": "确定要删除设备可视化布局吗？此操作不可恢复。",
-    "topology_layout_delete_success": "拓扑布局删除成功",
     "auto_discover_done": "自动发现完成：新增 {{count}} 个节点",
     "no_nodes_to_layout": "没有可布局的节点",
     "link_order": "链路顺序",
@@ -1820,7 +1818,7 @@
       "deleted": "网络删除成功",
       "fetched": "网络获取成功",
       "in_use_by_cabinet": "无法删除网络：该网络已被机柜通过房间间接关联，请先解除关联关系",
-      "in_use_by_ip": "无法删除网络：该网络已被IP管理关联，请先解除关联关系",
+      "in_use_by_ip": "无法删除网络：该网络已被IP查询关联，请先解除关联关系",
       "in_use_by_room": "无法删除网络：该网络已被房间关联，请先解除关联关系",
       "ipv4_cidr_exists": "IPv4网段已存在，网段不能重复",
       "ipv4_cidr_in_use": "IPv4网段已被其他网段使用，网段不能重复",

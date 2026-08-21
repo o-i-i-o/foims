@@ -9,7 +9,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "resources": "Resources",
-    "ip_management": "IP Management",
+    "ip_management": "IP Query",
     "visualization": "Visualization",
     "logs": "Logs",
     "system": "System",
@@ -76,7 +76,8 @@
     "page_size": "Rows per page",
     "goto": "Go to",
     "request_failed": "Request failed",
-    "type": "Type"
+    "type": "Type",
+    "search": "Search"
   },
   "status": {
     "active": "Active",
@@ -873,7 +874,7 @@
       "network": "Network",
       "workstation": "Workstation",
       "ip": "IP Address",
-      "ip_manager": "IP Management",
+      "ip_manager": "IP Query",
       "region": "Region",
       "network_region": "Network Region",
       "room": "Room",
@@ -943,7 +944,9 @@
     "no_ip_data": "No IP data",
     "server_connection_failed": "Server connection failed. Please check your network or contact the administrator.",
     "load_failed_short": "Load failed",
-    "delete_ip": "Remove this IP"
+    "delete_ip": "Remove this IP",
+    "pull_short": "Pull",
+    "pull_device_hint": "Only devices with SNMP configuration are listed"
   },
   "visualization": {
     "workstation": "Workstation Visualization",
@@ -952,8 +955,6 @@
     "auto_draw": "Auto Draw",
     "save_layout": "Save Layout",
     "delete_layout": "Delete Layout",
-    "select_device": "-- Add Device --",
-    "add_device": "Add Device",
     "connection_mode": "Connection Mode",
     "exit_connection_mode": "Exit Connection",
     "auto_layout": "Auto Layout",
@@ -1268,11 +1269,8 @@
     "device_removed": "Device removed from topology",
     "auto_discover_failed": "Auto-discovery failed",
     "delete_failed": "Delete failed",
-    "device_already_in_topology": "This device is already in the topology",
     "confirm_remove_device": "Remove this device from the topology? Related connections will also be deleted.",
     "no_nodes_to_save": "No nodes to save",
-    "confirm_delete_topology_layout": "Delete the device visualization layout? This cannot be undone.",
-    "topology_layout_delete_success": "Topology layout deleted successfully",
     "auto_discover_done": "Auto-discovery complete: {{count}} new nodes added",
     "no_nodes_to_layout": "No nodes to lay out",
     "link_order": "link order",
@@ -1820,7 +1818,7 @@
       "deleted": "Network deleted successfully",
       "fetched": "Networks fetched successfully",
       "in_use_by_cabinet": "Cannot delete network: indirectly referenced by cabinets through rooms, remove the association first",
-      "in_use_by_ip": "Cannot delete network: referenced by IP management, remove the association first",
+      "in_use_by_ip": "Cannot delete network: referenced by IP query, remove the association first",
       "in_use_by_room": "Cannot delete network: referenced by rooms, remove the association first",
       "ipv4_cidr_exists": "IPv4 network already exists, networks must be unique",
       "ipv4_cidr_in_use": "IPv4 network is already used by another network",

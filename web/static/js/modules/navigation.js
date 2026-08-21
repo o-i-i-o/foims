@@ -103,12 +103,10 @@ async function loadOrganizationPage() {
 }
 
 /**
- * 加载 IP 管理页面
+ * 加载 IP 查询页面
  */
 async function loadIpPage() {
   const ipmanager = await loadModule("ipmanager");
-  ipmanager.loadDevicesForPullMac();
-  ipmanager.loadNetworksForPullMac();
   ipmanager.initIpMacFunctions();
   nextFrame(() => ipmanager.loadIpMacData());
 }

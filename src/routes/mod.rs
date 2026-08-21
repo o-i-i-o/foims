@@ -268,7 +268,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(update_cabinet_position)
                 .delete(delete_cabinet_position),
         )
-        // IP管理
+        // IP查询
         .route("/api/resources/ip", get(get_ip_managers))
         .route("/api/resources/ip/pull", post(pull_ip_managers))
         .route(

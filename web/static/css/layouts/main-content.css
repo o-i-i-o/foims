@@ -122,14 +122,9 @@
   flex-wrap: wrap;
 }
 
-/* IP 管理页：table-container 的顶部留白上移到搜索行上方，
-   搜索行与表格上下紧贴 */
-#ip .section-header-row {
-  margin-top: var(--space-sm);
-}
-
+/* IP 查询页：表格与页面顶部留出少量间距 */
 #ip .table-container {
-  margin-top: 0;
+  margin-top: var(--space-sm);
 }
 
 .toolbar {

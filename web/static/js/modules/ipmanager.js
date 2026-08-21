@@ -17,6 +17,8 @@ import { t } from "../utils/i18n.js";
 
 import { getDeviceTypeName } from "../utils/formatter.js";
 
+import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
+
 const IP_PAGE_SIZE = 100;
 let currentPageSize = IP_PAGE_SIZE;
 
@@ -30,10 +32,10 @@ let currentPage = 1;
 
 const ipTableState = createSortState("updated_at", "desc");
 
-// ====== IP管理 ======
+// ====== IP查询 ======
 
-// 加载设备列表到拉取MAC下拉框
-export async function loadDevicesForPullMac() {
+// 加载设备列表到拉取MAC模态框（仅列出配置了 SNMP 的设备）
+async function loadDevicesForPullMac() {
   try {
     const result = await apiGet("/api/resources/devices?page_size=1000");
     const select = document.getElementById("pull-mac-device-select");
@@ -73,8 +75,8 @@ export async function loadDevicesForPullMac() {
   }
 }
 
-// 加载网段列表到拉取MAC下拉框
-export async function loadNetworksForPullMac() {
+// 加载网段列表到拉取MAC模态框
+async function loadNetworksForPullMac() {
   try {
     const result = await apiGet("/api/resources/networks?page_size=1000");
     const select = document.getElementById("pull-mac-network-select");
@@ -108,9 +110,24 @@ export async function loadNetworksForPullMac() {
   }
 }
 
-// 拉取IP MAC数据
-export async function pullIpMacData() {
-  // 获取选中的设备
+// 打开拉取MAC模态框（MAC 地址表头“拉取”按钮入口）
+async function openPullMacModal() {
+  const modal = await loadModal("pull-mac-modal");
+  if (!modal) return;
+
+  await Promise.all([loadDevicesForPullMac(), loadNetworksForPullMac()]);
+
+  const form = document.getElementById("pull-mac-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    await pullIpMacData();
+  };
+
+  openModal("pull-mac-modal");
+}
+
+// 拉取IP MAC数据（目标设备与网段取自拉取MAC模态框）
+async function pullIpMacData() {
   const deviceSelect = document.getElementById("pull-mac-device-select");
   const deviceId = deviceSelect ? deviceSelect.value : "";
 
@@ -119,7 +136,6 @@ export async function pullIpMacData() {
     return;
   }
 
-  // 获取选中的网段
   const networkSelect = document.getElementById("pull-mac-network-select");
   const networkId = networkSelect ? networkSelect.value : "";
 
@@ -142,6 +158,7 @@ export async function pullIpMacData() {
 
     if (result.success) {
       showToast(result.message || t("ip.pull_mac_success"), "success");
+      closeModal("pull-mac-modal");
       loadIpMacData();
     } else {
       showToast(`${t("ip.pull_mac_failed")}: ${result.message}`, "error");
@@ -269,21 +286,16 @@ export const initIpMacFunctions = () => {
   ipSection.dataset.initialized = "true";
 
   initIpFilters();
+  initThSearchPopovers();
 
   initSortEvents("ip-table", ipTableState, (page, sortBy, sortOrder) =>
     loadIpMacData(currentFilters, page, sortBy, sortOrder)
   );
 
-  ipSection.addEventListener("click", (e) => {
-    const target = e.target;
-    const id = target.id || target.dataset?.action;
-
-    switch (id) {
-      case "pull-ip-btn":
-        pullIpMacData();
-        break;
-    }
-  });
+  const pullMacBtn = document.getElementById("open-pull-mac-modal");
+  if (pullMacBtn) {
+    pullMacBtn.addEventListener("click", openPullMacModal);
+  }
 };
 
 export function initIpFilters() {
@@ -295,6 +307,53 @@ export function initIpFilters() {
     const filterElement = document.getElementById(filterId);
     if (filterElement) {
       filterElement.addEventListener("input", debouncedFilter);
+    }
+  });
+}
+
+// 表头搜索弹层：点击放大镜图标展开/收起输入框，Esc 或点击外部收起
+export function initThSearchPopovers() {
+  document.querySelectorAll("#ip-table th.th-searchable").forEach((th) => {
+    const toggle = th.querySelector(".th-search-toggle");
+    const popover = th.querySelector(".th-search-popover");
+    const input = popover?.querySelector("input");
+    if (!toggle || !popover || !input) return;
+
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = !popover.classList.contains("open");
+
+      // 同一时间只展开一个搜索弹层
+      document.querySelectorAll("#ip-table .th-search-popover.open").forEach((p) => {
+        p.classList.remove("open");
+      });
+
+      if (willOpen) {
+        popover.classList.add("open");
+        input.focus();
+      }
+    });
+
+    // 输入框有内容时放大镜图标保持高亮
+    input.addEventListener("input", () => {
+      toggle.classList.toggle("active", input.value.trim() !== "");
+    });
+    if (input.value.trim() !== "") {
+      toggle.classList.add("active");
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        popover.classList.remove("open");
+      }
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#ip-table th.th-searchable")) {
+      document.querySelectorAll("#ip-table .th-search-popover.open").forEach((p) => {
+        p.classList.remove("open");
+      });
     }
   });
 }

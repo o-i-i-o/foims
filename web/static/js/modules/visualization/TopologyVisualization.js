@@ -47,31 +47,6 @@ export class TopologyVisualization {
     this.core._updateZoomIndicator();
   }
 
-  async addDevice(deviceId, deviceName, deviceType) {
-    if (this.nodes.find((n) => n.device_id === deviceId)) {
-      showToast(t("viz.device_already_in_topology"), "warning");
-      return;
-    }
-
-    const position = this._findNextPosition();
-    const node = {
-      device_id: deviceId,
-      x: position.x,
-      y: position.y,
-      width: 200,
-      height: 100,
-      device_name: deviceName,
-      device_type: deviceType
-    };
-
-    const saved = await this.dataManager.saveTopologyNodes([node]);
-    if (saved) {
-      this.nodes.push(node);
-      this.renderer.drawDeviceNode(node);
-      this._renderContainers();
-    }
-  }
-
   async deleteDevice(deviceId) {
     const confirmed = await showConfirm(t("viz.confirm_remove_device"));
     if (!confirmed) return;
@@ -179,20 +154,6 @@ export class TopologyVisualization {
     }
 
     await this.dataManager.saveTopologyNodes(nodes);
-  }
-
-  async deleteLayout() {
-    const confirmed = await showConfirm(t("viz.confirm_delete_topology_layout"));
-    if (!confirmed) return;
-
-    for (const node of this.nodes) {
-      await this.dataManager.deleteTopologyNode(node.device_id);
-    }
-    this.nodes = [];
-    this.connections = [];
-    this.connectionsMap.clear();
-    this.renderer.clearAll();
-    showToast(t("viz.topology_layout_delete_success"), "success");
   }
 
   toggleConnectionMode() {
@@ -455,15 +416,6 @@ export class TopologyVisualization {
     if (this.callbacks?.onDeviceDetail) {
       this.callbacks.onDeviceDetail(deviceId);
     }
-  }
-
-  _findNextPosition() {
-    const cols = Math.ceil(Math.sqrt(this.nodes.length + 1));
-    const idx = this.nodes.length;
-    return {
-      x: 100 + (idx % cols) * 250,
-      y: 100 + Math.floor(idx / cols) * 150
-    };
   }
 
   _fitView() {

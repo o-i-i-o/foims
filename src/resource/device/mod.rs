@@ -22,7 +22,7 @@ use crate::error::{AppError, msg};
 
 /// Valid device types matching the database CHECK constraint
 const VALID_DEVICE_TYPES: [&str; 9] = [
-    "pc",
+    "desktop",
     "laptop",
     "printer",
     "server",

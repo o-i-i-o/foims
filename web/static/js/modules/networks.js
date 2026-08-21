@@ -466,6 +466,22 @@ function buildIPv4Content(network, networkIps, networkId) {
   return `
     <div class="usage-stats">
       <div class="stat-item">
+        <span class="stat-label">${t("network.ipv4_cidr")}:</span>
+        <span class="stat-value">${escapeHtml(cidr) || "-"}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">${t("network.ipv4_gateway")}:</span>
+        <span class="stat-value">${escapeHtml(network.ipv4_gateway) || "-"}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">${t("network.ipv4_dns")}:</span>
+        <span class="stat-value">${
+          Array.isArray(network.ipv4_dns)
+            ? network.ipv4_dns.map((d) => escapeHtml(d)).join(", ")
+            : escapeHtml(network.ipv4_dns) || "-"
+        }</span>
+      </div>
+      <div class="stat-item">
         <span class="stat-label">${t("network.region")}:</span>
         <span class="stat-value">${escapeHtml(network.network_region) || "-"}</span>
       </div>
@@ -583,6 +599,32 @@ function buildIPv6Content(network, networkIps, networkId) {
   const totalAssigned = networkIps.length;
 
   return `
+    <div class="ipv6-info-section">
+      <h5>${t("network.ipv6_info")}</h5>
+      <div class="ipv6-info-grid">
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("network.ipv6_cidr")}</span>
+          <span class="ipv6-info-value ipv6-address">${escapeHtml(network.ipv6_cidr)}</span>
+        </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("network.ipv6_gateway")}</span>
+          <span class="ipv6-info-value ipv6-address">${escapeHtml(network.ipv6_gateway) || "-"}</span>
+        </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">DNS</span>
+          <span class="ipv6-info-value ipv6-address">${
+            Array.isArray(network.ipv6_dns)
+              ? network.ipv6_dns.map((d) => escapeHtml(d)).join(", ")
+              : escapeHtml(network.ipv6_dns) || "-"
+          }</span>
+        </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("network.connection_status")}</span>
+          <span class="ipv6-info-value"><span class="connection-status ${totalAssigned > 0 ? "status-enabled" : "status-disabled"}">${totalAssigned > 0 ? t("network.enabled") : t("network.unused")}</span></span>
+        </div>
+      </div>
+    </div>
+
     <div class="ipv6-stats-section">
       <h5>${t("network.ipv6_stats")}</h5>
       <div class="ipv6-stats-grid">

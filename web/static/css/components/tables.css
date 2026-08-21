@@ -314,6 +314,88 @@
   font-size: 0.75rem;
 }
 
+/* 表头搜索：放大镜图标 + 点击图标弹出的搜索输入框 */
+.data-table th.th-searchable {
+  position: relative;
+  white-space: nowrap;
+}
+
+.data-table th .th-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: all 0.2s ease;
+}
+
+.data-table th .th-search-toggle svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.data-table th .th-search-toggle:hover {
+  color: var(--color-primary);
+  background-color: var(--color-bg-hover);
+}
+
+/* 输入框内有内容时图标保持高亮 */
+.data-table th .th-search-toggle.active {
+  color: var(--color-primary);
+}
+
+.data-table th .th-search-popover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  width: min(14rem, 80vw);
+  padding: 0.5rem;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.data-table th .th-search-popover.open {
+  display: block;
+}
+
+.data-table th .th-search-popover .form-control {
+  width: 100%;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.5rem;
+}
+
+/* 表头文字右侧的小操作按钮（如 MAC 地址列的“拉取”） */
+.data-table th .th-action-btn {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: all 0.2s ease;
+}
+
+.data-table th .th-action-btn:hover {
+  background-color: var(--color-primary);
+  color: var(--color-bg-white);
+}
+
 /* 表格容器水平滚动包装（通用工具类，原位于 network-usage.css） */
 .table-responsive {
   overflow-x: auto;

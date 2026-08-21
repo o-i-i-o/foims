@@ -1,0 +1,26 @@
+<template id="pull-mac-modal-template">
+<div id="pull-mac-modal" class="modal">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="ip.pull_mac">Pull MAC</h3>
+      <span class="close" data-modal-id="pull-mac-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+    </header>
+    <div class="modal-body">
+      <form id="pull-mac-form">
+        <div class="form-group">
+          <label for="pull-mac-device-select" data-i18n="ip.select_device">Select Device</label>
+          <select id="pull-mac-device-select" class="form-control" aria-label="Target device"></select>
+          <span class="hint-text" data-i18n="ip.pull_device_hint">Only devices with SNMP configuration are listed</span>
+        </div>
+        <div class="form-group">
+          <label for="pull-mac-network-select" data-i18n="ip.select_network">Select Network</label>
+          <select id="pull-mac-network-select" class="form-control" aria-label="Target network"></select>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="submit" class="btn btn-primary" form="pull-mac-form" id="pull-ip-btn" data-i18n="common.confirm">Confirm</button>
+    </footer>
+  </div>
+</div>
+</template>

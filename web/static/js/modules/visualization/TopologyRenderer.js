@@ -9,7 +9,7 @@ const DEVICE_COLORS = {
   router: { fill: "#fff3e0", stroke: "#f57c00" },
   camera: { fill: "#fce4ec", stroke: "#c62828" },
   phone: { fill: "#f3e5f5", stroke: "#7b1fa2" },
-  pc: { fill: "#f5f5f5", stroke: "#9e9e9e" },
+  desktop: { fill: "#f5f5f5", stroke: "#9e9e9e" },
   laptop: { fill: "#f5f5f5", stroke: "#757575" },
   printer: { fill: "#fff8e1", stroke: "#f9a825" },
   other: { fill: "#f5f5f5", stroke: "#9e9e9e" }
@@ -22,7 +22,7 @@ const DEVICE_TYPE_I18N_KEYS = {
   router: "device_type.router",
   camera: "device_type.camera",
   phone: "device_type.phone",
-  pc: "device_type.pc",
+  desktop: "device_type.desktop",
   laptop: "device_type.laptop",
   printer: "device_type.printer",
   other: "device_type.other"

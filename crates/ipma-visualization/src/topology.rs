@@ -768,7 +768,8 @@ pub struct AutoDiscoverResult {
     pub discovered_connections: usize,
 }
 
-/// 扫描线路数据，为出现过的设备确保拓扑节点存在。
+/// 自动发现：为设备模块中存在而布局中缺失的设备补齐拓扑节点，
+/// 并基于线路数据派生物理连线。
 ///
 /// 物理连线自 SQL 派生后无需落库，自动发现仅负责补节点；
 /// 同时清理历史遗留的 auto_discovered 物理连线（迁移兜底）。
@@ -784,6 +785,16 @@ pub async fn auto_discover_all_topology(
         }
         if !device_ids.contains(&conn.target_device_id) {
             device_ids.push(conn.target_device_id);
+        }
+    }
+
+    // 设备模块中的全部设备均确保存在节点（已存在的由 ON CONFLICT 跳过）
+    let all_devices: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM devices ORDER BY name")
+        .fetch_all(pool)
+        .await?;
+    for device_id in all_devices {
+        if !device_ids.contains(&device_id) {
+            device_ids.push(device_id);
         }
     }
 

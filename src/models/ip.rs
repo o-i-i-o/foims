@@ -6,7 +6,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== IP 管理模型 ====================
+// ==================== IP 查询模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct IpManager {

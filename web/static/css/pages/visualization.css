@@ -6,10 +6,12 @@
   max-height: 100vh;
 }
 
+/* 二级导航标签：保持原有大小与高度，水平居中悬浮在画布顶部 */
 #visualization > .tabs {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
   margin-bottom: 0;
   box-shadow: var(--shadow-md);
@@ -22,7 +24,6 @@
 
 #visualization .toolbar {
   justify-content: flex-end;
-  padding-left: 200px;
   flex-shrink: 0;
 }
 
@@ -696,12 +697,19 @@
   dominant-baseline: middle;
 }
 
-/* 设备可视化工具栏：按钮较多，改为在子标签行下方换行排布，
-   避免设备选择组与绝对定位的子标签行重叠（原单行 + padding-left 布局） */
+/* 设备可视化工具栏：连线模式/创建连线/自动发现 靠左，
+   自动布局/保存布局/比例指示 靠右；顶部留白避开居中悬浮的子标签行 */
 #global-visualization .toolbar {
   flex-wrap: wrap;
   justify-content: flex-start;
   padding-left: 0;
   padding-top: 44px;
   row-gap: var(--space-sm);
+}
+
+#global-visualization .toolbar .toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
 }

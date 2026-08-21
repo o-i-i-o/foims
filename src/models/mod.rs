@@ -11,7 +11,7 @@ use validator::ValidationError;
 
 pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
     match device_type {
-        "pc" | "laptop" | "printer" | "server" | "network_device" | "switch" | "camera"
+        "desktop" | "laptop" | "printer" | "server" | "network_device" | "switch" | "camera"
         | "phone" | "other" => Ok(()),
         // code 仅作错误标识；实际返回给前端的消息 key 由调用点的 message 属性覆盖
         _ => Err(ValidationError::new(

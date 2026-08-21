@@ -161,30 +161,10 @@ function bindLayoutEvents() {
 }
 
 function bindTopologyEvents() {
-  const deviceSelect = elementCache.get("topology-device-select");
-  const addDeviceBtn = elementCache.get("add-device-to-topology");
   const toggleConnModeBtn = elementCache.get("toggle-connection-mode");
   const autoDiscoverBtn = elementCache.get("topology-auto-discover");
   const autoLayoutBtn = elementCache.get("topology-auto-layout");
   const saveLayoutBtn = elementCache.get("save-topology-layout");
-  const deleteLayoutBtn = elementCache.get("delete-topology-layout");
-
-  if (addDeviceBtn) {
-    addDeviceBtn.addEventListener("click", async () => {
-      const selectEl = deviceSelect;
-      if (!selectEl) return;
-      const deviceId = selectEl.value;
-      if (!deviceId) {
-        showToast(t("visualization.select_device"), "warning");
-        return;
-      }
-      const option = selectEl.selectedOptions[0];
-      const deviceName = option?.textContent || deviceId;
-      const deviceType = option?.dataset.deviceType || "other";
-      await topologyVisualization.addDevice(deviceId, deviceName, deviceType);
-      selectEl.value = "";
-    });
-  }
 
   if (toggleConnModeBtn) {
     toggleConnModeBtn.addEventListener("click", () => {
@@ -205,19 +185,12 @@ function bindTopologyEvents() {
   if (autoDiscoverBtn) {
     autoDiscoverBtn.addEventListener("click", async () => {
       await topologyVisualization.autoDiscover();
-      loadDeviceOptions();
     });
   }
 
   if (saveLayoutBtn) {
     saveLayoutBtn.addEventListener("click", () => {
       topologyVisualization.saveLayout();
-    });
-  }
-
-  if (deleteLayoutBtn) {
-    deleteLayoutBtn.addEventListener("click", () => {
-      topologyVisualization.deleteLayout();
     });
   }
 
@@ -348,32 +321,6 @@ async function openTopologyConnectionModal() {
   openModal("topology-connection-modal");
 }
 
-async function loadDeviceOptions() {
-  const select = elementCache.get("topology-device-select");
-  if (!select) return;
-
-  try {
-    const result = await apiGet("/api/resources/devices?page_size=1000");
-    if (!result.success || !result.data) return;
-
-    const devices = result.data.items || result.data || [];
-    select.innerHTML = `<option value="" data-i18n="visualization.select_device">${t("visualization.select_device")}</option>`;
-
-    const existingIds = new Set(topologyVisualization.nodes.map((n) => n.device_id));
-
-    devices.forEach((d) => {
-      if (existingIds.has(d.id)) return;
-      const option = document.createElement("option");
-      option.value = d.id;
-      option.textContent = d.name || d.id;
-      option.dataset.deviceType = d.device_type || "other";
-      select.appendChild(option);
-    });
-  } catch (error) {
-    console.error("加载设备列表失败:", error);
-  }
-}
-
 async function loadInitialData() {
   // 先填充组织选项，再按默认筛选（全类别）加载两个视图的房间列表
   await Promise.all([
@@ -439,7 +386,6 @@ export async function initVisualization() {
     topologyModal = new TopologyModal();
     topologyModal.onRemoveDevice = (deviceId) => {
       topologyVisualization.deleteDevice(deviceId);
-      loadDeviceOptions();
     };
 
     topologyVisualization.callbacks = {
@@ -456,7 +402,6 @@ export async function initVisualization() {
     bindTopologyEvents();
     bindCabinetResizeRelayout();
     loadInitialData();
-    loadDeviceOptions();
 
     // 刷新后恢复上次记住的子标签（在可视化对象初始化完成后切换）
     const savedVizTabId = getActiveSubtab("visualization");

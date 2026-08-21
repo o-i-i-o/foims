@@ -28,7 +28,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             CONSTRAINT chk_device_type CHECK (device_type IN (
-                'pc', 'laptop', 'printer', 'server', 'network_device', 'switch',
+                'desktop', 'laptop', 'printer', 'server', 'network_device', 'switch',
                 'camera', 'phone', 'other'
             ))
         )",
