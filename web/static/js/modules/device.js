@@ -37,7 +37,7 @@ let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
 const DEVICE_TYPE_LABELS = {
-  pc: t("device_type.pc"),
+  desktop: t("device_type.desktop"),
   laptop: t("device_type.laptop"),
   printer: t("device_type.printer"),
   server: t("device_type.server"),
@@ -266,7 +266,7 @@ function setupTemplateManageBtn() {
 }
 
 const DEVICE_TYPE_OPTIONS = [
-  { value: "pc", label: () => t("device_type.pc") },
+  { value: "desktop", label: () => t("device_type.desktop") },
   { value: "laptop", label: () => t("device_type.laptop") },
   { value: "printer", label: () => t("device_type.printer") },
   { value: "server", label: () => t("device_type.server") },
