@@ -1092,6 +1092,7 @@
               <div>
                 <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
                 <button id="app-fail2ban-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
+                <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
               </div>
             </div>
 
@@ -1117,17 +1118,9 @@
                 <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800">
               </div>
             </div>
-            <div class="action-bar" style="margin-top: 0.5rem;">
-              <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
-            </div>
 
             <!-- 日志路径提示 -->
-            <div class="info-card info-card-info" style="margin-top: 1rem;">
-              <div class="info-content">
-                <h3 data-i18n="security.os_integration_title">OS Fail2ban Integration</h3>
-                <p id="app-fail2ban-log-path-hint" style="margin-top: 0.5rem; color: var(--text-secondary);"></p>
-              </div>
-            </div>
+            <p id="app-fail2ban-log-path-hint" style="margin-top: 0.5rem; color: var(--text-secondary);"></p>
 
             <!-- 已封禁 IP -->
             <h4 style="margin-top: 1rem;" data-i18n="security.banned_ips">Banned IPs</h4>
