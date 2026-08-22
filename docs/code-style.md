@@ -139,7 +139,7 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 - 模态框 HTML 抽离边界：**静态骨架**（固定表单/文案）放
   `modals/<域>/<名称>-modal.html`，经 `modalLoader.js` 注册挂载，值用
   DOM API 填充；**数据驱动正文**（`.map()` 行循环、条件分支、运行时
-  计算值，如 networks.js 的网段使用详情、TopologyModal 的端口表）保留
+  计算值，如 TopologyModal 的端口表）保留
   在 JS 渲染函数中，仅注入骨架的空容器。modalLoader 不支持模板占位
   符/循环/条件，强行抽离动态内容需另造模板引擎，不做。
 

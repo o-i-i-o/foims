@@ -442,11 +442,6 @@ export async function showNetworkUsage(id) {
 }
 
 // 构建网段使用详情弹窗的 IPv4 动态正文。
-// 说明：本函数与其后的 buildIPv6Content 生成的 HTML 为数据驱动内容
-// （行循环/条件分支/运行时计算值），按项目约定保留在 JS 渲染函数中，
-// 注入已抽离的静态骨架 modals/network/subnet-usage-modal.html 的
-// #subnet-usage-contents 空容器；静态骨架才走 modalLoader 抽离，
-// 详见 docs/code-style.md「模态框 HTML 抽离边界」。
 function buildIPv4Content(network, networkIps, networkId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
@@ -628,27 +623,21 @@ function buildIPv6Content(network, networkIps, networkId) {
           <span class="ipv6-info-label">${t("network.connection_status")}</span>
           <span class="ipv6-info-value"><span class="connection-status ${totalAssigned > 0 ? "status-enabled" : "status-disabled"}">${totalAssigned > 0 ? t("network.enabled") : t("network.unused")}</span></span>
         </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("network.assigned")}</span>
+          <span class="ipv6-info-value" data-stat="assigned">${totalAssigned}</span>
+        </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("status.active")}</span>
+          <span class="ipv6-info-value" data-stat="active">${activeIps}</span>
+        </div>
+        <div class="ipv6-info-item">
+          <span class="ipv6-info-label">${t("status.inactive")}</span>
+          <span class="ipv6-info-value" data-stat="inactive">${inactiveIps}</span>
+        </div>
       </div>
     </div>
 
-    <div class="ipv6-stats-section">
-      <h5>${t("network.ipv6_stats")}</h5>
-      <div class="ipv6-stats-grid">
-        <div class="ipv6-stat-card">
-          <div class="stat-number">${totalAssigned}</div>
-          <div class="stat-desc">${t("network.assigned")}</div>
-        </div>
-        <div class="ipv6-stat-card active">
-          <div class="stat-number">${activeIps}</div>
-          <div class="stat-desc">${t("status.active")}</div>
-        </div>
-        <div class="ipv6-stat-card inactive">
-          <div class="stat-number">${inactiveIps}</div>
-          <div class="stat-desc">${t("status.inactive")}</div>
-        </div>
-      </div>
-    </div>
-    
     <div class="ipv6-list-section">
       <div class="ipv6-list-header">
         <h5>${t("network.ipv6_list")}</h5>
@@ -866,12 +855,16 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
           const activeIps = refreshedNetworkIps.filter((ip) => ip.status === "active").length;
           const inactiveIps = refreshedNetworkIps.filter((ip) => ip.status !== "active").length;
 
-          const statCards = modalContainer.querySelectorAll(".ipv6-stat-card");
-          if (statCards.length >= 3) {
-            statCards[0].querySelector(".stat-number").textContent = refreshedNetworkIps.length;
-            statCards[1].querySelector(".stat-number").textContent = activeIps;
-            statCards[2].querySelector(".stat-number").textContent = inactiveIps;
-          }
+          // 统计项已并入 ipv6-info-grid，按 data-stat 更新数值
+          const updateStat = (key, value) => {
+            const statValue = modalContainer.querySelector(`.ipv6-info-value[data-stat="${key}"]`);
+            if (statValue) {
+              statValue.textContent = value;
+            }
+          };
+          updateStat("assigned", refreshedNetworkIps.length);
+          updateStat("active", activeIps);
+          updateStat("inactive", inactiveIps);
 
           showToast(t("network.ipv6_usage_updated"), "success");
         }

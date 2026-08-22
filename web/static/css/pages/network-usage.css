@@ -56,9 +56,10 @@
   display: block;
 }
 
+/* 固定 4 列：8 项统计按顺序前 4 后 4 分两行；窄屏在下方媒体查询降为 2 列 */
 .usage-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.375rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.625rem;
   margin-bottom: 1.25rem;
   padding: 0.9375rem;
@@ -310,14 +311,15 @@
   font-weight: 600;
 }
 
+/* 与 IPv4 页 .usage-stats 同款容器：固定 4 列，前 4 项信息一行、统计项随后的行；
+   项内保持标签在上、值在下（IPv6 地址长，值独占第二行）；窄屏降为整行显示 */
 .ipv6-info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
-  gap: 0.9375rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.625rem;
   padding: 0.9375rem;
   background-color: var(--color-bg);
   border-radius: var(--radius-lg);
-  border-left: 0.25rem solid var(--color-ipv6);
 }
 
 .ipv6-info-item {
@@ -329,7 +331,7 @@
 .ipv6-info-label {
   font-weight: 500;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .ipv6-info-value {
@@ -362,60 +364,6 @@
 .ipv6-status-disabled {
   background-color: var(--color-border-light);
   color: var(--color-text-muted);
-}
-
-.ipv6-stats-section {
-  margin-bottom: 1.25rem;
-}
-
-.ipv6-stats-section h5 {
-  margin-bottom: 0.9375rem;
-  color: var(--color-text-light);
-  font-weight: 600;
-}
-
-.ipv6-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-  gap: 0.9375rem;
-}
-
-.ipv6-stat-card {
-  padding: 1.25rem;
-  background-color: var(--color-bg);
-  border-radius: var(--radius-lg);
-  text-align: center;
-  border: 0.0625rem solid var(--color-border-dark);
-}
-
-.ipv6-stat-card.active {
-  background-color: var(--color-success-bg);
-  border-color: var(--color-success);
-}
-
-.ipv6-stat-card.inactive {
-  background-color: var(--color-warning-bg);
-  border-color: var(--color-warning);
-}
-
-.ipv6-stat-number {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--color-text-light);
-}
-
-.ipv6-stat-card.active .ipv6-stat-number {
-  color: var(--color-success-text);
-}
-
-.ipv6-stat-card.inactive .ipv6-stat-number {
-  color: var(--color-warning-text);
-}
-
-.ipv6-stat-desc {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 0.3125rem;
 }
 
 .ipv6-address-cell {
@@ -471,11 +419,11 @@
     background-color: var(--color-bg);
   }
 
-  .ipv6-info-grid {
-    grid-template-columns: 1fr;
+  .usage-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ipv6-stats-grid {
+  .ipv6-info-grid {
     grid-template-columns: 1fr;
   }
 }
