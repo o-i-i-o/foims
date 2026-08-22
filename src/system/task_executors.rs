@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use ipma_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
 use uuid::Uuid;
 
-use ipma_common::{AppMessage, log_info, msg};
+use ipma_common::{AppMessage, log_debug, log_info, msg};
 
 /// 提取数据层错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏）
 pub(crate) fn data_error_message(e: ipma_data_manager::DataError) -> AppMessage {
@@ -64,13 +64,18 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
         "token_cleanup"
     }
 
+    /// 每小时例行运行且几乎总有产出，例行成功日志降为 debug 避免刷屏
+    fn debug_routine_logs(&self) -> bool {
+        true
+    }
+
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
         let count = crate::utils::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))
             })?;
-        log_info!("log.task.token_cleanup_completed", count = count);
+        log_debug!("log.task.token_cleanup_completed", count = count);
         Ok("server.task.token_cleanup_completed".to_string())
     }
 }

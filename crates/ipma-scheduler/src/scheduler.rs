@@ -1,6 +1,6 @@
 //! 调度器生命周期管理。
 
-use ipma_common::{AppMessage, log_error, log_info, msg};
+use ipma_common::{AppMessage, log_debug, log_error, log_info, msg};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::error::{SchedulerError, SchedulerResult};
@@ -71,11 +71,22 @@ impl SchedulerState {
             let task_type_owned = task_type_owned.clone();
 
             Box::pin(async move {
-                log_info!(
-                    "log.task.running",
-                    name = task_name,
-                    task_type = task_type_owned
-                );
+                // 例行成功日志的级别由执行器声明：高频维护任务降为 debug 避免刷屏
+                let routine_debug = registry.debug_routine_logs(&task_type_owned);
+
+                if routine_debug {
+                    log_debug!(
+                        "log.task.running",
+                        name = task_name,
+                        task_type = task_type_owned
+                    );
+                } else {
+                    log_info!(
+                        "log.task.running",
+                        name = task_name,
+                        task_type = task_type_owned
+                    );
+                }
 
                 let ctx = TaskContext {
                     pool: pool.clone(),
@@ -87,11 +98,19 @@ impl SchedulerState {
 
                 match &result {
                     Ok(result_message) => {
-                        log_info!(
-                            "log.task.completed",
-                            name = task_name,
-                            result = result_message
-                        );
+                        if routine_debug {
+                            log_debug!(
+                                "log.task.completed",
+                                name = task_name,
+                                result = result_message
+                            );
+                        } else {
+                            log_info!(
+                                "log.task.completed",
+                                name = task_name,
+                                result = result_message
+                            );
+                        }
                         log_task_execution(&pool, &task_name, "success", result_message).await;
                     }
                     Err(e) => {

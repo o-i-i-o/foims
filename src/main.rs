@@ -355,10 +355,8 @@ async fn main() -> std::io::Result<()> {
         None
     } else {
         match DbPool::new(&config.database).await {
-            Ok(p) => {
-                ipma_common::log_info!("system.db_pool_created");
-                Some(p)
-            }
+            // 池创建成功的日志（含全部参数）由 DbPool::new_with_config 统一记录
+            Ok(p) => Some(p),
             Err(e) => {
                 ipma_common::log_error!("system.db_pool_create_failed", error = e);
                 std::process::exit(1);

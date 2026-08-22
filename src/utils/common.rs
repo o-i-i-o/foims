@@ -6,7 +6,7 @@ use uuid::Uuid;
 use axum::extract::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use ipma_common::{log_error, log_info, log_warn};
+use ipma_common::{log_debug, log_error, log_info, log_warn};
 use std::net::SocketAddr;
 
 use hex::encode;
@@ -270,7 +270,8 @@ pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, 
 
     let deleted_count = result.rows_affected();
     if deleted_count > 0 {
-        log_info!("log.token.revoked_cleaned", count = deleted_count);
+        // 仅供 token_cleanup 定时任务调用，例行日志降为 debug 避免刷屏
+        log_debug!("log.token.revoked_cleaned", count = deleted_count);
     }
 
     Ok(deleted_count)

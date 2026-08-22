@@ -472,6 +472,10 @@ function buildIPv4Content(network, networkIps, networkId) {
   return `
     <div class="usage-stats">
       <div class="stat-item">
+        <span class="stat-label">${t("network.region")}:</span>
+        <span class="stat-value">${escapeHtml(network.network_region) || "-"}</span>
+      </div>
+      <div class="stat-item">
         <span class="stat-label">${t("network.ipv4_cidr")}:</span>
         <span class="stat-value">${escapeHtml(cidr) || "-"}</span>
       </div>
@@ -486,10 +490,6 @@ function buildIPv4Content(network, networkIps, networkId) {
             ? network.ipv4_dns.map((d) => escapeHtml(d)).join(", ")
             : escapeHtml(network.ipv4_dns) || "-"
         }</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">${t("network.region")}:</span>
-        <span class="stat-value">${escapeHtml(network.network_region) || "-"}</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">${t("network.total_ips")}:</span>

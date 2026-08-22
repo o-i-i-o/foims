@@ -170,19 +170,44 @@ fn rust_i18n_translate(locale: &str, key: &str, params: &[(&str, &str)]) -> Stri
 /// 为某个输出层构建过滤规则：
 /// - 常规业务事件（target 以 `ipma` 开头）按既有级别放行；
 /// - 多语言宏事件（target `ipma_log::{lang}`）只放行本层语言，其余语言全部关闭。
-fn build_filter(allow_lang: &str, all_langs: &[String]) -> Targets {
+///
+/// `i18n_level` 为多语言日志输出级别（来自 `resolve_i18n_log_level`）。
+fn build_filter(allow_lang: &str, all_langs: &[String], i18n_level: LevelFilter) -> Targets {
     let mut targets = Targets::new()
         .with_target("ipma", LevelFilter::INFO)
         .with_target("axum", LevelFilter::WARN);
     for lang in all_langs {
         let target = format!("ipma_log::{lang}");
         if lang == allow_lang {
-            targets = targets.with_target(target, LevelFilter::INFO);
+            targets = targets.with_target(target, i18n_level);
         } else {
             targets = targets.with_target(target, LevelFilter::OFF);
         }
     }
     targets.with_default(LevelFilter::WARN)
+}
+
+/// 解析多语言日志（target `ipma_log::{lang}`）的输出级别。
+///
+/// 环境变量 `IPMA_LOG_LEVEL` 可设为 debug/info/warn/error，缺省 info。
+/// 高频维护任务的例行日志已降为 debug，需要排查时设为 debug 放开；
+/// 返回值第二项为非法值告警（订阅器就绪后统一输出），缺省/合法时为 None。
+fn resolve_i18n_log_level() -> (LevelFilter, Option<String>) {
+    let Ok(raw) = std::env::var("IPMA_LOG_LEVEL") else {
+        return (LevelFilter::INFO, None);
+    };
+    match raw.trim().to_lowercase().as_str() {
+        "debug" | "trace" => (LevelFilter::DEBUG, None),
+        "info" => (LevelFilter::INFO, None),
+        "warn" => (LevelFilter::WARN, None),
+        "error" => (LevelFilter::ERROR, None),
+        other => (
+            LevelFilter::INFO,
+            Some(format!(
+                "环境变量 IPMA_LOG_LEVEL='{other}' 不是合法级别（debug/info/warn/error），按 info 处理"
+            )),
+        ),
+    }
 }
 
 /// 初始化多语言日志系统。
@@ -203,6 +228,11 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
     ipma_common::set_log_translate(rust_i18n_translate);
 
     let (timer, mut warnings) = build_timer();
+
+    let (i18n_level, level_warning) = resolve_i18n_log_level();
+    if let Some(warning) = level_warning {
+        warnings.push(warning);
+    }
 
     let app_name = env!("CARGO_PKG_NAME");
     let log_dir = format!("/var/log/{app_name}");
@@ -235,7 +265,7 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
                     .with_writer(MakeWriterAdapter(file))
                     .with_timer(timer.clone())
                     .with_ansi(false)
-                    .with_filter(build_filter(&lang, &all_langs)),
+                    .with_filter(build_filter(&lang, &all_langs, i18n_level)),
             )
         })
         .collect();
@@ -245,7 +275,7 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
             tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
                 .with_timer(timer)
-                .with_filter(build_filter(&log_cfg.console_lang, &all_langs)),
+                .with_filter(build_filter(&log_cfg.console_lang, &all_langs, i18n_level)),
         )
         .with(file_layers)
         .init();
