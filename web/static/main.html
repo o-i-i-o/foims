@@ -764,9 +764,6 @@
                     <span class="hint-text" data-i18n="config.public_url_desc">Server public URL for reset links and notifications</span>
                   </div>
                 </div>
-              </div>
-
-              <div class="config-actions">
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </div>
             </form>
@@ -1013,17 +1010,6 @@
                   <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.import_csv">Import CSV</button>
                   <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="import_export.download_template">Download Template</button>
                 </div>
-                <div class="import-hint">
-                  <p data-i18n="import_export.instructions">Instructions:</p>
-                  <ul>
-                    <li data-i18n="import_export.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
-                    <li data-i18n="import_export.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
-                    <li data-i18n="import_export.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
-                    <li data-i18n="import_export.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
-                  </ul>
-                </div>
-              </section>
-              <section class="section">
                 <h3 data-i18n="import_export.csv_export">CSV Data Export</h3>
                 <div class="export-actions">
                   <select id="export-type" class="form-control" aria-label="Select export module">
@@ -1039,6 +1025,17 @@
                   <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_csv">Export CSV</button>
                 </div>
               </section>
+              <section class="section">
+                <div class="import-hint">
+                  <p data-i18n="import_export.instructions">Instructions:</p>
+                  <ul>
+                    <li data-i18n="import_export.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
+                    <li data-i18n="import_export.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
+                    <li data-i18n="import_export.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
+                    <li data-i18n="import_export.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
+                  </ul>
+                </div>
+              </section>
             </div>
           </article>
           
@@ -1050,6 +1047,8 @@
                 <div class="export-actions">
                   <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_database">Export Database</button>
                 </div>
+              </section>
+              <section class="section">
                 <div class="export-hint">
                   <p data-i18n="import_export.instructions">Instructions:</p>
                   <ul>
