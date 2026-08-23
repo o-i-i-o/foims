@@ -33,22 +33,29 @@ use crate::utils::common::RequestMeta;
 use ipma_common::msg;
 use totp_rs::{Algorithm, Builder, Secret};
 
+/// TOTP 已用码存储：保留每个用户最近 N 个已用码。
+/// 仅记录最后 1 个码时，skew=1 窗口允许的相邻窗口历史码可重放（A-6）；
+/// 保留 3 个覆盖 ±1 个 30s 窗口的全部合法码。
 type TotpReplayStore =
-    std::sync::Mutex<std::collections::HashMap<Uuid, (String, std::time::Instant)>>;
+    std::sync::Mutex<std::collections::HashMap<Uuid, Vec<(String, std::time::Instant)>>>;
 static TOTP_REPLAY_STORE: std::sync::OnceLock<TotpReplayStore> = std::sync::OnceLock::new();
+
+/// 每用户保留的已用码数量（覆盖 skew=1 的相邻窗口）
+const TOTP_REPLAY_KEEP: usize = 3;
+
+const TOTP_REPLAY_TTL: std::time::Duration = std::time::Duration::from_secs(120);
 
 fn totp_replay_store() -> &'static TotpReplayStore {
     TOTP_REPLAY_STORE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-const TOTP_REPLAY_TTL: std::time::Duration = std::time::Duration::from_secs(90);
-
 fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
     let store = totp_replay_store();
     if let Ok(map) = store.lock()
-        && let Some((used_code, used_at)) = map.get(&user_id)
-        && used_code == code
-        && used_at.elapsed() < TOTP_REPLAY_TTL
+        && let Some(used) = map.get(&user_id)
+        && used
+            .iter()
+            .any(|(used_code, used_at)| used_code == code && used_at.elapsed() < TOTP_REPLAY_TTL)
     {
         return true;
     }
@@ -58,8 +65,14 @@ fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
 fn record_totp_usage(user_id: Uuid, code: &str) {
     let store = totp_replay_store();
     if let Ok(mut map) = store.lock() {
-        map.retain(|_, (_, used_at)| used_at.elapsed() < TOTP_REPLAY_TTL);
-        map.insert(user_id, (code.to_string(), std::time::Instant::now()));
+        let entry = map.entry(user_id).or_default();
+        // 先按 TTL 清理过期项，再追加并截断到保留数量
+        entry.retain(|(_, used_at)| used_at.elapsed() < TOTP_REPLAY_TTL);
+        entry.push((code.to_string(), std::time::Instant::now()));
+        if entry.len() > TOTP_REPLAY_KEEP {
+            let drop_count = entry.len() - TOTP_REPLAY_KEEP;
+            entry.drain(0..drop_count);
+        }
     }
 }
 
@@ -183,10 +196,17 @@ pub async fn login(
 
     req.validate()?;
 
-    // 应用层 fail2ban: 检查 IP 是否被封禁
+    // 应用层 fail2ban: 检查 IP 与用户名是否被封禁（用户名维度拦截
+    // 分布式来源针对同一账户的爆破，A-1）
     let client_ip = meta.ip_address.clone();
     if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+    if crate::system::app_fail2ban::is_user_banned(&req.username) {
+        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(&req.username);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -204,6 +224,8 @@ pub async fn login(
     {
         Some(row) => row,
         None => {
+            // 等价 bcrypt 校验后再返回，抹平用户名枚举时间侧信道（A-4）
+            dummy_bcrypt_verify(&req.password).await;
             crate::system::app_fail2ban::record_login_failure(
                 &client_ip,
                 &req.username,
@@ -340,6 +362,22 @@ pub async fn login_with_email_code(
     req.validate()?;
     let email = req.email.trim();
 
+    // 应用层 fail2ban：邮箱验证码同样纳入 IP/账户维度爆破防护（A-5）
+    //（此前仅密码/TOTP 登录有联动，6 位数字码可被不限速爆破）
+    let client_ip = meta.ip_address.clone();
+    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+    if crate::system::app_fail2ban::is_user_banned(email) {
+        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(email);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
         (
@@ -362,6 +400,12 @@ pub async fn login_with_email_code(
     {
         Some(row) => row,
         None => {
+            // 未注册邮箱：记录失败计入 fail2ban（防止对任意邮箱爆破验证码）
+            crate::system::app_fail2ban::record_login_failure(
+                &client_ip,
+                email,
+                "server.login_log.user_not_found",
+            );
             if let Err(e) = log_login(&conn, email, &meta.ip_address, &meta.user_agent, false, Some("server.login_log.user_not_found")).await {
                 ipma_common::log_warn!("log.login.record_failed", error = e);
             }
@@ -412,6 +456,12 @@ pub async fn login_with_email_code(
     }
 
     if !verified {
+        // 错误验证码计入 fail2ban：连续失败即封禁该 IP 与该邮箱（A-5）
+        crate::system::app_fail2ban::record_login_failure(
+            &client_ip,
+            &username,
+            "server.login_log.invalid_email_code",
+        );
         if let Err(e) = log_login(
             &conn,
             &username,
@@ -475,6 +525,8 @@ pub async fn login_with_email_code(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
+    crate::system::app_fail2ban::record_login_success(&client_ip, &username);
+    ipma_common::log_info!("log.login.email_code_success", username = username);
 
     build_login_response(user, login_tokens, meta.is_secure)
 }
@@ -531,10 +583,16 @@ pub async fn login_with_two_factor(
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
-    // 应用层 fail2ban: 检查 IP 是否被封禁
+    // 应用层 fail2ban: 检查 IP 与用户名是否被封禁
     let client_ip = meta.ip_address.clone();
     if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+    if crate::system::app_fail2ban::is_user_banned(&req.username) {
+        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(&req.username);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -552,6 +610,10 @@ pub async fn login_with_two_factor(
     {
         Some(row) => row,
         None => {
+            // 等价 bcrypt 校验抹平时间侧信道（A-4）
+            if let Some(password) = req.password.as_deref() {
+                dummy_bcrypt_verify(password).await;
+            }
             crate::system::app_fail2ban::record_login_failure(
                 &client_ip,
                 &req.username,
@@ -915,8 +977,11 @@ pub async fn refresh_token(
 
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
+    // 旋转令牌必须先成功撤销旧令牌：撤销失败（如 DB 故障）仍签发新令牌的话，
+    // 旧 refresh token 在其有效期内继续可用，轮换防重放失效（A-8）
     if let Err(e) = crate::utils::revoke_token(&conn, &token, Some(user_id), token_expiry).await {
         ipma_common::log_error!("log.auth.revoke_token_failed", error = e);
+        return Err(AppError::Database(msg("server.db.operation_failed")));
     }
 
     let token_duration = claims.exp.saturating_sub(claims.iat);
@@ -1666,6 +1731,24 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     result == 0
 }
 
+/// 进程级 dummy bcrypt 哈希（首次使用时生成，cost 与真实口令一致）
+static DUMMY_BCRYPT_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// 用户不存在时对提交口令执行一次等价 bcrypt 校验：
+/// 消除「用户不存在立即返回、用户存在时 bcrypt 校验约数百毫秒」的
+/// 用户名枚举时间侧信道（security-review A-4）
+async fn dummy_bcrypt_verify(password: &str) {
+    let hash = DUMMY_BCRYPT_HASH.get_or_init(|| {
+        bcrypt::hash("ipma-dummy-password", bcrypt::DEFAULT_COST).unwrap_or_default()
+    });
+    if hash.is_empty() {
+        return;
+    }
+    let password = password.to_string();
+    let hash = hash.clone();
+    let _ = tokio::task::spawn_blocking(move || verify(&password, &hash)).await;
+}
+
 pub(crate) async fn log_login(
     pool: &sqlx::PgPool,
     username: &str,
@@ -1674,6 +1757,13 @@ pub(crate) async fn log_login(
     success: bool,
     error_message: Option<&str>,
 ) -> Result<(), sqlx::Error> {
+    // login_logs.username 列宽 VARCHAR(50)：邮箱验证码登录以完整邮箱作为
+    // 标识写入，超长邮箱直写会报错丢日志——按字符截断对齐列宽
+    let username = if username.chars().count() > 50 {
+        username.chars().take(50).collect::<String>()
+    } else {
+        username.to_string()
+    };
     sqlx::query(
         "INSERT INTO login_logs (id, username, ip_address, user_agent, success, error_message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
     )

@@ -7,7 +7,6 @@ use aes_gcm::{
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -18,10 +17,28 @@ const NONCE_SIZE: usize = 12;
 
 static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
 
-/// 将文件权限设置为 0600,仅所有者可读写,防止敏感密钥被其他用户读取
-fn secure_file_permissions(path: &str) {
-    if let Err(e) = fs::set_permissions(path, fs::Permissions::from_mode(0o600)) {
-        log_warn!("log.crypto.set_permissions_failed", path = path, error = e);
+/// 以 0600 权限原子写入密钥文件（覆盖已存在内容）。
+/// 直接用带 mode 的 OpenOptions 创建，消除「先写后 chmod」窗口期内
+/// 其他本地用户读到密钥的可能（security-review I-6）。
+/// 返回写入是否成功。
+fn write_key_file(path: &str, key: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new()
+        .mode(0o600)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
+    file.write_all(key)
+}
+
+/// 尽力写入密钥文件：失败仅告警（用于备份等非关键副本）
+fn write_key_file_atomic(path: &str, key: &[u8]) {
+    if let Err(e) = write_key_file(path, key) {
+        log_warn!("log.crypto.backup_create_failed", error = e);
+    } else {
+        log_info!("log.crypto.key_backed_up", path = path);
     }
 }
 
@@ -47,12 +64,7 @@ fn load_encryption_key() -> Vec<u8> {
     if Path::new(&key_path).exists() {
         match fs::read(&key_path) {
             Ok(key) if key.len() == 32 => {
-                if let Err(e) = fs::copy(&key_path, &key_backup_path) {
-                    log_warn!("log.crypto.backup_create_failed", error = e);
-                } else {
-                    secure_file_permissions(&key_backup_path);
-                    log_info!("log.crypto.key_backed_up", path = key_backup_path);
-                }
+                write_key_file_atomic(&key_backup_path, &key);
                 return key;
             }
             Ok(key) => {
@@ -68,11 +80,7 @@ fn load_encryption_key() -> Vec<u8> {
                     match fs::read(&key_backup_path) {
                         Ok(key) if key.len() == 32 => {
                             log_info!("log.crypto.key_restored");
-                            if let Err(e) = fs::write(&key_path, &key) {
-                                log_error!("log.crypto.key_resave_failed", error = e);
-                            } else {
-                                secure_file_permissions(&key_path);
-                            }
+                            write_key_file_atomic(&key_path, &key);
                             return key;
                         }
                         Ok(key) => {
@@ -93,11 +101,7 @@ fn load_encryption_key() -> Vec<u8> {
         match fs::read(&key_backup_path) {
             Ok(key) if key.len() == 32 => {
                 log_info!("log.crypto.key_restored");
-                if let Err(e) = fs::write(&key_path, &key) {
-                    log_error!("log.crypto.key_resave_failed", error = e);
-                } else {
-                    secure_file_permissions(&key_path);
-                }
+                write_key_file_atomic(&key_path, &key);
                 return key;
             }
             Ok(_) => {
@@ -113,16 +117,11 @@ fn load_encryption_key() -> Vec<u8> {
     let mut key = vec![0u8; 32];
     rand::rng().fill(&mut key);
 
-    if let Err(e) = fs::write(&key_path, &key) {
+    // 新密钥必须成功落盘：否则下次启动会再生成新密钥，历史密文全部无法解密
+    if let Err(e) = write_key_file(&key_path, &key) {
         panic!("保存加密密钥失败: {}", e);
     }
-    secure_file_permissions(&key_path);
-
-    if let Err(e) = fs::write(&key_backup_path, &key) {
-        log_warn!("log.crypto.backup_save_failed", error = e);
-    } else {
-        secure_file_permissions(&key_backup_path);
-    }
+    write_key_file_atomic(&key_backup_path, &key);
 
     log_info!("log.crypto.key_generated", path = key_path);
     key

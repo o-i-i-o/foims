@@ -69,7 +69,7 @@ async function loadNetworkRegions(select) {
   }
 
   try {
-    const result = await apiGet("/api/resources/network-regions?page_size=1000");
+    const result = await apiGet("/api/resources/options/network-regions");
     const items = extractItems(result);
     if (items.length > 0) {
       networkCache.networkRegions = items;
@@ -99,8 +99,8 @@ async function loadNetworks(regionId, select, excludeIds = []) {
 
   try {
     const url = regionId
-      ? `/api/resources/networks?region_id=${regionId}&page_size=1000`
-      : "/api/resources/networks?page_size=1000";
+      ? `/api/resources/options/networks?region_id=${regionId}`
+      : "/api/resources/options/networks";
     const result = await apiGet(url);
 
     const items = extractItems(result);
@@ -878,10 +878,10 @@ export function initRoomSortEvents() {
   initSortEvents("rooms-table", tableState, loadRoomsData);
 }
 
-// 编辑房间
+// 编辑房间（轻量端点：仅基础字段 + 网络绑定，避免完整详情的 7 次查询）
 export async function editRoom(id) {
   try {
-    const result = await apiGet(`/api/resources/rooms/${id}`);
+    const result = await apiGet(`/api/resources/rooms/${id}/brief`);
     if (result.success) {
       openRoomModal(result.data);
     } else {
@@ -1089,7 +1089,7 @@ export async function openRoomModal(room = null) {
 // 加载房间的网络配置
 async function loadRoomNetworks(room) {
   try {
-    const networksResult = await apiGet("/api/resources/networks?page_size=1000");
+    const networksResult = await apiGet("/api/resources/options/networks");
     if (networksResult.success) {
       const allNetworks = networksResult.data.items || networksResult.data || [];
       await roomNetworkConfigManager.loadExistingNetworks(room.networks, allNetworks);

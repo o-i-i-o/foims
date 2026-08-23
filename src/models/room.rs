@@ -111,6 +111,7 @@ pub struct RoomUpdate {
         message = "server.room.validation.type_invalid"
     ))]
     pub room_type: Option<String>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub org_id: Option<Option<Uuid>>,
     pub network_ids: Option<Vec<Uuid>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -218,15 +219,15 @@ mod tests {
     #[test]
     fn test_room_update_org_id_null_semantics() -> Result<(), serde_json::Error> {
         use serde::de::Error as _;
-        // org_id 为 Option<Option<Uuid>> 但未挂 deserialize_some：
-        // 缺失与 null 均反序列化为 None（无法通过 null 表达"解绑组织"）
+        // org_id 挂 deserialize_some 后三态可达：
+        // 缺失 → None（不修改）；null → Some(None)（解绑组织）；值 → Some(Some(v))
         let missing: RoomUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert_eq!(missing.org_id, None);
 
         let null_org: RoomUpdate = serde_json::from_value(serde_json::json!({
             "org_id": null
         }))?;
-        assert_eq!(null_org.org_id, None);
+        assert_eq!(null_org.org_id, Some(None));
 
         let set_org: RoomUpdate = serde_json::from_value(serde_json::json!({
             "org_id": "550e8400-e29b-41d4-a716-446655440000"

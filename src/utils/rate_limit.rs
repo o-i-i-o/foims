@@ -130,7 +130,10 @@ impl RateLimitEntry {
 
         let current_weight = 1.0 - (current_elapsed / window_f64).min(1.0);
 
-        (self.previous_count as f64 * previous_weight + self.count as f64 * current_weight) as u32
+        // 向上取整：浮点截断曾使加权计数恒少 1（count=5 时算出 4），
+        // limit=3 实际第 5 次请求才被拒，等于放宽了一档（security-review 第六节）
+        (self.previous_count as f64 * previous_weight + self.count as f64 * current_weight).ceil()
+            as u32
     }
 
     fn reset_window(&mut self) {
@@ -295,12 +298,14 @@ impl RateLimitState {
 }
 
 fn is_strict_path(path: &str) -> bool {
+    // LDAP/SSO 回调同为爆破入口，纳入严格限流（A-9）
     let strict_paths = [
         "/api/auth/login",
         "/api/auth/login/email",
         "/api/auth/login/two-factor",
         "/api/auth/login/send-code",
         "/api/auth/login/send-2fa-code",
+        "/api/auth/login/ldap",
         "/api/auth/forgot-password",
         "/api/auth/reset-password",
     ];
@@ -495,21 +500,17 @@ mod tests {
 
     #[test]
     fn test_rate_limit_entry_weighted_count_current_only() {
-        // 无历史窗口：仅按当前窗口剩余权重折算。
-        // 注意浮点截断：count=5、elapsed≈0 时 5*(1-ε) 截断为 4
+        // 无历史窗口：仅按当前窗口剩余权重折算，向上取整后等于实际计数
         let mut entry = RateLimitEntry::new();
         entry.count = 5;
         let weighted = entry.weighted_count(10);
-        assert!(
-            (4..=5).contains(&weighted),
-            "当前窗口计数权重应在 4~5 之间，实际 {weighted}"
-        );
+        assert_eq!(weighted, 5, "当前窗口计数应向上取整为 5");
     }
 
     #[test]
     fn test_rate_limit_entry_weighted_count_with_previous() {
         // 上一窗口计数 10，已过去 15 秒（窗口 10 秒）→ 重叠 5 秒，权重约 0.5；
-        // 当前窗口计数 0 → 加权计数约 5（截断后 4~5）
+        // 当前窗口计数 0 → 加权计数约 5，向上取整为 5
         let entry = RateLimitEntry {
             count: 0,
             window_start: Instant::now(),
@@ -526,7 +527,7 @@ mod tests {
     #[test]
     fn test_rate_limit_entry_weighted_count_expired_previous_zero() {
         // 上一窗口已远去（30 秒 > 窗口 10 秒的两倍）→ 权重归零；
-        // 当前窗口计数 3、elapsed≈0 → 截断后 2~3
+        // 当前窗口计数 3、elapsed≈0 → 向上取整为 3
         let entry = RateLimitEntry {
             count: 3,
             window_start: Instant::now(),
@@ -534,10 +535,7 @@ mod tests {
             previous_window_start: Some(Instant::now() - Duration::from_secs(30)),
         };
         let weighted = entry.weighted_count(10);
-        assert!(
-            (2..=3).contains(&weighted),
-            "历史窗口失效后加权计数应在 2~3 之间，实际 {weighted}"
-        );
+        assert_eq!(weighted, 3, "历史窗口失效后加权计数应等于当前窗口计数");
     }
 
     #[test]
@@ -562,9 +560,10 @@ mod tests {
 
     #[test]
     fn test_check_rate_limit_ip_limit_enforced() {
-        // ip_limit=3：前 4 次通过（浮点截断放行 1 次），第 5 次拒绝
+        // ip_limit=3：恰好 3 次通过，第 4 次拒绝
+        //（首次请求走新建条目路径不检查，第 2/3 次加权计数 1/2 < 3）
         let limiter = RateLimiter::new(3, 100, 100, 60);
-        for round in 1..=4 {
+        for round in 1..=3 {
             assert!(
                 limiter
                     .check_rate_limit("1.1.1.1", None, false, false)
@@ -573,7 +572,7 @@ mod tests {
             );
         }
         let Err(err) = limiter.check_rate_limit("1.1.1.1", None, false, false) else {
-            panic!("超过 IP 限制后应被拒绝");
+            panic!("达到 IP 限制后应被拒绝");
         };
         assert_eq!(err.message.key(), "server.common.rate_limited");
         assert!(err.retry_after >= 1);
@@ -602,14 +601,9 @@ mod tests {
 
     #[test]
     fn test_check_rate_limit_login_key_isolated() {
-        // 登录路径使用独立键与独立限额：login_limit=1 时第 3 次拒绝，
+        // 登录路径使用独立键与独立限额：login_limit=1 时第 2 次拒绝，
         // 且不影响普通路径的计数
         let limiter = RateLimiter::new(100, 100, 1, 60);
-        assert!(
-            limiter
-                .check_rate_limit("3.3.3.3", None, true, false)
-                .is_ok()
-        );
         assert!(
             limiter
                 .check_rate_limit("3.3.3.3", None, true, false)
@@ -631,14 +625,8 @@ mod tests {
 
     #[test]
     fn test_check_rate_limit_user_limit() {
-        // user_limit=1：同一用户第 3 次请求被用户维度拒绝
-        // （浮点截断使加权计数略低于实际计数，限额+2 次后才触发）
+        // user_limit=1：同一用户第 2 次请求被用户维度拒绝
         let limiter = RateLimiter::new(100, 1, 100, 60);
-        assert!(
-            limiter
-                .check_rate_limit("4.4.4.4", Some("user-1"), false, false)
-                .is_ok()
-        );
         assert!(
             limiter
                 .check_rate_limit("4.4.4.4", Some("user-1"), false, false)
@@ -654,11 +642,6 @@ mod tests {
     fn test_check_rate_limit_email_limit() {
         // 邮箱验证码路径使用独立邮箱限额（默认窗口 3600 秒）
         let limiter = RateLimiter::new(100, 100, 100, 60).with_email_limit(1, 3600);
-        assert!(
-            limiter
-                .check_rate_limit("5.5.5.5", None, false, true)
-                .is_ok()
-        );
         assert!(
             limiter
                 .check_rate_limit("5.5.5.5", None, false, true)
@@ -710,6 +693,7 @@ mod tests {
     #[test]
     fn test_is_strict_path() {
         assert!(is_strict_path("/api/auth/login"));
+        assert!(is_strict_path("/api/auth/login/ldap"));
         assert!(is_strict_path("/api/auth/forgot-password"));
         assert!(is_strict_path("/api/auth/reset-password"));
         assert!(!is_strict_path("/api/auth/logout"));

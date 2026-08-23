@@ -316,7 +316,12 @@ pub fn extract_token_from_parts(parts: &axum::http::request::Parts) -> Option<St
         .and_then(|header| header.to_str().ok())
         .and_then(|auth_str| {
             if auth_str.starts_with("Bearer ") {
-                Some(auth_str.strip_prefix("Bearer ").unwrap_or("").to_string())
+                // "Bearer "（空令牌）视为未携带令牌，而非返回空串
+                //（A-11：空串令牌应走未认证路径而不是进入验签）
+                auth_str
+                    .strip_prefix("Bearer ")
+                    .filter(|token| !token.is_empty())
+                    .map(std::string::ToString::to_string)
             } else {
                 None
             }
@@ -737,12 +742,12 @@ mod tests {
         // 完全缺失认证信息
         let empty = make_parts(&[]);
         assert_eq!(extract_token_from_parts(&empty), None);
-        // 空字符串 Bearer：当前实现返回空串（由后续验签兜底失败），记录现状行为
+        // 空字符串 Bearer：视为未携带令牌返回 None（A-11 修复）
         let blank = make_parts(&[("Authorization", "Bearer ")]);
         assert_eq!(
             extract_token_from_parts(&blank),
-            Some(String::new()),
-            "空 Bearer 现状返回空串而非 None"
+            None,
+            "空 Bearer 应返回 None 而非空串"
         );
     }
 

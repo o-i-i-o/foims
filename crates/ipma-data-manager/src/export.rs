@@ -422,6 +422,23 @@ async fn fetch_table_rows(conn: &mut PgConnection, table: &str) -> DataResult<Ve
     Ok(rows.into_iter().map(|j| j.0).collect())
 }
 
+/// CSV 公式注入防护：以 = + - @（及 Tab/CR）开头的单元格前置单引号，
+/// 防止用户可控字段（名称/描述等）在 Excel/WPS 中被当作公式/DDE 执行
+/// （security-review S-1）
+fn escape_csv_formula(cell: &str) -> String {
+    let dangerous = cell.starts_with('=')
+        || cell.starts_with('+')
+        || cell.starts_with('-')
+        || cell.starts_with('@')
+        || cell.starts_with('\t')
+        || cell.starts_with('\r');
+    if dangerous {
+        format!("'{cell}")
+    } else {
+        cell.to_string()
+    }
+}
+
 /// 将一张表写成 CSV 字节流（UTF-8 BOM + 表头 + 数据行）。
 fn write_table_csv(
     spec: &crate::spec::TableSpec,
@@ -446,7 +463,7 @@ fn write_table_csv(
                 Col::Ref { csv: _, db, target } => ref_to_csv(ctx, target, row, db)?,
                 Col::Info(csv_col) => info_to_csv(ctx, spec.table, csv_col, row)?,
             };
-            record.push(value);
+            record.push(escape_csv_formula(&value));
         }
         writer.write_record(&record).map_err(|e| {
             DataError::Internal(msg("server.import_export.csv_build_failed").with("error", e))

@@ -171,8 +171,14 @@ pub async fn update_system_config(
     })?;
     log_info!("log.config.saved", path = config_path);
 
+    // 响应中脱敏数据库密码与 JWT 密钥（与 get_system_config 一致）：
+    // 回传明文 JWT secret 等同于允许接收方伪造任意管理员令牌（A-3）
+    let mut masked = new_config;
+    masked.database.password = "***".to_string();
+    masked.jwt.secret = "***".to_string();
+
     Ok(crate::error::ok_json(
-        new_config,
+        masked,
         "server.system.config_updated",
     ))
 }
@@ -274,28 +280,30 @@ cd "$1"
 exec "$2"
 "#;
 
-    let script_path = "/tmp/ipma_restart.sh";
-    tokio::fs::write(script_path, restart_script)
-        .await
-        .map_err(|e| {
+    // 随机文件名 + create_new 原子创建（0700）：避免固定路径被本地低权用户
+    // 预置符号链接劫持为任意文件写入/执行（security-review I-5）
+    let script_path = format!("/tmp/ipma_restart_{}.sh", Uuid::new_v4());
+    {
+        // tokio::fs::OpenOptions 在 Unix 上原生提供 mode()
+        let mut opts = tokio::fs::OpenOptions::new();
+        opts.mode(0o700).write(true).create_new(true);
+        let mut file = opts.open(&script_path).await.map_err(|e| {
             AppError::Internal(msg("server.system.restart_script_create_failed").with("error", e))
         })?;
-
-    let output = Command::new("chmod")
-        .arg("+x")
-        .arg(script_path)
-        .output()
-        .await
-        .map_err(|e| {
-            AppError::Internal(msg("server.system.script_chmod_failed").with("error", e))
-        })?;
-
-    if !output.status.success() {
-        return Err(AppError::Internal(msg("server.system.script_chmod_failed")));
+        use tokio::io::AsyncWriteExt;
+        file.write_all(restart_script.as_bytes())
+            .await
+            .map_err(|e| {
+                AppError::Internal(
+                    msg("server.system.restart_script_create_failed").with("error", e),
+                )
+            })?;
     }
 
+    let script_path_owned = script_path.clone();
+    // 脚本已 0700 可执行，直接 spawn；退出前清理
     if let Err(e) = Command::new("nohup")
-        .arg(script_path)
+        .arg(&script_path)
         .arg(working_dir_str)
         .arg(exe_path_str)
         .spawn()
@@ -303,8 +311,9 @@ exec "$2"
         log_warn!("log.system.restart_script_spawn_failed", error = e);
     }
 
-    tokio::spawn(async {
+    tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let _ = tokio::fs::remove_file(&script_path_owned).await;
         std::process::exit(0);
     });
 

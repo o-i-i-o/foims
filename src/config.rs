@@ -94,6 +94,11 @@ pub struct ListenConfig {
     /// 调试时可改为 /tmp/ipma-dev.sock 避免权限问题
     #[serde(default = "default_uds_path")]
     pub uds_path: String,
+    /// UDS socket 属组（反代进程所属组，如 nginx 的 www-data）。
+    /// socket 权限固定 0660：仅属主与属组可访问，防止本机任意进程
+    /// 直连伪造 X-Real-IP 头访问初始化接口（见 security-review I-1）。
+    #[serde(default = "default_uds_group")]
+    pub uds_group: String,
     /// 是否托管静态文件
     /// - false（默认）：由 nginx 托管静态文件，axum 仅服务 API（生产模式）
     /// - true：axum 同时托管静态文件和 API（调试模式，可用 curl 验证）
@@ -105,6 +110,10 @@ fn default_uds_path() -> String {
     "/run/ipma/api.sock".to_string()
 }
 
+fn default_uds_group() -> String {
+    "www-data".to_string()
+}
+
 const fn default_serve_static() -> bool {
     false
 }
@@ -113,6 +122,7 @@ impl Default for ListenConfig {
     fn default() -> Self {
         Self {
             uds_path: default_uds_path(),
+            uds_group: default_uds_group(),
             serve_static: default_serve_static(),
         }
     }

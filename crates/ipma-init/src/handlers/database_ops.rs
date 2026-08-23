@@ -7,6 +7,7 @@ use axum::response::Response;
 use ipma_common::msg;
 use sqlx::PgPool;
 use std::path::PathBuf;
+use uuid::Uuid;
 
 use crate::check::{check_has_data, validate_table_columns};
 use crate::connection::ensure_database_and_schema;
@@ -15,7 +16,7 @@ use crate::error::{InitError, ok_json};
 use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::schema::create_tables;
 use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest};
-use crate::utils::PgPassFile;
+use crate::utils::{PgPassFile, url_encode_component};
 use crate::verification::verify_code;
 
 /// 备份并删除现有数据库（有数据时先备份），为重建做准备。
@@ -53,9 +54,13 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
     } else {
         drop(pool);
 
+        // 密码做 URL 编码后再拼连接串：含 @ : / 等字符时裸拼会导致连接失败（I-8）
         let postgres_url = format!(
             "postgres://{}:{}@{}:{}/postgres",
-            ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
+            url_encode_component(&ctx.db_config.username),
+            url_encode_component(&ctx.db_config.password),
+            ctx.db_config.host,
+            ctx.db_config.port
         );
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
@@ -118,7 +123,7 @@ pub async fn create_database_api(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<CreateDatabaseRequest>,
 ) -> Result<Response, InitError> {
-    if !ctx.init_enabled {
+    if !ctx.init_enabled() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
@@ -144,7 +149,7 @@ pub async fn import_database_api(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<ImportDatabaseRequest>,
 ) -> Result<Response, InitError> {
-    if !ctx.init_enabled {
+    if !ctx.init_enabled() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
@@ -174,7 +179,7 @@ pub async fn import_database_from_file(
     State(ctx): State<Arc<InitContext>>,
     mut payload: Multipart,
 ) -> Result<Response, InitError> {
-    if !ctx.init_enabled {
+    if !ctx.init_enabled() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
@@ -206,22 +211,6 @@ pub async fn import_database_from_file(
             }
             verification_code = Some(String::from_utf8_lossy(&data).to_string());
         } else if field_name == "sql_file" {
-            let raw_filename = field
-                .file_name()
-                .map(std::string::ToString::to_string)
-                .unwrap_or_else(|| "import.sql".to_string());
-            let safe_name = raw_filename
-                .split(['/', '\\'])
-                .filter(|part| *part != ".." && *part != ".")
-                .collect::<Vec<&str>>()
-                .join("_");
-            let safe_name = if safe_name.is_empty() {
-                "import.sql".to_string()
-            } else {
-                safe_name
-            };
-            let filepath = PathBuf::from(format!("/tmp/ipma_import/{safe_name}"));
-
             let mut data = Vec::new();
             while let Some(chunk) = field.chunk().await.map_err(|e| {
                 InitError::Validation(msg("server.init.db.file_read_failed").with("error", e))
@@ -233,9 +222,20 @@ pub async fn import_database_from_file(
                     )));
                 }
             }
-            tokio::fs::write(&filepath, &data).await.map_err(|e| {
-                InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
-            })?;
+            // 落盘路径使用随机文件名 + create_new 原子创建（0600）：
+            // 用户可控的可预测路径可能被本地低权用户以符号链接预置劫持（I-5）
+            let filepath = PathBuf::from(format!("/tmp/ipma_import/import_{}.sql", Uuid::new_v4()));
+            {
+                let mut opts = tokio::fs::OpenOptions::new();
+                opts.mode(0o600).write(true).create_new(true);
+                let mut file = opts.open(&filepath).await.map_err(|e| {
+                    InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
+                })?;
+                use tokio::io::AsyncWriteExt;
+                file.write_all(&data).await.map_err(|e| {
+                    InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
+                })?;
+            }
             sql_file_path = Some(filepath);
         }
     }
@@ -330,7 +330,7 @@ pub async fn clear_database(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<serde_json::Value>,
 ) -> Result<Response, InitError> {
-    if !ctx.init_enabled {
+    if !ctx.init_enabled() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 

@@ -14,12 +14,27 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
         ));
     }
 
+    let cron_parts: Vec<&str> = if parts.len() == 6 {
+        parts
+    } else {
+        // 5 字段表达式按惯例补秒位 "0"
+        vec!["0", parts[0], parts[1], parts[2], parts[3], parts[4]]
+    };
+
     let now = Utc::now();
-    let mut next = now;
+
+    // 按分钟步进不会改变秒数：若起始秒不在秒字段的命中集合内，
+    // 表达式将永远无法命中（5 字段表达式即秒位 0，除整分钟时刻调用外
+    // 全部遍历失败）。因此先把起始秒对齐到秒字段的最小命中值。
+    let target_sec = first_matching_value(cron_parts[0], 0, 59)?;
+    let mut next = now
+        .with_second(target_sec as u32)
+        .ok_or_else(|| SchedulerError::Validation(msg("server.task.cron_next_run_calc_failed")))?;
+    if next <= now {
+        next += chrono::Duration::minutes(1);
+    }
 
     for _ in 0..366 * 24 * 60 {
-        next += chrono::Duration::minutes(1);
-
         let (sec, min, hour, day, month, weekday) = (
             next.second() as i32,
             next.minute() as i32,
@@ -28,12 +43,6 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
             next.month() as i32,
             next.weekday().num_days_from_monday() as i32,
         );
-
-        let cron_parts = if parts.len() == 6 {
-            parts.clone()
-        } else {
-            vec!["0", parts[0], parts[1], parts[2], parts[3], parts[4]]
-        };
 
         if matches_cron_field(cron_parts[0], sec)?
             && matches_cron_field(cron_parts[1], min)?
@@ -44,11 +53,25 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
         {
             return Ok(next);
         }
+
+        next += chrono::Duration::minutes(1);
     }
 
     Err(SchedulerError::Validation(msg(
         "server.task.cron_next_run_calc_failed",
     )))
+}
+
+/// 求字段在 [min, max] 内的最小命中值（用于秒位对齐）
+fn first_matching_value(field: &str, min: i32, max: i32) -> SchedulerResult<i32> {
+    for value in min..=max {
+        if matches_cron_field(field, value)? {
+            return Ok(value);
+        }
+    }
+    Err(SchedulerError::Validation(
+        msg("server.task.cron_field_invalid").with("field", field),
+    ))
 }
 
 fn matches_cron_field(field: &str, value: i32) -> SchedulerResult<bool> {
@@ -75,6 +98,12 @@ fn matches_cron_field(field: &str, value: i32) -> SchedulerResult<bool> {
         let step: i32 = parts[1].parse().map_err(|_| {
             SchedulerError::Validation(msg("server.task.cron_step_invalid").with("value", parts[1]))
         })?;
+        // 步长必须 ≥ 1：步长 0 会导致取模运算整数除零 panic（security-review 第六节）
+        if step < 1 {
+            return Err(SchedulerError::Validation(
+                msg("server.task.cron_step_invalid").with("value", parts[1]),
+            ));
+        }
         let base_field = parts[0];
 
         if base_field == "*" {
@@ -156,6 +185,11 @@ mod tests {
             invalid_key("*/x * * * * *"),
             "server.task.cron_step_invalid"
         );
+        // 步长 0 会引发整数除零 panic，修复后按非法步长拒绝
+        assert_eq!(
+            invalid_key("*/0 * * * * *"),
+            "server.task.cron_step_invalid"
+        );
     }
 
     #[test]
@@ -195,11 +229,14 @@ mod tests {
 
     #[test]
     fn 每分钟表达式_一分钟内命中() {
+        // 以调用前后的时刻为界，避免「计算完成瞬间跨过整分钟」导致的边界偶发
+        let before = Utc::now();
         let next = calculate_next_run("* * * * * *").unwrap_or_else(|e| panic!("应解析成功: {e}"));
-        let delta = (next - Utc::now()).num_seconds();
+        let after = Utc::now();
+        assert!(next > before, "下次执行必须晚于调用前时刻");
         assert!(
-            (0..=60).contains(&delta),
-            "下次执行应在 1 分钟内，实际 {delta}s"
+            next <= after + chrono::Duration::seconds(61),
+            "下次执行应在 1 分钟内"
         );
     }
 
@@ -257,19 +294,28 @@ mod tests {
         assert_eq!(key, "server.task.cron_next_run_calc_failed");
     }
 
-    /// 记录现状（生产代码缺陷，未在本任务修复）：
-    /// 5 字段表达式按惯例秒位补 "0"，但 `calculate_next_run` 从当前时刻起按
-    /// 分钟步进，秒数保持为调用时的秒数，因此除恰好在整秒 0 调用外，
-    /// 任何 5 字段表达式都遍历完一年仍无法命中，最终返回计算失败。
+    /// 修复后的行为：5 字段表达式秒位对齐到 0，任何时刻调用都能命中
+    ///（此前按分钟步进保留当前秒数，整分 0 秒之外调用永远计算失败）
     #[test]
-    fn 五字段表达式_受秒位缺陷影响计算失败() {
-        if Utc::now().second() == 0 {
-            // 恰逢整秒 0 时该缺陷不显现，跳过断言避免偶发失败
-            return;
-        }
-        let Err(SchedulerError::Validation(m)) = calculate_next_run("0 12 * * *") else {
-            panic!("整秒 0 之外的 5 字段表达式当前无法命中（见函数注释）");
-        };
-        assert_eq!(m.key(), "server.task.cron_next_run_calc_failed");
+    fn 五字段表达式_秒位对齐后可命中() {
+        let next = calculate_next_run("0 12 * * *")
+            .unwrap_or_else(|e| panic!("5 字段表达式应解析成功: {e}"));
+        assert_eq!(next.second(), 0, "5 字段表达式秒位应为 0");
+        assert_eq!((next.minute(), next.hour()), (0, 12));
+        assert!(next > Utc::now());
+
+        // 每 15 分钟（5 字段变体）
+        let next = calculate_next_run("*/15 * * * *").unwrap_or_else(|e| panic!("应解析成功: {e}"));
+        assert_eq!(next.second(), 0);
+        assert_eq!(next.minute() % 15, 0);
+    }
+
+    /// 6 字段表达式带非零秒位：秒位对齐到秒字段最小命中值后同样可命中
+    #[test]
+    fn 六字段表达式_非零秒位可命中() {
+        let next = calculate_next_run("30 */5 * * * *")
+            .unwrap_or_else(|e| panic!("带非零秒位的表达式应解析成功: {e}"));
+        assert_eq!(next.second(), 30);
+        assert_eq!(next.minute() % 5, 0);
     }
 }

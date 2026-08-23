@@ -145,7 +145,24 @@ pub async fn create_cabinet_position(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 机位必须隶属机柜：cabinet_id 可空时既不受 UNIQUE(cabinet_id,name) 保护，
+    // 也不受 U 位重叠触发器保护（db-schema-review R8，已实测确认）
+    let Some(cabinet_id) = req.cabinet_id else {
+        return Err(AppError::Validation(msg(
+            "server.position.cabinet_required",
+        )));
+    };
+
     let mut tx = state.pool()?.get_conn().begin().await?;
+
+    let cabinet_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
+            .bind(cabinet_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !cabinet_exists {
+        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
+    }
 
     let existing_position: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",

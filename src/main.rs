@@ -125,27 +125,34 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
 
     let allow_origin = AllowOrigin::predicate(
         move |origin: &HeaderValue, _parts: &axum::http::request::Parts| {
-            if let Ok(origin_str) = origin.to_str() {
-                for allowed in allowed_origins.iter() {
-                    if origin_str == allowed {
-                        return true;
-                    }
-                    if origin_str.starts_with(allowed.trim_end_matches('/'))
-                        && (origin_str.ends_with(":80") || origin_str.ends_with(":443"))
-                    {
-                        return true;
-                    }
+            let Some(origin_str) = origin.to_str().ok() else {
+                return false;
+            };
+            // 仅精确匹配（含可选的显式 :80/:443 端口写法）。
+            // 此前用 starts_with 前缀匹配，http://localhost.evil.com:80 这类
+            // 后缀域名可绕过且 allow_credentials(true)（见 security-review A-10）
+            for allowed in allowed_origins.iter() {
+                let base = allowed.trim_end_matches('/');
+                if origin_str == allowed || origin_str == base {
+                    return true;
                 }
-                allow_localhost
-                    && (origin_str.starts_with("http://localhost:")
-                        || origin_str.starts_with("https://localhost:")
-                        || origin_str.starts_with("http://127.0.0.1:")
-                        || origin_str.starts_with("https://127.0.0.1:")
-                        || origin_str.starts_with("http://[::1]:")
-                        || origin_str.starts_with("https://[::1]:"))
-            } else {
-                false
+                // 允许显式补写默认端口（http→:80 / https→:443）
+                let with_port = if base.starts_with("https://") {
+                    format!("{base}:443")
+                } else {
+                    format!("{base}:80")
+                };
+                if origin_str == with_port {
+                    return true;
+                }
             }
+            allow_localhost
+                && (origin_str.starts_with("http://localhost:")
+                    || origin_str.starts_with("https://localhost:")
+                    || origin_str.starts_with("http://127.0.0.1:")
+                    || origin_str.starts_with("https://127.0.0.1:")
+                    || origin_str.starts_with("http://[::1]:")
+                    || origin_str.starts_with("https://[::1]:"))
         },
     );
 
@@ -174,11 +181,12 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
 ///
 /// - 自动创建父目录
 /// - 清理已存在的 socket 文件，避免 "Address already in use"
-/// - 设置 socket 文件权限 0666，允许 nginx (www-data) 等其他用户进程访问
-///   安全考虑：socket 文件本身不存储敏感数据，应用层有 JWT 认证保护，
-///   且内核保证 bind 路径不可被重新 bind，因此 0666 不会导致劫持风险
-///   生产环境若需更严格权限，可通过 systemd SocketUser/SocketGroup 实现
-fn create_uds_listener(path: &str) -> std::io::Result<tokio::net::UnixListener> {
+/// - 设置 socket 文件权限 0660 并将属组设为反代进程组（默认 www-data）：
+///   仅允许属主（服务账户）与反代访问。此前为 0666，本机任意进程均可
+///   直连并伪造 X-Real-IP 头，绕过初始化接口的 localhost 限制与限流/
+///   fail2ban（见 security-review I-1/A-1）。非 root 运行无法改属组时
+///   保持 0660 仅属主可用（fail-closed），记录告警由运维调整属组。
+fn create_uds_listener(path: &str, group: &str) -> std::io::Result<tokio::net::UnixListener> {
     let socket_path = Path::new(path);
 
     // 确保父目录存在
@@ -192,11 +200,46 @@ fn create_uds_listener(path: &str) -> std::io::Result<tokio::net::UnixListener> 
     }
 
     let listener = tokio::net::UnixListener::bind(path)?;
-    // 设置 socket 文件权限 0666：允许 nginx 等其他用户进程访问
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))?;
+    // 尝试将属组设为反代进程组（需 root）；失败不阻断启动（保持仅属主可用）
+    #[cfg(unix)]
+    {
+        match lookup_group_gid(group) {
+            Ok(Some(gid)) => {
+                if let Err(e) = std::os::unix::fs::chown(path, None, Some(gid)) {
+                    tracing::warn!(
+                        "设置 UDS socket 属组为 {group} 失败（非 root 运行？），保持仅属主可访问: {e}"
+                    );
+                }
+            }
+            Ok(None) => {
+                tracing::warn!("用户组 {group} 不存在，UDS socket 保持仅属主可访问");
+            }
+            Err(e) => {
+                tracing::warn!("解析用户组 {group} 失败，UDS socket 保持仅属主可访问: {e}");
+            }
+        }
+    }
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660))?;
 
     Ok(listener)
+}
+
+/// 从 /etc/group 解析组名对应的 GID（避免引入额外 crate）。
+/// /etc/group 字段序为「组名:口令:GID:成员」，GID 是第 3 列。
+/// 返回 Ok(None) 表示组不存在。
+fn lookup_group_gid(group: &str) -> std::io::Result<Option<u32>> {
+    let content = std::fs::read_to_string("/etc/group")?;
+    for line in content.lines() {
+        let mut fields = line.split(':');
+        if fields.next() == Some(group)
+            && let Some(gid) = fields.nth(1) // 跳过口令列，取 GID 列
+            && let Ok(gid) = gid.parse::<u32>()
+        {
+            return Ok(Some(gid));
+        }
+    }
+    Ok(None)
 }
 
 async fn redirect_to_index() -> Response {
@@ -217,8 +260,8 @@ fn configure_app_services(
 
     let router = if init_enabled {
         // 创建 InitContext 用于初始化模块
-        let init_context = Arc::new(InitContext {
-            db_config: InitDatabaseConfig {
+        let init_context = Arc::new(InitContext::new(
+            InitDatabaseConfig {
                 host: app_state.config.database.host.clone(),
                 port: app_state.config.database.port,
                 database: app_state.config.database.database.clone(),
@@ -232,9 +275,9 @@ fn configure_app_services(
                 query_timeout_secs: app_state.config.database.query_timeout_secs,
                 health_check_interval_secs: app_state.config.database.health_check_interval_secs,
             },
-            config_path: ipma::config::get_config_file_path(),
-            init_enabled: app_state.config.init.enabled,
-            restart_fn: Arc::new(|| {
+            ipma::config::get_config_file_path(),
+            app_state.config.init.enabled,
+            Arc::new(|| {
                 Box::pin(async move {
                     ipma::system::config::trigger_service_restart()
                         .await
@@ -242,7 +285,7 @@ fn configure_app_services(
                     Ok(())
                 })
             }),
-        });
+        ));
 
         let init_router = Router::new()
             .route("/api/init", post(ipma_init::init_system))
@@ -548,8 +591,8 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    // 创建 UDS 监听器
-    let uds_listener = create_uds_listener(&uds_path)?;
+    // 创建 UDS 监听器（0660 + 反代属组，见 create_uds_listener 注释）
+    let uds_listener = create_uds_listener(&uds_path, &app_state.config.server.listen.uds_group)?;
 
     // 构建应用
     let app = configure_app_services(

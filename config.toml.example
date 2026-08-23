@@ -35,6 +35,8 @@ cors_allowed_origins = []
 # 调试：/tmp/ipma-dev.sock（避免权限问题）
 # 生产：/run/ipma/api.sock（systemd RuntimeDirectory 管理）
 uds_path = "/tmp/ipma-dev.sock"
+# UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data）
+uds_group = "www-data"
 # 是否由 axum 托管静态文件
 # - false（推荐）：静态文件由 nginx 直接服务，axum 仅 API
 # - true：axum 同时托管静态文件和 API（不推荐，与 nginx 重复）

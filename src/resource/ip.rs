@@ -151,7 +151,8 @@ pub async fn get_ip_managers(
     let sort_order = query.get("sort_order").cloned().unwrap_or_default();
 
     // ORDER BY 白名单，未匹配时回落默认序，避免注入。
-    // ip_address 使用视图源列（inet 类型）排序，按数值而非字符串比较
+    // 视图列 ip_address 为 host() 输出的 TEXT，直排是字典序（"10.0.0.10" <
+    // "10.0.0.2"）；转回 inet 后按数值大小排序（db-schema-review 第九节）
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("device_name", "desc") => "ORDER BY device_name DESC NULLS LAST, updated_at DESC",
         ("device_name", _) => "ORDER BY device_name ASC NULLS LAST, updated_at DESC",
@@ -159,8 +160,8 @@ pub async fn get_ip_managers(
         ("device_type", _) => "ORDER BY device_type ASC, updated_at DESC",
         ("network_name", "desc") => "ORDER BY network_name DESC NULLS LAST, updated_at DESC",
         ("network_name", _) => "ORDER BY network_name ASC NULLS LAST, updated_at DESC",
-        ("ip_address", "desc") => "ORDER BY ip_with_details.ip_address DESC, updated_at DESC",
-        ("ip_address", _) => "ORDER BY ip_with_details.ip_address ASC, updated_at DESC",
+        ("ip_address", "desc") => "ORDER BY ip_with_details.ip_address::inet DESC, updated_at DESC",
+        ("ip_address", _) => "ORDER BY ip_with_details.ip_address::inet ASC, updated_at DESC",
         ("mac_address", "desc") => "ORDER BY mac_address DESC NULLS LAST, updated_at DESC",
         ("mac_address", _) => "ORDER BY mac_address ASC NULLS LAST, updated_at DESC",
         ("hostname", "desc") => "ORDER BY hostname DESC NULLS LAST, updated_at DESC",
@@ -729,6 +730,11 @@ pub fn find_available_ips_in_cidr(
         (None, true) => 100,
         (None, false) => 1000,
     };
+    // max_count=Some(0) 语义为不需要任何地址：此前循环先压入再判长度，
+    // 仍会返回 1 个地址（security-review 第六节）
+    if effective_max == 0 {
+        return Vec::new();
+    }
 
     let network_addr = network_cidr.network();
     let broadcast_addr = match network_cidr {

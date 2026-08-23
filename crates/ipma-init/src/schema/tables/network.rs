@@ -28,10 +28,25 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             ipv6_dns INET[],
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            CONSTRAINT uq_network_cidrs_region_name UNIQUE (name, network_region_id)
         )",
     )
     .execute(pool)
-    .await
-    .map(|_| ())
+    .await?;
+
+    // CIDR 全局唯一（部分唯一索引跳过 NULL 行）：应用层查重存在并发竞态，
+    // DB 兜底保证同一 CIDR 不会被并发写入两行（db-schema-review R2）
+    sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_cidrs_ipv4 ON network_cidrs (ipv4_cidr) WHERE ipv4_cidr IS NOT NULL",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_cidrs_ipv6 ON network_cidrs (ipv6_cidr) WHERE ipv6_cidr IS NOT NULL",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }

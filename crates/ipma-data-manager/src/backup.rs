@@ -18,26 +18,46 @@ impl PgPassFile {
         password: &str,
     ) -> DataResult<Self> {
         let pgpass_dir = std::env::temp_dir();
+        // 随机后缀避免并发冲突；用户名/库名仅作可读性前缀（转义路径分隔符）
+        let safe_user: String = username
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect();
+        let safe_db: String = database
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect();
         let pgpass_path = pgpass_dir.join(format!(
-            ".pgpass_ipma_{}_{}_{}",
-            username,
-            database,
-            std::process::id()
+            ".pgpass_ipma_{}_{}_{}_{}",
+            safe_user,
+            safe_db,
+            std::process::id(),
+            uuid::Uuid::new_v4()
         ));
         let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        std::fs::write(&pgpass_path, &pgpass_content).map_err(|e| {
-            DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
-        })?;
+        // 以 0600 原子创建（create_new）：避免「先写后 chmod」窗口期内
+        // 其他本地用户读取到明文口令（security-review I-6）
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&pgpass_path, std::fs::Permissions::from_mode(0o600))
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = std::fs::OpenOptions::new()
+                .mode(0o600)
+                .write(true)
+                .create_new(true)
+                .open(&pgpass_path)
                 .map_err(|e| {
-                    let _ = std::fs::remove_file(&pgpass_path);
-                    DataError::Internal(
-                        msg("server.backup.pgpass_permission_failed").with("error", e),
-                    )
+                    DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
                 })?;
+            file.write_all(pgpass_content.as_bytes()).map_err(|e| {
+                DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
+            })?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&pgpass_path, &pgpass_content).map_err(|e| {
+                DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
+            })?;
         }
         Ok(Self { path: pgpass_path })
     }
@@ -124,15 +144,28 @@ pub fn backup_to_file(
 
     let sql_content = pg_dump_raw(config)?;
 
-    std::fs::write(&backup_file, sql_content).map_err(|e| {
-        DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
-    })?;
+    // 以 0600 原子创建写入（I-6）：备份含全库数据，避免先写后 chmod 的暴露窗口
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&backup_file, std::fs::Permissions::from_mode(0o600)).map_err(
-            |e| DataError::Internal(msg("server.backup.file_permission_failed").with("error", e)),
-        )?;
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .mode(0o600)
+            .write(true)
+            .create_new(true)
+            .open(&backup_file)
+            .map_err(|e| {
+                DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
+            })?;
+        file.write_all(&sql_content).map_err(|e| {
+            DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
+        })?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&backup_file, &sql_content).map_err(|e| {
+            DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
+        })?;
     }
 
     Ok(backup_file)

@@ -200,14 +200,14 @@ function appendOptions(select, items) {
 // 范围选项：按端点类型选择 API（设备名缺失时回退显示 id）
 async function loadScopeOptions(scopeType, scopeSelectId) {
   const scopeApis = {
-    room: { url: "/api/resources/rooms?page_size=1000", placeholderKey: "cable_link.select_room" },
+    room: { url: "/api/resources/options/rooms", placeholderKey: "cable_link.select_room" },
     device: {
-      url: "/api/resources/devices?page_size=1000",
+      url: "/api/resources/options/devices",
       placeholderKey: "cable_link.select_device",
       itemToLabel: (d) => d.name || d.id
     },
     cabinet: {
-      url: "/api/resources/cabinets?page_size=1000",
+      url: "/api/resources/options/cabinets",
       placeholderKey: "cable_link.select_cabinet"
     }
   };
@@ -226,7 +226,7 @@ async function loadCabinetOptions(side, roomId) {
     });
     return;
   }
-  await fillSelect(ids.cabinetSelect, `/api/resources/cabinets?room_id=${roomId}&page_size=1000`, {
+  await fillSelect(ids.cabinetSelect, `/api/resources/options/cabinets?room_id=${roomId}`, {
     placeholderKey: "cable_link.cabinet_any",
     errorLabel: "机柜"
   });
@@ -238,7 +238,7 @@ async function loadDeviceOptions(side, { roomId = null, cabinetId = null } = {})
   const query = cabinetId ? `cabinet_id=${cabinetId}` : `room_id=${roomId}`;
   await fillSelect(
     ids.deviceSelect,
-    roomId || cabinetId ? `/api/resources/devices?${query}&page_size=1000` : null,
+    roomId || cabinetId ? `/api/resources/options/devices?${query}` : null,
     {
       placeholderKey: "cable_link.select_device",
       errorLabel: "设备",
@@ -258,7 +258,7 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
   try {
     if (endpointType === "net_outlet") {
       const result = await apiGet(
-        `/api/resources/net-outlets?room_id=${scopeValue}&page_size=1000`
+        `/api/resources/options/net-outlets?room_id=${scopeValue}`
       );
       const data = result.success ? result.data : {};
       const items = (data.items || data || []).map((o) => ({ id: o.id, label: o.name }));

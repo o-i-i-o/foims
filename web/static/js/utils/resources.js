@@ -183,7 +183,8 @@ export async function loadRoomNetworksForCabinet(
   }
 
   try {
-    const roomResult = await apiGet(`/api/resources/rooms/${roomId}`);
+    // 轻量端点：仅需网络绑定列表，避免完整房间详情的多次查询
+    const roomResult = await apiGet(`/api/resources/rooms/${roomId}/brief`);
 
     if (!roomResult.success || !roomResult.data) {
       showHint("common.load_failed_retry");

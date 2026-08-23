@@ -51,6 +51,21 @@ pub fn validate_role_option(role: &&String) -> Result<(), ValidationError> {
     validate_role(role)
 }
 
+/// SNMP 版本枚举（devices.snmp_version 为 VARCHAR(3)，DB 无 CHECK）：
+/// 非法值直写数据库报 500，此处前置拦截（db-schema-review 第五节）
+pub fn validate_snmp_version_string(version: &str) -> Result<(), ValidationError> {
+    match version {
+        "v1" | "v2c" | "v3" => Ok(()),
+        _ => Err(ValidationError::new(
+            "server.device.validation.snmp_version_invalid",
+        )),
+    }
+}
+
+pub fn validate_snmp_version_option(version: &&String) -> Result<(), ValidationError> {
+    validate_snmp_version_string(version)
+}
+
 pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
     if dns_list.len() > 5 {
         return Err(ValidationError::new("dns_count_exceeded"));
@@ -61,6 +76,39 @@ pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
 pub fn validate_ip_address(ip: &str) -> Result<(), ValidationError> {
     if ip.parse::<std::net::IpAddr>().is_err() {
         return Err(ValidationError::new("invalid_ip_address"));
+    }
+    Ok(())
+}
+
+// ==================== 双层 Option 长度校验 ====================
+//
+// validator 的 #[validate(length)] 对 Option<Option<String>> 字段完全不生效
+// （security-review 第六节）：外层 Some 时不校验内层字符串长度，超长值直写
+// 数据库撞 VARCHAR 上限报 500。custom 函数会被 derive 自动解包双层 Option
+// （Some(None) 跳过校验、Some(Some(v)) 传入 &&String），以下按此签名实现。
+
+/// CableLinkUpdate.cable_label（VARCHAR(50)）
+pub fn validate_cable_label_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 50, "server.cable_link.validation.cable_label_length")
+}
+
+/// 设备接口 MAC 地址（VARCHAR(20)）
+pub fn validate_iface_mac_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 20, "server.device.validation.mac_length")
+}
+
+/// 通用描述字段（VARCHAR/TEXT 上限 255）
+pub fn validate_description_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 255, "server.common.validation.description_length")
+}
+
+fn validate_length_str(
+    value: &str,
+    max_chars: usize,
+    key: &'static str,
+) -> Result<(), ValidationError> {
+    if value.chars().count() > max_chars {
+        return Err(ValidationError::new(key));
     }
     Ok(())
 }

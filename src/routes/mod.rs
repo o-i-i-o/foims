@@ -9,9 +9,11 @@ pub mod static_files;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use axum::Json;
 use axum::Router;
 use axum::extract::{Multipart, Query, State};
 use axum::middleware;
+use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 
@@ -54,15 +56,15 @@ use crate::resource::{
     get_net_outlets, get_network, get_network_region, get_network_regions, get_networks,
     get_org_rooms, get_org_template, get_org_templates, get_organization, get_organization_tree,
     get_organizations, get_patch_panels, get_positions, get_positions_layout, get_room,
-    get_room_cabinets_with_positions, get_room_networks, get_rooms, get_topology_connections,
-    get_topology_nodes, get_workstation, get_workstations, pull_ip_managers, save_layout,
-    save_topology_nodes, sync_cabinet_patch_panels, sync_cabinet_positions,
-    sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp, sync_room_children,
-    sync_room_net_outlets, test_snmp_connection, test_snmp_connection_by_id, trigger_auto_discover,
-    update_cabinet, update_cabinet_position, update_cable_link, update_device,
-    update_device_interface, update_device_port, update_device_template, update_net_outlet,
-    update_network, update_network_region, update_org_template, update_organization, update_room,
-    update_workstation,
+    get_room_brief, get_room_cabinets_with_positions, get_room_networks, get_rooms,
+    get_topology_connections, get_topology_nodes, get_workstation, get_workstations,
+    pull_ip_managers, save_layout, save_topology_nodes, sync_cabinet_patch_panels,
+    sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
+    sync_room_children, sync_room_net_outlets, test_snmp_connection, test_snmp_connection_by_id,
+    trigger_auto_discover, update_cabinet, update_cabinet_position, update_cable_link,
+    update_device, update_device_interface, update_device_port, update_device_template,
+    update_net_outlet, update_network, update_network_region, update_org_template,
+    update_organization, update_room, update_workstation,
 };
 use crate::routes::static_files::AppJson;
 use crate::system::app_fail2ban::{
@@ -142,6 +144,52 @@ async fn health_check() -> Response {
     crate::error::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
 }
 
+/// 资源写操作与敏感查询的管理员守卫（security-review A-2/S-2）。
+///
+/// 此前资源 CRUD 仅要求登录：普通用户可任意增删改组织/网段/设备数据、
+/// 发起 SNMP 探测与读取审计日志。守卫规则：
+/// - `/api/resources/**` 下所有非 GET/HEAD/OPTIONS 请求（写操作、同步、探测）；
+/// - 实时 SNMP 探测的 GET 端点（snmp-info / snmp-ports，向任意内网目标发包）；
+/// - `/api/logs/**` 审计日志查询。
+///
+/// 该守卫必须挂在 auth_middleware 之内（先由其校验令牌并注入 JwtClaims）。
+async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Response {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    let is_read = method == axum::http::Method::GET
+        || method == axum::http::Method::HEAD
+        || method == axum::http::Method::OPTIONS;
+    let needs_admin = (path.starts_with("/api/resources") && !is_read)
+        || (is_read && (path.ends_with("/snmp-info") || path.ends_with("/snmp-ports")))
+        || path.starts_with("/api/logs/");
+
+    if !needs_admin {
+        return next.run(req).await;
+    }
+
+    match req.extensions().get::<crate::auth::utils::JwtClaims>() {
+        Some(claims) if claims.role == "admin" => next.run(req).await,
+        Some(_) => (
+            StatusCode::FORBIDDEN,
+            Json(ipma_common::ApiResponse::<()>::error(ipma_common::msg(
+                "server.auth.admin_required",
+            ))),
+        )
+            .into_response(),
+        None => (
+            StatusCode::UNAUTHORIZED,
+            Json(ipma_common::ApiResponse::<()>::error(ipma_common::msg(
+                "server.auth.auth_failed",
+            ))),
+        )
+            .into_response(),
+    }
+}
+
 /// 公开的初始化状态查询（不需要认证）
 /// 供前端登录页判断：当 init_enabled=true 时跳转到初始化页 /init_index.html
 /// 仅返回 init_enabled 一个布尔字段，避免泄露系统是否已初始化等额外信息。
@@ -197,6 +245,11 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/two-factor/enable", post(enable_two_factor))
         .route("/api/two-factor/disable", post(disable_two_factor))
         // 资源管理路由
+        // 下拉专用精简选项端点（id+name，仅登录即可读）
+        .route(
+            "/api/resources/options/{resource}",
+            get(crate::resource::options::get_resource_options),
+        )
         // 网络管理
         .route(
             "/api/resources/networks",
@@ -227,6 +280,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/rooms/{id}",
             get(get_room).put(update_room).delete(delete_room),
         )
+        .route("/api/resources/rooms/{id}/brief", get(get_room_brief))
         .route("/api/resources/rooms/{id}/networks", get(get_room_networks))
         .route(
             "/api/resources/rooms/{id}/children",
@@ -611,6 +665,9 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/fail2ban/app/ban", post(app_ban_ip))
         .route("/api/system/fail2ban/app/unban", post(app_unban_ip))
+        // admin_guard_middleware 先注册（位于 auth_middleware 之内）：
+        // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定
+        .route_layer(middleware::from_fn(admin_guard_middleware))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

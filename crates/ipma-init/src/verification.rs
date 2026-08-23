@@ -64,7 +64,10 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 }
 
 pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {
-    let stored_code = get_verification_code_storage()
+    // 校验成功即作废（替换为新随机码）：验证码必须一次性使用，
+    // 否则 15 分钟有效期内同一验证码可重复通过 init/clear/create/import
+    // 等多个危险操作的校验（security-review I-2）
+    let mut stored_code = get_verification_code_storage()
         .lock()
         .map_err(|_| msg("server.init.verification.lock_failed"))?;
 
@@ -76,7 +79,8 @@ pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {
         })
         .as_secs();
 
-    if now - stored_code.created_at > VERIFICATION_CODE_EXPIRY_SECS {
+    // 时钟回拨时 created_at 可能晚于当前时刻：saturating_sub 避免 u64 下溢 panic
+    if now.saturating_sub(stored_code.created_at) > VERIFICATION_CODE_EXPIRY_SECS {
         return Err(msg("server.init.verification.expired"));
     }
 
@@ -84,12 +88,20 @@ pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {
         return Err(msg("server.init.verification.invalid"));
     }
 
+    // 消费验证码：替换为新随机码，重放的旧码立即失效
+    *stored_code = VerificationCode::new(generate_verification_code());
+
     Ok(())
 }
 
 pub async fn get_verification_code(
-    State(_ctx): State<Arc<InitContext>>,
+    State(ctx): State<Arc<InitContext>>,
 ) -> Result<Response, InitError> {
+    // 初始化模式已关闭时不再发放验证码（防止关闭后凭旧验证码重新触发生成）
+    if !ctx.init_enabled() {
+        return Err(InitError::Forbidden(msg("server.init.disabled")));
+    }
+
     let verification_code = generate_and_print_verification_code();
 
     if let Ok(mut lock) = get_verification_code_storage().lock() {
@@ -198,5 +210,43 @@ mod tests {
             };
         }
         assert!(verify_code("DDDDDDDDDDDDDDDD").is_ok());
+    }
+
+    /// 验证码一次性消费：校验成功后同一验证码不可再次使用（I-2）
+    #[test]
+    fn verify_code_成功后即作废_重放被拒绝() {
+        {
+            let mut lock = get_verification_code_storage()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *lock = VerificationCode {
+                code: "EEEEEEEEEEEEEEEE".to_string(),
+                created_at: now_secs(),
+            };
+        }
+        // 首次校验成功
+        assert!(verify_code("EEEEEEEEEEEEEEEE").is_ok());
+        // 同一验证码立即重放 → 失败（已被替换为新随机码）
+        let Err(m) = verify_code("EEEEEEEEEEEEEEEE") else {
+            panic!("已消费的验证码重放应被拒绝");
+        };
+        assert_eq!(m.key(), "server.init.verification.invalid");
+    }
+
+    /// 时钟回拨（now < created_at）不应 panic，且按未过期处理
+    #[test]
+    fn verify_code_时钟回拨不panic() {
+        {
+            let mut lock = get_verification_code_storage()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *lock = VerificationCode {
+                code: "FFFFFFFFFFFFFFFF".to_string(),
+                // created_at 晚于当前时刻 60 秒，模拟时钟回拨
+                created_at: now_secs().saturating_add(60),
+            };
+        }
+        // 未 panic 且码正确时通过（saturating_sub 归零，不判定过期）
+        assert!(verify_code("FFFFFFFFFFFFFFFF").is_ok());
     }
 }

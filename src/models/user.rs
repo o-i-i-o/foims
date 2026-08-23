@@ -28,6 +28,7 @@ pub struct UserCreate {
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub password: String,
     #[validate(email(message = "server.user.validation.email_invalid"))]
+    #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
     #[validate(custom(
         function = "crate::models::validate_role",
@@ -39,6 +40,7 @@ pub struct UserCreate {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserUpdate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
+    #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: Option<String>,
     #[validate(custom(
         function = "crate::models::validate_role_option",
@@ -60,6 +62,7 @@ pub struct UserLogin {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct ForgotPasswordRequest {
     #[validate(email(message = "server.user.validation.email_invalid"))]
+    #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
 }
 
@@ -94,6 +97,7 @@ pub struct SendTwoFactorCodeRequest {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SendLoginCodeRequest {
     #[validate(email(message = "server.user.validation.email_invalid"))]
+    #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
 }
 

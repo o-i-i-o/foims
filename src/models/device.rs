@@ -120,6 +120,10 @@ pub struct NetworkCardUpdate {
     pub name: Option<String>,
     pub card_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_description_opt",
+        message = "server.common.validation.description_length"
+    ))]
     pub description: Option<Option<String>>,
 }
 
@@ -186,9 +190,17 @@ pub struct DeviceInterfaceUpdate {
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_iface_mac_opt",
+        message = "server.device.validation.mac_length"
+    ))]
     pub mac_address: Option<Option<String>>,
     pub vlan_id: Option<i32>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_description_opt",
+        message = "server.common.validation.description_length"
+    ))]
     pub description: Option<Option<String>>,
 }
 
@@ -329,14 +341,16 @@ pub struct Device {
     pub template_id: Option<Uuid>,
     pub seller: Option<String>,
     pub location: Option<String>,
-    pub snmp_version: String,
+    // snmp_version/snmp_port 数据库列为可空（仅带 DEFAULT）：
+    // 应用路径恒写值，但模型按可空声明避免外部写入 NULL 时解码失败（M-1）
+    pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
     pub snmp_username: Option<String>,
     pub snmp_auth_protocol: Option<String>,
     pub snmp_auth_password: Option<String>,
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
-    pub snmp_port: i32,
+    pub snmp_port: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -388,8 +402,11 @@ pub struct DeviceCreate {
         message = "server.device.validation.type_invalid"
     ))]
     pub device_type: Option<String>,
+    #[validate(length(max = 50, message = "server.device.validation.brand_length"))]
     pub brand: Option<String>,
+    #[validate(length(max = 100, message = "server.device.validation.model_length"))]
     pub model: Option<String>,
+    #[validate(length(max = 100, message = "server.device.validation.serial_number_length"))]
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
     pub position_id: Option<Uuid>,
@@ -399,23 +416,40 @@ pub struct DeviceCreate {
     pub seller: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
+    #[validate(custom(
+        function = "crate::models::validate_snmp_version_option",
+        message = "server.device.validation.snmp_version_invalid"
+    ))]
     pub snmp_version: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
     pub snmp_community: Option<String>,
     #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
     pub snmp_username: Option<String>,
+    #[validate(length(
+        max = 10,
+        message = "server.device.validation.snmp_auth_protocol_length"
+    ))]
     pub snmp_auth_protocol: Option<String>,
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_auth_password_length"
     ))]
     pub snmp_auth_password: Option<String>,
+    #[validate(length(
+        max = 10,
+        message = "server.device.validation.snmp_priv_protocol_length"
+    ))]
     pub snmp_priv_protocol: Option<String>,
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_priv_password_length"
     ))]
     pub snmp_priv_password: Option<String>,
+    #[validate(range(
+        min = 1,
+        max = 65535,
+        message = "server.device.validation.snmp_port_range"
+    ))]
     pub snmp_port: Option<i32>,
     pub cards: Option<Vec<NetworkCardSyncItem>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -436,8 +470,11 @@ pub struct DeviceUpdate {
         message = "server.device.validation.type_invalid"
     ))]
     pub device_type: Option<String>,
+    #[validate(length(max = 50, message = "server.device.validation.brand_length"))]
     pub brand: Option<String>,
+    #[validate(length(max = 100, message = "server.device.validation.model_length"))]
     pub model: Option<String>,
+    #[validate(length(max = 100, message = "server.device.validation.serial_number_length"))]
     pub serial_number: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub workstation_id: Option<Option<Uuid>>,
@@ -448,23 +485,40 @@ pub struct DeviceUpdate {
     pub seller: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
+    #[validate(custom(
+        function = "crate::models::validate_snmp_version_option",
+        message = "server.device.validation.snmp_version_invalid"
+    ))]
     pub snmp_version: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
     pub snmp_community: Option<String>,
     #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
     pub snmp_username: Option<String>,
+    #[validate(length(
+        max = 10,
+        message = "server.device.validation.snmp_auth_protocol_length"
+    ))]
     pub snmp_auth_protocol: Option<String>,
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_auth_password_length"
     ))]
     pub snmp_auth_password: Option<String>,
+    #[validate(length(
+        max = 10,
+        message = "server.device.validation.snmp_priv_protocol_length"
+    ))]
     pub snmp_priv_protocol: Option<String>,
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_priv_password_length"
     ))]
     pub snmp_priv_password: Option<String>,
+    #[validate(range(
+        min = 1,
+        max = 65535,
+        message = "server.device.validation.snmp_port_range"
+    ))]
     pub snmp_port: Option<i32>,
     pub cards: Option<Vec<NetworkCardSyncItem>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -633,17 +687,20 @@ mod tests {
     }
 
     #[test]
-    fn test_device_interface_update_mac_length_not_enforced() -> Result<(), serde_json::Error> {
-        // 特征测试（疑似缺陷）：mac_address 为双层 Option，validator 的 length
-        // 校验对双层 Option 字段不生效，超长 MAC 当前不会被拒绝。
-        // 若未来修复 validator 行为，此断言应改为 is_err()。
+    fn test_device_interface_update_mac_length_enforced() -> Result<(), serde_json::Error> {
+        // 修复后：双层 Option 的长度经 custom 函数校验，超长 MAC 被拒绝
         let req: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
             "mac_address": "M".repeat(21)
         }))?;
-        assert!(
-            req.validate().is_ok(),
-            "当前 validator 对双层 Option 的 length 校验不生效"
-        );
+        let Err(errors) = req.validate() else {
+            panic!("超长 MAC 应被拒绝");
+        };
+        assert!(errors.errors().contains_key("mac_address"));
+
+        // null（清除）合法
+        let null_mac: DeviceInterfaceUpdate =
+            serde_json::from_value(serde_json::json!({ "mac_address": null }))?;
+        assert!(null_mac.validate().is_ok());
         Ok(())
     }
 
@@ -659,7 +716,7 @@ mod tests {
             "model": "S6520",
             "seller": "代理商",
             "location": "A 机柜",
-            "snmp_version": "2c",
+            "snmp_version": "v2c",
             "snmp_community": "public",
             "snmp_port": 161,
             "description": "核心设备",
@@ -729,6 +786,27 @@ mod tests {
         assert_eq!(req.workstation_id, None);
         assert_eq!(req.position_id, None);
         assert!(req.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_create_invalid_snmp_version() -> Result<(), serde_json::Error> {
+        // snmp_version 仅允许 v1/v2c/v3（VARCHAR(3)，DB 无 CHECK，由应用层拦截）
+        let mut json = valid_device_create_json();
+        json["snmp_version"] = serde_json::json!("version3");
+        let req: DeviceCreate = serde_json::from_value(json)?;
+        let Err(errors) = req.validate() else {
+            panic!("非法 SNMP 版本应被拒绝");
+        };
+        assert!(errors.errors().contains_key("snmp_version"));
+
+        // 合法枚举值通过
+        for ok in ["v1", "v2c", "v3"] {
+            let mut json = valid_device_create_json();
+            json["snmp_version"] = serde_json::json!(ok);
+            let req: DeviceCreate = serde_json::from_value(json)?;
+            assert!(req.validate().is_ok(), "版本 {ok} 应合法");
+        }
         Ok(())
     }
 
@@ -854,14 +932,14 @@ mod tests {
             template_id: None,
             seller: None,
             location: None,
-            snmp_version: "2c".to_string(),
+            snmp_version: Some("2c".to_string()),
             snmp_community: Some("public".to_string()),
             snmp_username: None,
             snmp_auth_protocol: None,
             snmp_auth_password: None,
             snmp_priv_protocol: None,
             snmp_priv_password: None,
-            snmp_port: 161,
+            snmp_port: Some(161),
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),

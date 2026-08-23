@@ -18,13 +18,16 @@ use crate::types::InitRequest;
 use crate::utils::hash_password;
 use crate::verification::verify_code;
 
+/// 初始化建户专用 advisory lock key（"IPMA" 魔数）
+const INIT_ADMIN_LOCK_KEY: i64 = 0x4950_4D41_0001;
+
 pub async fn init_system(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<InitRequest>,
 ) -> Result<Response, InitError> {
     req.validate()?;
 
-    if !ctx.init_enabled {
+    if !ctx.init_enabled() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
@@ -39,28 +42,6 @@ pub async fn init_system(
         }
     };
 
-    let count: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&pool)
-        .await
-    {
-        Ok(count) => count,
-        Err(e) => {
-            if let Some(db_err) = e.as_database_error()
-                && db_err.to_string().contains("UndefinedTable")
-            {
-                0
-            } else {
-                return Err(InitError::Database(
-                    msg("server.init.db.query_failed").with("error", e),
-                ));
-            }
-        }
-    };
-
-    if count > 0 {
-        return Err(InitError::Validation(msg("server.init.db.has_user_data")));
-    }
-
     if !check_required_tables_exist(&pool).await
         && let Err(e) = create_tables(&pool).await
     {
@@ -70,7 +51,6 @@ pub async fn init_system(
     }
 
     let password_hash = hash_password(&req.password).await?;
-
     let user_id = Uuid::new_v4();
 
     ipma_common::log_info!(
@@ -80,6 +60,43 @@ pub async fn init_system(
         email = req.email,
         role = req.role
     );
+
+    // 建户检查与插入放进同一事务并持有 advisory lock：
+    // 否则并发调用可在 COUNT 检查后各自插入，创建出多个管理员（I-4）
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            return Err(InitError::Database(
+                msg("server.init.db.query_failed").with("error", e),
+            ));
+        }
+    };
+
+    if let Err(e) = sqlx::query_scalar::<_, i64>("SELECT pg_advisory_xact_lock($1)")
+        .bind(INIT_ADMIN_LOCK_KEY)
+        .fetch_one(&mut *tx)
+        .await
+    {
+        return Err(InitError::Database(
+            msg("server.init.db.query_failed").with("error", e),
+        ));
+    }
+
+    let count: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *tx)
+        .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            return Err(InitError::Database(
+                msg("server.init.db.query_failed").with("error", e),
+            ));
+        }
+    };
+
+    if count > 0 {
+        return Err(InitError::Validation(msg("server.init.db.has_user_data")));
+    }
 
     if let Err(e) = sqlx::query(
         r"INSERT INTO users (id, username, password_hash, email, role, status)
@@ -91,7 +108,7 @@ pub async fn init_system(
     .bind(&req.email)
     .bind(&req.role)
     .bind(true)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
     {
         ipma_common::log_error!("log.init.admin_create_failed", error = e);
@@ -100,11 +117,20 @@ pub async fn init_system(
         ));
     }
 
+    if let Err(e) = tx.commit().await {
+        return Err(InitError::Database(
+            msg("server.init.db.query_failed").with("error", e),
+        ));
+    }
+
+    // 先落盘配置，再同步翻转内存开关：init 完成到重启之间不再存在
+    // 「配置已写 init.enabled=false 但进程仍按 true 服务」的毁库窗口（I-3）
     if let Err(e) = update_config_enabled(&ctx.config_path, false).await {
         return Err(InitError::Internal(
             msg("server.init.config_update_failed").with("error", e),
         ));
     }
+    ctx.disable_init();
 
     ipma_common::log_info!("log.init.system_initialized", username = req.username);
 
@@ -112,6 +138,12 @@ pub async fn init_system(
 }
 
 pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
+    // 建表同样是危险操作：与其他 init 接口一致校验开关
+    //（验证码经 init_system 消费后不可复用，此处不重复校验）
+    if !ctx.init_enabled() {
+        return Err(InitError::Forbidden(msg("server.init.disabled")));
+    }
+
     let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {

@@ -100,12 +100,18 @@ pub struct OrganizationWithChildren {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 校验类型路径：非空且格式合法（点分隔的数字索引）
+/// 校验类型路径：非空、格式合法（点分隔的数字索引）且总长不超过 50
+///（organizations.type_path 列为 VARCHAR(50)，超长直写数据库报错）
 pub fn validate_type_path(type_path: &str) -> Result<(), ValidationError> {
     if type_path.trim().is_empty() {
         // code 仅作错误标识；实际返回给前端的消息 key 由调用点的 message 属性覆盖
         return Err(ValidationError::new(
             "server.organization.validation.type_path_required",
+        ));
+    }
+    if type_path.chars().count() > 50 {
+        return Err(ValidationError::new(
+            "server.organization.validation.type_path_length",
         ));
     }
     for segment in type_path.split('.') {

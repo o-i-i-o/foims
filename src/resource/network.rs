@@ -18,6 +18,24 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
+/// network_cidrs 唯一约束冲突（并发写入竞态触发 DB 兜底）→ 409，
+/// 按约束名区分重名 / IPv4 / IPv6 网段冲突（db-schema-review R2）
+fn map_network_unique_violation(e: sqlx::Error, name: &str) -> AppError {
+    if let sqlx::Error::Database(db_err) = &e
+        && db_err.is_unique_violation()
+    {
+        let constraint = db_err.constraint().unwrap_or_default();
+        return if constraint.contains("ipv4") {
+            AppError::Conflict(msg("server.network.ipv4_cidr_exists"))
+        } else if constraint.contains("ipv6") {
+            AppError::Conflict(msg("server.network.ipv6_cidr_exists"))
+        } else {
+            AppError::Conflict(msg("server.network.name_exists").with("name", name))
+        };
+    }
+    AppError::from(e)
+}
+
 pub async fn get_networks(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
@@ -114,22 +132,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{name_filter}%");
+            let pattern = crate::utils::escape_like(&name_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = format!("%{network_region_filter}%");
+            let pattern = crate::utils::escape_like(&network_region_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = format!("%{ipv4_filter}%");
+            let pattern = crate::utils::escape_like(&ipv4_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = format!("%{ipv6_filter}%");
+            let pattern = crate::utils::escape_like(&ipv6_filter);
             count_sql = count_sql.bind(pattern);
         }
 
@@ -207,22 +225,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = format!("%{name_filter}%");
+            let pattern = crate::utils::escape_like(&name_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = format!("%{network_region_filter}%");
+            let pattern = crate::utils::escape_like(&network_region_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = format!("%{ipv4_filter}%");
+            let pattern = crate::utils::escape_like(&ipv4_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = format!("%{ipv6_filter}%");
+            let pattern = crate::utils::escape_like(&ipv6_filter);
             data_sql = data_sql.bind(pattern);
         }
 
@@ -400,7 +418,7 @@ pub async fn create_network(
     let ipv6_dns_array: Option<Vec<String>> = req.ipv6_dns.clone();
 
     sqlx::query(
-        "INSERT INTO network_cidrs (id, name, network_region_id, ipv4_cidr, ipv6_cidr, ipv4_gateway, ipv6_gateway, ipv4_dns, ipv6_dns, description, created_at, updated_at) 
+        "INSERT INTO network_cidrs (id, name, network_region_id, ipv4_cidr, ipv6_cidr, ipv4_gateway, ipv6_gateway, ipv4_dns, ipv6_dns, description, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS CIDR), CAST($5 AS CIDR), CAST($6 AS INET), CAST($7 AS INET), $8::INET[], $9::INET[], $10, $11, $12)"
     )
     .bind(id)
@@ -415,7 +433,9 @@ pub async fn create_network(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn()).await?;
+    .execute(&state.pool()?.get_conn())
+    .await
+    .map_err(|e| map_network_unique_violation(e, &full_network_name))?;
 
     let details = serde_json::json!({
         "name": full_network_name.clone(),
@@ -684,7 +704,8 @@ pub async fn update_network(
     .bind(now)
     .bind(id)
     .execute(&state.pool()?.get_conn())
-    .await?;
+    .await
+    .map_err(|e| map_network_unique_violation(e, &full_network_name))?;
 
     let row = sqlx::query(
         r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway), 
@@ -819,7 +840,7 @@ pub async fn get_network_regions(
             .fetch_one(&state.pool()?.get_conn())
             .await?
     } else {
-        let pattern = format!("%{search}%");
+        let pattern = crate::utils::escape_like(&search);
         sqlx::query_scalar(
             "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1",
         )
@@ -841,7 +862,7 @@ pub async fn get_network_regions(
             .fetch_all(&state.pool()?.get_conn())
             .await?
     } else {
-        let pattern = format!("%{search}%");
+        let pattern = crate::utils::escape_like(&search);
         let sql = format!(
             "{base_select} WHERE name ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         );

@@ -386,14 +386,14 @@ pub async fn create_device(
         template_id: req.template_id,
         seller: req.seller.clone(),
         location: req.location.clone(),
-        snmp_version,
+        snmp_version: Some(snmp_version),
         snmp_community: encrypted_community,
         snmp_username: req.snmp_username.clone(),
         snmp_auth_protocol: req.snmp_auth_protocol.clone(),
         snmp_auth_password: encrypted_auth_password,
         snmp_priv_protocol: req.snmp_priv_protocol.clone(),
         snmp_priv_password: encrypted_priv_password,
-        snmp_port,
+        snmp_port: Some(snmp_port),
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -425,40 +425,46 @@ pub async fn get_device(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let device = sqlx::query_as::<_, DeviceWithDetails>(
-        "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
-                d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.seller, d.location,
-                d.snmp_version, d.snmp_community, d.snmp_username,
-                d.snmp_auth_protocol, d.snmp_auth_password,
-                d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
-                d.description,
-                d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
-                d.start_u, d.end_u,
-                d.template_name,
-                d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
-         FROM devices_with_details d
-         WHERE d.id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
+    let conn = state.pool()?.get_conn();
+    // 设备行与网卡配置并行拉取；三个 SNMP 凭据解密（AES-GCM）亦并行，
+    // 替代原先 1(设备)+N(网卡)+M(网口)+K(IP)+3(解密) 的串行等待
+    let (device_opt, cards) = tokio::join!(
+        sqlx::query_as::<_, DeviceWithDetails>(
+            "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
+                    d.workstation_id, d.position_id, d.room_id,
+                    d.template_id, d.seller, d.location,
+                    d.snmp_version, d.snmp_community, d.snmp_username,
+                    d.snmp_auth_protocol, d.snmp_auth_password,
+                    d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                    d.description,
+                    d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                    d.start_u, d.end_u,
+                    d.template_name,
+                    d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
+             FROM devices_with_details d
+             WHERE d.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&conn),
+        super::nic::fetch_device_network_config(&conn, id)
+    );
 
-    // Fetch associated network cards (with nested ports and IPs)
-    let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
+    let device = device_opt?.ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
+    let cards = cards?;
+
+    let (decrypted_community, decrypted_auth, decrypted_priv) = tokio::join!(
+        crate::crypto::decrypt_credential_async(device.snmp_community.clone()),
+        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()),
+        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()),
+    );
+    let decrypted_community = decrypted_community?;
+    let decrypted_auth = decrypted_auth?;
+    let decrypted_priv = decrypted_priv?;
 
     let mut result = serde_json::to_value(&device)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["cards"] = serde_json::to_value(cards)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
-
-    let decrypted_community =
-        crate::crypto::decrypt_credential_async(device.snmp_community.clone()).await?;
-    let decrypted_auth =
-        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()).await?;
-    let decrypted_priv =
-        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()).await?;
     result["snmp_community"] = serde_json::to_value(decrypted_community)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
     result["snmp_auth_password"] = serde_json::to_value(decrypted_auth)
@@ -747,6 +753,33 @@ pub async fn delete_device(
     if existing.is_none() {
         return Err(AppError::NotFound(msg("server.device.not_found")));
     }
+
+    // 预清理引用本设备端口/接口的线路：devices 级联删除 device_ports/
+    // device_interfaces 时会触发 cable_links 的防删触发器，直接 DELETE
+    // 会报 500 且设备永远无法删除（db-schema-review R1，已实测确认）。
+    // 与 delete_device_interface / apply_network_config 的清理口径一致。
+    sqlx::query(
+        r"DELETE FROM cable_links
+         WHERE (a_endpoint_type = 'device_port' AND a_endpoint_id IN (SELECT id FROM device_ports WHERE device_id = $1))
+            OR (b_endpoint_type = 'device_port' AND b_endpoint_id IN (SELECT id FROM device_ports WHERE device_id = $1))
+            OR (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))
+            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
+    // 拓扑逻辑连线成员引用本设备端口：随设备删除一并清理
+    sqlx::query(
+        "DELETE FROM topology_connection_members WHERE device_id = $1 OR device_port_id IN (SELECT id FROM device_ports WHERE device_id = $1)",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("DELETE FROM topology_nodes WHERE device_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
     sqlx::query("DELETE FROM devices WHERE id = $1")
         .bind(id)

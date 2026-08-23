@@ -284,6 +284,49 @@ pub async fn create_room(
     Ok(crate::error::ok_json(room, "server.room.created"))
 }
 
+/// 房间编辑回显专用轻量端点：仅基础字段 + 网络绑定（GET /{id}/brief）。
+///
+/// 完整详情接口为组装视图需 7 次串行查询，而编辑弹窗只需要
+/// name/room_type/org_id/description/networks，此前一并拉取了
+/// 工位/机柜/信息点等无关数据。
+pub async fn get_room_brief(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
+    let conn = state.pool()?.get_conn();
+    let (room, room_networks) = tokio::join!(
+        sqlx::query_as::<_, Room>(
+            "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(&conn),
+        sqlx::query_as::<_, NetworkInfo>(
+            r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
+               FROM room_networks rn
+               JOIN network_cidrs n ON rn.network_id = n.id
+               JOIN network_regions nr ON n.network_region_id = nr.id
+               WHERE rn.room_id = $1",
+        )
+        .bind(id)
+        .fetch_all(&conn)
+    );
+
+    let room = room?.ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
+    let room_networks = room_networks?;
+
+    Ok(crate::error::ok_json(
+        serde_json::json!({
+            "id": room.id,
+            "name": room.name,
+            "room_type": room.room_type,
+            "org_id": room.org_id,
+            "description": room.description,
+            "networks": room_networks,
+        }),
+        "server.room.fetched",
+    ))
+}
+
 pub async fn get_room(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -294,73 +337,100 @@ pub async fn get_room(
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
 
-    let room_networks = sqlx::query_as::<_, NetworkInfo>(
-        r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
-           FROM room_networks rn
-           JOIN network_cidrs n ON rn.network_id = n.id
-           JOIN network_regions nr ON n.network_region_id = nr.id
-           WHERE rn.room_id = $1",
-    )
-    .bind(id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    // 以下查询相互独立，并行执行替代原先的串行等待
+    let conn = state.pool()?.get_conn();
+    let is_office = room.room_type == "OFFICE";
+    let is_dc = room.room_type == "DATA_CENTER" || room.room_type == "TELECOM_CLOSET";
 
-    let workstation_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
+    let (room_networks, workstation_count, org_name_opt, ws_rows, cab_rows, no_rows) =
+        tokio::join!(
+            sqlx::query_as::<_, NetworkInfo>(
+                r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
+                   FROM room_networks rn
+                   JOIN network_cidrs n ON rn.network_id = n.id
+                   JOIN network_regions nr ON n.network_region_id = nr.id
+                   WHERE rn.room_id = $1",
+            )
             .bind(room.id)
-            .fetch_one(&state.pool()?.get_conn())
-            .await?;
+            .fetch_all(&conn),
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
+                .bind(room.id)
+                .fetch_one(&conn),
+            async {
+                match room.org_id {
+                    Some(oid) => sqlx::query_scalar::<_, String>(
+                        "SELECT name FROM organizations WHERE id = $1",
+                    )
+                    .bind(oid)
+                    .fetch_optional(&conn)
+                    .await
+                    .map_err(AppError::from),
+                    None => Ok(None),
+                }
+            },
+            async {
+                if is_office {
+                    sqlx::query(
+                        "SELECT id, name, manager FROM workstations WHERE room_id = $1 ORDER BY name",
+                    )
+                    .bind(room.id)
+                    .fetch_all(&conn)
+                    .await
+                    .map_err(AppError::from)
+                } else {
+                    Ok(Vec::new())
+                }
+            },
+            async {
+                if is_dc {
+                    sqlx::query(
+                        "SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name",
+                    )
+                    .bind(room.id)
+                    .fetch_all(&conn)
+                    .await
+                    .map_err(AppError::from)
+                } else {
+                    Ok(Vec::new())
+                }
+            },
+            sqlx::query("SELECT id, name FROM net_outlets WHERE room_id = $1 ORDER BY name")
+                .bind(room.id)
+                .fetch_all(&conn)
+        );
 
-    let org_name: Option<String> = if let Some(oid) = room.org_id {
-        sqlx::query_scalar("SELECT name FROM organizations WHERE id = $1")
-            .bind(oid)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?
+    let workstation_count = workstation_count?;
+    let org_name = org_name_opt?;
+
+    let workstations = if is_office {
+        Some(
+            ws_rows?
+                .iter()
+                .map(|r| WorkstationBrief {
+                    id: r.get("id"),
+                    name: r.get("name"),
+                    manager: r.get("manager"),
+                })
+                .collect::<Vec<_>>(),
+        )
     } else {
         None
     };
-
-    let (workstations, cabinets) = if room.room_type == "OFFICE" {
-        let ws_rows = sqlx::query(
-            "SELECT id, name, manager FROM workstations WHERE room_id = $1 ORDER BY name",
+    let cabinets = if is_dc {
+        Some(
+            cab_rows?
+                .iter()
+                .map(|r| CabinetBrief {
+                    id: r.get("id"),
+                    name: r.get("name"),
+                    capacity: r.get("capacity"),
+                })
+                .collect::<Vec<_>>(),
         )
-        .bind(room.id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
-        let ws_list: Vec<WorkstationBrief> = ws_rows
-            .iter()
-            .map(|r| WorkstationBrief {
-                id: r.get("id"),
-                name: r.get("name"),
-                manager: r.get("manager"),
-            })
-            .collect();
-        (Some(ws_list), None)
-    } else if room.room_type == "DATA_CENTER" || room.room_type == "TELECOM_CLOSET" {
-        let cab_rows =
-            sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
-                .bind(room.id)
-                .fetch_all(&state.pool()?.get_conn())
-                .await?;
-        let cab_list: Vec<CabinetBrief> = cab_rows
-            .iter()
-            .map(|r| CabinetBrief {
-                id: r.get("id"),
-                name: r.get("name"),
-                capacity: r.get("capacity"),
-            })
-            .collect();
-        (None, Some(cab_list))
     } else {
-        (None, None)
+        None
     };
-
-    // 信息点：所有房型都支持（特指网络插座，仅隶属房间）
-    let no_rows = sqlx::query("SELECT id, name FROM net_outlets WHERE room_id = $1 ORDER BY name")
-        .bind(room.id)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
-    let net_outlets: Vec<NetOutletBrief> = no_rows
+    let net_outlets: Vec<NetOutletBrief> = no_rows?
         .iter()
         .map(|r| NetOutletBrief {
             id: r.get("id"),
@@ -375,7 +445,7 @@ pub async fn get_room(
         org_id: room.org_id,
         org_name,
         description: room.description,
-        networks: room_networks,
+        networks: room_networks?,
         workstation_count,
         workstations,
         cabinets,

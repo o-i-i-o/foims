@@ -486,7 +486,8 @@ pub async fn get_cabinet_networks(
            JOIN network_cidrs n ON rn.network_id = n.id 
            JOIN network_regions nr ON n.network_region_id = nr.id 
            WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
-           AND r.room_type IN ('DATA_CENTER', 'TELECOM_CLOSET')",
+           -- 房型口径与 sync_room_children 对齐：OTHER 房型的机柜同样参与机柜网络（R7）
+           AND r.room_type IN ('DATA_CENTER', 'TELECOM_CLOSET', 'OTHER')",
     )
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())

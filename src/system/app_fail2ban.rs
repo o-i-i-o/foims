@@ -58,8 +58,12 @@ impl FailRecord {
 }
 
 /// 应用层 Fail2ban 全局状态
+///
+/// 记录按「IP 维度」与「用户名维度」分别计数（键带 `ip:`/`user:` 前缀）：
+/// 仅按 IP 计数时，攻击者伪造 IP 头（或分布式来源）即可绕过封禁，
+/// 而针对同一用户名的爆破仍应被拦截（见 security-review A-1）。
 pub struct AppFail2ban {
-    /// IP -> 失败记录
+    /// 记录键（"ip:<addr>" / "user:<name>"）→ 失败记录
     records: Mutex<HashMap<String, FailRecord>>,
     /// 配置
     config: Mutex<Fail2banConfig>,
@@ -118,16 +122,15 @@ fn cleanup_expired_records() {
     }
 }
 
-/// 检查 IP 是否被封禁
-pub fn is_ip_banned(ip: &str) -> bool {
-    let store = app_fail2ban();
+/// 检查记录键是否被封禁
+fn is_key_banned(store: &AppFail2ban, key: &str) -> bool {
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
     if !config.enabled {
         return false;
     }
 
     if let Ok(records) = store.records.lock()
-        && let Some(record) = records.get(ip)
+        && let Some(record) = records.get(key)
         && let Some(until) = record.banned_until
     {
         return Instant::now() < until;
@@ -135,11 +138,20 @@ pub fn is_ip_banned(ip: &str) -> bool {
     false
 }
 
-/// 获取封禁剩余时间（秒），未封禁返回 0
-pub fn get_ban_remaining(ip: &str) -> u64 {
-    let store = app_fail2ban();
+/// 检查 IP 是否被封禁
+pub fn is_ip_banned(ip: &str) -> bool {
+    is_key_banned(app_fail2ban(), &ip_key(ip))
+}
+
+/// 检查用户名是否被封禁（按用户名维度的爆破防护）
+pub fn is_user_banned(username: &str) -> bool {
+    is_key_banned(app_fail2ban(), &user_key(username))
+}
+
+/// 获取记录键的封禁剩余时间（秒），未封禁返回 0
+fn key_ban_remaining(store: &AppFail2ban, key: &str) -> u64 {
     if let Ok(records) = store.records.lock()
-        && let Some(record) = records.get(ip)
+        && let Some(record) = records.get(key)
         && let Some(until) = record.banned_until
     {
         let now = Instant::now();
@@ -148,6 +160,24 @@ pub fn get_ban_remaining(ip: &str) -> u64 {
         }
     }
     0
+}
+
+/// 获取 IP 封禁剩余时间（秒），未封禁返回 0
+pub fn get_ban_remaining(ip: &str) -> u64 {
+    key_ban_remaining(app_fail2ban(), &ip_key(ip))
+}
+
+/// 获取用户名封禁剩余时间（秒），未封禁返回 0
+pub fn get_user_ban_remaining(username: &str) -> u64 {
+    key_ban_remaining(app_fail2ban(), &user_key(username))
+}
+
+fn ip_key(ip: &str) -> String {
+    format!("ip:{ip}")
+}
+
+fn user_key(username: &str) -> String {
+    format!("user:{username}")
 }
 
 /// 写入认证日志（供 OS fail2ban 监控）
@@ -191,7 +221,7 @@ fn write_auth_log(success: bool, ip: &str, username: &str, reason: Option<&str>)
     });
 }
 
-/// 记录一次登录失败，返回是否因此次失败而被封禁
+/// 记录一次登录失败（IP 与用户名两个维度分别计数），返回是否因此次失败而被封禁
 pub fn record_login_failure(ip: &str, username: &str, reason: &str) -> bool {
     // 写入日志文件（供 OS fail2ban 监控）
     write_auth_log(false, ip, username, Some(reason));
@@ -205,40 +235,47 @@ pub fn record_login_failure(ip: &str, username: &str, reason: &str) -> bool {
     let now = Instant::now();
     let findtime_dur = Duration::from_secs(config.findtime);
 
+    let mut banned = false;
     if let Ok(mut records) = store.records.lock() {
-        let record = records
-            .entry(ip.to_string())
-            .or_insert_with(FailRecord::new);
-        // 清除过期的失败记录
-        record
-            .failures
-            .retain(|&t| now.duration_since(t) < findtime_dur);
-        // 记录本次失败
-        record.failures.push(now);
+        for key in [ip_key(ip), user_key(username)] {
+            let record = records.entry(key.clone()).or_insert_with(FailRecord::new);
+            // 清除过期的失败记录
+            record
+                .failures
+                .retain(|&t| now.duration_since(t) < findtime_dur);
+            // 记录本次失败
+            record.failures.push(now);
 
-        // 检查是否达到封禁阈值
-        if record.failures.len() as u64 >= config.max_retry {
-            record.banned_until = Some(now + Duration::from_secs(config.bantime));
-            log_warn!(
-                "log.fail2ban.ip_banned",
-                ip = ip,
-                count = record.failures.len(),
-                seconds = config.bantime
-            );
-            return true;
+            // 检查是否达到封禁阈值
+            if record.failures.len() as u64 >= config.max_retry {
+                record.banned_until = Some(now + Duration::from_secs(config.bantime));
+                log_warn!(
+                    "log.fail2ban.ip_banned",
+                    key = record_key_label(&key),
+                    count = record.failures.len(),
+                    seconds = config.bantime
+                );
+                banned = true;
+            }
         }
     }
-    false
+    banned
 }
 
-/// 记录登录成功，清除该 IP 的失败记录
+/// 记录键的用户可读标签（日志透出维度类型）
+fn record_key_label(key: &str) -> String {
+    key.to_string()
+}
+
+/// 记录登录成功，清除该 IP 与该用户名的失败记录
 pub fn record_login_success(ip: &str, username: &str) {
     // 写入日志文件（供 OS fail2ban 监控）
     write_auth_log(true, ip, username, None);
 
     let store = app_fail2ban();
     if let Ok(mut records) = store.records.lock() {
-        records.remove(ip);
+        records.remove(&ip_key(ip));
+        records.remove(&user_key(username));
     }
 }
 
@@ -253,6 +290,9 @@ pub struct AppFail2banStatus {
     pub log_path: String,
     pub banned_ips: Vec<BannedIpInfo>,
     pub tracked_ips: Vec<TrackedIpInfo>,
+    /// 用户名维度封禁与跟踪（爆破同一账户的攻击不受换 IP 影响）
+    pub banned_usernames: Vec<BannedNameInfo>,
+    pub tracked_usernames: Vec<TrackedNameInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -264,6 +304,18 @@ pub struct BannedIpInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackedIpInfo {
     pub ip: String,
+    pub failure_count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BannedNameInfo {
+    pub username: String,
+    pub remaining_seconds: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrackedNameInfo {
+    pub username: String,
     pub failure_count: u64,
 }
 
@@ -311,21 +363,40 @@ pub async fn get_app_fail2ban_status(
 
     let mut banned_ips: Vec<BannedIpInfo> = vec![];
     let mut tracked_ips: Vec<TrackedIpInfo> = vec![];
+    let mut banned_usernames: Vec<BannedNameInfo> = vec![];
+    let mut tracked_usernames: Vec<TrackedNameInfo> = vec![];
     let now = Instant::now();
 
     if let Ok(records) = store.records.lock() {
-        for (ip, record) in records.iter() {
-            if let Some(until) = record.banned_until
-                && now < until
-            {
+        for (key, record) in records.iter() {
+            let banned_until = record.banned_until.filter(|until| now < *until);
+            let Some(key_str) = key.strip_prefix("ip:") else {
+                // 用户名维度记录
+                let Some(name) = key.strip_prefix("user:") else {
+                    continue;
+                };
+                if let Some(until) = banned_until {
+                    banned_usernames.push(BannedNameInfo {
+                        username: name.to_string(),
+                        remaining_seconds: until.duration_since(now).as_secs(),
+                    });
+                } else if !record.failures.is_empty() {
+                    tracked_usernames.push(TrackedNameInfo {
+                        username: name.to_string(),
+                        failure_count: record.failures.len() as u64,
+                    });
+                }
+                continue;
+            };
+            if let Some(until) = banned_until {
                 banned_ips.push(BannedIpInfo {
-                    ip: ip.clone(),
+                    ip: key_str.to_string(),
                     remaining_seconds: until.duration_since(now).as_secs(),
                 });
             }
-            if !record.failures.is_empty() && record.banned_until.is_none() {
+            if !record.failures.is_empty() && banned_until.is_none() {
                 tracked_ips.push(TrackedIpInfo {
-                    ip: ip.clone(),
+                    ip: key_str.to_string(),
                     failure_count: record.failures.len() as u64,
                 });
             }
@@ -334,6 +405,8 @@ pub async fn get_app_fail2ban_status(
 
     banned_ips.sort_by_key(|a| a.remaining_seconds);
     tracked_ips.sort_by_key(|b| std::cmp::Reverse(b.failure_count));
+    banned_usernames.sort_by_key(|a| a.remaining_seconds);
+    tracked_usernames.sort_by_key(|b| std::cmp::Reverse(b.failure_count));
 
     Ok(crate::error::ok_json(
         AppFail2banStatus {
@@ -344,6 +417,8 @@ pub async fn get_app_fail2ban_status(
             log_path: AUTH_LOG_PATH.to_string(),
             banned_ips,
             tracked_ips,
+            banned_usernames,
+            tracked_usernames,
         },
         "server.common.success",
     ))
@@ -391,8 +466,9 @@ pub async fn app_unban_ip(
     }
 
     let store = app_fail2ban();
+    let key = ip_key(&ip);
     if let Ok(mut records) = store.records.lock()
-        && let Some(record) = records.get_mut(&ip)
+        && let Some(record) = records.get_mut(&key)
     {
         record.banned_until = None;
         record.failures.clear();
@@ -421,7 +497,7 @@ pub async fn app_ban_ip(
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
 
     if let Ok(mut records) = store.records.lock() {
-        let record = records.entry(ip.clone()).or_insert_with(FailRecord::new);
+        let record = records.entry(ip_key(&ip)).or_insert_with(FailRecord::new);
         record.banned_until = Some(Instant::now() + Duration::from_secs(config.bantime));
     }
 
@@ -432,4 +508,67 @@ pub async fn app_ban_ip(
         serde_json::json!({"message": "server.fail2ban.ip_banned", "ip": ip}),
         response,
     ))
+}
+
+// ==================== 单元测试 ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 验证 IP 与用户名双维度计数与封禁互不干扰
+    #[test]
+    fn test_fail2ban_records_ip_and_username_dimensions() {
+        let store = AppFail2ban::new();
+        let config = Fail2banConfig {
+            findtime: 600,
+            max_retry: 3,
+            bantime: 60,
+            enabled: true,
+        };
+        if let Ok(mut c) = store.config.lock() {
+            *c = config;
+        }
+
+        // 同一用户名在两个不同 IP 上失败：user 维度累计 2 次，两个 IP 各 1 次
+        {
+            let now = Instant::now();
+            let mut records = store.records.lock().unwrap_or_else(|e| e.into_inner());
+            for ip in ["1.1.1.1", "2.2.2.2"] {
+                let rec = records.entry(ip_key(ip)).or_insert_with(FailRecord::new);
+                rec.failures.push(now);
+            }
+            let user = records
+                .entry(user_key("admin"))
+                .or_insert_with(FailRecord::new);
+            user.failures.push(now);
+            user.failures.push(now);
+        }
+
+        assert!(!is_key_banned(&store, &ip_key("1.1.1.1")));
+        assert!(!is_key_banned(&store, &user_key("admin")));
+        assert_eq!(
+            store
+                .records
+                .lock()
+                .map(|r| r.get(&user_key("admin")).map(|x| x.failures.len()))
+                .unwrap_or(None),
+            Some(2)
+        );
+
+        // 第 3 次失败（user 维度）触发封禁：两个维度同时被封
+        {
+            let now = Instant::now();
+            let mut records = store.records.lock().unwrap_or_else(|e| e.into_inner());
+            let user = records
+                .entry(user_key("admin"))
+                .or_insert_with(FailRecord::new);
+            user.failures.push(now);
+            user.banned_until = Some(now + Duration::from_secs(60));
+        }
+        assert!(is_key_banned(&store, &user_key("admin")));
+        assert!(key_ban_remaining(&store, &user_key("admin")) > 0);
+        // IP 维度未达阈值，不受影响
+        assert!(!is_key_banned(&store, &ip_key("1.1.1.1")));
+    }
 }

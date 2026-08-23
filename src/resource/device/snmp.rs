@@ -24,14 +24,15 @@ use ipma_common::{AppMessage, log_info, log_warn};
 pub struct DeviceForSnmp {
     pub id: Uuid,
     pub name: String,
-    pub snmp_version: String,
+    // snmp_version/snmp_port 数据库列可空（仅带 DEFAULT），按可空声明（M-1）
+    pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
     pub snmp_username: Option<String>,
     pub snmp_auth_protocol: Option<String>,
     pub snmp_auth_password: Option<String>,
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
-    pub snmp_port: i32,
+    pub snmp_port: Option<i32>,
 }
 
 impl DeviceForSnmp {
@@ -42,8 +43,11 @@ impl DeviceForSnmp {
         let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await?;
         Ok(SnmpParamsLegacy {
             ip: ip_address.to_string(),
-            port: self.snmp_port,
-            version: self.snmp_version.clone(),
+            port: self.snmp_port.unwrap_or(161),
+            version: self
+                .snmp_version
+                .clone()
+                .unwrap_or_else(|| "v2c".to_string()),
             community: creds.community,
             username: self.snmp_username.clone(),
             auth_proto: self.snmp_auth_protocol.clone(),
@@ -172,7 +176,15 @@ pub struct SnmpParamsLegacy {
 
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     match params.version.as_str() {
-        "v1" | "v2c" => {
+        "v1" => {
+            let community = params
+                .community
+                .as_deref()
+                .ok_or_else(|| "SNMP v1/v2c 需要配置 community 字符串".to_string())?;
+            // v1 真实使用 v1 协议版本构造（此前误复用 v2c，v1 选项形同虚设，S-4）
+            Ok(Auth::v1(community))
+        }
+        "v2c" => {
             let community = params
                 .community
                 .as_deref()
@@ -260,8 +272,19 @@ pub fn format_snmp_error(e: Box<Error>) -> String {
     }
 }
 
+/// 构造 SNMP 目标地址串：IPv6 必须包裹方括号（如 `[2001:db8::1]:161`），
+/// 直接 `ip:port` 拼接对 IPv6 无效（security-review S-2）
+#[must_use]
+pub fn snmp_target(ip: &str, port: i32) -> String {
+    if ip.contains(':') && !ip.starts_with('[') {
+        format!("[{ip}]:{port}")
+    } else {
+        format!("{ip}:{port}")
+    }
+}
+
 pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<String, SnmpError> {
-    let addr = format!("{}:{}", params.ip, params.port);
+    let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(timeout_secs);
 
     log_info!(
@@ -333,7 +356,7 @@ pub struct DeviceSnmpInfo {
 pub async fn get_device_info_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<DeviceSnmpInfo, SnmpError> {
-    let addr = format!("{}:{}", params.ip, params.port);
+    let addr = snmp_target(&params.ip, params.port);
     let auth = build_auth(params).map_err(SnmpError::Message)?;
     let client = Client::builder(&addr, auth)
         .timeout(Duration::from_secs(5))
@@ -444,7 +467,7 @@ fn extract_model(sys_descr: &str) -> String {
 pub async fn get_device_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<DevicePortCreate>, SnmpError> {
-    let addr = format!("{}:{}", params.ip, params.port);
+    let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
@@ -530,14 +553,18 @@ pub async fn test_snmp_connection(
 
             let creds = DecryptedSnmpCredentials::from_device_snmp_async(&switch).await?;
 
-            let version = req.snmp_version.clone().unwrap_or(switch.snmp_version);
+            let version = req
+                .snmp_version
+                .clone()
+                .or(switch.snmp_version.clone())
+                .unwrap_or_else(|| "v2c".to_string());
             let community = req.snmp_community.clone().or(creds.community);
             let username = req.snmp_username.clone().or(switch.snmp_username);
             let auth_proto = req.snmp_auth_protocol.clone().or(switch.snmp_auth_protocol);
             let auth_pass = req.snmp_auth_password.clone().or(creds.auth_password);
             let priv_proto = req.snmp_priv_protocol.clone().or(switch.snmp_priv_protocol);
             let priv_pass = req.snmp_priv_password.clone().or(creds.priv_password);
-            let port = req.snmp_port.unwrap_or(switch.snmp_port);
+            let port = req.snmp_port.or(switch.snmp_port).unwrap_or(161);
 
             (
                 req.ip_address.clone().or(ip_address),
@@ -588,6 +615,8 @@ pub async fn test_snmp_connection(
     match parsed_ip {
         std::net::IpAddr::V4(v4) => {
             if v4.is_link_local() {
+                // 169.254.0.0/16 已覆盖云元数据端点 169.254.169.254，
+                // 由链路本地检查统一拒绝（原专用分支不可达，已移除，S-3）
                 return Err(AppError::Validation(msg(
                     "server.device.snmp.link_local_forbidden",
                 )));
@@ -595,14 +624,14 @@ pub async fn test_snmp_connection(
             if v4.is_private() {
                 log_warn!("log.device.snmp.private_ip_allowed", ip = ip);
             }
-            let octets = v4.octets();
-            if octets[0] == 169 && octets[1] == 254 && octets[2] == 169 && octets[3] == 254 {
-                return Err(AppError::Validation(msg(
-                    "server.device.snmp.metadata_endpoint_forbidden",
-                )));
-            }
         }
         std::net::IpAddr::V6(v6) => {
+            // IPv6 链路本地（fe80::/10）与 IPv4 同样拒绝
+            if v6.is_unicast_link_local() {
+                return Err(AppError::Validation(msg(
+                    "server.device.snmp.link_local_forbidden",
+                )));
+            }
             // IPv6 没有与 IPv4 相同的私有/链路本地概念，但检查常用受限范围
             if v6.is_unique_local() {
                 log_warn!("log.device.snmp.ula_ip_allowed", ip = ip);
@@ -818,12 +847,22 @@ mod tests {
     }
 
     #[test]
-    fn test_build_auth_v1_uses_v2c_community_version() {
-        // 记录现状：v1 分支复用 Auth::v2c 构造器，协议版本为 V2c（疑似生产缺陷）
+    fn test_build_auth_v1_uses_v1_protocol() {
+        // S-4 修复：v1 分支真实使用 Auth::v1（此前误复用 v2c 构造）
         let mut params = v2c_params(Some("private"));
         params.version = "v1".to_string();
         let auth = build_auth(&params).unwrap_or_else(|e| panic!("v1 构造失败: {e}"));
-        assert_eq!(auth, Auth::v2c("private"), "v1 分支当前退化为 v2c 构造");
+        assert_eq!(auth, Auth::v1("private"), "v1 应使用 v1 协议构造");
+    }
+
+    #[test]
+    fn test_snmp_target_wraps_ipv6_in_brackets() {
+        // IPv6 目标必须包裹方括号，IPv4 原样拼接（S-2）
+        assert_eq!(snmp_target("192.0.2.1", 161), "192.0.2.1:161");
+        assert_eq!(snmp_target("2001:db8::1", 161), "[2001:db8::1]:161");
+        assert_eq!(snmp_target("fe80::1%25eth0", 161), "[fe80::1%25eth0]:161");
+        // 已带括号的输入不重复包裹
+        assert_eq!(snmp_target("[2001:db8::1]", 161), "[2001:db8::1]:161");
     }
 
     #[test]

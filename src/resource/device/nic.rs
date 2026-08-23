@@ -1,5 +1,6 @@
 //! 设备网卡管理：网卡-网口-IP 层级与整体同步。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -223,57 +224,82 @@ pub async fn apply_network_config(
     Ok(())
 }
 
-/// 拉取设备的网卡配置（含嵌套网口、IP）作为 JSON Value
+/// 拉取设备的网卡配置（含嵌套网口、IP）作为 JSON Value。
+///
+/// 三层各一条批量查询（网卡 / 网口 / IP）后内存组装，
+/// 替代原先「每网卡一查、每网口再查 IP」的 N+1 形态。
 pub async fn fetch_device_network_config(
     pool: &PgPool,
     device_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, AppError> {
-    let cards: Vec<NetworkCard> =
-        sqlx::query_as("SELECT * FROM device_nics WHERE device_id = $1 ORDER BY sort_order, name")
-            .bind(device_id)
-            .fetch_all(pool)
-            .await?;
+    let (cards, ports, ip_rows) = tokio::join!(
+        sqlx::query_as::<_, NetworkCard>(
+            "SELECT * FROM device_nics WHERE device_id = $1 ORDER BY sort_order, name"
+        )
+        .bind(device_id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, DeviceInterface>(
+            "SELECT * FROM device_interfaces WHERE device_id = $1 ORDER BY sort_order, name",
+        )
+        .bind(device_id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, IpManager>(
+            r"SELECT
+                m.id, m.device_interface_id, di.device_id, m.network_id,
+                nc.network_region_id AS network_region_id,
+                nc.name AS network_name,
+                nr.name AS network_region,
+                host(m.ip_address) as ip_address,
+                m.ip_version, di.mac_address AS mac_address, m.description,
+                m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
+              FROM ips m
+              JOIN device_interfaces di ON m.device_interface_id = di.id
+              LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+              LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+              WHERE di.device_id = $1
+              ORDER BY m.ip_address",
+        )
+        .bind(device_id)
+        .fetch_all(pool)
+    );
+
+    let cards = cards?;
+    let ports = ports?;
+
+    // 网口 ID → 其 IP 列表（批量结果按接口分组）
+    let mut ips_by_port: HashMap<Uuid, Vec<IpManager>> = HashMap::new();
+    for ip in ip_rows? {
+        ips_by_port
+            .entry(ip.device_interface_id)
+            .or_default()
+            .push(ip);
+    }
+
+    // 网卡 ID → 网口列表
+    let mut ports_by_card: HashMap<Uuid, Vec<DeviceInterface>> = HashMap::new();
+    for port in ports {
+        if let Some(nic_id) = port.nic_id {
+            ports_by_card.entry(nic_id).or_default().push(port);
+        }
+    }
 
     let mut result = Vec::new();
     for card in cards {
-        let ports: Vec<DeviceInterface> = sqlx::query_as(
-            "SELECT * FROM device_interfaces WHERE device_id = $1 AND nic_id = $2 ORDER BY sort_order, name",
-        )
-        .bind(device_id)
-        .bind(card.id)
-        .fetch_all(pool)
-        .await?;
-
-        let mut ports_json = Vec::new();
-        for port in ports {
-            let ips: Vec<IpManager> = sqlx::query_as(
-                r"SELECT
-                    m.id, m.device_interface_id, di.device_id, m.network_id,
-                    nc.network_region_id AS network_region_id,
-                    nc.name AS network_name,
-                    nr.name AS network_region,
-                    host(m.ip_address) as ip_address,
-                    m.ip_version, di.mac_address AS mac_address, m.description,
-                    m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-                  FROM ips m
-                  JOIN device_interfaces di ON m.device_interface_id = di.id
-                  LEFT JOIN network_cidrs nc ON m.network_id = nc.id
-                  LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-                  WHERE m.device_interface_id = $1
-                  ORDER BY m.ip_address",
-            )
-            .bind(port.id)
-            .fetch_all(pool)
-            .await?;
-
-            let mut port_json = serde_json::to_value(&port).map_err(|e| {
-                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
-            })?;
-            port_json["ips"] = serde_json::to_value(&ips).map_err(|e| {
-                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
-            })?;
-            ports_json.push(port_json);
-        }
+        let ports_json: Vec<serde_json::Value> = ports_by_card
+            .remove(&card.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|port| {
+                let ips = ips_by_port.remove(&port.id).unwrap_or_default();
+                let mut port_json = serde_json::to_value(&port).map_err(|e| {
+                    AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+                })?;
+                port_json["ips"] = serde_json::to_value(&ips).map_err(|e| {
+                    AppError::Internal(msg("server.common.serialize_failed").with("error", e))
+                })?;
+                Ok(port_json)
+            })
+            .collect::<Result<Vec<_>, AppError>>()?;
 
         let mut card_json = serde_json::to_value(&card).map_err(|e| {
             AppError::Internal(msg("server.common.serialize_failed").with("error", e))

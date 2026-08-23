@@ -22,6 +22,8 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
     let pool = match ensure_database_and_schema(&ctx.db_config).await {
         Ok(p) => p,
         Err(e) => {
+            // 错误详情（含连接 host/user）只入日志，不回传客户端（I-7）
+            ipma_common::log_warn!("log.init.db.status_check_failed", error = e.log_string());
             return Ok(json_ok(serde_json::json!({
                 "success": true,
                 "data": {
@@ -29,7 +31,7 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
                     "has_tables": false,
                     "required_tables_exist": false,
                     "has_data": false,
-                    "error": e.log_string()
+                    "error": "server.init.db.connect_failed"
                 }
             })));
         }
@@ -119,9 +121,13 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
         })));
     }
 
+    // 密码做 URL 编码后再拼连接串：含 @ : / 等字符时裸拼会导致误报（I-8）
     let url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        ctx.db_config.username, ctx.db_config.password, ctx.db_config.host, ctx.db_config.port
+        crate::utils::url_encode_component(&ctx.db_config.username),
+        crate::utils::url_encode_component(&ctx.db_config.password),
+        ctx.db_config.host,
+        ctx.db_config.port
     );
 
     match PgPool::connect(&url).await {
@@ -131,7 +137,9 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
             "message": "server.init.pgsql_running"
         }))),
         Err(e) => {
+            // 错误串可能含连接串片段（host/用户名），只入日志不回传（I-7）
             let error_str = e.to_string();
+            ipma_common::log_warn!("log.init.pgsql_connect_failed", error = error_str);
             let running = !error_str.contains("connect")
                 && !error_str.contains("timeout")
                 && !error_str.contains("refused");
@@ -139,7 +147,7 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
             Ok(json_ok(serde_json::json!({
                 "installed": true,
                 "running": running,
-                "error": error_str
+                "error": "server.init.pgsql_connect_failed"
             })))
         }
     }

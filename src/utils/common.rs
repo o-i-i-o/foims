@@ -417,12 +417,14 @@ pub async fn log_op_best_effort(
 /// 从 axum 请求 parts 中获取真实客户端 IP
 ///
 /// 优先级：
-/// 1. 若 peer 是可信代理（或 UDS 无 peer 信息，默认视为可信），优先使用 X-Real-IP
-///    （nginx 将其设置为 `$remote_addr`，客户端无法伪造）；其次回退到 X-Forwarded-For
+/// 1. 若 peer 是可信代理（或 UDS 无 peer 信息，默认视为可信），使用 X-Real-IP
+///    （nginx 用 `proxy_set_header X-Real-IP $remote_addr;` 覆盖式设置，
+///    客户端无法伪造）
 /// 2. 否则使用 peer IP（TCP）或 "unknown"（UDS 无转发头）
 ///
-/// 注意：不可优先信任 X-Forwarded-For 的首段——当 nginx 使用
-/// `$proxy_add_x_forwarded_for` 时，该首段是客户端可伪造的，会被用于绕过限流/fail2ban。
+/// 安全要点：不信任 X-Forwarded-For——nginx 用 `$proxy_add_x_forwarded_for`
+/// 时其首段是客户端可伪造的值，若在此采信，攻击者可按请求轮换伪造 IP
+/// 绕过限流与 fail2ban（见 security-review I-1/A-1）。
 #[must_use]
 pub fn get_real_ip_from_parts(parts: &Parts) -> String {
     // 从 extensions 获取 ConnectInfo（TCP 监听时可用）
@@ -434,22 +436,12 @@ pub fn get_real_ip_from_parts(parts: &Parts) -> String {
     // UDS 场景无 peer IP，默认视为可信代理（即位于 nginx 之后）
     let peer_trusted = peer_info.map(|ip| is_trusted_proxy(&ip)).unwrap_or(true);
 
-    if peer_trusted {
-        // 优先 X-Real-IP（不可伪造）；缺失时再回退到 X-Forwarded-For
-        if let Some(x_real_ip) = parts.headers.get("X-Real-IP")
-            && let Ok(real_ip_str) = x_real_ip.to_str()
-            && !real_ip_str.trim().is_empty()
-        {
-            return normalize_ipv4_address(real_ip_str.trim());
-        }
-
-        if let Some(xff) = parts.headers.get("X-Forwarded-For")
-            && let Ok(xff_str) = xff.to_str()
-            && let Some(real_ip) = xff_str.split(',').next().map(|s| s.trim().to_string())
-            && !real_ip.is_empty()
-        {
-            return normalize_ipv4_address(&real_ip);
-        }
+    if peer_trusted
+        && let Some(x_real_ip) = parts.headers.get("X-Real-IP")
+        && let Ok(real_ip_str) = x_real_ip.to_str()
+        && !real_ip_str.trim().is_empty()
+    {
+        return normalize_ipv4_address(real_ip_str.trim());
     }
 
     let ip = peer_info
@@ -475,15 +467,25 @@ pub fn detect_user_language_from_parts(parts: &Parts) -> String {
     "zh".to_string()
 }
 
+/// login_logs.user_agent / token_usage.user_agent 列宽（VARCHAR(255)）
+const USER_AGENT_MAX_CHARS: usize = 255;
+
 /// 从 axum 请求 parts 中获取 User-Agent
+///
+/// 按字符数截断到 255 以内（对齐 login_logs/token_usage 的 VARCHAR(255)，
+/// 防止超长 UA 直写数据库报错丢日志；按 chars 截断避免切断多字节字符）
 #[must_use]
 pub fn get_user_agent_from_parts(parts: &Parts) -> String {
-    parts
+    let ua = parts
         .headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
-        .unwrap_or("unknown")
-        .to_string()
+        .unwrap_or("unknown");
+    if ua.chars().count() > USER_AGENT_MAX_CHARS {
+        ua.chars().take(USER_AGENT_MAX_CHARS).collect()
+    } else {
+        ua.to_string()
+    }
 }
 
 /// 判断请求是否为 HTTPS（基于 X-Forwarded-Proto 头，适用于反代后的 UDS 部署）
@@ -933,10 +935,14 @@ mod tests {
     }
 
     #[test]
-    fn test_get_real_ip_falls_back_to_xff() {
-        // X-Real-IP 缺失时取 X-Forwarded-For 首段
+    fn test_get_real_ip_ignores_x_forwarded_for() {
+        // X-Forwarded-For 不再作为回退来源（首段可伪造，见 I-1/A-1）
         let parts = parts_with_headers(&[("X-Forwarded-For", "5.6.7.8, 10.0.0.1")]);
-        assert_eq!(get_real_ip_from_parts(&parts), "5.6.7.8");
+        assert_eq!(get_real_ip_from_parts(&parts), "unknown");
+
+        // 存在 X-Real-IP 时优先采用，忽略 X-Forwarded-For
+        let both = parts_with_headers(&[("X-Real-IP", "1.2.3.4"), ("X-Forwarded-For", "5.6.7.8")]);
+        assert_eq!(get_real_ip_from_parts(&both), "1.2.3.4");
     }
 
     #[test]
@@ -972,11 +978,12 @@ mod tests {
         );
         assert_eq!(get_real_ip_from_parts(&private), "1.2.3.4");
 
+        // 可信 peer 但仅有可伪造的 X-Forwarded-For 时不再采信，回退 peer IP
         let loopback = parts_with_peer(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             &[("X-Forwarded-For", "5.6.7.8")],
         );
-        assert_eq!(get_real_ip_from_parts(&loopback), "5.6.7.8");
+        assert_eq!(get_real_ip_from_parts(&loopback), "127.0.0.1");
     }
 
     #[test]
@@ -1012,6 +1019,19 @@ mod tests {
             get_user_agent_from_parts(&parts_with_headers(&[])),
             "unknown"
         );
+    }
+
+    #[test]
+    fn test_get_user_agent_truncated_to_column_limit() {
+        // 超长 UA 按字符截断到 255（对齐 VARCHAR(255) 列宽）
+        let long_ua = "U".repeat(300);
+        let parts = parts_with_headers(&[("User-Agent", long_ua.as_str())]);
+        let ua = get_user_agent_from_parts(&parts);
+        assert_eq!(ua.chars().count(), 255);
+
+        // 未超长时原样保留
+        let short = parts_with_headers(&[("User-Agent", "curl/8.0")]);
+        assert_eq!(get_user_agent_from_parts(&short), "curl/8.0");
     }
 
     #[test]

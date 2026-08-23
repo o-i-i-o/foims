@@ -65,6 +65,10 @@ pub struct CableLinkCreate {
 pub struct CableLinkUpdate {
     pub link_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_cable_label_opt",
+        message = "server.cable_link.validation.cable_label_length"
+    ))]
     pub cable_label: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub length_m: Option<Option<f64>>,
@@ -153,17 +157,21 @@ mod tests {
     }
 
     #[test]
-    fn test_cable_link_update_label_too_long_not_enforced() -> Result<(), serde_json::Error> {
-        // 特征测试（疑似缺陷）：cable_label 为 Option<Option<String>> 双层 Option，
-        // validator 的 length 校验对双层 Option 字段不生效，超长标签当前不会被拒绝。
-        // 若未来修复 validator 行为，此断言应改为 is_err()。
+    fn test_cable_link_update_label_too_long_rejected() -> Result<(), serde_json::Error> {
+        // 修复后：双层 Option 的长度经 custom 函数校验，超长标签被拒绝
         let req: CableLinkUpdate = serde_json::from_value(serde_json::json!({
             "cable_label": "L".repeat(51)
         }))?;
-        assert!(
-            req.validate().is_ok(),
-            "当前 validator 对双层 Option 的 length 校验不生效"
-        );
+        let Err(errors) = req.validate() else {
+            panic!("超长标签应被拒绝");
+        };
+        assert!(errors.errors().contains_key("cable_label"));
+
+        // 50 字符边界值合法；null（清除）与缺失均合法
+        let ok: CableLinkUpdate = serde_json::from_value(serde_json::json!({
+            "cable_label": "L".repeat(50)
+        }))?;
+        assert!(ok.validate().is_ok());
         Ok(())
     }
 

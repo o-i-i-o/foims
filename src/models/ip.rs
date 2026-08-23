@@ -151,7 +151,8 @@ pub struct PullIpManagersRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct IpManagerUpdate {
-    #[serde(default)]
+    // 挂 deserialize_some 后 JSON null → Some(None)：可通过 null 解绑接口
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub device_interface_id: Option<Option<Uuid>>,
     pub ip_address: Option<String>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -332,14 +333,14 @@ mod tests {
     #[test]
     fn test_ip_manager_update_semantics() -> Result<(), serde_json::Error> {
         use serde::de::Error as _;
-        // device_interface_id 带 serde(default) 但未挂 deserialize_some：
+        // device_interface_id 带 serde(default) 且已挂 deserialize_some（null 清除语义可达）：
         // 缺失与 null 均为 None；值则包一层 Some
         let missing: IpManagerUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert_eq!(missing.device_interface_id, None);
 
         let null_id: IpManagerUpdate =
             serde_json::from_value(serde_json::json!({ "device_interface_id": null }))?;
-        assert_eq!(null_id.device_interface_id, None);
+        assert_eq!(null_id.device_interface_id, Some(None));
 
         let set_id: IpManagerUpdate = serde_json::from_value(serde_json::json!({
             "device_interface_id": "550e8400-e29b-41d4-a716-446655440000"

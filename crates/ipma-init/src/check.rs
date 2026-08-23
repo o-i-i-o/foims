@@ -83,6 +83,17 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "two_factor_verified",
             "two_factor_email_code",
             "two_factor_email_code_expiry",
+            "tokens_invalidated_at",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "encryption_keys",
+        vec![
+            "id",
+            "key_name",
+            "encryption_key",
             "created_at",
             "updated_at",
         ],
@@ -483,10 +494,26 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
+        "element_layouts",
+        vec![
+            "id",
+            "room_id",
+            "element_type",
+            "x",
+            "y",
+            "width",
+            "height",
+            "rotation",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
         "workstation_layouts",
         vec![
             "id",
             "workstation_id",
+            "room_id",
             "x",
             "y",
             "width",
@@ -519,6 +546,40 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     for table in get_required_tables() {
         let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
             "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
+        )))
+        .fetch_one(pool)
+        .await
+        else {
+            return false;
+        };
+
+        if !exists {
+            return false;
+        }
+    }
+
+    check_required_views_exist(pool).await
+}
+
+/// 必需视图清单（与 `schema/tables/views.rs` 一致）。
+/// 视图缺失时列表接口直接 42P01 报错，必须纳入自检（K-5）。
+#[must_use]
+pub fn get_required_views() -> Vec<&'static str> {
+    vec![
+        "ip_with_details",
+        "mac_comparison",
+        "devices_with_details",
+        "net_outlets_with_details",
+        "patch_panels_with_details",
+        "cable_links_with_details",
+    ]
+}
+
+/// 检查全部必需视图是否已创建。
+pub async fn check_required_views_exist(pool: &sqlx::PgPool) -> bool {
+    for view in get_required_views() {
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema = 'public' AND table_name = '{view}')"
         )))
         .fetch_one(pool)
         .await

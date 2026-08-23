@@ -151,6 +151,18 @@ pub async fn get_all_device_ports(
     ))
 }
 
+/// 校验端口类型枚举（与 device_ports.port_type CHECK 一致）。
+/// 此前裸传非法值直写 DB 报 500 而非 422（db-schema-review 第六节）。
+pub fn validate_port_type(port_type: &str) -> Result<(), AppError> {
+    if !matches!(
+        port_type,
+        "access" | "trunk" | "uplink" | "stack" | "console"
+    ) {
+        return Err(AppError::Validation(msg("server.device.port.type_invalid")));
+    }
+    Ok(())
+}
+
 /// 为设备创建端口（同设备端口号唯一，存在性检查与写入在同一事务内）。
 pub async fn create_device_port(
     State(state): State<Arc<AppState>>,
@@ -159,6 +171,9 @@ pub async fn create_device_port(
     AppJson(req): AppJson<DevicePortCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    if let Some(port_type) = req.port_type.as_deref() {
+        validate_port_type(port_type)?;
+    }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -264,6 +279,9 @@ pub async fn update_device_port(
     AppJson(req): AppJson<DevicePortUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    if let Some(port_type) = req.port_type.as_deref() {
+        validate_port_type(port_type)?;
+    }
 
     let result = sqlx::query(
         r"UPDATE device_ports SET

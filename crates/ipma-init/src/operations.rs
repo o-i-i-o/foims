@@ -152,18 +152,24 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<(), AppMessage> 
 }
 
 pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    let tables: Vec<String> = sqlx::query_scalar::<_, String>(
+    // 整段在同一连接上顺序执行：SET session_replication_role 是会话级设置，
+    // 若每条语句各自从池中取连接，DROP 可能落在未 SET 的连接上因 FK 失败，
+    // 恢复 'origin' 也可能落在别的连接，使池内残留 replica 模式连接、
+    // 触发器/FK 对该连接静默失效（security-review D-1）
+    let mut conn = pool.acquire().await?;
+
+    let tables: Vec<String> = sqlx::query_scalar(
         r"
-        SELECT table_name FROM information_schema.tables 
+        SELECT table_name FROM information_schema.tables
         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
 
     if !tables.is_empty() {
         sqlx::query("SET session_replication_role = 'replica'")
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
 
         for table in &tables {
@@ -171,12 +177,12 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 "DROP TABLE IF EXISTS {} CASCADE",
                 quote_ident(table)
             )))
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
         }
 
         sqlx::query("SET session_replication_role = 'origin'")
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
     }
 

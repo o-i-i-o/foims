@@ -17,7 +17,7 @@ use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
-use ipma_common::{log_info, log_warn};
+use ipma_common::log_info;
 
 pub async fn get_users(
     _admin: crate::auth::extractor::AdminUser,
@@ -198,12 +198,15 @@ pub async fn update_user(
 
     let now = Utc::now();
 
+    // 权限或启用状态变更时，同语句吊销历史令牌（强制重新登录）：
+    // 拆成两条语句时第二条失败会导致降权已生效但旧令牌未被强制下线（D-2）
     sqlx::query(
-        "UPDATE users SET 
-         email = COALESCE($1, email), 
-         role = COALESCE($2, role), 
-         status = COALESCE($3, status), 
-         updated_at = $4 
+        "UPDATE users SET
+         email = COALESCE($1, email),
+         role = COALESCE($2, role),
+         status = COALESCE($3, status),
+         tokens_invalidated_at = CASE WHEN $2::VARCHAR IS NOT NULL OR $3::BOOLEAN IS FALSE THEN NOW() ELSE tokens_invalidated_at END,
+         updated_at = $4
          WHERE id = $5",
     )
     .bind(&req.email)
@@ -213,16 +216,6 @@ pub async fn update_user(
     .bind(id)
     .execute(&conn)
     .await?;
-
-    // 权限或启用状态变更时，吊销该用户的历史令牌（强制重新登录，立即生效）
-    if (req.role.is_some() || req.status == Some(false))
-        && let Err(e) = sqlx::query("UPDATE users SET tokens_invalidated_at = NOW() WHERE id = $1")
-            .bind(id)
-            .execute(&conn)
-            .await
-    {
-        log_warn!("log.user.invalidate_tokens_failed", error = e);
-    }
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
