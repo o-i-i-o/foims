@@ -624,17 +624,6 @@
         </div>
 
         <div id="notifications-tab" class="tab-content" role="tabpanel">
-          <div class="notifications-header">
-            <div class="form-group">
-              <select id="notifications-filter" aria-label="Filter notifications">
-                <option value="all" data-i18n="notifications.all">All Notifications</option>
-                <option value="unread" data-i18n="notifications.unread">Unread</option>
-                <option value="read" data-i18n="notifications.read">Read</option>
-              </select>
-            </div>
-            <button id="refresh-notifications-btn" class="btn btn-primary btn-sm" data-i18n="common.refresh">Refresh</button>
-            <button id="clear-read-notifications-btn" class="btn btn-secondary btn-sm" data-i18n="notifications.clear_read">Clear Read</button>
-          </div>
           <div class="table-container">
             <table id="notifications-table" class="data-table" aria-label="Notifications list">
               <thead>
@@ -644,7 +633,7 @@
                   <th data-i18n="notifications.title" class="sortable" data-sort="title">Title</th>
                   <th data-i18n="notifications.content">Content</th>
                   <th data-i18n="notifications.status" class="sortable col-center" data-sort="read">Status</th>
-                  <th data-i18n="common.actions" class="col-center">Actions</th>
+                  <th><button id="clear-read-notifications-btn" class="btn btn-secondary btn-sm" data-i18n="notifications.clear_read">Clear Read</button></th>
                 </tr>
               </thead>
               <tbody>
