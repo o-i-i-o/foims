@@ -45,6 +45,16 @@
   box-shadow: 0 4px 12px rgb(102 126 234 / 0.1);
 }
 
+/* 标题/操作行：h2 + 按钮组，或仅一个主操作按钮 */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+
 .config-card-header {
   display: flex;
   align-items: center;
@@ -330,7 +340,7 @@
 .cert-section-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-primary, #333);
+  color: var(--color-text);
   margin: 0 0 8px;
 }
 

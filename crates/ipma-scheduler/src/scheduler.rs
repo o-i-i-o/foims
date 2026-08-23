@@ -188,3 +188,43 @@ impl RunningScheduler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// error_message 应原样提取各变体内部消息（key 与参数都不丢失）
+    #[test]
+    fn error_message_提取各变体内部消息() {
+        let cases: Vec<SchedulerError> = vec![
+            SchedulerError::Database(msg("server.a")),
+            SchedulerError::NotFound(msg("server.b")),
+            SchedulerError::Validation(msg("server.c").with("field", "cron")),
+            SchedulerError::Conflict(msg("server.d")),
+            SchedulerError::TaskNotFound(msg("server.e").with("task_type", "backup")),
+            SchedulerError::Execution(msg("server.f")),
+            SchedulerError::Internal(msg("server.g")),
+        ];
+        let expected_keys = [
+            "server.a", "server.b", "server.c", "server.d", "server.e", "server.f", "server.g",
+        ];
+        for (err, key) in cases.into_iter().zip(expected_keys) {
+            let m = error_message(&err);
+            assert_eq!(m.key(), key);
+        }
+    }
+
+    #[test]
+    fn error_message_保留动态参数() {
+        let err = SchedulerError::Validation(
+            msg("server.task.cron_expression_invalid").with("expression", "bad"),
+        );
+        let m = error_message(&err);
+        let params = m.params();
+        assert_eq!(params.len(), 1);
+        assert_eq!(
+            (params[0].0.as_str(), params[0].1.as_str()),
+            ("expression", "bad")
+        );
+    }
+}

@@ -565,8 +565,8 @@ class RoomChildrenManager {
     const cabGroup = document.getElementById("room-cabinets-group");
     const showWorkstations = this.isOfficeRoom || this.isMixedRoom;
     const showCabinets = this.isCabinetRoom || this.isMixedRoom;
-    if (wsGroup) wsGroup.style.display = showWorkstations ? "" : "none";
-    if (cabGroup) cabGroup.style.display = showCabinets ? "" : "none";
+    wsGroup?.classList.toggle("hidden", !showWorkstations);
+    cabGroup?.classList.toggle("hidden", !showCabinets);
   }
 
   init() {

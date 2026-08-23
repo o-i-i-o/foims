@@ -1,9 +1,9 @@
 <template id="cert-generate-modal-template">
-<div id="cert-generate-modal" class="modal">
+<div id="cert-generate-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" data-i18n="cert.generate_title">Generate Self-signed Certificate</h3>
-      <span class="close" data-modal-id="cert-generate-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="cert-generate-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="cert-generate-form">

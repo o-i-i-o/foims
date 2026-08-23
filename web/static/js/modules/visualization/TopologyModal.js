@@ -110,7 +110,7 @@ export class TopologyModal {
     ["ports", "macs", "lldp"].forEach((panel) => {
       const el = this.modal?.querySelector(`.${panel}-panel`);
       if (el) {
-        el.style.display = this.panelVisibility[panel] ? "" : "none";
+        el.classList.toggle("hidden", !this.panelVisibility[panel]);
       }
     });
   }

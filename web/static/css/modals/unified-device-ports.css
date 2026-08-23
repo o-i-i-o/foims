@@ -43,8 +43,9 @@
   gap: 8px;
 }
 
-/* ============ 单个端口项 ============ */
-.port-item {
+/* ============ 单个端口项（.port-item 与可视化页 .viz-port-item 共用一套方块样式） ============ */
+.port-item,
+.viz-port-item {
   width: 40px;
   height: 40px;
   border: 1px solid #ddd;
@@ -60,25 +61,28 @@
   color: var(--color-text, #333);
 }
 
-.port-item:hover {
-  border-color: #4a90d9;
-  background-color: #f0f8ff;
+.port-item:hover,
+.viz-port-item:hover {
+  border-color: var(--port-hover-border);
+  background-color: var(--port-hover-bg);
   transform: translateY(-1px);
 }
 
-.port-item.status-up {
-  border-color: #48bb78;
-  background-color: #f0fff4;
+.port-item.status-up,
+.viz-port-item.status-up {
+  border-color: var(--port-up-border);
+  background-color: var(--port-up-bg);
 }
 
-.port-item.status-down {
-  border-color: #f56565;
-  background-color: #fff5f5;
+.port-item.status-down,
+.viz-port-item.status-down {
+  border-color: var(--port-down-border);
+  background-color: var(--port-down-bg);
 }
 
 .port-item.status-admin-down {
-  border-color: #ecc94b;
-  background-color: #fffff0;
+  border-color: var(--port-admin-down-border);
+  background-color: var(--port-admin-down-bg);
 }
 
 /* NIC 接口项用蓝色调区分（仍沿用 .port-item 的方块样式） */
@@ -111,7 +115,8 @@
   transition: all var(--transition-fast, 0.15s ease);
 }
 
-.port-item:hover .port-tooltip {
+.port-item:hover .port-tooltip,
+.viz-port-item:hover .port-tooltip {
   opacity: 1;
   visibility: visible;
 }

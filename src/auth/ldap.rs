@@ -488,3 +488,89 @@ pub async fn test_ldap_connection(
 
     Ok(crate::error::ok_json((), "server.ldap.test_success"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== RFC 4515 过滤器转义 ====================
+
+    #[test]
+    fn test_escape_ldap_filter_special_chars() {
+        // 五类特殊字符必须转义为 RFC 4515 十六进制形式
+        assert_eq!(escape_ldap_filter(r#"\"#), r#"\5c"#);
+        assert_eq!(escape_ldap_filter("*"), r#"\2a"#);
+        assert_eq!(escape_ldap_filter("("), r#"\28"#);
+        assert_eq!(escape_ldap_filter(")"), r#"\29"#);
+        assert_eq!(escape_ldap_filter("\0"), r#"\00"#);
+        // 组合输入逐字符全部转义
+        assert_eq!(escape_ldap_filter("()*"), r#"\28\29\2a"#);
+    }
+
+    #[test]
+    fn test_escape_ldap_filter_keeps_ordinary_chars() {
+        // 普通字母数字与常见标点保持原样
+        assert_eq!(escape_ldap_filter("alice"), "alice");
+        assert_eq!(
+            escape_ldap_filter("user_01@example.com"),
+            "user_01@example.com"
+        );
+        // 中文字符原样保留
+        assert_eq!(escape_ldap_filter("张三"), "张三");
+        // 空串保持为空
+        assert_eq!(escape_ldap_filter(""), "");
+    }
+
+    #[test]
+    fn test_escape_ldap_filter_blocks_injection() {
+        // 典型注入载荷：闭合括号扩大过滤器匹配范围，转义后不再含裸元字符
+        let payload = "admin*)(objectClass=*)";
+        let escaped = escape_ldap_filter(payload);
+        assert!(!escaped.contains('*'), "转义后不应残留裸星号: {escaped}");
+        assert!(!escaped.contains('('), "转义后不应残留裸左括号: {escaped}");
+        assert!(!escaped.contains(')'), "转义后不应残留裸右括号: {escaped}");
+        assert_eq!(escaped, r"admin\2a\29\28objectClass=\2a\29");
+
+        // 空字节注入同样被转义
+        let null_payload = "user\0";
+        assert_eq!(escape_ldap_filter(null_payload), r"user\00");
+    }
+
+    #[test]
+    fn test_ldap_config_default_values() {
+        let config = LdapConfig::default();
+        assert!(!config.enabled, "默认未启用");
+        assert!(config.url.is_empty(), "默认 URL 为空");
+        assert!(config.bind_dn.is_empty(), "默认服务账号 DN 为空");
+        assert!(config.bind_password.is_empty(), "默认密码为空");
+        assert!(config.base_dn.is_empty(), "默认 Base DN 为空");
+        assert_eq!(config.user_filter, "(&(objectClass=person)(uid=%s))");
+        assert_eq!(config.default_role, "user", "默认建户角色为 user");
+        // 默认过滤器应包含用户名占位符
+        assert!(config.user_filter.contains("%s"));
+    }
+
+    #[test]
+    fn test_ldap_config_serde_roundtrip() {
+        // 配置结构体 JSON 序列化往返应保持字段不变
+        let config = LdapConfig {
+            enabled: true,
+            url: "ldap://ldap.example.com:389".to_string(),
+            bind_dn: "cn=admin,dc=example,dc=com".to_string(),
+            bind_password: "secret".to_string(),
+            base_dn: "dc=example,dc=com".to_string(),
+            user_filter: "(&(objectClass=person)(sAMAccountName={username}))".to_string(),
+            default_role: "admin".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        let parsed: LdapConfig =
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(parsed.url, config.url);
+        assert_eq!(parsed.bind_dn, config.bind_dn);
+        assert_eq!(parsed.bind_password, config.bind_password);
+        assert_eq!(parsed.base_dn, config.base_dn);
+        assert_eq!(parsed.user_filter, config.user_filter);
+        assert_eq!(parsed.default_role, config.default_role);
+        assert!(parsed.enabled);
+    }
+}

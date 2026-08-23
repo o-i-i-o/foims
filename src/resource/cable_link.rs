@@ -480,3 +480,145 @@ pub async fn get_cable_path(
         "server.cable_link.path_fetched",
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== 端点/链路类型校验 ====================
+
+    #[test]
+    fn test_validate_endpoint_type_accepts_all_valid_types() {
+        for endpoint_type in VALID_ENDPOINT_TYPES {
+            assert!(
+                validate_endpoint_type(endpoint_type).is_ok(),
+                "合法端点类型 {endpoint_type} 应通过校验"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_endpoint_type_rejects_invalid() {
+        // 未收录类型、空串、大小写变体均应拒绝为 Validation 错误
+        for invalid in [
+            "",
+            "device",
+            "port",
+            "Device_Port",
+            "net_outlets",
+            "patch-panel",
+        ] {
+            let result = validate_endpoint_type(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法类型 {invalid} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_link_type_accepts_all_valid_types() {
+        for link_type in VALID_LINK_TYPES {
+            assert!(
+                validate_link_type(link_type).is_ok(),
+                "合法链路类型 {link_type} 应通过校验"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_link_type_rejects_invalid() {
+        for invalid in ["", "Ethernet", "optic", "cons0le", "ethernet "] {
+            let result = validate_link_type(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法类型 {invalid} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    // ==================== 端点规范化序 ====================
+
+    #[test]
+    fn test_sort_endpoints_orders_by_type_string() {
+        // 类型不同时按类型字符串升序：device_port < net_outlet
+        let id_x = Uuid::new_v4();
+        let id_y = Uuid::new_v4();
+        let (a_type, a_id, b_type, b_id) = sort_endpoints("net_outlet", id_x, "device_port", id_y);
+        assert_eq!(a_type, "device_port");
+        assert_eq!(a_id, id_y);
+        assert_eq!(b_type, "net_outlet");
+        assert_eq!(b_id, id_x);
+    }
+
+    #[test]
+    fn test_sort_endpoints_same_type_orders_by_uuid() {
+        // 类型相同时按 id 升序：确保 id_1 > id_2 的构造场景
+        let (id_big, id_small) = loop {
+            let u1 = Uuid::new_v4();
+            let u2 = Uuid::new_v4();
+            if u1 > u2 {
+                break (u1, u2);
+            }
+        };
+        let (a_type, a_id, b_type, b_id) =
+            sort_endpoints("patch_panel", id_big, "patch_panel", id_small);
+        assert_eq!(a_type, "patch_panel");
+        assert_eq!(b_type, "patch_panel");
+        assert_eq!(a_id, id_small, "同类型时较小的 id 应排到 A 端");
+        assert_eq!(b_id, id_big);
+    }
+
+    #[test]
+    fn test_sort_endpoints_already_ordered_unchanged() {
+        // 已满足规范序时保持原顺序（类型不同且 a_type < b_type）
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let (a_type, a_id, b_type, b_id) =
+            sort_endpoints("device_interface", id_a, "net_outlet", id_b);
+        assert_eq!(a_type, "device_interface");
+        assert_eq!(a_id, id_a);
+        assert_eq!(b_type, "net_outlet");
+        assert_eq!(b_id, id_b);
+    }
+
+    #[test]
+    fn test_sort_endpoints_commutative() {
+        // 交换输入顺序应得到完全相同的规范化结果（A/B 双向存储去重依据）
+        let type_a = "device_port";
+        let id_a = Uuid::new_v4();
+        let type_b = "patch_panel";
+        let id_b = Uuid::new_v4();
+
+        let forward = sort_endpoints(type_a, id_a, type_b, id_b);
+        let backward = sort_endpoints(type_b, id_b, type_a, id_a);
+        assert_eq!(forward, backward);
+
+        // 结果必须满足规范序定义：(a_type < b_type) 或 (同类型且 a_id <= b_id)
+        let (a_type, a_id, b_type, b_id) = forward;
+        assert!(
+            a_type < b_type || (a_type == b_type && a_id <= b_id),
+            "规范化结果必须满足字典规范序"
+        );
+    }
+
+    #[test]
+    fn test_sort_endpoints_idempotent() {
+        // 对已排序结果再次排序应保持不变（幂等性）
+        let type_a = "net_outlet";
+        let id_a = Uuid::new_v4();
+        let type_b = "net_outlet";
+        let id_b = Uuid::new_v4();
+        let (a_type, a_id, b_type, b_id) = sort_endpoints(type_a, id_a, type_b, id_b);
+        // 再排一次
+        let (a2_type, a2_id, b2_type, b2_id) = sort_endpoints(&a_type, a_id, &b_type, b_id);
+        assert_eq!((a2_type, a2_id), (a_type, a_id));
+        assert_eq!((b2_type, b2_id), (b_type, b_id));
+    }
+}

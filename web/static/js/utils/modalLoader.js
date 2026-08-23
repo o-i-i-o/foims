@@ -1,5 +1,6 @@
-import { updatePageTranslations } from "./i18n.js";
+import { updatePageTranslations, t } from "./i18n.js";
 import { MODULE_VERSION } from "./resourceLoader.js";
+import { showToast } from "./toast.js";
 
 const loadedModals = new Set();
 const loadingModals = new Map();
@@ -110,7 +111,14 @@ export async function loadModal(id) {
   }
   const innerHtml = await fetchModalHtml(id);
   if (!innerHtml) {
+    showToast(t("common.load_failed"), "error");
     return null;
+  }
+
+  // fetch 期间可能已被并发调用装载完成，避免重复解析追加
+  const concurrent = document.getElementById(id);
+  if (concurrent) {
+    return concurrent;
   }
 
   const container = document.createElement("div");
@@ -121,15 +129,11 @@ export async function loadModal(id) {
     return null;
   }
 
-  const existingModal = document.getElementById(id);
-  if (existingModal) {
-    existingModal.remove();
-  }
-
   document.body.appendChild(modal);
   loadedModals.add(id);
 
-  updatePageTranslations();
+  // 仅扫描模态框子树，避免每次开框对全文档跑多轮翻译查询
+  updatePageTranslations(modal);
 
   return modal;
 }

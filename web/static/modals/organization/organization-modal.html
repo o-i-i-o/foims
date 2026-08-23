@@ -1,15 +1,15 @@
 <template id="organization-modal-template">
-<div id="organization-modal" class="modal">
+<div id="organization-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="organization-modal-title" data-i18n="organization.add">Add Organization</h3>
-      <span class="close" data-modal-id="organization-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="organization-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="organization-form">
         <input type="hidden" id="org-id">
         <input type="hidden" id="org-parent-id">
-        <div id="org-template-select-container" class="form-group" style="display: none;">
+        <div id="org-template-select-container" class="form-group hidden">
           <label for="org-template-select"><span data-i18n="org_template.select_template">Select Template</span><span class="required">*</span></label>
           <select id="org-template-select" name="template_id">
             <option value="" data-i18n="org_template.select_template">Select Template</option>
@@ -31,7 +31,7 @@
           <label for="org-description" data-i18n="common.description">Description</label>
           <textarea id="org-description" name="description" rows="3"></textarea>
         </div>
-        <div id="org-parent-info" class="org-parent-info" style="display: none;">
+        <div id="org-parent-info" class="org-parent-info hidden">
           <p><span data-i18n="organization.parent">Parent</span>: <strong id="org-parent-name"></strong> (<span id="org-parent-type"></span>)</p>
         </div>
       </form>

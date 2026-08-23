@@ -1068,3 +1068,196 @@ pub async fn delete_network_region(
 
     Ok(crate::error::ok_json((), "server.network.region_deleted"))
 }
+
+#[cfg(test)]
+mod tests {
+    //! 本模块覆盖 network.rs 处理器所依赖的纯校验链
+    //!（CIDR 格式/类型、网关归属、区域包含），不触及数据库。
+
+    use crate::error::AppError;
+    use crate::utils::{
+        cidr_belongs_to_region, get_cidr_type, validate_cidr, validate_gateway_in_cidr,
+    };
+
+    // ==================== CIDR 格式校验（IPv4） ====================
+
+    #[test]
+    fn test_validate_cidr_ipv4_valid() {
+        // 主机位全 0 的合法网段（含前缀边界 0 与 32）
+        for cidr in [
+            "10.0.0.0/8",
+            "192.168.1.0/24",
+            "172.16.0.0/12",
+            "0.0.0.0/0",
+            "10.1.2.3/32",
+            // 无掩码的裸地址按 /32 处理（与 PostgreSQL CIDR 语义一致）
+            "10.2.3.4",
+        ] {
+            assert!(validate_cidr(cidr), "合法 IPv4 CIDR {cidr} 应通过");
+        }
+    }
+
+    #[test]
+    fn test_validate_cidr_ipv4_invalid() {
+        // 主机位非 0、前缀越界、格式错误均应拒绝
+        for cidr in [
+            "192.168.1.1/24", // 主机位非 0
+            "10.0.0.0/33",    // 前缀超过 32
+            "10.0.0.0/-1",    // 负前缀
+            "10.0.0.0/",      // 掩码为空
+            "300.0.0.0/8",    // 非法地址段
+            "",               // 空串
+            "abc/24",         // 非数字地址
+        ] {
+            assert!(!validate_cidr(cidr), "非法 IPv4 CIDR {cidr:?} 应被拒绝");
+        }
+    }
+
+    #[test]
+    fn test_validate_cidr_ipv6_valid() {
+        for cidr in [
+            "2001:db8::/32",
+            "2001:db8:1::/48",
+            "fe80::/10",
+            "::/0",
+            "2001:db8::1/128",
+            // 无掩码的裸地址按 /128 处理
+            "2001:db8::2",
+        ] {
+            assert!(validate_cidr(cidr), "合法 IPv6 CIDR {cidr} 应通过");
+        }
+    }
+
+    #[test]
+    fn test_validate_cidr_ipv6_invalid() {
+        for cidr in [
+            "2001:db8::1/64", // 主机位非 0
+            "::1/0",          // 全地址下主机位非 0
+            "::/129",         // 前缀超过 128
+            "gg::/16",        // 非法十六进制
+        ] {
+            assert!(!validate_cidr(cidr), "非法 IPv6 CIDR {cidr:?} 应被拒绝");
+        }
+    }
+
+    // ==================== CIDR 类型识别 ====================
+
+    #[test]
+    fn test_get_cidr_type_v4_v6_and_none() {
+        assert_eq!(get_cidr_type("10.0.0.0/8"), Some("ipv4"));
+        assert_eq!(get_cidr_type("192.168.1.0/30"), Some("ipv4"));
+        assert_eq!(get_cidr_type("2001:db8::/32"), Some("ipv6"));
+        assert_eq!(get_cidr_type("fe80::/64"), Some("ipv6"));
+        // 非法输入（即便主机位非 0）类型解析只看地址族
+        assert_eq!(get_cidr_type("192.168.1.1/24"), Some("ipv4"));
+        // 完全非法输入返回 None
+        assert_eq!(get_cidr_type("invalid"), None);
+        assert_eq!(get_cidr_type(""), None);
+        assert_eq!(get_cidr_type("10.0.0.0/33"), None);
+    }
+
+    #[test]
+    fn test_get_cidr_type_family_mismatch_guard() {
+        // create_network 的校验链要求「格式合法 + 地址族匹配」同时成立：
+        // IPv4 CIDR 提交到 ipv6 槽位 / 反之均应视为不匹配
+        assert_ne!(get_cidr_type("10.0.0.0/8"), Some("ipv6"));
+        assert_ne!(get_cidr_type("2001:db8::/32"), Some("ipv4"));
+    }
+
+    // ==================== 网关与网段归属校验 ====================
+
+    #[test]
+    fn test_gateway_in_cidr_ipv4_ok() {
+        // 网关在网段内且地址族一致应通过
+        assert!(
+            validate_gateway_in_cidr(Some("192.168.1.1"), Some("192.168.1.0/24"), "ipv4").is_ok()
+        );
+        // 网段边界上的首/末地址同样合法
+        assert!(validate_gateway_in_cidr(Some("10.0.0.255"), Some("10.0.0.0/24"), "ipv4").is_ok());
+        // 容忍 PostgreSQL INET 文本自带的掩码后缀
+        assert!(
+            validate_gateway_in_cidr(Some("192.168.1.1/32"), Some("192.168.1.0/24"), "ipv4")
+                .is_ok()
+        );
+        // 空白网关视为未提供，直接通过
+        assert!(validate_gateway_in_cidr(Some("  "), Some("192.168.1.0/24"), "ipv4").is_ok());
+        assert!(validate_gateway_in_cidr(None, None, "ipv4").is_ok());
+    }
+
+    #[test]
+    fn test_gateway_in_cidr_ipv4_rejected() {
+        // 网段外
+        let err = validate_gateway_in_cidr(Some("192.168.2.1"), Some("192.168.1.0/24"), "ipv4")
+            .err()
+            .unwrap_or_else(|| panic!("网段外网关应被拒绝"));
+        assert!(matches!(err, AppError::Validation(_)));
+        // 格式非法
+        assert!(
+            validate_gateway_in_cidr(Some("not-an-ip"), Some("192.168.1.0/24"), "ipv4").is_err()
+        );
+        // 地址族不匹配：IPv6 网关填入 ipv4 槽位
+        assert!(
+            validate_gateway_in_cidr(Some("2001:db8::1"), Some("192.168.1.0/24"), "ipv4").is_err(),
+            "地址族不匹配应被拒绝"
+        );
+        // 提供网关但缺少同族 CIDR
+        assert!(validate_gateway_in_cidr(Some("192.168.1.1"), None, "ipv4").is_err());
+    }
+
+    #[test]
+    fn test_gateway_in_cidr_ipv6() {
+        assert!(
+            validate_gateway_in_cidr(Some("2001:db8::1"), Some("2001:db8::/64"), "ipv6").is_ok()
+        );
+        // 网段外
+        assert!(
+            validate_gateway_in_cidr(Some("2001:db9::1"), Some("2001:db8::/64"), "ipv6").is_err()
+        );
+        // IPv4 网关填入 ipv6 槽位
+        assert!(
+            validate_gateway_in_cidr(Some("192.168.1.1"), Some("2001:db8::/64"), "ipv6").is_err(),
+            "地址族不匹配应被拒绝"
+        );
+        // /128 边界：网关恰好为唯一地址
+        assert!(
+            validate_gateway_in_cidr(Some("2001:db8::1"), Some("2001:db8::1/128"), "ipv6").is_ok()
+        );
+    }
+
+    // ==================== 网段与区域 CIDR 包含关系 ====================
+
+    #[test]
+    fn test_cidr_belongs_to_region_empty_region_allows_all() {
+        // 区域未定义 CIDR 时不做限制
+        assert!(cidr_belongs_to_region("192.168.1.0/24", &[]));
+        assert!(cidr_belongs_to_region("2001:db8:1::/48", &[]));
+    }
+
+    #[test]
+    fn test_cidr_belongs_to_region_membership() {
+        let region = vec!["10.0.0.0/8".to_string(), "2001:db8::/32".to_string()];
+        // 子网（前缀更大）属于任一区域 CIDR 即通过
+        assert!(cidr_belongs_to_region("10.1.0.0/16", &region));
+        assert!(cidr_belongs_to_region("10.1.2.0/24", &region));
+        assert!(cidr_belongs_to_region("2001:db8:1::/48", &region));
+        // 与区域 CIDR 完全相同（前缀相等）不算子网
+        assert!(
+            !cidr_belongs_to_region("10.0.0.0/8", &region),
+            "前缀相等不满足 << 语义"
+        );
+        // 区域外的网段
+        assert!(!cidr_belongs_to_region("192.168.1.0/24", &region));
+        assert!(!cidr_belongs_to_region("2001:db9::/32", &region));
+    }
+
+    #[test]
+    fn test_cidr_belongs_to_region_cross_family_rejected() {
+        // IPv4 与 IPv6 不能互相包含
+        let region_v4 = vec!["10.0.0.0/8".to_string()];
+        assert!(!cidr_belongs_to_region("2001:db8:1::/48", &region_v4));
+        let region_v6 = vec!["2001:db8::/32".to_string()];
+        assert!(!cidr_belongs_to_region("10.1.0.0/16", &region_v6));
+        // 超网（前缀更小）同样不属于区域
+        assert!(!cidr_belongs_to_region("10.0.0.0/7", &region_v4));
+    }
+}

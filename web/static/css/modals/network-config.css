@@ -19,7 +19,7 @@
 }
 
 /* 覆盖 modal 中 .form-row 的布局，使用 flex 让 select 占满剩余空间 */
-.modal.active .modal-content .modal-body .network-config-item .form-row {
+.modal .network-config-item .form-row {
   display: flex;
   gap: var(--space-md);
   align-items: end;
@@ -27,7 +27,7 @@
 }
 
 /* 网络区域/网段选择列：flex: 1 让其占据剩余空间 */
-.modal.active .modal-content .modal-body .network-config-item .form-group {
+.modal .network-config-item .form-group {
   display: block;
   margin: 0;
   flex: 1;
@@ -36,11 +36,7 @@
 }
 
 /* 必填标记：select 为空（:invalid）时，用红色 * 覆盖在占位符文本后面 */
-.modal.active
-  .modal-content
-  .modal-body
-  .network-config-item
-  .form-group:has(select.required:invalid)::after {
+.modal .network-config-item .form-group:has(select.required:invalid)::after {
   content: "*";
   color: var(--color-danger);
   position: absolute;
@@ -53,20 +49,12 @@
 }
 
 /* "选择网络区域" = 5 个中文字符 */
-.modal.active
-  .modal-content
-  .modal-body
-  .network-config-item
-  .form-group:has(.network-region-select:invalid)::after {
+.modal .network-config-item .form-group:has(.network-region-select:invalid)::after {
   left: calc(var(--control-padding-x) + 5em + 2px);
 }
 
 /* "选择网段" = 4 个中文字符 */
-.modal.active
-  .modal-content
-  .modal-body
-  .network-config-item
-  .form-group:has(.network-select:invalid)::after {
+.modal .network-config-item .form-group:has(.network-select:invalid)::after {
   left: calc(var(--control-padding-x) + 4em + 2px);
 }
 
@@ -81,31 +69,12 @@
   padding-top: 0;
 }
 
-/* 覆盖 modal 中 select/input 的 width: auto，让下拉框占满列宽 */
-.modal.active .modal-content .modal-body .network-config-item .form-group select,
-.modal.active .modal-content .modal-body .network-config-item .form-group input {
+/* 覆盖 modal 中 select/input 的同行扩展，让控件占满列宽（基样式见 forms.css） */
+.modal .network-config-item .form-group select,
+.modal .network-config-item .form-group input {
   width: 100%;
   flex: none;
   min-width: 0;
-}
-
-.network-region-select,
-.network-select {
-  width: 100%;
-  padding: var(--control-padding-y) var(--control-padding-x);
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 0.95rem;
-  background-color: var(--control-bg);
-  transition: all var(--transition-fast);
-  height: var(--control-height);
-}
-
-.network-region-select:focus,
-.network-select:focus {
-  outline: none;
-  border-color: var(--control-border-focus);
-  box-shadow: var(--control-shadow);
 }
 
 .network-config-wrapper {
@@ -124,13 +93,8 @@
 }
 
 /* 按钮组列：flex: none 仅占内容宽度，让 select 占据更多空间 */
-.modal.active .modal-content .modal-body .network-config-item .form-group.network-config-actions,
-.modal.active
-  .modal-content
-  .modal-body
-  #room-children-container
-  .room-child-item
-  .form-group.room-children-actions {
+.modal .network-config-item .form-group.network-config-actions,
+.modal #room-children-container .room-child-item .form-group.room-children-actions {
   display: flex;
   min-width: 0;
   width: auto;
@@ -168,7 +132,7 @@
 }
 
 /* 覆盖 modal 中 .form-row 的布局，使用 flex 让 input 占满剩余空间 */
-.modal.active .modal-content .modal-body #room-children-container .room-child-item .form-row {
+.modal #room-children-container .room-child-item .form-row {
   display: flex;
   gap: var(--space-md);
   align-items: end;
@@ -176,7 +140,7 @@
 }
 
 /* 工位/机柜输入列：flex: 1 让其占据剩余空间 */
-.modal.active .modal-content .modal-body #room-children-container .room-child-item .form-group {
+.modal #room-children-container .room-child-item .form-group {
   display: block;
   margin: 0;
   flex: 1;
@@ -194,14 +158,8 @@
   padding-top: 0;
 }
 
-/* 覆盖 modal 中 input 的 width: auto，让输入框占满列宽 */
-.modal.active
-  .modal-content
-  .modal-body
-  #room-children-container
-  .room-child-item
-  .form-group
-  input {
+/* 覆盖 modal 中 input 的同行扩展，让输入框占满列宽 */
+.modal #room-children-container .room-child-item .form-group input {
   width: 100%;
   flex: none;
   min-width: 0;

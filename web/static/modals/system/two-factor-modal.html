@@ -1,9 +1,9 @@
 <template id="two-factor-modal-template">
-<div id="two-factor-modal" class="modal">
+<div id="two-factor-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content modal-lg">
     <header class="modal-header">
       <h3 class="modal-title" data-i18n="two_factor.title">Two-Factor Authentication Setup</h3>
-      <span class="close" data-modal-id="two-factor-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="two-factor-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <div id="two-factor-setup-step">
@@ -24,9 +24,7 @@
         <div id="two-factor-success" class="success-message" role="status" aria-live="polite"></div>
       </div>
       <div id="two-factor-manage-step" class="hidden">
-        <div class="form-group">
-          <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
-        </div>
+        <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
         <div class="form-group">
           <label for="two-factor-disable-code" data-i18n="two_factor.verify_code">Verification Code</label>
           <input type="text" id="two-factor-disable-code" maxlength="6" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code">

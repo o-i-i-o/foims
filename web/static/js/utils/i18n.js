@@ -1,22 +1,28 @@
 let i18nInstance = null;
 
+/* 支持的语言清单：翻译文件按需加载（首屏只拉当前语言，切换时再取另一份），
+   native_name 优先取语言文件内定义，未加载时用回退名 */
+const SUPPORTED_LANGUAGES = ["zh", "en"];
+const FALLBACK_NATIVE_NAMES = { zh: "中文", en: "English" };
+
 function detectBrowserLanguage() {
-  const browserLang =
-    navigator.language || navigator.userLanguage || navigator.browserLanguage || "en";
-  if (browserLang.startsWith("zh")) {
-    return "zh";
-  }
-  return "en";
+  const browserLang = navigator.language || "en";
+  return browserLang.startsWith("zh") ? "zh" : "en";
 }
 
 function getInitialLanguage() {
   const savedLang = localStorage.getItem("language");
-  if (savedLang && ["zh", "en"].includes(savedLang)) {
+  if (savedLang && SUPPORTED_LANGUAGES.includes(savedLang)) {
     return savedLang;
   }
   const browserLang = detectBrowserLanguage();
   localStorage.setItem("language", browserLang);
   return browserLang;
+}
+
+// cache: 'no-store' 保证始终读到最新翻译文件（新增 key 后不受中间缓存影响）
+function fetchTranslations(lang) {
+  return fetch(`/static/js/i18n/${lang}.json`, { cache: "no-store" }).then((r) => r.json());
 }
 
 export async function initI18n() {
@@ -27,20 +33,23 @@ export async function initI18n() {
   const initialLanguage = getInitialLanguage();
 
   try {
-    const [zhTranslations, enTranslations] = await Promise.all([
-      // cache: 'no-store' guarantees the browser always loads the current
-      // translation file. Without it, browsers (or proxies/CDNs) may serve a
-      // stale cached JSON after new keys are added, leaving new data-i18n
-      // elements untranslated.
-      fetch("/static/js/i18n/zh.json", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/static/js/i18n/en.json", { cache: "no-store" }).then((r) => r.json())
-    ]);
+    const translations = { [initialLanguage]: await fetchTranslations(initialLanguage) };
 
     i18nInstance = {
       language: initialLanguage,
-      translations: {
-        zh: zhTranslations,
-        en: enTranslations
+      translations,
+
+      /** 按需加载语言包；已加载或加载失败时原样返回 */
+      async loadLanguage(lang) {
+        if (this.translations[lang] || !SUPPORTED_LANGUAGES.includes(lang)) {
+          return this.translations[lang] ?? null;
+        }
+        try {
+          this.translations[lang] = await fetchTranslations(lang);
+        } catch (error) {
+          console.error(`加载语言包失败 [${lang}]:`, error);
+        }
+        return this.translations[lang] ?? null;
       },
 
       t(key, options = {}) {
@@ -52,16 +61,7 @@ export async function initI18n() {
           replaceOptions = {};
         }
 
-        const keys = key.split(".");
-        let value = this.translations[this.language];
-
-        for (const k of keys) {
-          if (value && typeof value === "object" && k in value) {
-            value = value[k];
-          } else {
-            return defaultValue !== null ? defaultValue : key;
-          }
-        }
+        const value = key.split(".").reduce((obj, k) => (obj && typeof obj === "object" ? obj[k] : undefined), this.translations[this.language]);
 
         if (typeof value !== "string") {
           return defaultValue !== null ? defaultValue : key;
@@ -69,13 +69,23 @@ export async function initI18n() {
 
         let result = value;
         for (const [k, v] of Object.entries(replaceOptions)) {
-          result = result.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+          result = result.replaceAll(`{{${k}}}`, v);
         }
-
         return result;
       },
 
-      changeLanguage(lang) {
+      async changeLanguage(lang) {
+        if (!SUPPORTED_LANGUAGES.includes(lang)) {
+          return;
+        }
+        // 语言包未加载时先取回，取回失败则保持原语言
+        if (!this.translations[lang]) {
+          await this.loadLanguage(lang);
+          if (!this.translations[lang]) {
+            return;
+          }
+        }
+
         this.language = lang;
         localStorage.setItem("language", lang);
         document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
@@ -91,54 +101,29 @@ export async function initI18n() {
         return this.language;
       },
 
-      updatePageTranslations() {
-        document.querySelectorAll("[data-i18n]").forEach((el) => {
-          const key = el.getAttribute("data-i18n");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.textContent = translation;
-          }
-        });
+      /** 可传入 root 元素限定扫描范围（如新打开的模态框），省去全文档遍历 */
+      updatePageTranslations(root = document) {
+        const apply = (attribute, property) => {
+          root.querySelectorAll(`[${attribute}]`).forEach((el) => {
+            const translation = this.t(el.getAttribute(attribute));
+            if (translation !== el.getAttribute(attribute)) {
+              if (property === "dataset") {
+                el.dataset.tooltip = translation;
+              } else if (property === "ariaLabel") {
+                el.setAttribute("aria-label", translation);
+              } else {
+                el[property] = translation;
+              }
+            }
+          });
+        };
 
-        document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
-          const key = el.getAttribute("data-i18n-placeholder");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.placeholder = translation;
-          }
-        });
-
-        document.querySelectorAll("[data-i18n-title]").forEach((el) => {
-          const key = el.getAttribute("data-i18n-title");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.title = translation;
-          }
-        });
-
-        document.querySelectorAll("[data-i18n-tooltip]").forEach((el) => {
-          const key = el.getAttribute("data-i18n-tooltip");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.dataset.tooltip = translation;
-          }
-        });
-
-        document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
-          const key = el.getAttribute("data-i18n-aria-label");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.setAttribute("aria-label", translation);
-          }
-        });
-
-        document.querySelectorAll("[data-i18n-value]").forEach((el) => {
-          const key = el.getAttribute("data-i18n-value");
-          const translation = this.t(key);
-          if (translation !== key) {
-            el.value = translation;
-          }
-        });
+        apply("data-i18n", "textContent");
+        apply("data-i18n-placeholder", "placeholder");
+        apply("data-i18n-title", "title");
+        apply("data-i18n-tooltip", "dataset");
+        apply("data-i18n-aria-label", "ariaLabel");
+        apply("data-i18n-value", "value");
       },
 
       updateLanguageSelector() {
@@ -157,7 +142,7 @@ export async function initI18n() {
       },
 
       getNativeName(code) {
-        return this.translations[code]?.language?.native_name || code;
+        return this.translations[code]?.language?.native_name || FALLBACK_NATIVE_NAMES[code] || code;
       }
     };
 
@@ -174,7 +159,7 @@ export async function initI18n() {
       language: initialLanguage,
       translations: {},
       t: (key) => key,
-      changeLanguage(lang) {
+      async changeLanguage(lang) {
         this.language = lang;
         localStorage.setItem("language", lang);
       },
@@ -200,7 +185,7 @@ export function changeLanguage(lang) {
   if (!i18nInstance) {
     return;
   }
-  i18nInstance.changeLanguage(lang);
+  return i18nInstance.changeLanguage(lang);
 }
 
 export function getCurrentLanguage() {
@@ -211,23 +196,21 @@ export function getCurrentLanguage() {
 }
 
 /**
- * 获取已加载的语言列表（含各语言的本地名称）
- * 列表完全由已加载的翻译文件决定，新增语言文件即自动出现在选择菜单中
+ * 获取支持的语言列表（含各语言的本地名称）
+ * native_name 取自已加载的语言文件，未加载的用内置回退名
  * @returns {Array<{code: string, nativeName: string}>}
  */
 export function getSupportedLanguages() {
-  if (!i18nInstance) {
-    return [];
-  }
-  return Object.keys(i18nInstance.translations).map((code) => ({
+  const loaded = i18nInstance?.translations || {};
+  return SUPPORTED_LANGUAGES.map((code) => ({
     code,
-    nativeName: i18nInstance.translations[code]?.language?.native_name || code
+    nativeName: loaded[code]?.language?.native_name || FALLBACK_NATIVE_NAMES[code] || code
   }));
 }
 
-export function updatePageTranslations() {
+export function updatePageTranslations(root) {
   if (!i18nInstance) {
     return;
   }
-  i18nInstance.updatePageTranslations();
+  i18nInstance.updatePageTranslations(root);
 }

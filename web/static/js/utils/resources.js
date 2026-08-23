@@ -51,10 +51,6 @@ export async function fillSelect(selectId, url, opts = {}) {
   if (!select) return;
 
   const currentValue = select.value;
-  select.replaceChildren();
-  if (placeholderKey) {
-    select.appendChild(buildOption("", t(placeholderKey)));
-  }
 
   let fetched = [];
   if (prefetched) {
@@ -64,19 +60,22 @@ export async function fillSelect(selectId, url, opts = {}) {
       fetched = extractItems(await apiGet(url));
     } catch (error) {
       console.error(`加载${errorLabel}失败:`, error);
-      select.appendChild(buildOption("", t("common.load_failed"), true));
+      select.replaceChildren(buildOption("", t("common.load_failed"), true));
       return;
     }
   }
 
   const items = fetched.filter(filter || (() => true));
-  for (const item of items) {
-    select.appendChild(buildOption(item.id, itemToLabel ? itemToLabel(item) : item.name));
-  }
+  const options = [placeholderKey ? buildOption("", t(placeholderKey)) : null]
+    .filter(Boolean)
+    .concat(items.map((item) => buildOption(item.id, itemToLabel ? itemToLabel(item) : item.name)));
 
   if (emptyKey && items.length === 0) {
-    select.appendChild(buildOption("", t(emptyKey), true));
+    options.push(buildOption("", t(emptyKey), true));
   }
+
+  // 一次性替换全部选项，避免逐项 append 触发多次重排
+  select.replaceChildren(...options);
 
   if (currentValue) {
     select.value = currentValue;

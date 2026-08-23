@@ -1,24 +1,15 @@
-/* 响应式设计 */
+/* 响应式补充：仅保留结构性变化（侧栏转顶部导航、纵向堆叠等）。
+   尺寸自适应已由 auto-fit grid、min()、clamp() 在基础样式中原生完成，不再依赖断点覆盖。 */
 
-/* 中等屏幕 */
+/* 中屏：侧边栏收窄（宽度统一由 --sidebar-width 变量驱动，侧栏与主内容区自动同步） */
 @media (max-width: 992px) {
-  .sidebar {
-    width: 200px;
-  }
-
-  .main-content {
-    margin-left: 200px;
+  :root {
+    --sidebar-width: 200px;
   }
 }
 
 @media (max-width: 768px) {
-  /* 登录页面响应式 */
-  .login-container {
-    padding: 1.5rem;
-    margin: 1rem;
-  }
-
-  /* 侧边栏响应式 - 折叠为顶部横向导航 */
+  /* ===== 侧边栏折叠为顶部横向导航（结构性变化） ===== */
   .sidebar {
     width: 100%;
     height: auto;
@@ -29,7 +20,6 @@
     flex-direction: column;
   }
 
-  /* 侧边栏头部响应式 */
   .sidebar-header {
     padding: 0.75rem 1rem;
   }
@@ -38,7 +28,6 @@
     font-size: 1.1rem;
   }
 
-  /* 侧边栏菜单响应式 */
   .sidebar-menu {
     display: flex;
     flex-wrap: nowrap;
@@ -130,11 +119,6 @@
     box-shadow: none;
   }
 
-  .language-section,
-  .logout-section {
-    flex-shrink: 0;
-  }
-
   .footer-btn {
     width: auto;
     min-height: 0;
@@ -143,32 +127,13 @@
     box-shadow: none;
   }
 
-  /* 主内容区响应式 */
+  /* ===== 主内容区 ===== */
   .main-content {
     margin-left: 0;
     padding: 1rem;
   }
 
-  /* 仪表盘响应式 */
-
-  /* .dashboard-stats and .form-row overrides removed to use auto-fit from base CSS */
-  .dashboard-stats {
-    gap: 0.75rem;
-  }
-
-  .stat-card {
-    padding: 1rem;
-  }
-
-  .stat-card .stat-value {
-    font-size: 1.75rem;
-  }
-
-  .stat-card .stat-icon {
-    font-size: 2rem;
-  }
-
-  /* 表格响应式 */
+  /* 表格压缩 */
   .table-container {
     margin: 0 -1rem;
     padding: 0 1rem;
@@ -183,32 +148,18 @@
     padding: 0.5rem 0.35rem;
   }
 
-  /* 模态框响应式 */
+  /* ===== 模态框：贴边全宽、底部按钮平分 ===== */
   .modal.active {
     padding: 1rem 0.5rem;
     align-items: flex-start;
   }
 
   .modal-content {
-    width: 100%;
     max-height: calc(100vh - 2rem);
     border-radius: var(--radius-lg);
   }
 
-  .modal-header {
-    padding: 1rem;
-  }
-
-  .modal-title {
-    font-size: 1rem;
-  }
-
-  .modal-body {
-    padding: 1rem;
-  }
-
   .modal-footer {
-    padding: 0.875rem 1rem;
     flex-wrap: wrap;
   }
 
@@ -217,88 +168,32 @@
     min-width: 100px;
   }
 
-  .modal .form-row {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-  }
-
-  /* 表单行响应式 */
-
-  /* .form-row override removed */
-  .form-row {
-    gap: 0.5rem;
-  }
-
+  /* ===== 表单：label 与控件纵向堆叠（选择器特异性对齐 forms.css/modals.css） ===== */
   .form-group {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .form-group label {
+  .form-group label:not(.checkbox-label),
+  .modal .form-group label {
     width: 100%;
+    min-width: 0;
+    text-align: left;
     padding-top: 0;
     margin-bottom: 0.25rem;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    min-width: 100%;
   }
 
   .form-inline-group {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
   }
 
-  .form-inline-group label {
-    width: 60%;
-    margin-bottom: 0.25rem;
-  }
-
-  /* 网络配置项响应式 */
-  .network-config-item .form-row,
-  .workstation-port-row,
-  .network-port-item {
+  /* 网络配置行纵向堆叠 */
+  .network-config-item .form-row {
     flex-direction: column;
   }
 
-  .network-config-item .form-group,
-  .workstation-port-row .form-group,
-  .network-port-item .form-group {
-    margin-right: 0;
-    margin-bottom: 0.5rem;
-  }
-
-  .network-config-item .form-group:last-child,
-  .workstation-port-row .form-group:last-child,
-  .network-port-item .form-group:last-child {
-    margin-left: 0;
-    align-items: stretch;
-  }
-
-  /* 搜索容器响应式 */
-  .search-container {
-    width: 100%;
-  }
-
-  .search-container input {
-    min-width: 100%;
-    flex: 1;
-  }
-
-  /* 卡片头部响应式 */
-  .card-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .card-header h3 {
-    margin-bottom: 0.5rem;
-  }
-
-  /* 标签页响应式 */
+  /* ===== 标签页横向滚动 ===== */
   .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -312,7 +207,7 @@
     white-space: nowrap;
   }
 
-  /* 通知头部响应式 */
+  /* 通知头部纵向 */
   .notifications-header {
     flex-direction: column;
     align-items: stretch;
@@ -322,30 +217,35 @@
     width: 100%;
   }
 
-  /* 导入导出响应式 */
+  /* 导入导出纵向 */
   .import-actions,
   .export-actions {
     flex-direction: column;
   }
 
-  /* 操作按钮响应式 */
   .action-buttons {
     width: 100%;
     justify-content: space-between;
   }
 
-  /* 按钮响应式 */
   .btn-sm {
     padding: 0.4rem 0.75rem;
     font-size: 0.8rem;
     min-width: 60px;
   }
+
+  /* 仪表盘卡片压缩 */
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-card .stat-icon {
+    font-size: 2rem;
+  }
 }
 
 /* 超小屏幕 */
 @media (max-width: 480px) {
-  /* .dashboard-stats override removed */
-
   .stat-card h3 {
     font-size: 0.8rem;
   }
@@ -354,37 +254,19 @@
     font-size: 1.5rem;
   }
 
-  .header h1 {
-    font-size: 1rem;
-  }
-
   .data-table th,
   .data-table td {
     padding: 0.35rem 0.25rem;
     font-size: 0.75rem;
   }
 
-  .info-value {
-    font-size: 1.25rem;
-  }
-
-  /* 可视化管理响应式样式 */
+  /* 可视化容器按视口高度取比例（原为固定 400px） */
   #workstation-visualization-container,
   #cabinet-visualization-container {
-    height: 400px;
-  }
-
-  .login-container {
-    padding: var(--space-lg);
+    height: clamp(300px, 60vh, 100%);
   }
 
   .btn {
     min-width: 100px;
-  }
-
-  .form-group input:not([type="checkbox"]),
-  .form-group select,
-  .form-group textarea {
-    min-width: 100%;
   }
 }

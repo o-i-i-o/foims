@@ -456,3 +456,223 @@ pub async fn get_room_cabinets_with_positions(
         "server.visualization.room_cabinets_retrieved",
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造指定字段的坐标
+    fn pos(x: f64, y: f64, width: f64, height: f64, rotation: f64) -> Position {
+        Position {
+            x,
+            y,
+            width,
+            height,
+            rotation,
+        }
+    }
+
+    #[test]
+    fn 坐标取整_四舍五入() {
+        let p = pos(1.4, 2.6, 100.5, 0.5, 10.0);
+        assert_eq!(p.x_i32(), 1, "1.4 舍去");
+        assert_eq!(p.y_i32(), 3, "2.6 进位");
+        assert_eq!(p.width_i32(), 101, "100.5 进位（远离零取整）");
+        assert_eq!(p.height_i32(), 1, "0.5 进位");
+        assert_eq!(p.rotation_i32(), 10);
+    }
+
+    #[test]
+    fn 坐标取整_负数远离零() {
+        let p = pos(-1.5, -2.4, 3.0, 4.0, 0.0);
+        assert_eq!(p.x_i32(), -2, "-1.5 远离零取整为 -2");
+        assert_eq!(p.y_i32(), -2, "-2.4 取整为 -2");
+    }
+
+    #[test]
+    fn 坐标钳制_超出i32范围饱和() {
+        let p = pos(1e12, -1e12, 9e18, 9e18, 0.0);
+        assert_eq!(p.x_i32(), i32::MAX, "超大 x 饱和为 i32::MAX");
+        assert_eq!(p.y_i32(), i32::MIN, "超小 y 饱和为 i32::MIN");
+        assert_eq!(p.width_i32(), i32::MAX);
+        assert_eq!(p.height_i32(), i32::MAX);
+    }
+
+    #[test]
+    fn 尺寸规范化_负值钳为零() {
+        let p = pos(0.0, 0.0, -10.6, -0.4, 0.0);
+        assert_eq!(p.width_i32(), 0, "负宽度钳为 0");
+        assert_eq!(p.height_i32(), 0, "负高度钳为 0");
+    }
+
+    #[test]
+    fn 旋转规范化_钳到0至360() {
+        assert_eq!(pos(0.0, 0.0, 1.0, 1.0, 359.6).rotation_i32(), 360);
+        assert_eq!(
+            pos(0.0, 0.0, 1.0, 1.0, 400.0).rotation_i32(),
+            360,
+            "超上限钳为 360"
+        );
+        assert_eq!(
+            pos(0.0, 0.0, 1.0, 1.0, -5.0).rotation_i32(),
+            0,
+            "负旋转钳为 0"
+        );
+        assert_eq!(pos(0.0, 0.0, 1.0, 1.0, 0.4).rotation_i32(), 0);
+    }
+
+    #[test]
+    fn 坐标取整_nan饱和为零() {
+        // f64 饱和转换：NaN as i32 == 0
+        assert_eq!(pos(f64::NAN, 0.0, 1.0, 1.0, 0.0).x_i32(), 0);
+    }
+
+    #[test]
+    fn position序列化_键名与往返() {
+        let p = pos(1.5, 2.5, 30.0, 40.0, 90.0);
+        let json = serde_json::to_string(&p).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        assert_eq!(
+            json,
+            r#"{"x":1.5,"y":2.5,"width":30.0,"height":40.0,"rotation":90.0}"#
+        );
+        let back: Position =
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(
+            (back.x, back.y, back.width, back.height, back.rotation),
+            (1.5, 2.5, 30.0, 40.0, 90.0)
+        );
+    }
+
+    #[test]
+    fn 布局保存请求_反序列化与字段判别() {
+        let json = r#"{
+            "type": "workstation",
+            "room_id": "550e8400-e29b-41d4-a716-446655440000",
+            "layout": []
+        }"#;
+        let req: LayoutSaveRequest =
+            serde_json::from_str(json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(req.r#type, "workstation");
+        assert!(req.room_id.is_some());
+        assert!(req.network_region_id.is_none());
+        assert!(req.cabinet_id.is_none());
+        assert!(req.layout.is_empty());
+    }
+
+    #[test]
+    fn 布局条目_反序列化() {
+        let json = r#"{
+            "id": "550e8400-e29b-41d4-a716-446655440001",
+            "position": {"x": 1, "y": 2, "width": 3, "height": 4, "rotation": 5},
+            "element_type": "door"
+        }"#;
+        let item: LayoutItem =
+            serde_json::from_str(json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(item.element_type, "door");
+        assert_eq!(item.position.x_i32(), 1);
+        assert_eq!(item.position.height_i32(), 4);
+        assert_eq!(item.position.rotation_i32(), 5);
+    }
+
+    /// 各错误变体到 HTTP 状态码的映射
+    #[test]
+    fn 错误状态码_各变体映射() {
+        let m = msg("server.x");
+        let cases: Vec<(VisualizationError, StatusCode)> = vec![
+            (
+                VisualizationError::Database(m.clone()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                VisualizationError::NotFound(m.clone()),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                VisualizationError::Validation(m.clone()),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                VisualizationError::Conflict(m.clone()),
+                StatusCode::CONFLICT,
+            ),
+            (
+                VisualizationError::Internal(m),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.status_code(), expected, "变体 {err}");
+        }
+    }
+
+    #[test]
+    fn from_sqlx_行不存在映射为not_found() {
+        let err = VisualizationError::from(sqlx::Error::RowNotFound);
+        match &err {
+            VisualizationError::NotFound(m) => assert_eq!(m.key(), "server.common.not_found"),
+            other => panic!("应映射为 NotFound，实际 {other}"),
+        }
+    }
+
+    #[test]
+    fn from_sqlx_连接池关闭映射为数据库错误() {
+        let err = VisualizationError::from(sqlx::Error::PoolClosed);
+        assert!(matches!(err, VisualizationError::Database(_)));
+    }
+
+    /// 极简 block_on：响应体为内存数据，忙轮询即可完成
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        let mut fut = std::pin::pin!(fut);
+        loop {
+            if let std::task::Poll::Ready(out) = fut.as_mut().poll(&mut cx) {
+                return out;
+            }
+        }
+    }
+
+    /// 提取响应体 JSON 文本
+    fn body_string(resp: Response) -> String {
+        let Ok(bytes) = block_on(axum::body::to_bytes(resp.into_body(), usize::MAX)) else {
+            panic!("读取响应体失败");
+        };
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    #[test]
+    fn into_response_校验错误透传key() {
+        let resp = VisualizationError::Validation(msg("server.visualization.room_id_required"))
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body = body_string(resp);
+        assert!(body.contains(r#""success":false"#), "响应体: {body}");
+        assert!(
+            body.contains(r#""message":"server.visualization.room_id_required""#),
+            "响应体: {body}"
+        );
+    }
+
+    #[test]
+    fn into_response_数据库错误返回通用key() {
+        let resp = VisualizationError::Database(msg("server.detail.sensitive")).into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = body_string(resp);
+        assert!(
+            body.contains(r#""message":"server.error.database""#),
+            "响应体: {body}"
+        );
+        assert!(!body.contains("sensitive"), "不应透出内部详情: {body}");
+    }
+
+    #[test]
+    fn into_response_内部错误返回通用key() {
+        let resp = VisualizationError::Internal(msg("server.detail.internal")).into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = body_string(resp);
+        assert!(
+            body.contains(r#""message":"server.error.internal""#),
+            "响应体: {body}"
+        );
+    }
+}

@@ -225,3 +225,225 @@ pub(crate) async fn write_key_file(path: &PathBuf, content: &str) -> Result<(), 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn san解析_ipv4与ipv6优先按地址处理() {
+        let Some(SanType::IpAddress(ip)) = parse_san("192.168.1.1") else {
+            panic!("IPv4 应解析为 IpAddress");
+        };
+        assert_eq!(
+            ip,
+            "192.168.1.1"
+                .parse::<std::net::IpAddr>()
+                .unwrap_or_else(|e| panic!("解析失败: {e}"))
+        );
+
+        let Some(SanType::IpAddress(ip)) = parse_san("::1") else {
+            panic!("IPv6 应解析为 IpAddress");
+        };
+        assert_eq!(
+            ip,
+            "::1"
+                .parse::<std::net::IpAddr>()
+                .unwrap_or_else(|e| panic!("解析失败: {e}"))
+        );
+    }
+
+    #[test]
+    fn san解析_域名按dns处理() {
+        let Some(SanType::DnsName(dns)) = parse_san("gw.example.com") else {
+            panic!("域名应解析为 DnsName");
+        };
+        assert_eq!(dns.as_str(), "gw.example.com");
+    }
+
+    #[test]
+    fn san解析_空白与首尾空格() {
+        // 首尾空格会被裁剪后按域名解析
+        let Some(SanType::DnsName(dns)) = parse_san("  host.example.com  ") else {
+            panic!("裁剪后的域名应解析为 DnsName");
+        };
+        assert_eq!(dns.as_str(), "host.example.com");
+
+        assert!(parse_san("").is_none(), "空串返回 None");
+        assert!(parse_san("   ").is_none(), "纯空白返回 None");
+    }
+
+    #[test]
+    fn san解析_非法输入返回none() {
+        // IA5 域名仅接受 ASCII，非 ASCII 字符无法转换
+        assert!(parse_san("例え.jp").is_none(), "非 ASCII 无法作为 IA5 域名");
+        assert!(
+            parse_san("中文.example").is_none(),
+            "非 ASCII 无法作为 IA5 域名"
+        );
+    }
+
+    /// 构造仅含 CN 的最小请求
+    fn minimal_request(cn: &str) -> GenerateCertRequest {
+        GenerateCertRequest {
+            common_name: cn.to_string(),
+            organization: None,
+            organizational_unit: None,
+            country: None,
+            state: None,
+            locality: None,
+            validity_days: None,
+            subject_alt_names: None,
+        }
+    }
+
+    #[test]
+    fn 构建自签名证书_cn写入主题与签发者() {
+        let req = minimal_request("box.example.com");
+        let out = build_self_signed_cert("box.example.com", &req, 30, vec![])
+            .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        assert!(out.cert_pem.starts_with("-----BEGIN CERTIFICATE-----"));
+        assert!(out.key_pem.starts_with("-----BEGIN PRIVATE KEY-----"));
+
+        let Some(meta) = crate::listing::parse_cert_metadata(out.cert_pem.as_bytes()) else {
+            panic!("生成的证书应可解析");
+        };
+        assert_eq!(meta.subject_cn.as_deref(), Some("box.example.com"));
+        assert_eq!(
+            meta.issuer_cn.as_deref(),
+            Some("box.example.com"),
+            "自签名签发者即自身"
+        );
+        let Some(nb) = meta.not_before else {
+            panic!("缺 not_before")
+        };
+        let Some(na) = meta.not_after else {
+            panic!("缺 not_after")
+        };
+        let days = (na - nb).num_days();
+        assert!(
+            (29..=31).contains(&days),
+            "有效期应为 30 天左右，实际 {days}"
+        );
+    }
+
+    #[test]
+    fn 构建自签名证书_san去重与cn回退() {
+        // 无 SAN 时回退使用 CN（CN 是合法域名）
+        let req = minimal_request("fallback.example.com");
+        let out = build_self_signed_cert("fallback.example.com", &req, 3650, vec![])
+            .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        let (sans, _) = extract_sans(&out.cert_pem);
+        assert_eq!(
+            sans.iter().filter(|s| s == &"fallback.example.com").count(),
+            1,
+            "CN 应作为回退 SAN 恰好出现一次: {sans:?}"
+        );
+
+        // 请求 SAN 与注入 SAN 合并去重
+        let mut req = minimal_request("cn.example.com");
+        req.subject_alt_names = Some(vec![
+            "192.168.1.10".to_string(),
+            "192.168.1.10".to_string(),
+            "alt.example.com".to_string(),
+        ]);
+        let out = build_self_signed_cert(
+            "cn.example.com",
+            &req,
+            3650,
+            vec![
+                "alt.example.com".to_string(),
+                "extra.example.com".to_string(),
+            ],
+        )
+        .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        let (dns_sans, ip_sans) = extract_sans(&out.cert_pem);
+        assert_eq!(
+            dns_sans
+                .iter()
+                .filter(|s| s.as_str() == "alt.example.com")
+                .count(),
+            1,
+            "重复 SAN 应去重"
+        );
+        assert!(
+            dns_sans.contains(&"extra.example.com".to_string()),
+            "注入的 SAN 应保留: {dns_sans:?}"
+        );
+        assert!(
+            ip_sans.iter().any(|b| b.as_slice() == [192, 168, 1, 10]),
+            "IP SAN 应保留: {ip_sans:?}"
+        );
+    }
+
+    /// 从 PEM 证书中提取 SAN，返回 (DNS 名称列表, IP 地址字节列表)
+    fn extract_sans(cert_pem: &str) -> (Vec<String>, Vec<Vec<u8>>) {
+        let pems = pem::parse_many(cert_pem.as_bytes()).unwrap_or_default();
+        let Some(block) = pems.iter().find(|p| p.tag() == "CERTIFICATE") else {
+            panic!("应包含证书块");
+        };
+        let Ok((_, cert)) = x509_parser::parse_x509_certificate(block.contents()) else {
+            panic!("证书应可解析");
+        };
+        let Ok(Some(san_ext)) = cert.subject_alternative_name() else {
+            return (Vec::new(), Vec::new());
+        };
+        let mut dns = Vec::new();
+        let mut ips = Vec::new();
+        for gn in &san_ext.value.general_names {
+            match gn {
+                x509_parser::extensions::GeneralName::DNSName(d) => dns.push(d.to_string()),
+                x509_parser::extensions::GeneralName::IPAddress(b) => ips.push(b.to_vec()),
+                _ => {}
+            }
+        }
+        (dns, ips)
+    }
+
+    /// 私钥写入临时目录：内容一致且权限为 0600，测试后清理
+    #[test]
+    fn 写入私钥文件_内容与权限() {
+        // 进程 + 线程唯一的临时子目录，测试后清理
+        let dir = std::env::temp_dir().join(format!(
+            "ipma_x509_write_test_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("创建临时目录失败: {e}"));
+        let key_path = dir.join("test.key");
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap_or_else(|e| panic!("构造测试运行时失败: {e}"));
+        rt.block_on(write_key_file(&key_path, "SECRET-KEY-CONTENT"))
+            .unwrap_or_else(|e| panic!("写入私钥失败: {e}"));
+
+        let content =
+            std::fs::read_to_string(&key_path).unwrap_or_else(|e| panic!("读取私钥失败: {e}"));
+        assert_eq!(content, "SECRET-KEY-CONTENT");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&key_path)
+                .unwrap_or_else(|e| panic!("读取元数据失败: {e}"))
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600, "私钥应仅属主可读写");
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn 生成请求_serde缺省字段为none() {
+        let req: GenerateCertRequest =
+            serde_json::from_str(r#"{"common_name": "only.example.com"}"#)
+                .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(req.common_name, "only.example.com");
+        assert!(req.organization.is_none());
+        assert!(req.validity_days.is_none());
+        assert!(req.subject_alt_names.is_none());
+    }
+}

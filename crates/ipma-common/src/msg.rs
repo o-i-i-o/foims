@@ -87,3 +87,80 @@ impl Display for AppMessage {
 pub fn msg(key: impl Into<String>) -> AppMessage {
     AppMessage::new(key)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_创建无参数消息() {
+        let m = AppMessage::new("server.ok");
+        assert_eq!(m.key(), "server.ok");
+        assert!(m.params().is_empty());
+    }
+
+    #[test]
+    fn msg_便捷构造等价于_new() {
+        assert_eq!(msg("server.ok"), AppMessage::new("server.ok"));
+    }
+
+    #[test]
+    fn from_str与from_string_等价() {
+        assert_eq!(AppMessage::from("k"), AppMessage::new("k"));
+        assert_eq!(AppMessage::from(String::from("k")), AppMessage::new("k"));
+    }
+
+    #[test]
+    fn with_链式追加参数并保持顺序() {
+        let m = msg("server.task.failed")
+            .with("name", "备份")
+            .with("count", 3);
+        let params = m.params();
+        assert_eq!(params.len(), 2);
+        assert_eq!(
+            (params[0].0.as_str(), params[0].1.as_str()),
+            ("name", "备份")
+        );
+        assert_eq!((params[1].0.as_str(), params[1].1.as_str()), ("count", "3"));
+    }
+
+    #[test]
+    fn params_map_空参数返回_none() {
+        assert!(msg("k").params_map().is_none());
+    }
+
+    #[test]
+    fn params_map_非空参数返回映射() {
+        let map = msg("k").with("a", 1).with("b", "x").params_map();
+        let Some(map) = map else {
+            panic!("有参数时 params_map 不应为 None");
+        };
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get("a"), Some(&"1".to_string()));
+        assert_eq!(map.get("b"), Some(&"x".to_string()));
+    }
+
+    #[test]
+    fn log_string_无参数仅输出_key() {
+        assert_eq!(msg("server.ok").log_string(), "server.ok");
+    }
+
+    #[test]
+    fn log_string_带参数输出键值对() {
+        let m = msg("server.task.failed").with("name", "t1").with("code", 7);
+        assert_eq!(m.log_string(), "server.task.failed(name=t1, code=7)");
+    }
+
+    #[test]
+    fn display_仅输出_key_不含参数() {
+        let m = msg("server.ok").with("a", 1);
+        assert_eq!(m.to_string(), "server.ok");
+    }
+
+    #[test]
+    fn 相等性_比较_key与参数() {
+        assert_eq!(msg("k").with("a", 1), msg("k").with("a", "1"));
+        assert_ne!(msg("k").with("a", 1), msg("k").with("a", 2));
+        assert_ne!(msg("k1"), msg("k2"));
+    }
+}

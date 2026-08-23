@@ -1,9 +1,9 @@
 <template id="user-modal-template">
-<div id="user-modal" class="modal">
+<div id="user-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="user-modal-title" data-i18n="user.add_user">Add User</h3>
-      <span class="close" data-modal-id="user-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="user-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="user-form">

@@ -72,3 +72,101 @@ pub async fn import_certificate(
 
     Ok(cert_path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造仅含指定标签 PEM 块的字节流（内容不要求为真实 DER）
+    fn pem_bytes(tag: &str) -> Vec<u8> {
+        format!("-----BEGIN {tag}-----\nSGVsbG8=\n-----END {tag}-----\n").into_bytes()
+    }
+
+    #[test]
+    fn 证书标签判定_仅精确匹配certificate() {
+        assert!(is_certificate_tag("CERTIFICATE"));
+        assert!(!is_certificate_tag("certificate"), "大小写敏感");
+        assert!(!is_certificate_tag("X509 CERTIFICATE"));
+    }
+
+    #[test]
+    fn 私钥标签判定_匹配各类private_key() {
+        assert!(is_private_key_tag("PRIVATE KEY"));
+        assert!(is_private_key_tag("RSA PRIVATE KEY"));
+        assert!(is_private_key_tag("EC PRIVATE KEY"));
+        assert!(is_private_key_tag("ENCRYPTED PRIVATE KEY"));
+        assert!(!is_private_key_tag("PUBLIC KEY"));
+    }
+
+    #[test]
+    fn pem块检测_按标签谓词判定() {
+        let cert = pem_bytes("CERTIFICATE");
+        assert!(has_pem_block(&cert, is_certificate_tag));
+        assert!(!has_pem_block(&cert, is_private_key_tag));
+
+        let key = pem_bytes("RSA PRIVATE KEY");
+        assert!(has_pem_block(&key, is_private_key_tag));
+        assert!(!has_pem_block(&key, is_certificate_tag));
+    }
+
+    #[test]
+    fn pem块检测_非pem数据返回false() {
+        assert!(!has_pem_block(b"garbage data", is_certificate_tag));
+        assert!(!has_pem_block(b"", is_certificate_tag));
+    }
+
+    /// 构造单线程 tokio 运行时（本 crate 的 tokio 未启用 macros 特性）
+    fn with_runtime<F: std::future::Future>(fut: F) -> F::Output {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap_or_else(|e| panic!("构造测试运行时失败: {e}"));
+        rt.block_on(fut)
+    }
+
+    /// 空输入在校验阶段即被拒绝，不触碰文件系统
+    #[test]
+    fn 导入_空输入返回校验错误() {
+        let err = with_runtime(import_certificate(vec![], vec![]))
+            .err()
+            .unwrap_or_else(|| panic!("空输入应被拒绝"));
+        match err {
+            CertManagerError::Validation(m) => {
+                assert_eq!(m.key(), "server.certificate.cert_file_missing")
+            }
+            other => panic!("应为校验错误，实际 {other}"),
+        }
+    }
+
+    /// 私钥不含 PRIVATE KEY 块时在校验阶段被拒绝
+    #[test]
+    fn 导入_私钥格式非法返回校验错误() {
+        let cert = pem_bytes("CERTIFICATE");
+        let bad_key = pem_bytes("NOTE");
+        let err = with_runtime(import_certificate(cert, bad_key))
+            .err()
+            .unwrap_or_else(|| panic!("非法私钥应被拒绝"));
+        match err {
+            CertManagerError::Validation(m) => {
+                assert_eq!(m.key(), "server.certificate.cert_file_invalid")
+            }
+            other => panic!("应为校验错误，实际 {other}"),
+        }
+    }
+
+    /// 证书块存在但无法被 X.509 解析（内容非 DER）时被拒绝
+    #[test]
+    fn 导入_证书不可解析返回校验错误() {
+        let cert = pem_bytes("CERTIFICATE"); // 内容为 "Hello"，非 DER
+        let key = pem_bytes("PRIVATE KEY");
+        let err = with_runtime(import_certificate(cert, key))
+            .err()
+            .unwrap_or_else(|| panic!("不可解析证书应被拒绝"));
+        match err {
+            CertManagerError::Validation(m) => {
+                assert_eq!(m.key(), "server.certificate.cert_file_invalid")
+            }
+            other => panic!("应为校验错误，实际 {other}"),
+        }
+    }
+}

@@ -367,3 +367,138 @@ pub fn validate_interface_role(interface_role: &str) -> Result<(), AppError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== 网卡类型校验 ====================
+
+    #[test]
+    fn test_validate_card_type_accepts_all_valid() {
+        for card_type in ["pcie", "onboard", "usb", "virtual", "wwan", "wifi", "other"] {
+            assert!(
+                validate_card_type(card_type).is_ok(),
+                "合法网卡类型 {card_type} 应通过校验"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_card_type_rejects_invalid() {
+        // 未收录值、大小写变体、空串均应返回 Validation 错误
+        for invalid in ["", "PCIE", "pci-e", "pcie ", "bluetooth", "nvidia"] {
+            let result = validate_card_type(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法类型 {invalid:?} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    // ==================== 物理接口类型校验 ====================
+
+    #[test]
+    fn test_validate_physical_type_accepts_all_valid() {
+        for physical_type in [
+            "rj45",
+            "sfp",
+            "sfp_plus",
+            "sfp28",
+            "qsfp_plus",
+            "qsfp28",
+            "wifi",
+            "virtual",
+            "other",
+        ] {
+            assert!(
+                validate_physical_type(physical_type).is_ok(),
+                "合法物理类型 {physical_type} 应通过校验"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_physical_type_rejects_invalid() {
+        // 常见别名（如 sfp+、QSFP28 大写）不收录，按非法处理
+        for invalid in ["", "SFP", "sfp+", "QSFP28", "rj-45", "aix"] {
+            let result = validate_physical_type(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法类型 {invalid:?} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    // ==================== 接口角色校验 ====================
+
+    #[test]
+    fn test_validate_interface_role_accepts_all_valid() {
+        for role in ["management", "business", "loopback", "uplink", "other"] {
+            assert!(
+                validate_interface_role(role).is_ok(),
+                "合法接口角色 {role} 应通过校验"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_interface_role_rejects_invalid() {
+        for invalid in ["", "Management", "mgmt", "business ", "downlink", "admin"] {
+            let result = validate_interface_role(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法角色 {invalid:?} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    // ==================== 默认网卡配置 ====================
+
+    #[test]
+    fn test_default_card_sync_item_matches_constants() {
+        // 空同步请求自动生成的默认配置应与常量及默认类型一致
+        assert_eq!(DEFAULT_CARD_NAME, "网卡1");
+        assert_eq!(DEFAULT_PORT_NAME, "eth0");
+
+        let item = default_card_sync_item();
+        assert_eq!(item.name, DEFAULT_CARD_NAME);
+        assert_eq!(
+            item.card_type.as_deref(),
+            Some("pcie"),
+            "默认网卡类型应为 pcie"
+        );
+        assert_eq!(item.id, None, "默认生成项不应携带 id");
+        assert_eq!(item.description, None);
+        assert_eq!(item.ports.len(), 1, "默认配置应含一个网口");
+
+        let port = item
+            .ports
+            .first()
+            .unwrap_or_else(|| panic!("默认网口应存在"));
+        assert_eq!(port.name, DEFAULT_PORT_NAME);
+        assert_eq!(
+            port.physical_type.as_deref(),
+            Some("rj45"),
+            "默认物理类型应为 rj45"
+        );
+        assert_eq!(
+            port.interface_role.as_deref(),
+            Some("business"),
+            "默认角色应为 business"
+        );
+        assert_eq!(port.id, None);
+        assert_eq!(port.mac_address, None);
+        assert_eq!(port.vlan_id, None);
+        assert!(port.ips.is_empty(), "默认网口不应携带 IP");
+    }
+}

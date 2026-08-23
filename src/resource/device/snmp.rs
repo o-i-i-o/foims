@@ -695,3 +695,432 @@ pub async fn get_device_ports_snmp(
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_snmp::{ErrorStatus, WalkAbortReason};
+    use std::net::SocketAddr;
+
+    /// 构造 v2c 参数
+    fn v2c_params(community: Option<&str>) -> SnmpParamsLegacy {
+        SnmpParamsLegacy {
+            ip: "192.0.2.1".to_string(),
+            port: 161,
+            version: "v2c".to_string(),
+            community: community.map(str::to_string),
+            username: None,
+            auth_proto: None,
+            auth_pass: None,
+            priv_proto: None,
+            priv_pass: None,
+            timeout_secs: 1,
+        }
+    }
+
+    /// 构造 v3 参数
+    fn v3_params(
+        username: Option<&str>,
+        auth_proto: Option<&str>,
+        priv_proto: Option<&str>,
+    ) -> SnmpParamsLegacy {
+        SnmpParamsLegacy {
+            ip: "192.0.2.1".to_string(),
+            port: 161,
+            version: "v3".to_string(),
+            community: None,
+            username: username.map(str::to_string),
+            auth_proto: auth_proto.map(str::to_string),
+            auth_pass: Some("auth-pass".to_string()),
+            priv_proto: priv_proto.map(str::to_string),
+            priv_pass: Some("priv-pass".to_string()),
+            timeout_secs: 1,
+        }
+    }
+
+    // ==================== 厂商识别 ====================
+
+    #[test]
+    fn test_identify_vendor_known_brands() {
+        let cases = [
+            ("Cisco IOS Software", "Cisco"),
+            ("Huawei Versatile Routing Platform", "Huawei"),
+            ("H3C Comware Software", "H3C"),
+            ("3Com SuperStack Switch", "H3C"),
+            ("Juniper Networks Junos", "Juniper"),
+            ("Dell EMC Networking", "Dell"),
+            ("HP ProCurve Switch", "HP/HPE"),
+            ("HPE OfficeConnect", "HP/HPE"),
+            ("ProCurve J9021A", "HP/HPE"),
+            ("ArubaOS-CX Switch", "Aruba"),
+            ("NETGEAR ProSafe GS724T", "Netgear"),
+            ("TP-Link JetStream T2600G", "TP-Link"),
+            ("TPLink Web Smart Switch", "TP-Link"),
+            ("Linksys LGS318", "Linksys"),
+            ("Ubiquiti UniFi Switch", "Ubiquiti"),
+            ("UBNT EdgeSwitch", "Ubiquiti"),
+            ("MikroTik RouterOS", "MikroTik"),
+            ("ExtremeXOS Switch", "Extreme Networks"),
+            ("Alcatel-Lucent OS6850", "Alcatel"),
+            ("ZyXEL GS1900", "ZyXEL"),
+            ("D-Link DGS-1210", "D-Link"),
+            ("Dlink Smart Switch", "D-Link"),
+        ];
+        for (sys_descr, expected) in cases {
+            assert_eq!(
+                identify_vendor(sys_descr),
+                expected,
+                "sysDescr={sys_descr} 应识别为 {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_identify_vendor_case_insensitive_and_priority() {
+        // 大小写不敏感
+        assert_eq!(identify_vendor("CISCO IOS"), "Cisco");
+        assert_eq!(identify_vendor("HUAWEI S5720"), "Huawei");
+        // 优先级：cisco 先于 huawei 判定
+        assert_eq!(identify_vendor("cisco device by huawei oem"), "Cisco");
+        // 未知厂商
+        assert_eq!(identify_vendor("Some Generic Device"), "Unknown");
+        assert_eq!(identify_vendor(""), "Unknown");
+    }
+
+    // ==================== 型号提取 ====================
+
+    #[test]
+    fn test_extract_model_with_digits() {
+        // 取前两个含数字的词（无分隔符拼接）
+        assert_eq!(extract_model("Huawei S5720 5700EI"), "S57205700EI");
+        // 仅一个含数字词
+        assert_eq!(extract_model("Cisco IOS C2960 Software"), "C2960");
+    }
+
+    #[test]
+    fn test_extract_model_without_digits() {
+        // 无数字词时短串原样返回
+        assert_eq!(extract_model("Generic Switch"), "Generic Switch");
+        // 长串（超过 50 字符）截断为前 50 字符
+        let long_descr = "X".repeat(80);
+        let model = extract_model(&long_descr);
+        assert_eq!(model.len(), 50, "超长描述应截断为 50 字符");
+        assert_eq!(model, "X".repeat(50));
+    }
+
+    // ==================== 认证参数构造 ====================
+
+    #[test]
+    fn test_build_auth_v2c() {
+        let auth =
+            build_auth(&v2c_params(Some("public"))).unwrap_or_else(|e| panic!("v2c 构造失败: {e}"));
+        assert_eq!(auth, Auth::v2c("public"));
+    }
+
+    #[test]
+    fn test_build_auth_v1_uses_v2c_community_version() {
+        // 记录现状：v1 分支复用 Auth::v2c 构造器，协议版本为 V2c（疑似生产缺陷）
+        let mut params = v2c_params(Some("private"));
+        params.version = "v1".to_string();
+        let auth = build_auth(&params).unwrap_or_else(|e| panic!("v1 构造失败: {e}"));
+        assert_eq!(auth, Auth::v2c("private"), "v1 分支当前退化为 v2c 构造");
+    }
+
+    #[test]
+    fn test_build_auth_v2c_requires_community() {
+        let err = build_auth(&v2c_params(None)).err().unwrap_or_default();
+        assert!(
+            err.contains("community"),
+            "错误信息应说明缺少 community: {err}"
+        );
+    }
+
+    #[test]
+    fn test_build_auth_unknown_version_rejected() {
+        let mut params = v2c_params(Some("public"));
+        params.version = "v4".to_string();
+        let err = build_auth(&params).err().unwrap_or_default();
+        assert!(err.contains("版本"), "错误信息应说明版本不支持: {err}");
+    }
+
+    #[test]
+    fn test_build_auth_v3_requires_username() {
+        let err = build_auth(&v3_params(None, None, None))
+            .err()
+            .unwrap_or_default();
+        assert!(err.contains("用户名"), "错误信息应说明缺少用户名: {err}");
+    }
+
+    #[test]
+    fn test_build_auth_v3_no_auth_level() {
+        // noAuthNoPriv：仅用户名
+        let auth = build_auth(&v3_params(Some("readonly"), None, None))
+            .unwrap_or_else(|e| panic!("v3 无认证构造失败: {e}"));
+        let expected: Auth = Auth::usm("readonly").into();
+        assert_eq!(auth, expected);
+    }
+
+    #[test]
+    fn test_build_auth_v3_auth_only() {
+        // authNoPriv：认证协议 + 密码，不配隐私协议
+        let auth = build_auth(&v3_params(Some("admin"), Some("SHA-256"), None))
+            .unwrap_or_else(|e| panic!("v3 authNoPriv 构造失败: {e}"));
+        let expected: Auth = Auth::usm("admin")
+            .auth(AuthProtocol::Sha256, "auth-pass")
+            .into();
+        assert_eq!(auth, expected);
+    }
+
+    #[test]
+    fn test_build_auth_v3_auth_priv_all_protocols() {
+        // authPriv：全部认证 × 隐私协议别名组合均应构造成功
+        for auth_proto in [
+            "MD5", "SHA", "SHA-1", "SHA1", "SHA-224", "SHA-256", "SHA-384", "SHA-512",
+        ] {
+            let params = v3_params(Some("admin"), Some(auth_proto), Some("DES"));
+            assert!(
+                build_auth(&params).is_ok(),
+                "认证协议 {auth_proto} 应被支持"
+            );
+        }
+        for priv_proto in [
+            "DES", "3DES", "DES3", "AES", "AES-128", "AES128", "AES-192", "AES192", "AES-256",
+            "AES256",
+        ] {
+            let params = v3_params(Some("admin"), Some("SHA"), Some(priv_proto));
+            assert!(
+                build_auth(&params).is_ok(),
+                "隐私协议 {priv_proto} 应被支持"
+            );
+        }
+        // 完整组合等值校验
+        let auth = build_auth(&v3_params(Some("admin"), Some("MD5"), Some("AES-128")))
+            .unwrap_or_else(|e| panic!("v3 authPriv 构造失败: {e}"));
+        let expected: Auth = Auth::usm("admin")
+            .auth_priv(
+                AuthProtocol::Md5,
+                "auth-pass",
+                PrivProtocol::Aes128,
+                "priv-pass",
+            )
+            .into();
+        assert_eq!(auth, expected);
+    }
+
+    #[test]
+    fn test_build_auth_v3_rejects_unsupported_protocols() {
+        // 不支持的认证协议
+        let err = build_auth(&v3_params(Some("admin"), Some("RC4"), None))
+            .err()
+            .unwrap_or_default();
+        assert!(
+            err.contains("认证协议"),
+            "错误信息应指明认证协议不支持: {err}"
+        );
+        // 不支持的隐私协议（需同时给出认证协议与密码才进入隐私分支）
+        let err = build_auth(&v3_params(Some("admin"), Some("SHA"), Some("RC4")))
+            .err()
+            .unwrap_or_default();
+        assert!(
+            err.contains("隐私协议"),
+            "错误信息应指明隐私协议不支持: {err}"
+        );
+    }
+
+    // ==================== 错误格式化 ====================
+
+    fn test_target() -> SocketAddr {
+        "192.0.2.10:161"
+            .parse()
+            .unwrap_or_else(|e| panic!("测试地址解析失败: {e}"))
+    }
+
+    #[test]
+    fn test_format_snmp_error_variants() {
+        // 超时
+        let timeout = Error::Timeout {
+            target: test_target(),
+            elapsed: Duration::from_secs(5),
+            retries: 3,
+        };
+        let text = format_snmp_error(Box::new(timeout));
+        assert!(text.contains("连接超时"), "超时错误文案: {text}");
+        assert!(text.contains("192.0.2.10:161"), "应包含目标地址: {text}");
+
+        // 网络错误
+        let network = Error::Network {
+            target: test_target(),
+            source: std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused"),
+        };
+        let text = format_snmp_error(Box::new(network));
+        assert!(text.contains("网络错误"), "网络错误文案: {text}");
+
+        // SNMP 协议错误
+        let snmp_err = Error::Snmp {
+            target: test_target(),
+            status: ErrorStatus::NoSuchName,
+            index: 2,
+            oid: None,
+        };
+        let text = format_snmp_error(Box::new(snmp_err));
+        assert!(text.contains("SNMP错误"), "协议错误文案: {text}");
+        assert!(text.contains("NoSuchName"), "应包含错误状态: {text}");
+
+        // 认证失败
+        let auth_err = Error::Auth {
+            target: test_target(),
+        };
+        assert!(format_snmp_error(Box::new(auth_err)).contains("认证失败"));
+
+        // 响应格式错误
+        let malformed = Error::MalformedResponse {
+            target: test_target(),
+        };
+        assert!(format_snmp_error(Box::new(malformed)).contains("响应格式错误"));
+
+        // Walk 中断
+        let aborted = Error::WalkAborted {
+            target: test_target(),
+            reason: WalkAbortReason::Cycle,
+        };
+        let text = format_snmp_error(Box::new(aborted));
+        assert!(text.contains("Walk中断"), "Walk 中断文案: {text}");
+
+        // 配置错误
+        let config = Error::Config("bad config".into());
+        assert_eq!(format_snmp_error(Box::new(config)), "配置错误: bad config");
+
+        // 无效 OID
+        let invalid_oid = Error::InvalidOid("1.2.x".into());
+        assert_eq!(format_snmp_error(Box::new(invalid_oid)), "无效OID: 1.2.x");
+
+        // 兜底分支
+        let closed = Error::Closed {
+            target: test_target(),
+        };
+        assert!(format_snmp_error(Box::new(closed)).contains("未知错误"));
+    }
+
+    // ==================== SSRF 地址分类（不发起真实网络请求的拒绝分支） ====================
+
+    /// 构造不依赖数据库的 AppState（连接池为 None，SNMP 测试走直接 IP 输入路径）
+    fn make_state() -> Arc<AppState> {
+        use crate::config::{
+            Config, DatabaseConfig, InitConfig, JwtConfig, ListenConfig, RateLimitConfig,
+            ServerConfig, SnmpConfig,
+        };
+        use ipma_scheduler::TaskRegistry;
+        let config = Config {
+            database: DatabaseConfig {
+                host: "127.0.0.1".to_string(),
+                port: 5432,
+                database: "ipma_test".to_string(),
+                username: "ipma".to_string(),
+                password: String::new(),
+                max_connections: 1,
+                min_connections: 1,
+                acquire_timeout_secs: 1,
+                idle_timeout_secs: 1,
+                max_lifetime_secs: 1,
+                query_timeout_secs: 1,
+                health_check_interval_secs: 1,
+            },
+            server: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                host_ipv6: None,
+                public_url: "http://127.0.0.1".to_string(),
+                session_timeout: None,
+                page_timeout: None,
+                cors_allowed_origins: Vec::new(),
+                allow_localhost_cors: false,
+                listen: ListenConfig::default(),
+            },
+            jwt: JwtConfig {
+                // 满足 32 字符强度要求即可，SNMP 测试不使用 JWT
+                secret: "snmp-unit-test-secret-0123456789".to_string(),
+                access_token_expiry: "15m".to_string(),
+                refresh_token_expiry: "7d".to_string(),
+            },
+            init: InitConfig { enabled: false },
+            i18n: None,
+            rate_limit: RateLimitConfig::default(),
+            snmp: SnmpConfig::default(),
+        };
+        let state = AppState::new(config, None, Arc::new(TaskRegistry::new()));
+        let state = state.unwrap_or_else(|e| panic!("测试 AppState 构造失败: {e}"));
+        Arc::new(state)
+    }
+
+    /// 发起 SNMP 连接测试并断言返回的错误消息 key
+    async fn assert_snmp_ip_rejected(ip: Option<&str>, expected_key: &str) {
+        let req = crate::models::SnmpTestRequest {
+            device_id: None,
+            ip_address: ip.map(str::to_string),
+            snmp_version: Some("v2c".to_string()),
+            snmp_community: Some("public".to_string()),
+            snmp_username: None,
+            snmp_auth_protocol: None,
+            snmp_auth_password: None,
+            snmp_priv_protocol: None,
+            snmp_priv_password: None,
+            snmp_port: Some(161),
+        };
+        let result = test_snmp_connection(State(make_state()), AppJson(req)).await;
+        let err = result.err().unwrap_or_else(|| panic!("IP {ip:?} 应被拒绝"));
+        assert!(
+            matches!(err, AppError::Validation(_)),
+            "应返回 Validation 错误，实际: {err}"
+        );
+        assert_eq!(
+            err.message().key(),
+            expected_key,
+            "IP {ip:?} 的拒绝原因不符"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_snmp_rejects_loopback_addresses() {
+        // IPv4/IPv6 回环均禁止
+        assert_snmp_ip_rejected(Some("127.0.0.1"), "server.device.snmp.loopback_forbidden").await;
+        assert_snmp_ip_rejected(
+            Some("127.255.255.254"),
+            "server.device.snmp.loopback_forbidden",
+        )
+        .await;
+        assert_snmp_ip_rejected(Some("::1"), "server.device.snmp.loopback_forbidden").await;
+    }
+
+    #[tokio::test]
+    async fn test_snmp_rejects_multicast_addresses() {
+        assert_snmp_ip_rejected(Some("224.0.0.1"), "server.device.snmp.multicast_forbidden").await;
+        assert_snmp_ip_rejected(Some("239.1.1.1"), "server.device.snmp.multicast_forbidden").await;
+        assert_snmp_ip_rejected(Some("ff02::1"), "server.device.snmp.multicast_forbidden").await;
+    }
+
+    #[tokio::test]
+    async fn test_snmp_rejects_link_local_and_metadata_addresses() {
+        // IPv4 链路本地（169.254.0.0/16）
+        assert_snmp_ip_rejected(
+            Some("169.254.1.1"),
+            "server.device.snmp.link_local_forbidden",
+        )
+        .await;
+        // 云元数据端点 169.254.169.254 亦属链路本地段：
+        // 现状先命中 is_link_local 检查（元数据专用分支不可达，已记录为生产问题）
+        assert_snmp_ip_rejected(
+            Some("169.254.169.254"),
+            "server.device.snmp.link_local_forbidden",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_snmp_rejects_invalid_or_missing_ip() {
+        // 非法 IP 字符串
+        assert_snmp_ip_rejected(Some("not-an-ip"), "server.device.snmp.ip_invalid").await;
+        assert_snmp_ip_rejected(Some("999.1.1.1"), "server.device.snmp.ip_invalid").await;
+        // 缺失或空 IP
+        assert_snmp_ip_rejected(None, "server.device.snmp.ip_required").await;
+        assert_snmp_ip_rejected(Some(""), "server.device.snmp.ip_required").await;
+    }
+}

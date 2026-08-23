@@ -381,8 +381,8 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
     option.selected = true;
     typeSelect.appendChild(option);
     typeSelect.disabled = true;
-    if (parentInfo) parentInfo.style.display = "none";
-    if (templateSelectContainer) templateSelectContainer.style.display = "none";
+    parentInfo?.classList.add("hidden");
+    templateSelectContainer?.classList.add("hidden");
   } else if (parentId) {
     // 新增子节点 - 类型由模板决定
     title.textContent = t("organization.add");
@@ -397,12 +397,12 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
         typeSelect.disabled = true;
       }
       if (parentInfo) {
-        parentInfo.style.display = "";
+        parentInfo.classList.remove("hidden");
         document.getElementById("org-parent-name").textContent = allowed?.parent_name || "";
         document.getElementById("org-parent-type").textContent =
           getOrgTypeLabel(allowed?.parent_type) || allowed?.parent_type || "";
       }
-      if (templateSelectContainer) templateSelectContainer.style.display = "none";
+      templateSelectContainer?.classList.add("hidden");
     } catch (error) {
       handleError(error, t("common.operation_failed"));
     }
@@ -410,11 +410,11 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
     // 新增根节点 - 需要选择模板
     title.textContent = t("organization.add_node");
     elementCache.setValue("org-parent-id", "");
-    if (parentInfo) parentInfo.style.display = "none";
+    parentInfo?.classList.add("hidden");
 
     // 显示模板选择
     if (templateSelectContainer) {
-      templateSelectContainer.style.display = "";
+      templateSelectContainer.classList.remove("hidden");
       const templateSelect = document.getElementById("org-template-select");
       if (templateSelect) {
         templateSelect.innerHTML = `<option value="">${t("org_template.select_template")}</option>`;

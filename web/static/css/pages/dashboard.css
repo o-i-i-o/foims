@@ -24,14 +24,10 @@
   margin-bottom: var(--space-xl);
 }
 
+/* 卡片基样式（白底/边框/圆角/阴影）由 components/cards.css 的分组规则提供 */
 .dashboard-card {
-  background: var(--color-bg-white);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
   transition: all var(--transition-fast);
   cursor: pointer;
-  border: 1px solid var(--color-border-light);
 }
 
 .dashboard-card:hover {
@@ -146,20 +142,7 @@
   font-weight: 500;
 }
 
-.item-status.status-active {
-  background: var(--color-success-bg);
-  color: var(--color-success-text);
-}
-
-.item-status.status-inactive {
-  background: var(--color-danger-bg);
-  color: var(--color-danger-text);
-}
-
-.item-status.status-reserved {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
-}
+/* 状态色由 components/badges.css 的 .status-active/.status-inactive/.status-reserved 全局提供 */
 
 .loading-item {
   padding: var(--space-sm) 0;

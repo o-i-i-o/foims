@@ -7,13 +7,7 @@
   margin-bottom: var(--space-xl);
 }
 
-.chart-card {
-  background: var(--color-bg-white);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  border: 1px solid var(--color-border-light);
-}
+/* 卡片基样式（白底/边框/圆角/阴影/溢出裁剪）由 components/cards.css 的分组规则提供 */
 
 .chart-card-header {
   padding: var(--space-md) var(--space-lg);

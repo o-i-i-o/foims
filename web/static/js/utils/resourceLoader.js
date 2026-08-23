@@ -2,9 +2,12 @@ const moduleCache = new Map();
 const loadingPromises = new Map();
 const preloadedModules = new Set();
 
-export const MODULE_VERSION = "01329";
+/* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
+   JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
+   避免同一模块因 URL 不同产生双实例、双份独立状态 */
+export const MODULE_VERSION = "01331";
 
-function withVersion(path) {
+export function withVersion(path) {
   if (!path) return path;
   return path.includes("?") ? `${path}&v=${MODULE_VERSION}` : `${path}?v=${MODULE_VERSION}`;
 }
@@ -59,12 +62,11 @@ export async function loadModule(moduleName, modulePath = null) {
     return loadingPromises.get(moduleName);
   }
 
-  const basePath = modulePath || MODULE_REGISTRY[moduleName];
-  if (!basePath) {
+  const path = modulePath || MODULE_REGISTRY[moduleName];
+  if (!path) {
     throw new Error(`Module "${moduleName}" not found in registry`);
   }
 
-  const path = withVersion(basePath);
   const promise = (async () => {
     try {
       const module = await import(path);
@@ -91,24 +93,14 @@ export function lazyLoad(moduleName, options = {}) {
         return;
       }
       try {
-        const module = await loadModule(moduleName);
-        resolve(module);
+        resolve(await loadModule(moduleName));
       } catch (error) {
         reject(error);
       }
     };
 
-    if (delay > 0) {
-      setTimeout(() => {
-        if (when === "idle" && "requestIdleCallback" in window) {
-          requestIdleCallback(executeLoad, { timeout: delay });
-        } else {
-          executeLoad();
-        }
-      }, delay);
-    } else if (when === "idle" && "requestIdleCallback" in window) {
-      requestIdleCallback(executeLoad, { timeout: 5000 });
-    } else if (when === "visible" && options.selector) {
+    // 进入视口后加载（与 delay 无关，IntersectionObserver 触发即执行）
+    if (when === "visible" && options.selector) {
       const observer = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
@@ -124,6 +116,14 @@ export function lazyLoad(moduleName, options = {}) {
       } else {
         executeLoad();
       }
+      return;
+    }
+
+    if (when === "idle" && "requestIdleCallback" in window) {
+      // delay 作为 idle 回调的超时上限：最迟 delay 毫秒后强制执行
+      requestIdleCallback(executeLoad, { timeout: Math.max(delay, 5000) });
+    } else if (delay > 0) {
+      setTimeout(executeLoad, delay);
     } else {
       executeLoad();
     }
@@ -155,10 +155,10 @@ function prefetchModule(moduleName) {
     return;
   }
 
-  const path = withVersion(basePath);
+  // 无版本号 URL 与实际 import 地址一致，modulepreload 提示才真正命中
   const link = document.createElement("link");
   link.rel = "modulepreload";
-  link.href = path;
+  link.href = basePath;
   document.head.appendChild(link);
   preloadedModules.add(moduleName);
 }

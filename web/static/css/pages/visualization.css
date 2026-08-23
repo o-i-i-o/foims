@@ -201,42 +201,8 @@
   opacity: 1;
 }
 
-.viz-port-item {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #ddd;
-  border-radius: var(--radius-sm);
-  background-color: var(--color-bg-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  cursor: pointer;
-  position: relative;
-  transition: all var(--transition-fast);
-}
-
-.viz-port-item:hover {
-  border-color: #4a90d9;
-  background-color: #f0f8ff;
-  transform: translateY(-1px);
-}
-
-.viz-port-item.status-up {
-  border-color: #48bb78;
-  background-color: #f0fff4;
-}
-
-.viz-port-item.status-down {
-  border-color: #f56565;
-  background-color: #fff5f5;
-}
-
-/* .port-tooltip 基础样式由 modals/unified-device-ports.css 全局提供，此处仅保留悬停触发 */
-.viz-port-item:hover .port-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
+/* .viz-port-item 方块与状态色、.port-tooltip 基础样式及悬停触发
+   均由 modals/unified-device-ports.css 的分组选择器全局提供，此处不再重复定义 */
 
 /* ==================== 全局可视化 ==================== */
 
@@ -466,7 +432,7 @@
   background: var(--color-bg);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
-  width: 600px;
+  width: min(600px, 90vw);
   max-height: 80vh;
   display: flex;
   flex-direction: column;

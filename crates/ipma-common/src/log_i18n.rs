@@ -228,3 +228,88 @@ macro_rules! log_debug {
         }
     }};
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 兜底翻译_无参数时回显_key() {
+        assert_eq!(fallback_translate("zh", "log.ok", &[]), "log.ok");
+    }
+
+    #[test]
+    fn 兜底翻译_带参数时拼接语言前缀与键值对() {
+        let params = [("name", "t1"), ("code", "7")];
+        assert_eq!(
+            fallback_translate("zh", "log.task.failed", &params),
+            "[zh] log.task.failed (name=t1, code=7)"
+        );
+    }
+
+    #[test]
+    fn 兜底翻译_单参数() {
+        let params = [("name", "t1")];
+        assert_eq!(
+            fallback_translate("en", "log.ok", &params),
+            "[en] log.ok (name=t1)"
+        );
+    }
+
+    /// 全局钩子与激活语言集合为进程级 OnceLock，集中在本测试内串行验证，
+    /// 避免与其他测试的读取行为产生竞态
+    #[test]
+    fn 全局状态_默认语言_钩子注册与二次设置不生效() {
+        // 未设置时默认英文
+        assert_eq!(active_log_langs(), ["en".to_string()]);
+
+        // 未注册钩子时 translate_for 走兜底翻译
+        let params = vec![("name", String::from("t1"))];
+        assert_eq!(
+            translate_for("zh", "log.ok", &params),
+            "[zh] log.ok (name=t1)"
+        );
+
+        // 注册钩子后由钩子接管翻译
+        fn upper_translate(locale: &str, key: &str, params: &[(&str, &str)]) -> String {
+            let joined = params
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join(";");
+            format!("{locale}#{key}#{joined}")
+        }
+        set_log_translate(upper_translate);
+        assert_eq!(translate_for("zh", "log.ok", &params), "zh#log.ok#name=t1");
+        // 无参数路径
+        assert_eq!(translate_for("zh", "log.ok", &[]), "zh#log.ok#");
+
+        // 设置激活语言集合后立即生效；OnceLock 决定再次设置不生效
+        set_active_log_langs(vec!["en".to_string(), "zh".to_string()]);
+        assert_eq!(active_log_langs(), ["en".to_string(), "zh".to_string()]);
+        set_active_log_langs(vec!["fr".to_string()]);
+        assert_eq!(
+            active_log_langs(),
+            ["en".to_string(), "zh".to_string()],
+            "OnceLock 语义下首次设置后不可变更"
+        );
+    }
+
+    /// 无订阅器环境下派发各级别事件不应 panic
+    #[test]
+    fn emit_各级别事件_派发不崩溃() {
+        emit_info("en", "info text");
+        emit_warn("zh", "warn 文本");
+        emit_error("en", "error text");
+        emit_debug("zh", "debug 文本");
+    }
+
+    /// 日志宏在未初始化环境（默认英文 + 兜底翻译）下可正常求值
+    #[test]
+    fn 日志宏_求值不崩溃() {
+        log_info!("log.test.info");
+        log_warn!("log.test.warn", name = "t1", code = 7);
+        log_error!("log.test.error", detail = "boom");
+        log_debug!("log.test.debug");
+    }
+}

@@ -1,9 +1,9 @@
 <template id="port-conflict-modal-template">
-<div id="port-conflict-modal" class="modal">
+<div id="port-conflict-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="port-conflict-modal-title" data-i18n="device.conflict_title">端口名称冲突</h3>
-      <span class="close" data-modal-id="port-conflict-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="port-conflict-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <div class="port-conflict-summary" id="port-conflict-summary"></div>

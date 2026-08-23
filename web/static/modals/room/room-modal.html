@@ -1,9 +1,9 @@
 <template id="room-modal-template">
-<div id="room-modal" class="modal">
+<div id="room-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="room-modal-title" data-i18n="room.add_room">Add Room</h3>
-      <span class="close" data-modal-id="room-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="room-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="room-form">
@@ -38,7 +38,7 @@
             <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
             <div id="room-children-container"></div>
         </div>
-        <div class="form-group" id="room-cabinets-group" style="display: none;">
+        <div class="form-group hidden" id="room-cabinets-group">
             <label id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</label>
             <div id="room-cabinets-container"></div>
         </div>

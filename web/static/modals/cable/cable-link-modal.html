@@ -1,9 +1,9 @@
 <template id="cable-link-modal-template">
-<div id="cable-link-modal" class="modal">
+<div id="cable-link-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="cable-link-modal-title" data-i18n="cable_link.add">Add Cable Link</h3>
-      <span class="close" data-modal-id="cable-link-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="cable-link-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="cable-link-form">
@@ -22,7 +22,7 @@
             <select id="cable-link-a-scope"></select>
           </div>
         </div>
-        <div class="form-row" id="cable-link-a-flow-row" style="display:none;">
+        <div class="form-row hidden" id="cable-link-a-flow-row">
           <div class="form-group">
             <label for="cable-link-a-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
             <select id="cable-link-a-cabinet"></select>
@@ -52,7 +52,7 @@
             <select id="cable-link-b-scope"></select>
           </div>
         </div>
-        <div class="form-row" id="cable-link-b-flow-row" style="display:none;">
+        <div class="form-row hidden" id="cable-link-b-flow-row">
           <div class="form-group">
             <label for="cable-link-b-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
             <select id="cable-link-b-cabinet"></select>

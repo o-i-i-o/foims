@@ -1,9 +1,9 @@
 <template id="cabinet-position-modal-template">
-<div id="cabinet-position-modal" class="modal">
+<div id="cabinet-position-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="cabinet-position-modal-title" data-i18n="cabinet_position.add_position">Add Cabinet Position</h3>
-      <span class="close" data-modal-id="cabinet-position-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="cabinet-position-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="cabinet-position-form">
@@ -26,8 +26,6 @@
             <select id="cabinet-position-cabinet" name="cabinet_id" required>
               <option value="" data-i18n="cabinet_position.select_room_first">Select room first</option>
             </select>
-          </div>
-          <div class="form-group">
           </div>
         </div>
         <div class="form-row">

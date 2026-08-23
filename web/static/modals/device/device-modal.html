@@ -1,9 +1,9 @@
 <template id="device-modal-template">
-<div id="device-modal" class="modal">
+<div id="device-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content modal-lg">
     <header class="modal-header">
       <h3 class="modal-title" id="device-modal-title" data-i18n="device.add">Add Device</h3>
-      <span class="close" data-modal-id="device-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="device-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="device-form">
@@ -52,7 +52,7 @@
                    data-i18n-placeholder="device.hostname_placeholder" placeholder="Fetched via SNMP, read-only"
                    data-i18n-title="device.hostname_title" title="Fetched via SNMP, read-only">
           </div>
-          <div class="form-group" id="device-template-name-group" style="display: none;">
+          <div class="form-group hidden" id="device-template-name-group">
             <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
             <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
           </div>
@@ -195,8 +195,6 @@
               <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
               <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="off">
             </div>
-            <!-- 空占位：保持 form-row 两列布局，使密码框占半宽 -->
-            <div class="form-group" aria-hidden="true"></div>
           </div>
         </div>
       </form>

@@ -1,9 +1,9 @@
 <template id="device-ports-group-modal-template">
-<div id="device-ports-group-modal" class="modal">
+<div id="device-ports-group-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content modal-lg-custom">
     <header class="modal-header">
       <h3 class="modal-title" id="device-ports-group-modal-title" data-i18n="device.port_groups">Port Groups</h3>
-      <span class="close" data-modal-id="device-ports-group-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="device-ports-group-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <div class="port-groups-container"></div>

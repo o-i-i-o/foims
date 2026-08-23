@@ -21,10 +21,6 @@
 
 /* 操作日志表：搜索框取代原操作列表头，收窄时间/操作人/结果列，
    让出宽度给含按钮与搜索框的最后一列 */
-#operation-logs-table .th-log-search {
-  width: 220px;
-}
-
 #operation-logs-table th.col-time,
 #operation-logs-table td.col-time {
   width: 170px;

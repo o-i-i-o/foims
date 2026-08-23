@@ -507,7 +507,7 @@ function buildIPv4Content(network, networkIps, networkId) {
     <div class="usage-controls">
       <div class="filter-controls">
         <label>${t("common.filter")}: </label>
-        <select id="ip-status-filter" class="form-control form-control-sm d-inline-block w-auto mr-2">
+        <select id="ip-status-filter" class="form-control form-control-sm">
           <option value="all">${t("common.all")}</option>
           <option value="used">${t("network.used")}</option>
           <option value="unused">${t("network.unused")}</option>
@@ -543,7 +543,7 @@ function buildIPv4Content(network, networkIps, networkId) {
     <div class="usage-ips">
       <h5>${t("network.ipv4_list")}</h5>
       <div class="table-responsive">
-        <table class="table table-sm">
+        <table class="table">
           <thead>
             <tr>
               <th>${t("ip.ip_address")}</th>
@@ -644,7 +644,7 @@ function buildIPv6Content(network, networkIps, networkId) {
         <button id="refresh-ipv6-usage" class="btn btn-sm btn-secondary">${t("common.refresh")}</button>
       </div>
       <div class="table-responsive">
-        <table class="table table-sm">
+        <table class="table">
           <thead>
             <tr>
               <th>${t("ip.ip_address")}</th>
@@ -737,7 +737,7 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
   const refreshButton = modalContainer.querySelector("#refresh-ipv4-usage");
   if (refreshButton) {
     refreshButton.addEventListener("click", async () => {
-      refreshButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
+      refreshButton.innerHTML = `<span class="loading" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
       refreshButton.disabled = true;
 
       try {
@@ -817,7 +817,7 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
 
   if (refreshButton) {
     refreshButton.addEventListener("click", async () => {
-      refreshButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
+      refreshButton.innerHTML = `<span class="loading" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
       refreshButton.disabled = true;
 
       try {

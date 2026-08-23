@@ -1,9 +1,9 @@
 <template id="log-details-modal-template">
-<div id="log-details-modal" class="modal modal-flex">
+<div id="log-details-modal" class="modal modal-flex" role="dialog" aria-modal="true">
   <div class="modal-content modal-md">
     <header class="modal-header">
       <h3 class="modal-title" data-i18n="logs.detail_title">Log Details</h3>
-      <span class="close" data-modal-id="log-details-modal" role="button" tabindex="0" aria-label="Close">&times;</span>
+      <button type="button" class="close" data-modal-id="log-details-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <div class="log-detail-row">

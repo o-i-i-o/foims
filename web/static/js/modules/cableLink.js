@@ -331,13 +331,13 @@ async function onTypeChange(side) {
   const cfg = type ? ENDPOINT_SCOPE[type] : null;
   if (!cfg) {
     if (scopeGroup) scopeGroup.style.display = "none";
-    if (flowRow) flowRow.style.display = "none";
+    flowRow?.classList.add("hidden");
     return;
   }
   if (scopeLabel) scopeLabel.textContent = t(cfg.labelKey) || cfg.scope;
   if (scopeGroup) scopeGroup.style.display = "";
   // 设备接口流程：显示 机柜（可选）+ 设备 级联行，其余类型隐藏
-  if (flowRow) flowRow.style.display = cfg.deviceFlow ? "" : "none";
+  flowRow?.classList.toggle("hidden", !cfg.deviceFlow);
   if (cfg.deviceFlow) {
     if (cabinetSelect)
       cabinetSelect.innerHTML = `<option value="">${t("cable_link.cabinet_any")}</option>`;

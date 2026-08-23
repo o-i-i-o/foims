@@ -182,3 +182,55 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 标识符校验_合法名称通过() {
+        assert!(validate_identifier("ipma").is_ok());
+        assert!(validate_identifier("db_2024").is_ok());
+        assert!(validate_identifier("A1_b").is_ok());
+    }
+
+    #[test]
+    fn 标识符校验_空名称返回_empty错误() {
+        let Err(m) = validate_identifier("") else {
+            panic!("空标识符应被拒绝");
+        };
+        assert_eq!(m.key(), "server.init.db.identifier_empty");
+        // 空名称作为 name 参数透出
+        let params = m.params();
+        assert_eq!(params.len(), 1);
+        assert_eq!((params[0].0.as_str(), params[0].1.as_str()), ("name", ""));
+    }
+
+    #[test]
+    fn 标识符校验_非法字符返回_invalid错误() {
+        for name in ["bad-name", "db;DROP", "name with space", "db.name", "db'x"] {
+            let Err(m) = validate_identifier(name) else {
+                panic!("标识符 {name} 应被拒绝");
+            };
+            assert_eq!(
+                m.key(),
+                "server.init.db.identifier_invalid",
+                "标识符: {name}"
+            );
+            let params = m.params();
+            assert_eq!(params[0].1.as_str(), name, "非法名称应作为参数透出");
+        }
+    }
+
+    #[test]
+    fn 标识符引用_普通名称加双引号() {
+        assert_eq!(quote_ident("ipma"), "\"ipma\"");
+        assert_eq!(quote_ident(""), "\"\"");
+    }
+
+    #[test]
+    fn 标识符引用_内部双引号翻倍转义() {
+        assert_eq!(quote_ident("a\"b"), "\"a\"\"b\"");
+        assert_eq!(quote_ident("\""), "\"\"\"\"");
+    }
+}

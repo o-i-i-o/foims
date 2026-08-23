@@ -18,17 +18,21 @@
   --color-success: #28a745;
   --color-success-bg: #d4edda;
   --color-success-text: #155724;
+  --color-success-border: #c3e6cb;
   --color-danger: #dc3545;
   --color-danger-hover: #c82333;
   --color-danger-bg: #f8d7da;
   --color-danger-text: #721c24;
+  --color-danger-border: #f5c6cb;
   --color-warning: #ffc107;
   --color-warning-bg: #fff3cd;
   --color-warning-text: #856404;
+  --color-warning-border: #ffeeba;
   --color-info: #17a2b8;
   --color-info-hover: #138496;
   --color-info-bg: #d1ecf1;
   --color-info-text: #0c5460;
+  --color-info-border: #bee5eb;
   --color-text: #333;
   --color-text-secondary: #555;
   --color-text-muted: #6c757d;
@@ -81,6 +85,8 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
+  /* 等宽字体：密码输入框 / IPv6 地址 / CIDR 标签等共用 */
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
   --z-dropdown: 1000;
   --z-sticky: 1020;
   --z-fixed: 1030;
@@ -102,6 +108,16 @@
   --status-inactive: #dc3545;
   --status-reserved: #ffc107;
   --status-fallback: #6c757d;
+
+  /* 端口方块状态色（统一端口管理模态框与可视化端口网格共用） */
+  --port-hover-border: #4a90d9;
+  --port-hover-bg: #f0f8ff;
+  --port-up-border: #48bb78;
+  --port-up-bg: #f0fff4;
+  --port-down-border: #f56565;
+  --port-down-bg: #fff5f5;
+  --port-admin-down-border: #ecc94b;
+  --port-admin-down-bg: #fffff0;
   --room-office: #17a2b8;
   --room-data-center: #fd7e14;
   --room-telecom-closet: #6f42c1;

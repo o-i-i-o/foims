@@ -42,3 +42,50 @@ impl From<sqlx::Error> for SchedulerError {
 }
 
 pub type SchedulerResult<T> = Result<T, SchedulerError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_包含分类前缀与消息key() {
+        assert_eq!(
+            SchedulerError::Validation(msg("server.v")).to_string(),
+            "验证失败: server.v"
+        );
+        assert_eq!(
+            SchedulerError::TaskNotFound(msg("server.t")).to_string(),
+            "任务未找到: server.t"
+        );
+        assert_eq!(
+            SchedulerError::Execution(msg("server.e")).to_string(),
+            "任务执行失败: server.e"
+        );
+    }
+
+    #[test]
+    fn from_sqlx_行不存在映射为not_found() {
+        let err = SchedulerError::from(sqlx::Error::RowNotFound);
+        match &err {
+            SchedulerError::NotFound(m) => assert_eq!(m.key(), "server.common.not_found"),
+            other => panic!("应映射为 NotFound，实际 {other}"),
+        }
+    }
+
+    #[test]
+    fn from_sqlx_连接池超时映射为数据库错误() {
+        let err = SchedulerError::from(sqlx::Error::PoolTimedOut);
+        assert!(matches!(err, SchedulerError::Database(_)));
+    }
+
+    #[test]
+    fn from_sqlx_列缺失映射为数据库错误() {
+        let err = SchedulerError::from(sqlx::Error::ColumnNotFound("c".to_string()));
+        match &err {
+            SchedulerError::Database(m) => {
+                assert_eq!(m.key(), "server.db.operation_failed");
+            }
+            other => panic!("应映射为 Database，实际 {other}"),
+        }
+    }
+}

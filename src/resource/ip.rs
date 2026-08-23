@@ -1222,3 +1222,208 @@ pub async fn batch_create_ip_managers(
             .with("failed", errors.len()),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    // ==================== IP 版本识别 ====================
+
+    #[test]
+    fn test_detect_ip_version_ipv4_valid() {
+        for ip in [
+            "192.168.1.1",
+            "10.0.0.1",
+            "172.16.254.254",
+            "0.0.0.0",
+            "255.255.255.255",
+        ] {
+            let version =
+                detect_ip_version(ip).unwrap_or_else(|e| panic!("合法 IPv4 {ip} 应识别成功: {e}"));
+            assert_eq!(version, 4, "IPv4 地址应返回版本 4: {ip}");
+        }
+    }
+
+    #[test]
+    fn test_detect_ip_version_ipv6_valid() {
+        for ip in [
+            "::1",
+            "2001:db8::1",
+            "fe80::1",
+            "::",
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        ] {
+            let version =
+                detect_ip_version(ip).unwrap_or_else(|e| panic!("合法 IPv6 {ip} 应识别成功: {e}"));
+            assert_eq!(version, 6, "IPv6 地址应返回版本 6: {ip}");
+        }
+    }
+
+    #[test]
+    fn test_detect_ip_version_ipv4_mapped_ipv6_is_v6() {
+        // IPv4 映射的 IPv6 地址按 IPv6 处理
+        let version = detect_ip_version("::ffff:192.168.1.1")
+            .unwrap_or_else(|e| panic!("映射地址应识别成功: {e}"));
+        assert_eq!(version, 6);
+    }
+
+    #[test]
+    fn test_detect_ip_version_invalid_inputs() {
+        // 各类非法输入应返回 Validation 错误
+        for invalid in [
+            "",               // 空串
+            "abc",            // 非数字
+            "192.168.1",      // IPv4 缺段
+            "1.2.3.4.5",      // IPv4 多段
+            "300.1.1.1",      // 超出 0-255
+            "192.168.1.1/24", // 带掩码后缀不被接受
+            "2001:db8:",      // IPv6 截断
+            "::gg::",         // 非法十六进制
+            "192.168.1.1 ",   // 带空白
+        ] {
+            let result = detect_ip_version(invalid);
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("非法输入 {invalid:?} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应返回 Validation 错误，实际: {err}"
+            );
+        }
+    }
+
+    // ==================== 网段可用 IP 计算 ====================
+
+    #[test]
+    fn test_find_available_invalid_cidr_returns_empty() {
+        // 非法 CIDR 返回空列表而非 panic
+        for bad in ["not-a-cidr", "192.168.1.1", "", "10.0.0.0/33", "::/129"] {
+            let result = find_available_ips_in_cidr(bad, None, &HashSet::new(), None);
+            assert!(result.is_empty(), "非法 CIDR {bad:?} 应返回空列表");
+        }
+    }
+
+    #[test]
+    fn test_find_available_ipv4_excludes_network_and_broadcast() {
+        // /24 网段应排除网络地址与广播地址
+        let available = find_available_ips_in_cidr("192.168.1.0/24", None, &HashSet::new(), None);
+        assert_eq!(available.len(), 254, "/24 应有 254 个可用地址");
+        assert_eq!(available.first().map(String::as_str), Some("192.168.1.1"));
+        assert_eq!(available.last().map(String::as_str), Some("192.168.1.254"));
+        assert!(
+            !available.contains(&"192.168.1.0".to_string()),
+            "网络地址应被排除"
+        );
+        assert!(
+            !available.contains(&"192.168.1.255".to_string()),
+            "广播地址应被排除"
+        );
+    }
+
+    #[test]
+    fn test_find_available_excludes_used_and_gateway() {
+        let mut used = HashSet::new();
+        used.insert("10.0.0.1".to_string());
+        let gateway = "10.0.0.2".to_string();
+        let available = find_available_ips_in_cidr("10.0.0.0/24", Some(&gateway), &used, None);
+        // 已占用与网关均应被跳过，首个可用为 .3
+        assert!(
+            !available.contains(&"10.0.0.1".to_string()),
+            "已占用 IP 应被排除"
+        );
+        assert!(
+            !available.contains(&"10.0.0.2".to_string()),
+            "网关 IP 应被排除"
+        );
+        assert_eq!(available.first().map(String::as_str), Some("10.0.0.3"));
+        assert_eq!(available.len(), 252, "254 - 1(占用) - 1(网关) = 252");
+    }
+
+    #[test]
+    fn test_find_available_respects_max_count() {
+        // max_count 截断结果数量
+        let available = find_available_ips_in_cidr("10.0.0.0/24", None, &HashSet::new(), Some(3));
+        assert_eq!(available.len(), 3);
+        assert_eq!(
+            available,
+            vec![
+                "10.0.0.1".to_string(),
+                "10.0.0.2".to_string(),
+                "10.0.0.3".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_find_available_ipv4_default_cap_1000() {
+        // 未指定上限时 IPv4 默认最多 1000 个：/22 覆盖验证
+        let available = find_available_ips_in_cidr("10.1.0.0/22", None, &HashSet::new(), None);
+        assert_eq!(available.len(), 1000, "IPv4 默认上限应为 1000");
+    }
+
+    #[test]
+    fn test_find_available_ipv6_no_broadcast_and_default_cap_100() {
+        // IPv6 无广播地址概念，仅排除网络地址；默认上限 100
+        let available = find_available_ips_in_cidr("2001:db8::/64", None, &HashSet::new(), None);
+        assert_eq!(available.len(), 100, "IPv6 默认上限应为 100");
+        assert_eq!(available.first().map(String::as_str), Some("2001:db8::1"));
+        assert!(
+            !available.contains(&"2001:db8::".to_string()),
+            "网络地址应被排除"
+        );
+    }
+
+    #[test]
+    fn test_find_available_ipv6_excludes_used_and_gateway() {
+        let mut used = HashSet::new();
+        used.insert("2001:db8::1".to_string());
+        let gateway = "2001:db8::2".to_string();
+        let available = find_available_ips_in_cidr("2001:db8::/64", Some(&gateway), &used, Some(5));
+        assert_eq!(
+            available,
+            vec![
+                "2001:db8::3".to_string(),
+                "2001:db8::4".to_string(),
+                "2001:db8::5".to_string(),
+                "2001:db8::6".to_string(),
+                "2001:db8::7".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_find_available_prefix_boundaries() {
+        let empty = HashSet::new();
+        // /32：唯一地址既是网络地址也是广播地址，无可用 IP
+        assert!(
+            find_available_ips_in_cidr("192.168.7.5/32", None, &empty, None).is_empty(),
+            "/32 应无可用地址"
+        );
+        // /31：仅有的两个地址分别为网络/广播地址，无可用 IP
+        assert!(
+            find_available_ips_in_cidr("192.168.7.0/31", None, &empty, None).is_empty(),
+            "/31 应无可用地址"
+        );
+        // /30：中间两个主机地址可用
+        let slash30 = find_available_ips_in_cidr("192.168.7.0/30", None, &empty, None);
+        assert_eq!(slash30.len(), 2, "/30 应有 2 个可用地址");
+        assert!(slash30.contains(&"192.168.7.1".to_string()));
+        assert!(slash30.contains(&"192.168.7.2".to_string()));
+        // /0 前缀下应受默认 1000 上限约束（不遍历全部地址）
+        let slash0 = find_available_ips_in_cidr("0.0.0.0/0", None, &empty, None);
+        assert_eq!(slash0.len(), 1000, "/0 受默认上限约束");
+        assert_eq!(slash0.first().map(String::as_str), Some("0.0.0.1"));
+    }
+
+    #[test]
+    fn test_find_available_full_subnet_returns_empty() {
+        // 所有主机地址均被占用时应返回空列表
+        let mut used: HashSet<String> = HashSet::new();
+        for i in 1..=2 {
+            used.insert(format!("192.168.9.{i}"));
+        }
+        let available = find_available_ips_in_cidr("192.168.9.0/30", None, &used, None);
+        assert!(available.is_empty(), "全部占用后应无可用地址");
+    }
+}

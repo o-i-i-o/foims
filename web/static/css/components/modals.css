@@ -35,16 +35,18 @@
   position: relative;
 }
 
-.modal-content.modal-lg {
-  max-width: 900px;
+/* 宽度档位：min() 保证窄视口下不溢出（原生响应式，无需媒体查询） */
+.modal-content.modal-lg,
+.modal-content.modal-xl {
+  max-width: min(900px, calc(100vw - 2rem));
 }
 
 .modal-content.modal-sm {
-  max-width: 480px;
+  max-width: min(480px, calc(100vw - 2rem));
 }
 
 .modal-content.modal-md {
-  max-width: 600px;
+  max-width: min(600px, calc(100vw - 2rem));
 }
 
 .modal-content.modal-lg-custom {
@@ -169,105 +171,40 @@
   transform: rotate(90deg);
 }
 
-.modal.active .modal-content .modal-body .form-group {
-  margin-bottom: var(--space-md);
-  display: flex;
+/* ===== 模态框内表单（基样式见 forms.css，此处仅覆盖布局差异） =====
+   差异：label 定宽居中、控件与 label 同行横向扩展 */
+.modal .form-group {
   align-items: center;
-  gap: var(--space-sm);
 }
 
-.modal.active .modal-content .modal-body .form-group:last-child {
-  margin-bottom: 0;
-}
-
-.modal.active .modal-content .modal-body .form-group label {
-  display: inline-block;
-  margin-bottom: 0;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
+.modal .form-group label {
   width: 100px;
-  flex-shrink: 0;
+  min-width: 100px;
   text-align: center;
+  color: var(--color-text-secondary);
+  padding-top: 0;
 }
 
-.modal.active .modal-content .modal-body .form-group input,
-.modal.active .modal-content .modal-body .form-group textarea,
-.modal.active .modal-content .modal-body .form-group select {
+.modal .form-group input:not([type="checkbox"]),
+.modal .form-group select,
+.modal .form-group textarea {
   flex: 1;
   width: auto;
   min-width: 0;
-  padding: var(--control-padding-y) var(--control-padding-x);
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 0.9rem;
-  font-family: inherit;
-  transition: all var(--transition-fast);
-  background-color: var(--control-bg);
-  color: var(--color-text-light);
-  box-sizing: border-box;
 }
 
-.modal.active .modal-content .modal-body .form-group input,
-.modal.active .modal-content .modal-body .form-group select {
-  height: var(--control-height);
-  line-height: 1.2;
-}
-
-.modal.active .modal-content .modal-body .form-group select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M6 9L1 4h10L6 9z' fill='%236c757d'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right var(--control-padding-x) center;
-  background-size: 14px;
-  padding-right: calc(var(--control-padding-x) * 2.5);
-  cursor: pointer;
-}
-
-.modal.active .modal-content .modal-body .form-group textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.5;
+.modal .form-group textarea {
   align-self: flex-start;
 }
 
-.modal.active .modal-content .modal-body .form-group input:focus,
-.modal.active .modal-content .modal-body .form-group select:focus,
-.modal.active .modal-content .modal-body .form-group textarea:focus {
-  outline: none;
-  border-color: var(--control-border-focus);
-  box-shadow: var(--control-shadow);
-  background-color: var(--color-bg-white);
-}
-
-.modal.active .modal-content .modal-body .form-group input::placeholder,
-.modal.active .modal-content .modal-body .form-group textarea::placeholder {
-  color: var(--color-text-muted);
-  opacity: 1;
-}
-
-.modal.active .modal-content .modal-body .form-group [id$="-ips-container"] {
+.modal .form-group [id$="-ips-container"] {
   flex: 1;
   min-width: 0;
   width: 100%;
 }
 
-.modal.active .modal-content .modal-body .form-row {
-  display: flex;
-  gap: var(--space-lg);
-  margin-bottom: var(--space-md);
-}
-
-.modal.active .modal-content .modal-body .form-row:last-child {
-  margin-bottom: 0;
-}
-
-.modal.active .modal-content .modal-body .form-row .form-group {
-  margin-bottom: 0;
-  flex: 1;
-}
-
-.modal.active .modal-content .modal-body .form-row .form-group label {
+/* 行内组空间有限，label 退化为自适应宽度 */
+.modal .form-row .form-group label {
   width: auto;
   min-width: 80px;
 }
@@ -389,14 +326,8 @@
   border: 0.25rem solid var(--color-border-light, #ddd);
   border-top-color: var(--color-primary, #3b82f6);
   border-radius: 50%;
-  animation: modalSpinnerSpin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
   margin: 0 auto;
-}
-
-@keyframes modalSpinnerSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* 模态框内工具行：左侧 tab 切换 + 右侧操作按钮 */

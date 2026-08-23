@@ -25,26 +25,24 @@ async function loadStyle(href) {
     return loadingStyles.get(url);
   }
 
-  const promise = new Promise((resolve, reject) => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = url;
+  const { promise, resolve, reject } = Promise.withResolvers();
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = url;
 
-    link.onload = () => {
-      loadedStyles.add(url);
-      loadingStyles.delete(url);
-      resolve(true);
-    };
+  link.onload = () => {
+    loadedStyles.add(url);
+    loadingStyles.delete(url);
+    resolve(true);
+  };
 
-    link.onerror = () => {
-      loadingStyles.delete(url);
-      console.error(`Failed to load style: ${url}`);
-      reject(new Error(`Failed to load style: ${url}`));
-    };
+  link.onerror = () => {
+    loadingStyles.delete(url);
+    console.error(`Failed to load style: ${url}`);
+    reject(new Error(`Failed to load style: ${url}`));
+  };
 
-    document.head.appendChild(link);
-  });
-
+  document.head.appendChild(link);
   loadingStyles.set(url, promise);
   return promise;
 }
@@ -66,11 +64,13 @@ export function preloadPageStyles(pageId) {
   }
 
   styles.forEach((href) => {
-    if (!loadedStyles.has(href) && !loadingStyles.has(href)) {
+    // 与 loadStyle 相同以版本化 URL 作为去重键，避免重复插入 prefetch
+    const url = withVersion(href);
+    if (!loadedStyles.has(url) && !loadingStyles.has(url)) {
       const link = document.createElement("link");
       link.rel = "prefetch";
       link.as = "style";
-      link.href = href;
+      link.href = url;
       document.head.appendChild(link);
     }
   });

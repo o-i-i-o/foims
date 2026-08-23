@@ -249,7 +249,7 @@ function setupSaveAsTemplateToggle() {
   if (!checkbox || !nameGroup || checkbox.dataset.bound) return;
 
   checkbox.addEventListener("change", () => {
-    nameGroup.style.display = checkbox.checked ? "" : "none";
+    nameGroup.classList.toggle("hidden", !checkbox.checked);
     if (!checkbox.checked) {
       const nameInput = document.getElementById("device-template-name");
       if (nameInput) nameInput.value = "";
@@ -657,22 +657,28 @@ export async function submitDeviceForm() {
 }
 
 export async function openDeviceModal(device = null) {
-  await openModal("device-modal");
+  // 打开模态、模板下拉、组织下拉、房间数据互不依赖，并行加载
+  // （编辑路径的房间列表需按所属组织/类型过滤：先并行取房间详情，再加载过滤列表，
+  //   避免旧实现"先全量后过滤"的重复请求；新增路径直接全量加载一次）
+  const roomDetailPromise = device?.room_id
+    ? apiGet(`/api/resources/rooms/${device.room_id}`).catch(() => null)
+    : null;
+  const [, , , , cardManagerModule] = await Promise.all([
+    openModal("device-modal"),
+    loadDeviceTemplatesForSelect("device-template-id"),
+    loadOrgsForSelect("device-org-id"),
+    device?.room_id ? Promise.resolve() : loadRoomsForSelect("device-room-id"),
+    loadModule("networkCardManager")
+  ]);
+  const modal = document.getElementById("device-modal");
+  if (!modal) return;
 
   const title = elementCache.get("device-modal-title");
   const form = elementCache.get("device-form");
 
-  await loadDeviceTemplatesForSelect("device-template-id");
-  await loadOrgsForSelect("device-org-id");
-  await loadRoomsForSelect("device-room-id");
-  await loadWorkstationsForSelect("device-workstation-id");
-  await loadCabinetsForSelect("device-cabinet-id");
-  await loadPositionsForSelect("device-position-id");
-
   ensureDeviceListeners();
 
-  const { getNetworkCardManager } = await loadModule("networkCardManager");
-  const cardManager = getNetworkCardManager();
+  const cardManager = cardManagerModule.getNetworkCardManager();
 
   if (device) {
     title.textContent = t("device.edit");
@@ -690,39 +696,41 @@ export async function openDeviceModal(device = null) {
     setSnmpFieldValues(device);
 
     if (device.template_id) elementCache.setValue("device-template-id", device.template_id);
+
     if (device.room_id) {
-      // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列
-      try {
-        const roomResult = await apiGet(`/api/resources/rooms/${device.room_id}`);
-        if (roomResult.success && roomResult.data) {
-          const room = roomResult.data;
-          const orgId = room.org_id || null;
-          const roomType = room.room_type ? room.room_type.toLowerCase() : null;
-          if (orgId) elementCache.setValue("device-org-id", orgId);
-          if (roomType) elementCache.setValue("device-room-type", roomType);
-          await loadRoomsForSelect("device-room-id", { orgId, roomType });
-        }
-      } catch (error) {
-        console.error("加载设备所属房间失败:", error);
-      }
+      // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列；
+      // 工位/机柜/机位下拉与房间网段上下文仅依赖 room_id，五路并行
+      const roomResult = await roomDetailPromise;
+      const room = roomResult?.success ? roomResult.data : null;
+      const orgId = room?.org_id || null;
+      const roomType = room?.room_type ? room.room_type.toLowerCase() : null;
+      if (orgId) elementCache.setValue("device-org-id", orgId);
+      if (roomType) elementCache.setValue("device-room-type", roomType);
+
+      await Promise.all([
+        loadRoomsForSelect("device-room-id", { orgId, roomType }),
+        loadWorkstationsForSelect("device-workstation-id", device.room_id),
+        loadCabinetsForSelect("device-cabinet-id", device.room_id),
+        device.cabinet_id
+          ? loadPositionsForSelect("device-position-id", device.cabinet_id)
+          : device.position_id
+            ? // 历史数据：机位可能未挂接机柜，按房间回退加载以便回显
+              loadPositionsForSelect("device-position-id", null, device.room_id)
+            : loadPositionsForSelect("device-position-id"),
+        cardManager.setRoomContext(device.room_id)
+      ]);
+
       elementCache.setValue("device-room-id", device.room_id);
-      await loadWorkstationsForSelect("device-workstation-id", device.room_id);
-      await loadCabinetsForSelect("device-cabinet-id", device.room_id);
+    } else {
+      await cardManager.setRoomContext(null);
     }
-    if (device.cabinet_id) {
-      elementCache.setValue("device-cabinet-id", device.cabinet_id);
-      await loadPositionsForSelect("device-position-id", device.cabinet_id);
-    } else if (device.position_id && device.room_id) {
-      // 历史数据：机位可能未挂接机柜，按房间回退加载以便回显
-      await loadPositionsForSelect("device-position-id", null, device.room_id);
-    }
+
+    if (device.cabinet_id) elementCache.setValue("device-cabinet-id", device.cabinet_id);
     if (device.workstation_id)
       elementCache.setValue("device-workstation-id", device.workstation_id);
     if (device.position_id) elementCache.setValue("device-position-id", device.position_id);
 
     if (cardManager) {
-      // 网络区域/网段选项按设备所属房间过滤后再回显
-      await cardManager.setRoomContext(device.room_id || null);
       await cardManager.loadExisting(device.cards || []);
     }
   } else {
@@ -733,7 +741,7 @@ export async function openDeviceModal(device = null) {
     const saveAsTemplateCheckbox = document.getElementById("device-save-as-template");
     if (saveAsTemplateCheckbox) saveAsTemplateCheckbox.checked = false;
     const templateNameGroup = document.getElementById("device-template-name-group");
-    if (templateNameGroup) templateNameGroup.style.display = "none";
+    if (templateNameGroup) templateNameGroup.classList.add("hidden");
 
     if (cardManager) {
       await cardManager.setRoomContext(null);

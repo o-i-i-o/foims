@@ -287,31 +287,20 @@
   background-color: var(--color-primary);
 }
 
-.data-table th .filter-input {
-  display: block;
-  width: 100%;
-  margin-top: 0.3rem;
-  padding: 0.5rem 0.5rem;
-  font-size: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background-color: var(--color-bg-white);
-  transition: all 0.2s ease;
+/* 表格上方工具栏：过滤输入组（左）+ 主操作按钮（右） */
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
 }
 
-.data-table th .filter-input:hover {
-  border-color: var(--color-primary);
-}
-
-.data-table th .filter-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-light);
-}
-
-.data-table th .filter-input::placeholder {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+.table-filter-group {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 /* 表头搜索：放大镜图标 + 点击图标弹出的搜索输入框 */
@@ -374,26 +363,6 @@
   width: 100%;
   font-size: 0.75rem;
   padding: 0.4rem 0.5rem;
-}
-
-/* 表头文字右侧的小操作按钮（如 MAC 地址列的“拉取”） */
-.data-table th .th-action-btn {
-  margin-left: 0.4rem;
-  padding: 0.1rem 0.5rem;
-  font-size: 0.7rem;
-  line-height: 1.4;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  color: var(--color-primary);
-  cursor: pointer;
-  vertical-align: middle;
-  transition: all 0.2s ease;
-}
-
-.data-table th .th-action-btn:hover {
-  background-color: var(--color-primary);
-  color: var(--color-bg-white);
 }
 
 /* 表格容器水平滚动包装（通用工具类，原位于 network-usage.css） */

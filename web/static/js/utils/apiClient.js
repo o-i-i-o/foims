@@ -4,6 +4,7 @@
  */
 import { SessionManager } from "./sessionManager.js";
 import { t } from "./i18n.js";
+import { showToast } from "./toast.js";
 
 /**
  * 集中翻译服务端返回的 i18n 消息。
@@ -105,16 +106,16 @@ export class ApiClient {
     }
 
     if (this.currentRequests >= this.MAX_CONCURRENT_REQUESTS) {
-      return new Promise((resolve) => {
-        this.requestQueue.push({
-          url,
-          options: mergedOptions,
-          retryCount,
-          requestKey,
-          resolve
-        });
-        this.processQueue();
+      const { promise, resolve } = Promise.withResolvers();
+      this.requestQueue.push({
+        url,
+        options: mergedOptions,
+        retryCount,
+        requestKey,
+        resolve
       });
+      this.processQueue();
+      return promise;
     } else {
       return this.processRequest(url, mergedOptions, retryCount, requestKey);
     }
@@ -337,56 +338,7 @@ export class ApiClient {
   }
 
   static showAuthError() {
-    const existingError = document.getElementById("auth-error-toast");
-    if (existingError) return;
-
-    const errorElement = document.createElement("div");
-    errorElement.id = "auth-error-toast";
-    errorElement.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background-color: #f8d7da;
-      color: #721c24;
-      padding: 15px 20px;
-      border-radius: 4px;
-      border: 1px solid #f5c6cb;
-      z-index: 10000;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      animation: slideIn 0.3s ease-out;
-    `;
-
-    const style = document.createElement("style");
-    style.textContent = `
-      @keyframes slideIn {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-
-    errorElement.textContent = t("api.token_expired");
-    document.body.appendChild(errorElement);
-
-    setTimeout(() => {
-      errorElement.style.animation = "slideIn 0.3s ease-out reverse";
-      setTimeout(() => {
-        if (document.body.contains(errorElement)) {
-          document.body.removeChild(errorElement);
-        }
-        if (document.head.contains(style)) {
-          document.head.removeChild(style);
-        }
-      }, 300);
-    }, 3000);
+    showToast(t("api.token_expired"), "error");
   }
 
   static async refreshToken() {

@@ -20,7 +20,7 @@ import {
   initLogout,
   checkLoginStatus
 } from "./modules/authManager.js";
-import { prefetchModules, schedulePreload, lazyLoad, loadModule } from "./utils/resourceLoader.js";
+import { schedulePreload, lazyLoad, loadModule } from "./utils/resourceLoader.js";
 
 // ==========================================
 // 应用初始化
@@ -32,7 +32,7 @@ import { prefetchModules, schedulePreload, lazyLoad, loadModule } from "./utils/
 async function initApp() {
   try {
     await initI18n();
-
+    // 登录态校验为后续步骤的门槛（失败时由 authManager 跳转登录页）
     await checkLoginStatus();
 
     initNavigation();
@@ -44,10 +44,9 @@ async function initApp() {
 
     displayCurrentUser();
     initLogout();
-    await initAutoRefresh();
-    await initPageTimeout();
 
-    initResourcePreloading();
+    // 三个互不依赖的异步初始化并行执行，预加载不再被网络请求串行阻塞
+    await Promise.allSettled([initAutoRefresh(), initPageTimeout(), initResourcePreloading()]);
   } catch (error) {
     console.error("应用程序初始化失败:", error);
     // 显示用户友好的错误提示
@@ -105,8 +104,8 @@ function getResourceCallbacks() {
 }
 
 function initResourcePreloading() {
-  prefetchModules(["apiClient", "toast", "confirm", "formatter", "ui"]);
-
+  // apiClient/toast/confirm/formatter/ui 已在 app.js 静态导入图中随主入口并行加载，
+  // 无需重复 modulepreload；此处只预热纯动态加载的业务模块
   schedulePreload(
     [
       "resourceTabs",

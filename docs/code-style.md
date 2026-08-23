@@ -15,7 +15,7 @@
 - 版本号规则：`0.x.yy`，每次代码更新 bump `yy`（`yy>=99` 时 `x+1, yy=0`）。
 - 每次改动后：`cargo fmt && cargo clippy --release -- -D warnings`；数据库结构
   变更走“直接执行 SQL + 同步完善 ipma-init 的 DDL”，不用迁移框架。
-
+- 新增功能（rust、js）、新增前端布局、新增样式代码 保障代码健壮性的前提下遵循最少代码实现原则
 ## 2. Rust（2024 Edition）
 
 ### 2.1 工程结构

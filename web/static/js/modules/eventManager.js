@@ -39,8 +39,10 @@ const DELETE_FUNCTIONS = {
 
 /**
  * 预加载模块缓存
+ * 仅预热纯动态加载的模块：userManager/authManager/i18n 已在 app.js 静态导入图中，
+ * 再经 loadModule 加载会形成第二实例（独立状态），故不列入
  */
-const PRELOAD_MODULES = ["log", "systemManager", "userManager", "authManager", "i18n"];
+const PRELOAD_MODULES = ["log", "systemManager"];
 
 async function preloadModules() {
   await Promise.all(PRELOAD_MODULES.map((name) => loadModule(name)));

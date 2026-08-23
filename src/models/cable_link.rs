@@ -86,3 +86,124 @@ pub struct CablePathNode {
     pub cable_label: Option<String>,
     pub hop_type: String,
 }
+
+// ==================== 单元测试 ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use validator::Validate;
+
+    #[test]
+    fn test_cable_link_create_valid() -> Result<(), serde_json::Error> {
+        let req: CableLinkCreate = serde_json::from_value(serde_json::json!({
+            "a_endpoint_type": "net_outlet",
+            "a_endpoint_id": Uuid::new_v4(),
+            "b_endpoint_type": "patch_panel",
+            "b_endpoint_id": Uuid::new_v4(),
+            "link_type": "cat6",
+            "cable_label": "L-101",
+            "length_m": 12.5,
+            "tested": true
+        }))?;
+        assert!(req.validate().is_ok());
+        assert_eq!(req.length_m, Some(12.5));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_link_create_label_too_long() -> Result<(), serde_json::Error> {
+        // 线缆标签最长 50 字符
+        let req: CableLinkCreate = serde_json::from_value(serde_json::json!({
+            "a_endpoint_type": "net_outlet",
+            "a_endpoint_id": Uuid::new_v4(),
+            "b_endpoint_type": "patch_panel",
+            "b_endpoint_id": Uuid::new_v4(),
+            "cable_label": "L".repeat(51)
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("超长标签应被拒绝");
+        };
+        assert!(errors.errors().contains_key("cable_label"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_link_update_null_clear_semantics() -> Result<(), serde_json::Error> {
+        // cable_label / length_m 双层 Option：null 表示清除、缺失表示不修改
+        let missing: CableLinkUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.cable_label, None);
+        assert_eq!(missing.length_m, None);
+
+        let cleared: CableLinkUpdate = serde_json::from_value(serde_json::json!({
+            "cable_label": null,
+            "length_m": null
+        }))?;
+        assert_eq!(cleared.cable_label, Some(None));
+        assert_eq!(cleared.length_m, Some(None));
+
+        let set: CableLinkUpdate = serde_json::from_value(serde_json::json!({
+            "cable_label": "L-202",
+            "length_m": 30.0
+        }))?;
+        assert_eq!(set.cable_label, Some(Some("L-202".to_string())));
+        assert_eq!(set.length_m, Some(Some(30.0)));
+        assert!(set.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_link_update_label_too_long_not_enforced() -> Result<(), serde_json::Error> {
+        // 特征测试（疑似缺陷）：cable_label 为 Option<Option<String>> 双层 Option，
+        // validator 的 length 校验对双层 Option 字段不生效，超长标签当前不会被拒绝。
+        // 若未来修复 validator 行为，此断言应改为 is_err()。
+        let req: CableLinkUpdate = serde_json::from_value(serde_json::json!({
+            "cable_label": "L".repeat(51)
+        }))?;
+        assert!(
+            req.validate().is_ok(),
+            "当前 validator 对双层 Option 的 length 校验不生效"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_link_entity_serde_roundtrip() -> Result<(), serde_json::Error> {
+        let link = CableLink {
+            id: Uuid::new_v4(),
+            a_endpoint_type: "net_outlet".to_string(),
+            a_endpoint_id: Uuid::new_v4(),
+            b_endpoint_type: "device_interface".to_string(),
+            b_endpoint_id: Uuid::new_v4(),
+            link_type: "cat6".to_string(),
+            cable_label: Some("L-101".to_string()),
+            length_m: Some(12.5),
+            tested: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let first = serde_json::to_value(&link)?;
+        let back: CableLink = serde_json::from_value(first.clone())?;
+        let second = serde_json::to_value(&back)?;
+        assert_eq!(first, second);
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_path_node_serde_roundtrip() -> Result<(), serde_json::Error> {
+        let node = CablePathNode {
+            hop_idx: 0,
+            node_type: "net_outlet".to_string(),
+            node_id: Uuid::new_v4(),
+            node_label: Some("D101".to_string()),
+            cable_id: Some(Uuid::new_v4()),
+            cable_label: None,
+            hop_type: "start".to_string(),
+        };
+        let first = serde_json::to_value(&node)?;
+        let back: CablePathNode = serde_json::from_value(first.clone())?;
+        let second = serde_json::to_value(&back)?;
+        assert_eq!(first, second);
+        Ok(())
+    }
+}

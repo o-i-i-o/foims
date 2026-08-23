@@ -4,41 +4,20 @@ import { apiGet, apiPost } from "../utils/apiClient.js";
 
 import { elementCache } from "../utils/helpers.js";
 import { escapeHtml, showToast } from "../utils/ui.js";
-import { t, updatePageTranslations } from "../utils/i18n.js";
-import { fetchModalHtml } from "../utils/modalLoader.js";
-
-
-// 从独立模板文件创建一次性模态框（ARP / LLDP），创建后由调用方自行关闭
-async function createModalFromTemplate(modalId) {
-  const html = await fetchModalHtml(modalId);
-  if (!html) {
-    return null;
-  }
-  const wrap = document.createElement("div");
-  wrap.innerHTML = html;
-  const modal = wrap.firstElementChild;
-  document.body.appendChild(modal);
-  modal.classList.add("active");
-  updatePageTranslations();
-  return modal;
-}
+import { t } from "../utils/i18n.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 
 // ==================== MAC 表函数 ====================
 
 async function viewArpTable(deviceId) {
-  const modal = await createModalFromTemplate("arp-modal");
+  const modal = await openModal("arp-modal");
   if (!modal) {
     showToast(t("common.load_failed"), "error");
     return;
   }
 
-  const closeButtons = modal.querySelectorAll(".arp-modal-close");
-  closeButtons.forEach((btn) => {
-    btn.addEventListener("click", () => modal.remove());
-  });
-
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.remove();
+    if (e.target === modal) closeModal("arp-modal");
   });
 
   let isFirstLoad = true;
@@ -51,8 +30,8 @@ async function viewArpTable(deviceId) {
     const nameEl = modal.querySelector("#arp-device-name");
     const syncBtn = modal.querySelector("#sync-mac-btn");
 
-    loadingEl.style.display = "block";
-    contentEl.style.display = "none";
+    loadingEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
     syncBtn.disabled = true;
 
     try {
@@ -136,8 +115,8 @@ async function viewArpTable(deviceId) {
           isFirstLoad = false;
         }
 
-        loadingEl.style.display = "none";
-        contentEl.style.display = "block";
+        loadingEl.classList.add("hidden");
+        contentEl.classList.remove("hidden");
       } else {
         loadingEl.innerHTML = `<p style="color: red;">${t("device.load_mac_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
@@ -153,8 +132,8 @@ async function viewArpTable(deviceId) {
     const contentEl = modal.querySelector("#arp-content");
     const syncBtn = modal.querySelector("#sync-mac-btn");
 
-    loadingEl.style.display = "block";
-    contentEl.style.display = "none";
+    loadingEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>
@@ -218,13 +197,8 @@ function bindCollapseEvents(container) {
       const content = container.querySelector(`#${targetId}`);
       const icon = header.querySelector(".collapse-icon");
 
-      if (content.style.display === "none") {
-        content.style.display = "block";
-        icon.style.transform = "rotate(0deg)";
-      } else {
-        content.style.display = "none";
-        icon.style.transform = "rotate(-90deg)";
-      }
+      const collapsed = content.classList.toggle("hidden");
+      icon.style.transform = collapsed ? "rotate(-90deg)" : "rotate(0deg)";
     });
   });
 }
@@ -296,19 +270,14 @@ function filterEntries(entries, searchTerm) {
 // ==================== LLDP 函数 ====================
 
 async function viewLldpNeighbors(deviceId) {
-  const modal = await createModalFromTemplate("lldp-modal");
+  const modal = await openModal("lldp-modal");
   if (!modal) {
     showToast(t("common.load_failed"), "error");
     return;
   }
 
-  const closeButtons = modal.querySelectorAll(".lldp-modal-close");
-  closeButtons.forEach((btn) => {
-    btn.addEventListener("click", () => modal.remove());
-  });
-
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.remove();
+    if (e.target === modal) closeModal("lldp-modal");
   });
 
   const loadLldpData = async () => {
@@ -317,8 +286,8 @@ async function viewLldpNeighbors(deviceId) {
     const nameEl = modal.querySelector("#lldp-device-name");
     const syncBtn = modal.querySelector("#sync-lldp-btn");
 
-    loadingEl.style.display = "block";
-    contentEl.style.display = "none";
+    loadingEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
     syncBtn.disabled = true;
 
     try {
@@ -349,8 +318,8 @@ async function viewLldpNeighbors(deviceId) {
         }
 
         contentEl.innerHTML = renderLldpTable(neighbors);
-        loadingEl.style.display = "none";
-        contentEl.style.display = "block";
+        loadingEl.classList.add("hidden");
+        contentEl.classList.remove("hidden");
       } else {
         loadingEl.innerHTML = `<p style="color: red;">${t("device.load_lldp_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
@@ -366,8 +335,8 @@ async function viewLldpNeighbors(deviceId) {
     const contentEl = modal.querySelector("#lldp-content");
     const syncBtn = modal.querySelector("#sync-lldp-btn");
 
-    loadingEl.style.display = "block";
-    contentEl.style.display = "none";
+    loadingEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>

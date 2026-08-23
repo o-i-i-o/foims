@@ -55,26 +55,6 @@ function setupEventListeners() {
     createBtn.addEventListener("click", openCreateScheduledTaskModal);
   }
 
-  const taskTypeSelect = document.getElementById("scheduled-task-type");
-  if (taskTypeSelect) {
-    taskTypeSelect.addEventListener("change", handleTaskTypeChange);
-  }
-
-  const form = document.getElementById("scheduled-task-form");
-  if (form) {
-    form.addEventListener("submit", handleScheduledTaskSubmit);
-  }
-
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer && !modalContainer.dataset.closeHandlerAttached) {
-    modalContainer.dataset.closeHandlerAttached = "true";
-    modalContainer.addEventListener("click", (e) => {
-      const btn = e.target.closest('button[data-action="close-modal"]');
-      if (!btn) return;
-      closeScheduledTaskModal();
-    });
-  }
-
   const taskTable = document.querySelector("#scheduled-tasks-table");
   if (taskTable && !taskTable.dataset.handlerAttached) {
     taskTable.dataset.handlerAttached = "true";
@@ -108,24 +88,27 @@ function setupEventListeners() {
   }
 }
 
+/* 模态框每次打开均为全新 DOM（closeModal 后销毁），此处随开随绑，无需防重绑 */
+function bindTaskModalEvents() {
+  document.getElementById("scheduled-task-type")?.addEventListener("change", handleTaskTypeChange);
+  document.getElementById("scheduled-task-form")?.addEventListener("submit", handleScheduledTaskSubmit);
+}
+
 function handleTaskTypeChange(e) {
   const taskType = e.target.value;
-  const macSyncConfig = document.getElementById("mac-sync-config");
-  const logCleanupConfig = document.getElementById("log-cleanup-config");
+  const isMacSync = taskType === "mac_sync";
 
-  if (macSyncConfig) macSyncConfig.style.display = "none";
-  if (logCleanupConfig) logCleanupConfig.style.display = "none";
+  document.getElementById("mac-sync-config")?.classList.toggle("hidden", !isMacSync);
+  document
+    .getElementById("mac-sync-network-config")
+    ?.classList.toggle("hidden", !isMacSync);
+  document
+    .getElementById("log-cleanup-config")
+    ?.classList.toggle("hidden", taskType !== "log_cleanup");
 
-  if (taskType === "mac_sync") {
-    if (macSyncConfig) {
-      macSyncConfig.style.display = "block";
-      populateDeviceSelect();
-      populateNetworkSelect();
-    }
-  } else if (taskType === "log_cleanup") {
-    if (logCleanupConfig) {
-      logCleanupConfig.style.display = "block";
-    }
+  if (isMacSync) {
+    populateDeviceSelect();
+    populateNetworkSelect();
   }
 }
 
@@ -213,74 +196,48 @@ function renderScheduledTasks(tasks) {
   });
 }
 
-window.openCreateScheduledTaskModal = function () {
-  const template = document.getElementById("scheduled-task-modal-template");
-  if (!template) return;
+window.openCreateScheduledTaskModal = async function () {
+  const modal = await openModal("scheduled-task-modal");
+  if (!modal) return;
 
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer) {
-    modalContainer.innerHTML = template.innerHTML;
-    setupEventListeners();
-    document.getElementById("scheduled-task-modal-title").textContent = t(
-      "scheduled_tasks.create_task"
-    );
-    document.getElementById("scheduled-task-id").value = "";
-    document.getElementById("scheduled-task-form").reset();
-    document.getElementById("scheduled-task-enabled").checked = true;
-    handleTaskTypeChange({ target: { value: "mac_sync" } });
-    modalContainer.style.display = "flex";
-  }
+  bindTaskModalEvents();
+  document.getElementById("scheduled-task-modal-title").textContent = t("scheduled_tasks.create_task");
+  document.getElementById("scheduled-task-form").reset();
+  document.getElementById("scheduled-task-id").value = "";
+  document.getElementById("scheduled-task-cron").value = "0 */6 * * *";
+  document.getElementById("scheduled-task-enabled").checked = true;
+  handleTaskTypeChange({ target: { value: "mac_sync" } });
 };
 
 window.editScheduledTask = async function (id) {
   try {
     const response = await apiGet(`/api/system/scheduled-tasks/${id}`);
-    if (response.success) {
-      const task = response.data;
-      const template = document.getElementById("scheduled-task-modal-template");
-      if (!template) return;
+    if (!response.success) return;
+    const task = response.data;
 
-      const modalContainer = document.getElementById("modal-container");
-      if (modalContainer) {
-        modalContainer.innerHTML = template.innerHTML;
-        setupEventListeners();
-        document.getElementById("scheduled-task-modal-title").textContent = t(
-          "scheduled_tasks.edit_task"
-        );
-        document.getElementById("scheduled-task-id").value = task.id;
-        document.getElementById("scheduled-task-name").value = task.name;
-        document.getElementById("scheduled-task-type").value = task.task_type;
-        document.getElementById("scheduled-task-cron").value = task.cron_expression;
-        document.getElementById("scheduled-task-enabled").checked = task.enabled;
+    const modal = await openModal("scheduled-task-modal");
+    if (!modal) return;
 
-        handleTaskTypeChange({ target: { value: task.task_type } });
+    bindTaskModalEvents();
+    document.getElementById("scheduled-task-modal-title").textContent = t("scheduled_tasks.edit_task");
+    document.getElementById("scheduled-task-id").value = task.id;
+    document.getElementById("scheduled-task-name").value = task.name;
+    document.getElementById("scheduled-task-type").value = task.task_type;
+    document.getElementById("scheduled-task-cron").value = task.cron_expression;
+    document.getElementById("scheduled-task-enabled").checked = task.enabled;
 
-        if (task.task_type === "mac_sync" && task.config) {
-          setTimeout(() => {
-            document.getElementById("scheduled-task-device-id").value = task.config.device_id || "";
-            document.getElementById("scheduled-task-network-id").value =
-              task.config.network_id || "";
-          }, 100);
-        } else if (task.task_type === "log_cleanup" && task.config) {
-          document.getElementById("scheduled-task-keep-days").value = task.config.days || 30;
-        }
+    handleTaskTypeChange({ target: { value: task.task_type } });
 
-        modalContainer.style.display = "flex";
-      }
+    if (task.task_type === "mac_sync" && task.config) {
+      document.getElementById("scheduled-task-device-id").value = task.config.device_id || "";
+      document.getElementById("scheduled-task-network-id").value = task.config.network_id || "";
+    } else if (task.task_type === "log_cleanup" && task.config) {
+      document.getElementById("scheduled-task-keep-days").value = task.config.days || 30;
     }
   } catch (error) {
     console.error("Failed to load task:", error);
   }
 };
-
-// 隐藏并清空 modal-container（任务模态框直接渲染在容器内，非 template 加载）
-function closeScheduledTaskModal() {
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer) {
-    modalContainer.style.display = "none";
-    modalContainer.innerHTML = "";
-  }
-}
 
 async function handleScheduledTaskSubmit(e) {
   e.preventDefault();
@@ -332,7 +289,7 @@ async function handleScheduledTaskSubmit(e) {
         id ? t("scheduled_tasks.update_success") : t("scheduled_tasks.create_success"),
         "success"
       );
-      closeScheduledTaskModal();
+      closeModal("scheduled-task-modal");
       await loadScheduledTasks();
     } else {
       showToast(t("scheduled_tasks.save_failed") + ": " + (response.message || ""), "error");
@@ -399,40 +356,39 @@ window.deleteScheduledTask = async function (id) {
 };
 
 window.viewTaskLogs = async function (taskName) {
-  const template = document.getElementById("task-logs-modal-template");
-  if (!template) return;
+  const modal = await openModal("task-logs-modal");
+  if (!modal) return;
 
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer) {
-    modalContainer.innerHTML = template.innerHTML;
-    modalContainer.style.display = "flex";
+  const tbody = document.getElementById("task-logs-tbody");
+  if (!tbody) return;
 
-    try {
-      const response = await apiGet(
-        `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`
-      );
-      const tbody = document.getElementById("task-logs-tbody");
-      if (tbody && response.success) {
-        const logs = response.data || [];
-        if (logs.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" class="no-data">${t("common.no_data")}</td></tr>`;
-        } else {
-          logs.forEach((log) => {
-            const row = document.createElement("tr");
-            const statusClass = log.status === "success" ? "status-active" : "status-inactive";
-            row.innerHTML = `
-                            <td>${escapeHtml(log.task_name)}</td>
-                            <td><span class="status-badge ${statusClass}">${log.status}</span></td>
-                            <td>${formatDateTime(log.start_time)}</td>
-                            <td>${log.duration || 0}</td>
-                            <td>${escapeHtml(log.details?.message || log.details?.error || "-")}</td>
-                        `;
-            tbody.appendChild(row);
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load task logs:", error);
+  try {
+    const response = await apiGet(
+      `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`
+    );
+    if (!response.success) return;
+
+    const logs = response.data || [];
+    if (logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="no-data">${t("common.no_data")}</td></tr>`;
+      return;
     }
+
+    const fragment = document.createDocumentFragment();
+    for (const log of logs) {
+      const statusClass = log.status === "success" ? "status-active" : "status-inactive";
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${escapeHtml(log.task_name)}</td>
+        <td><span class="status-badge ${statusClass}">${log.status}</span></td>
+        <td>${formatDateTime(log.start_time)}</td>
+        <td>${log.duration || 0}</td>
+        <td>${escapeHtml(log.details?.message || log.details?.error || "-")}</td>
+      `;
+      fragment.appendChild(row);
+    }
+    tbody.replaceChildren(fragment);
+  } catch (error) {
+    console.error("Failed to load task logs:", error);
   }
 };

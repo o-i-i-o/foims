@@ -58,14 +58,10 @@ class CacheManager {
     try {
       const stored = localStorage.getItem(this.localStorageKey);
       if (stored) {
-        const data = JSON.parse(stored);
         const now = Date.now();
-
-        for (const [key, item] of Object.entries(data)) {
-          if (item.expiry > now) {
-            this.caches.set(key, item);
-          }
-        }
+        this.caches = new Map(
+          Object.entries(JSON.parse(stored)).filter(([, item]) => item.expiry > now)
+        );
       }
     } catch (e) {
       // Ignore localStorage errors
@@ -74,15 +70,13 @@ class CacheManager {
 
   saveToStorage() {
     try {
-      const data = {};
       const now = Date.now();
-
-      for (const [key, item] of this.caches.entries()) {
-        if (item.expiry > now && item.persist !== false) {
-          data[key] = item;
-        }
-      }
-
+      const data = Object.fromEntries(
+        this.caches
+          .entries()
+          .filter(([, item]) => item.expiry > now && item.persist !== false)
+          .toArray()
+      );
       localStorage.setItem(this.localStorageKey, JSON.stringify(data));
     } catch (e) {
       if (e.name === "QuotaExceededError") {
@@ -323,11 +317,18 @@ class ElementCache {
   }
 }
 
+// 纯字符串转义：不创建临时 DOM 元素，且较 textContent 方案多覆盖引号（属性场景同样安全）
+const HTML_ESCAPE_MAP = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+
 export function escapeHtml(text) {
   if (!text) return "";
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+  return String(text).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
 }
 
 export const elementCache = new ElementCache();

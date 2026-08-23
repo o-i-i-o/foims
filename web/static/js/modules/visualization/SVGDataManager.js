@@ -1,4 +1,5 @@
 import { t } from "../../utils/i18n.js";
+import { nextFrame } from "../../utils/helpers.js";
 
 // 机柜可视化布局常量
 /** 画布四周预留边距：首柜距左缘 / 柜底距底缘（像素，viewBox 1:1） */
@@ -255,8 +256,7 @@ export class SVGDataManager {
   async waitForContainerHeight() {
     let height = this.core.container.clientHeight;
     if (!height || height < 100) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => nextFrame(resolve));
       height = this.core.container.clientHeight;
     }
     return height >= 100 ? height : 600;

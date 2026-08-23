@@ -63,12 +63,20 @@ fn setup_panic_handler() {
 
 async fn static_cache_control_middleware(req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
+    let has_version = req.uri().query().is_some_and(|q| q.contains("v="));
     let mut res = next.run(req).await;
 
     if path.starts_with("/static/") {
+        // 带 ?v= 的资源由版本号机制保证内容变化即换 URL，可长缓存；
+        // 其余资源（含无版本号的 JS 模块动态 import）维持每次再验证
+        let cache_policy = if has_version {
+            "public, max-age=31536000, immutable"
+        } else {
+            "no-cache, must-revalidate"
+        };
         res.headers_mut().insert(
             header::CACHE_CONTROL,
-            HeaderValue::from_static("no-cache, must-revalidate"),
+            HeaderValue::from_static(cache_policy),
         );
         // 为 .json 文件补充 charset=utf-8（ServeDir 默认只设 application/json）
         if path.ends_with(".json")

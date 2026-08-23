@@ -847,3 +847,228 @@ async fn ensure_topology_node(pool: &PgPool, device_id: Uuid) -> Result<bool, Vi
 
     Ok(result.rows_affected() > 0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 固定 UUID 便于断言（末字节承载序号，字符串形式为 ...00NN）
+    fn uuid(n: u8) -> Uuid {
+        let mut bytes = [0u8; 16];
+        bytes[15] = n;
+        Uuid::from_bytes(bytes)
+    }
+
+    #[test]
+    fn 拓扑节点条目_序列化键名与往返() {
+        let item = TopologyNodeItem {
+            device_id: uuid(1),
+            x: 10,
+            y: 20,
+            width: 200,
+            height: 100,
+        };
+        let json = serde_json::to_string(&item).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        assert_eq!(
+            json,
+            r#"{"device_id":"00000000-0000-0000-0000-000000000001","x":10,"y":20,"width":200,"height":100}"#
+        );
+        let back: TopologyNodeItem =
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(back.device_id, item.device_id);
+        assert_eq!(
+            (back.x, back.y, back.width, back.height),
+            (10, 20, 200, 100)
+        );
+    }
+
+    #[test]
+    fn 拓扑节点保存请求_空列表与多节点反序列化() {
+        let req: TopologyNodesRequest = serde_json::from_str(r#"{"nodes": []}"#)
+            .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert!(req.nodes.is_empty());
+
+        let req: TopologyNodesRequest = serde_json::from_str(
+            r#"{"nodes": [
+                {"device_id": "00000000-0000-0000-0000-000000000001", "x": 0, "y": 0, "width": 1, "height": 1},
+                {"device_id": "00000000-0000-0000-0000-000000000002", "x": 5, "y": 6, "width": 7, "height": 8}
+            ]}"#,
+        )
+        .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(req.nodes.len(), 2);
+        assert_eq!(req.nodes[1].device_id, uuid(2));
+        assert_eq!((req.nodes[1].x, req.nodes[1].y), (5, 6));
+    }
+
+    #[test]
+    fn 连线请求_缺省connection_type为none() {
+        let req: TopologyConnectionRequest = serde_json::from_str(
+            r#"{"source_device_id": "00000000-0000-0000-0000-000000000001",
+                "target_device_id": "00000000-0000-0000-0000-000000000002"}"#,
+        )
+        .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(
+            req.connection_type, None,
+            "未提供时为 None，由处理函数默认 physical"
+        );
+        assert!(req.label.is_none());
+        assert!(req.source_port_ids.is_none());
+        assert!(req.target_port_ids.is_none());
+    }
+
+    #[test]
+    fn 连线请求_逻辑连线全字段反序列化() {
+        let req: TopologyConnectionRequest = serde_json::from_str(
+            r#"{"connection_type": "logical",
+                "source_device_id": "00000000-0000-0000-0000-000000000001",
+                "target_device_id": "00000000-0000-0000-0000-000000000002",
+                "label": "聚合链路",
+                "source_port_ids": ["00000000-0000-0000-0000-00000000000a"],
+                "target_port_ids": ["00000000-0000-0000-0000-00000000000b"]}"#,
+        )
+        .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(req.connection_type.as_deref(), Some("logical"));
+        assert_eq!(req.label.as_deref(), Some("聚合链路"));
+        assert_eq!(req.source_port_ids.as_deref(), Some(&[uuid(0xa)][..]));
+        assert_eq!(req.target_port_ids.as_deref(), Some(&[uuid(0xb)][..]));
+    }
+
+    /// 派生连线视图的序列化：合成 id、hops/cables/members 空数组也应出现
+    #[test]
+    fn 连线视图序列化_包含全部键() {
+        let view = TopologyConnectionView {
+            id: "cable:abc".to_string(),
+            connection_type: "physical".to_string(),
+            derived: true,
+            source_device_id: uuid(1),
+            target_device_id: uuid(2),
+            source_device_name: Some("sw1".to_string()),
+            target_device_name: Some("sw2".to_string()),
+            source_port_id: Some(uuid(3)),
+            target_port_id: Some(uuid(4)),
+            source_port_label: Some("G1".to_string()),
+            target_port_label: Some("G2".to_string()),
+            label: None,
+            auto_discovered: true,
+            hops: vec![TopologyHop {
+                node_type: "net_outlet".to_string(),
+                node_id: uuid(5),
+                node_label: Some("A1".to_string()),
+            }],
+            cables: vec![TopologyCableSegment {
+                cable_id: uuid(6),
+                cable_label: Some("C1".to_string()),
+            }],
+            source_members: Vec::new(),
+            target_members: Vec::new(),
+        };
+        let json = serde_json::to_string(&view).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        for key in [
+            "\"id\":\"cable:abc\"",
+            "\"connection_type\":\"physical\"",
+            "\"derived\":true",
+            "\"auto_discovered\":true",
+            "\"hops\":[",
+            "\"cables\":[",
+            "\"source_members\":[]",
+            "\"target_members\":[]",
+            "\"node_type\":\"net_outlet\"",
+        ] {
+            assert!(json.contains(key), "应包含 {key}，实际: {json}");
+        }
+        // 往返保持字段
+        let back: TopologyConnectionView =
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(back.id, "cable:abc");
+        assert!(back.derived);
+        assert_eq!(back.hops.len(), 1);
+        assert_eq!(back.hops[0].node_type, "net_outlet");
+        assert_eq!(back.cables.len(), 1);
+        assert_eq!(back.cables[0].cable_label.as_deref(), Some("C1"));
+    }
+
+    #[test]
+    fn 连线视图_成员端口序列化() {
+        let view = TopologyConnectionView {
+            id: "00000000-0000-0000-0000-00000000000f".to_string(),
+            connection_type: "logical".to_string(),
+            derived: false,
+            source_device_id: uuid(1),
+            target_device_id: uuid(2),
+            source_device_name: None,
+            target_device_name: None,
+            source_port_id: None,
+            target_port_id: None,
+            source_port_label: None,
+            target_port_label: None,
+            label: None,
+            auto_discovered: false,
+            hops: Vec::new(),
+            cables: Vec::new(),
+            source_members: vec![TopologyMemberPort {
+                port_id: uuid(0xa),
+                port_number: Some("G1".to_string()),
+            }],
+            target_members: vec![TopologyMemberPort {
+                port_id: uuid(0xb),
+                port_number: None,
+            }],
+        };
+        let json = serde_json::to_string(&view).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        assert!(json.contains(r#""port_number":"G1""#), "序列化输出: {json}");
+        assert!(
+            json.contains(r#""port_number":null"#),
+            "None 端口号序列化为 null: {json}"
+        );
+        let back: TopologyConnectionView =
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert_eq!(back.source_members.len(), 1);
+        assert_eq!(back.source_members[0].port_id, uuid(0xa));
+        assert_eq!(back.target_members[0].port_number, None);
+    }
+
+    #[test]
+    fn 自动发现结果_序列化() {
+        let result = AutoDiscoverResult {
+            added_nodes: 3,
+            discovered_connections: 5,
+        };
+        let json = serde_json::to_string(&result).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        assert_eq!(json, r#"{"added_nodes":3,"discovered_connections":5}"#);
+    }
+
+    #[test]
+    fn 拓扑节点带设备信息_可选字段序列化为null() {
+        let node = TopologyNodeWithDevice {
+            id: uuid(1),
+            device_id: uuid(2),
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+            device_name: Some("core-sw".to_string()),
+            device_type: None,
+            brand: None,
+            model: None,
+            seller: None,
+            snmp_version: None,
+            snmp_port: None,
+            location: None,
+            workstation_name: None,
+            room_id: None,
+            room_name: None,
+            org_id: None,
+            org_name: None,
+            cabinet_id: None,
+            cabinet_name: None,
+            ip_address: None,
+        };
+        let json = serde_json::to_string(&node).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        assert!(
+            json.contains(r#""device_name":"core-sw""#),
+            "序列化输出: {json}"
+        );
+        assert!(json.contains(r#""device_type":null"#), "序列化输出: {json}");
+        assert!(json.contains(r#""ip_address":null"#), "序列化输出: {json}");
+    }
+}

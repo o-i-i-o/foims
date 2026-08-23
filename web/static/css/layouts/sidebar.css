@@ -267,7 +267,7 @@ body.sidebar-collapsed .sidebar-footer .user-info {
   box-shadow: var(--control-shadow);
 }
 
-.logout-section .footer-btn:hover {
+#logout-btn:hover {
   color: var(--color-danger);
   border-color: var(--color-danger);
 }

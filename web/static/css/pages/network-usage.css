@@ -109,9 +109,11 @@
   margin-bottom: 1.25rem;
 }
 
-.usage-filter-controls {
+/* 过滤行（networks.js buildIPv4Content 输出 .filter-controls） */
+.usage-controls .filter-controls {
   display: flex;
   align-items: center;
+  gap: var(--space-sm);
 }
 
 .usage-visualization {
@@ -150,25 +152,25 @@
   padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
   line-height: 1.4;
-  color: var(--color-text-secondary, #6c757d);
-  background-color: var(--color-bg-secondary, #f8f9fa);
-  border: 1px solid var(--color-border, #dee2e6);
-  border-radius: var(--radius-sm, 0.25rem);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-normal, 0.15s);
-  font-family: var(--font-mono, monospace);
+  transition: all var(--transition-normal);
+  font-family: var(--font-mono);
 }
 
 .subnet-24-btn:hover {
-  color: var(--color-primary, #0d6efd);
-  border-color: var(--color-primary, #0d6efd);
-  background-color: var(--color-primary-bg, rgba(13, 110, 253, 0.05));
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light);
 }
 
 .subnet-24-btn.active {
   color: var(--color-bg-white);
-  background-color: var(--color-primary, #0d6efd);
-  border-color: var(--color-primary, #0d6efd);
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .ip-block {
@@ -342,11 +344,12 @@
 }
 
 .ipv6-address {
-  font-family: Consolas, Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--color-ipv6);
 }
 
-.ipv6-connection-status {
+/* JS 生成的连接状态徽章（networks.js buildIPv6Content 输出 .connection-status + .status-enabled/.status-disabled） */
+.connection-status {
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
@@ -356,18 +359,18 @@
   font-weight: 500;
 }
 
-.ipv6-status-enabled {
+.connection-status.status-enabled {
   background-color: var(--color-success-bg);
   color: var(--color-success-text);
 }
 
-.ipv6-status-disabled {
+.connection-status.status-disabled {
   background-color: var(--color-border-light);
   color: var(--color-text-muted);
 }
 
 .ipv6-address-cell {
-  font-family: Consolas, Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   color: var(--color-ipv6);
 }

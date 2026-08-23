@@ -67,3 +67,142 @@ pub struct CabinetUpdate {
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
+
+// ==================== 单元测试 ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use validator::Validate;
+
+    #[test]
+    fn test_cabinet_create_valid() -> Result<(), serde_json::Error> {
+        let req: CabinetCreate = serde_json::from_value(serde_json::json!({
+            "name": "A 机柜",
+            "room_id": Uuid::new_v4(),
+            "capacity": 42,
+            "description": "主机柜"
+        }))?;
+        assert!(req.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_create_capacity_range() -> Result<(), serde_json::Error> {
+        // 容量边界：1 与 48 合法；0 与 49 非法
+        for capacity in [1, 48] {
+            let req: CabinetCreate = serde_json::from_value(serde_json::json!({
+                "name": "A 机柜",
+                "room_id": Uuid::new_v4(),
+                "capacity": capacity
+            }))?;
+            assert!(req.validate().is_ok(), "容量 {capacity} 应合法");
+        }
+        for capacity in [0, 49, -1] {
+            let req: CabinetCreate = serde_json::from_value(serde_json::json!({
+                "name": "A 机柜",
+                "room_id": Uuid::new_v4(),
+                "capacity": capacity
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("容量 {capacity} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("capacity"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_create_name_length() -> Result<(), serde_json::Error> {
+        let req: CabinetCreate = serde_json::from_value(serde_json::json!({
+            "name": "",
+            "room_id": Uuid::new_v4(),
+            "capacity": 42
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("空机柜名应被拒绝");
+        };
+        assert!(errors.errors().contains_key("name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_update_valid_and_invalid() -> Result<(), serde_json::Error> {
+        // 全缺省通过
+        let empty: CabinetUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert!(empty.validate().is_ok());
+
+        // 容量越界拒绝
+        let bad: CabinetUpdate = serde_json::from_value(serde_json::json!({ "capacity": 100 }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("超界容量应被拒绝");
+        };
+        assert!(errors.errors().contains_key("capacity"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_with_networks_skip_serialization() -> Result<(), serde_json::Error> {
+        // positions / patch_panels 为 None 时跳过序列化
+        let cabinet = CabinetWithNetworks {
+            id: Uuid::new_v4(),
+            name: "A 机柜".to_string(),
+            room_id: Uuid::new_v4(),
+            room_name: Some("机房".to_string()),
+            capacity: 42,
+            position_count: 3,
+            positions: None,
+            patch_panels: None,
+            description: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let value = serde_json::to_value(&cabinet)?;
+        let obj = value
+            .as_object()
+            .unwrap_or_else(|| panic!("应为 JSON 对象"));
+        assert!(!obj.contains_key("positions"));
+        assert!(!obj.contains_key("patch_panels"));
+
+        // 有值时包含
+        let full = CabinetWithNetworks {
+            positions: Some(vec![PositionBrief {
+                id: Uuid::new_v4(),
+                name: "U1-U4".to_string(),
+                start_u: 1,
+                end_u: 4,
+                description: None,
+            }]),
+            patch_panels: Some(vec![PatchPanelBrief {
+                id: Uuid::new_v4(),
+                name: "配线架 1".to_string(),
+            }]),
+            ..cabinet
+        };
+        let full_value = serde_json::to_value(&full)?;
+        let full_obj = full_value
+            .as_object()
+            .unwrap_or_else(|| panic!("应为 JSON 对象"));
+        assert!(full_obj.contains_key("positions"));
+        assert!(full_obj.contains_key("patch_panels"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_entity_serde_roundtrip() -> Result<(), serde_json::Error> {
+        let cabinet = Cabinet {
+            id: Uuid::new_v4(),
+            name: "A 机柜".to_string(),
+            room_id: Uuid::new_v4(),
+            capacity: 42,
+            description: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let first = serde_json::to_value(&cabinet)?;
+        let back: Cabinet = serde_json::from_value(first.clone())?;
+        let second = serde_json::to_value(&back)?;
+        assert_eq!(first, second);
+        Ok(())
+    }
+}

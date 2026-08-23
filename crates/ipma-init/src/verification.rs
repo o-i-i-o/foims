@@ -98,3 +98,105 @@ pub async fn get_verification_code(
 
     Ok(ok_json((), "server.init.verification.generated"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// 验证码字符集（大小写字母与数字）
+    const CODE_CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    /// 当前 Unix 秒（用于构造未过期的验证码）
+    fn now_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
+
+    #[test]
+    fn 生成验证码_长度16且字符集合法() {
+        for _ in 0..8 {
+            let code = generate_verification_code();
+            assert_eq!(code.chars().count(), 16, "验证码应为 16 位: {code}");
+            assert!(
+                code.chars().all(|c| CODE_CHARS.contains(c)),
+                "验证码含非法字符: {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn 生成验证码_两次生成结果不同() {
+        let a = generate_verification_code();
+        let b = generate_verification_code();
+        assert_ne!(a, b, "随机生成器应产生不同验证码");
+    }
+
+    #[test]
+    fn 常量时间比较_各分支() {
+        assert!(constant_time_eq("abcdef", "abcdef"), "相同字符串应相等");
+        assert!(!constant_time_eq("abcdef", "abcdeX"), "同长度不同内容");
+        assert!(!constant_time_eq("abc", "abcd"), "长度不同直接不等");
+        assert!(!constant_time_eq("", "a"), "空串与非空串");
+        assert!(constant_time_eq("", ""), "两个空串相等");
+    }
+
+    /// verify_code 依赖进程级全局验证码存储（OnceLock<Mutex>），
+    /// 所有涉及该存储的分支集中在一个测试内串行执行避免并行互扰
+    #[test]
+    fn verify_code_过期_错误码_成功_边界分支() {
+        // 覆盖过期分支：写入 created_at=0 的历史验证码，即使码正确也应报过期
+        {
+            let mut lock = get_verification_code_storage()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *lock = VerificationCode {
+                code: "AAAAAAAAAAAAAAAA".to_string(),
+                created_at: 0,
+            };
+        }
+        let Err(m) = verify_code("AAAAAAAAAAAAAAAA") else {
+            panic!("已过期的验证码应校验失败");
+        };
+        assert_eq!(m.key(), "server.init.verification.expired");
+
+        // 覆盖错误码分支：未过期但提供的码不匹配
+        {
+            let mut lock = get_verification_code_storage()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *lock = VerificationCode {
+                code: "BBBBBBBBBBBBBBBB".to_string(),
+                created_at: now_secs(),
+            };
+        }
+        let Err(m) = verify_code("CCCCCCCCCCCCCCCC") else {
+            panic!("错误验证码应校验失败");
+        };
+        assert_eq!(m.key(), "server.init.verification.invalid");
+        // 长度不匹配的码同样落入错误码分支
+        let Err(m) = verify_code("short") else {
+            panic!("长度不符的验证码应校验失败");
+        };
+        assert_eq!(m.key(), "server.init.verification.invalid");
+
+        // 覆盖成功分支：未过期且码一致
+        let Ok(()) = verify_code("BBBBBBBBBBBBBBBB") else {
+            panic!("正确的验证码应校验通过");
+        };
+
+        // 有效期边界内：created_at 距今 10 分钟（< 15 分钟），码正确应通过
+        {
+            let mut lock = get_verification_code_storage()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *lock = VerificationCode {
+                code: "DDDDDDDDDDDDDDDD".to_string(),
+                created_at: now_secs().saturating_sub(10 * 60),
+            };
+        }
+        assert!(verify_code("DDDDDDDDDDDDDDDD").is_ok());
+    }
+}

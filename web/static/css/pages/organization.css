@@ -13,13 +13,10 @@
   flex-wrap: wrap;
 }
 
-.org-search-container {
+.org-search-input {
   flex: 1;
   max-width: 320px;
   min-width: 200px;
-}
-
-.org-search-container .form-control {
   width: 100%;
 }
 

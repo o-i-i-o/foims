@@ -5,6 +5,16 @@
   padding: var(--space-lg);
 }
 
+/* 白底卡片基样式：仪表盘卡片（pages/dashboard.css）与图表卡片（pages/charts.css）共用 */
+.dashboard-card,
+.chart-card {
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
 .card h3 {
   margin: 0 0 var(--space-md) 0;
   color: var(--color-text);

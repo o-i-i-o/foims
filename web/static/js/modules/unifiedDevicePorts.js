@@ -773,14 +773,14 @@ function groupPorts(ports) {
 function extractPortNumber(portNumber) {
   if (typeof portNumber !== "string" || !portNumber) return 0;
   const match = portNumber.match(/\d+/g);
-  if (match) return parseInt(match[match.length - 1]) || 0;
+  if (match) return parseInt(match.at(-1)) || 0;
   return 0;
 }
 
 function extractPortLastNumber(portNumber) {
   if (typeof portNumber !== "string" || !portNumber) return portNumber || "";
   const match = portNumber.match(/\d+/g);
-  if (match) return match[match.length - 1];
+  if (match) return match.at(-1);
   return portNumber;
 }
 

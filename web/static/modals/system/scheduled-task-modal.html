@@ -3,10 +3,10 @@
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="scheduled-task-modal-title" data-i18n="scheduled_tasks.create_task">Create Scheduled Task</h3>
-      <button type="button" class="close" data-action="close-modal" aria-label="Close">&times;</button>
+      <button type="button" class="close" data-modal-id="scheduled-task-modal" aria-label="Close">&times;</button>
     </header>
-    <form id="scheduled-task-form">
-      <div class="modal-body">
+    <div class="modal-body">
+      <form id="scheduled-task-form">
         <input type="hidden" id="scheduled-task-id">
         <div class="form-group">
           <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
@@ -27,20 +27,28 @@
           <small class="form-hint" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
         </div>
         <div id="scheduled-task-config-section">
-          <div class="form-group" id="mac-sync-config" style="display:none;">
-            <label><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
-            <select id="scheduled-task-device-id">
-              <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
-            </select>
-            <label style="margin-top:10px;"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
-            <select id="scheduled-task-network-id">
-              <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group hidden" id="mac-sync-config">
+              <label for="scheduled-task-device-id"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
+              <select id="scheduled-task-device-id">
+                <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group" id="log-cleanup-config" style="display:none;">
-            <label><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
-            <input type="number" id="scheduled-task-keep-days" value="30" min="0">
-            <small class="form-hint" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+          <div class="form-row">
+            <div class="form-group hidden" id="mac-sync-network-config">
+              <label for="scheduled-task-network-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
+              <select id="scheduled-task-network-id">
+                <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group hidden" id="log-cleanup-config">
+              <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
+              <input type="number" id="scheduled-task-keep-days" value="30" min="0">
+              <small class="form-hint" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+            </div>
           </div>
         </div>
         <div class="form-group">
@@ -49,11 +57,11 @@
             <span data-i18n="scheduled_tasks.enabled">Enabled</span>
           </label>
         </div>
-      </div>
-      <footer class="modal-footer">
-        <button type="submit" class="btn btn-primary" data-i18n="common.save">Save</button>
-      </footer>
-    </form>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="submit" class="btn btn-primary" form="scheduled-task-form" data-i18n="common.save">Save</button>
+    </footer>
   </div>
 </div>
 </template>

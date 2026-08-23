@@ -236,8 +236,9 @@ export class NetworkCardManager {
     if (!container) return;
     const data = cardData || {};
     const card = this.createCardElement(data);
-    container.appendChild(card);
+    // 先在分离 DOM 上完成端口/IP 子树的构建与绑定，再一次性插入，避免逐级触发重排
     await this.bindCardEvents(card, data);
+    container.appendChild(card);
   }
 
   createCardElement(cardData = {}) {
@@ -278,21 +279,21 @@ export class NetworkCardManager {
     card.querySelector(".remove-card-btn")?.addEventListener("click", () => this.removeCard(card));
     card.querySelector(".add-port-btn")?.addEventListener("click", async () => {
       const port = this.createPortElement();
-      card.appendChild(port);
       await this.bindPortEvents(port);
+      card.appendChild(port);
     });
 
     const ports = cardData.ports || [];
     if (ports.length > 0) {
       for (const portData of ports) {
         const port = this.createPortElement(portData);
-        card.appendChild(port);
         await this.bindPortEvents(port, portData);
+        card.appendChild(port);
       }
     } else {
       const port = this.createPortElement();
-      card.appendChild(port);
       await this.bindPortEvents(port);
+      card.appendChild(port);
     }
   }
 
@@ -360,8 +361,8 @@ export class NetworkCardManager {
     port.querySelector(".add-ip-btn")?.addEventListener("click", async () => {
       const ipsContainer = port.querySelector(".port-ips-container");
       const ipRow = await this.createIpRowElement();
-      ipsContainer.appendChild(ipRow.element);
       await this.bindIpRowEvents(ipRow);
+      ipsContainer.appendChild(ipRow.element);
     });
 
     const ipsContainer = port.querySelector(".port-ips-container");
@@ -369,13 +370,13 @@ export class NetworkCardManager {
     if (ips.length > 0) {
       for (const ipData of ips) {
         const ipRow = await this.createIpRowElement();
-        ipsContainer.appendChild(ipRow.element);
         await this.bindIpRowEvents(ipRow, ipData);
+        ipsContainer.appendChild(ipRow.element);
       }
     } else {
       const ipRow = await this.createIpRowElement();
-      ipsContainer.appendChild(ipRow.element);
       await this.bindIpRowEvents(ipRow);
+      ipsContainer.appendChild(ipRow.element);
     }
   }
 

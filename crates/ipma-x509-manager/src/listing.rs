@@ -182,3 +182,90 @@ pub async fn list_certificates() -> Result<CertificateInventory, CertManagerErro
         imported: scan_dir(IMPORTED_CERTS_DIR).await?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kind解析_合法值与非法值() {
+        assert_eq!(CertKind::parse("generated"), Some(CertKind::Generated));
+        assert_eq!(CertKind::parse("imported"), Some(CertKind::Imported));
+        assert_eq!(CertKind::parse("Generated"), None, "大小写敏感");
+        assert_eq!(CertKind::parse("other"), None);
+        assert_eq!(CertKind::parse(""), None);
+    }
+
+    #[test]
+    fn kind目录映射_与crate常量一致() {
+        assert_eq!(CertKind::Generated.dir(), crate::GENERATED_CERTS_DIR);
+        assert_eq!(CertKind::Generated.dir(), "/etc/ssl/ipma-certs");
+        assert_eq!(CertKind::Imported.dir(), crate::IMPORTED_CERTS_DIR);
+        assert_eq!(CertKind::Imported.dir(), "/etc/ssl/ipma-import-certs");
+    }
+
+    #[test]
+    fn kind序列化_小写往返() {
+        for (kind, text) in [
+            (CertKind::Generated, "\"generated\""),
+            (CertKind::Imported, "\"imported\""),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+            assert_eq!(json, text);
+            let back: CertKind =
+                serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+            assert_eq!(back, kind);
+        }
+        // 非法值反序列化失败
+        assert!(serde_json::from_str::<CertKind>("\"unknown\"").is_err());
+    }
+
+    /// 用 rcgen 在内存中生成一张自签名证书（不触碰文件系统）
+    fn make_test_cert_pem(cn: &str) -> Vec<u8> {
+        let key_pair = rcgen::KeyPair::generate().unwrap_or_else(|e| panic!("生成密钥失败: {e}"));
+        let mut params = rcgen::CertificateParams::default();
+        let mut dn = rcgen::DistinguishedName::new();
+        dn.push(rcgen::DnType::CommonName, cn);
+        params.distinguished_name = dn;
+        let cert = params
+            .self_signed(&key_pair)
+            .unwrap_or_else(|e| panic!("生成证书失败: {e}"));
+        cert.pem().into_bytes()
+    }
+
+    #[test]
+    fn 证书元数据解析_提取cn与有效期() {
+        let pem = make_test_cert_pem("test.example.com");
+        let Some(meta) = parse_cert_metadata(&pem) else {
+            panic!("有效证书应解析出元数据");
+        };
+        assert_eq!(meta.subject_cn.as_deref(), Some("test.example.com"));
+        // 自签名证书的签发者即自身
+        assert_eq!(meta.issuer_cn.as_deref(), Some("test.example.com"));
+        let Some(not_before) = meta.not_before else {
+            panic!("应解析出 not_before");
+        };
+        let Some(not_after) = meta.not_after else {
+            panic!("应解析出 not_after");
+        };
+        assert!(not_after > not_before, "有效期应正序");
+        assert!(
+            not_after - not_before > chrono::Duration::days(365),
+            "默认有效期应超过一年"
+        );
+    }
+
+    #[test]
+    fn 证书元数据解析_无效输入返回none() {
+        // 非 PEM 数据
+        assert!(parse_cert_metadata(b"this is not a pem").is_none());
+        // PEM 块但不是证书
+        let not_cert = b"-----BEGIN NOTE-----\nSGVsbG8=\n-----END NOTE-----\n";
+        assert!(parse_cert_metadata(not_cert).is_none());
+        // 证书块但内容非 DER
+        let bad_cert = b"-----BEGIN CERTIFICATE-----\nSGVsbG8=\n-----END CERTIFICATE-----\n";
+        assert!(parse_cert_metadata(bad_cert).is_none());
+        // 空输入
+        assert!(parse_cert_metadata(b"").is_none());
+    }
+}

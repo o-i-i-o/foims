@@ -270,4 +270,156 @@ mod tests {
         assert_eq!(password, decrypt_password(&encrypted1).unwrap());
         assert_eq!(password, decrypt_password(&encrypted2).unwrap());
     }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_string() {
+        // 空明文也应可加解密往返（密文仅含 nonce + 16 字节认证标签）
+        let encrypted = encrypt_password("").unwrap_or_else(|e| panic!("空串加密失败: {e}"));
+        let decrypted =
+            decrypt_password(&encrypted).unwrap_or_else(|e| panic!("空串解密失败: {e}"));
+        assert_eq!(decrypted, "");
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_multibyte_utf8() {
+        // 多字节 UTF-8（中文 + emoji）往返保持字节一致
+        let password = "超级管理员密码🔐P@ssw0rd！";
+        let encrypted = encrypt_password(password).unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let decrypted = decrypt_password(&encrypted).unwrap_or_else(|e| panic!("解密失败: {e}"));
+        assert_eq!(password, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_ciphertext_layout() {
+        // 密文结构：Base64(12 字节 nonce || 明文 || 16 字节 GCM 标签)
+        let plaintext = "0123456789abcdef"; // 16 字节
+        let encrypted = encrypt_password(plaintext).unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let decoded = BASE64
+            .decode(&encrypted)
+            .unwrap_or_else(|e| panic!("密文应为合法 Base64: {e}"));
+        assert_eq!(
+            decoded.len(),
+            NONCE_SIZE + 16 + 16,
+            "长度应为 nonce+明文+标签"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_rejects_invalid_base64() {
+        let result = decrypt_password("!!!not-base64!!!");
+        let err = result.err().unwrap_or_default();
+        assert!(
+            err.contains("Base64"),
+            "错误信息应指明 Base64 解码失败: {err}"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_rejects_short_ciphertext() {
+        // 解码后不足 nonce 长度（12 字节）应直接失败
+        let short = BASE64.encode([0u8; NONCE_SIZE - 1]);
+        let result = decrypt_password(&short);
+        let err = result.err().unwrap_or_default();
+        assert!(err.contains("长度不足"), "错误信息应指明长度不足: {err}");
+        // 恰好 12 字节（只有 nonce、无密文）交给 AES-GCM 解密失败分支
+        let nonce_only = BASE64.encode([0u8; NONCE_SIZE]);
+        assert!(
+            decrypt_password(&nonce_only).is_err(),
+            "仅有 nonce 应解密失败"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_rejects_tampered_ciphertext() {
+        // 篡改密文区任一字节，GCM 认证标签校验必须失败
+        let encrypted = encrypt_password("tamper-me").unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let mut decoded = BASE64
+            .decode(&encrypted)
+            .unwrap_or_else(|e| panic!("Base64 解码失败: {e}"));
+        let last = decoded.len() - 1;
+        decoded[last] ^= 0xFF;
+        let tampered = BASE64.encode(&decoded);
+        let result = decrypt_password(&tampered);
+        let err = result.err().unwrap_or_default();
+        assert!(
+            err.contains("AES-GCM"),
+            "错误信息应为 AES-GCM 解密错误: {err}"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_rejects_tampered_nonce() {
+        // 篡改 nonce 同样导致解密失败
+        let encrypted =
+            encrypt_password("tamper-nonce").unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let mut decoded = BASE64
+            .decode(&encrypted)
+            .unwrap_or_else(|e| panic!("Base64 解码失败: {e}"));
+        decoded[0] ^= 0x01;
+        let tampered = BASE64.encode(&decoded);
+        assert!(
+            decrypt_password(&tampered).is_err(),
+            "篡改 nonce 后应解密失败"
+        );
+    }
+
+    #[test]
+    fn test_encrypt_long_text_roundtrip() {
+        // 长文本（约 100KB）分段无关地往返成功（AES-GCM 单次加密无分块限制）
+        let long_text = "长".repeat(32_768); // 98_304 字节
+        let encrypted = encrypt_password(&long_text).unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let decrypted = decrypt_password(&encrypted).unwrap_or_else(|e| panic!("解密失败: {e}"));
+        assert_eq!(decrypted, long_text);
+    }
+
+    #[test]
+    fn test_different_plaintexts_produce_different_ciphertexts() {
+        let enc1 = encrypt_password("password-a").unwrap_or_else(|e| panic!("加密失败: {e}"));
+        let enc2 = encrypt_password("password-b").unwrap_or_else(|e| panic!("加密失败: {e}"));
+        assert_ne!(enc1, enc2, "不同明文不应产生相同密文");
+    }
+
+    #[test]
+    fn test_get_encryption_key_shape_and_stability() {
+        // 密钥长度必须为 32 字节（AES-256），且 OnceLock 保证多次获取一致
+        let key1 = get_encryption_key();
+        let key2 = get_encryption_key();
+        assert_eq!(key1.len(), 32, "加密密钥应为 32 字节");
+        assert_eq!(key1, key2, "同一进程内密钥应保持稳定");
+    }
+
+    #[test]
+    fn test_check_key_integrity_returns_ok() {
+        // 密钥可用时完整性检查应通过（长度校验 + 备份比对仅记日志）
+        let result = check_key_integrity();
+        assert!(result.is_ok(), "密钥完整性检查应通过");
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_async_roundtrip() {
+        // 异步包装与同步实现行为一致
+        let plaintext = "async-credential-测试";
+        let encrypted = encrypt_password_async(plaintext.to_string())
+            .await
+            .unwrap_or_else(|e| panic!("异步加密失败: {e}"));
+        let decrypted = decrypt_password_async(encrypted)
+            .await
+            .unwrap_or_else(|e| panic!("异步解密失败: {e}"));
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_credential_async_none_passthrough() {
+        // None 输入直接透传，不触发加解密
+        let result = decrypt_credential_async(None).await;
+        assert!(result.is_ok(), "None 输入应成功透传");
+        assert_eq!(result.ok().flatten(), None);
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_credential_async_invalid_value() {
+        // 非法密文经异步链路返回错误
+        let result = decrypt_credential_async(Some("!!!bad-base64!!!".to_string())).await;
+        assert!(result.is_err(), "非法密文应返回错误");
+    }
 }
