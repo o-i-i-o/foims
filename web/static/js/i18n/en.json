@@ -449,7 +449,7 @@
     "ipv6_gateway": "IPv6 Gateway",
     "usage": "Usage",
     "add_network": "Add Network",
-    "add_region": "Add Network Region",
+    "add_region": "Add Region",
     "add_network_config": "Add Region",
     "network_config": "Network Config",
     "select_region": "Select Network Region",
@@ -1585,7 +1585,8 @@
         "sync_all_skipped": "All {{skipped}} ports already exist, skipped",
         "sync_partial": "Saved {{saved}} ports, skipped {{skipped}} existing ports",
         "sync_saved": "Saved {{saved}} ports to database",
-        "updated": "Port updated successfully"
+        "updated": "Port updated successfully",
+        "type_invalid": "Port type must be one of: access, trunk, uplink, stack, console"
       },
       "snmp": {
         "arp_fetch_failed": "Failed to fetch ARP table: {{error}}",
@@ -1623,7 +1624,14 @@
         "snmp_username_length": "SNMP username must not exceed 50 characters",
         "speed_length": "Speed must not exceed 20 characters",
         "template_name_length": "Template name must not exceed 100 characters",
-        "type_invalid": "Device type must be pc/laptop/printer/server/network_device/switch/camera/phone/other"
+        "type_invalid": "Device type must be pc/laptop/printer/server/network_device/switch/camera/phone/other",
+        "brand_length": "Brand must not exceed 50 characters",
+        "model_length": "Model must not exceed 100 characters",
+        "serial_number_length": "Serial number must not exceed 100 characters",
+        "snmp_version_invalid": "SNMP version must be v1, v2c or v3",
+        "snmp_auth_protocol_length": "SNMP auth protocol must not exceed 10 characters",
+        "snmp_priv_protocol_length": "SNMP privacy protocol must not exceed 10 characters",
+        "snmp_port_range": "SNMP port must be between 1 and 65535"
       },
       "workstation_position_exclusive": "Workstation and cabinet position cannot both be specified"
     },
@@ -1945,7 +1953,8 @@
         "type_path_invalid": "Invalid type path format",
         "type_path_out_of_range": "Type path \"{{path}}\" not found in template (index {{index}} out of range)",
         "type_path_required": "Type path is required",
-        "type_path_root_anchor": "Invalid type path \"{{path}}\" (first segment must be 0)"
+        "type_path_root_anchor": "Invalid type path \"{{path}}\" (first segment must be 0)",
+        "type_path_length": "Type path must not exceed 50 characters"
       }
     },
     "patch_panel": {
@@ -1971,7 +1980,8 @@
         "end_u_range": "End U position must be between 1 and 48",
         "name_length": "Cabinet position name must be 1 to 50 characters",
         "start_u_range": "Start U position must be between 1 and 48"
-      }
+      },
+      "cabinet_required": "Position must belong to a cabinet, please specify the cabinet"
     },
     "room": {
       "children_synced": "Room children synced successfully",
@@ -2119,7 +2129,8 @@
         "email_invalid": "Please enter a valid email address",
         "password_length": "Password must be at least 8 characters",
         "role_invalid": "Role must be admin or user",
-        "username_length": "Username must be 3 to 50 characters"
+        "username_length": "Username must be 3 to 50 characters",
+        "email_length": "Email must not exceed 100 characters"
       }
     },
     "visualization": {
