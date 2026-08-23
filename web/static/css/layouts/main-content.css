@@ -68,12 +68,9 @@
 }
 
 .tab-btn {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md);
   background: transparent;
   border: none;
-  cursor: pointer;
-  font-size: var(--space-md);
-  font-weight: 500;
   color: var(--color-text-muted);
   transition: all var(--transition-slow);
   flex: 1;
