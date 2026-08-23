@@ -10,7 +10,8 @@ import {
   escapeHtml,
   createSortState,
   updateSortIcons,
-  initSortEvents
+  initSortEvents,
+  initThSearchPopovers
 } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
@@ -286,7 +287,7 @@ export const initIpMacFunctions = () => {
   ipSection.dataset.initialized = "true";
 
   initIpFilters();
-  initThSearchPopovers();
+  initThSearchPopovers("#ip-table");
 
   initSortEvents("ip-table", ipTableState, (page, sortBy, sortOrder) =>
     loadIpMacData(currentFilters, page, sortBy, sortOrder)
@@ -311,52 +312,7 @@ export function initIpFilters() {
   });
 }
 
-// 表头搜索弹层：点击放大镜图标展开/收起输入框，Esc 或点击外部收起
-export function initThSearchPopovers() {
-  document.querySelectorAll("#ip-table th.th-searchable").forEach((th) => {
-    const toggle = th.querySelector(".th-search-toggle");
-    const popover = th.querySelector(".th-search-popover");
-    const input = popover?.querySelector("input");
-    if (!toggle || !popover || !input) return;
-
-    toggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const willOpen = !popover.classList.contains("open");
-
-      // 同一时间只展开一个搜索弹层
-      document.querySelectorAll("#ip-table .th-search-popover.open").forEach((p) => {
-        p.classList.remove("open");
-      });
-
-      if (willOpen) {
-        popover.classList.add("open");
-        input.focus();
-      }
-    });
-
-    // 输入框有内容时放大镜图标保持高亮
-    input.addEventListener("input", () => {
-      toggle.classList.toggle("active", input.value.trim() !== "");
-    });
-    if (input.value.trim() !== "") {
-      toggle.classList.add("active");
-    }
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        popover.classList.remove("open");
-      }
-    });
-  });
-
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest("#ip-table th.th-searchable")) {
-      document.querySelectorAll("#ip-table .th-search-popover.open").forEach((p) => {
-        p.classList.remove("open");
-      });
-    }
-  });
-}
+// 表头搜索弹层逻辑已通用化至 utils/ui.js 的 initThSearchPopovers(selector)
 
 function applyIpFilters() {
   const filters = {

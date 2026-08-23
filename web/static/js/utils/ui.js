@@ -75,6 +75,69 @@ export function initSortEvents(tableId, sortState, loadDataFn) {
   });
 }
 
+// 表头搜索弹层全局点击外部收起监听只注册一次（跨表格共用）
+let thSearchOutsideClickRegistered = false;
+
+/**
+ * 表头搜索弹层初始化：点击放大镜图标展开/收起输入框，Esc 或点击外部收起。
+ *
+ * 适用于任意 `.data-table`（IP 查询页、资源管理网段表等）：
+ * 表头需为 `th.th-searchable`，内含 `.th-search-toggle` 按钮与
+ * `.th-search-popover > input` 输入框（结构见 main.html）。
+ *
+ * @param {string} tableSelector 表格选择器，如 "#ip-table"
+ */
+export function initThSearchPopovers(tableSelector) {
+  document.querySelectorAll(`${tableSelector} th.th-searchable`).forEach((th) => {
+    const toggle = th.querySelector(".th-search-toggle");
+    const popover = th.querySelector(".th-search-popover");
+    const input = popover?.querySelector("input");
+    if (!toggle || !popover || !input) return;
+
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = !popover.classList.contains("open");
+
+      // 同一表格内同一时间只展开一个搜索弹层
+      popover
+        .closest("table")
+        ?.querySelectorAll(".th-search-popover.open")
+        .forEach((p) => p.classList.remove("open"));
+
+      if (willOpen) {
+        popover.classList.add("open");
+        input.focus();
+      }
+    });
+
+    // 输入框有内容时放大镜图标保持高亮
+    input.addEventListener("input", () => {
+      toggle.classList.toggle("active", input.value.trim() !== "");
+    });
+    if (input.value.trim() !== "") {
+      toggle.classList.add("active");
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        popover.classList.remove("open");
+      }
+    });
+  });
+
+  // 点击任意表头搜索区之外的位置，收起所有表格的搜索弹层
+  if (!thSearchOutsideClickRegistered) {
+    thSearchOutsideClickRegistered = true;
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("th.th-searchable")) {
+        document.querySelectorAll(".th-search-popover.open").forEach((p) => {
+          p.classList.remove("open");
+        });
+      }
+    });
+  }
+}
+
 export function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {

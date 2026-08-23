@@ -77,16 +77,6 @@
   font-style: italic;
 }
 
-/* 保持 th 为 table-cell（不能用 display: flex，否则 fixed 布局下
-   列宽分配失效导致按钮错位），借助继承的 text-align: center 居中 */
-.th-actions {
-  text-align: center;
-}
-
-.th-actions .btn {
-  margin: 0;
-}
-
 .pagination {
   display: flex;
   align-items: center;
@@ -285,22 +275,6 @@
   right: 0;
   height: 2px;
   background-color: var(--color-primary);
-}
-
-/* 表格上方工具栏：过滤输入组（左）+ 主操作按钮（右） */
-.table-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-md);
-}
-
-.table-filter-group {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
 }
 
 /* 表头搜索：放大镜图标 + 点击图标弹出的搜索输入框 */

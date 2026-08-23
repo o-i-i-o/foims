@@ -14,7 +14,8 @@ import {
   escapeHtml,
   createSortState,
   updateSortIcons,
-  initSortEvents
+  initSortEvents,
+  initThSearchPopovers
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modalLoader.js";
@@ -211,6 +212,9 @@ export function initNetworksFilters() {
       filterElement.addEventListener("input", debouncedFilter);
     }
   });
+
+  // 网段表头搜索弹层（与 IP 查询页同一套通用实现）
+  initThSearchPopovers("#networks-table");
 
   // 网络区域与网段两张表的排序事件（resourceTabs 每模块仅初始化一次）
   initSortEvents("network-regions-table", networkRegionTableState, loadNetworkRegionsData);
