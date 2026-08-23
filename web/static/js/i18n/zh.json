@@ -759,7 +759,7 @@
     "user_agent": "用户代理",
     "login_result": "登录结果",
     "error_message": "错误信息",
-    "cleanup": "日志清理",
+    "manager": "日志管理",
     "stats": "日志统计",
     "clear_logs": "清理日志",
     "log_type": "日志类型",

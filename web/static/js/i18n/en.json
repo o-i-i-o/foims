@@ -759,7 +759,7 @@
     "user_agent": "User Agent",
     "login_result": "Login Result",
     "error_message": "Error Message",
-    "cleanup": "Log Cleanup",
+    "manager": "Log Management",
     "stats": "Log Statistics",
     "clear_logs": "Clear Logs",
     "log_type": "Log Type",
