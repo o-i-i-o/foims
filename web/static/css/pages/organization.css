@@ -1,8 +1,4 @@
 /* 组织管理 - 树形结构样式 */
-/* 工具栏与树容器的间隔上移到页面顶部，树容器与工具栏紧贴 */
-#organization {
-  padding-top: var(--space-md);
-}
 
 .org-toolbar {
   display: flex;
