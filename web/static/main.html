@@ -514,7 +514,6 @@
 
         <div id="workstation-visualization" class="tab-content active" role="tabpanel">
           <div class="toolbar">
-            <div class="viz-filter-group">
               <select id="viz-org-select" class="form-control" aria-label="Select organization"></select>
               <select id="viz-room-type" class="form-control" aria-label="Select room type">
                 <option value="" data-i18n="viz.all_room_types">All Room Types</option>
@@ -524,7 +523,6 @@
                 <option value="other" data-i18n="room.type_other">Other</option>
               </select>
               <select id="room-select" class="form-control" aria-label="Select room"></select>
-            </div>
             <button id="auto-draw-workstations" class="btn btn-primary btn-sm" data-i18n="visualization.auto_draw">Auto Draw</button>
             <button id="save-workstation-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
             <button id="delete-workstation-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
@@ -534,7 +532,6 @@
 
         <div id="cabinet-visualization" class="tab-content" role="tabpanel">
           <div class="toolbar">
-            <div class="viz-filter-group">
               <select id="cabinet-viz-org-select" class="form-control" aria-label="Select organization for cabinets"></select>
               <select id="cabinet-room-type" class="form-control" aria-label="Select room type for cabinets">
                 <option value="" data-i18n="viz.all_room_types">All Room Types</option>
@@ -543,7 +540,6 @@
                 <option value="other" data-i18n="room.type_other">Other</option>
               </select>
               <select id="cabinet-room-select" class="form-control" aria-label="Select room for cabinets"></select>
-            </div>
             <button id="auto-draw-cabinet-positions" class="btn btn-primary btn-sm" data-i18n="visualization.auto_draw">Auto Draw</button>
             <button id="delete-cabinet-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
             <button id="save-cabinet-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
@@ -553,17 +549,13 @@
 
         <div id="global-visualization" class="tab-content" role="tabpanel">
           <div class="toolbar">
-            <div class="viz-filter-group">
               <select id="topology-org-select" class="form-control" aria-label="Select organization for topology"></select>
-            </div>
             <button id="toggle-connection-mode" class="btn btn-warning btn-sm" data-i18n="visualization.connection_mode">Connection Mode</button>
             <button id="open-topology-connection-modal" class="btn btn-primary btn-sm" data-i18n="viz.create_connection">Create Connection</button>
             <button id="topology-auto-discover" class="btn btn-info btn-sm" data-i18n="visualization.auto_discover">Auto Discover</button>
-            <div class="toolbar-right">
               <button id="topology-auto-layout" class="btn btn-primary btn-sm" data-i18n="visualization.auto_layout">Auto Layout</button>
               <button id="save-topology-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
               <span id="topology-zoom-level" class="zoom-indicator">100%</span>
-            </div>
           </div>
           <div id="global-visualization-container" role="img" aria-label="Device topology visualization"></div>
         </div>

@@ -122,11 +122,6 @@
   flex-wrap: wrap;
 }
 
-/* IP 查询页：表格与页面顶部留出少量间距 */
-#ip .table-container {
-  margin-top: var(--space-sm);
-}
-
 .toolbar {
   margin-bottom: var(--space-md);
   display: flex;
