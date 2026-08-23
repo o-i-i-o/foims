@@ -26,7 +26,6 @@
   background: var(--color-bg-white);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: var(--space-md);
   min-height: 400px;
   overflow-x: auto;
 }
