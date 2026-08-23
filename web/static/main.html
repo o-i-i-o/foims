@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01331">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01331">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01331">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01331">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01331">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01331">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01331">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01331">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01331">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01331">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01331">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01331">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01332">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01332">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01332">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01332">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01332">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01332">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01332">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01332">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01332">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01332">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01332">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01332">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -714,7 +714,6 @@
         </div>
 
         <div id="users-tab" class="tab-content" role="tabpanel">
-          <div class="table-toolbar"><button id="add-user-btn" class="btn btn-primary btn-sm" data-i18n="user.add_user">Add User</button></div>
               <div class="table-container">
             <table id="users-table" class="data-table" aria-label="User list">
               <thead>
@@ -726,7 +725,7 @@
                   <th data-i18n="user.status" class="sortable col-center" data-sort="status">Status</th>
                   <th class="sortable col-center" data-sort="two_factor_enabled">2FA</th>
                   <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
-                  <th class="th-actions" data-i18n="common.actions">Actions</th>
+                  <th><button id="add-user-btn" class="btn btn-primary btn-sm" data-i18n="user.add_user">Add User</button></th>
                 </tr>
               </thead>
               <tbody>
@@ -1108,10 +1107,6 @@
         
         <div id="scheduled-tasks-tab" class="tab-content" role="tabpanel">
           <article class="import-export-section">
-            <h2 data-i18n="scheduled_tasks.title">Scheduled Tasks</h2>
-            <div class="action-bar">
-              <button id="create-scheduled-task-btn" class="btn btn-primary" data-i18n="scheduled_tasks.create">Create Task</button>
-            </div>
             <div class="table-container">
               <table id="scheduled-tasks-table" class="data-table">
                 <thead>
@@ -1123,7 +1118,7 @@
                   <th data-i18n="scheduled_tasks.status" class="sortable col-center" data-sort="enabled">Status</th>
                   <th data-i18n="scheduled_tasks.last_run" class="sortable col-center" data-sort="last_run_at">Last Run</th>
                   <th data-i18n="scheduled_tasks.last_result" class="sortable col-center" data-sort="last_result">Last Result</th>
-                  <th data-i18n="common.actions" class="col-center">Actions</th>
+                  <th><button id="create-scheduled-task-btn" class="btn btn-primary" data-i18n="scheduled_tasks.create">Create Task</button></th>
                 </tr>
                 </thead>
                 <tbody id="scheduled-tasks-tbody"></tbody>
@@ -1258,6 +1253,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01331"></script>
+  <script type="module" src="/static/js/app.js?v=01332"></script>
 </body>
 </html>
