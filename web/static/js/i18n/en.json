@@ -733,7 +733,7 @@
     "rate_limit_email_window": "Email Window (seconds)",
     "rate_limit_saved": "Rate limit config saved successfully",
     "session_settings": "Session Settings",
-    "password_policy": "Password Policy (Classified Protection L3)",
+    "password_policy": "Password Policy",
     "password_min_length": "Minimum Length",
     "password_expiry": "Validity Period (days, 0 = disabled)",
     "password_history": "History Check (recent N, 0 = disabled)",

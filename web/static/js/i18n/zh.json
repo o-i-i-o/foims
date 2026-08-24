@@ -733,7 +733,7 @@
     "rate_limit_email_window": "邮件限制窗口(秒)",
     "rate_limit_saved": "限流配置保存成功",
     "session_settings": "会话设置",
-    "password_policy": "密码策略（等保三级）",
+    "password_policy": "密码策略",
     "password_min_length": "最小长度",
     "password_expiry": "有效期（天，0 为不启用）",
     "password_history": "历史重复检查（最近 N 次，0 为不启用）",

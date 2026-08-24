@@ -3,13 +3,15 @@
 
 .status-badge,
 .two-factor-badge {
-  display: inline-block;
+  display: flex;
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  align-items: center;
+  justify-content: center;
 }
 
 .status-active {
