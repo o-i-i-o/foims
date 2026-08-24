@@ -10,7 +10,7 @@ stages:
   - step: build@rust
     name: build_rust_fmt
     displayName: Rust 代码格式化及检查
-    rustVersion: "1.93"
+    rustVersion: "1.98"
     commands:
     - pwd
     - ls
@@ -27,7 +27,7 @@ stages:
   - step: build@rust
     name: build_rust_clippy
     displayName: Rust 静态检查
-    rustVersion: "1.93"
+    rustVersion: "1.98"
     commands:
     - cargo clippy --release
     notify: []
@@ -36,7 +36,7 @@ stages:
   - step: build@rust
     name: build_rust_check
     displayName: Rust 构建测试
-    rustVersion: "1.93"
+    rustVersion: "1.98"
     commands:
     - cargo check --release
     notify: []
@@ -45,7 +45,7 @@ stages:
   - step: build@rust
     name: build_rust_build
     displayName: Rust 单元测试
-    rustVersion: "1.93"
+    rustVersion: "1.98"
     commands:
     - cargo test
     artifacts: []
@@ -60,7 +60,7 @@ stages:
   - step: build@rust
     name: 2ba8bbf9
     displayName: Rust 构建
-    rustVersion: "1.93"
+    rustVersion: "1.98"
     commands:
     - cargo build --release
     artifacts:
