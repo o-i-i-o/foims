@@ -1050,7 +1050,7 @@
     "cert_file": "Certificate File (PEM format)",
     "key_file": "Private Key File (PEM format)",
     "manager_title": "Certificate Management",
-    "generated_section": "Generated Certificates (CA-signed, /etc/ssl/ipma-certs)",
+    "generated_section": "Generated Certificates (/etc/ssl/ipma-certs)",
     "imported_section": "Imported Certificates (/etc/ssl/ipma-import-certs)",
     "col_file": "File",
     "col_subject": "Subject (CN)",

@@ -314,11 +314,10 @@
 
           <div id="login-error" class="error-message" role="alert" aria-live="polite"></div>
 
-          <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载（仅 PEM）；
+          <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载；
                无 CA 时整体隐藏 -->
           <div id="ca-download-entry" class="ca-download-entry" hidden>
-            <span class="ca-download-label" data-i18n="login.ca_download">下载本站根证书</span>
-            <a href="/api/certificate/ca/download" class="ca-download-link" download data-i18n="login.ca_download_pem">PEM</a>
+            <a href="/api/certificate/ca/download" class="ca-download-link" download data-i18n="login.ca_download">下载本站根证书</a>
           </div>
         </div>
       </div>

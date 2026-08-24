@@ -1050,7 +1050,7 @@
     "cert_file": "证书文件(PEM格式)",
     "key_file": "私钥文件(PEM格式)",
     "manager_title": "证书管理",
-    "generated_section": "生成证书（由 CA 签发，/etc/ssl/ipma-certs）",
+    "generated_section": "生成证书（/etc/ssl/ipma-certs）",
     "imported_section": "导入证书（/etc/ssl/ipma-import-certs）",
     "col_file": "文件",
     "col_subject": "主题(CN)",
