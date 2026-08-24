@@ -26,7 +26,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 /// 工位基础查询列（含房间名联表），列表与单条查询共用。
 const WORKSTATION_COLUMNS: &str = "w.id, w.name, w.room_id,
         r.name as room_name,
-        w.manager, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ";
+        w.manager, w.manager_employee_id, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ";
 
 /// 追加工位列表过滤条件（关键字 + 机房），供 COUNT 与数据查询共用。
 fn push_workstation_filters(
@@ -147,13 +147,15 @@ pub async fn create_workstation(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
+    // 指定员工时管理人以员工姓名为准（员工被删除时回退文本值）
     sqlx::query(
-        "INSERT INTO workstations (id, name, room_id, manager, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO workstations (id, name, room_id, manager, manager_employee_id, description, created_at, updated_at)
+         VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(req.room_id)
+    .bind(req.manager_employee_id)
     .bind(&req.manager)
     .bind(&req.description)
     .bind(now)
@@ -169,6 +171,7 @@ pub async fn create_workstation(
         room_id: req.room_id,
         room_name: None,
         manager: req.manager.clone(),
+        manager_employee_id: req.manager_employee_id,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -280,13 +283,15 @@ pub async fn update_workstation(
         "UPDATE workstations SET
          name = COALESCE($1, name),
          room_id = COALESCE($2, room_id),
-         manager = COALESCE($3, manager),
-         description = COALESCE($4, description),
-         updated_at = $5
-         WHERE id = $6",
+         manager = COALESCE((SELECT name FROM employees WHERE id = $3), $4, manager),
+         manager_employee_id = COALESCE($3, manager_employee_id),
+         description = COALESCE($5, description),
+         updated_at = $6
+         WHERE id = $7",
     )
     .bind(&req.name)
     .bind(req.room_id)
+    .bind(req.manager_employee_id)
     .bind(&req.manager)
     .bind(&req.description)
     .bind(Utc::now())

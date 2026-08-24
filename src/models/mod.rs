@@ -42,7 +42,8 @@ pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationEr
 
 pub fn validate_role(role: &str) -> Result<(), ValidationError> {
     match role {
-        "admin" | "user" => Ok(()),
+        // 等保三权分立：admin 系统管理员 / secadmin 安全管理员 / auditor 审计管理员 / user 普通用户
+        "admin" | "secadmin" | "auditor" | "user" => Ok(()),
         _ => Err(ValidationError::new("server.user.validation.role_invalid")),
     }
 }
@@ -162,6 +163,7 @@ pub use ipma_common::ApiResponse;
 pub mod cabinet;
 pub mod cable_link;
 pub mod device;
+pub mod employee;
 pub mod ip;
 pub mod layout;
 pub mod log;
@@ -177,6 +179,7 @@ pub mod workstation;
 pub use cabinet::*;
 pub use cable_link::*;
 pub use device::*;
+pub use employee::*;
 pub use ip::*;
 pub use layout::*;
 pub use log::*;
@@ -315,11 +318,13 @@ mod tests {
     fn test_validate_role_valid() {
         assert!(validate_role("admin").is_ok());
         assert!(validate_role("user").is_ok());
+        assert!(validate_role("secadmin").is_ok(), "等保安全管理员");
+        assert!(validate_role("auditor").is_ok(), "等保审计管理员");
     }
 
     #[test]
     fn test_validate_role_invalid() {
-        // 角色严格区分大小写，仅允许 admin/user
+        // 角色严格区分大小写，仅允许 admin/secadmin/auditor/user
         for invalid in ["Admin", "ADMIN", "root", "", "superuser"] {
             let err = validate_role(invalid)
                 .err()

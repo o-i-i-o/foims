@@ -269,6 +269,17 @@ pub async fn login_with_ldap(
     req.validate()?;
 
     let client_ip = meta.ip_address.clone();
+
+    // 连续失败达到阈值后要求图形验证码（与本地登录共用触发计数）
+    if let Err(key) = crate::auth::captcha::enforce(
+        &client_ip,
+        &req.username,
+        &req.captcha_id,
+        &req.captcha_text,
+    ) {
+        return Err(AppError::Validation(msg(key)));
+    }
+
     if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
         return Err(AppError::Forbidden(

@@ -447,16 +447,20 @@ fn sso_error_redirect(error_key: &str) -> Response {
 // ==================== 认证方式查询 ====================
 
 /// 公开的认证方式开关：登录页据此显示/隐藏 LDAP 与 SSO 标签。
+///
+/// 邮箱登录依赖 SMTP：未配置时该入口静默隐藏（模块视为未运行），
+/// 避免用户触发必然失败的发码请求。
 pub async fn get_auth_methods(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let ldap_enabled = get_ldap_config_enabled(&conn, "ldap").await;
     let sso_enabled = get_ldap_config_enabled(&conn, "sso").await;
+    let email_enabled = crate::system::smtp::smtp_configured(&conn).await;
 
     Ok(crate::error::ok_json(
         serde_json::json!({
             "password": true,
-            "email": true,
+            "email": email_enabled,
             "ldap": ldap_enabled,
             "sso": sso_enabled,
         }),

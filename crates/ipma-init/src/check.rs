@@ -13,6 +13,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
     vec![
         // 用户与系统
         "users",
+        "password_history",
         "encryption_keys",
         "system_configs",
         // 网络
@@ -22,6 +23,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 组织与模板
         "org_templates",
         "organizations",
+        "employees",
         "device_templates",
         // 空间
         "rooms",
@@ -84,9 +86,14 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "two_factor_email_code",
             "two_factor_email_code_expiry",
             "tokens_invalidated_at",
+            "password_changed_at",
             "created_at",
             "updated_at",
         ],
+    );
+    columns.insert(
+        "password_history",
+        vec!["id", "user_id", "password_hash", "created_at"],
     );
     columns.insert(
         "encryption_keys",
@@ -162,7 +169,22 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "name",
             "room_id",
             "manager",
+            "manager_employee_id",
             "description",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "employees",
+        vec![
+            "id",
+            "org_id",
+            "name",
+            "gender",
+            "phone",
+            "email",
+            "hire_date",
             "created_at",
             "updated_at",
         ],

@@ -257,7 +257,12 @@
     "network_not_in_room": "Network segment does not belong to the device room",
     "seller": "Seller",
     "room_type_filter": "Room Type",
-    "all_room_types": "All Room Types"
+    "all_room_types": "All Room Types",
+    "auto_assign_ip": "Auto Assign",
+    "auto_assign_success": "Filled available IP: {{ip}}",
+    "auto_assign_none": "No available IP in this network",
+    "auto_assign_failed": "Failed to auto-assign IP",
+    "auto_assign_select_network": "Select a network first"
   },
   "device_template": {
     "title": "Device Template Management",
@@ -322,11 +327,18 @@
     "logout": "Logout",
     "username": "Username",
     "password": "Password",
-    "confirm_password": "Confirm Password",
+    "confirm_password": "Confirm New Password",
     "email": "Email",
     "welcome": "Welcome, {{username}}",
     "session_refreshed": "Session refreshed",
-    "session_timeout": "Session expired, please login again"
+    "session_timeout": "Session expired, please login again",
+    "change_password": "Change Password",
+    "old_password": "Current Password",
+    "new_password": "New Password",
+    "change_password_hint": "After a successful change you will be logged out everywhere; the new password must follow the policy and not reuse recent passwords",
+    "change_password_failed": "Failed to change password",
+    "password_mismatch": "New passwords do not match",
+    "password_required": "Password is required"
   },
   "login": {
     "welcome": "Welcome back",
@@ -374,7 +386,13 @@
     "ldap_username": "LDAP Username",
     "ldap_username_placeholder": "Enter LDAP username",
     "ldap_password_placeholder": "Enter LDAP password",
-    "sso_hint": "You will be redirected to the enterprise identity platform to sign in"
+    "sso_hint": "You will be redirected to the enterprise identity platform to sign in",
+    "ca_download": "Download site root CA",
+    "ca_download_pem": "PEM (Linux)",
+    "ca_download_der": "DER (Windows)",
+    "captcha": "Captcha",
+    "captcha_refresh": "Click to refresh captcha",
+    "captcha_required": "Please enter the captcha"
   },
   "dashboard": {
     "total_networks": "Total Networks",
@@ -502,7 +520,8 @@
       "workstation": "Workstation",
       "cabinet": "Cabinet",
       "cabinet_position": "Cabinet Position"
-    }
+    },
+    "manage_employees": "Employees"
   },
   "org_template": {
     "management": "Template Management",
@@ -562,7 +581,9 @@
     "name_required": "Workstation name cannot be empty",
     "room_required": "Please select a room",
     "edit": "Edit Workstation",
-    "add": "Add Workstation"
+    "add": "Add Workstation",
+    "manager_unassigned": "No manager assigned",
+    "manager_legacy": "not linked to employee"
   },
   "cabinet": {
     "name": "Cabinet Name",
@@ -620,7 +641,7 @@
     "info": "System Info",
     "users": "User Management",
     "config": "System Config",
-    "import_export": "Data Management",
+    "data-management": "Data Management",
     "system_name": "System Name",
     "version": "System Version",
     "database_status": "Database Status",
@@ -693,7 +714,9 @@
     "add_success": "User added successfully",
     "update_failed": "Failed to update user",
     "add_failed": "Failed to add user",
-    "save_failed_network": "Failed to save user. Please check your network connection."
+    "save_failed_network": "Failed to save user. Please check your network connection.",
+    "role_secadmin": "Security Administrator",
+    "role_auditor": "Audit Administrator"
   },
   "config": {
     "page_timeout": "Page Timeout (minutes)",
@@ -709,7 +732,15 @@
     "rate_limit_email": "Email Limit (per hour)",
     "rate_limit_email_window": "Email Window (seconds)",
     "rate_limit_saved": "Rate limit config saved successfully",
-    "session_settings": "Session Settings"
+    "session_settings": "Session Settings",
+    "password_policy": "Password Policy (Classified Protection L3)",
+    "password_min_length": "Minimum Length",
+    "password_expiry": "Validity Period (days, 0 = disabled)",
+    "password_history": "History Check (recent N, 0 = disabled)",
+    "password_require_upper": "Require uppercase letters",
+    "password_require_lower": "Require lowercase letters",
+    "password_require_digit": "Require digits",
+    "password_require_special": "Require special characters"
   },
   "smtp": {
     "host": "SMTP Server",
@@ -855,7 +886,15 @@
     "no_detail": "No details",
     "earliest_label": "Earliest",
     "resource_id": "Resource ID",
-    "clear_zero_hint": "0=delete all"
+    "clear_zero_hint": "0=delete all",
+    "forwarding_title": "Log Forwarding",
+    "forwarding_enabled": "Enabled",
+    "forwarding_protocol": "Protocol",
+    "forwarding_host": "Collector Host",
+    "forwarding_host_placeholder": "e.g., 192.168.1.10",
+    "forwarding_port": "Port",
+    "forwarding_test": "Send Test",
+    "forwarding_hint": "Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164); forwarding failures do not affect local storage"
   },
   "notifications": {
     "all": "All Notifications",
@@ -926,7 +965,7 @@
     "no_macs_data": "No MAC data",
     "no_lldp_data": "No LLDP data"
   },
-  "import_export": {
+  "data-management": {
     "data_management": "Data Management",
     "download_template": "Download Template",
     "import_result": "Import Result",
@@ -992,7 +1031,7 @@
     "disable_failed_network": "Disable failed. Please check your network connection."
   },
   "cert": {
-    "generate_title": "Generate Self-signed Certificate",
+    "generate_title": "Generate Certificate",
     "import_title": "Import Certificate",
     "common_name": "Common Name (CN)",
     "organization": "Organization (O)",
@@ -1028,7 +1067,32 @@
     "delete_failed": "Failed to delete certificate",
     "common_name_required": "Common Name (CN) is required",
     "file_required": "Please select both certificate and private key files",
-    "import_failed": "Failed to import certificate"
+    "import_failed": "Failed to import certificate",
+    "ca_section": "Site Root CA",
+    "ca_generate_title": "Generate Root CA",
+    "ca_import_title": "Import Root CA",
+    "ca_generate": "Generate Root CA",
+    "ca_import": "Import Root CA",
+    "ca_generate_confirm": "Generating a new root CA overwrites the existing one; certificates issued by the old CA will no longer chain. Continue?",
+    "ca_export_pem": "Export CA (PEM/Linux)",
+    "ca_export_der": "Export CA (DER/Windows)",
+    "ca_none": "No root CA configured",
+    "ca_has_key": "Private key available (can issue certificates)",
+    "ca_no_key": "Certificate only (for terminal trust export)",
+    "ca_cert_file": "CA Certificate File (PEM format)",
+    "ca_key_file": "CA Private Key File (PEM format)",
+    "ca_file": "CA Certificate (optional)",
+    "ca_file_hint": "Optionally attach the issuing CA so terminals can download and trust the root certificate; export only, not used for signing",
+    "ca_import_hint": "After importing an existing CA certificate and private key, this site can issue certificates under that CA. The CA private key never leaves the server",
+    "ca_generate_hint": "A new root CA will overwrite the existing one; certificates previously issued by the old CA will no longer chain",
+    "sign_with_ca": "Sign with site root CA",
+    "sign_with_ca_hint": "When a root CA exists the certificate is issued by it; otherwise it falls back to self-signed",
+    "ca_help_title": "How to trust the site root CA",
+    "ca_help_windows": "Windows: run \"certutil -addstore -f Root ipma-root-ca.crt\" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox trust it after a browser restart.",
+    "ca_help_linux": "Debian/Ubuntu: sudo cp ipma-root-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates; RHEL/Fedora: sudo cp ipma-root-ca.crt /etc/pki/ca-trust/source/anchors/ && sudo update-ca-trust extract (PEM with .crt extension required).",
+    "ca_help_chrome": "Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t \"C,,\" -n \"IPMA-RootCA\" -i ipma-root-ca.crt (requires libnss3-tools/nss-tools).",
+    "ca_help_firefox": "Linux Firefox uses its own certificate store: import manually under Settings > Privacy & Security > Certificates > View Certificates, or configure the p11-kit trust module via enterprise policy.",
+    "ca_help_note": "Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and falls back to TCP automatically - expected behavior."
   },
   "language": {
     "native_name": "EN",
@@ -1346,7 +1410,16 @@
       "qr_generate_failed": "Failed to generate 2FA QR code: {{error}}",
       "external_account_use_provider_login": "This account uses external authentication; please sign in with the corresponding method",
       "provider_mismatch": "This username is already bound to another sign-in method",
-      "external_username_invalid": "The username returned by external authentication is invalid"
+      "external_username_invalid": "The username returned by external authentication is invalid",
+      "captcha_required": "Too many failed attempts, please complete the captcha",
+      "captcha_invalid": "Captcha is incorrect or expired, please try again",
+      "password_expired": "Password expired; reset it via administrator or the recovery flow",
+      "old_password_incorrect": "Current password is incorrect",
+      "password_changed": "Password changed, please sign in again",
+      "password_too_short": "Password too short (minimum {{min_length}} characters)",
+      "password_complexity": "Password complexity insufficient (missing: {{missing}})",
+      "password_reused": "New password reuses a recent password",
+      "secadmin_required": "Security administrator privilege required"
     },
     "backup": {
       "dir_create_failed": "Failed to create backup directory",
@@ -1415,7 +1488,14 @@
       "country_invalid": "Country code must be two letters",
       "read_failed": "Failed to read uploaded certificate file",
       "write_failed": "Failed to write certificate file",
-      "list_failed": "Failed to scan certificate directory"
+      "list_failed": "Failed to scan certificate directory",
+      "ca_generate_succeeded": "Root CA generated successfully",
+      "ca_import_succeeded": "Root CA imported successfully",
+      "ca_not_found": "Root CA not configured",
+      "ca_key_required": "CA certificate or key file missing",
+      "ca_invalid": "Invalid CA (BasicConstraints CA:TRUE and matching key required)",
+      "key_download_forbidden": "Private key download is not allowed; use the server filesystem",
+      "format_invalid": "Invalid export format"
     },
     "common": {
       "cipher_init_failed": "Failed to create cipher",
@@ -1435,7 +1515,8 @@
       "user_id_invalid": "Invalid user identifier",
       "validation": {
         "description_length": "Description must not exceed 255 characters",
-        "email_format": "Invalid email format"
+        "email_format": "Invalid email format",
+        "uuid_invalid": "Invalid UUID parameter"
       }
     },
     "db": {
@@ -1577,7 +1658,7 @@
         "max_retry_range": "Max retry must be between 1 and 100"
       }
     },
-    "import_export": {
+    "data-management": {
       "chunk_read_failed": "Failed to read file chunk",
       "file_read_failed": "Failed to read file",
       "file_too_large": "File exceeds the {{limit}}MB limit",
@@ -1728,7 +1809,14 @@
       "type_invalid": "Invalid log type",
       "validation": {
         "log_type_length": "Log type length must be between 1 and 20 characters"
-      }
+      },
+      "forwarding_retrieved": "Log forwarding config retrieved",
+      "forwarding_updated": "Log forwarding config updated",
+      "forwarding_incomplete": "Collector host and port are required when forwarding is enabled",
+      "forwarding_protocol_invalid": "Protocol must be udp or tcp",
+      "forwarding_disabled": "Log forwarding is not enabled",
+      "forwarding_test_failed": "Failed to send test message",
+      "forwarding_test_sent": "Test message sent, verify on the collector side"
     },
     "net_outlet": {
       "created": "Net outlet created successfully",
@@ -1977,7 +2065,8 @@
         "language_length": "Language code must be 2 to 5 characters"
       },
       "workdir_failed": "Failed to get working directory",
-      "workdir_invalid": "Cannot convert working directory path to a string"
+      "workdir_invalid": "Cannot convert working directory path to a string",
+      "password_policy_updated": "Password policy updated"
     },
     "task": {
       "backup_completed": "Backup completed",
@@ -2137,6 +2226,21 @@
         "secret_length": "Invalid client secret length",
         "redirect_uri_length": "Invalid redirect URI length"
       }
+    },
+    "employee": {
+      "list_retrieved": "Employee list retrieved",
+      "fetched": "Employee retrieved",
+      "created": "Employee created",
+      "updated": "Employee updated",
+      "deleted": "Employee deleted",
+      "not_found": "Employee not found",
+      "name_exists": "An employee with this name already exists in the organization",
+      "validation": {
+        "name_length": "Employee name must be 1-50 characters",
+        "gender_invalid": "Invalid gender value",
+        "phone_length": "Phone number must not exceed 20 characters",
+        "phone_invalid": "Phone number allows digits, +, - and spaces only"
+      }
     }
   },
   "ldap": {
@@ -2185,5 +2289,28 @@
     "test_error": "Error testing SSO connection",
     "save_success": "SSO configuration saved",
     "save_failed": "Failed to save SSO configuration"
+  },
+  "employee": {
+    "manager_title": "Employee Management",
+    "add": "Add Employee",
+    "add_title": "Add Employee",
+    "edit_title": "Edit Employee",
+    "name": "Name",
+    "gender": "Gender",
+    "gender_male": "Male",
+    "gender_female": "Female",
+    "gender_unknown": "Undisclosed",
+    "phone": "Phone",
+    "email": "Email",
+    "hire_date": "Hire Date",
+    "col_name": "Name",
+    "col_gender": "Gender",
+    "col_phone": "Phone",
+    "col_email": "Email",
+    "col_hire_date": "Hire Date",
+    "modal_hint": "Employees belong to this organization node and can be selected as workstation managers; deleting an employee unbinds workstation manager links automatically",
+    "load_failed": "Failed to load employee list",
+    "name_required": "Employee name is required",
+    "delete_confirm": "Delete employee {{name}}?"
   }
 }

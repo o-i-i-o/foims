@@ -418,7 +418,10 @@ export class NetworkCardManager {
         </div>
         <div class="nc-field">
           <label for="${uid}-address">${t("ip.ip_address")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
-          <input id="${uid}-address" type="text" class="ip-address nc-input" value="" placeholder="192.168.1.100" autocomplete="off" required />
+          <div class="nc-address-group">
+            <input id="${uid}-address" type="text" class="ip-address nc-input" value="" placeholder="192.168.1.100" autocomplete="off" required />
+            <button type="button" class="btn btn-secondary btn-sm auto-assign-ip-btn" title="${t("device.auto_assign_ip")}" data-tooltip="${t("device.auto_assign_ip")}">${t("device.auto_assign_ip")}</button>
+          </div>
         </div>
         <div class="nc-field">
           <label for="${uid}-description">${t("common.description")}</label>
@@ -457,6 +460,30 @@ export class NetworkCardManager {
           regionSelect.value = regionId;
           this.renderNetworkOptions(networkSelect, regionId);
         }
+      }
+    });
+
+    // 自动分配：从所选网段取第一个未使用的 IP 填入地址框
+    element.querySelector(".auto-assign-ip-btn")?.addEventListener("click", async () => {
+      const networkId = networkSelect?.value;
+      if (!networkId) {
+        showToast(t("device.auto_assign_select_network"), "warning");
+        return;
+      }
+      try {
+        const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(networkId)}`);
+        const first = result.success
+          ? (result.data?.available_ips || [])[0]
+          : null;
+        if (first) {
+          addressInput.value = first;
+          showToast(t("device.auto_assign_success", { ip: first }), "success");
+        } else {
+          showToast(t("device.auto_assign_none"), "warning");
+        }
+      } catch (error) {
+        console.error("自动分配IP失败:", error);
+        showToast(t("device.auto_assign_failed"), "error");
       }
     });
 

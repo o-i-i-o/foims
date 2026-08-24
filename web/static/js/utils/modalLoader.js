@@ -22,6 +22,8 @@ const MODAL_REGISTRY = {
   "organization-modal": "/static/modals/organization/organization-modal.html",
   "org-template-modal": "/static/modals/organization/org-template-modal.html",
   "org-template-editor-modal": "/static/modals/organization/org-template-editor-modal.html",
+  "employee-modal": "/static/modals/organization/employee-modal.html",
+  "employee-edit-modal": "/static/modals/organization/employee-edit-modal.html",
   // 房间 / 工位 / 机柜
   "room-modal": "/static/modals/room/room-modal.html",
   "workstation-modal": "/static/modals/workstation/workstation-modal.html",
@@ -51,6 +53,9 @@ const MODAL_REGISTRY = {
   "scheduled-task-modal": "/static/modals/system/scheduled-task-modal.html",
   "cert-generate-modal": "/static/modals/system/cert-generate-modal.html",
   "cert-import-modal": "/static/modals/system/cert-import-modal.html",
+  "ca-generate-modal": "/static/modals/system/ca-generate-modal.html",
+  "ca-import-modal": "/static/modals/system/ca-import-modal.html",
+  "change-password-modal": "/static/modals/system/change-password-modal.html",
   "open-source-modal": "/static/modals/system/open-source-modal.html",
   // 登录页
   "forgot-password-modal": "/static/modals/auth/forgot-password-modal.html"

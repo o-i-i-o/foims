@@ -1,6 +1,6 @@
 [package]
 name = "ipma-x509-manager"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA X.509 证书管理：自签名证书生成、导入、清点与下载"
@@ -8,7 +8,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 ipma-common = { path = "../ipma-common" }
-rcgen = "0.14"
+rcgen = { version = "0.14", features = ["x509-parser"] }
 pem = "3"
 x509-parser = "0.17"
 tokio = { version = "1", features = ["fs", "rt"] }

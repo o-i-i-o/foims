@@ -213,6 +213,7 @@ async function renderTreeNode(node, depth) {
     <span class="org-node-actions">
       ${addChildBtns}
       ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "users", label: t("organization.manage_employees"), cls: "btn-employees", attrs: `data-action="employees" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
       ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
     </span>
   `;
@@ -273,6 +274,10 @@ function handleTreeClick(e) {
     case "edit":
       e.stopPropagation();
       editOrganization(target.dataset.id);
+      break;
+    case "employees":
+      e.stopPropagation();
+      openEmployeeModal(target.dataset.id, target.dataset.name);
       break;
     case "delete":
       e.stopPropagation();
@@ -491,6 +496,155 @@ export async function deleteOrganization(id, name) {
     if (result.success) {
       showToast(t("organization.delete_success"), "success");
       loadOrganizationTree();
+    } else {
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+    }
+  } catch (error) {
+    handleError(error, t("common.operation_failed"));
+  }
+}
+
+// ==========================================
+// 人员管理（员工挂在组织节点下）
+// ==========================================
+
+/** 性别取值显示文案 */
+function genderText(gender) {
+  if (gender === "male") return t("employee.gender_male");
+  if (gender === "female") return t("employee.gender_female");
+  return t("employee.gender_unknown");
+}
+
+/** 打开人员管理模态框（orgName 用于标题展示） */
+export async function openEmployeeModal(orgId, orgName) {
+  const modal = await openModal("employee-modal");
+  if (!modal) return;
+
+  const orgIdInput = document.getElementById("employee-modal-org-id");
+  if (orgIdInput) orgIdInput.value = orgId || "";
+  const orgNameEl = document.getElementById("employee-modal-org-name");
+  if (orgNameEl) orgNameEl.textContent = orgName ? ` - ${orgName}` : "";
+
+  const addBtn = document.getElementById("employee-add-btn");
+  if (addBtn) {
+    addBtn.onclick = () => openEmployeeEditModal(orgId, null);
+  }
+
+  await loadEmployeeList(orgId);
+}
+
+/** 加载组织下的员工列表 */
+async function loadEmployeeList(orgId) {
+  const tbody = document.querySelector("#employee-table tbody");
+  if (!tbody) return;
+
+  try {
+    const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
+    const employees = result.success && Array.isArray(result.data) ? result.data : [];
+    if (!employees.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("common.no_data")}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = "";
+    employees.forEach((emp) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(emp.name || "-")}</td>
+        <td>${escapeHtml(genderText(emp.gender))}</td>
+        <td>${escapeHtml(emp.phone || "-")}</td>
+        <td>${escapeHtml(emp.email || "-")}</td>
+        <td>${escapeHtml(emp.hire_date || "-")}</td>
+        <td class="employee-actions-cell"></td>`;
+
+      const actions = tr.querySelector(".employee-actions-cell");
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn btn-secondary btn-sm";
+      editBtn.textContent = t("common.edit");
+      editBtn.addEventListener("click", () => openEmployeeEditModal(orgId, emp));
+      actions.appendChild(editBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn btn-danger btn-sm";
+      deleteBtn.textContent = t("common.delete");
+      deleteBtn.addEventListener("click", () => deleteEmployee(emp));
+      actions.appendChild(deleteBtn);
+
+      tbody.appendChild(tr);
+    });
+  } catch (error) {
+    handleError(error, t("employee.load_failed"));
+  }
+}
+
+/** 打开员工编辑模态框（employee 为 null 时是新增） */
+async function openEmployeeEditModal(orgId, employee) {
+  const modal = await openModal("employee-edit-modal");
+  if (!modal) return;
+
+  const title = document.getElementById("employee-edit-modal-title");
+  if (title) title.textContent = employee ? t("employee.edit_title") : t("employee.add_title");
+
+  elementCache.setValue("employee-edit-id", employee?.id || "");
+  elementCache.setValue("employee-edit-org-id", orgId || "");
+  elementCache.setValue("employee-edit-name", employee?.name || "");
+  elementCache.setValue("employee-edit-gender", employee?.gender || "unknown");
+  elementCache.setValue("employee-edit-phone", employee?.phone || "");
+  elementCache.setValue("employee-edit-email", employee?.email || "");
+  elementCache.setValue("employee-edit-hire-date", employee?.hire_date || "");
+
+  const form = elementCache.get("employee-edit-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const id = elementCache.getValue("employee-edit-id");
+    const name = elementCache.getValue("employee-edit-name").trim();
+    if (!name) {
+      showToast(t("employee.name_required"), "warning");
+      return;
+    }
+
+    const body = {
+      name,
+      gender: elementCache.getValue("employee-edit-gender") || "unknown",
+      phone: elementCache.getValue("employee-edit-phone").trim(),
+      email: elementCache.getValue("employee-edit-email").trim(),
+      hire_date: elementCache.getValue("employee-edit-hire-date") || null
+    };
+
+    try {
+      const result = id
+        ? await apiPut(`/api/resources/employees/${id}`, body)
+        : await apiPost("/api/resources/employees", { ...body, org_id: orgId });
+      if (result.success) {
+        showToast(result.message, "success");
+        closeModal("employee-edit-modal");
+        form.reset();
+        loadEmployeeList(orgId);
+      } else {
+        showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      }
+    } catch (error) {
+      handleError(error, t("common.operation_failed"));
+    }
+  };
+}
+
+/** 删除员工（工位管理人的员工引用会自动解绑） */
+async function deleteEmployee(employee) {
+  const confirmed = await import("../utils/confirm.js").then((m) =>
+    m.showConfirm(t("employee.delete_confirm", { name: employee.name }))
+  );
+  if (!confirmed) return;
+
+  try {
+    const result = await apiDelete(`/api/resources/employees/${employee.id}`);
+    if (result.success) {
+      showToast(result.message, "success");
+      const orgId = document.getElementById("employee-modal-org-id")?.value;
+      loadEmployeeList(orgId);
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }

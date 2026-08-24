@@ -6,7 +6,7 @@
     <meta name="description" content="IPMA系统登录页面">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>IPMA - 系统登录</title>
-    <link rel="stylesheet" href="/static/css/pages/login.css?v=0.15.59">
+    <link rel="stylesheet" href="/static/css/pages/login.css?v=0.15.62">
   </head>
   <body class="login-body" role="document">
     <div id="login-page">
@@ -134,6 +134,21 @@
                     </div>
                   </div>
 
+                  <!-- 图形验证码（连续登录失败达到阈值后显示） -->
+                  <div class="form-group" id="captcha-group" hidden>
+                    <label for="captcha-input" data-i18n="login.captcha">验证码</label>
+                    <div class="captcha-row">
+                      <input
+                        type="text"
+                        id="captcha-input"
+                        name="captcha_input"
+                        maxlength="5"
+                        autocomplete="off"
+                        aria-label="验证码"
+                        data-i18n-aria-label="login.captcha">
+                      <button type="button" id="captcha-image" class="captcha-image" title="点击刷新验证码" data-i18n-title="login.captcha_refresh" aria-label="点击刷新验证码" data-i18n-aria-label="login.captcha_refresh"></button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- 邮箱验证码登录区域 -->
@@ -201,6 +216,22 @@
                         autocomplete="current-password"
                         aria-label="密码"
                         data-i18n-aria-label="auth.password">
+                    </div>
+                  </div>
+
+                  <!-- 图形验证码（连续登录失败达到阈值后显示） -->
+                  <div class="form-group" id="ldap-captcha-group" hidden>
+                    <label for="ldap-captcha-input" data-i18n="login.captcha">验证码</label>
+                    <div class="captcha-row">
+                      <input
+                        type="text"
+                        id="ldap-captcha-input"
+                        name="ldap_captcha_input"
+                        maxlength="5"
+                        autocomplete="off"
+                        aria-label="验证码"
+                        data-i18n-aria-label="login.captcha">
+                      <button type="button" id="ldap-captcha-image" class="captcha-image" title="点击刷新验证码" data-i18n-title="login.captcha_refresh" aria-label="点击刷新验证码" data-i18n-aria-label="login.captcha_refresh"></button>
                     </div>
                   </div>
                 </div>
@@ -282,12 +313,20 @@
           </div>
 
           <div id="login-error" class="error-message" role="alert" aria-live="polite"></div>
+
+          <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载；
+               无 CA 时整体隐藏 -->
+          <div id="ca-download-entry" class="ca-download-entry" hidden>
+            <span class="ca-download-label" data-i18n="login.ca_download">下载本站根证书</span>
+            <a href="/api/certificate/ca/download/pem" class="ca-download-link" download data-i18n="login.ca_download_pem">PEM (Linux)</a>
+            <a href="/api/certificate/ca/download/der" class="ca-download-link" download data-i18n="login.ca_download_der">DER (Windows)</a>
+          </div>
         </div>
       </div>
     </div>
 
     
 
-    <script type="module" src="/static/js/login.js?v=0.15.59"></script>
+    <script type="module" src="/static/js/login.js?v=0.15.62"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-//! 设备子模块（CRUD/端口/接口/网卡/MAC/LLDP/SNMP/模板）。
+//! 设备子模块（CRUD/端口/接口/网卡/MAC/LLDP/SNMP/模板/通知）。
 
 pub mod crud;
 pub mod device_port;
@@ -6,6 +6,7 @@ pub mod interface;
 pub mod lldp;
 pub mod mac;
 pub mod nic;
+pub mod notify;
 pub mod snmp;
 pub mod template;
 

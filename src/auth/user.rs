@@ -20,7 +20,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::log_info;
 
 pub async fn get_users(
-    _admin: crate::auth::extractor::AdminUser,
+    _secadmin: crate::auth::extractor::SecAdminUser,
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -94,7 +94,7 @@ pub async fn get_users(
 pub async fn create_user(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: crate::auth::extractor::AdminUser,
+    _secadmin: crate::auth::extractor::SecAdminUser,
     AppJson(req): AppJson<UserCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -119,6 +119,10 @@ pub async fn create_user(
         return Err(AppError::Conflict(msg("server.user.email_exists")));
     }
 
+    // 等保密码策略：复杂度校验（新用户无历史记录可查）
+    crate::auth::password_policy::validate_complexity(&state.pool()?.get_conn(), &req.password)
+        .await?;
+
     let hashed_password = hash_password(&req.password).await?;
 
     let id = Uuid::new_v4();
@@ -138,6 +142,9 @@ pub async fn create_user(
     .bind(now)
     .execute(&conn)
     .await?;
+
+    // 等保密码策略：记录密码历史（供后续改密时的重复使用检查）
+    crate::auth::password_policy::record_history(&conn, id, &hashed_password).await;
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
@@ -159,7 +166,7 @@ pub async fn create_user(
 }
 
 pub async fn get_user(
-    _admin: crate::auth::extractor::AdminUser,
+    _secadmin: crate::auth::extractor::SecAdminUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
@@ -179,7 +186,7 @@ pub async fn get_user(
 pub async fn update_user(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: crate::auth::extractor::AdminUser,
+    _secadmin: crate::auth::extractor::SecAdminUser,
     Path(id): Path<Uuid>,
     AppJson(req): AppJson<UserUpdate>,
 ) -> Result<Response, AppError> {
@@ -234,7 +241,7 @@ pub async fn update_user(
 pub async fn delete_user(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: crate::auth::extractor::AdminUser,
+    _secadmin: crate::auth::extractor::SecAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();

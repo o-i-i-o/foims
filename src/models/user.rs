@@ -57,6 +57,9 @@ pub struct UserLogin {
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     pub password: String,
     pub remember_me: Option<bool>,
+    /// 连续失败触发后的图形验证码（captcha_id + 用户输入）
+    pub captcha_id: Option<String>,
+    pub captcha_text: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -117,6 +120,9 @@ pub struct LdapLoginRequest {
     #[validate(length(min = 1, message = "server.auth.validation.password_required"))]
     pub password: String,
     pub remember_me: Option<bool>,
+    /// 连续失败触发后的图形验证码（captcha_id + 用户输入）
+    pub captcha_id: Option<String>,
+    pub captcha_text: Option<String>,
 }
 
 // ==================== 单元测试 ====================

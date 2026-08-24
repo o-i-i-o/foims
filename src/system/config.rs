@@ -639,6 +639,8 @@ pub async fn update_notification_settings(
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SmtpConfigResponse {
+    /// 业务状态：未配置是正常状态（HTTP 200），而非错误
+    pub configured: bool,
     pub host: String,
     pub port: u16,
     pub username: String,
@@ -651,21 +653,26 @@ pub async fn get_smtp_config(
     State(state): State<Arc<AppState>>,
     _admin: crate::auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
-        Some(c) => c,
-        None => {
-            log_warn!("log.smtp.not_configured");
-            return Err(AppError::NotFound(msg("server.smtp.not_configured")));
-        }
-    };
-
-    let resp = SmtpConfigResponse {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        from: config.from,
-        secure: config.secure,
-        has_password: !config.password.is_empty(),
+    // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
+    let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
+        Some(config) => SmtpConfigResponse {
+            configured: true,
+            host: config.host,
+            port: config.port,
+            username: config.username,
+            from: config.from,
+            secure: config.secure,
+            has_password: !config.password.is_empty(),
+        },
+        None => SmtpConfigResponse {
+            configured: false,
+            host: String::new(),
+            port: 0,
+            username: String::new(),
+            from: String::new(),
+            secure: false,
+            has_password: false,
+        },
     };
 
     Ok(crate::error::ok_json(resp, "server.smtp.config_retrieved"))
@@ -699,7 +706,7 @@ pub async fn update_smtp_config(
             .await
             .ok_or_else(|| {
                 log_warn!("log.smtp.not_configured_password");
-                AppError::NotFound(msg("server.smtp.not_configured_password"))
+                AppError::Validation(msg("server.smtp.not_configured_password"))
             })?;
         existing.password
     } else {
@@ -729,7 +736,7 @@ pub async fn test_smtp_connection(
         Some(c) => c,
         None => {
             log_warn!("log.smtp.not_configured");
-            return Err(AppError::NotFound(msg("server.smtp.not_configured")));
+            return Err(AppError::Validation(msg("server.smtp.not_configured")));
         }
     };
 
@@ -764,6 +771,33 @@ pub async fn send_system_email(
     .await?;
 
     Ok(crate::error::ok_json((), "server.smtp.email_sent"))
+}
+
+// ==================== 等保密码策略配置 ====================
+
+/// 读取密码策略（未配置时返回等保三级默认值）
+pub async fn get_password_policy(
+    State(state): State<Arc<AppState>>,
+    _secadmin: crate::auth::extractor::SecAdminUser,
+) -> Result<Response, AppError> {
+    let policy = crate::auth::password_policy::load(&state.pool()?.get_conn()).await;
+    Ok(crate::error::ok_json(
+        policy,
+        "server.system.config_retrieved",
+    ))
+}
+
+/// 保存密码策略（长度下限 8、各数值范围由模块内钳制）
+pub async fn update_password_policy(
+    State(state): State<Arc<AppState>>,
+    _secadmin: crate::auth::extractor::SecAdminUser,
+    AppJson(req): AppJson<crate::auth::password_policy::PasswordPolicy>,
+) -> Result<Response, AppError> {
+    crate::auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
+    Ok(crate::error::ok_json(
+        (),
+        "server.system.password_policy_updated",
+    ))
 }
 
 #[derive(Debug, Serialize)]

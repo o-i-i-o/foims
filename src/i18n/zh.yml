@@ -177,7 +177,12 @@ log:
     sigint_register_failed: "无法注册 SIGINT 信号处理器: {{error}}"
     sigterm_received: "收到 SIGTERM 信号"
     sigterm_register_failed: "无法注册 SIGTERM 信号处理器: {{error}}"
+  forwarding:
+    send_failed: "日志外发失败: {{error}}"
+    test_sent: "日志外发测试报文已发送"
   smtp:
+    device_notify_failed: "设备IP通知查询失败: {{error}}"
+    device_notify_skipped: "跳过设备IP邮件通知（未匹配工位/管理人无邮箱/SMTP未配置）"
     incomplete: "SMTP配置不完整，缺少必要字段"
     insecure_connection: "使用非加密SMTP连接发送邮件，凭据可能以明文传输 (host: {{host}})"
     no_recipients_configured: "未配置邮件收件人，跳过MAC变更邮件通知"
@@ -221,6 +226,8 @@ log:
     revoked_cleaned: "已清理 {{count}} 个过期撤销令牌"
     usage_cleaned: "已清理 {{count}} 条超过 {{days}} 天的令牌使用记录"
   user:
+    password_history_write_failed: "写入密码历史失败: {{error}}"
+    password_history_prune_failed: "清理密码历史失败: {{error}}"
     created: "用户 {{username}} 创建成功（ID: {{id}}）"
     deleted: "用户删除成功（ID: {{id}}）"
     invalidate_tokens_failed: "更新 tokens_invalidated_at 失败: {{error}}"

@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01333">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01333">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01333">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01333">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01333">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01333">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01333">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/import-export.css?v=01333">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01333">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01333">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01333">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01333">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01334">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01334">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01334">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01334">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01334">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01334">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01334">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01334">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01334">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01334">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01334">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01334">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -104,6 +104,10 @@
         <button id="language-selector" type="button" class="footer-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Switch language" data-i18n-aria-label="language.toggle" data-tooltip="Language" data-i18n-tooltip="language.title">
           <span class="nav-icon lang-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
           <span class="lang-name">中文</span>
+        </button>
+        <button id="change-password-btn" type="button" class="footer-btn" aria-label="Change password" data-i18n-aria-label="auth.change_password" data-tooltip="Change password" data-i18n-tooltip="auth.change_password">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <span class="nav-text" data-i18n="auth.change_password">Change Password</span>
         </button>
         <button id="logout-btn" type="button" class="footer-btn" aria-label="Logout" data-i18n-aria-label="auth.logout" data-tooltip="Logout" data-i18n-tooltip="auth.logout">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
@@ -644,7 +648,7 @@
           <button class="tab-btn" data-tab="users" role="tab" aria-selected="false" aria-controls="users-tab" data-i18n="system.users">User Management</button>
           <button class="tab-btn" data-tab="system-config" role="tab" aria-selected="false" aria-controls="system-config-tab" data-i18n="system.config">System Config</button>
           <button class="tab-btn" data-tab="system-notification" role="tab" aria-selected="false" aria-controls="system-notification-tab" data-i18n="system.notification">SMTP Config</button>
-          <button class="tab-btn" data-tab="import-export" role="tab" aria-selected="false" aria-controls="import-export-tab" data-i18n="system.import_export">Import/Export</button>
+          <button class="tab-btn" data-tab="data-management" role="tab" aria-selected="false" aria-controls="data-management-tab" data-i18n="system.data-management">Import/Export</button>
           <button class="tab-btn" data-tab="scheduled-tasks" role="tab" aria-selected="false" aria-controls="scheduled-tasks-tab" data-i18n="system.scheduled_tasks">Scheduled Tasks</button>
           <button class="tab-btn" data-tab="security" role="tab" aria-selected="false" aria-controls="security-tab" data-i18n="system.security">Security</button>
         </div>
@@ -767,13 +771,37 @@
                   <span data-i18n="cert.manager_title">Certificate Management</span>
                 </div>
                 <div class="cert-manager-actions">
-                  <button type="button" id="cert-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.generate_title">Generate Self-signed Certificate</button>
+                  <button type="button" id="cert-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.generate_title">Generate Certificate</button>
                   <button type="button" id="cert-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.import_title">Import Certificate</button>
                   <button type="button" id="cert-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
                 </div>
               </div>
+
+              <div class="cert-section cert-ca-section">
+                <div class="cert-section-header">
+                  <h4 class="cert-section-title" data-i18n="cert.ca_section">Site Root CA</h4>
+                  <div class="cert-manager-actions">
+                    <button type="button" id="ca-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.ca_generate_title">Generate Root CA</button>
+                    <button type="button" id="ca-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_import_title">Import Root CA</button>
+                    <button type="button" id="ca-export-pem-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_export_pem">Export CA (PEM/Linux)</button>
+                    <button type="button" id="ca-export-der-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_export_der">Export CA (DER/Windows)</button>
+                  </div>
+                </div>
+                <div id="cert-ca-status" class="cert-ca-status"></div>
+                <details class="cert-ca-help">
+                  <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
+                  <div class="cert-ca-help-body">
+                    <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root ipma-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
+                    <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp ipma-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp ipma-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
+                    <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "IPMA-RootCA" -i ipma-root-ca.crt (requires libnss3-tools/nss-tools).</p>
+                    <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
+                    <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
+                  </div>
+                </details>
+              </div>
+
               <div class="cert-section">
-                <h4 class="cert-section-title" data-i18n="cert.generated_section">Self-signed Certificates</h4>
+                <h4 class="cert-section-title" data-i18n="cert.generated_section">Generated Certificates</h4>
                 <div class="table-container cert-table-container">
                   <table id="cert-generated-table" class="data-table" aria-label="Self-signed certificates">
                     <thead>
@@ -992,68 +1020,68 @@
           </div>
         </div>
 
-        <div id="import-export-tab" class="tab-content" role="tabpanel">
-          <article class="import-export-section">
-            <h2 data-i18n="import_export.data_management">Data Management</h2>
+        <div id="data-management-tab" class="tab-content" role="tabpanel">
+          <article class="data-management-section">
+            <h2 data-i18n="data-management.data_management">Data Management</h2>
             <div class="data-management-container">
               <section class="section">
-                <h3 data-i18n="import_export.csv_import">CSV Data Import</h3>
+                <h3 data-i18n="data-management.csv_import">CSV Data Import</h3>
                 <div class="import-actions">
-                  <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.import_csv">Import CSV</button>
-                  <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="import_export.download_template">Download Template</button>
+                  <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.import_csv">Import CSV</button>
+                  <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="data-management.download_template">Download Template</button>
                 </div>
-                <h3 data-i18n="import_export.csv_export">CSV Data Export</h3>
+                <h3 data-i18n="data-management.csv_export">CSV Data Export</h3>
                 <div class="export-actions">
                   <select id="export-type" class="form-control" aria-label="Select export module">
-                    <option value="all" data-i18n="import_export.module_all">All Modules (ZIP)</option>
-                    <option value="organization" data-i18n="import_export.module_organization">Organization</option>
-                    <option value="network" data-i18n="import_export.module_network">Network Regions &amp; Subnets (incl. room bindings)</option>
-                    <option value="room" data-i18n="import_export.module_room">Rooms (incl. workstations &amp; outlets)</option>
-                    <option value="cabinet" data-i18n="import_export.module_cabinet">Cabinets (incl. positions &amp; patch panels)</option>
-                    <option value="device" data-i18n="import_export.module_device">Devices (incl. ports, NICs, interfaces &amp; IPs)</option>
-                    <option value="cable-link" data-i18n="import_export.module_cable_link">Cable Links</option>
-                    <option value="visualization" data-i18n="import_export.module_visualization">Visualization Layouts &amp; Topology</option>
+                    <option value="all" data-i18n="data-management.module_all">All Modules (ZIP)</option>
+                    <option value="organization" data-i18n="data-management.module_organization">Organization</option>
+                    <option value="network" data-i18n="data-management.module_network">Network Regions &amp; Subnets (incl. room bindings)</option>
+                    <option value="room" data-i18n="data-management.module_room">Rooms (incl. workstations &amp; outlets)</option>
+                    <option value="cabinet" data-i18n="data-management.module_cabinet">Cabinets (incl. positions &amp; patch panels)</option>
+                    <option value="device" data-i18n="data-management.module_device">Devices (incl. ports, NICs, interfaces &amp; IPs)</option>
+                    <option value="cable-link" data-i18n="data-management.module_cable_link">Cable Links</option>
+                    <option value="visualization" data-i18n="data-management.module_visualization">Visualization Layouts &amp; Topology</option>
                   </select>
-                  <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_csv">Export CSV</button>
+                  <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_csv">Export CSV</button>
                 </div>
               </section>
               <section class="section">
                 <div class="import-hint">
-                  <p data-i18n="import_export.instructions">Instructions:</p>
+                  <p data-i18n="data-management.instructions">Instructions:</p>
                   <ul>
-                    <li data-i18n="import_export.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
-                    <li data-i18n="import_export.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
-                    <li data-i18n="import_export.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
-                    <li data-i18n="import_export.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
+                    <li data-i18n="data-management.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
+                    <li data-i18n="data-management.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
+                    <li data-i18n="data-management.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
+                    <li data-i18n="data-management.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
                   </ul>
                 </div>
               </section>
             </div>
           </article>
           
-          <article class="import-export-section">
-            <h2 data-i18n="import_export.database_management">Database Management</h2>
+          <article class="data-management-section">
+            <h2 data-i18n="data-management.database_management">Database Management</h2>
             <div class="database-management-container">
               <section class="section">
-                <h3 data-i18n="import_export.db_export">Database Export</h3>
+                <h3 data-i18n="data-management.db_export">Database Export</h3>
                 <div class="export-actions">
-                  <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="import_export.export_database">Export Database</button>
+                  <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_database">Export Database</button>
                 </div>
               </section>
               <section class="section">
                 <div class="export-hint">
-                  <p data-i18n="import_export.instructions">Instructions:</p>
+                  <p data-i18n="data-management.instructions">Instructions:</p>
                   <ul>
-                    <li data-i18n="import_export.db_export_hint1">Exports as PostgreSQL SQL file</li>
-                    <li data-i18n="import_export.db_export_hint2">Contains complete database structure and data</li>
-                    <li data-i18n="import_export.db_export_hint3">Can be used for migration or disaster recovery</li>
+                    <li data-i18n="data-management.db_export_hint1">Exports as PostgreSQL SQL file</li>
+                    <li data-i18n="data-management.db_export_hint2">Contains complete database structure and data</li>
+                    <li data-i18n="data-management.db_export_hint3">Can be used for migration or disaster recovery</li>
                   </ul>
                 </div>
               </section>
             </div>
           </article>
           
-          <article class="import-export-section">
+          <article class="data-management-section">
             <h2 data-i18n="logs.manager">Log Management</h2>
             <div class="data-management-container">
               <section class="section">
@@ -1095,12 +1123,42 @@
                   <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
                 </div>
               </section>
+              <section class="section">
+              <h3 data-i18n="logs.forwarding_title">Log Forwarding</h3>
+            <div class="nc-fields">
+              <div class="nc-field">
+                <label data-i18n="logs.forwarding_enabled">Enabled</label>
+                <select id="log-forwarding-enabled" class="form-control">
+                  <option value="true" data-i18n="common.yes">Yes</option>
+                  <option value="false" data-i18n="common.no">No</option>
+                </select>
+              </div>
+              <div class="nc-field">
+                <label data-i18n="logs.forwarding_protocol">Protocol</label>
+                <select id="log-forwarding-protocol" class="form-control">
+                  <option value="udp">UDP</option>
+                  <option value="tcp">TCP</option>
+                </select>
+              </div>
+              <div class="nc-field">
+                <label data-i18n="logs.forwarding_host">Collector Host</label>
+                <input type="text" id="log-forwarding-host" class="form-control" data-i18n-placeholder="logs.forwarding_host_placeholder" placeholder="e.g., 192.168.1.10" autocomplete="off" />
+              </div>
+              <div class="nc-field">
+                <label data-i18n="logs.forwarding_port">Port</label>
+                <input type="number" id="log-forwarding-port" class="form-control" min="1" max="65535" placeholder="514" />
+              </div>
             </div>
+            <span class="hint-text" data-i18n="logs.forwarding_hint">Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164) to the collector; forwarding failures do not affect local storage</span>
+               <div class="action-buttons">
+                <button id="log-forwarding-test-btn" class="btn btn-secondary btn-sm" data-i18n="logs.forwarding_test">Send Test</button>
+                <button id="log-forwarding-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+              </div>        
           </article>
         </div>
         
         <div id="scheduled-tasks-tab" class="tab-content" role="tabpanel">
-          <article class="import-export-section">
+          <article class="data-management-section">
             <div class="table-container">
               <table id="scheduled-tasks-table" class="data-table">
                 <thead>
@@ -1122,7 +1180,7 @@
         </div>
 
         <div id="security-tab" class="tab-content" role="tabpanel">
-          <article class="import-export-section">
+          <article class="data-management-section">
             <div class="action-bar">
               <h2 data-i18n="config.rate_limit_settings">Rate Limit Settings</h2>
             </div>
@@ -1165,7 +1223,57 @@
             </div>
           </article>
 
-          <article class="import-export-section">
+          <!-- 等保三级密码策略（安全管理员管辖） -->
+          <article class="data-management-section">
+            <div class="action-bar">
+              <h2 data-i18n="config.password_policy">Password Policy</h2>
+              <div class="action-buttons">
+                <button id="password-policy-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+              </div>
+            </div>
+            <div class="nc-fields">
+              <div class="nc-field">
+                <label data-i18n="config.password_min_length">Minimum Length</label>
+                <input type="number" id="password-policy-min-length" class="form-control" min="8" max="128">
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
+                <input type="number" id="password-policy-expiry" class="form-control" min="0" max="36500">
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
+                <input type="number" id="password-policy-history" class="form-control" min="0" max="24">
+              </div>
+            </div>
+            <div class="nc-fields">
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-upper" class="form-checkbox" />
+                  <span data-i18n="config.password_require_upper">Require uppercase letters</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-lower" class="form-checkbox" />
+                  <span data-i18n="config.password_require_lower">Require lowercase letters</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-digit" class="form-checkbox" />
+                  <span data-i18n="config.password_require_digit">Require digits</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-special" class="form-checkbox" />
+                  <span data-i18n="config.password_require_special">Require special characters</span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="data-management-section">
             <div class="action-bar">
               <h2 data-i18n="security.app_fail2ban">Application Fail2ban</h2>
               <div class="action-buttons">
@@ -1247,6 +1355,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01333"></script>
+  <script type="module" src="/static/js/app.js?v=01334"></script>
 </body>
 </html>

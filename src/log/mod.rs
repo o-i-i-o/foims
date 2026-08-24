@@ -11,6 +11,7 @@
 //!   宏为每种激活语言生成一条 target 为 `ipma_log::{lang}` 的事件，
 //!   本模块按 target 将事件路由到对应语言的控制台/文件输出层。
 
+pub mod forwarding;
 pub mod login;
 pub mod notification;
 pub mod operation;

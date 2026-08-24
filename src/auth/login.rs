@@ -29,7 +29,7 @@ use crate::models::{
     SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
 };
 use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::msg;
 use totp_rs::{Algorithm, Builder, Secret};
 
@@ -196,6 +196,16 @@ pub async fn login(
 
     req.validate()?;
 
+    // 连续失败达到阈值后要求图形验证码（未达阈值时直接放行）
+    if let Err(key) = crate::auth::captcha::enforce(
+        &meta.ip_address,
+        &req.username,
+        &req.captcha_id,
+        &req.captcha_text,
+    ) {
+        return Err(AppError::Validation(msg(key)));
+    }
+
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁（用户名维度拦截
     // 分布式来源针对同一账户的爆破，A-1）
     let client_ip = meta.ip_address.clone();
@@ -305,6 +315,23 @@ pub async fn login(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
             "server.common.success",
         ));
+    }
+
+    // 等保密码有效期：过期后拒绝登录（由安全管理员重置或走找回流程）
+    if crate::auth::password_policy::is_expired(&conn, id).await? {
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.login_log.password_expired"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
+        return Err(AppError::Unauthorized(msg("server.auth.password_expired")));
     }
 
     let jwt_utils = &state.jwt_utils;
@@ -1118,10 +1145,18 @@ pub async fn reset_password(
 
     match user_result {
         Some((user_id,)) => {
+            // 等保密码策略：复杂度 + 历史重复检查
+            crate::auth::password_policy::validate_password(
+                &state.pool()?.get_conn(),
+                user_id,
+                &req.new_password,
+            )
+            .await?;
+
             let hashed_password = hash_password(&req.new_password).await?;
 
             sqlx::query(
-                "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, tokens_invalidated_at = NOW() WHERE id = $2",
+                "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, tokens_invalidated_at = NOW(), password_changed_at = NOW() WHERE id = $2",
             )
             .bind(&hashed_password)
             .bind(user_id)
@@ -1130,6 +1165,13 @@ pub async fn reset_password(
 
             tx.commit().await?;
 
+            crate::auth::password_policy::record_history(
+                &state.pool()?.get_conn(),
+                user_id,
+                &hashed_password,
+            )
+            .await;
+
             Ok(crate::error::ok_json(
                 (),
                 "server.auth.reset_password_success",
@@ -1137,6 +1179,80 @@ pub async fn reset_password(
         }
         None => Err(AppError::Validation(msg("server.auth.reset_link_invalid"))),
     }
+}
+
+/// 自助修改密码（已登录用户；修改成功后吊销全部令牌强制重新登录）。
+#[derive(Debug, serde::Deserialize, validator::Validate)]
+pub struct ChangePasswordRequest {
+    #[validate(length(min = 1, message = "server.auth.validation.password_required"))]
+    pub old_password: String,
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    pub new_password: String,
+}
+
+pub async fn change_password(
+    State(state): State<Arc<AppState>>,
+    auth: crate::auth::extractor::AuthUser,
+    meta: RequestMeta,
+    AppJson(req): AppJson<ChangePasswordRequest>,
+) -> Result<Response, AppError> {
+    req.validate()?;
+
+    let conn = state.pool()?.get_conn();
+    let user_id = Uuid::parse_str(&auth.sub)
+        .map_err(|e| AppError::Validation(msg("server.common.user_id_invalid").with("error", e)))?;
+
+    let (password_hash,): (String,) =
+        sqlx::query_as("SELECT password_hash FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&conn)
+            .await?
+            .ok_or_else(|| AppError::NotFound(msg("server.user.not_found")))?;
+
+    // 旧密码校验
+    let old_for_verify = req.old_password.clone();
+    let hash_for_verify = password_hash;
+    let valid = tokio::task::spawn_blocking(move || verify(&old_for_verify, &hash_for_verify))
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
+        })?;
+    if !valid {
+        return Err(AppError::Validation(msg(
+            "server.auth.old_password_incorrect",
+        )));
+    }
+
+    // 等保密码策略：复杂度 + 历史重复检查
+    crate::auth::password_policy::validate_password(&conn, user_id, &req.new_password).await?;
+
+    let hashed_password = hash_password(&req.new_password).await?;
+
+    sqlx::query(
+        "UPDATE users SET password_hash = $1, tokens_invalidated_at = NOW(), password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
+    )
+    .bind(&hashed_password)
+    .bind(user_id)
+    .execute(&conn)
+    .await?;
+
+    crate::auth::password_policy::record_history(&conn, user_id, &hashed_password).await;
+
+    let details = serde_json::json!({ "username": auth.username });
+    log_op_best_effort(
+        &conn,
+        &meta,
+        "change_password",
+        "user",
+        Some(&user_id),
+        &details,
+    )
+    .await;
+
+    Ok(crate::error::ok_json((), "server.auth.password_changed"))
 }
 
 pub async fn init_two_factor(
@@ -1768,7 +1884,7 @@ pub(crate) async fn log_login(
         "INSERT INTO login_logs (id, username, ip_address, user_agent, success, error_message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
     )
     .bind(Uuid::new_v4())
-    .bind(username)
+    .bind(username.clone())
     .bind(ip_address)
     .bind(user_agent)
     .bind(success)
@@ -1776,6 +1892,13 @@ pub(crate) async fn log_login(
     .bind(Utc::now())
     .execute(pool)
     .await?;
+
+    // 审计外发（syslog）：旁路尽力而为，未启用时内部直接跳过
+    let forward_message = format!(
+        "login user={username} ip={ip_address} success={success} error={}",
+        error_message.unwrap_or("-")
+    );
+    crate::log::forwarding::spawn_forward(pool.clone(), forward_message);
 
     Ok(())
 }

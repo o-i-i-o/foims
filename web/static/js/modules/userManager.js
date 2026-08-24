@@ -18,6 +18,15 @@ import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
+// 角色显示（等保三权分立：admin/secadmin/auditor/user）
+function roleLabel(role) {
+  if (role === "admin") return t("user.role_admin");
+  if (role === "secadmin") return t("user.role_secadmin");
+  if (role === "auditor") return t("user.role_auditor");
+  return t("user.role_user");
+}
+
+
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
 const userTableState = createSortState("created_at", "desc");
@@ -53,7 +62,7 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
           <td class="index-column">${startIndex + index + 1}</td>
           <td>${escapeHtml(user.username)}</td>
           <td>${escapeHtml(user.email)}</td>
-          <td class="col-center">${user.role === "admin" ? t("user.role_admin") : t("user.role_user")}</td>
+          <td class="col-center">${roleLabel(user.role)}</td>
           <td class="col-center">
             <span class="status-badge ${user.status ? "status-active" : "status-inactive"}">
               ${user.status ? t("user.status_enabled") : t("user.status_disabled")}

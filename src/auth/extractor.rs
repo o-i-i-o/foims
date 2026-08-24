@@ -52,6 +52,30 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
     }
 }
 
+/// 安全管理员（等保三权分立）：admin 或 secadmin 可用。
+///
+/// 管辖用户账户管理与安全策略（含密码策略、fail2ban、会话配置）；
+/// admin 为系统管理员，具有全部权限。
+pub struct SecAdminUser {
+    pub sub: String,
+    pub username: String,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for SecAdminUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" || c.role == "secadmin" => Ok(SecAdminUser {
+                sub: c.sub.clone(),
+                username: c.username.clone(),
+            }),
+            Some(_) => Err(AppError::Forbidden(msg("server.auth.secadmin_required"))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
+        }
+    }
+}
+
 /// 提取 access_token（优先 Cookie `access_token`，其次 Authorization: Bearer 头）
 pub struct AccessToken(pub Option<String>);
 

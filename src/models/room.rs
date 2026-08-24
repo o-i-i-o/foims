@@ -69,6 +69,7 @@ pub struct WorkstationBrief {
     pub id: Uuid,
     pub name: String,
     pub manager: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -271,6 +272,7 @@ mod tests {
                 id: Uuid::new_v4(),
                 name: "工位 1".to_string(),
                 manager: None,
+                manager_employee_id: None,
             }]),
             cabinets: Some(vec![CabinetBrief {
                 id: Uuid::new_v4(),

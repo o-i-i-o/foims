@@ -16,6 +16,7 @@ pub struct Workstation {
     pub room_id: Uuid,
     pub room_name: Option<String>,
     pub manager: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -28,6 +29,7 @@ pub struct WorkstationWithDetails {
     pub room_id: Uuid,
     pub room_name: Option<String>,
     pub manager: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
     /// IP 明细不从 SQL 映射（列表不携带、详情单独查询后手动填充）
     #[sqlx(skip)]
     pub ips: Vec<IpManager>,
@@ -47,6 +49,8 @@ pub struct WorkstationCreate {
     pub room_id: Uuid,
     #[validate(length(max = 50, message = "server.workstation.validation.manager_length"))]
     pub manager: Option<String>,
+    /// 管理人员工引用（存在时管理人显示名以员工姓名为准）
+    pub manager_employee_id: Option<Uuid>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -61,6 +65,7 @@ pub struct WorkstationUpdate {
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
     pub manager: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -78,6 +83,7 @@ pub struct WorkstationSyncItem {
     pub name: String,
     #[validate(length(max = 50, message = "server.workstation.validation.manager_length"))]
     pub manager: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -358,6 +364,7 @@ mod tests {
             room_id: Uuid::new_v4(),
             room_name: Some("301".to_string()),
             manager: Some("张三".to_string()),
+            manager_employee_id: None,
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -377,6 +384,7 @@ mod tests {
             room_id: Uuid::new_v4(),
             room_name: None,
             manager: None,
+            manager_employee_id: None,
             // ips 为 sqlx(skip) 字段，serde 往返仍保留
             ips: Vec::new(),
             description: None,

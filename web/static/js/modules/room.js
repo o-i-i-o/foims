@@ -387,6 +387,81 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 // 房间子项（工位/机柜）动态管理模块
 // ==========================================
 
+/** 当前房间所属组织下的员工（供工位管理人下拉选择；无组织时为空） */
+let roomOrgEmployees = [];
+
+/** 按组织加载员工列表（组织为空时清空选项并回退文本输入） */
+async function loadRoomOrgEmployees(orgId) {
+  if (!orgId) {
+    roomOrgEmployees = [];
+    return;
+  }
+  try {
+    const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
+    roomOrgEmployees = result.success && Array.isArray(result.data) ? result.data : [];
+  } catch (error) {
+    console.error("加载组织员工失败:", error);
+    roomOrgEmployees = [];
+  }
+}
+
+/** 渲染工位管理人控件：有员工数据时为下拉（选员工），否则回退文本输入 */
+function renderManagerControl(data = {}) {
+  if (!roomOrgEmployees.length) {
+    return `<input type="text" class="child-manager form-control" value="${escapeHtml(data.manager || "")}" placeholder="${t("workstation.manager")}" autocomplete="off" />`;
+  }
+  const managerId = data.manager_employee_id || "";
+  const legacyText = !managerId && data.manager ? data.manager : "";
+  const options = [
+    `<option value="">${t("workstation.manager_unassigned")}</option>`,
+    ...roomOrgEmployees.map((emp) =>
+      `<option value="${emp.id}" ${managerId === emp.id ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
+    )
+  ];
+  if (legacyText) {
+    options.push(
+      `<option value="text" data-text="${escapeHtml(legacyText)}" selected>${escapeHtml(legacyText)}（${t("workstation.manager_legacy")}）</option>`
+    );
+  }
+  return `<select class="child-manager form-control" autocomplete="off">${options.join("")}</select>`;
+}
+
+/** 收集单个管理人控件的值：下拉取员工 id，文本/遗留选项取文本 */
+function collectManagerValue(item) {
+  const control = item.querySelector(".child-manager");
+  if (!control) return { manager: null, manager_employee_id: null };
+  if (control.tagName === "SELECT") {
+    const value = control.value;
+    if (value && value !== "text") {
+      return { manager: null, manager_employee_id: value };
+    }
+    if (value === "text") {
+      const text = control.selectedOptions[0]?.dataset.text || "";
+      return { manager: text || null, manager_employee_id: null };
+    }
+    return { manager: null, manager_employee_id: null };
+  }
+  return { manager: (control.value || "").trim() || null, manager_employee_id: null };
+}
+
+/** 组织切换后刷新既有行的管理人下拉选项（保留仍有效的选择） */
+function refreshManagerSelects() {
+  document.querySelectorAll("#room-children-container .child-manager").forEach((control) => {
+    if (control.tagName !== "SELECT") return;
+    const selectedValue = control.value;
+    const selectedText = control.selectedOptions[0]?.dataset.text || "";
+    control.innerHTML = renderManagerControl({
+      manager_employee_id: selectedValue && selectedValue !== "text" ? selectedValue : "",
+      manager: selectedValue === "text" ? selectedText : ""
+    })
+      .replace(/^<select[^>]*>/, "")
+      .replace(/<\/select>$/, "");
+    // 重新赋值选择（选项集变化后原选择可能丢失）
+    const exists = Array.from(control.options).some((opt) => opt.value === selectedValue);
+    control.value = exists ? selectedValue : "";
+  });
+}
+
 /** 单类子项（工位或机柜）的动态行管理器。 */
 class RoomChildListManager extends DynamicRowManager {
   constructor(config, kind) {
@@ -402,7 +477,6 @@ class RoomChildListManager extends DynamicRowManager {
   createWorkstationRow(data = {}) {
     const id = data.id || "";
     const name = data.name || "";
-    const manager = data.manager || "";
     const div = document.createElement("div");
     div.className = "room-child-item";
     div.dataset.childType = "workstation";
@@ -413,7 +487,7 @@ class RoomChildListManager extends DynamicRowManager {
           <input type="text" class="child-name form-control" value="${escapeHtml(name)}" placeholder="${t("workstation.name")}" autocomplete="off" />
         </div>
         <div class="form-group">
-          <input type="text" class="child-manager form-control" value="${escapeHtml(manager)}" placeholder="${t("workstation.manager")}" autocomplete="off" />
+          ${renderManagerControl(data)}
         </div>
         <div class="form-group room-children-actions">
           <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t("common.delete")}</button>
@@ -465,11 +539,10 @@ class RoomChildListManager extends DynamicRowManager {
       return Array.from(items).map((item) => {
         const idInput = item.querySelector(".child-id");
         const nameInput = item.querySelector(".child-name");
-        const managerInput = item.querySelector(".child-manager");
         return {
           id: idInput?.value || null,
           name: (nameInput?.value || "").trim(),
-          manager: (managerInput?.value || "").trim() || null
+          ...collectManagerValue(item)
         };
       });
     }
@@ -1054,6 +1127,7 @@ export async function openRoomModal(room = null) {
   const form = elementCache.get("room-form");
 
   await loadOrgsForSelect("room-org-id");
+  bindRoomOrgEmployeeSync();
 
   if (room) {
     title.textContent = t("room.edit");
@@ -1063,6 +1137,7 @@ export async function openRoomModal(room = null) {
     elementCache.setValue("room-org-id", room.org_id || "");
     elementCache.setValue("room-description", room.description || "");
 
+    await loadRoomOrgEmployees(room.org_id || "");
     await loadRoomNetworks(room);
 
     // 初始化子项管理器并加载现有工位/机柜
@@ -1075,6 +1150,7 @@ export async function openRoomModal(room = null) {
     title.textContent = t("room.add");
     if (form) form.reset();
     elementCache.setValue("room-id", "");
+    await loadRoomOrgEmployees("");
     await roomNetworkConfigManager.init();
 
     // 初始化子项管理器为默认空状态
@@ -1084,6 +1160,17 @@ export async function openRoomModal(room = null) {
     // 初始化信息点管理器为默认空状态
     roomNetOutletsManager.init();
   }
+}
+
+// 组织切换 → 重新加载该组织员工并刷新管理人下拉
+// （模态框每次打开会重建 DOM，因此每次都需重新绑定）
+function bindRoomOrgEmployeeSync() {
+  const orgSelect = document.getElementById("room-org-id");
+  if (!orgSelect) return;
+  orgSelect.addEventListener("change", async (e) => {
+    await loadRoomOrgEmployees(e.target.value);
+    refreshManagerSelects();
+  });
 }
 
 // 加载房间的网络配置

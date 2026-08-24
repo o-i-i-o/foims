@@ -1,0 +1,49 @@
+<template id="employee-edit-modal-template">
+<div id="employee-edit-modal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" id="employee-edit-modal-title" data-i18n="employee.add_title">Add Employee</h3>
+      <button type="button" class="close" data-modal-id="employee-edit-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <form id="employee-edit-form">
+        <input type="hidden" id="employee-edit-id" />
+        <input type="hidden" id="employee-edit-org-id" />
+        <div class="form-group">
+          <label for="employee-edit-name">
+            <span data-i18n="employee.name">Name</span><span class="required">*</span>
+          </label>
+          <input type="text" id="employee-edit-name" name="name" maxlength="50" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="employee-edit-gender" data-i18n="employee.gender">Gender</label>
+            <select id="employee-edit-gender" name="gender">
+              <option value="unknown" data-i18n="employee.gender_unknown">Undisclosed</option>
+              <option value="male" data-i18n="employee.gender_male">Male</option>
+              <option value="female" data-i18n="employee.gender_female">Female</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="employee-edit-phone" data-i18n="employee.phone">Phone</label>
+            <input type="tel" id="employee-edit-phone" name="phone" maxlength="20" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="employee-edit-email" data-i18n="employee.email">Email</label>
+            <input type="email" id="employee-edit-email" name="email" maxlength="100" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="employee-edit-hire-date" data-i18n="employee.hire_date">Hire Date</label>
+            <input type="date" id="employee-edit-hire-date" name="hire_date" />
+          </div>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="submit" class="btn btn-primary" form="employee-edit-form" data-i18n="common.save">Save</button>
+    </footer>
+  </div>
+</div>
+</template>

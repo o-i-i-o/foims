@@ -7,6 +7,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             name VARCHAR(50) NOT NULL,
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             manager VARCHAR(50),
+            manager_employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

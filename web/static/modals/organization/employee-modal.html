@@ -1,0 +1,34 @@
+<template id="employee-modal-template">
+<div id="employee-modal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-content modal-content-lg">
+    <header class="modal-header">
+      <h3 class="modal-title"><span data-i18n="employee.manager_title">Employee Management</span><span id="employee-modal-org-name" class="employee-modal-org"></span></h3>
+      <button type="button" class="close" data-modal-id="employee-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <input type="hidden" id="employee-modal-org-id" />
+      <div class="modal-toolbar">
+        <button type="button" id="employee-add-btn" class="btn btn-primary btn-sm" data-i18n="employee.add">Add Employee</button>
+      </div>
+      <div class="table-container employee-table-container">
+        <table id="employee-table" class="data-table">
+          <thead>
+            <tr>
+              <th data-i18n="employee.col_name">Name</th>
+              <th data-i18n="employee.col_gender">Gender</th>
+              <th data-i18n="employee.col_phone">Phone</th>
+              <th data-i18n="employee.col_email">Email</th>
+              <th data-i18n="employee.col_hire_date">Hire Date</th>
+              <th class="col-center" data-i18n="common.actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="empty-row"><td colspan="6" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint-text" data-i18n="employee.modal_hint">Employees belong to this organization node and can be selected as workstation managers</p>
+    </div>
+  </div>
+</div>
+</template>

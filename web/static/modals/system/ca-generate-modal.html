@@ -1,0 +1,50 @@
+<template id="ca-generate-modal-template">
+<div id="ca-generate-modal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cert.ca_generate_title">Generate Site Root CA</h3>
+      <button type="button" class="close" data-modal-id="ca-generate-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <form id="ca-generate-form">
+        <div class="form-group">
+          <label for="ca-common-name">
+            <span data-i18n="cert.common_name">Common Name (CN)</span><span class="required">*</span>
+          </label>
+          <input type="text" id="ca-common-name" name="common_name" placeholder="e.g., IPMA Root CA" required />
+        </div>
+        <div class="form-group">
+          <label for="ca-organization" data-i18n="cert.organization">Organization (O)</label>
+          <input type="text" id="ca-organization" name="organization" data-i18n-placeholder="cert.organization_placeholder" placeholder="Organization name" />
+        </div>
+        <div class="form-group">
+          <label for="ca-organizational-unit" data-i18n="cert.organizational_unit">Organizational Unit (OU)</label>
+          <input type="text" id="ca-organizational-unit" name="organizational_unit" data-i18n-placeholder="cert.ou_placeholder" placeholder="Organizational unit" />
+        </div>
+        <div class="form-group">
+          <label for="ca-country" data-i18n="cert.country">Country (C)</label>
+          <input type="text" id="ca-country" name="country" data-i18n-placeholder="cert.country_placeholder" placeholder="Country code, e.g., CN" maxlength="2" />
+        </div>
+        <div class="form-group">
+          <label for="ca-state" data-i18n="cert.state">State (ST)</label>
+          <input type="text" id="ca-state" name="state" data-i18n-placeholder="cert.state_placeholder" placeholder="State name" />
+        </div>
+        <div class="form-group">
+          <label for="ca-locality" data-i18n="cert.locality">Locality (L)</label>
+          <input type="text" id="ca-locality" name="locality" data-i18n-placeholder="cert.locality_placeholder" placeholder="City name" />
+        </div>
+        <div class="form-group">
+          <label for="ca-validity">
+            <span data-i18n="cert.validity">Validity (days)</span><span class="required">*</span>
+          </label>
+          <input type="number" id="ca-validity" name="validity_days" placeholder="Validity days" min="1" max="36500" value="7300" required />
+        </div>
+        <span class="hint-text" data-i18n="cert.ca_generate_hint">A new root CA will overwrite the existing one; certificates previously issued by the old CA will no longer chain to the new CA</span>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="submit" class="btn btn-primary" form="ca-generate-form" data-i18n="cert.ca_generate">Generate Root CA</button>
+    </footer>
+  </div>
+</div>
+</template>

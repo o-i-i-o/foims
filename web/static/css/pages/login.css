@@ -631,6 +631,35 @@
   display: block;
 }
 
+/* ============ 站点根证书下载入口 ============ */
+.ca-download-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.ca-download-entry[hidden] {
+  display: none;
+}
+
+.ca-download-link {
+  color: #2563eb;
+  text-decoration: none;
+  padding: 2px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.ca-download-link:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
 /* ============================================================
    动画角色（4 个几何角色，鼠标追踪 / 眨眼 / 输入互动 / 错误摇头）
    ============================================================ */
@@ -970,4 +999,39 @@
   .form-inline-group .btn-send-code {
     width: 100%;
   }
+}
+
+/* ============ 图形验证码（连续失败触发） ============ */
+.captcha-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.captcha-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.captcha-image {
+  flex-shrink: 0;
+  height: 44px;
+  min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.captcha-image svg {
+  display: block;
+}
+
+.captcha-image:hover {
+  border-color: rgba(37, 99, 235, 0.45);
 }

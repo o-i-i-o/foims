@@ -7,6 +7,7 @@ import { loadModule } from "../utils/resourceLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 import { t } from "../utils/i18n.js";
+import { SessionManager } from "../utils/sessionManager.js";
 
 const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {
@@ -32,10 +33,38 @@ export function initNavigation() {
   const navLinks = document.querySelectorAll(".nav-link");
   const contentSections = document.querySelectorAll(".content-section");
 
+  applyRoleVisibility();
   bindNavClickHandlers(navLinks);
   loadInitialPage();
   bindHashChangeHandler();
   initSidebarCollapse();
+}
+
+/**
+ * 等保三权分立：按角色隐藏无权访问的导航入口。
+ * 后端始终强制校验（403），此处仅为界面整洁：
+ * - auditor（审计管理员）：仅仪表盘与日志
+ * - secadmin（安全管理员）：用户/系统安全/日志，不涉资源运维
+ */
+export function applyRoleVisibility() {
+  const user = SessionManager.getUser();
+  const role = user?.role || "user";
+  if (!["auditor", "secadmin"].includes(role)) return;
+
+  const hiddenSections =
+    role === "auditor"
+      ? ["organization", "resources", "ip", "visualization", "system"]
+      : ["organization", "resources", "visualization"];
+
+  for (const section of hiddenSections) {
+    const link = document.querySelector(`.nav-link[href="#${section}"]`);
+    link?.closest("li")?.classList.add("hidden");
+  }
+
+  // 当前落在被隐藏分区时回到仪表盘
+  if (hiddenSections.includes(window.location.hash.slice(1))) {
+    window.location.hash = "#dashboard";
+  }
 }
 
 // ==========================================

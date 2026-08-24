@@ -1,6 +1,6 @@
 /* 导入导出 / 数据管理 / 备份恢复样式 */
 
-.import-export-section {
+.data-management-section {
   margin-bottom: var(--space-xl);
   padding: var(--space-lg);
   border: 1px solid var(--color-border-light);
@@ -10,12 +10,12 @@
   transition: all var(--transition-fast);
 }
 
-.import-export-section:hover {
+.data-management-section:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--color-primary-light);
 }
 
-.import-export-section h2 {
+.data-management-section h2 {
   margin-bottom: var(--space-lg);
   color: var(--color-text);
   font-size: 1.1rem;
@@ -27,7 +27,7 @@
   gap: var(--space-sm);
 }
 
-.import-export-section h2::before {
+.data-management-section h2::before {
   content: "";
   width: 4px;
   height: 20px;

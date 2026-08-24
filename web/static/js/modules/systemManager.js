@@ -47,10 +47,12 @@ export function initSystemTabs() {
           loadNotificationSettings();
         } else if (tabId === "import-export") {
           loadLogsStats();
+          loadLogForwarding();
         } else if (tabId === "scheduled-tasks") {
           initScheduledTasksTab();
         } else if (tabId === "security") {
           initSecurityTab();
+          loadPasswordPolicy();
         }
       });
     });
@@ -90,6 +92,21 @@ export function initSystemTabs() {
         await loadSsoConfig();
       }, 100);
     });
+  }
+
+  const logForwardingSaveBtn = elementCache.get("log-forwarding-save-btn");
+  if (logForwardingSaveBtn) {
+    logForwardingSaveBtn.addEventListener("click", saveLogForwarding);
+  }
+
+  const logForwardingTestBtn = elementCache.get("log-forwarding-test-btn");
+  if (logForwardingTestBtn) {
+    logForwardingTestBtn.addEventListener("click", testLogForwarding);
+  }
+
+  const passwordPolicySaveBtn = elementCache.get("password-policy-save-btn");
+  if (passwordPolicySaveBtn) {
+    passwordPolicySaveBtn.addEventListener("click", savePasswordPolicy);
   }
 
   const smtpConfigForm = elementCache.get("smtp-config-form");
@@ -281,13 +298,13 @@ export async function loadSystemConfig() {
   }
 }
 
-// 加载SMTP配置
+// 加载SMTP配置（未配置是正常业务状态：后端返回 200 + configured=false）
 async function loadSmtpConfig() {
   try {
     const result = await apiGet("/api/system/smtp/config");
-    if (result.success) {
+    if (result.success && result.data) {
       const smtpConfig = result.data;
-      if (smtpConfig) {
+      if (smtpConfig.configured) {
         elementCache.setValue("smtp-host", smtpConfig.host || "");
         elementCache.setValue("smtp-port", smtpConfig.port || "587");
         elementCache.setValue("smtp-username", smtpConfig.username || "");
@@ -314,6 +331,10 @@ async function loadSmtpConfig() {
         elementCache.setValue("smtp-username", "");
         elementCache.setValue("smtp-password", "");
         elementCache.setValue("smtp-from", "");
+        const pwdEl = elementCache.get("smtp-password");
+        if (pwdEl) {
+          pwdEl.placeholder = t("smtp.password_input");
+        }
         const secureTypeElement = elementCache.get("smtp-secure-type");
         if (secureTypeElement) {
           secureTypeElement.value = "none";
@@ -895,6 +916,107 @@ async function initScheduledTasksTab() {
   }
 }
 
+// ==================== 日志外发（syslog） ====================
+
+// 加载外发配置（未配置时后端返回默认值：关闭）
+async function loadLogForwarding() {
+  try {
+    const result = await apiGet("/api/system/logs/forwarding");
+    if (!result.success || !result.data) return;
+    const config = result.data;
+    elementCache.setValue("log-forwarding-enabled", config.enabled ? "true" : "false");
+    elementCache.setValue("log-forwarding-protocol", (config.protocol || "udp").toLowerCase());
+    elementCache.setValue("log-forwarding-host", config.host || "");
+    elementCache.setValue("log-forwarding-port", String(config.port || 514));
+  } catch (error) {
+    console.error("加载日志外发配置失败:", error);
+  }
+}
+
+// 保存外发配置
+async function saveLogForwarding() {
+  const body = {
+    enabled: elementCache.getValue("log-forwarding-enabled") === "true",
+    protocol: elementCache.getValue("log-forwarding-protocol") || "udp",
+    host: elementCache.getValue("log-forwarding-host").trim(),
+    port: parseInt(elementCache.getValue("log-forwarding-port"), 10) || 514
+  };
+  try {
+    const result = await apiPut("/api/system/logs/forwarding", body);
+    if (result.success) {
+      showToast(result.message, "success");
+    } else {
+      showToast(result.message, "error");
+    }
+  } catch (error) {
+    console.error("保存日志外发配置失败:", error);
+    showToast(t("common.operation_failed"), "error");
+  }
+}
+
+// 发送测试报文验证连通性
+async function testLogForwarding() {
+  try {
+    const result = await apiPost("/api/system/logs/forwarding/test", {});
+    if (result.success) {
+      showToast(result.message, "success");
+    } else {
+      showToast(result.message, "error");
+    }
+  } catch (error) {
+    console.error("测试日志外发失败:", error);
+    showToast(t("common.operation_failed"), "error");
+  }
+}
+
+// ==================== 等保密码策略 ====================
+
+// 加载密码策略（未配置时后端返回默认值）
+async function loadPasswordPolicy() {
+  try {
+    const result = await apiGet("/api/system/password-policy");
+    if (!result.success || !result.data) return;
+    const policy = result.data;
+    elementCache.setValue("password-policy-min-length", String(policy.min_length ?? 8));
+    elementCache.setValue("password-policy-expiry", String(policy.expiry_days ?? 90));
+    elementCache.setValue("password-policy-history", String(policy.history_count ?? 5));
+    const setCheck = (id, value) => {
+      const el = elementCache.get(id);
+      if (el) el.checked = Boolean(value);
+    };
+    setCheck("password-policy-upper", policy.require_upper);
+    setCheck("password-policy-lower", policy.require_lower);
+    setCheck("password-policy-digit", policy.require_digit);
+    setCheck("password-policy-special", policy.require_special);
+  } catch (error) {
+    console.error("加载密码策略失败:", error);
+  }
+}
+
+// 保存密码策略（安全管理员权限）
+async function savePasswordPolicy() {
+  const body = {
+    min_length: parseInt(elementCache.getValue("password-policy-min-length"), 10) || 8,
+    expiry_days: parseInt(elementCache.getValue("password-policy-expiry"), 10) || 0,
+    history_count: parseInt(elementCache.getValue("password-policy-history"), 10) || 0,
+    require_upper: elementCache.get("password-policy-upper")?.checked ?? true,
+    require_lower: elementCache.get("password-policy-lower")?.checked ?? true,
+    require_digit: elementCache.get("password-policy-digit")?.checked ?? true,
+    require_special: elementCache.get("password-policy-special")?.checked ?? false
+  };
+  try {
+    const result = await apiPut("/api/system/password-policy", body);
+    if (result.success) {
+      showToast(result.message, "success");
+    } else {
+      showToast(result.message, "error");
+    }
+  } catch (error) {
+    console.error("保存密码策略失败:", error);
+    showToast(t("common.operation_failed"), "error");
+  }
+}
+
 // ==================== 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs） ====================
 
 // 可选字段：空串转 null
@@ -936,21 +1058,13 @@ function renderCertTable(tableId, items, kind) {
 
     const actions = tr.querySelector(".cert-actions-cell");
 
+    // 私钥不提供下载：证书/密钥仅用于本机 HTTPS/nginx，由部署侧在服务器上取用
     const downloadCertBtn = document.createElement("button");
     downloadCertBtn.type = "button";
     downloadCertBtn.className = "btn btn-secondary btn-sm";
     downloadCertBtn.textContent = t("cert.download_cert");
     downloadCertBtn.addEventListener("click", () => downloadCertFile(kind, info.cert_filename));
     actions.appendChild(downloadCertBtn);
-
-    if (info.key_filename) {
-      const downloadKeyBtn = document.createElement("button");
-      downloadKeyBtn.type = "button";
-      downloadKeyBtn.className = "btn btn-secondary btn-sm";
-      downloadKeyBtn.textContent = t("cert.download_key");
-      downloadKeyBtn.addEventListener("click", () => downloadCertFile(kind, info.key_filename));
-      actions.appendChild(downloadKeyBtn);
-    }
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -987,9 +1101,120 @@ export async function loadCertificateInventory() {
     if (!result.success || !result.data) return;
     renderCertTable("cert-generated-table", result.data.generated, "generated");
     renderCertTable("cert-imported-table", result.data.imported, "imported");
+    renderCaStatus(result.data.ca);
   } catch (error) {
     console.error("加载证书列表失败:", error);
   }
+}
+
+// 渲染站点根 CA 状态（无 CA 时提示未配置）
+function renderCaStatus(ca) {
+  const container = elementCache.get("cert-ca-status");
+  if (!container) return;
+
+  if (!ca || !ca.available) {
+    container.innerHTML = `<span class="cert-ca-missing">${t("cert.ca_none")}</span>`;
+    return;
+  }
+
+  const days = ca.days_remaining;
+  const daysText = days === null || days === undefined ? "-" : String(days);
+  const daysClass =
+    days != null && days < 0 ? "cert-days-expired" : days != null && days < 30 ? "cert-days-warning" : "";
+  const keyText = ca.has_key ? t("cert.ca_has_key") : t("cert.ca_no_key");
+
+  container.innerHTML = `
+    <span class="cert-ca-field"><strong>${escapeHtml(ca.subject_cn || "-")}</strong></span>
+    <span class="cert-ca-field">${formatCertValidity(ca)}</span>
+    <span class="cert-ca-field ${daysClass}">${t("cert.col_remaining")}: ${daysText}</span>
+    <span class="cert-ca-field">${keyText}</span>`;
+}
+
+// 下载站点根 CA（pem 适配 Linux / der 适配 Windows）
+function exportCa(format) {
+  window.open(`/api/certificate/ca/download/${format}`, "_blank");
+}
+
+async function openCaGenerateModal() {
+  const modal = await loadModal("ca-generate-modal");
+  if (!modal) return;
+
+  const confirmed = await showConfirm(t("cert.ca_generate_confirm"));
+  if (!confirmed) {
+    closeModal("ca-generate-modal");
+    return;
+  }
+
+  const form = elementCache.get("ca-generate-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const body = {
+      common_name: String(fd.get("common_name") || "").trim(),
+      organization: certOptionalField(fd.get("organization")),
+      organizational_unit: certOptionalField(fd.get("organizational_unit")),
+      country: certOptionalField(fd.get("country")),
+      state: certOptionalField(fd.get("state")),
+      locality: certOptionalField(fd.get("locality")),
+      validity_days: parseInt(fd.get("validity_days"), 10) || null
+    };
+    if (!body.common_name) {
+      showToast(t("cert.common_name_required"), "warning");
+      return;
+    }
+
+    const result = await apiPost("/api/system/certificate/ca/generate", body);
+    if (result.success) {
+      showToast(result.message, "success");
+      closeModal("ca-generate-modal");
+      form.reset();
+      loadCertificateInventory();
+    } else {
+      showToast(result.message, "error");
+    }
+  };
+
+  openModal("ca-generate-modal");
+}
+
+async function openCaImportModal() {
+  const modal = await loadModal("ca-import-modal");
+  if (!modal) return;
+
+  const form = elementCache.get("ca-import-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const caFile = elementCache.get("ca-file")?.files[0];
+    const caKeyFile = elementCache.get("ca-key-file")?.files[0];
+    if (!caFile || !caKeyFile) {
+      showToast(t("cert.file_required"), "warning");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("cert", caFile);
+    fd.append("key", caKeyFile);
+
+    try {
+      const result = await apiRequest("/api/system/certificate/ca/import", {
+        method: "POST",
+        body: fd
+      });
+      if (result.success) {
+        showToast(result.message, "success");
+        closeModal("ca-import-modal");
+        form.reset();
+        loadCertificateInventory();
+      } else {
+        showToast(result.message, "error");
+      }
+    } catch (error) {
+      console.error("导入CA失败:", error);
+      showToast(t("cert.import_failed"), "error");
+    }
+  };
+
+  openModal("ca-import-modal");
 }
 
 async function downloadCertFile(kind, filename) {
@@ -1038,7 +1263,8 @@ async function openCertGenerateModal() {
       state: certOptionalField(fd.get("state")),
       locality: certOptionalField(fd.get("locality")),
       validity_days: parseInt(fd.get("validity_days"), 10) || null,
-      subject_alt_names: sans.length > 0 ? sans : null
+      subject_alt_names: sans.length > 0 ? sans : null,
+      sign_with_ca: fd.get("sign_with_ca") === "on"
     };
     if (!body.common_name) {
       showToast(t("cert.common_name_required"), "warning");
@@ -1076,6 +1302,11 @@ async function openCertImportModal() {
     const fd = new FormData();
     fd.append("cert", certFile);
     fd.append("key", keyFile);
+    // 附带的 CA（可选）仅供终端导出信任，不参与证书/私钥校验
+    const caFile = elementCache.get("cert-ca-file")?.files[0];
+    if (caFile) {
+      fd.append("ca", caFile);
+    }
 
     try {
       const result = await apiRequest("/api/system/certificate/import", {
@@ -1108,4 +1339,16 @@ function initCertificateManager() {
 
   const refreshBtn = elementCache.get("cert-refresh-btn");
   if (refreshBtn) refreshBtn.addEventListener("click", loadCertificateInventory);
+
+  const caGenerateBtn = elementCache.get("ca-generate-btn");
+  if (caGenerateBtn) caGenerateBtn.addEventListener("click", openCaGenerateModal);
+
+  const caImportBtn = elementCache.get("ca-import-btn");
+  if (caImportBtn) caImportBtn.addEventListener("click", openCaImportModal);
+
+  const caExportPemBtn = elementCache.get("ca-export-pem-btn");
+  if (caExportPemBtn) caExportPemBtn.addEventListener("click", () => exportCa("pem"));
+
+  const caExportDerBtn = elementCache.get("ca-export-der-btn");
+  if (caExportDerBtn) caExportDerBtn.addEventListener("click", () => exportCa("der"));
 }

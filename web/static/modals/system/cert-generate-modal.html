@@ -2,13 +2,15 @@
 <div id="cert-generate-modal" class="modal" role="dialog" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
-      <h3 class="modal-title" data-i18n="cert.generate_title">Generate Self-signed Certificate</h3>
+      <h3 class="modal-title" data-i18n="cert.generate_title">Generate Certificate</h3>
       <button type="button" class="close" data-modal-id="cert-generate-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="cert-generate-form">
         <div class="form-group">
-          <label for="cert-common-name" data-i18n="cert.common_name">Common Name (CN)</label>
+          <label for="cert-common-name">
+            <span data-i18n="cert.common_name">Common Name (CN)</span><span class="required">*</span>
+          </label>
           <input type="text" id="cert-common-name" name="common_name" placeholder="e.g., example.com" required />
         </div>
         <div class="form-group">
@@ -32,13 +34,22 @@
           <input type="text" id="cert-locality" name="locality" data-i18n-placeholder="cert.locality_placeholder" placeholder="City name" />
         </div>
         <div class="form-group">
-          <label for="cert-validity" data-i18n="cert.validity">Validity (days)</label>
-          <input type="number" id="cert-validity" name="validity_days" placeholder="Validity days" min="1" max="36500" value="3650" />
+          <label for="cert-validity">
+            <span data-i18n="cert.validity">Validity (days)</span><span class="required">*</span>
+          </label>
+          <input type="number" id="cert-validity" name="validity_days" placeholder="Validity days" min="1" max="36500" value="3650" required />
         </div>
         <div class="form-group">
           <label for="cert-san" data-i18n="cert.subject_alt_names">Subject Alt Names</label>
           <input type="text" id="cert-san" name="subject_alt_names" data-i18n-placeholder="cert.san_placeholder" placeholder="Comma-separated IPs or domains" />
           <span class="hint-text" data-i18n="cert.san_hint">Comma-separated IP addresses or domain names; the public URL host is added automatically</span>
+        </div>
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="cert-sign-with-ca" name="sign_with_ca" checked />
+            <span data-i18n="cert.sign_with_ca">Sign with site root CA</span>
+          </label>
+          <span class="hint-text" data-i18n="cert.sign_with_ca_hint">When a root CA exists, the certificate is issued by it and trusted via the exported CA; otherwise it falls back to self-signed</span>
         </div>
       </form>
     </div>

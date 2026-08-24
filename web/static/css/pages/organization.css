@@ -211,6 +211,41 @@
   color: white;
 }
 
+/* 人员管理按钮（介于编辑与删除之间） */
+.btn-employees {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.btn-employees:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* 人员管理模态框 */
+.employee-modal-org {
+  color: var(--color-text-secondary);
+  font-weight: normal;
+  font-size: 0.9em;
+  margin-left: 6px;
+}
+
+.employee-table-container {
+  max-height: 380px;
+  overflow: auto;
+}
+
+.employee-actions-cell .btn {
+  margin-right: 6px;
+}
+
+.modal-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
 /* 子节点容器 */
 .org-children {
   position: relative;

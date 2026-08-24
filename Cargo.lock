@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.61"
+version = "0.15.62"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-x509-manager"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "ipma-common",

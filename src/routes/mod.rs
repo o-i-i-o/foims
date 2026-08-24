@@ -73,11 +73,12 @@ use crate::system::app_fail2ban::{
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
-    get_page_timeout_config, get_service_status, get_session_timeout_config, get_smtp_config,
-    get_supported_languages, get_system_config, get_system_info, register_service,
+    get_page_timeout_config, get_password_policy, get_service_status, get_session_timeout_config,
+    get_smtp_config, get_supported_languages, get_system_config, get_system_info, register_service,
     restart_application, restore_config, send_system_email, test_smtp_connection as test_smtp,
     update_language_setting, update_notification_settings, update_page_timeout_config,
-    update_session_timeout_config, update_smtp_config, update_system_config,
+    update_password_policy, update_session_timeout_config, update_smtp_config,
+    update_system_config,
 };
 use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
@@ -163,16 +164,31 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
     let is_read = method == axum::http::Method::GET
         || method == axum::http::Method::HEAD
         || method == axum::http::Method::OPTIONS;
-    let needs_admin = (path.starts_with("/api/resources") && !is_read)
-        || (is_read && (path.ends_with("/snmp-info") || path.ends_with("/snmp-ports")))
-        || path.starts_with("/api/logs/");
+
+    // 等保三权分立的角色矩阵：
+    // - 审计日志（/api/logs/**、日志统计、任务日志查询）：admin 或 auditor（审计管理员只读）
+    // - 其余受守卫资源（资源写、SNMP 查询）：admin（secadmin/auditor 由各自提取器按端点放行）
+    // - 日志清理等写操作仍由 handler 层 AdminUser 提取器约束
+    let needs_admin_with_roles: Option<&[&str]> = if path.starts_with("/api/logs/")
+        || (is_read
+            && (path == "/api/system/logs/stats" || path == "/api/system/scheduled-tasks/logs"))
+    {
+        Some(&["admin", "auditor"])
+    } else {
+        None
+    };
+    let needs_admin = needs_admin_with_roles.is_some()
+        || (path.starts_with("/api/resources") && !is_read)
+        || (is_read && (path.ends_with("/snmp-info") || path.ends_with("/snmp-ports")));
 
     if !needs_admin {
         return next.run(req).await;
     }
 
+    let allowed_roles = needs_admin_with_roles.unwrap_or(&["admin"]);
+
     match req.extensions().get::<crate::auth::utils::JwtClaims>() {
-        Some(claims) if claims.role == "admin" => next.run(req).await,
+        Some(claims) if allowed_roles.contains(&claims.role.as_str()) => next.run(req).await,
         Some(_) => (
             StatusCode::FORBIDDEN,
             Json(ipma_common::ApiResponse::<()>::error(ipma_common::msg(
@@ -216,14 +232,31 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/auth/sso/login", get(sso_login))
         .route("/api/auth/sso/callback", get(sso_callback))
         .route("/api/auth/methods", get(get_auth_methods))
+        .route("/api/auth/captcha", get(crate::auth::get_captcha))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/refresh", post(refresh_token))
         .route("/api/auth/forgot-password", post(forgot_password))
         .route("/api/auth/reset-password", post(reset_password));
 
+    // 公开的站点 CA 端点：CA 证书是公开数据，登录页提供下载入口；
+    // 私钥不存在任何公开通道
+    let public_ca_routes = Router::new()
+        .route(
+            "/api/certificate/ca/info",
+            get(crate::system::certificate::ca_info),
+        )
+        .route(
+            "/api/certificate/ca/download/{format}",
+            get(crate::system::certificate::ca_download),
+        );
+
     // /me 路由（单独应用认证中间件）
     let me_routes = Router::new()
         .route("/api/auth/me", get(get_current_user))
+        .route(
+            "/api/auth/change-password",
+            post(crate::auth::login::change_password),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -403,6 +436,18 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route(
             "/api/resources/organizations/{id}/rooms",
             get(get_org_rooms),
+        )
+        // 员工管理（挂在组织节点下；GET 登录即可读供下拉使用）
+        .route(
+            "/api/resources/employees",
+            get(crate::resource::employee::get_employees)
+                .post(crate::resource::employee::create_employee),
+        )
+        .route(
+            "/api/resources/employees/{id}",
+            get(crate::resource::employee::get_employee)
+                .put(crate::resource::employee::update_employee)
+                .delete(crate::resource::employee::delete_employee),
         )
         // 组织模板管理
         .route(
@@ -584,13 +629,22 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/config/backup", get(backup_config))
         .route("/api/system/config/restore", post(restore_config))
-        // 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs）
+        // 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs，
+        // 站点根 CA /etc/ssl/ipma-ca；CA 的公开下载走 /api/certificate/ca/*）
         .route("/api/system/certificate/list", get(certificate::list))
         .route(
             "/api/system/certificate/generate",
             post(certificate::generate),
         )
         .route("/api/system/certificate/import", post(certificate::import))
+        .route(
+            "/api/system/certificate/ca/generate",
+            post(certificate::ca_generate),
+        )
+        .route(
+            "/api/system/certificate/ca/import",
+            post(certificate::ca_import),
+        )
         .route(
             "/api/system/certificate/download/{kind}/{filename}",
             get(certificate::download),
@@ -617,6 +671,11 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/notification/settings",
             get(get_notification_settings).put(update_notification_settings),
         )
+        // 等保密码策略（安全管理员管辖）
+        .route(
+            "/api/system/password-policy",
+            get(get_password_policy).put(update_password_policy),
+        )
         // 导入导出功能
         .route(
             "/api/system/import-export/import/csv",
@@ -634,6 +693,16 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 日志清理功能
         .route("/api/system/logs/stats", get(data_get_logs_stats))
         .route("/api/system/logs/clear", post(data_clear_logs))
+        // 日志外发（syslog，安全管理员管辖）
+        .route(
+            "/api/system/logs/forwarding",
+            get(crate::log::forwarding::get_forwarding)
+                .put(crate::log::forwarding::update_forwarding),
+        )
+        .route(
+            "/api/system/logs/forwarding/test",
+            post(crate::log::forwarding::test_forwarding),
+        )
         // 定时任务管理
         .route(
             "/api/system/scheduled-tasks",
@@ -675,6 +744,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
 
     Router::new()
         .merge(public_auth_routes)
+        .merge(public_ca_routes)
         .merge(me_routes)
         .merge(health_routes)
         .merge(protected_api_routes)

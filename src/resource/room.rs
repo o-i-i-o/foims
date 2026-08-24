@@ -371,7 +371,7 @@ pub async fn get_room(
             async {
                 if is_office {
                     sqlx::query(
-                        "SELECT id, name, manager FROM workstations WHERE room_id = $1 ORDER BY name",
+                        "SELECT id, name, manager, manager_employee_id FROM workstations WHERE room_id = $1 ORDER BY name",
                     )
                     .bind(room.id)
                     .fetch_all(&conn)
@@ -410,6 +410,7 @@ pub async fn get_room(
                     id: r.get("id"),
                     name: r.get("name"),
                     manager: r.get("manager"),
+                    manager_employee_id: r.get("manager_employee_id"),
                 })
                 .collect::<Vec<_>>(),
         )
@@ -843,9 +844,14 @@ async fn sync_workstation_children(
         validate_workstation_name(tx, &item.name, room_id, item.id).await?;
         if let Some(item_id) = item.id {
             sqlx::query(
-                "UPDATE workstations SET name = $1, manager = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+                "UPDATE workstations SET name = $1,
+                    manager = COALESCE((SELECT name FROM employees WHERE id = $2), $3),
+                    manager_employee_id = $2,
+                    room_id = $4, updated_at = $5
+                 WHERE id = $6",
             )
             .bind(&item.name)
+            .bind(item.manager_employee_id)
             .bind(&item.manager)
             .bind(room_id)
             .bind(now)
@@ -855,11 +861,13 @@ async fn sync_workstation_children(
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO workstations (id, name, room_id, manager, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+                "INSERT INTO workstations (id, name, room_id, manager, manager_employee_id, created_at, updated_at)
+                 VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7)",
             )
             .bind(new_id)
             .bind(&item.name)
             .bind(room_id)
+            .bind(item.manager_employee_id)
             .bind(&item.manager)
             .bind(now)
             .bind(now)

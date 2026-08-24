@@ -410,6 +410,16 @@ pub async fn log_op_best_effort(
     {
         log_warn!("log.operation.record_failed", error = e);
     }
+
+    // 审计外发（syslog）：旁路尽力而为，未启用时内部直接跳过
+    let forward_message = format!(
+        "op action={action} resource={resource_type} ip={} user={} details={details}",
+        meta.ip_address,
+        meta.user_id()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+    );
+    crate::log::forwarding::spawn_forward(pool.clone(), forward_message);
 }
 
 // ==================== HTTP 请求处理 ====================

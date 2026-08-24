@@ -121,6 +121,13 @@ class LoginManager {
     // 按后端配置显示 LDAP / SSO 登录方式
     await this.setupAuthMethods();
 
+    // 站点根证书下载入口（有 CA 时才显示）
+    this.setupCaDownload();
+
+    // 图形验证码图片点击刷新（连续登录失败触发后显示）
+    document.getElementById("captcha-image")?.addEventListener("click", () => this.refreshCaptcha("password"));
+    document.getElementById("ldap-captcha-image")?.addEventListener("click", () => this.refreshCaptcha("ldap"));
+
     if (ssoErrorKey) {
       this.showError(t(ssoErrorKey));
     }
@@ -162,7 +169,8 @@ class LoginManager {
 
   /**
    * 按后端 /api/auth/methods 返回的开关显示 LDAP / SSO 标签
-   * （请求失败时保持隐藏，_fail-safe）
+   * （请求失败时保持隐藏，_fail-safe）；
+   * 邮箱登录依赖 SMTP，未配置时同样静默隐藏
    */
   async setupAuthMethods() {
     try {
@@ -170,6 +178,7 @@ class LoginManager {
       if (!result.success || !result.data) return;
 
       const visibility = {
+        "email-login": result.data.email !== false,
         "ldap-login": Boolean(result.data.ldap),
         "sso-login": Boolean(result.data.sso)
       };
@@ -181,6 +190,21 @@ class LoginManager {
       });
     } catch (error) {
       console.error("获取认证方式失败:", error);
+    }
+  }
+
+  /**
+   * 站点根证书下载入口：CA 证书是公开数据，无 CA 时保持隐藏
+   */
+  async setupCaDownload() {
+    try {
+      const result = await apiGet("/api/certificate/ca/info");
+      if (!result.success || !result.data?.available) return;
+      const entry = document.getElementById("ca-download-entry");
+      if (entry) entry.hidden = false;
+    } catch (error) {
+      // 查询失败保持隐藏即可，不影响登录流程
+      console.error("获取根证书状态失败:", error);
     }
   }
 
@@ -271,6 +295,11 @@ class LoginManager {
         this.showError(t("login.username_password_required"));
         return;
       }
+      // LDAP 表单要求验证码时先校验输入
+      if (this.isCaptchaVisible("ldap") && !this.getCaptchaInput("ldap")) {
+        this.showError(t("login.captcha_required"));
+        return;
+      }
       await this.submitLdapLogin(username, password, rememberMe);
     } else if (this.currentMode === this.LoginMode.SSO) {
       // SSO：跳转后端发起 OIDC 授权码流程
@@ -286,6 +315,58 @@ class LoginManager {
     }
   }
 
+  // ==================== 图形验证码（连续失败触发） ====================
+
+  /** 每个表单（password / ldap）的验证码状态 */
+  captchaState = { password: { id: null, failures: 0 }, ldap: { id: null, failures: 0 } };
+
+  isCaptchaVisible(form) {
+    const group = document.getElementById(form === "ldap" ? "ldap-captcha-group" : "captcha-group");
+    return Boolean(group && !group.hidden);
+  }
+
+  getCaptchaInput(form) {
+    const input = document.getElementById(form === "ldap" ? "ldap-captcha-input" : "captcha-input");
+    return (input?.value || "").trim();
+  }
+
+  /** 显示验证码并加载新图（点击图片可刷新） */
+  async showCaptcha(form) {
+    const group = document.getElementById(form === "ldap" ? "ldap-captcha-group" : "captcha-group");
+    if (!group) return;
+    group.hidden = false;
+    await this.refreshCaptcha(form);
+  }
+
+  /** 拉取新验证码图片 */
+  async refreshCaptcha(form) {
+    const image = document.getElementById(form === "ldap" ? "ldap-captcha-image" : "captcha-image");
+    if (!image) return;
+    try {
+      const result = await apiGet("/api/auth/captcha");
+      if (result.success && result.data) {
+        this.captchaState[form].id = result.data.captcha_id;
+        image.innerHTML = result.data.svg;
+      }
+    } catch (error) {
+      console.error("加载验证码失败:", error);
+    }
+  }
+
+  /** 登录失败后的验证码联动：累计失败次数并按需显示验证码 */
+  handleCaptchaOnFailure(form, messageKey) {
+    const state = this.captchaState[form];
+    state.failures += 1;
+    const input = document.getElementById(form === "ldap" ? "ldap-captcha-input" : "captcha-input");
+    if (input) input.value = "";
+
+    const required = messageKey === "server.auth.captcha_required" ||
+      messageKey === "server.auth.captcha_invalid";
+    if (required || state.failures >= 3) {
+      this.showCaptcha(form);
+    }
+  }
+
   /**
    * 提交密码登录
    */
@@ -293,11 +374,12 @@ class LoginManager {
     this.setLoading(true);
 
     try {
-      const result = await apiPost(
-        "/api/auth/login",
-        { username, password, remember_me: rememberMe },
-        { skipAuthCheck: true }
-      );
+      const body = { username, password, remember_me: rememberMe };
+      if (this.isCaptchaVisible("password")) {
+        body.captcha_id = this.captchaState.password.id;
+        body.captcha_text = this.getCaptchaInput("password");
+      }
+      const result = await apiPost("/api/auth/login", body, { skipAuthCheck: true });
 
       if (result.success) {
         if (result.data && result.data.requires_two_factor) {
@@ -309,6 +391,7 @@ class LoginManager {
         }
       } else {
         this.showError(this.formatErrorMessage(result.message));
+        this.handleCaptchaOnFailure("password", result.message);
       }
     } catch (error) {
       this.handleNetworkError(error);
@@ -360,16 +443,18 @@ class LoginManager {
     this.setLoading(true);
 
     try {
-      const result = await apiPost(
-        "/api/auth/login/ldap",
-        { username, password, remember_me: rememberMe },
-        { skipAuthCheck: true }
-      );
+      const body = { username, password, remember_me: rememberMe };
+      if (this.isCaptchaVisible("ldap")) {
+        body.captcha_id = this.captchaState.ldap.id;
+        body.captcha_text = this.getCaptchaInput("ldap");
+      }
+      const result = await apiPost("/api/auth/login/ldap", body, { skipAuthCheck: true });
 
       if (result.success) {
         loginUser(result.data, rememberMe);
       } else {
         this.showError(this.formatErrorMessage(result.message));
+        this.handleCaptchaOnFailure("ldap", result.message);
       }
     } catch (error) {
       this.handleNetworkError(error);

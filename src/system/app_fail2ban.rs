@@ -167,6 +167,39 @@ pub fn get_ban_remaining(ip: &str) -> u64 {
     key_ban_remaining(app_fail2ban(), &ip_key(ip))
 }
 
+/// 当前窗口内的失败次数（IP 与用户名维度取较大值），
+/// 供登录验证码等按失败次数递进的机制判定触发条件
+pub fn failure_count(ip: &str, username: &str) -> usize {
+    let store = app_fail2ban();
+    let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
+    if !config.enabled {
+        return 0;
+    }
+    let now = Instant::now();
+    let findtime_dur = Duration::from_secs(config.findtime);
+
+    let count_of = |key: &str| -> usize {
+        store
+            .records
+            .lock()
+            .map(|records| {
+                records
+                    .get(key)
+                    .map(|record| {
+                        record
+                            .failures
+                            .iter()
+                            .filter(|&&t| now.duration_since(t) < findtime_dur)
+                            .count()
+                    })
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0)
+    };
+
+    count_of(&ip_key(ip)).max(count_of(&user_key(username)))
+}
+
 /// 获取用户名封禁剩余时间（秒），未封禁返回 0
 pub fn get_user_ban_remaining(username: &str) -> u64 {
     key_ban_remaining(app_fail2ban(), &user_key(username))

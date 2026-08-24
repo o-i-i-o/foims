@@ -8,6 +8,7 @@ mod device_ports;
 mod device_templates;
 mod devices;
 mod element;
+mod employees;
 mod encryption;
 mod indexes;
 mod ips;
@@ -44,6 +45,9 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 组织（引用 org_templates、自引用）
     organizations::create(pool).await?;
+
+    // 员工（引用 organizations）
+    employees::create(pool).await?;
 
     // 房间（引用 organizations、network_cidrs）
     rooms::create(pool).await?;

@@ -4,6 +4,8 @@ import { showToast } from "../utils/ui.js";
 
 import { t } from "../utils/i18n.js";
 import { SessionManager } from "../utils/sessionManager.js";
+import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
+import { elementCache } from "../utils/helpers.js";
 
 const parseDuration = (durationStr) => {
   const match = durationStr.match(/^(\d+)([smhd])$/);
@@ -108,6 +110,52 @@ export const initLogout = () => {
   if (logoutBtn) {
     logoutBtn.addEventListener("click", logoutUser);
   }
+};
+
+// 修改密码（等保：改密后吊销全部令牌，强制重新登录）
+export const initChangePassword = () => {
+  const changeBtn = document.getElementById("change-password-btn");
+  changeBtn?.addEventListener("click", async () => {
+    const modal = await loadModal("change-password-modal");
+    if (!modal) return;
+
+    const form = elementCache.get("change-password-form");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const oldPassword = elementCache.getValue("change-password-old");
+      const newPassword = elementCache.getValue("change-password-new");
+      const confirmPassword = elementCache.getValue("change-password-confirm");
+
+      if (!oldPassword || !newPassword) {
+        showToast(t("auth.password_required"), "warning");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        showToast(t("auth.password_mismatch"), "warning");
+        return;
+      }
+
+      try {
+        const result = await apiPost("/api/auth/change-password", {
+          old_password: oldPassword,
+          new_password: newPassword
+        });
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("change-password-modal");
+          form.reset();
+          // 改密后令牌全部失效，跳转登录页重新认证
+          setTimeout(() => redirectToLogin(), 1200);
+        } else {
+          showToast(result.message, "error");
+        }
+      } catch (error) {
+        showToast(t("auth.change_password_failed"), "error");
+      }
+    };
+
+    openModal("change-password-modal");
+  });
 };
 
 let autoRefreshInterval = null;

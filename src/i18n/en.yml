@@ -177,7 +177,12 @@ log:
     sigint_register_failed: "Failed to register SIGINT handler: {{error}}"
     sigterm_received: "SIGTERM received"
     sigterm_register_failed: "Failed to register SIGTERM handler: {{error}}"
+  forwarding:
+    send_failed: "Log forwarding failed: {{error}}"
+    test_sent: "Log forwarding test message sent"
   smtp:
+    device_notify_failed: "Device IP notification query failed: {{error}}"
+    device_notify_skipped: "Skipping device IP email (no workstation match / manager email / SMTP not configured)"
     incomplete: "SMTP configuration incomplete, required fields missing"
     insecure_connection: "Sending email over unencrypted SMTP, credentials may be transmitted in plaintext (host: {{host}})"
     no_recipients_configured: "No email recipients configured, skipping MAC change email"
@@ -221,6 +226,8 @@ log:
     revoked_cleaned: "Cleaned {{count}} expired revoked tokens"
     usage_cleaned: "Cleaned {{count}} token usage records older than {{days}} days"
   user:
+    password_history_write_failed: "Failed to write password history: {{error}}"
+    password_history_prune_failed: "Failed to prune password history: {{error}}"
     created: "User {{username}} created (ID: {{id}})"
     deleted: "User deleted (ID: {{id}})"
     invalidate_tokens_failed: "Failed to update tokens_invalidated_at: {{error}}"

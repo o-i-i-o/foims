@@ -52,7 +52,7 @@ pub async fn send_email_async(
 ) -> Result<(), AppError> {
     let smtp_config = get_smtp_config_from_db(pool)
         .await
-        .ok_or_else(|| AppError::NotFound(msg("server.smtp.not_configured")))?;
+        .ok_or_else(|| AppError::Validation(msg("server.smtp.not_configured")))?;
 
     let email = Message::builder()
         .from(parse_address(&smtp_config.from)?.into())
@@ -238,6 +238,24 @@ pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<(), AppError> {
     send_with_timeout(transport, email).await
 }
 
+/// 轻量检查 SMTP 是否已完整配置（不解密密码，不写日志）。
+///
+/// 供登录方式发现等公开端点使用：未配置时邮件登录入口应静默隐藏，
+/// 而不是在运行日志里反复产生告警。
+pub async fn smtp_configured(pool: &PgPool) -> bool {
+    let Ok(count) = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(DISTINCT key) FROM system_configs
+         WHERE config_type = 'smtp' AND key IN ('host', 'port', 'username', 'from')
+           AND value IS NOT NULL AND value <> ''",
+    )
+    .fetch_one(pool)
+    .await
+    else {
+        return false;
+    };
+    count >= 4
+}
+
 /// 向指定用户群发邮件（收件人缺失视为业务错误而非跳过）。
 pub async fn send_email_to_users(
     pool: &PgPool,
@@ -247,7 +265,7 @@ pub async fn send_email_to_users(
 ) -> Result<(), AppError> {
     let Some(smtp_config) = get_smtp_config_from_db(pool).await else {
         log_warn!("log.smtp.not_configured");
-        return Err(AppError::NotFound(msg("server.smtp.not_configured")));
+        return Err(AppError::Validation(msg("server.smtp.not_configured")));
     };
 
     let users = sqlx::query("SELECT email FROM users WHERE id = ANY($1)")
@@ -256,7 +274,9 @@ pub async fn send_email_to_users(
         .await?;
 
     if users.is_empty() {
-        return Err(AppError::NotFound(msg("server.smtp.recipients_not_found")));
+        return Err(AppError::Validation(msg(
+            "server.smtp.recipients_not_found",
+        )));
     }
 
     let mut recipients: Vec<String> = Vec::new();

@@ -418,6 +418,9 @@ pub async fn create_device(
     )
     .await;
 
+    // 尽力而为的旁路通知：设备匹配工位且有 IP 时邮件通知管理人
+    super::notify::spawn_ip_notification(state.pool()?.get_conn(), id);
+
     Ok(crate::error::ok_json(device, "server.device.created"))
 }
 
@@ -733,6 +736,9 @@ pub async fn update_device(
         &details,
     )
     .await;
+
+    // 尽力而为的旁路通知：设备编辑完成且匹配工位时邮件通知管理人 IP 信息
+    super::notify::spawn_ip_notification(state.pool()?.get_conn(), id);
 
     Ok(crate::error::ok_json(result, "server.device.updated"))
 }

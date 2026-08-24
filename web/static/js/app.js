@@ -18,6 +18,7 @@ import {
   initAutoRefresh,
   initPageTimeout,
   initLogout,
+  initChangePassword,
   checkLoginStatus
 } from "./modules/authManager.js";
 import { schedulePreload, lazyLoad, loadModule } from "./utils/resourceLoader.js";
@@ -44,6 +45,7 @@ async function initApp() {
 
     displayCurrentUser();
     initLogout();
+    initChangePassword();
 
     // 三个互不依赖的异步初始化并行执行，预加载不再被网络请求串行阻塞
     await Promise.allSettled([initAutoRefresh(), initPageTimeout(), initResourcePreloading()]);

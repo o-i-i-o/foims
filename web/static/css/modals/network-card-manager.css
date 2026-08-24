@@ -156,3 +156,20 @@ header.ip-level-bar {
     gap: var(--space-xs);
   }
 }
+
+/* IP 地址输入 + 自动分配按钮组合 */
+.nc-address-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.nc-address-group .ip-address {
+  flex: 1;
+  min-width: 0;
+}
+
+.nc-address-group .auto-assign-ip-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
