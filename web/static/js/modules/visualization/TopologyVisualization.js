@@ -24,6 +24,7 @@ export class TopologyVisualization {
       onNodeClick: (deviceId) => this.openDeviceDetail(deviceId),
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
       onNodeDragEnd: (deviceId) => this._handleNodeDragEnd(deviceId),
+      onContainerDragEnd: (fixedKey) => this._handleGroupDragEnd(fixedKey),
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
@@ -37,6 +38,8 @@ export class TopologyVisualization {
     this.selectedConnectionId = null;
     // 组织筛选：null 显示全部，否则仅渲染集合内组织的设备（一个组织一套布局）
     this.orgFilterSet = null;
+    // 拖拽自动保存计时器（页面直接编辑坐标后静默持久化）
+    this._autoSaveTimer = null;
   }
 
   async loadTopology() {
@@ -118,7 +121,7 @@ export class TopologyVisualization {
     }
   }
 
-  /// 拖拽结束后：以用户摆放位置为准，推开其他被覆盖的房间分组
+  /// 拖拽结束后：以用户摆放位置为准，推开其他被覆盖的房间分组，并自动保存坐标
   _handleNodeDragEnd(deviceId) {
     const node = this.nodes.find((n) => n.device_id === deviceId);
     const fixedKey = node?.room_id ? `room:${node.room_id}` : "room:none";
@@ -130,6 +133,46 @@ export class TopologyVisualization {
     } else {
       this._renderContainers();
     }
+    this._scheduleAutoSave();
+  }
+
+  /// 容器（房间/机柜分组框）拖拽结束后：同步位置、推挤重叠分组并自动保存
+  _handleGroupDragEnd(fixedKey) {
+    this._syncPositionsFromDom();
+    const moved = this._separateOverlappingGroups(fixedKey);
+    if (moved) {
+      this._renderCurrentView();
+    } else {
+      this._renderContainers();
+    }
+    this._scheduleAutoSave();
+  }
+
+  /// 拖拽编辑防抖保存：500ms 内连续拖动只落一次
+  _scheduleAutoSave() {
+    clearTimeout(this._autoSaveTimer);
+    this._autoSaveTimer = setTimeout(() => {
+      this._savePositions({ silent: true });
+    }, 500);
+  }
+
+  /// 同步 DOM 坐标到节点对象并提交保存（silent 时成功不提示）
+  async _savePositions({ silent = false } = {}) {
+    this._syncPositionsFromDom();
+    const nodes = this.visibleNodes().map((n) => ({
+      device_id: n.device_id,
+      x: n.x || 100,
+      y: n.y || 100,
+      width: n.width || 200,
+      height: n.height || 100
+    }));
+    if (nodes.length === 0) {
+      if (!silent) {
+        showToast(t("viz.no_nodes_to_save"), "warning");
+      }
+      return;
+    }
+    await this.dataManager.saveTopologyNodes(nodes, { silent });
   }
 
   async _handleConnectionClick(connectionId) {
@@ -250,27 +293,9 @@ export class TopologyVisualization {
     this.selectedConnectionId = null;
   }
 
+  /// 手动保存（工具栏按钮）：复用 _savePositions，成功时提示
   async saveLayout() {
-    const elements = this.core.elementsGroup.querySelectorAll("[data-device-id]");
-    const nodes = [];
-    elements.forEach((el) => {
-      const rect = el.querySelector("rect");
-      if (!rect) return;
-      nodes.push({
-        device_id: el.dataset.deviceId,
-        x: parseFloat(rect.getAttribute("x")),
-        y: parseFloat(rect.getAttribute("y")),
-        width: parseFloat(rect.getAttribute("width")),
-        height: parseFloat(rect.getAttribute("height"))
-      });
-    });
-
-    if (nodes.length === 0) {
-      showToast(t("viz.no_nodes_to_save"), "warning");
-      return;
-    }
-
-    await this.dataManager.saveTopologyNodes(nodes);
+    await this._savePositions();
   }
 
   toggleConnectionMode() {
@@ -385,6 +410,7 @@ export class TopologyVisualization {
 
       const roomG = this._drawContainerRect(roomBox, {
         kind: "room",
+        key: room.key,
         padding: ROOM_PADDING,
         header: ROOM_HEADER,
         label: room.label,
@@ -398,6 +424,7 @@ export class TopologyVisualization {
         if (!cabBox) return;
         const cabG = this._drawContainerRect(cabBox, {
           kind: "cabinet",
+          key: cabinet.key,
           padding: CABINET_PADDING,
           header: CABINET_HEADER,
           label: cabinet.label,
@@ -412,6 +439,9 @@ export class TopologyVisualization {
   _drawContainerRect(box, opts) {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("topology-container-group", `container-${opts.kind}`);
+    // 容器拖动识别：kind + 分组键（与节点 dataset 的 roomKey/cabinetKey 对应）
+    g.dataset.containerKind = opts.kind;
+    g.dataset.containerKey = opts.key;
 
     const rect = document.createElementNS(SVG_NS, "rect");
     rect.classList.add("topology-container", `container-${opts.kind}`);

@@ -1,4 +1,4 @@
-//! 证书生成（rcgen）：自签名叶子证书与 CA 签发叶子证书。
+//! 证书生成（rcgen）：强制由所选 CA（站点根 CA 或导入 CA）签发叶子证书。
 
 use std::path::PathBuf;
 
@@ -27,9 +27,10 @@ pub struct GenerateCertRequest {
     pub validity_days: Option<i32>,
     /// 主题备用名称（IP 或域名）
     pub subject_alt_names: Option<Vec<String>>,
-    /// 是否优先用本站 CA 签发（缺省 true；无可用 CA 时自动回退自签名）
+    /// 签发 CA 标识：缺省或 "root" 为站点根 CA，否则为导入 CA 池中的目录名。
+    /// 证书强制由所选 CA 签发，不再提供自签名回退。
     #[serde(default)]
-    pub sign_with_ca: Option<bool>,
+    pub ca_id: Option<String>,
 }
 
 /// 解析 SAN 条目：IP 地址优先，否则按 DNS 名称
@@ -49,9 +50,9 @@ fn parse_san(entry: &str) -> Option<SanType> {
 
 /// 生成证书并写入生成目录，返回证书文件路径。
 ///
-/// 优先用本站 CA 签发（`req.sign_with_ca` 缺省视为 true）：
-/// CA 证书与私钥齐备时叶子证书由 CA 签发（形成可分发的信任链），
-/// 否则回退为传统自签名叶子证书。
+/// 强制由所选 CA 签发（`req.ca_id` 缺省视为站点根 CA）：
+/// CA 不存在或无私钥时直接报错，不再回退自签名——
+/// 证书生成流程固定为"生成 CA / 导入 CA → 生成证书"。
 ///
 /// `extra_sans` 为调用方注入的额外 SAN（如服务器 public_url 的主机名），
 /// 与请求中的 SAN 合并；两者均为空时回退使用 common_name。
@@ -77,10 +78,20 @@ pub async fn generate_certificate(
         .map_or(DEFAULT_VALIDITY_DAYS, i64::from)
         .clamp(1, MAX_VALIDITY_DAYS);
 
-    // CA 物料在阻塞线程外读取，避免阻塞异步运行时
-    let ca_material = match req.sign_with_ca {
-        Some(false) => None,
-        _ => crate::ca::load_ca_material().await,
+    // CA 物料在阻塞线程外读取，避免阻塞异步运行时；缺失即拒绝生成
+    let ca_material = match crate::ca::load_ca_material_by_id(req.ca_id.as_deref()).await {
+        Some(material) => material,
+        None => {
+            // 区分"CA 不存在"与"CA 无私钥"给出准确错误
+            if crate::ca::ca_cert_exists(req.ca_id.as_deref()).await {
+                return Err(CertManagerError::Validation(msg(
+                    "server.certificate.ca_key_missing",
+                )));
+            }
+            return Err(CertManagerError::NotFound(msg(
+                "server.certificate.ca_not_found",
+            )));
+        }
     };
 
     tokio::fs::create_dir_all(GENERATED_CERTS_DIR)
@@ -128,7 +139,7 @@ fn build_leaf_cert(
     req: &GenerateCertRequest,
     validity_days: i64,
     extra_sans: Vec<String>,
-    ca_material: Option<(String, String)>,
+    ca_material: (String, String),
 ) -> Result<GeneratedPem, CertManagerError> {
     let key_pair = KeyPair::generate().map_err(|e| {
         CertManagerError::Internal(
@@ -212,30 +223,23 @@ fn build_leaf_cert(
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
 
-    let cert = match ca_material {
-        Some((ca_cert_pem, ca_key_pem)) => {
-            let ca_key = KeyPair::from_pem(&ca_key_pem).map_err(|e| {
-                CertManagerError::Internal(
-                    msg("server.certificate.generate_failed").with("error", e.to_string()),
-                )
-            })?;
-            let issuer = rcgen::Issuer::from_ca_cert_pem(&ca_cert_pem, ca_key).map_err(|e| {
-                CertManagerError::Internal(
-                    msg("server.certificate.generate_failed").with("error", e.to_string()),
-                )
-            })?;
-            params.signed_by(&key_pair, &issuer).map_err(|e| {
-                CertManagerError::Internal(
-                    msg("server.certificate.generate_failed").with("error", e.to_string()),
-                )
-            })?
-        }
-        None => params.self_signed(&key_pair).map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.generate_failed").with("error", e.to_string()),
-            )
-        })?,
-    };
+    // 强制 CA 签发（物料已在异步层校验存在）
+    let (ca_cert_pem, ca_key_pem) = ca_material;
+    let ca_key = KeyPair::from_pem(&ca_key_pem).map_err(|e| {
+        CertManagerError::Internal(
+            msg("server.certificate.generate_failed").with("error", e.to_string()),
+        )
+    })?;
+    let issuer = rcgen::Issuer::from_ca_cert_pem(&ca_cert_pem, ca_key).map_err(|e| {
+        CertManagerError::Internal(
+            msg("server.certificate.generate_failed").with("error", e.to_string()),
+        )
+    })?;
+    let cert = params.signed_by(&key_pair, &issuer).map_err(|e| {
+        CertManagerError::Internal(
+            msg("server.certificate.generate_failed").with("error", e.to_string()),
+        )
+    })?;
 
     Ok(GeneratedPem {
         cert_pem: cert.pem(),
@@ -333,14 +337,28 @@ mod tests {
             locality: None,
             validity_days: None,
             subject_alt_names: None,
-            sign_with_ca: None,
+            ca_id: None,
         }
     }
 
+    /// 构造测试用 CA 物料（证书 PEM, 私钥 PEM）
+    fn test_ca_material() -> (String, String) {
+        let ca_key = KeyPair::generate().unwrap_or_else(|e| panic!("生成 CA 密钥失败: {e}"));
+        let mut ca_params = CertificateParams::default();
+        let mut ca_dn = DistinguishedName::new();
+        ca_dn.push(DnType::CommonName, "IPMA Test Root CA");
+        ca_params.distinguished_name = ca_dn;
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        let ca_cert = ca_params
+            .self_signed(&ca_key)
+            .unwrap_or_else(|e| panic!("生成 CA 失败: {e}"));
+        (ca_cert.pem(), ca_key.serialize_pem())
+    }
+
     #[test]
-    fn 构建自签名证书_cn写入主题与签发者() {
+    fn 构建证书_cn写入主题且由ca签发() {
         let req = minimal_request("box.example.com");
-        let out = build_leaf_cert("box.example.com", &req, 30, vec![], None)
+        let out = build_leaf_cert("box.example.com", &req, 30, vec![], test_ca_material())
             .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
         assert!(out.cert_pem.starts_with("-----BEGIN CERTIFICATE-----"));
         assert!(out.key_pem.starts_with("-----BEGIN PRIVATE KEY-----"));
@@ -351,8 +369,8 @@ mod tests {
         assert_eq!(meta.subject_cn.as_deref(), Some("box.example.com"));
         assert_eq!(
             meta.issuer_cn.as_deref(),
-            Some("box.example.com"),
-            "自签名签发者即自身"
+            Some("IPMA Test Root CA"),
+            "叶子证书应由所选 CA 签发"
         );
         let Some(nb) = meta.not_before else {
             panic!("缺 not_before")
@@ -368,11 +386,17 @@ mod tests {
     }
 
     #[test]
-    fn 构建自签名证书_san去重与cn回退() {
+    fn 构建证书_san去重与cn回退() {
         // 无 SAN 时回退使用 CN（CN 是合法域名）
         let req = minimal_request("fallback.example.com");
-        let out = build_leaf_cert("fallback.example.com", &req, 3650, vec![], None)
-            .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        let out = build_leaf_cert(
+            "fallback.example.com",
+            &req,
+            3650,
+            vec![],
+            test_ca_material(),
+        )
+        .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
         let (sans, _) = extract_sans(&out.cert_pem);
         assert_eq!(
             sans.iter().filter(|s| s == &"fallback.example.com").count(),
@@ -395,7 +419,7 @@ mod tests {
                 "alt.example.com".to_string(),
                 "extra.example.com".to_string(),
             ],
-            None,
+            test_ca_material(),
         )
         .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
         let (dns_sans, ip_sans) = extract_sans(&out.cert_pem);
@@ -486,21 +510,13 @@ mod tests {
         assert!(req.organization.is_none());
         assert!(req.validity_days.is_none());
         assert!(req.subject_alt_names.is_none());
-        assert!(req.sign_with_ca.is_none(), "sign_with_ca 缺省为 None");
+        assert!(req.ca_id.is_none(), "ca_id 缺省为 None");
     }
 
     /// CA 签发路径：叶子证书的签发者应为 CA 的 CN
     #[test]
     fn 构建证书_ca签发叶子() {
-        let ca_key = KeyPair::generate().unwrap_or_else(|e| panic!("生成 CA 密钥失败: {e}"));
-        let mut ca_params = CertificateParams::default();
-        let mut ca_dn = DistinguishedName::new();
-        ca_dn.push(DnType::CommonName, "IPMA Test Root CA");
-        ca_params.distinguished_name = ca_dn;
-        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-        let ca_cert = ca_params
-            .self_signed(&ca_key)
-            .unwrap_or_else(|e| panic!("生成 CA 失败: {e}"));
+        let (ca_cert_pem, ca_key_pem) = test_ca_material();
 
         let req = minimal_request("leaf.example.com");
         let out = build_leaf_cert(
@@ -508,7 +524,7 @@ mod tests {
             &req,
             365,
             vec![],
-            Some((ca_cert.pem(), ca_key.serialize_pem())),
+            (ca_cert_pem, ca_key_pem),
         )
         .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
 

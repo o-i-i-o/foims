@@ -238,7 +238,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/auth/forgot-password", post(forgot_password))
         .route("/api/auth/reset-password", post(reset_password));
 
-    // 公开的站点 CA 端点：CA 证书是公开数据，登录页提供下载入口；
+    // 公开的站点 CA 端点：CA 证书是公开数据，登录页提供下载入口（仅 PEM）；
     // 私钥不存在任何公开通道
     let public_ca_routes = Router::new()
         .route(
@@ -246,7 +246,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(crate::system::certificate::ca_info),
         )
         .route(
-            "/api/certificate/ca/download/{format}",
+            "/api/certificate/ca/download",
             get(crate::system::certificate::ca_download),
         );
 
@@ -630,7 +630,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/system/config/backup", get(backup_config))
         .route("/api/system/config/restore", post(restore_config))
         // 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs，
-        // 站点根 CA /etc/ssl/ipma-ca；CA 的公开下载走 /api/certificate/ca/*）
+        // 站点根 CA /etc/ssl/ipma-ca，导入 CA 池 /etc/ssl/ipma-import-cas；
+        // CA 的公开下载走 /api/certificate/ca/*。证书仅程序自用，无下载端点）
         .route("/api/system/certificate/list", get(certificate::list))
         .route(
             "/api/system/certificate/generate",
@@ -644,10 +645,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route(
             "/api/system/certificate/ca/import",
             post(certificate::ca_import),
-        )
-        .route(
-            "/api/system/certificate/download/{kind}/{filename}",
-            get(certificate::download),
         )
         .route(
             "/api/system/certificate/{kind}/{file_stem}",

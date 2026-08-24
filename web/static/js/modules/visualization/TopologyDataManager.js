@@ -23,11 +23,19 @@ export class TopologyDataManager {
     }
   }
 
-  async saveTopologyNodes(nodes) {
+  /**
+   * 保存拓扑节点坐标（按 device_id upsert）。
+   * @param {Array<{device_id: string, x: number, y: number, width: number, height: number}>} nodes
+   * @param {Object} [options]
+   * @param {boolean} [options.silent] 静默模式：成功不提示（拖拽自动保存使用），失败仍提示
+   */
+  async saveTopologyNodes(nodes, { silent = false } = {}) {
     try {
       const result = await this.apiPost("/api/resources/topology/nodes", { nodes });
       if (result.success) {
-        this.showToast(t("viz.node_save_success"), "success");
+        if (!silent) {
+          this.showToast(t("viz.node_save_success"), "success");
+        }
         return true;
       }
       this.showToast(`${t("viz.node_save_failed")}: ${result.message}`, "error");

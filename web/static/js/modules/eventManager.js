@@ -73,6 +73,7 @@ const RESOURCE_BUTTON_CALLBACK_MAP = {
   "add-cabinet-btn": "openCabinetModal",
   "add-user-btn": "openUserModal",
   "add-cable-link-btn": "openCableLinkModal",
+  "cable-label-print-btn": "openCableLabelPrintModal",
   "add-device-btn": "openDeviceModal"
 };
 

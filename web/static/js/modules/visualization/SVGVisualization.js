@@ -133,8 +133,9 @@ export class SVGVisualization {
     return await this.dataManager.loadSavedLayout(id);
   }
 
-  async saveLayout() {
-    return await this.dataManager.saveLayout();
+  /** @param {{silent?: boolean}} [options] 静默保存：拖拽自动保存时不弹成功提示 */
+  async saveLayout(options) {
+    return await this.dataManager.saveLayout(options);
   }
 
   async deleteLayout() {

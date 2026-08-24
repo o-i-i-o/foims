@@ -55,6 +55,17 @@ export class TopologyRenderer {
     g.classList.add("topology-device-node", `type-${device.device_type || "other"}`);
     g.dataset.deviceId = device.device_id;
     g.dataset.tooltip = `${device.device_name || "Unknown"} (${getDeviceTypeLabel(device.device_type) || device.device_type})`;
+    // 分组键与 TopologyVisualization._collectSpatialGroups 一致，
+    // 容器（房间/机柜分组框）拖动时按此键匹配并整体移动组内节点
+    g.dataset.roomKey = device.room_id ? `room:${device.room_id}` : "room:none";
+    const cabinetKey = device.cabinet_id
+      ? `cab:${device.cabinet_id}`
+      : device.cabinet_name
+        ? `cab:name:${device.cabinet_name}`
+        : null;
+    if (cabinetKey) {
+      g.dataset.cabinetKey = cabinetKey;
+    }
 
     const x = device.x || 100;
     const y = device.y || 100;

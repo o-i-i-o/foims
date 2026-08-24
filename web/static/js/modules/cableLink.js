@@ -14,7 +14,7 @@ import {
   initSortEvents
 } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modalLoader.js";
+import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
@@ -23,6 +23,9 @@ import { fillSelect } from "../utils/resources.js";
 const tableState = createSortState("updated_at", "desc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
+
+// 最近一次加载的线路数据（行内打印按钮直接取两端编号，避免二次请求）
+let lastLoadedItems = [];
 
 const ENDPOINT_TYPE_LABELS = {
   net_outlet: t("cable_link.endpoint_net_outlet") || t("net_outlet.name"),
@@ -71,6 +74,7 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
     );
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
+    lastLoadedItems = Array.isArray(items) ? items : [];
     const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#cable-links-table", {
@@ -111,12 +115,15 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
           field: "id",
           render: (v) => `
           ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
+          ${iconButton({ icon: "printer", label: t("cable_link.print"), cls: "btn-print-cable", attrs: `data-action="print-label" data-id="${v}"` })}
           ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-id="${v}"` })}
         `
         }
       ],
       emptyMessage: t("common.no_data")
     });
+
+    bindCablePrintRowEvents();
 
     if (data.total !== undefined) {
       appendPaginationToTable("#cable-links-table", data, loadCableLinksData, {
@@ -141,6 +148,117 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
 
 export function initCableLinkSortEvents() {
   initSortEvents("cable-links-table", tableState, loadCableLinksData);
+}
+
+// ==========================================
+// 线缆标签打印（25x38+40 规格：标签 25mm x 38mm，步进 40mm）
+// 一条线路两端各一枚标签：A端+B端 与 B端+A端（本端在前、对端在后）
+// ==========================================
+
+let cableTableClickHandler = null;
+
+// 行内打印按钮委托（eventManager 只委托 edit/delete，data-action 按钮由模块自管）
+function bindCablePrintRowEvents() {
+  const table = elementCache.get("cable-links-table");
+  if (!table) return;
+  if (cableTableClickHandler) {
+    table.removeEventListener("click", cableTableClickHandler);
+  }
+
+  cableTableClickHandler = (e) => {
+    const btn = e.target.closest('button[data-action="print-label"]');
+    if (!btn) return;
+    const item = lastLoadedItems.find((it) => it.id === btn.dataset.id);
+    if (item) {
+      printCableLabels([item]);
+    }
+  };
+  table.addEventListener("click", cableTableClickHandler);
+}
+
+/** 打开批量打印模态框：列出当前页线路，勾选后一次性打印两端标签 */
+export async function openCableLabelPrintModal() {
+  if (!lastLoadedItems.length) {
+    showToast(t("cable_link.print_empty"), "warning");
+    return;
+  }
+
+  const modal = await loadModal("cable-label-print-modal");
+  if (!modal) return;
+
+  const tbody = modal.querySelector("#cable-label-print-table tbody");
+  tbody.innerHTML = lastLoadedItems
+    .map(
+      (item, index) => `
+      <tr>
+        <td class="col-center"><input type="checkbox" class="cable-label-print-check" data-index="${index}" checked /></td>
+        <td>${escapeHtml(item.a_endpoint_label || "-")}</td>
+        <td>${escapeHtml(item.b_endpoint_label || "-")}</td>
+      </tr>`
+    )
+    .join("");
+
+  const countEl = modal.querySelector("#cable-label-print-count");
+  const updateCount = () => {
+    const checked = modal.querySelectorAll(".cable-label-print-check:checked").length;
+    countEl.textContent = t("cable_link.print_count", { cables: checked, labels: checked * 2 });
+  };
+
+  const allCheck = modal.querySelector("#cable-label-print-all");
+  allCheck.checked = true;
+  allCheck.onchange = () => {
+    modal
+      .querySelectorAll(".cable-label-print-check")
+      .forEach((check) => {
+        check.checked = allCheck.checked;
+      });
+    updateCount();
+  };
+  tbody.onclick = (e) => {
+    if (e.target.classList.contains("cable-label-print-check")) updateCount();
+  };
+  updateCount();
+
+  const form = modal.querySelector("#cable-label-print-form");
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const indexes = [...modal.querySelectorAll(".cable-label-print-check:checked")].map((check) =>
+      Number(check.dataset.index)
+    );
+    if (!indexes.length) {
+      showToast(t("cable_link.print_none_selected"), "warning");
+      return;
+    }
+    printCableLabels(indexes.map((i) => lastLoadedItems[i]));
+    closeModal("cable-label-print-modal");
+  };
+
+  openModal("cable-label-print-modal");
+}
+
+/** 渲染标签打印区并调起浏览器打印，打印结束/取消后清理 DOM */
+function printCableLabels(items) {
+  document.querySelector(".cable-label-print-area")?.remove();
+
+  const labelHtml = (first, second) => `
+    <div class="cable-label">
+      <div class="cable-label-text">${escapeHtml(first || "-")}</div>
+      <div class="cable-label-divider"></div>
+      <div class="cable-label-text">${escapeHtml(second || "-")}</div>
+    </div>`;
+
+  const area = document.createElement("div");
+  area.className = "cable-label-print-area";
+  area.innerHTML = items
+    .flatMap((item) => [
+      labelHtml(item.a_endpoint_label, item.b_endpoint_label),
+      labelHtml(item.b_endpoint_label, item.a_endpoint_label)
+    ])
+    .join("");
+  document.body.appendChild(area);
+
+  window.addEventListener("afterprint", () => area.remove(), { once: true });
+  window.print();
 }
 
 export async function editCableLink(id) {

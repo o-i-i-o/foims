@@ -377,7 +377,12 @@ export class SVGDataManager {
     });
   }
 
-  async saveLayout() {
+  /**
+   * 保存当前画布布局（整表 upsert）。
+   * @param {Object} [options]
+   * @param {boolean} [options.silent] 静默模式：成功不弹提示（拖拽自动保存使用），失败仍提示
+   */
+  async saveLayout({ silent = false } = {}) {
     const elements = this.core.elementsGroup.querySelectorAll("[data-id]");
     const layoutData = [];
 
@@ -410,6 +415,14 @@ export class SVGDataManager {
       layoutData.push({ id, position, element_type });
     });
 
+    // 空画布（未选房间/无元素）不提交，防止把空布局写到无效 room
+    if (layoutData.length === 0 || !this.core.currentRoomId) {
+      if (!silent) {
+        this.showToast(t("viz.no_workstation_data"), "info");
+      }
+      return;
+    }
+
     try {
       const result = await this.apiPost("/api/resources/layouts", {
         type: this.core.type === "cabinet" ? "cabinet" : this.core.type,
@@ -420,7 +433,9 @@ export class SVGDataManager {
       });
 
       if (result.success) {
-        this.showToast(t("viz.layout_save_success"), "success");
+        if (!silent) {
+          this.showToast(t("viz.layout_save_success"), "success");
+        }
       } else {
         this.showToast(`${t("viz.layout_save_failed")}: ${result.message}`, "error");
       }

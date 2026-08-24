@@ -42,6 +42,12 @@ export function initSystemTabs() {
         } else if (tabId === "system-info") {
           loadSystemInfo();
           loadSystemConfig();
+        } else if (tabId === "system-config") {
+          // 证书/LDAP/SSO 配置随子标签激活加载（含刷新后程序化恢复子标签的场景）
+          loadSystemConfig();
+          loadCertificateInventory();
+          loadLdapConfig();
+          loadSsoConfig();
         } else if (tabId === "system-notification") {
           loadSmtpConfig();
           loadNotificationSettings();
@@ -52,7 +58,6 @@ export function initSystemTabs() {
           initScheduledTasksTab();
         } else if (tabId === "security") {
           initSecurityTab();
-          loadPasswordPolicy();
         }
       });
     });
@@ -82,17 +87,7 @@ export function initSystemTabs() {
     });
   }
 
-  const systemConfigTab = document.querySelector('[data-tab="system-config"]');
-  if (systemConfigTab) {
-    systemConfigTab.addEventListener("click", async () => {
-      setTimeout(async () => {
-        await loadSystemConfig();
-        await loadCertificateInventory();
-        await loadLdapConfig();
-        await loadSsoConfig();
-      }, 100);
-    });
-  }
+  // 子标签点击统一走上面的通用处理器（含证书清单加载），无需重复绑定
 
   const logForwardingSaveBtn = elementCache.get("log-forwarding-save-btn");
   if (logForwardingSaveBtn) {
@@ -104,10 +99,12 @@ export function initSystemTabs() {
     logForwardingTestBtn.addEventListener("click", testLogForwarding);
   }
 
-  const passwordPolicySaveBtn = elementCache.get("password-policy-save-btn");
-  if (passwordPolicySaveBtn) {
-    passwordPolicySaveBtn.addEventListener("click", savePasswordPolicy);
-  }
+  // 用户编辑模态框的"密码策略"按钮：模态框动态装载，走文档级委托
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#user-password-policy-btn")) {
+      openPasswordPolicyModal();
+    }
+  });
 
   const smtpConfigForm = elementCache.get("smtp-config-form");
   if (smtpConfigForm) {
@@ -969,7 +966,20 @@ async function testLogForwarding() {
   }
 }
 
-// ==================== 等保密码策略 ====================
+// ==================== 等保密码策略（入口：用户编辑模态框的"密码策略"按钮） ====================
+
+// 打开密码策略模态框（等保三级，安全管理员权限）：每次打开重新拉取当前策略
+export async function openPasswordPolicyModal() {
+  const modal = await loadModal("password-policy-modal");
+  if (!modal) return;
+
+  await loadPasswordPolicy();
+
+  const saveBtn = modal.querySelector("#password-policy-save-btn");
+  saveBtn.onclick = () => savePasswordPolicy();
+
+  openModal("password-policy-modal");
+}
 
 // 加载密码策略（未配置时后端返回默认值）
 async function loadPasswordPolicy() {
@@ -1017,7 +1027,8 @@ async function savePasswordPolicy() {
   }
 }
 
-// ==================== 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs） ====================
+// ==================== 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs，
+// 站点根 CA /etc/ssl/ipma-ca，导入 CA 池 /etc/ssl/ipma-import-cas） ====================
 
 // 可选字段：空串转 null
 function certOptionalField(value) {
@@ -1029,6 +1040,13 @@ function formatCertValidity(info) {
   if (!info.not_before || !info.not_after) return "-";
   const fmt = (iso) => new Date(iso).toLocaleDateString();
   return `${fmt(info.not_before)} ~ ${fmt(info.not_after)}`;
+}
+
+// CA 下拉选项文案：根 CA（自生成）在前，导入 CA 标注来源；无私钥的 CA 不可签发
+function caOptionLabel(ca) {
+  const source = ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported");
+  const name = ca.name || ca.id;
+  return ca.has_key ? `${name}（${source}）` : `${name}（${source}，${t("cert.ca_no_key")}）`;
 }
 
 function renderCertTable(tableId, items, kind) {
@@ -1058,14 +1076,7 @@ function renderCertTable(tableId, items, kind) {
 
     const actions = tr.querySelector(".cert-actions-cell");
 
-    // 私钥不提供下载：证书/密钥仅用于本机 HTTPS/nginx，由部署侧在服务器上取用
-    const downloadCertBtn = document.createElement("button");
-    downloadCertBtn.type = "button";
-    downloadCertBtn.className = "btn btn-secondary btn-sm";
-    downloadCertBtn.textContent = t("cert.download_cert");
-    downloadCertBtn.addEventListener("click", () => downloadCertFile(kind, info.cert_filename));
-    actions.appendChild(downloadCertBtn);
-
+    // 证书仅用于程序运行（HTTPS/nginx），不提供下载；删除按钮直接操作服务器文件
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn btn-danger btn-sm";
@@ -1095,10 +1106,14 @@ function renderCertTable(tableId, items, kind) {
   });
 }
 
+// 最近一次拉取的 CA 列表（证书生成弹窗下拉数据源）
+let lastCaList = [];
+
 export async function loadCertificateInventory() {
   try {
     const result = await apiGet("/api/system/certificate/list");
     if (!result.success || !result.data) return;
+    lastCaList = Array.isArray(result.data.cas) ? result.data.cas : [];
     renderCertTable("cert-generated-table", result.data.generated, "generated");
     renderCertTable("cert-imported-table", result.data.imported, "imported");
     renderCaStatus(result.data.ca);
@@ -1130,9 +1145,9 @@ function renderCaStatus(ca) {
     <span class="cert-ca-field">${keyText}</span>`;
 }
 
-// 下载站点根 CA（pem 适配 Linux / der 适配 Windows）
-function exportCa(format) {
-  window.open(`/api/certificate/ca/download/${format}`, "_blank");
+// 下载站点根 CA（仅 PEM 格式；CA 证书是公开数据）
+function downloadCa() {
+  window.open("/api/certificate/ca/download", "_blank");
 }
 
 async function openCaGenerateModal() {
@@ -1217,34 +1232,38 @@ async function openCaImportModal() {
   openModal("ca-import-modal");
 }
 
-async function downloadCertFile(kind, filename) {
-  try {
-    const result = await apiRequest(
-      `/api/system/certificate/download/${kind}/${encodeURIComponent(filename)}`
-    );
-    if (!result.success) {
-      showToast(result.message, "error");
-      return;
-    }
-    if (result.isBlob) {
-      const url = window.URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.filename || filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
-    }
-  } catch (error) {
-    console.error("下载证书失败:", error);
-    showToast(t("cert.download_failed"), "error");
+// 填充证书生成弹窗的 CA 下拉框：根 CA（自生成）在前，导入 CA 在后；
+// 无私钥的 CA（cert-only 导入）禁用选择
+function fillCertCaSelect(select) {
+  const cas = lastCaList;
+  if (!cas.length) {
+    select.innerHTML = `<option value="">${t("cert.ca_none")}</option>`;
+    return;
+  }
+  select.innerHTML = cas
+    .map((ca) => {
+      const disabled = ca.has_key ? "" : "disabled";
+      const selected = ca.source === "root" && ca.has_key ? "selected" : "";
+      return `<option value="${escapeHtml(ca.id)}" ${disabled} ${selected}>${escapeHtml(caOptionLabel(ca))}</option>`;
+    })
+    .join("");
+  // 根 CA 不可用（无私钥）时默认选第一个可用 CA
+  if (!select.value) {
+    const firstUsable = cas.find((ca) => ca.has_key);
+    if (firstUsable) select.value = firstUsable.id;
   }
 }
 
 async function openCertGenerateModal() {
   const modal = await loadModal("cert-generate-modal");
   if (!modal) return;
+
+  const caSelect = elementCache.get("cert-ca-select");
+  if (caSelect) {
+    // 拉取最新 CA 列表（生成/导入 CA 后立即反映到下拉框）
+    await loadCertificateInventory();
+    fillCertCaSelect(caSelect);
+  }
 
   const form = elementCache.get("cert-generate-form");
   form.onsubmit = async (e) => {
@@ -1255,6 +1274,12 @@ async function openCertGenerateModal() {
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const caId = String(fd.get("ca_id") || "").trim();
+    if (!caId) {
+      showToast(t("cert.ca_required"), "warning");
+      return;
+    }
+
     const body = {
       common_name: String(fd.get("common_name") || "").trim(),
       organization: certOptionalField(fd.get("organization")),
@@ -1264,7 +1289,7 @@ async function openCertGenerateModal() {
       locality: certOptionalField(fd.get("locality")),
       validity_days: parseInt(fd.get("validity_days"), 10) || null,
       subject_alt_names: sans.length > 0 ? sans : null,
-      sign_with_ca: fd.get("sign_with_ca") === "on"
+      ca_id: caId
     };
     if (!body.common_name) {
       showToast(t("cert.common_name_required"), "warning");
@@ -1346,9 +1371,6 @@ function initCertificateManager() {
   const caImportBtn = elementCache.get("ca-import-btn");
   if (caImportBtn) caImportBtn.addEventListener("click", openCaImportModal);
 
-  const caExportPemBtn = elementCache.get("ca-export-pem-btn");
-  if (caExportPemBtn) caExportPemBtn.addEventListener("click", () => exportCa("pem"));
-
-  const caExportDerBtn = elementCache.get("ca-export-der-btn");
-  if (caExportDerBtn) caExportDerBtn.addEventListener("click", () => exportCa("der"));
+  const caDownloadBtn = elementCache.get("ca-download-btn");
+  if (caDownloadBtn) caDownloadBtn.addEventListener("click", downloadCa);
 }

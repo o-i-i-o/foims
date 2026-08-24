@@ -15,6 +15,9 @@ export class TopologyCore {
     this.isPanning = false;
     this.panStart = { x: 0, y: 0 };
     this.viewBoxStart = { x: 0, y: 0 };
+    // 容器（房间/机柜分组框）整体拖动状态
+    this.isContainerDragging = false;
+    this.containerDrag = null;
     this.isSpaceDown = false;
     this.isConnectionMode = false;
     this.connectionSource = null;
@@ -157,6 +160,12 @@ export class TopologyCore {
     const anchor = e.target.closest(".port-anchor");
     if (anchor) return;
 
+    // 容器（房间/机柜分组框）拖动：整体移动组内全部设备节点
+    const containerG = e.target.closest(".topology-container-group");
+    if (containerG && this._startContainerDrag(containerG, e)) {
+      return;
+    }
+
     const target = e.target.closest("[data-device-id]");
     if (target) {
       this.isDragging = true;
@@ -191,6 +200,18 @@ export class TopologyCore {
         "viewBox",
         `${this.viewBoxStart.x - dx} ${this.viewBoxStart.y - dy} ${vb.width} ${vb.height}`
       );
+      return;
+    }
+
+    if (this.isContainerDragging && this.containerDrag) {
+      const currentPos = this._getSvgCoordinates(e);
+      const dx = currentPos.x - this.mouseStartPos.x;
+      const dy = currentPos.y - this.mouseStartPos.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        this.hasMoved = true;
+        this._hideTooltip();
+        this._moveContainerBy(dx, dy);
+      }
       return;
     }
 
@@ -262,6 +283,23 @@ export class TopologyCore {
   _handleMouseUp() {
     if (this.isPanning) {
       this.isPanning = false;
+      return;
+    }
+
+    if (this.isContainerDragging && this.containerDrag) {
+      const drag = this.containerDrag;
+      this.isContainerDragging = false;
+      this.containerDrag = null;
+      if (this.hasMoved) {
+        drag.memberStart.forEach(({ el }) => this._snapElementToGrid(el));
+        if (this.callbacks.onContainerDragEnd) {
+          this.callbacks.onContainerDragEnd(drag.fixedKey);
+        }
+      } else if (this.callbacks.onCanvasClick) {
+        // 容器内空白处的单击视同画布点击（保持清空选中等既有行为）
+        this.callbacks.onCanvasClick();
+      }
+      this.hasMoved = false;
       return;
     }
 
@@ -380,6 +418,71 @@ export class TopologyCore {
       const relCy = parseFloat(anchor.dataset.relCy || 0);
       anchor.setAttribute("cx", x + relCx);
       anchor.setAttribute("cy", y + relCy);
+    });
+  }
+
+  /**
+   * 开始容器拖动：按容器类型匹配组内全部设备节点并记录起始位置。
+   * @returns {boolean} 是否成功进入容器拖动（无成员时返回 false 走默认点击逻辑）
+   */
+  _startContainerDrag(containerG, e) {
+    const kind = containerG.dataset.containerKind;
+    const key = containerG.dataset.containerKey;
+    if (!kind || !key) return false;
+
+    const members = [...this.elementsGroup.querySelectorAll("[data-device-id]")].filter((el) =>
+      kind === "cabinet" ? el.dataset.cabinetKey === key : el.dataset.roomKey === key
+    );
+    if (members.length === 0) return false;
+
+    const rect = containerG.querySelector("rect");
+    if (!rect) return false;
+
+    this.isContainerDragging = true;
+    this.hasMoved = false;
+    // 推挤分组时被拖容器保持不动：房间容器即房间键，机柜容器取首个成员的房间键
+    const fixedKey =
+      kind === "room" ? key : members[0].dataset.roomKey || "room:none";
+    this.containerDrag = {
+      groupEl: containerG,
+      rectStart: {
+        x: parseFloat(rect.getAttribute("x")),
+        y: parseFloat(rect.getAttribute("y"))
+      },
+      memberStart: members.map((el) => {
+        const r = el.querySelector("rect");
+        return {
+          el,
+          x: parseFloat(r.getAttribute("x")),
+          y: parseFloat(r.getAttribute("y"))
+        };
+      }),
+      textsStart: [...containerG.querySelectorAll("text")].map((text) => ({
+        text,
+        x: parseFloat(text.getAttribute("x")),
+        y: parseFloat(text.getAttribute("y"))
+      })),
+      fixedKey
+    };
+    this.mouseStartPos = this._getSvgCoordinates(e);
+    return true;
+  }
+
+  /** 容器拖动位移：从起始位置整体平移组内节点与容器框/文字 */
+  _moveContainerBy(dx, dy) {
+    const drag = this.containerDrag;
+    const rect = drag.groupEl.querySelector("rect");
+    rect.setAttribute("x", drag.rectStart.x + dx);
+    rect.setAttribute("y", drag.rectStart.y + dy);
+    drag.textsStart.forEach(({ text, x, y }) => {
+      text.setAttribute("x", x + dx);
+      text.setAttribute("y", y + dy);
+    });
+    drag.memberStart.forEach(({ el, x, y }) => {
+      this._setElementPosition(el, x + dx, y + dy);
+      if (this.callbacks.onNodeDrag) {
+        this.callbacks.onNodeDrag(el.dataset.deviceId);
+      }
     });
   }
 

@@ -323,26 +323,35 @@ class NetworkConfigManager {
     const networkMap = new Map(allNetworks.map((n) => [n.id, n]));
     const selectedIds = networks.map((n) => n.id);
 
+    // 预热区域/网段缓存，避免逐条串行请求
     await loadNetworkRegions(document.createElement("select"));
 
-    for (const network of networks) {
-      const networkInfo = networkMap.get(network.id);
-      if (!networkInfo) continue;
+    // 各网段条目的区域/网段选项加载相互独立，并行构建（缓存命中后无额外请求）
+    const items = await Promise.all(
+      networks.map(async (network) => {
+        const networkInfo = networkMap.get(network.id);
+        if (!networkInfo) return null;
 
-      const div = document.createElement("div");
-      div.innerHTML = this.createItemHTML();
-      const item = div.firstElementChild;
+        const div = document.createElement("div");
+        div.innerHTML = this.createItemHTML();
+        const item = div.firstElementChild;
 
-      const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
-      const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
+        const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
+        const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
 
-      await loadNetworkRegions(regionSelect);
-      regionSelect.value = networkInfo.network_region_id;
+        await loadNetworkRegions(regionSelect);
+        regionSelect.value = networkInfo.network_region_id;
 
-      const otherIds = selectedIds.filter((id) => id !== network.id);
-      await loadNetworks(networkInfo.network_region_id, networkSelect, otherIds);
-      networkSelect.value = network.id;
+        const otherIds = selectedIds.filter((id) => id !== network.id);
+        await loadNetworks(networkInfo.network_region_id, networkSelect, otherIds);
+        networkSelect.value = network.id;
 
+        return item;
+      })
+    );
+
+    for (const item of items) {
+      if (!item) continue;
       this.container.appendChild(item);
       this.bindItemEvents(item);
     }
@@ -444,21 +453,30 @@ function collectManagerValue(item) {
   return { manager: (control.value || "").trim() || null, manager_employee_id: null };
 }
 
-/** 组织切换后刷新既有行的管理人下拉选项（保留仍有效的选择） */
+/** 组织切换后按新员工列表重建管理人控件：
+ * 文本输入在组织有员工时升级为下拉（当前文本保留为遗留选项），
+ * 下拉在组织无员工时回退文本输入，仍有效的员工选择保持不变 */
 function refreshManagerSelects() {
   document.querySelectorAll("#room-children-container .child-manager").forEach((control) => {
-    if (control.tagName !== "SELECT") return;
-    const selectedValue = control.value;
-    const selectedText = control.selectedOptions[0]?.dataset.text || "";
-    control.innerHTML = renderManagerControl({
-      manager_employee_id: selectedValue && selectedValue !== "text" ? selectedValue : "",
-      manager: selectedValue === "text" ? selectedText : ""
-    })
-      .replace(/^<select[^>]*>/, "")
-      .replace(/<\/select>$/, "");
-    // 重新赋值选择（选项集变化后原选择可能丢失）
-    const exists = Array.from(control.options).some((opt) => opt.value === selectedValue);
-    control.value = exists ? selectedValue : "";
+    const formGroup = control.parentElement;
+    if (!formGroup) return;
+
+    const isSelect = control.tagName === "SELECT";
+    const selectedValue = isSelect ? control.value : "";
+    const managerId = selectedValue && selectedValue !== "text" ? selectedValue : "";
+    const legacyText = isSelect
+      ? control.selectedOptions[0]?.dataset.text || ""
+      : (control.value || "").trim();
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = renderManagerControl({
+      manager_employee_id: managerId,
+      manager: legacyText
+    });
+    const next = wrapper.firstElementChild;
+    if (next) {
+      formGroup.replaceChildren(next);
+    }
   });
 }
 
@@ -811,6 +829,11 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
         },
         { field: "org_name", render: (v) => escapeHtml(v) || "-" },
         {
+          field: "workstation_count",
+          className: "col-center",
+          render: (v) => (v != null ? String(v) : "0")
+        },
+        {
           field: "networks",
           render: (v) =>
             v && v.length > 0
@@ -1126,7 +1149,12 @@ export async function openRoomModal(room = null) {
   const title = elementCache.get("room-modal-title");
   const form = elementCache.get("room-form");
 
-  await loadOrgsForSelect("room-org-id");
+  // 组织树 / 组织员工 / 网段选项相互独立，并行加载缩短弹窗就绪时间
+  const networkReady = room ? loadRoomNetworks(room) : roomNetworkConfigManager.init();
+  await Promise.all([
+    loadOrgsForSelect("room-org-id"),
+    room ? loadRoomOrgEmployees(room.org_id || "") : loadRoomOrgEmployees("")
+  ]);
   bindRoomOrgEmployeeSync();
 
   if (room) {
@@ -1137,21 +1165,16 @@ export async function openRoomModal(room = null) {
     elementCache.setValue("room-org-id", room.org_id || "");
     elementCache.setValue("room-description", room.description || "");
 
-    await loadRoomOrgEmployees(room.org_id || "");
-    await loadRoomNetworks(room);
-
-    // 初始化子项管理器并加载现有工位/机柜
+    // 初始化子项管理器并加载现有工位/机柜（依赖员工列表就绪，供管理人下拉渲染）
     roomChildrenManager.roomType = (room.room_type || "OFFICE").toLowerCase();
     roomChildrenManager.loadExisting(room);
 
     // 初始化信息点管理器并加载现有信息点
-    await roomNetOutletsManager.loadExisting(room);
+    roomNetOutletsManager.loadExisting(room);
   } else {
     title.textContent = t("room.add");
     if (form) form.reset();
     elementCache.setValue("room-id", "");
-    await loadRoomOrgEmployees("");
-    await roomNetworkConfigManager.init();
 
     // 初始化子项管理器为默认空状态
     roomChildrenManager.roomType = "office";
@@ -1160,6 +1183,9 @@ export async function openRoomModal(room = null) {
     // 初始化信息点管理器为默认空状态
     roomNetOutletsManager.init();
   }
+
+  // 网段配置渲染不依赖表单其余字段，最后等待完成即可
+  await networkReady;
 }
 
 // 组织切换 → 重新加载该组织员工并刷新管理人下拉

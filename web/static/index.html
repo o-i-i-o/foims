@@ -6,7 +6,7 @@
     <meta name="description" content="IPMA系统登录页面">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>IPMA - 系统登录</title>
-    <link rel="stylesheet" href="/static/css/pages/login.css?v=0.15.62">
+    <link rel="stylesheet" href="/static/css/pages/login.css?v=0.15.63">
   </head>
   <body class="login-body" role="document">
     <div id="login-page">
@@ -314,12 +314,11 @@
 
           <div id="login-error" class="error-message" role="alert" aria-live="polite"></div>
 
-          <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载；
+          <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载（仅 PEM）；
                无 CA 时整体隐藏 -->
           <div id="ca-download-entry" class="ca-download-entry" hidden>
             <span class="ca-download-label" data-i18n="login.ca_download">下载本站根证书</span>
-            <a href="/api/certificate/ca/download/pem" class="ca-download-link" download data-i18n="login.ca_download_pem">PEM (Linux)</a>
-            <a href="/api/certificate/ca/download/der" class="ca-download-link" download data-i18n="login.ca_download_der">DER (Windows)</a>
+            <a href="/api/certificate/ca/download" class="ca-download-link" download data-i18n="login.ca_download_pem">PEM</a>
           </div>
         </div>
       </div>
@@ -327,6 +326,6 @@
 
     
 
-    <script type="module" src="/static/js/login.js?v=0.15.62"></script>
+    <script type="module" src="/static/js/login.js?v=0.15.63"></script>
   </body>
 </html>

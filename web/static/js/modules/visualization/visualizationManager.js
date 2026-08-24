@@ -27,6 +27,17 @@ function createVisualizationCallbacks() {
   };
 }
 
+// 工位可视化拖拽编辑防抖保存：600ms 内连续拖动只落一次，静默成功
+let workstationAutoSaveTimer = null;
+
+function scheduleWorkstationAutoSave() {
+  if (!workstationVisualization) return;
+  clearTimeout(workstationAutoSaveTimer);
+  workstationAutoSaveTimer = setTimeout(() => {
+    workstationVisualization.saveLayout({ silent: true });
+  }, 600);
+}
+
 function initTabSwitching() {
   const visualizationContainer = elementCache.get("visualization");
   if (!visualizationContainer) return;
@@ -381,10 +392,14 @@ export async function initVisualization() {
 
     const callbacks = createVisualizationCallbacks();
 
+    // 工位可视化支持页面直接编辑坐标：拖拽落定后自动保存
     workstationVisualization = new SVGVisualization(
       "workstation-visualization-container",
       "workstation",
-      callbacks
+      {
+        ...callbacks,
+        onPositionChanged: () => scheduleWorkstationAutoSave()
+      }
     );
 
     cabinetVisualization = new SVGVisualization(

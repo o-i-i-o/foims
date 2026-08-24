@@ -200,6 +200,7 @@
   font-size: var(--font-size-xs);
 }
 
+/* 文本按钮形态（组织模板编辑弹窗使用）：浅色底 + 边框 */
 .btn-add-child {
   background: var(--color-success-bg);
   color: var(--color-success-text);
@@ -211,16 +212,25 @@
   color: white;
 }
 
-/* 人员管理按钮（介于编辑与删除之间） */
-.btn-employees {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  color: var(--color-primary);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+/* 树节点图标按钮形态：无边框、透明底，与全局 icon-btn 风格统一 */
+.icon-btn.btn-add-child {
+  background: transparent;
+  border: none;
 }
 
-.btn-employees:hover {
-  background: var(--color-primary);
-  color: white;
+.icon-btn.btn-employees {
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+}
+
+/* 悬浮浅色着色（与 btn-edit/btn-delete 的悬浮反馈一致） */
+.icon-btn.btn-add-child:hover {
+  background: rgb(40 167 69 / 0.12);
+}
+
+.icon-btn.btn-employees:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 /* 人员管理模态框 */

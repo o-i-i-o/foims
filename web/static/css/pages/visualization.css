@@ -649,6 +649,13 @@
   pointer-events: none;
 }
 
+/* 容器分组框支持页面直接拖动（整体移动组内设备）：
+   父组禁用事件不拦截画布，子分组框重新开启命中（节点层在其上，节点点击不受影响） */
+.topology-container-group {
+  pointer-events: visiblePainted;
+  cursor: move;
+}
+
 .topology-container {
   fill: rgb(25 118 210 / 0.04);
   stroke: #90a4ae;

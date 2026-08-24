@@ -1,0 +1,39 @@
+<template id="cable-label-print-modal-template">
+<div id="cable-label-print-modal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h3 class="modal-title" data-i18n="cable_link.print_labels">Print Cable Labels</h3>
+      <button type="button" class="close" data-modal-id="cable-label-print-modal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal-body">
+      <form id="cable-label-print-form">
+        <div class="form-group">
+          <span class="hint-text" data-i18n="cable_link.print_spec_hint">Label spec: 25 x 38 mm (40 mm pitch). Each cable prints two labels: A-end + B-end and B-end + A-end.</span>
+        </div>
+        <div class="form-group cable-label-select-all">
+          <label class="checkbox-label">
+            <input type="checkbox" id="cable-label-print-all" checked />
+            <span data-i18n="cable_link.print_select_all">Select all</span>
+          </label>
+          <span id="cable-label-print-count" class="hint-text"></span>
+        </div>
+        <div class="table-container cable-label-print-table-container">
+          <table id="cable-label-print-table" class="data-table">
+            <thead>
+              <tr>
+                <th class="col-center"></th>
+                <th data-i18n="cable_link.a_endpoint_no">A Endpoint No.</th>
+                <th data-i18n="cable_link.b_endpoint_no">B Endpoint No.</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <button type="submit" class="btn btn-primary" form="cable-label-print-form" id="cable-label-print-submit" data-i18n="cable_link.print">Print</button>
+    </footer>
+  </div>
+</div>
+</template>

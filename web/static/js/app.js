@@ -89,6 +89,7 @@ function getResourceCallbacks() {
     openUserModal: createCallback("userManager", "openUserModal"),
     openOrgModal: createCallback("organization", "openOrgModal"),
     openCableLinkModal: createCallback("cableLink", "openCableLinkModal"),
+    openCableLabelPrintModal: createCallback("cableLink", "openCableLabelPrintModal"),
     openDeviceModal: createCallback("device", "openDeviceModal"),
     submitOrgTemplateForm: createCallback("organization", "submitOrgTemplateForm"),
     submitNetworkRegionForm: createCallback("networks", "submitNetworkRegionForm"),

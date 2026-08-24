@@ -1,0 +1,72 @@
+/* 线缆标签批量打印
+   规格说明：25x38+40 —— 标签 25mm 宽 x 38mm 高，标签间步进 40mm。
+   打印区域平时隐藏，window.print() 时仅渲染标签页（遮蔽应用其余内容）。 */
+
+/* 标签规格变量：调整纸张规格时只改这里 */
+.cable-label-print-area {
+  --label-width: 25mm;
+  --label-height: 38mm;
+  --label-pitch: 40mm;
+
+  display: none;
+}
+
+/* 打印时只保留标签打印区 */
+@media print {
+  body > *:not(.cable-label-print-area) {
+    display: none !important;
+  }
+
+  .cable-label-print-area {
+    display: block;
+  }
+
+  @page {
+    margin: 4mm;
+  }
+}
+
+/* 单枚标签：垂直排列（上=本端编号，下=对端编号） */
+.cable-label {
+  width: var(--label-width);
+  height: var(--label-height);
+  box-sizing: border-box;
+  border: 0.3mm solid #000;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+  padding: 1mm 0.5mm;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.cable-label-text {
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  word-break: break-all;
+}
+
+.cable-label-divider {
+  width: 100%;
+  border-top: 0.2mm dashed #000;
+}
+
+/* 标签步进：相邻标签中心距 40mm */
+.cable-label + .cable-label {
+  margin-top: calc(var(--label-pitch) - var(--label-height));
+}
+
+/* 弹窗内的选择列表滚动区 */
+.cable-label-print-table-container {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.cable-label-select-all {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

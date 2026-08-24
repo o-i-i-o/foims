@@ -40,6 +40,7 @@ const MODAL_REGISTRY = {
   "lldp-modal": "/static/modals/device/lldp-modal.html",
   // 线路
   "cable-link-modal": "/static/modals/cable/cable-link-modal.html",
+  "cable-label-print-modal": "/static/modals/cable/cable-label-print-modal.html",
   // 可视化
   "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
   "topology-connection-detail-modal": "/static/modals/visualization/topology-connection-detail-modal.html",
@@ -55,6 +56,7 @@ const MODAL_REGISTRY = {
   "cert-import-modal": "/static/modals/system/cert-import-modal.html",
   "ca-generate-modal": "/static/modals/system/ca-generate-modal.html",
   "ca-import-modal": "/static/modals/system/ca-import-modal.html",
+  "password-policy-modal": "/static/modals/system/password-policy-modal.html",
   "change-password-modal": "/static/modals/system/change-password-modal.html",
   "open-source-modal": "/static/modals/system/open-source-modal.html",
   // 登录页

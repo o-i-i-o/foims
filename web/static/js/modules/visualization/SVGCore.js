@@ -189,6 +189,11 @@ export class SVGCore {
       this._snapElementToGrid(this.selectedElement);
     }
 
+    // 拖拽落定后通知上层（可视化层据此自动保存坐标，实现页面直接编辑位置）
+    if (this.isDragging && this.hasMoved && this.selectedElement && this.callbacks.onPositionChanged) {
+      this.callbacks.onPositionChanged(this.selectedElement.dataset.id);
+    }
+
     this._clearAlignmentLines();
     this.isDragging = false;
   }

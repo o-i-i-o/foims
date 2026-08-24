@@ -1,9 +1,13 @@
-//! 站点根 CA 管理：生成、导入、状态查询与导出。
+//! 站点根 CA 与导入 CA 池管理：生成、导入、状态查询与导出。
 //!
-//! CA 固定存储于 `/etc/ssl/ipma-ca/`（ca.pem + 可选 ca.key）：
-//! - 自生成或导入的 CA 同时具备证书与私钥，可为本站签发服务器证书；
-//! - 随服务器证书一并导入的 CA 仅有证书（ca.key 不存在），只能导出给
-//!   终端信任，不能用于签发。
+//! CA 存储分两处：
+//! - 站点根 CA：`/etc/ssl/ipma-ca/`（ca.pem + 可选 ca.key），由"生成CA"写入，
+//!   是程序 HTTPS 与终端信任的默认签发 CA；
+//! - 导入 CA 池：`/etc/ssl/ipma-import-cas/{id}/`（ca.pem + ca.key），
+//!   由"导入CA"写入，仅作为证书签发的备选 CA，不改变站点根 CA。
+//!
+//! 证书生成强制由 CA 签发（根 CA 或导入 CA 池中任选，无 CA 时拒绝生成），
+//! 不再提供自签名回退。
 //!
 //! CA 证书本身是公开数据，私钥绝不允许通过任何接口外发。
 
@@ -18,6 +22,11 @@ use crate::generate::write_key_file;
 
 /// 站点 CA 存储目录
 pub const CA_DIR: &str = "/etc/ssl/ipma-ca";
+/// 导入 CA 池目录（每个 CA 独立子目录：ca.pem + ca.key）
+pub const IMPORT_CA_DIR: &str = "/etc/ssl/ipma-import-cas";
+/// 站点根 CA 在 CA 列表中的固定标识
+pub const ROOT_CA_ID: &str = "root";
+
 const CA_CERT_FILE: &str = "ca.pem";
 const CA_KEY_FILE: &str = "ca.key";
 
@@ -48,12 +57,41 @@ pub struct CaStatus {
     pub days_remaining: Option<i64>,
 }
 
+/// CA 列表项（证书生成弹窗的 CA 下拉框数据源）
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CaInfo {
+    /// CA 标识：根 CA 固定为 "root"，导入 CA 为其目录名
+    pub id: String,
+    /// CA 主题 CN
+    pub name: Option<String>,
+    /// 来源："root"（自生成根 CA）/ "imported"（导入 CA）
+    pub source: String,
+    /// 私钥是否在本机（无私钥的 CA 不能签发）
+    pub has_key: bool,
+    pub not_before: Option<chrono::DateTime<chrono::Utc>>,
+    pub not_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub days_remaining: Option<i64>,
+}
+
 fn ca_cert_path() -> PathBuf {
     Path::new(CA_DIR).join(CA_CERT_FILE)
 }
 
 fn ca_key_path() -> PathBuf {
     Path::new(CA_DIR).join(CA_KEY_FILE)
+}
+
+fn import_ca_dir(id: &str) -> PathBuf {
+    Path::new(IMPORT_CA_DIR).join(id)
+}
+
+/// CA 标识只允许出现字母数字与连字符/下划线，防止路径穿越
+fn valid_ca_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// 读取 CA 证书 PEM；不存在时返回 None
@@ -220,9 +258,10 @@ pub async fn generate_ca(req: GenerateCaRequest) -> Result<PathBuf, CertManagerE
     Ok(ca_cert_path())
 }
 
-/// 导入已有 CA（证书 + 私钥），覆盖写入 CA 目录。
+/// 导入已有 CA（证书 + 私钥），写入导入 CA 池的独立子目录，返回该目录。
 ///
 /// 校验：证书可解析、BasicConstraints CA:TRUE、私钥可解析且与证书公钥匹配。
+/// 导入 CA 不覆盖站点根 CA；同秒内多次导入以序号后缀区分目录。
 pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, CertManagerError> {
     if cert_pem.is_empty() || key_pem.is_empty() {
         return Err(CertManagerError::Validation(msg(
@@ -244,14 +283,7 @@ pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, C
     };
     validated?;
 
-    tokio::fs::create_dir_all(CA_DIR).await.map_err(|e| {
-        CertManagerError::Internal(
-            msg("server.certificate.write_failed").with("error", e.to_string()),
-        )
-    })?;
-    // 证书与私钥成对覆盖，避免新旧错配
-    write_key_file(&ca_key_path(), &key_pem).await?;
-    tokio::fs::write(ca_cert_path(), &cert_pem)
+    tokio::fs::create_dir_all(IMPORT_CA_DIR)
         .await
         .map_err(|e| {
             CertManagerError::Internal(
@@ -259,7 +291,35 @@ pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, C
             )
         })?;
 
-    Ok(ca_cert_path())
+    // 目录名：import_{时间戳}，已存在时追加序号，保证重复导入互不覆盖
+    let timestamp = chrono::Utc::now().timestamp();
+    let mut id = format!("import_{timestamp}");
+    let mut seq = 1;
+    while tokio::fs::try_exists(import_ca_dir(&id))
+        .await
+        .unwrap_or(false)
+    {
+        id = format!("import_{timestamp}_{seq}");
+        seq += 1;
+    }
+    let target_dir = import_ca_dir(&id);
+
+    tokio::fs::create_dir_all(&target_dir).await.map_err(|e| {
+        CertManagerError::Internal(
+            msg("server.certificate.write_failed").with("error", e.to_string()),
+        )
+    })?;
+    // 证书与私钥成对写入，避免新旧错配
+    write_key_file(&target_dir.join(CA_KEY_FILE), &key_pem).await?;
+    tokio::fs::write(target_dir.join(CA_CERT_FILE), &cert_pem)
+        .await
+        .map_err(|e| {
+            CertManagerError::Internal(
+                msg("server.certificate.write_failed").with("error", e.to_string()),
+            )
+        })?;
+
+    Ok(target_dir)
 }
 
 /// 仅导入 CA 证书（无私钥）：供"随服务器证书一并导入 CA"场景，
@@ -328,30 +388,98 @@ pub async fn ca_status() -> CaStatus {
     status
 }
 
-/// 读取 CA 证书 PEM（导出用）；不存在返回 NotFound
+/// 读取 CA 证书 PEM（导出用，仅站点根 CA）；不存在返回 NotFound
 pub async fn read_ca_cert_pem() -> Result<Vec<u8>, CertManagerError> {
     read_ca_cert()
         .await
         .ok_or_else(|| CertManagerError::NotFound(msg("server.certificate.ca_not_found")))
 }
 
-/// 读取 CA 证书 DER（Windows 导入格式）；不存在返回 NotFound
-pub async fn read_ca_cert_der() -> Result<Vec<u8>, CertManagerError> {
-    let pem_data = read_ca_cert_pem().await?;
-    let pems = pem::parse_many(&pem_data)
-        .map_err(|_| CertManagerError::Validation(msg("server.certificate.cert_file_invalid")))?;
-    let block = pems
-        .iter()
-        .find(|p| p.tag() == "CERTIFICATE")
-        .ok_or_else(|| CertManagerError::Validation(msg("server.certificate.cert_file_invalid")))?;
-    Ok(block.contents().to_vec())
+/// CA 列表：站点根 CA（自生成）在前，导入 CA 池按目录名在后。
+/// 根 CA 不存在时列表可能只含导入 CA（或为空）。
+pub async fn list_cas() -> Vec<CaInfo> {
+    let mut list = Vec::new();
+
+    let root = ca_status().await;
+    if root.available {
+        list.push(CaInfo {
+            id: ROOT_CA_ID.to_string(),
+            name: root.subject_cn.clone(),
+            source: "root".to_string(),
+            has_key: root.has_key,
+            not_before: root.not_before,
+            not_after: root.not_after,
+            days_remaining: root.days_remaining,
+        });
+    }
+
+    let Ok(mut entries) = tokio::fs::read_dir(IMPORT_CA_DIR).await else {
+        return list;
+    };
+    let mut imported = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let id = entry.file_name().to_string_lossy().to_string();
+        if !valid_ca_id(&id) || id == ROOT_CA_ID {
+            continue;
+        }
+        let cert_path = import_ca_dir(&id).join(CA_CERT_FILE);
+        let Some(cert_pem) = tokio::fs::read(&cert_path).await.ok() else {
+            continue;
+        };
+        let Some(meta) = crate::listing::parse_cert_metadata(&cert_pem) else {
+            continue;
+        };
+        let has_key = tokio::fs::try_exists(import_ca_dir(&id).join(CA_KEY_FILE))
+            .await
+            .unwrap_or(false);
+        imported.push(CaInfo {
+            id,
+            name: meta.subject_cn,
+            source: "imported".to_string(),
+            has_key,
+            not_before: meta.not_before,
+            not_after: meta.not_after,
+            days_remaining: meta
+                .not_after
+                .map(|na| (na - chrono::Utc::now()).num_days()),
+        });
+    }
+    imported.sort_by(|a, b| a.id.cmp(&b.id));
+    list.extend(imported);
+    list
 }
 
-/// 读取 CA 证书与私钥 PEM（签发叶子证书用）；任一缺失返回 None
-pub(crate) async fn load_ca_material() -> Option<(String, String)> {
-    let cert = tokio::fs::read_to_string(ca_cert_path()).await.ok()?;
-    let key = tokio::fs::read_to_string(ca_key_path()).await.ok()?;
+/// 按 CA 标识读取证书与私钥 PEM（签发叶子证书用）。
+/// id 为空或 "root" 取站点根 CA；否则取导入 CA 池对应目录。
+/// 任一文件缺失返回 None（由调用方决定报错语义）。
+pub(crate) async fn load_ca_material_by_id(id: Option<&str>) -> Option<(String, String)> {
+    let id = id.unwrap_or(ROOT_CA_ID).trim();
+    let (cert_path, key_path) = if id.is_empty() || id == ROOT_CA_ID {
+        (ca_cert_path(), ca_key_path())
+    } else if valid_ca_id(id) {
+        (
+            import_ca_dir(id).join(CA_CERT_FILE),
+            import_ca_dir(id).join(CA_KEY_FILE),
+        )
+    } else {
+        return None;
+    };
+    let cert = tokio::fs::read_to_string(cert_path).await.ok()?;
+    let key = tokio::fs::read_to_string(key_path).await.ok()?;
     Some((cert, key))
+}
+
+/// 按 CA 标识检查证书文件是否存在（生成证书时区分"CA 不存在"与"无私钥"）
+pub(crate) async fn ca_cert_exists(id: Option<&str>) -> bool {
+    let id = id.unwrap_or(ROOT_CA_ID).trim();
+    let path = if id.is_empty() || id == ROOT_CA_ID {
+        ca_cert_path()
+    } else if valid_ca_id(id) {
+        import_ca_dir(id).join(CA_CERT_FILE)
+    } else {
+        return false;
+    };
+    tokio::fs::try_exists(path).await.unwrap_or(false)
 }
 
 #[cfg(test)]

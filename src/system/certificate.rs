@@ -1,11 +1,14 @@
 //! 证书管理接口（转发 ipma-x509-manager 模块）。
 //!
 //! 生成证书写入 /etc/ssl/ipma-certs/，导入证书写入
-//! /etc/ssl/ipma-import-certs/，站点根 CA 存于 /etc/ssl/ipma-ca/。
+//! /etc/ssl/ipma-import-certs/，站点根 CA 存于 /etc/ssl/ipma-ca/，
+//! 导入 CA 池存于 /etc/ssl/ipma-import-cas/{id}/。
 //!
 //! 权限约定：
 //! - 管理端点（生成/导入/删除/CA 管理）仅管理员可用；
-//! - CA 证书是公开数据，info/download 端点公开（登录页提供下载入口）；
+//! - CA 证书是公开数据，info/download 端点公开（登录页提供下载入口），
+//!   下载仅提供 PEM 格式；
+//! - 证书仅用于程序运行（HTTPS/nginx），不提供证书下载端点；
 //! - 私钥仅保存在服务器文件系统上，任何端点都不得下发私钥。
 
 use std::sync::Arc;
@@ -18,7 +21,7 @@ use ipma_common::msg;
 use ipma_x509_manager::{
     CaStatus, CertKind, GenerateCaRequest, GenerateCertRequest, ca_status, delete_certificate,
     generate_ca, generate_certificate, import_ca, import_certificate, list_certificates,
-    read_ca_cert_der, read_ca_cert_pem, read_certificate, set_ca_cert_only,
+    read_ca_cert_pem, set_ca_cert_only,
 };
 
 use crate::app_state::AppState;
@@ -174,23 +177,12 @@ pub async fn ca_info() -> Result<Response, AppError> {
     ))
 }
 
-/// 公开的 CA 证书下载：format ∈ pem（Linux）/ der（Windows）。
+/// 公开的 CA 证书下载：仅 PEM 格式（站点根 CA）。
 ///
 /// CA 证书是公开数据；私钥不存在任何下载通道。
-pub async fn ca_download(Path(format): Path<String>) -> Result<Response, AppError> {
-    match format.as_str() {
-        "pem" => {
-            let content = read_ca_cert_pem().await?;
-            serve_file(content, "ipma-root-ca.crt", "application/x-pem-file")
-        }
-        "der" => {
-            let content = read_ca_cert_der().await?;
-            serve_file(content, "ipma-root-ca.cer", "application/pkix-cert")
-        }
-        _ => Err(AppError::Validation(msg(
-            "server.certificate.format_invalid",
-        ))),
-    }
+pub async fn ca_download() -> Result<Response, AppError> {
+    let content = read_ca_cert_pem().await?;
+    serve_file(content, "ipma-root-ca.crt", "application/x-pem-file")
 }
 
 fn serve_file(content: Vec<u8>, filename: &str, content_type: &str) -> Result<Response, AppError> {
@@ -264,29 +256,10 @@ pub async fn import(
     ))
 }
 
-/// 下载证书（仅证书本体，kind ∈ generated/imported）。
-///
-/// 私钥不出服务器：证书/密钥文件由部署侧在操作系统上直接取用，
-/// 应用层不提供任何私钥下载通道。
-pub async fn download(
-    _admin: AdminUser,
-    Path((kind, filename)): Path<(String, String)>,
-) -> Result<Response, AppError> {
-    let kind = CertKind::parse(&kind)
-        .ok_or_else(|| AppError::Validation(msg("server.certificate.kind_invalid")))?;
-
-    if filename.ends_with(".key") {
-        return Err(AppError::Forbidden(msg(
-            "server.certificate.key_download_forbidden",
-        )));
-    }
-
-    let (filename, content) = read_certificate(kind, &filename).await?;
-
-    serve_file(content, &filename, "application/x-pem-file")
-}
-
 /// 删除证书对（{stem}.pem 与 {stem}.key）
+///
+/// 证书仅用于程序运行，不提供证书下载端点；需要取用文件时由部署侧
+/// 在服务器文件系统上直接操作。
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,

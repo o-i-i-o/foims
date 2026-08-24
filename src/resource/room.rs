@@ -284,17 +284,17 @@ pub async fn create_room(
     Ok(crate::error::ok_json(room, "server.room.created"))
 }
 
-/// 房间编辑回显专用轻量端点：仅基础字段 + 网络绑定（GET /{id}/brief）。
+/// 房间编辑回显专用轻量端点（GET /{id}/brief）。
 ///
-/// 完整详情接口为组装视图需 7 次串行查询，而编辑弹窗只需要
-/// name/room_type/org_id/description/networks，此前一并拉取了
-/// 工位/机柜/信息点等无关数据。
+/// 完整详情接口的组装视图查询较多，而编辑弹窗需要
+/// name/room_type/org_id/description/networks 以及工位/机柜/信息点子项，
+/// 此处在一次并行查询内取齐，避免编辑保存时空列表同步误删既有子项。
 pub async fn get_room_brief(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
-    let (room, room_networks) = tokio::join!(
+    let (room, room_networks, ws_rows, cab_rows, no_rows) = tokio::join!(
         sqlx::query_as::<_, Room>(
             "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
         )
@@ -308,11 +308,46 @@ pub async fn get_room_brief(
                WHERE rn.room_id = $1",
         )
         .bind(id)
-        .fetch_all(&conn)
+        .fetch_all(&conn),
+        // 工位/机柜/信息点按房型由前端过滤展示，这里统一取全量保证"其他"房型两类子项齐全
+        sqlx::query("SELECT id, name, manager, manager_employee_id FROM workstations WHERE room_id = $1 ORDER BY name")
+            .bind(id)
+            .fetch_all(&conn),
+        sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
+            .bind(id)
+            .fetch_all(&conn),
+        sqlx::query("SELECT id, name FROM net_outlets WHERE room_id = $1 ORDER BY name")
+            .bind(id)
+            .fetch_all(&conn)
     );
 
     let room = room?.ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
     let room_networks = room_networks?;
+
+    let workstations: Vec<WorkstationBrief> = ws_rows?
+        .iter()
+        .map(|r| WorkstationBrief {
+            id: r.get("id"),
+            name: r.get("name"),
+            manager: r.get("manager"),
+            manager_employee_id: r.get("manager_employee_id"),
+        })
+        .collect();
+    let cabinets: Vec<CabinetBrief> = cab_rows?
+        .iter()
+        .map(|r| CabinetBrief {
+            id: r.get("id"),
+            name: r.get("name"),
+            capacity: r.get("capacity"),
+        })
+        .collect();
+    let net_outlets: Vec<NetOutletBrief> = no_rows?
+        .iter()
+        .map(|r| NetOutletBrief {
+            id: r.get("id"),
+            name: r.get("name"),
+        })
+        .collect();
 
     Ok(crate::error::ok_json(
         serde_json::json!({
@@ -322,6 +357,9 @@ pub async fn get_room_brief(
             "org_id": room.org_id,
             "description": room.description,
             "networks": room_networks,
+            "workstations": workstations,
+            "cabinets": cabinets,
+            "net_outlets": net_outlets,
         }),
         "server.room.fetched",
     ))
@@ -339,8 +377,15 @@ pub async fn get_room(
 
     // 以下查询相互独立，并行执行替代原先的串行等待
     let conn = state.pool()?.get_conn();
-    let is_office = room.room_type == "OFFICE";
-    let is_dc = room.room_type == "DATA_CENTER" || room.room_type == "TELECOM_CLOSET";
+    // 办公类（含"其他"）携带工位、机房类（含"其他"）携带机柜，与房间弹窗分区管理语义一致
+    let is_office = matches!(
+        room.room_type.as_str(),
+        "OFFICE" | "LOBBY" | "RECEPTION" | "OTHER"
+    );
+    let is_dc = matches!(
+        room.room_type.as_str(),
+        "DATA_CENTER" | "TELECOM_CLOSET" | "OTHER"
+    );
 
     let (room_networks, workstation_count, org_name_opt, ws_rows, cab_rows, no_rows) =
         tokio::join!(

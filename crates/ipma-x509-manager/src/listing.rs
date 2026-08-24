@@ -53,6 +53,8 @@ pub struct CertificateInventory {
     pub imported: Vec<CertFileInfo>,
     /// 站点根 CA 状态（无 CA 时 available=false）
     pub ca: crate::ca::CaStatus,
+    /// 可选签发 CA 列表（站点根 CA + 导入 CA 池，证书生成弹窗下拉数据源）
+    pub cas: Vec<crate::ca::CaInfo>,
 }
 
 /// 解析出的证书元数据
@@ -177,12 +179,13 @@ async fn scan_dir(dir: &str) -> Result<Vec<CertFileInfo>, CertManagerError> {
     Ok(infos)
 }
 
-/// 清点生成目录与导入目录的全部证书，并附带站点 CA 状态
+/// 清点生成目录与导入目录的全部证书，并附带站点 CA 状态与可选 CA 列表
 pub async fn list_certificates() -> Result<CertificateInventory, CertManagerError> {
     Ok(CertificateInventory {
         generated: scan_dir(GENERATED_CERTS_DIR).await?,
         imported: scan_dir(IMPORTED_CERTS_DIR).await?,
         ca: crate::ca::ca_status().await,
+        cas: crate::ca::list_cas().await,
     })
 }
 
