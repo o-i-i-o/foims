@@ -100,7 +100,8 @@ pub async fn get_lldp_neighbors_via_snmp(
     let auth = build_auth(params).map_err(SnmpError::Message)?;
 
     let client = Client::builder(&addr, auth)
-        .timeout(timeout)
+        .construction_timeout(timeout)
+        .request_timeout(timeout)
         .connect()
         .await
         .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;

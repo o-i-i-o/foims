@@ -2230,6 +2230,8 @@
       "state_invalid": "SSO状态校验失败，请重新发起登录",
       "code_missing": "SSO回调缺少授权码",
       "exchange_failed": "授权码换取令牌失败",
+      "http_client_failed": "创建OIDC出站HTTP客户端失败",
+      "token_endpoint_missing": "发现文档未提供token端点",
       "id_token_missing": "IdP未返回ID Token",
       "id_token_invalid": "ID Token校验失败",
       "provider_error": "认证平台返回错误",

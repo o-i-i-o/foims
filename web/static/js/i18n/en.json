@@ -2230,6 +2230,8 @@
       "state_invalid": "SSO state validation failed; please start the sign-in again",
       "code_missing": "SSO callback is missing the authorization code",
       "exchange_failed": "Failed to exchange the authorization code for tokens",
+      "http_client_failed": "Failed to create the OIDC outbound HTTP client",
+      "token_endpoint_missing": "The discovery document does not provide a token endpoint",
       "id_token_missing": "The IdP did not return an ID Token",
       "id_token_invalid": "ID Token validation failed",
       "provider_error": "The identity provider returned an error",

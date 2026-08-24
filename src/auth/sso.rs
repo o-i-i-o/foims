@@ -35,10 +35,10 @@ use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
 use ipma_common::{log_info, msg};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
-use openidconnect::reqwest::async_http_client;
+use openidconnect::reqwest;
 use openidconnect::{
-    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, Scope,
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet, EndpointNotSet,
+    EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
 };
 
 /// 未完成授权的会话状态有效期
@@ -69,6 +69,25 @@ static SSO_METADATA_CACHE: OnceLock<MetadataCache> = OnceLock::new();
 
 fn metadata_cache() -> &'static MetadataCache {
     SSO_METADATA_CACHE.get_or_init(DashMap::new)
+}
+
+static SSO_HTTP_CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+
+/// OIDC 出站请求共享 HTTP 客户端（openidconnect 4.0 起由调用方持有）。
+///
+/// 禁止跟随重定向（防 SSRF），并设置固定超时；构建失败时返回错误
+/// 而非 panic（遵循项目禁用 unwrap 的规范）。
+fn sso_http_client() -> Result<&'static reqwest::Client, AppError> {
+    SSO_HTTP_CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(15))
+                .build()
+                .ok()
+        })
+        .as_ref()
+        .ok_or_else(|| AppError::Internal(msg("server.sso.http_client_failed")))
 }
 
 // ==================== 配置模型 ====================
@@ -214,7 +233,7 @@ async fn discover_metadata(issuer_url: &str) -> Result<CoreProviderMetadata, App
 
     let issuer = IssuerUrl::new(issuer_url.to_string())
         .map_err(|e| AppError::Validation(msg("server.sso.issuer_invalid").with("error", e)))?;
-    let metadata = CoreProviderMetadata::discover_async(issuer, async_http_client)
+    let metadata = CoreProviderMetadata::discover_async(issuer, sso_http_client()?)
         .await
         .map_err(|e| {
             AppError::Internal(msg("server.sso.discovery_failed").with("error", format!("{e:?}")))
@@ -231,7 +250,23 @@ async fn discover_metadata(issuer_url: &str) -> Result<CoreProviderMetadata, App
 }
 
 /// 构建已设置回调地址的 OIDC 客户端。
-async fn build_oidc_client(config: &SsoConfig, redirect_uri: &str) -> Result<CoreClient, AppError> {
+///
+/// 返回类型携带端点状态标记：授权端点必已就绪（`EndpointSet`），
+/// token/userinfo 端点取决于发现文档是否提供（`EndpointMaybeSet`）。
+async fn build_oidc_client(
+    config: &SsoConfig,
+    redirect_uri: &str,
+) -> Result<
+    CoreClient<
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointMaybeSet,
+        EndpointMaybeSet,
+    >,
+    AppError,
+> {
     let metadata = discover_metadata(&config.issuer_url).await?;
     let client = CoreClient::from_provider_metadata(
         metadata,
@@ -365,10 +400,17 @@ async fn sso_callback_inner(
     let client = build_oidc_client(&config, &redirect_uri).await?;
 
     // 授权码 + PKCE verifier 换取令牌
-    let token_response = client
+    // （openidconnect 4.0 中 token 端点为可选配置，缺失时返回配置错误）
+    let token_request = client
         .exchange_code(AuthorizationCode::new(code))
+        .map_err(|e| {
+            AppError::Unauthorized(
+                msg("server.sso.token_endpoint_missing").with("error", format!("{e:?}")),
+            )
+        })?;
+    let token_response = token_request
         .set_pkce_verifier(PkceCodeVerifier::new(pending.pkce_verifier.clone()))
-        .request_async(async_http_client)
+        .request_async(sso_http_client()?)
         .await
         .map_err(|e| {
             AppError::Unauthorized(
@@ -583,7 +625,7 @@ pub async fn test_sso_connection(
 
     let issuer = IssuerUrl::new(config.issuer_url.clone())
         .map_err(|e| AppError::Validation(msg("server.sso.issuer_invalid").with("error", e)))?;
-    CoreProviderMetadata::discover_async(issuer, async_http_client)
+    CoreProviderMetadata::discover_async(issuer, sso_http_client()?)
         .await
         .map_err(|e| {
             AppError::Internal(msg("server.sso.discovery_failed").with("error", format!("{e:?}")))

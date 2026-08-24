@@ -68,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.64"
+version = "0.15.65"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -113,7 +113,7 @@ sha2 = "0.11.0"
 rand = "0.10.2"
 
 # 外部认证（LDAP / OIDC SSO）
-ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls"] }
+ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
