@@ -1,6 +1,6 @@
 version: '1.0'
-name: pipeline-20260414
-displayName: pipeline-20260414
+name: CI
+displayName: CI
 triggers:
   trigger: auto
   push:
@@ -28,10 +28,6 @@ stages:
           - cargo fmt
           - ''
           - cargo fmt --check
-        artifacts:
-          - name: BUILD_ARTIFACT
-            path:
-              - ./target/release/ipma
         caches: []
         notify: []
         strategy:
@@ -43,10 +39,6 @@ stages:
         rustVersion: '1.93'
         commands:
           - cargo clippy --release
-        artifacts:
-          - name: BUILD_ARTIFACT
-            path:
-              - ./target
         caches: []
         notify: []
         strategy:
@@ -57,10 +49,6 @@ stages:
         rustVersion: '1.93'
         commands:
           - cargo check --release
-        artifacts:
-          - name: BUILD_ARTIFACT
-            path:
-              - ./target/release/ipma
         caches: []
         notify: []
         strategy:
