@@ -723,7 +723,7 @@
     "page_timeout_desc": "Auto logout time after inactivity",
     "public_url": "Public URL",
     "public_url_desc": "Server public URL for reset links and notifications",
-    "rate_limit_settings": "Rate Limit Settings",
+    "rate_limit_settings": "Rate Limit",
     "rate_limit_enabled": "Enable Rate Limiting",
     "rate_limit_ip": "IP Limit (requests/minute)",
     "rate_limit_user": "User Limit (requests/minute)",
