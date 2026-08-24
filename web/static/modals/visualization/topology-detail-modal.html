@@ -9,7 +9,13 @@
     <button type="button" class="toggle-macs" data-panel="macs" data-i18n="visualization.show_macs">Show MACs</button>
     <button type="button" class="toggle-lldp" data-panel="lldp" data-i18n="visualization.show_lldp">Show LLDP</button>
   </div>
-  <div class="topology-detail-coords">
+  <div class="topology-detail-body">
+    <div class="topology-panel ports-panel"></div>
+    <div class="topology-panel macs-panel hidden"></div>
+    <div class="topology-panel lldp-panel hidden"></div>
+  </div>
+  <div class="topology-detail-footer">
+      <div class="topology-detail-coords">
     <div class="coord-field">
       <label for="topology-detail-x" data-i18n="workstation.position_x">X Coordinate</label>
       <input type="number" id="topology-detail-x" min="0" step="1">
@@ -19,13 +25,6 @@
       <input type="number" id="topology-detail-y" min="0" step="1">
     </div>
     <button type="button" class="btn btn-primary btn-sm" id="topology-detail-save-pos-btn" data-i18n="viz.save_position">Save Position</button>
-  </div>
-  <div class="topology-detail-body">
-    <div class="topology-panel ports-panel"></div>
-    <div class="topology-panel macs-panel hidden"></div>
-    <div class="topology-panel lldp-panel hidden"></div>
-  </div>
-  <div class="topology-detail-footer">
     <button type="button" class="btn btn-danger btn-sm topology-remove-btn" data-i18n="visualization.remove_from_topology">Remove</button>
   </div>
 </div>
