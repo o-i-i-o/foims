@@ -1145,7 +1145,7 @@
     "link_type_fiber": "Fiber",
     "link_type_console": "Console",
     "cable_label": "Cable Label",
-    "length_m": "Length (m)",
+    "length_m": "Length",
     "tested": "Tested",
     "tested_yes": "Tested",
     "tested_no": "Not Tested",

@@ -68,7 +68,7 @@
 }
 
 .tab-btn {
-  padding: var(--space-md);
+  padding: var(--space-sm);
   background: transparent;
   border: none;
   color: var(--color-text-muted);
@@ -120,7 +120,6 @@
 }
 
 .toolbar {
-  margin-bottom: var(--space-md);
   display: flex;
   gap: var(--space-lg);
   align-items: center;

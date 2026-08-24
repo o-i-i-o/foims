@@ -1145,7 +1145,7 @@
     "link_type_fiber": "光纤",
     "link_type_console": "Console",
     "cable_label": "线缆标签",
-    "length_m": "长度(米)",
+    "length_m": "长度",
     "tested": "是否测试",
     "tested_yes": "已测",
     "tested_no": "未测",

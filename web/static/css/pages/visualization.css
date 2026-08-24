@@ -22,7 +22,6 @@
 
 #visualization .toolbar {
   justify-content: flex-end;
-  flex-shrink: 0;
 }
 
 /* 工具栏内 组织→房间类型→房间 级联筛选组 */
@@ -771,11 +770,10 @@
 /* 设备可视化工具栏：连线模式/创建连线/自动发现 靠左，
    自动布局/保存布局/比例指示 靠右；顶部留白避开居中悬浮的子标签行 */
 #global-visualization .toolbar {
-  flex-wrap: wrap;
-  justify-content: flex-start;
+  display: flex;
+  justify-content: flex-end;
   padding-left: 0;
-  padding-top: 44px;
-  row-gap: var(--space-sm);
+  align-items: center;
 }
 
 #global-visualization .toolbar .toolbar-right {
