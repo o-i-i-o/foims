@@ -583,7 +583,11 @@
     "edit": "Edit Workstation",
     "add": "Add Workstation",
     "manager_unassigned": "No manager assigned",
-    "manager_legacy": "not linked to employee"
+    "manager_legacy": "not linked to employee",
+    "position_x": "X Coordinate",
+    "position_y": "Y Coordinate",
+    "position_placeholder": "Canvas coordinate",
+    "position_hint": "Coordinates locate the workstation on the visualization canvas (matching the grid ruler); leave blank to keep the current position."
   },
   "cabinet": {
     "name": "Cabinet Name",
@@ -1050,9 +1054,11 @@
     "cert_file": "Certificate File (PEM format)",
     "key_file": "Private Key File (PEM format)",
     "manager_title": "Certificate Management",
-    "generated_section": "Generated Certificates (/etc/ssl/ipma-certs)",
-    "imported_section": "Imported Certificates (/etc/ssl/ipma-import-certs)",
+    "list_section": "Certificates (generated in /etc/ssl/ipma-certs, imported into /etc/ssl/ipma-import-certs)",
     "col_file": "File",
+    "col_type": "Certificate Type",
+    "type_generated": "Self-generated",
+    "type_imported": "Imported",
     "col_subject": "Subject (CN)",
     "col_validity": "Validity",
     "col_remaining": "Days Remaining",
@@ -1301,7 +1307,12 @@
     "patch_panel_node": "Patch Panel",
     "net_outlet_node": "Outlet",
     "device_unit": "devices",
-    "all_room_types": "All Types"
+    "all_room_types": "All Types",
+    "save_position": "Save Position",
+    "container_coords": "Container Coordinates",
+    "container_room": "Room",
+    "container_cabinet": "Cabinet",
+    "container_coord_hint": "Setting coordinates moves all devices inside the container together (same as dragging the container)."
   },
   "init": {
     "title": "IPMA System Initialization",

@@ -34,6 +34,39 @@ const HOP_STYLES = {
   patch_panel: { kind: "rect", fill: "#ede7f6", stroke: "#5e35b1" }
 };
 
+// 按设备类型维护的图标（Feather 风格线稿，24x24 viewBox，
+// stroke 取设备类型主色，随节点一起拖动）
+const DEVICE_ICONS = {
+  // 交换机：三节点互联
+  switch:
+    '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  // 网络设备：芯片
+  network_device:
+    '<rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+  // 服务器：双层层叠
+  server:
+    '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+  // 路由器：球体
+  router:
+    '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  // 摄像头：摄像机
+  camera: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
+  // 电话：听筒
+  phone:
+    '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  // 台式机：显示器
+  desktop:
+    '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+  // 笔记本：主机 + 底座
+  laptop: '<rect x="3" y="4" width="18" height="12" rx="2" ry="2"/><path d="M1 20h22"/>',
+  // 打印机
+  printer:
+    '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  // 其他：包装箱
+  other:
+    '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'
+};
+
 // 同侧边缘上相邻锚点的错开间距
 const ANCHOR_SPREAD = 18;
 
@@ -85,36 +118,59 @@ export class TopologyRenderer {
     rect.setAttribute("stroke-width", 1.5);
     g.appendChild(rect);
 
+    // 设备类型图标：左侧垂直居中，文字区右移让位
+    const ICON_SIZE = 32;
+    const iconG = document.createElementNS(SVG_NS, "g");
+    iconG.classList.add("device-icon");
+    iconG.dataset.relX = 14;
+    iconG.dataset.relY = h / 2 - ICON_SIZE / 2;
+    iconG.setAttribute("transform", `translate(${x + 14}, ${y + h / 2 - ICON_SIZE / 2})`);
+    const iconSvg = document.createElementNS(SVG_NS, "svg");
+    iconSvg.classList.add("device-type-icon");
+    iconSvg.setAttribute("viewBox", "0 0 24 24");
+    iconSvg.setAttribute("width", ICON_SIZE);
+    iconSvg.setAttribute("height", ICON_SIZE);
+    iconSvg.setAttribute("fill", "none");
+    iconSvg.setAttribute("stroke", colors.stroke);
+    iconSvg.setAttribute("stroke-width", "1.8");
+    iconSvg.setAttribute("stroke-linecap", "round");
+    iconSvg.setAttribute("stroke-linejoin", "round");
+    iconSvg.setAttribute("aria-hidden", "true");
+    iconSvg.innerHTML = DEVICE_ICONS[device.device_type] || DEVICE_ICONS.other;
+    iconG.appendChild(iconSvg);
+    g.appendChild(iconG);
+
+    const TEXT_OFFSET_X = 16;
     const nameText = document.createElementNS(SVG_NS, "text");
     nameText.classList.add("device-name");
     nameText.textContent = device.device_name || "Unknown";
-    nameText.setAttribute("x", x + w / 2);
+    nameText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     nameText.setAttribute("y", y + 22);
     nameText.setAttribute("text-anchor", "middle");
     nameText.setAttribute("dominant-baseline", "middle");
-    nameText.dataset.relX = 0;
+    nameText.dataset.relX = TEXT_OFFSET_X;
     nameText.dataset.relY = 22;
     g.appendChild(nameText);
 
     const typeText = document.createElementNS(SVG_NS, "text");
     typeText.classList.add("device-type-label");
     typeText.textContent = getDeviceTypeLabel(device.device_type) || device.device_type || "";
-    typeText.setAttribute("x", x + w / 2);
+    typeText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     typeText.setAttribute("y", y + 40);
     typeText.setAttribute("text-anchor", "middle");
     typeText.setAttribute("dominant-baseline", "middle");
-    typeText.dataset.relX = 0;
+    typeText.dataset.relX = TEXT_OFFSET_X;
     typeText.dataset.relY = 40;
     g.appendChild(typeText);
 
     const ipText = document.createElementNS(SVG_NS, "text");
     ipText.classList.add("device-ip");
     ipText.textContent = device.ip_address || device.room_name || "";
-    ipText.setAttribute("x", x + w / 2);
+    ipText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     ipText.setAttribute("y", y + 58);
     ipText.setAttribute("text-anchor", "middle");
     ipText.setAttribute("dominant-baseline", "middle");
-    ipText.dataset.relX = 0;
+    ipText.dataset.relX = TEXT_OFFSET_X;
     ipText.dataset.relY = 58;
     g.appendChild(ipText);
 

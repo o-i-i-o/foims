@@ -56,6 +56,7 @@ export class SVGCore {
 
     this._createDefs();
     this._createGridBackground();
+    this._createGridRulerGroup();
 
     this.elementsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     this.svg.appendChild(this.elementsGroup);
@@ -100,6 +101,76 @@ export class SVGCore {
     rect.setAttribute("fill", `url(#grid-${this.type})`);
     this.gridRect = rect;
     this.svg.appendChild(rect);
+  }
+
+  /**
+   * 主网格线 + 坐标标尺层：位于元素层之下。
+   * 主网格间距为 gridSize 的 5 倍（100px），每条主网格线在视口
+   * 顶边/左边标注画布坐标，配合坐标输入框精确定位。
+   */
+  _createGridRulerGroup() {
+    this.gridRulerGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.gridRulerGroup.className.baseVal = "grid-ruler";
+    this.svg.appendChild(this.gridRulerGroup);
+    this._renderGridRuler();
+  }
+
+  /** 按当前 viewBox 重绘主网格与坐标标注（viewBox 变化后调用）。 */
+  _renderGridRuler() {
+    if (!this.gridRulerGroup) return;
+    const vb = this.svg.viewBox.baseVal;
+    const group = this.gridRulerGroup;
+    group.innerHTML = "";
+    if (!vb.width || !vb.height) return;
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const step = this.gridSize * 5;
+    // 标注字号随视口宽度缩放，缩放后保持可读
+    const fontSize = Math.max(9, Math.min(14, vb.width / 100));
+    const endX = vb.x + vb.width;
+    const endY = vb.y + vb.height;
+
+    for (let gx = Math.floor(vb.x / step) * step; gx <= endX; gx += step) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", gx);
+      line.setAttribute("y1", vb.y);
+      line.setAttribute("x2", gx);
+      line.setAttribute("y2", endY);
+      line.setAttribute("class", "grid-major-line");
+      group.appendChild(line);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.setAttribute("x", gx + 2);
+      label.setAttribute("y", vb.y + fontSize);
+      label.setAttribute("class", "grid-label");
+      label.setAttribute("font-size", fontSize);
+      label.textContent = gx;
+      group.appendChild(label);
+    }
+
+    for (let gy = Math.floor(vb.y / step) * step; gy <= endY; gy += step) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", vb.x);
+      line.setAttribute("y1", gy);
+      line.setAttribute("x2", endX);
+      line.setAttribute("y2", gy);
+      line.setAttribute("class", "grid-major-line");
+      group.appendChild(line);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.setAttribute("x", vb.x + 2);
+      label.setAttribute("y", gy - 2);
+      label.setAttribute("class", "grid-label");
+      label.setAttribute("font-size", fontSize);
+      label.textContent = gy;
+      group.appendChild(label);
+    }
+  }
+
+  /** 统一的 viewBox 更新入口：同步重绘主网格与坐标标注。 */
+  setViewBox(x, y, width, height) {
+    this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+    this._renderGridRuler();
   }
 
   _initTooltip() {
@@ -294,8 +365,17 @@ export class SVGCore {
           ? "cabinet-position"
           : "";
 
+    // 画布当前坐标随事件透传（工位模态框坐标输入框回填用）
+    const rect = element.querySelector("rect");
+    const position = rect
+      ? {
+          x: parseFloat(rect.getAttribute("x")) || 0,
+          y: parseFloat(rect.getAttribute("y")) || 0
+        }
+      : null;
+
     if (elementType === "workstation" && this.callbacks.onEditWorkstation) {
-      this.callbacks.onEditWorkstation(id);
+      this.callbacks.onEditWorkstation(id, position);
     } else if (elementType === "cabinet" && this.callbacks.onEditCabinet) {
       this.callbacks.onEditCabinet(id);
     } else if (elementType === "cabinet-position" && this.callbacks.onEditCabinetPosition) {
@@ -439,6 +519,7 @@ export class SVGCore {
     this.gridSize = size;
     this._createDefs();
     this._createGridBackground();
+    this._renderGridRuler();
   }
 
   /**
@@ -490,10 +571,7 @@ export class SVGCore {
   /** 按横向滚动偏移更新机柜画布 viewBox 与网格窗口。 */
   _applyCabinetScroll(scrollLeft) {
     const viewWidth = this.container.clientWidth || 800;
-    this.svg.setAttribute(
-      "viewBox",
-      `${scrollLeft} 0 ${viewWidth} ${this._cabinetViewHeight || 600}`
-    );
+    this.setViewBox(scrollLeft, 0, viewWidth, this._cabinetViewHeight || 600);
     if (this.gridRect) {
       this.gridRect.setAttribute("x", scrollLeft);
       this.gridRect.setAttribute("width", viewWidth);

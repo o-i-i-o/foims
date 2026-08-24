@@ -379,15 +379,16 @@
 #networks-table th:nth-child(6) { width: 17%; }
 #networks-table th:nth-child(7) { width: 16%; }
 
-/* 房间表：序号/名称/类型/组织/网络/描述/创建时间/操作 */
-#rooms-table th:nth-child(1) { width: 5%; }
-#rooms-table th:nth-child(2) { width: 13%; }
-#rooms-table th:nth-child(3) { width: 10%; }
-#rooms-table th:nth-child(4) { width: 14%; }
-#rooms-table th:nth-child(5) { width: 15%; }
-#rooms-table th:nth-child(6) { width: 17%; }
-#rooms-table th:nth-child(7) { width: 14%; }
+/* 房间表：序号/名称/类型/组织/工位数/网络/描述/创建时间/操作（9 列，合计 100%） */
+#rooms-table th:nth-child(1) { width: 4%; }
+#rooms-table th:nth-child(2) { width: 12%; }
+#rooms-table th:nth-child(3) { width: 9%; }
+#rooms-table th:nth-child(4) { width: 12%; }
+#rooms-table th:nth-child(5) { width: 8%; }
+#rooms-table th:nth-child(6) { width: 16%; }
+#rooms-table th:nth-child(7) { width: 13%; }
 #rooms-table th:nth-child(8) { width: 12%; }
+#rooms-table th:nth-child(9) { width: 14%; }
 
 /* 机柜表：序号/房间/名称/容量/位置数/描述/创建时间/操作 */
 #cabinets-table th:nth-child(1) { width: 5%; }

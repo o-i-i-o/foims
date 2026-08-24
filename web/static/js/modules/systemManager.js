@@ -58,6 +58,7 @@ export function initSystemTabs() {
           initScheduledTasksTab();
         } else if (tabId === "security") {
           initSecurityTab();
+          loadPasswordPolicy();
         }
       });
     });
@@ -99,13 +100,6 @@ export function initSystemTabs() {
     logForwardingTestBtn.addEventListener("click", testLogForwarding);
   }
 
-  // 用户编辑模态框的"密码策略"按钮：模态框动态装载，走文档级委托
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("#user-password-policy-btn")) {
-      openPasswordPolicyModal();
-    }
-  });
-
   const smtpConfigForm = elementCache.get("smtp-config-form");
   if (smtpConfigForm) {
     smtpConfigForm.addEventListener("submit", async (e) => {
@@ -143,6 +137,12 @@ export function initSystemTabs() {
   const openSourceBtn = elementCache.get("open-source-btn");
   if (openSourceBtn) {
     openSourceBtn.addEventListener("click", openOpenSourceModal);
+  }
+
+  // 密码策略卡片保存按钮（等保三级，安全管理员权限，面向全体用户）
+  const passwordPolicySaveBtn = elementCache.get("password-policy-save-btn");
+  if (passwordPolicySaveBtn) {
+    passwordPolicySaveBtn.addEventListener("click", savePasswordPolicy);
   }
 
   initCertificateManager();
@@ -966,20 +966,7 @@ async function testLogForwarding() {
   }
 }
 
-// ==================== 等保密码策略（入口：用户编辑模态框的"密码策略"按钮） ====================
-
-// 打开密码策略模态框（等保三级，安全管理员权限）：每次打开重新拉取当前策略
-export async function openPasswordPolicyModal() {
-  const modal = await loadModal("password-policy-modal");
-  if (!modal) return;
-
-  await loadPasswordPolicy();
-
-  const saveBtn = modal.querySelector("#password-policy-save-btn");
-  saveBtn.onclick = () => savePasswordPolicy();
-
-  openModal("password-policy-modal");
-}
+// ==================== 等保密码策略（安全页卡片，面向全体用户的全局策略） ====================
 
 // 加载密码策略（未配置时后端返回默认值）
 async function loadPasswordPolicy() {
@@ -1049,12 +1036,19 @@ function caOptionLabel(ca) {
   return ca.has_key ? `${name}（${source}）` : `${name}（${source}，${t("cert.ca_no_key")}）`;
 }
 
-function renderCertTable(tableId, items, kind) {
-  const tbody = document.querySelector(`#${tableId} tbody`);
+// 单行证书记录：补齐证书类型（自生成 = 站点 CA 签发，导入 = 外部证书）
+function decorateCertItem(info, kind) {
+  return { ...info, kind };
+}
+
+// 渲染合并后的证书表格：自生成在前、导入在后，以"证书类型"列区分；
+// 删除操作按行内 kind 调用对应端点
+function renderCertTable(items) {
+  const tbody = document.querySelector("#cert-list-table tbody");
   if (!tbody) return;
 
   if (!items || items.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${t("common.no_data")}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("common.no_data")}</td></tr>`;
     return;
   }
 
@@ -1066,9 +1060,12 @@ function renderCertTable(tableId, items, kind) {
     const daysText = days === null || days === undefined ? "-" : String(days);
     const daysClass =
       days != null && days < 0 ? "cert-days-expired" : days != null && days < 30 ? "cert-days-warning" : "";
+    const typeClass = info.kind === "generated" ? "cert-type-generated" : "cert-type-imported";
+    const typeText = info.kind === "generated" ? t("cert.type_generated") : t("cert.type_imported");
 
     tr.innerHTML = `
       <td title="${escapeHtml(info.cert_filename)}">${escapeHtml(info.file_stem)}</td>
+      <td><span class="cert-type-badge ${typeClass}">${escapeHtml(typeText)}</span></td>
       <td>${escapeHtml(info.subject_cn || "-")}</td>
       <td>${formatCertValidity(info)}</td>
       <td class="${daysClass}">${daysText}</td>
@@ -1086,7 +1083,7 @@ function renderCertTable(tableId, items, kind) {
       if (!confirmed) return;
       try {
         const result = await apiRequest(
-          `/api/system/certificate/${kind}/${encodeURIComponent(info.file_stem)}`,
+          `/api/system/certificate/${info.kind}/${encodeURIComponent(info.file_stem)}`,
           { method: "DELETE" }
         );
         if (result.success) {
@@ -1114,8 +1111,12 @@ export async function loadCertificateInventory() {
     const result = await apiGet("/api/system/certificate/list");
     if (!result.success || !result.data) return;
     lastCaList = Array.isArray(result.data.cas) ? result.data.cas : [];
-    renderCertTable("cert-generated-table", result.data.generated, "generated");
-    renderCertTable("cert-imported-table", result.data.imported, "imported");
+    // 自生成与导入证书合并展示，以"证书类型"列区分
+    const merged = [
+      ...(result.data.generated || []).map((info) => decorateCertItem(info, "generated")),
+      ...(result.data.imported || []).map((info) => decorateCertItem(info, "imported"))
+    ];
+    renderCertTable(merged);
     renderCaStatus(result.data.ca);
   } catch (error) {
     console.error("加载证书列表失败:", error);

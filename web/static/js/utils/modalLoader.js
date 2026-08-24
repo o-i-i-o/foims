@@ -44,6 +44,7 @@ const MODAL_REGISTRY = {
   // 可视化
   "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
   "topology-connection-detail-modal": "/static/modals/visualization/topology-connection-detail-modal.html",
+  "topology-container-modal": "/static/modals/visualization/topology-container-modal.html",
   "topology-detail-modal": "/static/modals/visualization/topology-detail-modal.html",
   // 日志
   "log-details-modal": "/static/modals/log/log-details-modal.html",
@@ -56,7 +57,6 @@ const MODAL_REGISTRY = {
   "cert-import-modal": "/static/modals/system/cert-import-modal.html",
   "ca-generate-modal": "/static/modals/system/ca-generate-modal.html",
   "ca-import-modal": "/static/modals/system/ca-import-modal.html",
-  "password-policy-modal": "/static/modals/system/password-policy-modal.html",
   "change-password-modal": "/static/modals/system/change-password-modal.html",
   "open-source-modal": "/static/modals/system/open-source-modal.html",
   // 登录页

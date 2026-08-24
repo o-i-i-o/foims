@@ -583,7 +583,11 @@
     "edit": "编辑工位",
     "add": "添加工位",
     "manager_unassigned": "未指定管理人",
-    "manager_legacy": "未关联员工"
+    "manager_legacy": "未关联员工",
+    "position_x": "X 坐标",
+    "position_y": "Y 坐标",
+    "position_placeholder": "画布坐标",
+    "position_hint": "坐标用于工位可视化画布定位（与网格标尺对应），留空表示保持当前位置。"
   },
   "cabinet": {
     "name": "机柜名称",
@@ -1050,9 +1054,11 @@
     "cert_file": "证书文件(PEM格式)",
     "key_file": "私钥文件(PEM格式)",
     "manager_title": "证书管理",
-    "generated_section": "生成证书（/etc/ssl/ipma-certs）",
-    "imported_section": "导入证书（/etc/ssl/ipma-import-certs）",
+    "list_section": "证书列表（自生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs）",
     "col_file": "文件",
+    "col_type": "证书类型",
+    "type_generated": "自生成",
+    "type_imported": "导入",
     "col_subject": "主题(CN)",
     "col_validity": "有效期",
     "col_remaining": "剩余天数",
@@ -1301,7 +1307,12 @@
     "patch_panel_node": "配线架",
     "net_outlet_node": "信息点",
     "device_unit": "台设备",
-    "all_room_types": "全部类型"
+    "all_room_types": "全部类型",
+    "save_position": "保存坐标",
+    "container_coords": "容器坐标",
+    "container_room": "房间",
+    "container_cabinet": "机柜",
+    "container_coord_hint": "设置坐标会将容器内全部设备整体平移（与拖动容器效果一致）。"
   },
   "init": {
     "title": "IPMA 系统初始化",

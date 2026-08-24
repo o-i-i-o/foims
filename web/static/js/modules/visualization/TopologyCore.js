@@ -64,6 +64,12 @@ export class TopologyCore {
     bg.setAttribute("fill", "url(#topology-grid)");
     this.svg.appendChild(bg);
 
+    // 主网格线 + 坐标标尺层（元素层之下，viewBox 变化时重绘）
+    this.gridRulerGroup = document.createElementNS(SVG_NS, "g");
+    this.gridRulerGroup.className.baseVal = "grid-ruler";
+    this.svg.appendChild(this.gridRulerGroup);
+    this._renderGridRuler();
+
     this.containersGroup = document.createElementNS(SVG_NS, "g");
     this.containersGroup.className.baseVal = "containers-group";
     this.svg.appendChild(this.containersGroup);
@@ -105,6 +111,71 @@ export class TopologyCore {
     pattern.appendChild(path);
     defs.appendChild(pattern);
     this.svg.appendChild(defs);
+  }
+
+  /**
+   * 按当前 viewBox 重绘主网格与坐标标注。
+   * 主网格间距为 gridSize 的 5 倍（100px），顶边/左边标注画布坐标，
+   * 配合设备/容器坐标输入框精确定位。
+   */
+  _renderGridRuler() {
+    if (!this.gridRulerGroup) return;
+    const vb = this.svg.viewBox.baseVal;
+    const group = this.gridRulerGroup;
+    group.innerHTML = "";
+    if (!vb.width || !vb.height) return;
+
+    const step = this.gridSize * 5;
+    // 标注字号随视口宽度缩放，缩放后保持可读
+    const fontSize = Math.max(9, Math.min(14, vb.width / 150));
+    const endX = vb.x + vb.width;
+    const endY = vb.y + vb.height;
+
+    for (let gx = Math.floor(vb.x / step) * step; gx <= endX; gx += step) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", gx);
+      line.setAttribute("y1", vb.y);
+      line.setAttribute("x2", gx);
+      line.setAttribute("y2", endY);
+      line.setAttribute("class", "grid-major-line");
+      group.appendChild(line);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.setAttribute("x", gx + 2);
+      label.setAttribute("y", vb.y + fontSize);
+      label.setAttribute("class", "grid-label");
+      label.setAttribute("font-size", fontSize);
+      label.textContent = gx;
+      group.appendChild(label);
+    }
+
+    for (let gy = Math.floor(vb.y / step) * step; gy <= endY; gy += step) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", vb.x);
+      line.setAttribute("y1", gy);
+      line.setAttribute("x2", endX);
+      line.setAttribute("y2", gy);
+      line.setAttribute("class", "grid-major-line");
+      group.appendChild(line);
+
+      const label = document.createElementNS(SVG_NS, "text");
+      label.setAttribute("x", vb.x + 2);
+      label.setAttribute("y", gy - 2);
+      label.setAttribute("class", "grid-label");
+      label.setAttribute("font-size", fontSize);
+      label.textContent = gy;
+      group.appendChild(label);
+    }
+  }
+
+  /** 统一的 viewBox 更新入口：rAF 节流重绘主网格与坐标标注（平移/缩放高频触发）。 */
+  setViewBox(x, y, width, height) {
+    this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+    if (this._gridRulerRaf) return;
+    this._gridRulerRaf = requestAnimationFrame(() => {
+      this._gridRulerRaf = 0;
+      this._renderGridRuler();
+    });
   }
 
   _initEventListeners() {
@@ -196,10 +267,7 @@ export class TopologyCore {
       const scale = vb.width / this.container.clientWidth;
       const dx = (e.clientX - this.panStart.x) * scale;
       const dy = (e.clientY - this.panStart.y) * scale;
-      this.svg.setAttribute(
-        "viewBox",
-        `${this.viewBoxStart.x - dx} ${this.viewBoxStart.y - dy} ${vb.width} ${vb.height}`
-      );
+      this.setViewBox(this.viewBoxStart.x - dx, this.viewBoxStart.y - dy, vb.width, vb.height);
       return;
     }
 
@@ -295,6 +363,18 @@ export class TopologyCore {
         if (this.callbacks.onContainerDragEnd) {
           this.callbacks.onContainerDragEnd(drag.fixedKey);
         }
+      } else if (this.callbacks.onContainerClick) {
+        // 容器单击（未拖动）：与设备一致打开模态框，透传当前包围盒坐标
+        const rect = drag.groupEl.querySelector("rect");
+        const box = rect
+          ? {
+              x: parseFloat(rect.getAttribute("x")),
+              y: parseFloat(rect.getAttribute("y")),
+              width: parseFloat(rect.getAttribute("width")),
+              height: parseFloat(rect.getAttribute("height"))
+            }
+          : null;
+        this.callbacks.onContainerClick(drag.groupEl.dataset.containerKind, drag.groupEl.dataset.containerKey, box);
       } else if (this.callbacks.onCanvasClick) {
         // 容器内空白处的单击视同画布点击（保持清空选中等既有行为）
         this.callbacks.onCanvasClick();
@@ -334,7 +414,7 @@ export class TopologyCore {
     const newX = mousePos.x - (mousePos.x - vb.x) * delta;
     const newY = mousePos.y - (mousePos.y - vb.y) * delta;
 
-    this.svg.setAttribute("viewBox", `${newX} ${newY} ${newWidth} ${newHeight}`);
+    this.setViewBox(newX, newY, newWidth, newHeight);
     this._updateZoomIndicator();
   }
 
@@ -411,6 +491,13 @@ export class TopologyCore {
       const relY = parseFloat(text.dataset.relY || 0);
       text.setAttribute("x", x + width / 2 + relX);
       text.setAttribute("y", y + relY);
+    });
+
+    // 设备类型图标（相对节点左上角定位，随拖动平移）
+    element.querySelectorAll(".device-icon").forEach((icon) => {
+      const relX = parseFloat(icon.dataset.relX || 0);
+      const relY = parseFloat(icon.dataset.relY || 0);
+      icon.setAttribute("transform", `translate(${x + relX}, ${y + relY})`);
     });
 
     element.querySelectorAll(".port-anchor").forEach((anchor) => {
@@ -568,7 +655,7 @@ export class TopologyCore {
   }
 
   resetZoom() {
-    this.svg.setAttribute("viewBox", "0 0 3000 2000");
+    this.setViewBox(0, 0, 3000, 2000);
     this._updateZoomIndicator();
   }
 }

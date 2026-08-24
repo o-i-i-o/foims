@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01335">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01335">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01335">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01335">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01335">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01335">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01335">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01335">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01335">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01335">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01335">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01335">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01335">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01336">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01336">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01336">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01336">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01336">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01336">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01336">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01336">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01336">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01336">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01336">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01336">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01336">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -801,7 +801,7 @@
 
               <div class="cert-section">
                 <div class="cert-section-header">
-                  <h4 class="cert-section-title" data-i18n="cert.generated_section">Generated Certificates</h4>
+                  <h4 class="cert-section-title" data-i18n="cert.list_section">Certificates</h4>
                 <div class="cert-manager-actions">
                   <button type="button" id="cert-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.generate_title">Generate Certificate</button>
                   <button type="button" id="cert-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.import_title">Import Certificate</button>
@@ -809,10 +809,11 @@
                 </div>
                 </div>
                 <div class="table-container cert-table-container">
-                  <table id="cert-generated-table" class="data-table" aria-label="Self-signed certificates">
+                  <table id="cert-list-table" class="data-table" aria-label="Certificates">
                     <thead>
                       <tr>
                         <th data-i18n="cert.col_file">File</th>
+                        <th data-i18n="cert.col_type">Certificate Type</th>
                         <th data-i18n="cert.col_subject">Subject (CN)</th>
                         <th data-i18n="cert.col_validity">Validity</th>
                         <th data-i18n="cert.col_remaining">Days Remaining</th>
@@ -820,27 +821,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr class="empty-row"><td colspan="5" class="text-center" data-i18n="common.no_data">No data available</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="cert-section">
-                <h4 class="cert-section-title" data-i18n="cert.imported_section">Imported Certificates</h4>
-                <div class="table-container cert-table-container">
-                  <table id="cert-imported-table" class="data-table" aria-label="Imported certificates">
-                    <thead>
-                      <tr>
-                        <th data-i18n="cert.col_file">File</th>
-                        <th data-i18n="cert.col_subject">Subject (CN)</th>
-                        <th data-i18n="cert.col_validity">Validity</th>
-                        <th data-i18n="cert.col_remaining">Days Remaining</th>
-                        <th class="col-center" data-i18n="common.actions">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr class="empty-row"><td colspan="5" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                      <tr class="empty-row"><td colspan="6" class="text-center" data-i18n="common.no_data">No data available</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -1227,7 +1208,54 @@
             </div>
           </article>
 
-          <!-- 等保三级密码策略已迁移至 系统管理-用户管理-编辑用户模态框 的"密码策略"按钮 -->
+          <!-- 等保三级密码策略：面向全体用户的全局策略，直接在安全页卡片配置 -->
+          <article class="data-management-section">
+            <div class="action-bar">
+              <h2 data-i18n="config.password_policy">Password Policy</h2>
+              <div class="action-buttons">
+                <button id="password-policy-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+              </div>
+            </div>
+
+            <div class="nc-fields">
+              <div class="nc-field">
+                <label data-i18n="config.password_min_length">Minimum Length</label>
+                <input type="number" id="password-policy-min-length" class="form-control" min="8" max="128">
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
+                <input type="number" id="password-policy-expiry" class="form-control" min="0" max="36500">
+              </div>
+              <div class="nc-field">
+                <label data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
+                <input type="number" id="password-policy-history" class="form-control" min="0" max="24">
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-upper" class="form-checkbox" />
+                  <span data-i18n="config.password_require_upper">Require uppercase letters</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-lower" class="form-checkbox" />
+                  <span data-i18n="config.password_require_lower">Require lowercase letters</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-digit" class="form-checkbox" />
+                  <span data-i18n="config.password_require_digit">Require digits</span>
+                </label>
+              </div>
+              <div class="nc-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="password-policy-special" class="form-checkbox" />
+                  <span data-i18n="config.password_require_special">Require special characters</span>
+                </label>
+              </div>
+            </div>
+          </article>
 
           <article class="data-management-section">
             <div class="action-bar">
@@ -1311,6 +1339,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01335"></script>
+  <script type="module" src="/static/js/app.js?v=01336"></script>
 </body>
 </html>

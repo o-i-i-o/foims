@@ -88,13 +88,21 @@ pub async fn get_rooms(
         has_where = true;
     }
     // 各过滤分支独立判断首条件（WHERE）与后续条件（AND），
-    // 避免 org_id 与 room_type 组合时拼出双 WHERE
+    // 避免 org_id 与 room_type 组合时拼出双 WHERE；
+    // org_id 按组织子树过滤（含全部下级组织的房间）
     if let Some(org_id) = org_filter {
         let conjunction = if has_where { " AND" } else { " WHERE" };
         for builder in [&mut count_builder, &mut list_builder] {
             builder.push(conjunction);
-            builder.push(" r.org_id = ");
+            builder.push(
+                " r.org_id IN (WITH RECURSIVE org_tree AS (\
+                 SELECT id FROM organizations WHERE id = ",
+            );
             builder.push_bind(org_id);
+            builder.push(
+                " UNION ALL SELECT o.id FROM organizations o \
+                 JOIN org_tree t ON o.parent_id = t.id) SELECT id FROM org_tree)",
+            );
         }
         has_where = true;
     }

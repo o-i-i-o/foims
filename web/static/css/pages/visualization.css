@@ -65,6 +65,22 @@
   background-color: var(--color-bg-white);
 }
 
+/* ==================== 画布主网格与坐标标尺（工位/设备可视化共用） ==================== */
+
+/* 主网格线：每 5 格细网格（100px）一条，细网格由 pattern 背景提供 */
+.grid-major-line {
+  stroke: #cfd8dc;
+  stroke-width: 1;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* 坐标标注：跟随视口顶边/左边，字号由 JS 按视口宽度设置 */
+.grid-label {
+  fill: #90a4ae;
+  pointer-events: none;
+}
+
 .workstation-element {
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -471,6 +487,41 @@
   border-bottom-color: var(--color-primary);
 }
 
+/* 设备详情弹窗坐标配置区：x/y 输入 + 保存按钮 */
+.topology-detail-coords {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.topology-detail-coords .coord-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.topology-detail-coords .coord-field input {
+  width: 90px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.topology-detail-coords .coord-field input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* 设备类型图标：绘制于节点左侧，线稿颜色由 SVG 属性控制 */
+.device-icon {
+  pointer-events: none;
+}
+
 .topology-detail-body {
   padding: 16px 20px;
   overflow-y: auto;
@@ -650,10 +701,11 @@
 }
 
 /* 容器分组框支持页面直接拖动（整体移动组内设备）：
-   父组禁用事件不拦截画布，子分组框重新开启命中（节点层在其上，节点点击不受影响） */
+   父组禁用事件不拦截画布，子分组框重新开启命中（节点层在其上，节点点击不受影响）；
+   悬浮样式与设备节点一致（可单击打开模态框） */
 .topology-container-group {
   pointer-events: visiblePainted;
-  cursor: move;
+  cursor: pointer;
 }
 
 .topology-container {

@@ -87,10 +87,7 @@ export class SVGVisualization {
 
       const totalWidth = startX + cols * (width + gap) + 50;
       const totalHeight = startY + rows * (height + gap) + 50;
-      this.core.svg.setAttribute(
-        "viewBox",
-        `0 0 ${Math.max(1000, totalWidth)} ${Math.max(800, totalHeight)}`
-      );
+      this.core.setViewBox(0, 0, Math.max(1000, totalWidth), Math.max(800, totalHeight));
 
       setTimeout(() => {
         this.saveLayout();

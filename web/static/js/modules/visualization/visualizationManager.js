@@ -38,6 +38,23 @@ function scheduleWorkstationAutoSave() {
   }, 600);
 }
 
+// 工位模态框保存：携带坐标时把画布元素移动到指定位置并静默保存布局
+function bindWorkstationSavedEvent() {
+  document.addEventListener("ipma:workstation-saved", (e) => {
+    const { id, x, y } = e.detail || {};
+    if (!workstationVisualization || !id || x == null || y == null) return;
+
+    const element = workstationVisualization.core.elementsGroup.querySelector(
+      `[data-id="${CSS.escape(id)}"]`
+    );
+    if (!element) return;
+
+    workstationVisualization.core._setElementPosition(element, x, y);
+    workstationVisualization.core._snapElementToGrid(element);
+    workstationVisualization.saveLayout({ silent: true });
+  });
+}
+
 function initTabSwitching() {
   const visualizationContainer = elementCache.get("visualization");
   if (!visualizationContainer) return;
@@ -79,10 +96,7 @@ function initTabSwitching() {
 
 function bindSelectEvents() {
   elementCache.get("room-select").addEventListener("change", (e) => {
-    const roomId = e.target.value;
-    if (roomId) {
-      workstationVisualization.loadSavedLayout(roomId);
-    }
+    showWorkstationRoom(e.target.value);
   });
 
   elementCache.get("cabinet-room-select").addEventListener("change", (e) => {
@@ -103,6 +117,18 @@ function bindSelectEvents() {
     elementCache.get(selectId).addEventListener("change", () => {
       refreshVisualizationRooms(kind);
     });
+  }
+}
+
+/**
+ * 工位可视化按房间出图：优先加载已保存布局，
+ * 无布局时自动排布并落库，保证"选择房间即显示工位布局"。
+ */
+async function showWorkstationRoom(roomId) {
+  if (!workstationVisualization || !roomId) return;
+  const hasLayout = await workstationVisualization.loadSavedLayout(roomId);
+  if (!hasLayout) {
+    await workstationVisualization.autoDrawWorkstations(roomId);
   }
 }
 
@@ -129,7 +155,7 @@ async function refreshVisualizationRooms(kind) {
   if (firstRoomId) {
     roomSelect.value = firstRoomId;
     if (isWorkstation) {
-      workstationVisualization.loadSavedLayout(firstRoomId);
+      showWorkstationRoom(firstRoomId);
     } else {
       cabinetVisualization.loadSavedLayout(firstRoomId);
     }
@@ -343,6 +369,23 @@ async function openTopologyConnectionModal() {
   openModal("topology-connection-modal");
 }
 
+/**
+ * 工位可视化默认组织定位：第一个组织节点的最后一个下级；
+ * 无下级时退化为第一个组织节点本身（刷新后组织下拉随默认值选中）。
+ */
+async function applyDefaultWorkstationOrg() {
+  try {
+    const result = await apiGet("/api/resources/organizations/tree");
+    if (!result.success || !Array.isArray(result.data) || result.data.length === 0) return;
+    const firstRoot = result.data[0];
+    const children = firstRoot.children || [];
+    const target = children.length > 0 ? children[children.length - 1] : firstRoot;
+    elementCache.setValue("viz-org-select", target.id);
+  } catch (error) {
+    console.error("定位默认组织节点失败:", error);
+  }
+}
+
 async function loadInitialData() {
   // 先填充组织选项，再按默认筛选（全类别）加载两个视图的房间列表
   await Promise.all([
@@ -350,6 +393,7 @@ async function loadInitialData() {
     loadOrgsForSelect("cabinet-viz-org-select"),
     loadOrgsForSelect("topology-org-select")
   ]);
+  await applyDefaultWorkstationOrg();
   await Promise.all([refreshVisualizationRooms("workstation"), refreshVisualizationRooms("cabinet")]);
 }
 
@@ -419,8 +463,15 @@ export async function initVisualization() {
       onDeviceDetail: (deviceId) => {
         const node = topologyVisualization.nodes.find((n) => n.device_id === deviceId);
         const name = node?.device_name || deviceId;
-        topologyModal.open(deviceId, name);
+        // 画布当前坐标传入模态框，供坐标输入框回填
+        const position = node ? { x: node.x || 0, y: node.y || 0 } : null;
+        topologyModal.open(deviceId, name, position);
       }
+    };
+
+    // 设备模态框坐标保存：移动节点并按拖动落定流程持久化
+    topologyModal.onSavePosition = (deviceId, x, y) => {
+      topologyVisualization.updateDevicePosition(deviceId, x, y);
     };
 
     bindSelectEvents();
@@ -428,6 +479,7 @@ export async function initVisualization() {
     bindLayoutEvents();
     bindTopologyEvents();
     bindCabinetResizeRelayout();
+    bindWorkstationSavedEvent();
     loadInitialData();
 
     // 刷新后恢复上次记住的子标签（在可视化对象初始化完成后切换）

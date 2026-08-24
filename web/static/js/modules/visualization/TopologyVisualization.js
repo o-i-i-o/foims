@@ -24,6 +24,7 @@ export class TopologyVisualization {
       onNodeClick: (deviceId) => this.openDeviceDetail(deviceId),
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
       onNodeDragEnd: (deviceId) => this._handleNodeDragEnd(deviceId),
+      onContainerClick: (kind, key, box) => this.openContainerCoordinateModal(kind, key, box),
       onContainerDragEnd: (fixedKey) => this._handleGroupDragEnd(fixedKey),
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
@@ -689,9 +690,98 @@ export class TopologyVisualization {
     }
   }
 
+  /** 按分组键查找容器名称（房间或机柜）。 */
+  _findGroupLabel(kind, key) {
+    for (const room of this._collectSpatialGroups()) {
+      if (kind === "room" && room.key === key) return room.label;
+      if (kind === "cabinet") {
+        const cab = room.cabinets.find((c) => c.key === key);
+        if (cab) return cab.label;
+      }
+    }
+    return "";
+  }
+
+  /**
+   * 容器（房间/机柜分组框）坐标模态框：暂时只配置容器左上角 x/y，
+   * 保存时与容器拖动一致——组内全部设备整体平移后重排并保存坐标。
+   */
+  async openContainerCoordinateModal(kind, key, box) {
+    if (!box) return;
+    const modal = await loadModal("topology-container-modal");
+    if (!modal) return;
+
+    const nameLabel = modal.querySelector("#topology-container-name");
+    if (nameLabel) {
+      const kindLabel = kind === "room" ? t("viz.container_room") : t("viz.container_cabinet");
+      nameLabel.textContent = `${kindLabel}: ${this._findGroupLabel(kind, key)}`;
+    }
+
+    const xInput = modal.querySelector("#topology-container-x");
+    const yInput = modal.querySelector("#topology-container-y");
+    xInput.value = Math.round(box.x);
+    yInput.value = Math.round(box.y);
+
+    const saveBtn = modal.querySelector("#topology-container-save-btn");
+    saveBtn.onclick = async () => {
+      const x = Number(xInput.value);
+      const y = Number(yInput.value);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+        showToast(t("common.check_input"), "warning");
+        return;
+      }
+      closeModal("topology-container-modal");
+      await this.moveContainerOrigin(kind, key, Math.round(x), Math.round(y));
+    };
+
+    openModal("topology-container-modal");
+  }
+
+  /** 将容器左上角移动到指定坐标：组内设备同步平移，重排后保存。 */
+  async moveContainerOrigin(kind, key, targetX, targetY) {
+    const members = this.visibleNodes().filter((node) => {
+      if (kind === "cabinet") {
+        const cabKey = node.cabinet_id
+          ? `cab:${node.cabinet_id}`
+          : node.cabinet_name
+            ? `cab:name:${node.cabinet_name}`
+            : null;
+        return cabKey === key;
+      }
+      return (node.room_id ? `room:${node.room_id}` : "room:none") === key;
+    });
+    if (members.length === 0) return;
+
+    // 以组内设备实际包围盒推算当前容器原点，保证与拖动语义一致
+    const box = this._groupBox(members, kind === "room" ? ROOM_PADDING : CABINET_PADDING, kind === "room" ? ROOM_HEADER : CABINET_HEADER);
+    if (!box) return;
+    const dx = targetX - box.minX;
+    const dy = targetY - box.minY;
+    if (dx === 0 && dy === 0) return;
+
+    members.forEach((node) => {
+      node.x = Math.round((node.x || 0) + dx);
+      node.y = Math.round((node.y || 0) + dy);
+    });
+
+    this._renderCurrentView();
+    await this._savePositions();
+  }
+
+  /** 设备坐标更新（设备模态框保存回调）：移动节点并按拖动落定流程保存。 */
+  async updateDevicePosition(deviceId, x, y) {
+    const element = this.core.elementsGroup.querySelector(
+      `[data-device-id="${CSS.escape(deviceId)}"]`
+    );
+    if (!element) return;
+    this.core._setElementPosition(element, x, y);
+    this.core._snapElementToGrid(element);
+    this._handleNodeDragEnd(deviceId);
+  }
+
   _fitView() {
     if (this.nodes.length === 0) {
-      this.core.svg.setAttribute("viewBox", "0 0 3000 2000");
+      this.core.setViewBox(0, 0, 3000, 2000);
       return;
     }
     let minX = Infinity,
@@ -717,9 +807,11 @@ export class TopologyVisualization {
       });
     }
     const padding = 60;
-    this.core.svg.setAttribute(
-      "viewBox",
-      `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`
+    this.core.setViewBox(
+      minX - padding,
+      minY - padding,
+      maxX - minX + padding * 2,
+      maxY - minY + padding * 2
     );
   }
 }

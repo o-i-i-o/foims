@@ -1,6 +1,7 @@
 import { TopologyDataManager } from "./TopologyDataManager.js";
 import { t, updatePageTranslations } from "../../utils/i18n.js";
 import { fetchModalHtml } from "../../utils/modalLoader.js";
+import { showToast } from "../../utils/ui.js";
 
 export class TopologyModal {
   constructor() {
@@ -12,11 +13,14 @@ export class TopologyModal {
     this.activePanel = "ports";
     this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.onRemoveDevice = null;
+    // 设备坐标保存回调（可视化层注入：移动节点并持久化）
+    this.onSavePosition = null;
   }
 
-  open(deviceId, deviceName) {
+  open(deviceId, deviceName, position = null) {
     this.currentDeviceId = deviceId;
     this.currentDeviceName = deviceName || deviceId;
+    this.currentPosition = position;
     this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.activePanel = "ports";
     // 先完成模板渲染再拉取面板数据，保证 _loadPanelData 能拿到容器节点
@@ -77,6 +81,27 @@ export class TopologyModal {
         this.close();
       }
     });
+
+    // 坐标配置区：回填画布当前坐标，保存时回调可视化层移动节点
+    const xInput = this.modal.querySelector("#topology-detail-x");
+    const yInput = this.modal.querySelector("#topology-detail-y");
+    if (xInput && yInput) {
+      xInput.value = Math.round(this.currentPosition?.x ?? 0);
+      yInput.value = Math.round(this.currentPosition?.y ?? 0);
+      const savePosBtn = this.modal.querySelector("#topology-detail-save-pos-btn");
+      savePosBtn?.addEventListener("click", () => {
+        const x = Number(xInput.value);
+        const y = Number(yInput.value);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+          showToast(t("common.check_input"), "warning");
+          return;
+        }
+        if (this.onSavePosition && this.currentDeviceId) {
+          this.onSavePosition(this.currentDeviceId, Math.round(x), Math.round(y));
+          this.close();
+        }
+      });
+    }
 
     document.body.appendChild(this.overlay);
     document.body.appendChild(this.modal);

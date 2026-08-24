@@ -11,12 +11,12 @@ import { loadRoomsForSelect } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
 
-// 编辑工位（可视化回调）
-export async function editWorkstation(id) {
+// 编辑工位（可视化回调；position 为画布当前坐标，用于回填坐标输入框）
+export async function editWorkstation(id, position = null) {
   try {
     const result = await apiGet(`/api/resources/workstations/${id}`);
     if (result.success) {
-      openWorkstationModal(result.data);
+      openWorkstationModal(result.data, position);
     } else {
       showToast(`${t("workstation.load_failed")}: ${result.message}`, "error");
     }
@@ -26,7 +26,7 @@ export async function editWorkstation(id) {
 }
 
 // ====== 工位管理模态框 ======
-export async function openWorkstationModal(workstation = null) {
+export async function openWorkstationModal(workstation = null, position = null) {
   await openModal("workstation-modal");
 
   const title = elementCache.get("workstation-modal-title");
@@ -43,6 +43,9 @@ export async function openWorkstationModal(workstation = null) {
     elementCache.setValue("workstation-room", workstation.room_id);
     elementCache.setValue("workstation-manager", workstation.manager || "");
     elementCache.setValue("workstation-description", workstation.description || "");
+    // 画布传入的当前坐标回填（房间管理入口无画布上下文，留空表示不动位置）
+    elementCache.setValue("workstation-x", position ? String(Math.round(position.x)) : "");
+    elementCache.setValue("workstation-y", position ? String(Math.round(position.y)) : "");
   } else {
     // 添加模式
     title.textContent = t("workstation.add");
@@ -85,6 +88,21 @@ export async function submitWorkstationForm() {
     }
 
     if (result.success) {
+      // 坐标仅影响画布布局（element_layouts），随保存事件交给可视化层应用
+      const xInput = elementCache.getValue("workstation-x");
+      const yInput = elementCache.getValue("workstation-y");
+      const hasPosition =
+        xInput !== "" && yInput !== "" && !Number.isNaN(Number(xInput)) && !Number.isNaN(Number(yInput));
+      document.dispatchEvent(
+        new CustomEvent("ipma:workstation-saved", {
+          detail: {
+            id: result.data?.id || parsedId,
+            room_id: roomId,
+            x: hasPosition ? Math.max(0, Math.round(Number(xInput))) : null,
+            y: hasPosition ? Math.max(0, Math.round(Number(yInput))) : null
+          }
+        })
+      );
       closeModal("workstation-modal");
       showToast(t("workstation.save_success"), "success");
     } else {

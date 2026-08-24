@@ -197,9 +197,11 @@ export class SVGDataManager {
 
         if (maxX > 0 || maxY > 0) {
           const padding = 50;
-          this.core.svg.setAttribute(
-            "viewBox",
-            `0 0 ${Math.max(1000, maxX + padding)} ${Math.max(800, maxY + padding)}`
+          this.core.setViewBox(
+            0,
+            0,
+            Math.max(1000, maxX + padding),
+            Math.max(800, maxY + padding)
           );
         }
 

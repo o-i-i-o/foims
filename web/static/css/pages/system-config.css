@@ -367,6 +367,26 @@
   font-weight: 700;
 }
 
+/* 证书类型徽章：自生成（站点 CA 签发）/ 导入（外部证书） */
+.cert-type-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cert-type-generated {
+  color: #1565c0;
+  background: rgba(21, 101, 192, 0.12);
+}
+
+.cert-type-imported {
+  color: #2e7d32;
+  background: rgba(46, 125, 50, 0.12);
+}
+
 /* ==================== 站点根 CA 区块 ==================== */
 
 .cert-ca-section {

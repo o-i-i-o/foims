@@ -22,6 +22,17 @@
             <input type="text" id="workstation-manager" name="manager" autocomplete="off">
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="workstation-x" data-i18n="workstation.position_x">X Coordinate</label>
+            <input type="number" id="workstation-x" name="position_x" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas X coordinate">
+          </div>
+          <div class="form-group">
+            <label for="workstation-y" data-i18n="workstation.position_y">Y Coordinate</label>
+            <input type="number" id="workstation-y" name="position_y" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas Y coordinate">
+          </div>
+        </div>
+        <p class="hint-text" data-i18n="workstation.position_hint">Coordinates locate the workstation on the visualization canvas; leave blank to keep the current position.</p>
         <div class="form-group">
           <label for="workstation-description" data-i18n="common.description">Description</label>
           <textarea id="workstation-description" name="description" rows="3"></textarea>
