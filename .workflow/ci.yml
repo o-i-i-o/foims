@@ -73,6 +73,27 @@ stages:
       resource:
         cpu: "2"
         memory: "4"
+- name: 上传打包
+  displayName: 上传打包
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: release@gitee
+    name: 52cc1119
+    displayName: Gitee Release
+    releaseName: ""
+    description: $description
+    tagName: $tag
+    upstreamArtifact:
+    - BUILD_ARTIFACT
+    assertFiles: []
+    prerelease: false
+    allowUpdate: true
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
 triggers:
   trigger: auto
   push:
