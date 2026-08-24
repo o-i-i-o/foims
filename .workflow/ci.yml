@@ -52,6 +52,27 @@ stages:
     notify: []
     strategy:
       retry: "0"
+- name: 正式构建
+  displayName: 正式构建
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@rust
+    name: 2ba8bbf9
+    displayName: Rust 构建
+    rustVersion: "1.93"
+    commands:
+    - cargo build --release
+    artifacts:
+    - name: BUILD_ARTIFACT
+      path:
+      - ./target/release/ipma
+      type: .tar.gz
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
 triggers:
   trigger: auto
   push:
