@@ -1242,6 +1242,7 @@
     "no_workstation_data": "No workstation data for this room",
     "no_cabinet_data": "No cabinet data for this room",
     "auto_draw_workstation_failed": "Failed to auto-draw workstations, please retry",
+    "data_load_failed": "Failed to load data, please retry later",
     "draw_positions_failed": "Failed to draw cabinet positions",
     "no_ip": "No IP",
     "no_port": "No port",
@@ -1561,10 +1562,12 @@
         "created": "Interface created successfully",
         "deleted": "Interface deleted successfully",
         "fetched": "Interface retrieved successfully",
+        "interface_role_required": "Interface role is required",
         "list_all_retrieved": "All interface list retrieved successfully",
         "list_retrieved": "Interface list retrieved successfully",
         "name_exists": "Interface name already exists",
         "not_found": "Interface not found",
+        "physical_type_required": "Interface physical type is required",
         "updated": "Interface updated successfully"
       },
       "list_retrieved": "Device list retrieved successfully",
@@ -1822,6 +1825,7 @@
     "logs": {
       "cleared": "Successfully cleared {{count}} log records",
       "days_invalid": "Retention days cannot be negative",
+      "days_required": "Retention days must be specified explicitly (0 means delete all)",
       "invalid_resource_id": "Invalid resource_id: {{value}}",
       "invalid_user_id": "Invalid user_id: {{value}}",
       "login_retrieved": "Login logs retrieved",
@@ -1904,6 +1908,7 @@
       },
       "marked_read": "Notification marked as read",
       "not_found": "Notification not found",
+      "recipients_parse_failed": "Failed to parse notification recipients config: {{error}}",
       "settings_retrieved": "Notification settings retrieved",
       "settings_updated": "Notification settings updated"
     },

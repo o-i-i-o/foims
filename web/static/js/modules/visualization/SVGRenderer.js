@@ -1,4 +1,5 @@
 import { t } from "../../utils/i18n.js";
+import { DEFAULT_CABINET_CAPACITY } from "./SVGDataManager.js";
 
 export class SVGRenderer {
   constructor(core) {
@@ -11,10 +12,11 @@ export class SVGRenderer {
     group.className.baseVal = "workstation-element";
     group.dataset.id = workstation.id;
 
-    const x = workstation.position.x || 100;
-    const y = workstation.position.y || 100;
-    const width = workstation.position.width || 240;
-    const height = workstation.position.height || 120;
+    // 坐标 0 合法：仅 null/undefined 时回退；默认尺寸与自动布局（160×160）一致
+    const x = workstation.position.x ?? 100;
+    const y = workstation.position.y ?? 100;
+    const width = workstation.position.width ?? 160;
+    const height = workstation.position.height ?? 160;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     rect.setAttribute("x", x);
@@ -110,10 +112,10 @@ export class SVGRenderer {
     group.className.baseVal = "cabinet-element";
     group.dataset.id = cabinet.id;
 
-    const x = cabinet.position.x || 50;
-    const y = cabinet.position.y || 50;
-    const width = cabinet.position.width || 150;
-    const capacity = cabinet.capacity || 45;
+    const x = cabinet.position.x ?? 50;
+    const y = cabinet.position.y ?? 50;
+    const width = cabinet.position.width ?? 150;
+    const capacity = cabinet.capacity ?? DEFAULT_CABINET_CAPACITY;
     const height = cabinet.position.height || capacity * 20 + 40;
     const uHeight = (height - 40) / capacity;
 
@@ -128,7 +130,7 @@ export class SVGRenderer {
     text.setAttribute("y", y + 20);
     text.dataset.relY = 20;
     text.textContent = cabinet.name;
-    group.dataset.tooltip = `${t("viz.cabinet_label")}: ${cabinet.name}\n${t("viz.capacity_label")}: ${cabinet.capacity || 42}${t("viz.u_unit")}`;
+    group.dataset.tooltip = `${t("viz.cabinet_label")}: ${cabinet.name}\n${t("viz.capacity_label")}: ${capacity}${t("viz.u_unit")}`;
 
     group.appendChild(rect);
     this.drawUMarks(cabinet, group, x, y, width, capacity, uHeight);
@@ -176,16 +178,16 @@ export class SVGRenderer {
     group.dataset.id = position.id;
     group.dataset.cabinetId = cabinet.id;
 
-    const cabinetHeight = cabinet.position?.height || (cabinet.capacity || 45) * 20 + 40;
-    const capacity = cabinet.capacity || 45;
+    const capacity = cabinet.capacity ?? DEFAULT_CABINET_CAPACITY;
+    const cabinetHeight = cabinet.position?.height || capacity * 20 + 40;
     const uHeight = (cabinetHeight - 40) / capacity;
 
     const startU = position.start_u || 1;
     const endU = position.end_u || startU;
     const height = Math.max((endU - startU + 1) * uHeight, uHeight);
 
-    const cabinetY = cabinet.position?.y || 50;
-    const cabinetX = cabinet.position?.x || 50;
+    const cabinetY = cabinet.position?.y ?? 50;
+    const cabinetX = cabinet.position?.x ?? 50;
 
     const startY = cabinetY + 40;
     const y = startY + (capacity - endU) * uHeight;

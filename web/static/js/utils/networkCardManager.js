@@ -257,7 +257,7 @@ export class NetworkCardManager {
       <input type="hidden" class="card-id" value="${escapeHtml(cardData.id || "")}" />
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-name">${t("device.network_card_name")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-name">${t("device.network_card_name")}<span class="required" aria-hidden="true">*</span></label>
           <input id="${uid}-name" type="text" class="card-name nc-input" value="${escapeHtml(cardData.name || defaultCardName())}" placeholder="${t("device.network_card_name")}" autocomplete="off" required />
         </div>
         <div class="nc-field">
@@ -323,7 +323,7 @@ export class NetworkCardManager {
       <input type="hidden" class="port-id" value="${escapeHtml(portData.id || "")}" />
       <div class="nc-fields">
         <div class="nc-field">
-          <label for="${uid}-name">${t("device.network_port_name")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-name">${t("device.network_port_name")}<span class="required" aria-hidden="true">*</span></label>
           <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t("device.network_port_name")}" autocomplete="off" required />
         </div>
         <div class="nc-field">
@@ -411,13 +411,13 @@ export class NetworkCardManager {
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-network">${t("network.name")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-network">${t("network.name")}<span class="required" aria-hidden="true">*</span></label>
           <select id="${uid}-network" class="ip-network nc-input" required>
             <option value="">${t("network.select_network")}</option>
           </select>
         </div>
         <div class="nc-field">
-          <label for="${uid}-address">${t("ip.ip_address")}<abbr title="required" class="required" aria-hidden="true">*</abbr></label>
+          <label for="${uid}-address">${t("ip.ip_address")}<span class="required" aria-hidden="true">*</span></label>
           <div class="nc-address-group">
             <input id="${uid}-address" type="text" class="ip-address nc-input" value="" placeholder="192.168.1.100" autocomplete="off" required />
             <button type="button" class="btn btn-secondary btn-sm auto-assign-ip-btn" title="${t("device.auto_assign_ip")}" data-tooltip="${t("device.auto_assign_ip")}">${t("device.auto_assign_ip")}</button>

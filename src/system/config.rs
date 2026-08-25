@@ -600,9 +600,13 @@ pub async fn get_notification_settings(
     .fetch_optional(&state.pool()?.get_conn())
     .await
     {
-        Ok(Some(value)) => {
-            serde_json::from_str(&value).unwrap_or_default()
-        }
+        Ok(Some(value)) => serde_json::from_str(&value).map_err(|e| {
+            // 存量数据损坏时不能静默清空收件人，否则 MAC 变更通知会失效
+            ipma_common::log_error!("log.system.recipients_parse_failed", error = e);
+            AppError::Internal(
+                msg("server.notification.recipients_parse_failed").with("error", e),
+            )
+        })?,
         _ => Vec::new(),
     };
 

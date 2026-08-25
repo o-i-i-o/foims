@@ -11,6 +11,12 @@ const CABINET_WIDTH = 150;
 /** 每渲染完一批机柜统一拉取该批机位 IP 信息 */
 const CABINET_BATCH_SIZE = 16;
 
+/**
+ * 机柜容量缺省值：与后端建表默认（ipma-init cabinets DDL `capacity DEFAULT 42`）一致。
+ * 列表接口可能缺失该字段，渲染时统一回退到此常量。
+ */
+export const DEFAULT_CABINET_CAPACITY = 42;
+
 export class SVGDataManager {
   constructor(core, renderer) {
     this.core = core;
@@ -23,33 +29,41 @@ export class SVGDataManager {
     this.cabinetRenderToken = 0;
   }
 
+  /** 数据获取失败时的统一提示（请求异常或响应形状异常） */
+  _notifyLoadFailure(error, what) {
+    console.error(`${what}失败:`, error);
+    this.showToast(t("viz.data_load_failed"), "error");
+  }
+
   async fetchWorkstationsByRoom(roomId) {
     try {
-      const result = await this.apiGet(`/api/resources/workstations?room_id=${roomId}`);
-      if (!result.success || !result.data) return [];
-      if (Array.isArray(result.data)) return result.data;
-      if (result.data.items && Array.isArray(result.data.items)) return result.data.items;
+      const result = await this.apiGet(
+        `/api/resources/workstations?room_id=${roomId}&page_size=1000`
+      );
+      if (result.success && Array.isArray(result.data?.items)) {
+        return result.data.items;
+      }
+      if (result.success) return [];
+      this._notifyLoadFailure(result.message, "获取工位数据");
       return [];
     } catch (error) {
-      console.error("获取工位数据失败:", error);
+      this._notifyLoadFailure(error, "获取工位数据");
       return [];
     }
   }
 
   async fetchIps() {
     try {
-      const result = await this.apiGet("/api/resources/ip");
-      if (result.success && result.data) {
-        if (Array.isArray(result.data)) return result.data;
-        if (result.data.items && Array.isArray(result.data.items)) return result.data.items;
-        if (result.data.data && Array.isArray(result.data.data)) return result.data.data;
-        if (result.data.ip_managers && Array.isArray(result.data.ip_managers))
-          return result.data.ip_managers;
-        if (result.data.ips && Array.isArray(result.data.ips)) return result.data.ips;
+      const result = await this.apiGet("/api/resources/ip?page_size=1000");
+      // 后端分页响应形状固定为 items（paged_response），不再做多分支兜底
+      if (result.success && Array.isArray(result.data?.items)) {
+        return result.data.items;
       }
+      if (result.success) return [];
+      this._notifyLoadFailure(result.message, "获取IP");
       return [];
     } catch (error) {
-      console.error("获取IP失败:", error);
+      this._notifyLoadFailure(error, "获取IP");
       return [];
     }
   }
@@ -57,31 +71,14 @@ export class SVGDataManager {
   async fetchCabinetsByRoom(roomId) {
     try {
       const result = await this.apiGet(`/api/resources/layouts/room-cabinets/${roomId}`);
-      if (result.success && result.data) {
-        return result.data;
+      if (result.success) {
+        // 该接口返回裸数组（机柜含内嵌机位），非数组视为异常数据
+        return Array.isArray(result.data) ? result.data : [];
       }
+      this._notifyLoadFailure(result.message, "获取房间机柜数据");
       return [];
     } catch (error) {
-      console.error("获取房间机柜数据失败:", error);
-      return [];
-    }
-  }
-
-  async fetchCabinetPositions(cabinetId) {
-    try {
-      const positionsResult = await this.apiGet(`/api/resources/positions?cabinet_id=${cabinetId}`);
-      if (!positionsResult.success || !positionsResult.data) {
-        return [];
-      }
-
-      if (Array.isArray(positionsResult.data)) {
-        return positionsResult.data;
-      } else if (positionsResult.data.items && Array.isArray(positionsResult.data.items)) {
-        return positionsResult.data.items;
-      }
-      return [];
-    } catch (error) {
-      console.error("获取机位数据失败:", error);
+      this._notifyLoadFailure(error, "获取房间机柜数据");
       return [];
     }
   }
@@ -197,11 +194,15 @@ export class SVGDataManager {
 
         if (maxX > 0 || maxY > 0) {
           const padding = 50;
+          // viewBox 同时覆盖容器尺寸，网格背景铺满画布，
+          // 内容较小时右侧/下方不会留出空白带（左上角锚定由 preserveAspectRatio 保证）
+          const cw = this.core.container.clientWidth || 0;
+          const ch = this.core.container.clientHeight || 0;
           this.core.setViewBox(
             0,
             0,
-            Math.max(1000, maxX + padding),
-            Math.max(800, maxY + padding)
+            Math.max(1000, maxX + padding, cw),
+            Math.max(800, maxY + padding, ch)
           );
         }
 
@@ -275,13 +276,15 @@ export class SVGDataManager {
     if (token !== this.cabinetRenderToken) return false;
 
     const padding = CABINET_EDGE_PADDING;
-    const maxCapacity = Math.max(...cabinets.map((c) => c.capacity || 45));
+    const maxCapacity = Math.max(
+      ...cabinets.map((c) => c.capacity ?? DEFAULT_CABINET_CAPACITY)
+    );
     const uHeight = Math.floor((containerHeight - padding * 2 - 40) / maxCapacity);
 
     let minX = Infinity;
     let maxX = 0;
     cabinets.forEach((cabinet, index) => {
-      cabinet.capacity = cabinet.capacity || 45;
+      cabinet.capacity = cabinet.capacity ?? DEFAULT_CABINET_CAPACITY;
       const height = cabinet.capacity * uHeight + 40;
       const savedItem = layoutData.find(
         (item) => item.id.toLowerCase() === cabinet.id.toLowerCase()
@@ -352,21 +355,18 @@ export class SVGDataManager {
         `/api/resources/ip?page_size=1000&position_ids=${encodeURIComponent(ids)}`
       );
       const map = new Map();
-      if (result.success && result.data) {
-        const list = Array.isArray(result.data)
-          ? result.data
-          : Array.isArray(result.data.items)
-            ? result.data.items
-            : [];
-        list.forEach((ipManager) => {
+      if (result.success && Array.isArray(result.data?.items)) {
+        result.data.items.forEach((ipManager) => {
           if (ipManager.position_id) {
             map.set(ipManager.position_id, ipManager);
           }
         });
+      } else if (!result.success) {
+        this._notifyLoadFailure(result.message, "批量获取机位IP");
       }
       return map;
     } catch (error) {
-      console.error("批量获取机位 IP 失败:", error);
+      this._notifyLoadFailure(error, "批量获取机位IP");
       return new Map();
     }
   }

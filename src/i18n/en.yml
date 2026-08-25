@@ -97,6 +97,8 @@ log:
     switch_position_create_failed: "Failed to create switch position record: {{error}}"
     tx_commit_failed: "Failed to commit transaction for {{file}}: {{error}}"
     tx_rollback_failed: "Failed to rollback transaction for {{file}}: {{error}}"
+  import_export:
+    export_ref_missing: "Failed to resolve name for reference {{id}} during export; cell left empty/placeholder"
   init:
     admin_create_failed: "Failed to create the admin user"
     creating_admin: "Creating admin user"
@@ -196,6 +198,7 @@ log:
     db_check_failed: "Database connection check failed: {{error}}"
     disable_init_requested: "Disable init mode request received"
     init_disabled_restarting: "Init mode disabled, config saved, triggering service restart"
+    recipients_parse_failed: "Failed to parse notification recipients JSON: {{error}}"
     restart_requested: "Restart application request received"
     restart_script_spawn_failed: "Failed to spawn restart script: {{error}}"
     restart_triggered: "Service restart triggered (as service: {{as_service}})"
@@ -237,10 +240,12 @@ log:
     query_name_failed: "Failed to query workstation name: {{error}}"
   ldap:
     query_failed: "Failed to read LDAP config: {{error}}"
+    password_decrypt_failed: "Failed to decrypt LDAP bind password; treating LDAP config as unavailable: {{error}}"
   sso:
     login_redirect: "SSO login redirecting to authorization endpoint: {{issuer}}"
     provider_error: "Identity provider returned an error: {{error}}"
     query_failed: "Failed to read SSO config: {{error}}"
+    secret_decrypt_failed: "Failed to decrypt SSO client secret; treating SSO config as unavailable: {{error}}"
 
 system:
   config_load_failed: "Failed to load configuration file: {{error}}"

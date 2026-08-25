@@ -142,6 +142,13 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
   计算值，如 TopologyModal 的端口表）保留
   在 JS 渲染函数中，仅注入骨架的空容器。modalLoader 不支持模板占位
   符/循环/条件，强行抽离动态内容需另造模板引擎，不做。
+- 模态框表单元素统一命名（不再新增同类别名类）：
+  - Field 字段：`.form-group` + `<label for=…><span data-i18n=…>名称</span>…</label>`；
+  - Required field 必填项：`<span class="required">*</span>`（不用
+    `<abbr>` 或其他标记承载）；
+  - 描述提示文字：`.hint-text`（唯一类，`form-hint` 等别名已废弃）；
+  - 描述文本域：不写固定 `rows`（高度走 `field-sizing` 自适应），
+    统一带 `data-i18n-placeholder="common.description_placeholder"`。
 
 ### 3.5 缓存与版本
 

@@ -1850,16 +1850,18 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 /// 进程级 dummy bcrypt 哈希（首次使用时生成，cost 与真实口令一致）
 static DUMMY_BCRYPT_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// 运行时哈希生成失败时使用的静态兜底（"ipma-dummy-password" 的合法
+/// bcrypt 哈希，cost 12 与 DEFAULT_COST 一致），保证缓解不会静默失效
+const DUMMY_BCRYPT_FALLBACK: &str = "$2b$12$NUV.EviGW4zymnRdLE45LO60.7WNTwztAaUGRdQMKrKQmHRa6Ccxq";
+
 /// 用户不存在时对提交口令执行一次等价 bcrypt 校验：
 /// 消除「用户不存在立即返回、用户存在时 bcrypt 校验约数百毫秒」的
 /// 用户名枚举时间侧信道（security-review A-4）
 async fn dummy_bcrypt_verify(password: &str) {
     let hash = DUMMY_BCRYPT_HASH.get_or_init(|| {
-        bcrypt::hash("ipma-dummy-password", bcrypt::DEFAULT_COST).unwrap_or_default()
+        bcrypt::hash("ipma-dummy-password", bcrypt::DEFAULT_COST)
+            .unwrap_or_else(|_| DUMMY_BCRYPT_FALLBACK.to_string())
     });
-    if hash.is_empty() {
-        return;
-    }
     let password = password.to_string();
     let hash = hash.clone();
     let _ = tokio::task::spawn_blocking(move || verify(&password, &hash)).await;

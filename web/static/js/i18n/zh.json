@@ -1242,6 +1242,7 @@
     "no_workstation_data": "该房间下暂无工位数据",
     "no_cabinet_data": "该房间下暂无机柜数据",
     "auto_draw_workstation_failed": "自动绘制工位失败，请重试",
+    "data_load_failed": "数据加载失败，请稍后重试",
     "draw_positions_failed": "绘制机位图失败",
     "no_ip": "无IP",
     "no_port": "无端口",
@@ -1561,10 +1562,12 @@
         "created": "创建接口成功",
         "deleted": "删除接口成功",
         "fetched": "接口获取成功",
+        "interface_role_required": "接口角色为必填项",
         "list_all_retrieved": "所有接口列表获取成功",
         "list_retrieved": "接口列表获取成功",
         "name_exists": "该接口名已存在",
         "not_found": "接口不存在",
+        "physical_type_required": "接口物理形态为必填项",
         "updated": "更新接口成功"
       },
       "list_retrieved": "设备列表获取成功",
@@ -1822,6 +1825,7 @@
     "logs": {
       "cleared": "成功清理 {{count}} 条日志记录",
       "days_invalid": "保留天数不能为负数",
+      "days_required": "必须显式指定保留天数（0 表示删除全部）",
       "invalid_resource_id": "resource_id格式无效: {{value}}",
       "invalid_user_id": "user_id格式无效: {{value}}",
       "login_retrieved": "登录日志获取成功",
@@ -1904,6 +1908,7 @@
       },
       "marked_read": "通知已标记为已读",
       "not_found": "通知不存在",
+      "recipients_parse_failed": "通知收件人配置解析失败: {{error}}",
       "settings_retrieved": "通知设置获取成功",
       "settings_updated": "通知设置更新成功"
     },

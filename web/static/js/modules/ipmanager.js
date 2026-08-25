@@ -44,8 +44,8 @@ async function loadDevicesForPullMac() {
 
     select.innerHTML = `<option value="">${t("ip.select_device")}</option>`;
 
-    if (result.success && result.data) {
-      const devices = Array.isArray(result.data) ? result.data : result.data.items || [];
+    if (result.success) {
+      const devices = result.data?.items ?? [];
 
       if (devices.length === 0) {
         select.innerHTML = `<option value="">${t("ip.no_device_data")}</option>`;
@@ -86,9 +86,7 @@ async function loadNetworksForPullMac() {
     select.innerHTML = `<option value="">${t("ip.select_network")}</option>`;
 
     if (result.success && result.data) {
-      const networks = Array.isArray(result.data)
-        ? result.data
-        : result.data.items || result.data.data || [];
+      const networks = result.data?.items ?? [];
 
       if (networks.length === 0) {
         select.innerHTML = `<option value="">${t("ip.no_network_data")}</option>`;

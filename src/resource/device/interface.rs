@@ -120,9 +120,19 @@ pub async fn create_device_interface(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let physical_type = req.physical_type.as_deref().unwrap_or("rj45");
+    // 显式必填：缺省值会掩盖调用方漏传字段（审计 #12），
+    // 前端表单在提交前已回填默认选项
+    let Some(physical_type) = req.physical_type.as_deref() else {
+        return Err(AppError::Validation(msg(
+            "server.device.interface.physical_type_required",
+        )));
+    };
     validate_physical_type(physical_type)?;
-    let interface_role = req.interface_role.as_deref().unwrap_or("business");
+    let Some(interface_role) = req.interface_role.as_deref() else {
+        return Err(AppError::Validation(msg(
+            "server.device.interface.interface_role_required",
+        )));
+    };
     validate_interface_role(interface_role)?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;

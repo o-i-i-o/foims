@@ -104,10 +104,9 @@ async function loadTopLists() {
 
 async function fetchTopData(url, type) {
   const result = await apiGet(url);
-  if (result.success && result.data) {
-    if (Array.isArray(result.data)) return result.data;
-    if (result.data.items) return result.data.items;
-    if (result.data.data) return result.data.data;
+  // 各列表接口均为 paged_response，形状固定为 items
+  if (result.success) {
+    return result.data?.items ?? [];
   }
   return [];
 }

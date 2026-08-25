@@ -52,6 +52,14 @@ export class SVGCore {
       const w = this.container.clientWidth || 800;
       const h = this.container.clientHeight || 600;
       this.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    } else {
+      // 工位视图内容锚定左上角：默认 xMidYMid 会在容器宽高比与 viewBox 不一致时
+      // 把网格整体居中，左缘留出空白带，视觉上画布与左侧边栏之间偏离一段距离。
+      // 初始 viewBox 取容器尺寸（下限 1000x800），网格从画布左缘铺起
+      this.svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
+      const w = this.container.clientWidth || 0;
+      const h = this.container.clientHeight || 0;
+      this.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, w)} ${Math.max(800, h)}`);
     }
 
     this._createDefs();
@@ -70,6 +78,26 @@ export class SVGCore {
     // 尺寸与边框由 CSS（visualization.css）控制，禁止内联 maxHeight 限制容器高度，
     // 否则高分辨率屏幕下机柜底部无法贴近屏幕底部
     this.container.style.overflow = "auto";
+
+    // 工位画布：容器从隐藏变可见（切换页面/子标签）、侧边栏折叠、窗口缩放时
+    // 保证 viewBox 至少覆盖容器，网格背景铺满画布
+    if (this.type !== "cabinet" && typeof ResizeObserver !== "undefined") {
+      this._containerObserver = new ResizeObserver(() => this.fitViewBoxToContainer());
+      this._containerObserver.observe(this.container);
+    }
+  }
+
+  /**
+   * 工位画布尺寸跟踪：viewBox 至少覆盖容器尺寸，保证网格背景铺满画布；
+   * 已有内容时保留内容边界（取两者最大值），只增不减。
+   */
+  fitViewBoxToContainer() {
+    const w = this.container.clientWidth || 0;
+    const h = this.container.clientHeight || 0;
+    if (!w || !h) return;
+    const vb = this.svg.viewBox.baseVal;
+    if (vb.width >= w && vb.height >= h) return;
+    this.setViewBox(0, 0, Math.max(vb.width, w), Math.max(vb.height, h));
   }
 
   _createDefs() {

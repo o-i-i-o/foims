@@ -97,6 +97,8 @@ log:
     switch_position_create_failed: "创建交换机位置记录失败: {{error}}"
     tx_commit_failed: "提交 {{file}} 事务失败: {{error}}"
     tx_rollback_failed: "回滚 {{file}} 事务失败: {{error}}"
+  import_export:
+    export_ref_missing: "导出时引用 {{id}} 的名称解析失败，单元格输出为空/占位"
   init:
     admin_create_failed: "创建管理员用户失败"
     creating_admin: "正在创建管理员用户"
@@ -196,6 +198,7 @@ log:
     db_check_failed: "数据库连接检查失败: {{error}}"
     disable_init_requested: "收到关闭初始化模式请求"
     init_disabled_restarting: "初始化模式已关闭，配置已保存，正在触发服务重启"
+    recipients_parse_failed: "通知收件人配置 JSON 解析失败: {{error}}"
     restart_requested: "收到重启应用请求"
     restart_script_spawn_failed: "启动重启脚本失败: {{error}}"
     restart_triggered: "触发服务重启（服务模式: {{as_service}}）"
@@ -237,10 +240,12 @@ log:
     query_name_failed: "查询工位名称失败: {{error}}"
   ldap:
     query_failed: "读取LDAP配置失败: {{error}}"
+    password_decrypt_failed: "LDAP绑定密码解密失败，LDAP配置视为不可用: {{error}}"
   sso:
     login_redirect: "SSO登录跳转授权端点: {{issuer}}"
     provider_error: "认证平台返回错误: {{error}}"
     query_failed: "读取SSO配置失败: {{error}}"
+    secret_decrypt_failed: "SSO客户端密钥解密失败，SSO配置视为不可用: {{error}}"
 
 system:
   config_load_failed: "加载配置文件失败: {{error}}"

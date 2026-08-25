@@ -10,15 +10,22 @@ export class TopologyDataManager {
     this.showToast = showToast;
   }
 
+  /** 数据获取失败时的统一提示（请求异常或业务失败） */
+  _notifyLoadFailure(error, what) {
+    console.error(`${what}失败:`, error);
+    this.showToast(t("viz.data_load_failed"), "error");
+  }
+
   async fetchTopologyNodes() {
     try {
       const result = await this.apiGet("/api/resources/topology/nodes");
-      if (result.success && result.data) {
+      if (result.success) {
         return Array.isArray(result.data) ? result.data : [];
       }
+      this._notifyLoadFailure(result.message, "获取拓扑节点");
       return [];
     } catch (error) {
-      console.error("获取拓扑节点失败:", error);
+      this._notifyLoadFailure(error, "获取拓扑节点");
       return [];
     }
   }
@@ -66,12 +73,13 @@ export class TopologyDataManager {
   async fetchTopologyConnections() {
     try {
       const result = await this.apiGet("/api/resources/topology/connections");
-      if (result.success && result.data) {
+      if (result.success) {
         return Array.isArray(result.data) ? result.data : [];
       }
+      this._notifyLoadFailure(result.message, "获取拓扑连线");
       return [];
     } catch (error) {
-      console.error("获取拓扑连线失败:", error);
+      this._notifyLoadFailure(error, "获取拓扑连线");
       return [];
     }
   }
@@ -113,12 +121,14 @@ export class TopologyDataManager {
       const result = await this.apiGet(
         `/api/resources/devices/${deviceId}/device-ports?page_size=200`
       );
-      if (result.success && result.data) {
-        return result.data.items || result.data || [];
+      if (result.success) {
+        // 后端分页响应形状固定为 items（paged_response）
+        return result.data?.items ?? [];
       }
+      this._notifyLoadFailure(result.message, "获取设备端口");
       return [];
     } catch (error) {
-      console.error("获取设备端口失败:", error);
+      this._notifyLoadFailure(error, "获取设备端口");
       return [];
     }
   }
@@ -126,12 +136,13 @@ export class TopologyDataManager {
   async fetchDeviceMacs(deviceId) {
     try {
       const result = await this.apiGet(`/api/resources/devices/${deviceId}/macs`);
-      if (result.success && result.data) {
-        return result.data.items || result.data || [];
+      if (result.success) {
+        return result.data?.items ?? [];
       }
+      this._notifyLoadFailure(result.message, "获取MAC表");
       return [];
     } catch (error) {
-      console.error("获取MAC表失败:", error);
+      this._notifyLoadFailure(error, "获取MAC表");
       return [];
     }
   }
@@ -139,12 +150,13 @@ export class TopologyDataManager {
   async fetchDeviceLldp(deviceId) {
     try {
       const result = await this.apiGet(`/api/resources/devices/${deviceId}/lldp-neighbors`);
-      if (result.success && result.data) {
-        return result.data.items || result.data || [];
+      if (result.success) {
+        return result.data?.items ?? [];
       }
+      this._notifyLoadFailure(result.message, "获取LLDP邻居");
       return [];
     } catch (error) {
-      console.error("获取LLDP邻居失败:", error);
+      this._notifyLoadFailure(error, "获取LLDP邻居");
       return [];
     }
   }
@@ -152,12 +164,13 @@ export class TopologyDataManager {
   async fetchAllDevices() {
     try {
       const result = await this.apiGet("/api/resources/devices?page_size=1000");
-      if (result.success && result.data) {
-        return result.data.items || result.data || [];
+      if (result.success) {
+        return result.data?.items ?? [];
       }
+      this._notifyLoadFailure(result.message, "获取设备列表");
       return [];
     } catch (error) {
-      console.error("获取设备列表失败:", error);
+      this._notifyLoadFailure(error, "获取设备列表");
       return [];
     }
   }

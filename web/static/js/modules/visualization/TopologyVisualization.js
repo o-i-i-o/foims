@@ -162,10 +162,11 @@ export class TopologyVisualization {
     this._syncPositionsFromDom();
     const nodes = this.visibleNodes().map((n) => ({
       device_id: n.device_id,
-      x: n.x || 100,
-      y: n.y || 100,
-      width: n.width || 200,
-      height: n.height || 100
+      // 坐标 0 合法：仅 null/undefined 时回退默认值
+      x: n.x ?? 100,
+      y: n.y ?? 100,
+      width: n.width ?? 200,
+      height: n.height ?? 100
     }));
     if (nodes.length === 0) {
       if (!silent) {
@@ -385,10 +386,10 @@ export class TopologyVisualization {
   /// 节点包围盒（读节点对象；DOM 领先时由 _syncPositionsFromDom 先行同步）
   _nodeRect(node) {
     return {
-      x: node.x || 100,
-      y: node.y || 100,
-      width: node.width || 200,
-      height: node.height || 100
+      x: node.x ?? 100,
+      y: node.y ?? 100,
+      width: node.width ?? 200,
+      height: node.height ?? 100
     };
   }
 

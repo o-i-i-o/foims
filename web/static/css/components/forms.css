@@ -279,17 +279,35 @@ select.nc-input:not([multiple]) {
   border-radius: var(--radius-sm);
 }
 
-.form-hint {
-  display: block;
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  margin-top: var(--space-xs);
-}
-
+/* 模态框/表单描述提示统一使用 .hint-text（Field 字段用 .form-group+label，
+   必填标记用 .required 星号，不再提供同类别的别名类） */
 .cidr-input-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+}
+
+/* CIDR 双列分组：标题在上、输入行在下，整体在列内水平居中；
+   子项自顶向下紧凑排列，与另一列行数不一致时也不会被网格拉伸出空隙 */
+.cidr-column {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* 标题与输入行同宽、左缘对齐：选择器需覆盖 modals.css 的
+   .modal .form-row .form-group label（定宽居中）规则 */
+.modal .form-row .form-group.cidr-column > label {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
+  padding-top: 0;
+  text-align: left;
+}
+
+.modal .form-row .form-group.cidr-column > .cidr-input-list {
+  width: 100%;
+  max-width: 320px;
 }
 
 .cidr-input-row {

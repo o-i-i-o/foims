@@ -89,7 +89,15 @@ pub async fn get_ldap_config_from_db(pool: &PgPool) -> Option<LdapConfig> {
             "url" => config.url = value,
             "bind_dn" => config.bind_dn = value,
             "bind_password" => {
-                config.bind_password = decrypt_password_async(value).await.unwrap_or_default()
+                // 解密失败视为配置不可用：记日志并整体返回 None，
+                // 避免以空密码尝试绑定掩盖故障
+                match decrypt_password_async(value).await {
+                    Ok(plain) => config.bind_password = plain,
+                    Err(e) => {
+                        ipma_common::log_error!("log.ldap.password_decrypt_failed", error = e);
+                        return None;
+                    }
+                }
             }
             "base_dn" => config.base_dn = value,
             "user_filter" => config.user_filter = value,

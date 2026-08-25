@@ -5,7 +5,7 @@ const preloadedModules = new Set();
 /* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
    JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
    避免同一模块因 URL 不同产生双实例、双份独立状态 */
-export const MODULE_VERSION = "01338";
+export const MODULE_VERSION = "01339";
 
 export function withVersion(path) {
   if (!path) return path;

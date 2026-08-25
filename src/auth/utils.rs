@@ -57,10 +57,12 @@ pub struct JwtUtils {
 
 impl JwtUtils {
     pub fn new(config: &Config) -> Result<Self, String> {
-        let access_token_expiry = parse_duration(&config.jwt.access_token_expiry).unwrap_or(3600);
+        // 时长格式错误属配置错误：启动时直接失败，避免静默回退默认时长
+        let access_token_expiry = parse_duration(&config.jwt.access_token_expiry)
+            .map_err(|e| format!("access_token_expiry 配置无效: {e}"))?;
 
-        let refresh_token_expiry =
-            parse_duration(&config.jwt.refresh_token_expiry).unwrap_or(604800);
+        let refresh_token_expiry = parse_duration(&config.jwt.refresh_token_expiry)
+            .map_err(|e| format!("refresh_token_expiry 配置无效: {e}"))?;
 
         let algorithm = Algorithm::HS256;
 

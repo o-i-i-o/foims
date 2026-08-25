@@ -87,7 +87,15 @@ export class SVGVisualization {
 
       const totalWidth = startX + cols * (width + gap) + 50;
       const totalHeight = startY + rows * (height + gap) + 50;
-      this.core.setViewBox(0, 0, Math.max(1000, totalWidth), Math.max(800, totalHeight));
+      // viewBox 同时覆盖容器尺寸，网格背景铺满画布（与 loadSavedLayout 保持一致）
+      const cw = this.container.clientWidth || 0;
+      const ch = this.container.clientHeight || 0;
+      this.core.setViewBox(
+        0,
+        0,
+        Math.max(1000, totalWidth, cw),
+        Math.max(800, totalHeight, ch)
+      );
 
       setTimeout(() => {
         this.saveLayout();

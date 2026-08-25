@@ -146,7 +146,15 @@ pub async fn get_sso_config_from_db(pool: &PgPool) -> Option<SsoConfig> {
             "issuer_url" => config.issuer_url = value,
             "client_id" => config.client_id = value,
             "client_secret" => {
-                config.client_secret = decrypt_password_async(value).await.unwrap_or_default()
+                // 解密失败视为配置不可用：记日志并整体返回 None，
+                // 避免以空 secret 与 IdP 交互掩盖故障
+                match decrypt_password_async(value).await {
+                    Ok(plain) => config.client_secret = plain,
+                    Err(e) => {
+                        ipma_common::log_error!("log.sso.secret_decrypt_failed", error = e);
+                        return None;
+                    }
+                }
             }
             "redirect_uri" => config.redirect_uri = value,
             "default_role" => config.default_role = value,

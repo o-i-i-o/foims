@@ -24,7 +24,7 @@
         <div class="form-group">
           <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
           <input type="text" id="scheduled-task-cron" value="0 */6 * * *" required>
-          <small class="form-hint" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
+          <small class="hint-text" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
         </div>
         <div id="scheduled-task-config-section">
           <div class="form-row">
@@ -47,7 +47,7 @@
             <div class="form-group hidden" id="log-cleanup-config">
               <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
               <input type="number" id="scheduled-task-keep-days" value="30" min="0">
-              <small class="form-hint" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+              <small class="hint-text" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
             </div>
           </div>
         </div>

@@ -114,7 +114,10 @@ pub async fn clear_logs<P: DataProvider>(
     req: ClearLogsRequest,
 ) -> DataResult<Response> {
     req.validate()?;
-    let days = req.days.unwrap_or(0);
+    // 0 语义为"删除全部"，属危险操作，缺省时必须拒绝而非静默回退
+    let Some(days) = req.days else {
+        return Err(DataError::Validation(msg("server.logs.days_required")));
+    };
     let pool = provider.pool()?;
 
     let deleted = clear_logs_core(&pool, days, &req.log_type).await?;

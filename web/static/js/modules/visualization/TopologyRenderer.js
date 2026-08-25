@@ -158,10 +158,11 @@ export class TopologyRenderer {
       g.dataset.cabinetKey = cabinetKey;
     }
 
-    const x = device.x || 100;
-    const y = device.y || 100;
-    const w = device.width || 200;
-    const h = device.height || 100;
+    // 坐标 0 合法（未摆放节点可为 0）：仅 null/undefined 时回退默认值
+    const x = device.x ?? 100;
+    const y = device.y ?? 100;
+    const w = device.width ?? 200;
+    const h = device.height ?? 100;
     const colors = DEVICE_COLORS[device.device_type] || DEVICE_COLORS.other;
 
     const rect = document.createElementNS(SVG_NS, "rect");

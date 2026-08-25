@@ -105,7 +105,7 @@ export async function openCabinetPositionModal(position = null) {
     try {
       const result = await apiGet("/api/resources/cabinets");
       if (result.success && result.data) {
-        const cabinets = result.data.items || result.data;
+        const cabinets = result.data.items ?? [];
         const roomMap = new Map();
 
         cabinets.forEach((cabinet) => {
@@ -135,7 +135,7 @@ export async function openCabinetPositionModal(position = null) {
       try {
         const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}`);
         if (result.success && result.data) {
-          const cabinets = result.data.items || result.data;
+          const cabinets = result.data.items ?? [];
           cabinets.forEach((cabinet) => {
             const option = document.createElement("option");
             option.value = cabinet.id;

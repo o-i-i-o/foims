@@ -296,8 +296,8 @@ async function loadTopologyConnectionPorts(selectEl, deviceId) {
   if (!deviceId) return;
   try {
     const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=200`);
-    if (!result.success || !result.data) return;
-    const ports = result.data.items || result.data || [];
+    if (!result.success) return;
+    const ports = result.data?.items ?? [];
     ports.forEach((p) => {
       const option = document.createElement("option");
       option.value = p.id;

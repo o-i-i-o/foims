@@ -957,7 +957,7 @@ function addCidrInputRow(containerId, cidrType, value = "") {
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "btn btn-icon-sm btn-danger cidr-remove-btn";
-  removeBtn.textContent = "−";
+  removeBtn.textContent = "×";
   removeBtn.setAttribute("aria-label", t("common.delete"));
   removeBtn.addEventListener("click", () => {
     if (container.children.length > 1) {

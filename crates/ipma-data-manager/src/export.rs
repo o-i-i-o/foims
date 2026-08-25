@@ -14,7 +14,7 @@ use axum::extract::Query;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use ipma_common::msg;
+use ipma_common::{log_warn, msg};
 use serde_json::Value;
 use sqlx::AssertSqlSafe;
 use sqlx::PgConnection;
@@ -329,11 +329,16 @@ fn ref_to_csv(ctx: &NameContext, target: &Target, row: &Value, db_col: &str) -> 
             ctx.connections
                 .get(id)
                 .map(|(s, t, _)| {
-                    format!(
-                        "{} -> {}",
-                        ctx.devices.get(s).map(String::as_str).unwrap_or("?"),
-                        ctx.devices.get(t).map(String::as_str).unwrap_or("?")
-                    )
+                    // 关键字段（设备名）缺失时告警而非静默占位 "?"，
+                    // 便于发现导出数据不完整的行
+                    let name_of = |sid: &str| match ctx.devices.get(sid) {
+                        Some(n) => n.clone(),
+                        None => {
+                            log_warn!("log.import_export.export_ref_missing", id = sid);
+                            "?".to_string()
+                        }
+                    };
+                    format!("{} -> {}", name_of(s), name_of(t))
                 })
                 .unwrap_or_default()
         }
@@ -369,6 +374,7 @@ fn endpoint_to_csv(ctx: &NameContext, row: &Value, id_col: &str) -> DataResult<S
 }
 
 /// 伴随列取值（Info 列不写库，导出时由其他映射推导）。
+/// 引用 ID 非空但名称解析失败时记告警，避免行数据静默不完整。
 fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> DataResult<String> {
     let id_of = |col: &str| -> String {
         row.get(col)
@@ -376,37 +382,48 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
             .unwrap_or_default()
             .to_string()
     };
+    // 引用 id 非空却解析不到名称 → 输出空串并告警
+    let resolve_or_warn = |id: &str, name: Option<String>| -> String {
+        if !id.is_empty() && name.is_none() {
+            log_warn!("log.import_export.export_ref_missing", id = id);
+        }
+        name.unwrap_or_default()
+    };
     match (table, csv_col) {
-        ("room_networks", "region_name") => Ok(ctx
-            .cidrs
-            .get(&id_of("network_id"))
-            .map(|(r, _)| r.clone())
-            .unwrap_or_default()),
-        ("ips", "device") => Ok(ctx
-            .interfaces
-            .get(&id_of("device_interface_id"))
-            .and_then(|(d, _)| ctx.devices.get(d).cloned())
-            .unwrap_or_default()),
-        ("ips", "region_name") => Ok(ctx
-            .cidrs
-            .get(&id_of("network_id"))
-            .map(|(r, _)| r.clone())
-            .unwrap_or_default()),
-        ("topology_connection_members", "source_device") => Ok(ctx
-            .connections
-            .get(&id_of("connection_id"))
-            .and_then(|(s, _, _)| ctx.devices.get(s).cloned())
-            .unwrap_or_default()),
-        ("topology_connection_members", "target_device") => Ok(ctx
-            .connections
-            .get(&id_of("connection_id"))
-            .and_then(|(_, t, _)| ctx.devices.get(t).cloned())
-            .unwrap_or_default()),
-        ("topology_connection_members", "connection_type") => Ok(ctx
-            .connections
-            .get(&id_of("connection_id"))
-            .map(|(_, _, ty)| ty.clone())
-            .unwrap_or_default()),
+        ("room_networks", "region_name") => Ok(resolve_or_warn(
+            &id_of("network_id"),
+            ctx.cidrs.get(&id_of("network_id")).map(|(r, _)| r.clone()),
+        )),
+        ("ips", "device") => {
+            let iface = id_of("device_interface_id");
+            let device = ctx
+                .interfaces
+                .get(&iface)
+                .and_then(|(d, _)| ctx.devices.get(d).cloned());
+            Ok(resolve_or_warn(&iface, device))
+        }
+        ("ips", "region_name") => Ok(resolve_or_warn(
+            &id_of("network_id"),
+            ctx.cidrs.get(&id_of("network_id")).map(|(r, _)| r.clone()),
+        )),
+        ("topology_connection_members", "source_device") => Ok(resolve_or_warn(
+            &id_of("connection_id"),
+            ctx.connections
+                .get(&id_of("connection_id"))
+                .and_then(|(s, _, _)| ctx.devices.get(s).cloned()),
+        )),
+        ("topology_connection_members", "target_device") => Ok(resolve_or_warn(
+            &id_of("connection_id"),
+            ctx.connections
+                .get(&id_of("connection_id"))
+                .and_then(|(_, t, _)| ctx.devices.get(t).cloned()),
+        )),
+        ("topology_connection_members", "connection_type") => Ok(resolve_or_warn(
+            &id_of("connection_id"),
+            ctx.connections
+                .get(&id_of("connection_id"))
+                .map(|(_, _, ty)| ty.clone()),
+        )),
         _ => Ok(String::new()),
     }
 }
