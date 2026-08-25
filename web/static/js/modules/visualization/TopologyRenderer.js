@@ -34,37 +34,95 @@ const HOP_STYLES = {
   patch_panel: { kind: "rect", fill: "#ede7f6", stroke: "#5e35b1" }
 };
 
-// 按设备类型维护的图标（Feather 风格线稿，24x24 viewBox，
-// stroke 取设备类型主色，随节点一起拖动）
+// 按设备类型维护的彩色图标（24x24 viewBox，扁平填充风格，
+// 每种类型 2~4 种语义色，随节点一起拖动）：
+// 交换机=机身+端口+状态灯 / 网络设备=芯片 / 服务器=盘位+指示灯 /
+// 路由器=地球 / 摄像头=机身+镜头+录制灯 / 电话=话机+屏幕+键盘 /
+// 台式机=显示器+底座 / 笔记本=屏幕+键盘座 / 打印机=机身+纸张+CMY /
+// 其他=包装箱+胶带
 const DEVICE_ICONS = {
-  // 交换机：三节点互联
-  switch:
-    '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
-  // 网络设备：芯片
-  network_device:
-    '<rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
-  // 服务器：双层层叠
-  server:
-    '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
-  // 路由器：球体
-  router:
-    '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
-  // 摄像头：摄像机
-  camera: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
-  // 电话：听筒
-  phone:
-    '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
-  // 台式机：显示器
-  desktop:
-    '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
-  // 笔记本：主机 + 底座
-  laptop: '<rect x="3" y="4" width="18" height="12" rx="2" ry="2"/><path d="M1 20h22"/>',
-  // 打印机
-  printer:
-    '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
-  // 其他：包装箱
-  other:
-    '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'
+  // 交换机：深灰机箱 + 浅灰端口排 + 绿/黄状态灯
+  switch: `
+    <rect x="1.5" y="8" width="21" height="8.5" rx="2" fill="#37474f"/>
+    <rect x="1.5" y="8" width="21" height="3" rx="1.5" fill="#546e7a"/>
+    <rect x="4.2" y="12" width="8.6" height="3" rx="0.6" fill="#b0bec5"/>
+    <path d="M5.4 13.5h6.2" stroke="#78909c" stroke-width="0.8"/>
+    <path d="M5.4 12h6.2M8.5 12v3" stroke="#90a4ae" stroke-width="0.5" fill="none"/>
+    <circle cx="16.2" cy="13.5" r="0.85" fill="#66bb6a"/>
+    <circle cx="18.4" cy="13.5" r="0.85" fill="#66bb6a"/>
+    <circle cx="20.6" cy="13.5" r="0.85" fill="#ffca28"/>`,
+  // 网络设备：深灰芯片 + 蓝色内核 + 金色引脚
+  network_device: `
+    <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" stroke="#ffb300" stroke-width="1.6" stroke-linecap="round"/>
+    <rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="#455a64"/>
+    <rect x="9" y="9" width="6" height="6" rx="1" fill="#42a5f5"/>
+    <path d="M12 9v6M9 12h6" stroke="#90caf9" stroke-width="0.8"/>`,
+  // 服务器：机架 + 三层盘位 + 绿色指示灯
+  server: `
+    <rect x="5" y="2" width="14" height="20" rx="2" fill="#37474f"/>
+    <rect x="7" y="4" width="10" height="4" rx="0.8" fill="#78909c"/>
+    <rect x="7" y="10" width="10" height="4" rx="0.8" fill="#78909c"/>
+    <rect x="7" y="16" width="10" height="4" rx="0.8" fill="#78909c"/>
+    <path d="M8.2 6h4.6M8.2 12h4.6M8.2 18h4.6" stroke="#42a5f5" stroke-width="0.9" stroke-linecap="round"/>
+    <circle cx="15.4" cy="6" r="0.8" fill="#66bb6a"/>
+    <circle cx="15.4" cy="12" r="0.8" fill="#66bb6a"/>
+    <circle cx="15.4" cy="18" r="0.8" fill="#66bb6a"/>`,
+  // 路由器：蓝色地球 + 浅色经纬网
+  router: `
+    <circle cx="12" cy="12" r="9.5" fill="#1e88e5"/>
+    <path d="M2.5 12h19M12 2.5c3 2.6 4.6 5.9 4.6 9.5s-1.6 6.9-4.6 9.5c-3-2.6-4.6-5.9-4.6-9.5s1.6-6.9 4.6-9.5zM5 6.5c1.9 1.4 4.3 2.2 7 2.2s5.1-0.8 7-2.2M5 17.5c1.9-1.4 4.3-2.2 7-2.2s5.1 0.8 7 2.2" stroke="#bbdefb" stroke-width="1.1" fill="none"/>`,
+  // 摄像头：灰机身 + 蓝镜头 + 红色录制灯 + 支架底座
+  camera: `
+    <rect x="2" y="6" width="13.5" height="7.5" rx="2" fill="#546e7a"/>
+    <rect x="2" y="6" width="13.5" height="2.4" rx="1.2" fill="#78909c"/>
+    <circle cx="13.2" cy="10.2" r="2.3" fill="#42a5f5"/>
+    <circle cx="13.2" cy="10.2" r="1" fill="#0d47a1"/>
+    <circle cx="4.4" cy="11.2" r="0.9" fill="#ef5350"/>
+    <path d="M7.5 13.5v3.2" stroke="#546e7a" stroke-width="1.8" stroke-linecap="round"/>
+    <rect x="4.5" y="16.8" width="6.5" height="2" rx="1" fill="#37474f"/>
+    <path d="M16.5 7.8l4.5-1.8v8.5l-4.5-1.8" fill="#ffca28"/>`,
+  // 电话：话机主体 + 绿色显示屏 + 键盘
+  phone: `
+    <path d="M6.8 2.2h10.4l-1.2 2.4H8z" fill="#37474f"/>
+    <rect x="5" y="4.6" width="14" height="17" rx="2.2" fill="#455a64"/>
+    <rect x="7.3" y="6.3" width="9.4" height="4.2" rx="0.8" fill="#66bb6a"/>
+    <path d="M8.6 8.4h3.2" stroke="#e8f5e9" stroke-width="0.8" stroke-linecap="round"/>
+    <g fill="#b0bec5">
+      <circle cx="8.6" cy="13.2" r="0.95"/><circle cx="12" cy="13.2" r="0.95"/><circle cx="15.4" cy="13.2" r="0.95"/>
+      <circle cx="8.6" cy="16" r="0.95"/><circle cx="12" cy="16" r="0.95"/><circle cx="15.4" cy="16" r="0.95"/>
+      <circle cx="8.6" cy="18.8" r="0.95"/><circle cx="12" cy="18.8" r="0.95"/><circle cx="15.4" cy="18.8" r="0.95"/>
+    </g>`,
+  // 台式机：深灰边框 + 蓝色屏幕 + 内容线 + 底座
+  desktop: `
+    <rect x="2.5" y="3.5" width="19" height="13" rx="1.8" fill="#455a64"/>
+    <rect x="4.2" y="5.2" width="15.6" height="9.6" rx="1" fill="#1e88e5"/>
+    <path d="M6 8.2l3-1.8 2.6 2.4 2.8-3.2 3.4 2.6" stroke="#bbdefb" stroke-width="1" fill="none" stroke-linejoin="round"/>
+    <rect x="10.8" y="16.5" width="2.4" height="3" fill="#546e7a"/>
+    <rect x="7.5" y="19.4" width="9" height="1.8" rx="0.9" fill="#455a64"/>`,
+  // 笔记本：屏幕 + 键盘底座 + 触控条
+  laptop: `
+    <rect x="4" y="3.5" width="16" height="11" rx="1.5" fill="#455a64"/>
+    <rect x="5.5" y="5" width="13" height="8" rx="0.8" fill="#1e88e5"/>
+    <path d="M7.2 10.5l2.4-2.6 2 1.8 2.6-3 2.6 2.2" stroke="#bbdefb" stroke-width="0.9" fill="none" stroke-linejoin="round"/>
+    <path d="M2.2 17.8h19.6l-2-2.6H4.2z" fill="#546e7a"/>
+    <rect x="9.5" y="16.4" width="5" height="0.9" rx="0.45" fill="#90a4ae"/>`,
+  // 打印机：机身 + 进/出纸 + 青品黄墨点 + 绿色就绪灯
+  printer: `
+    <rect x="7" y="2" width="10" height="4.2" rx="0.8" fill="#eceff1"/>
+    <path d="M8.6 3.4h6.8" stroke="#b0bec5" stroke-width="0.7" stroke-linecap="round"/>
+    <rect x="3.2" y="6.2" width="17.6" height="8.2" rx="2" fill="#546e7a"/>
+    <rect x="3.2" y="6.2" width="17.6" height="2.4" rx="1.2" fill="#78909c"/>
+    <circle cx="18.4" cy="11.8" r="0.95" fill="#66bb6a"/>
+    <rect x="7" y="14.4" width="10" height="7" rx="0.8" fill="#eceff1"/>
+    <circle cx="9.4" cy="17.9" r="0.95" fill="#29b6f6"/>
+    <circle cx="12" cy="17.9" r="0.95" fill="#ef5350"/>
+    <circle cx="14.6" cy="17.9" r="0.95" fill="#ffee58"/>`,
+  // 其他：牛皮纸包装箱 + 封箱胶带
+  other: `
+    <path d="M3.5 7.6 12 3.4l8.5 4.2v8.8L12 20.6l-8.5-4.2z" fill="#a1887f"/>
+    <path d="M3.5 7.6 12 11.8l8.5-4.2L12 3.4z" fill="#8d6e63"/>
+    <path d="M12 11.8v8.8" stroke="#6d4c41" stroke-width="0.8"/>
+    <rect x="10.9" y="3.8" width="2.2" height="16.4" rx="0.4" fill="#ffe082" opacity="0.9"/>`
 };
 
 // 同侧边缘上相邻锚点的错开间距
@@ -118,7 +176,7 @@ export class TopologyRenderer {
     rect.setAttribute("stroke-width", 1.5);
     g.appendChild(rect);
 
-    // 设备类型图标：左侧垂直居中，文字区右移让位
+    // 设备类型彩色图标：左侧垂直居中，文字区右移让位
     const ICON_SIZE = 32;
     const iconG = document.createElementNS(SVG_NS, "g");
     iconG.classList.add("device-icon");
@@ -130,12 +188,8 @@ export class TopologyRenderer {
     iconSvg.setAttribute("viewBox", "0 0 24 24");
     iconSvg.setAttribute("width", ICON_SIZE);
     iconSvg.setAttribute("height", ICON_SIZE);
-    iconSvg.setAttribute("fill", "none");
-    iconSvg.setAttribute("stroke", colors.stroke);
-    iconSvg.setAttribute("stroke-width", "1.8");
-    iconSvg.setAttribute("stroke-linecap", "round");
-    iconSvg.setAttribute("stroke-linejoin", "round");
     iconSvg.setAttribute("aria-hidden", "true");
+    // 图标内各形状自带语义色填充，不再统一描边色
     iconSvg.innerHTML = DEVICE_ICONS[device.device_type] || DEVICE_ICONS.other;
     iconG.appendChild(iconSvg);
     g.appendChild(iconG);

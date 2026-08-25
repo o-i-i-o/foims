@@ -299,6 +299,21 @@ export class TopologyVisualization {
     await this._savePositions();
   }
 
+  /// 显示比例控制（工具栏下拉/按钮入口）
+  setZoom(scale) {
+    this.core.setZoom(scale);
+  }
+
+  zoomBy(factor) {
+    this.core.zoomBy(factor);
+  }
+
+  /// 视野适配全部内容（工具栏“适应画布”）
+  fitView() {
+    this._fitView();
+    this.core._updateZoomIndicator();
+  }
+
   toggleConnectionMode() {
     this.core.setConnectionMode(!this.core.isConnectionMode);
     return this.core.isConnectionMode;

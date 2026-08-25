@@ -53,6 +53,12 @@
   overflow: hidden;
 }
 
+/* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
+.config-card .data-management-container .section,
+.config-card .database-management-container .section {
+  background: var(--color-bg-white);
+}
+
 .data-management-container .section h3,
 .database-management-container .section h3 {
   font-size: 0.95rem;

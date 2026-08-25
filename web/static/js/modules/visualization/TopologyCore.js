@@ -59,10 +59,15 @@ export class TopologyCore {
     this._createDefs();
 
     const bg = document.createElementNS(SVG_NS, "rect");
-    bg.setAttribute("width", "100%");
-    bg.setAttribute("height", "100%");
+    bg.setAttribute("x", 0);
+    bg.setAttribute("y", 0);
+    bg.setAttribute("width", 3000);
+    bg.setAttribute("height", 2000);
     bg.setAttribute("fill", "url(#topology-grid)");
     this.svg.appendChild(bg);
+    // 背景矩形需随 viewBox 显式更新：百分比按容器像素而非 viewBox 解析，
+    // 缩小视野（fitView/缩小）时会导致网格只覆盖画布局部
+    this.gridRect = bg;
 
     // 主网格线 + 坐标标尺层（元素层之下，viewBox 变化时重绘）
     this.gridRulerGroup = document.createElementNS(SVG_NS, "g");
@@ -168,9 +173,15 @@ export class TopologyCore {
     }
   }
 
-  /** 统一的 viewBox 更新入口：rAF 节流重绘主网格与坐标标注（平移/缩放高频触发）。 */
+  /** 统一的 viewBox 更新入口：背景矩形同步铺满，rAF 节流重绘主网格与坐标标注（平移/缩放高频触发）。 */
   setViewBox(x, y, width, height) {
     this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+    if (this.gridRect) {
+      this.gridRect.setAttribute("x", x);
+      this.gridRect.setAttribute("y", y);
+      this.gridRect.setAttribute("width", width);
+      this.gridRect.setAttribute("height", height);
+    }
     if (this._gridRulerRaf) return;
     this._gridRulerRaf = requestAnimationFrame(() => {
       this._gridRulerRaf = 0;
@@ -253,10 +264,16 @@ export class TopologyCore {
       }
       this.mouseStartPos = this._getSvgCoordinates(e);
     } else {
+      // 空白处左键拖拽平移画布（中键/空格+拖拽保留）
       this._clearSelection();
       if (this.callbacks.onCanvasClick) {
         this.callbacks.onCanvasClick();
       }
+      this.isPanning = true;
+      this.panStart = { x: e.clientX, y: e.clientY };
+      const vb = this.svg.viewBox.baseVal;
+      this.viewBoxStart = { x: vb.x, y: vb.y };
+      this.container.classList.add("panning");
     }
   }
 
@@ -351,6 +368,7 @@ export class TopologyCore {
   _handleMouseUp() {
     if (this.isPanning) {
       this.isPanning = false;
+      this.container.classList.remove("panning");
       return;
     }
 
@@ -416,6 +434,37 @@ export class TopologyCore {
 
     this.setViewBox(newX, newY, newWidth, newHeight);
     this._updateZoomIndicator();
+  }
+
+  /** 当前显示比例：容器像素宽 / viewBox 宽（1 = 100%）。 */
+  getZoomScale() {
+    const vb = this.svg.viewBox.baseVal;
+    const containerWidth = this.container.clientWidth || 1;
+    return containerWidth / vb.width;
+  }
+
+  /**
+   * 设置画布显示比例（配合平移可实现特定区域的局部放大/缩小）。
+   * 以当前视野中心为锚点缩放，视野宽高比保持不变。
+   */
+  setZoom(scale) {
+    const clamped = Math.max(0.05, Math.min(8, scale));
+    const vb = this.svg.viewBox.baseVal;
+    const centerX = vb.x + vb.width / 2;
+    const centerY = vb.y + vb.height / 2;
+    const containerWidth = this.container.clientWidth || 800;
+    const newWidth = containerWidth / clamped;
+    const newHeight = newWidth * (vb.height / vb.width);
+
+    if (newWidth < 300 || newWidth > 30000) return;
+
+    this.setViewBox(centerX - newWidth / 2, centerY - newHeight / 2, newWidth, newHeight);
+    this._updateZoomIndicator();
+  }
+
+  /** 按倍率缩放（工具栏 +/- 按钮使用）。 */
+  zoomBy(factor) {
+    this.setZoom(this.getZoomScale() * factor);
   }
 
   _handleAnchorClick(anchor, e) {
@@ -607,13 +656,40 @@ export class TopologyCore {
     return pt.matrixTransform(ctm);
   }
 
+  /**
+   * 同步工具栏显示比例控件：工具栏为下拉选择（#topology-zoom-level），
+   * 命中预设档位（±2% 容差）则选中对应项，否则补充/更新一个动态档位项。
+   */
   _updateZoomIndicator() {
     const indicator = document.getElementById("topology-zoom-level");
     if (!indicator) return;
-    const vb = this.svg.viewBox.baseVal;
-    const containerWidth = this.container.clientWidth || 1;
-    const scale = containerWidth / vb.width;
-    indicator.textContent = Math.round(scale * 100) + "%";
+    if (indicator.tagName !== "SELECT") {
+      indicator.textContent = Math.round(this.getZoomScale() * 100) + "%";
+      return;
+    }
+
+    const scale = this.getZoomScale();
+    const preset = [...indicator.options].find(
+      (opt) =>
+        opt.value !== "fit" &&
+        Math.abs(parseFloat(opt.value) - scale) / scale <= 0.02
+    );
+
+    const dynamicId = "zoom-current";
+    const dynamic = indicator.querySelector(`option[value="${dynamicId}"]`);
+    if (preset) {
+      dynamic?.remove();
+      indicator.value = preset.value;
+    } else {
+      if (!dynamic) {
+        const opt = document.createElement("option");
+        opt.value = dynamicId;
+        indicator.insertBefore(opt, indicator.firstChild);
+      }
+      const opt = indicator.querySelector(`option[value="${dynamicId}"]`);
+      opt.textContent = Math.round(scale * 100) + "%";
+      indicator.value = dynamicId;
+    }
   }
 
   setConnectionMode(enabled) {

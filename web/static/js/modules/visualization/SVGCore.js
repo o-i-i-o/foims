@@ -73,6 +73,8 @@ export class SVGCore {
   }
 
   _createDefs() {
+    // 重建时先移除旧 defs，避免产生重复的 pattern id
+    this.svg.querySelector("defs")?.remove();
     const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
 
     const gridPattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
@@ -94,13 +96,24 @@ export class SVGCore {
     this.svg.appendChild(defs);
   }
 
+  /**
+   * 网格背景矩形。宽度/高度不能用百分比：百分比按 SVG 视口（容器像素）
+   * 而非 viewBox 解析，宽屏下 viewBox 长宽比与容器不一致时网格只覆盖
+   * 画布局部区域，因此这里显式按初始 viewBox 尺寸铺满，并在 setViewBox
+   * 中同步更新。
+   */
   _createGridBackground() {
+    this.gridRect?.remove();
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "100%");
-    rect.setAttribute("height", "100%");
+    const vb = this.svg.viewBox.baseVal;
+    rect.setAttribute("x", vb.x);
+    rect.setAttribute("y", vb.y);
+    rect.setAttribute("width", vb.width);
+    rect.setAttribute("height", vb.height);
     rect.setAttribute("fill", `url(#grid-${this.type})`);
     this.gridRect = rect;
-    this.svg.appendChild(rect);
+    // 保持图层顺序：背景位于标尺层与元素层之下
+    this.svg.insertBefore(rect, this.gridRulerGroup ?? null);
   }
 
   /**
@@ -167,9 +180,16 @@ export class SVGCore {
     }
   }
 
-  /** 统一的 viewBox 更新入口：同步重绘主网格与坐标标注。 */
+  /** 统一的 viewBox 更新入口：背景矩形、主网格与坐标标注同步重绘。 */
   setViewBox(x, y, width, height) {
     this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+    // 背景矩形跟随 viewBox 铺满可视区域（pattern 为 userSpaceOnUse，坐标不受影响）
+    if (this.gridRect) {
+      this.gridRect.setAttribute("x", x);
+      this.gridRect.setAttribute("y", y);
+      this.gridRect.setAttribute("width", width);
+      this.gridRect.setAttribute("height", height);
+    }
     this._renderGridRuler();
   }
 
@@ -568,14 +588,10 @@ export class SVGCore {
     this._applyCabinetScroll(this.container.scrollLeft);
   }
 
-  /** 按横向滚动偏移更新机柜画布 viewBox 与网格窗口。 */
+  /** 按横向滚动偏移更新机柜画布 viewBox（背景矩形随 setViewBox 一并铺满）。 */
   _applyCabinetScroll(scrollLeft) {
     const viewWidth = this.container.clientWidth || 800;
     this.setViewBox(scrollLeft, 0, viewWidth, this._cabinetViewHeight || 600);
-    if (this.gridRect) {
-      this.gridRect.setAttribute("x", scrollLeft);
-      this.gridRect.setAttribute("width", viewWidth);
-    }
   }
 
   toggleSnapToGrid(enabled) {

@@ -1312,7 +1312,11 @@
     "container_coords": "Container Coordinates",
     "container_room": "Room",
     "container_cabinet": "Cabinet",
-    "container_coord_hint": "Setting coordinates moves all devices inside the container together (same as dragging the container)."
+    "container_coord_hint": "Setting coordinates moves all devices inside the container together (same as dragging the container).",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "zoom_level": "Canvas zoom level",
+    "zoom_fit": "Fit Canvas"
   },
   "init": {
     "title": "IPMA System Initialization",

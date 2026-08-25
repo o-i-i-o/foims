@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01337">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01337">
-  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01337">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01337">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01337">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01337">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01337">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01337">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01337">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01337">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01337">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01337">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01337">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01338">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01338">
+  <link rel="stylesheet" href="/static/css/components/toggles.css?v=01338">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01338">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01338">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01338">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01338">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01338">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01338">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01338">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01338">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01338">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01338">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -562,9 +562,22 @@
             <button id="toggle-connection-mode" class="btn btn-warning btn-sm" data-i18n="visualization.connection_mode">Connection Mode</button>
             <button id="open-topology-connection-modal" class="btn btn-primary btn-sm" data-i18n="viz.create_connection">Create Connection</button>
             <button id="topology-auto-discover" class="btn btn-info btn-sm" data-i18n="visualization.auto_discover">Auto Discover</button>
-              <button id="topology-auto-layout" class="btn btn-primary btn-sm" data-i18n="visualization.auto_layout">Auto Layout</button>
-              <button id="save-topology-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
-              <span id="topology-zoom-level" class="zoom-indicator">100%</span>
+            <button id="topology-auto-layout" class="btn btn-primary btn-sm" data-i18n="visualization.auto_layout">Auto Layout</button>
+            <button id="save-topology-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
+            <div class="zoom-controls">
+              <button id="topology-zoom-out" type="button" class="btn btn-secondary btn-sm" aria-label="Zoom out" data-i18n-aria-label="viz.zoom_out" data-tooltip="Zoom out" data-i18n-tooltip="viz.zoom_out">&minus;</button>
+              <select id="topology-zoom-level" class="form-control zoom-select" aria-label="Canvas zoom level" data-i18n-aria-label="viz.zoom_level">
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1" selected>100%</option>
+                <option value="1.5">150%</option>
+                <option value="2">200%</option>
+                <option value="3">300%</option>
+                <option value="fit" data-i18n="viz.zoom_fit">Fit Canvas</option>
+              </select>
+              <button id="topology-zoom-in" type="button" class="btn btn-secondary btn-sm" aria-label="Zoom in" data-i18n-aria-label="viz.zoom_in" data-tooltip="Zoom in" data-i18n-tooltip="viz.zoom_in">+</button>
+            </div>
           </div>
           <div id="global-visualization-container" role="img" aria-label="Device topology visualization"></div>
         </div>
@@ -1008,140 +1021,159 @@
         </div>
 
         <div id="data-management-tab" class="tab-content" role="tabpanel">
-          <article class="data-management-section">
-            <h2 data-i18n="data-management.data_management">Data Management</h2>
-            <div class="data-management-container">
-              <section class="section">
-                <h3 data-i18n="data-management.csv_import">CSV Data Import</h3>
-                <div class="import-actions">
-                  <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.import_csv">Import CSV</button>
-                  <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="data-management.download_template">Download Template</button>
+          <div class="system-config-section">
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🗃️</span>
+                  <span data-i18n="data-management.data_management">Data Management</span>
                 </div>
-                <h3 data-i18n="data-management.csv_export">CSV Data Export</h3>
-                <div class="export-actions">
-                  <select id="export-type" class="form-control" aria-label="Select export module">
-                    <option value="all" data-i18n="data-management.module_all">All Modules (ZIP)</option>
-                    <option value="organization" data-i18n="data-management.module_organization">Organization</option>
-                    <option value="network" data-i18n="data-management.module_network">Network Regions &amp; Subnets (incl. room bindings)</option>
-                    <option value="room" data-i18n="data-management.module_room">Rooms (incl. workstations &amp; outlets)</option>
-                    <option value="cabinet" data-i18n="data-management.module_cabinet">Cabinets (incl. positions &amp; patch panels)</option>
-                    <option value="device" data-i18n="data-management.module_device">Devices (incl. ports, NICs, interfaces &amp; IPs)</option>
-                    <option value="cable-link" data-i18n="data-management.module_cable_link">Cable Links</option>
-                    <option value="visualization" data-i18n="data-management.module_visualization">Visualization Layouts &amp; Topology</option>
-                  </select>
-                  <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_csv">Export CSV</button>
-                </div>
-              </section>
-              <section class="section">
-                <div class="import-hint">
-                  <p data-i18n="data-management.instructions">Instructions:</p>
-                  <ul>
-                    <li data-i18n="data-management.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
-                    <li data-i18n="data-management.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
-                    <li data-i18n="data-management.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
-                    <li data-i18n="data-management.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
-                  </ul>
-                </div>
-              </section>
+              </div>
+              <div class="data-management-container">
+                <section class="section">
+                  <h3 data-i18n="data-management.csv_import">CSV Data Import</h3>
+                  <div class="import-actions">
+                    <button id="import-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.import_csv">Import CSV</button>
+                    <button id="download-template-btn" class="btn btn-secondary btn-sm" data-i18n="data-management.download_template">Download Template</button>
+                  </div>
+                  <h3 data-i18n="data-management.csv_export">CSV Data Export</h3>
+                  <div class="export-actions">
+                    <select id="export-type" class="form-control" aria-label="Select export module">
+                      <option value="all" data-i18n="data-management.module_all">All Modules (ZIP)</option>
+                      <option value="organization" data-i18n="data-management.module_organization">Organization</option>
+                      <option value="network" data-i18n="data-management.module_network">Network Regions &amp; Subnets (incl. room bindings)</option>
+                      <option value="room" data-i18n="data-management.module_room">Rooms (incl. workstations &amp; outlets)</option>
+                      <option value="cabinet" data-i18n="data-management.module_cabinet">Cabinets (incl. positions &amp; patch panels)</option>
+                      <option value="device" data-i18n="data-management.module_device">Devices (incl. ports, NICs, interfaces &amp; IPs)</option>
+                      <option value="cable-link" data-i18n="data-management.module_cable_link">Cable Links</option>
+                      <option value="visualization" data-i18n="data-management.module_visualization">Visualization Layouts &amp; Topology</option>
+                    </select>
+                    <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_csv">Export CSV</button>
+                  </div>
+                </section>
+                <section class="section">
+                  <div class="import-hint">
+                    <p data-i18n="data-management.instructions">Instructions:</p>
+                    <ul>
+                      <li data-i18n="data-management.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
+                      <li data-i18n="data-management.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
+                      <li data-i18n="data-management.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
+                      <li data-i18n="data-management.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
+                    </ul>
+                  </div>
+                </section>
+              </div>
             </div>
-          </article>
-          
-          <article class="data-management-section">
-            <h2 data-i18n="data-management.database_management">Database Management</h2>
-            <div class="database-management-container">
-              <section class="section">
-                <h3 data-i18n="data-management.db_export">Database Export</h3>
-                <div class="export-actions">
-                  <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_database">Export Database</button>
+
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🗄️</span>
+                  <span data-i18n="data-management.database_management">Database Management</span>
                 </div>
-              </section>
-              <section class="section">
-                <div class="export-hint">
-                  <p data-i18n="data-management.instructions">Instructions:</p>
-                  <ul>
-                    <li data-i18n="data-management.db_export_hint1">Exports as PostgreSQL SQL file</li>
-                    <li data-i18n="data-management.db_export_hint2">Contains complete database structure and data</li>
-                    <li data-i18n="data-management.db_export_hint3">Can be used for migration or disaster recovery</li>
-                  </ul>
-                </div>
-              </section>
+              </div>
+              <div class="database-management-container">
+                <section class="section">
+                  <h3 data-i18n="data-management.db_export">Database Export</h3>
+                  <div class="export-actions">
+                    <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_database">Export Database</button>
+                  </div>
+                </section>
+                <section class="section">
+                  <div class="export-hint">
+                    <p data-i18n="data-management.instructions">Instructions:</p>
+                    <ul>
+                      <li data-i18n="data-management.db_export_hint1">Exports as PostgreSQL SQL file</li>
+                      <li data-i18n="data-management.db_export_hint2">Contains complete database structure and data</li>
+                      <li data-i18n="data-management.db_export_hint3">Can be used for migration or disaster recovery</li>
+                    </ul>
+                  </div>
+                </section>
+              </div>
             </div>
-          </article>
-          
-          <article class="data-management-section">
-            <h2 data-i18n="logs.manager">Log Management</h2>
-            <div class="data-management-container">
-              <section class="section">
-                <h3 data-i18n="logs.stats">Log Statistics</h3>
-                <div id="logs-stats-container" class="logs-stats-grid">
-                  <div class="log-stat-card">
-                    <div class="log-stat-title" data-i18n="logs.operation_logs">Operation Logs</div>
-                    <div class="log-stat-value" id="operation-logs-count">-</div>
-                    <div class="log-stat-info" id="operation-logs-oldest"></div>
-                  </div>
-                  <div class="log-stat-card">
-                    <div class="log-stat-title" data-i18n="logs.login_logs">Login Logs</div>
-                    <div class="log-stat-value" id="login-logs-count">-</div>
-                    <div class="log-stat-info" id="login-logs-oldest"></div>
-                  </div>
-                  <div class="log-stat-card">
-                    <div class="log-stat-title" data-i18n="logs.notifications">Notifications</div>
-                    <div class="log-stat-value" id="notifications-count">-</div>
-                  </div>
+
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">📋</span>
+                  <span data-i18n="logs.manager">Log Management</span>
                 </div>
-                <h3 data-i18n="logs.clear_logs">Clear Logs</h3>
-                <div class="clear-logs-form">
-                  <div class="form-row">
-                    <div class="form-group">
-                      <label for="clear-log-type" data-i18n="logs.log_type">Log Type</label>
-                      <select id="clear-log-type">
-                        <option value="operation" data-i18n="logs.operation_logs">Operation Logs</option>
-                        <option value="login" data-i18n="logs.login_logs">Login Logs</option>
-                        <option value="notification" data-i18n="logs.notifications">Notifications</option>
-                        <option value="all" data-i18n="logs.all_logs">All Logs</option>
+              </div>
+              <div class="data-management-container">
+                <section class="section">
+                  <h3 data-i18n="logs.stats">Log Statistics</h3>
+                  <div id="logs-stats-container" class="logs-stats-grid">
+                    <div class="log-stat-card">
+                      <div class="log-stat-title" data-i18n="logs.operation_logs">Operation Logs</div>
+                      <div class="log-stat-value" id="operation-logs-count">-</div>
+                      <div class="log-stat-info" id="operation-logs-oldest"></div>
+                    </div>
+                    <div class="log-stat-card">
+                      <div class="log-stat-title" data-i18n="logs.login_logs">Login Logs</div>
+                      <div class="log-stat-value" id="login-logs-count">-</div>
+                      <div class="log-stat-info" id="login-logs-oldest"></div>
+                    </div>
+                    <div class="log-stat-card">
+                      <div class="log-stat-title" data-i18n="logs.notifications">Notifications</div>
+                      <div class="log-stat-value" id="notifications-count">-</div>
+                    </div>
+                  </div>
+                  <h3 data-i18n="logs.clear_logs">Clear Logs</h3>
+                  <div class="clear-logs-form">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="clear-log-type" data-i18n="logs.log_type">Log Type</label>
+                        <select id="clear-log-type">
+                          <option value="operation" data-i18n="logs.operation_logs">Operation Logs</option>
+                          <option value="login" data-i18n="logs.login_logs">Login Logs</option>
+                          <option value="notification" data-i18n="logs.notifications">Notifications</option>
+                          <option value="all" data-i18n="logs.all_logs">All Logs</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label for="clear-log-days" data-i18n="logs.keep_days">Keep Days</label>
+                        <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" data-i18n-placeholder="logs.clear_zero_hint">
+                      </div>
+                    </div>
+                    <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 or leave empty to delete all logs. This action cannot be undone.</p>
+                    <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
+                  </div>
+                </section>
+                <section class="section">
+                  <h3 data-i18n="logs.forwarding_title">Log Forwarding</h3>
+                  <div class="nc-fields">
+                    <div class="nc-field">
+                      <label data-i18n="logs.forwarding_enabled">Enabled</label>
+                      <select id="log-forwarding-enabled" class="form-control">
+                        <option value="true" data-i18n="common.yes">Yes</option>
+                        <option value="false" data-i18n="common.no">No</option>
                       </select>
                     </div>
-                    <div class="form-group">
-                      <label for="clear-log-days" data-i18n="logs.keep_days">Keep Days</label>
-                      <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" data-i18n-placeholder="logs.clear_zero_hint">
+                    <div class="nc-field">
+                      <label data-i18n="logs.forwarding_protocol">Protocol</label>
+                      <select id="log-forwarding-protocol" class="form-control">
+                        <option value="udp">UDP</option>
+                        <option value="tcp">TCP</option>
+                      </select>
+                    </div>
+                    <div class="nc-field">
+                      <label data-i18n="logs.forwarding_host">Collector Host</label>
+                      <input type="text" id="log-forwarding-host" class="form-control" data-i18n-placeholder="logs.forwarding_host_placeholder" placeholder="e.g., 192.168.1.10" autocomplete="off" />
+                    </div>
+                    <div class="nc-field">
+                      <label data-i18n="logs.forwarding_port">Port</label>
+                      <input type="number" id="log-forwarding-port" class="form-control" min="1" max="65535" placeholder="514" />
                     </div>
                   </div>
-                  <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 or leave empty to delete all logs. This action cannot be undone.</p>
-                  <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
-                </div>
-              </section>
-              <section class="section">
-              <h3 data-i18n="logs.forwarding_title">Log Forwarding</h3>
-            <div class="nc-fields">
-              <div class="nc-field">
-                <label data-i18n="logs.forwarding_enabled">Enabled</label>
-                <select id="log-forwarding-enabled" class="form-control">
-                  <option value="true" data-i18n="common.yes">Yes</option>
-                  <option value="false" data-i18n="common.no">No</option>
-                </select>
-              </div>
-              <div class="nc-field">
-                <label data-i18n="logs.forwarding_protocol">Protocol</label>
-                <select id="log-forwarding-protocol" class="form-control">
-                  <option value="udp">UDP</option>
-                  <option value="tcp">TCP</option>
-                </select>
-              </div>
-              <div class="nc-field">
-                <label data-i18n="logs.forwarding_host">Collector Host</label>
-                <input type="text" id="log-forwarding-host" class="form-control" data-i18n-placeholder="logs.forwarding_host_placeholder" placeholder="e.g., 192.168.1.10" autocomplete="off" />
-              </div>
-              <div class="nc-field">
-                <label data-i18n="logs.forwarding_port">Port</label>
-                <input type="number" id="log-forwarding-port" class="form-control" min="1" max="65535" placeholder="514" />
+                  <span class="hint-text" data-i18n="logs.forwarding_hint">Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164) to the collector; forwarding failures do not affect local storage</span>
+                  <div class="action-buttons">
+                    <button id="log-forwarding-test-btn" class="btn btn-secondary btn-sm" data-i18n="logs.forwarding_test">Send Test</button>
+                    <button id="log-forwarding-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+                  </div>
+                </section>
               </div>
             </div>
-            <span class="hint-text" data-i18n="logs.forwarding_hint">Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164) to the collector; forwarding failures do not affect local storage</span>
-               <div class="action-buttons">
-                <button id="log-forwarding-test-btn" class="btn btn-secondary btn-sm" data-i18n="logs.forwarding_test">Send Test</button>
-                <button id="log-forwarding-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
-              </div>        
-          </article>
+          </div>
         </div>
         
         <div id="scheduled-tasks-tab" class="tab-content" role="tabpanel">
@@ -1165,181 +1197,186 @@
         </div>
 
         <div id="security-tab" class="tab-content" role="tabpanel">
-          <section class="section">
-          <article class="data-management-section">
-            <div class="action-bar">
-              <h2 data-i18n="config.rate_limit_settings">Rate Limit Settings</h2>
+          <div class="system-config-section">
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🚦</span>
+                  <span data-i18n="config.rate_limit_settings">Rate Limit Settings</span>
+                </div>
+                <button id="rate-limit-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+              </div>
+
+              <div class="nc-fields">
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
+                  <select id="rate-limit-enabled" class="form-control">
+                    <option value="true" data-i18n="common.yes">Yes</option>
+                    <option value="false" data-i18n="common.no">No</option>
+                  </select>
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
+                  <input type="number" id="rate-limit-ip" class="form-control" min="1" max="10000">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
+                  <input type="number" id="rate-limit-user" class="form-control" min="1" max="10000">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
+                  <input type="number" id="rate-limit-login" class="form-control" min="1" max="100">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_window">Time Window (seconds)</label>
+                  <input type="number" id="rate-limit-window" class="form-control" min="10" max="3600">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
+                  <input type="number" id="rate-limit-email" class="form-control" min="1" max="100">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
+                  <input type="number" id="rate-limit-email-window" class="form-control" min="60" max="86400">
+                </div>
+              </div>
             </div>
 
-            <div class="nc-fields">
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
-                <select id="rate-limit-enabled" class="form-control">
-                  <option value="true" data-i18n="common.yes">Yes</option>
-                  <option value="false" data-i18n="common.no">No</option>
-                </select>
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
-                <input type="number" id="rate-limit-ip" class="form-control" min="1" max="10000">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
-                <input type="number" id="rate-limit-user" class="form-control" min="1" max="10000">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
-                <input type="number" id="rate-limit-login" class="form-control" min="1" max="100">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_window">Time Window (seconds)</label>
-                <input type="number" id="rate-limit-window" class="form-control" min="10" max="3600">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
-                <input type="number" id="rate-limit-email" class="form-control" min="1" max="100">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
-                <input type="number" id="rate-limit-email-window" class="form-control" min="60" max="86400">
-              </div>
-            </div>
-            <div class="action-bar">
-              <button id="rate-limit-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
-            </div>
-          </article>
-
-          <article class="data-management-section">
-            <div class="action-bar">
-              <h2 data-i18n="config.password_policy">Password Policy</h2>
-              <div class="action-buttons">
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🔑</span>
+                  <span data-i18n="config.password_policy">Password Policy</span>
+                </div>
                 <button id="password-policy-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
               </div>
-            </div>
 
-            <div class="nc-fields">
-              <div class="nc-field">
-                <label data-i18n="config.password_min_length">Minimum Length</label>
-                <input type="number" id="password-policy-min-length" class="form-control" min="8" max="128">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
-                <input type="number" id="password-policy-expiry" class="form-control" min="0" max="36500">
-              </div>
-              <div class="nc-field">
-                <label data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
-                <input type="number" id="password-policy-history" class="form-control" min="0" max="24">
-              </div>
-              <div class="nc-field">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="password-policy-upper" class="form-checkbox" />
-                  <span data-i18n="config.password_require_upper">Require uppercase letters</span>
-                </label>
-              </div>
-              <div class="nc-field">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="password-policy-lower" class="form-checkbox" />
-                  <span data-i18n="config.password_require_lower">Require lowercase letters</span>
-                </label>
-              </div>
-              <div class="nc-field">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="password-policy-digit" class="form-checkbox" />
-                  <span data-i18n="config.password_require_digit">Require digits</span>
-                </label>
-              </div>
-              <div class="nc-field">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="password-policy-special" class="form-checkbox" />
-                  <span data-i18n="config.password_require_special">Require special characters</span>
-                </label>
-              </div>
-            </div>
-          </article>
-
-          <article class="data-management-section">
-            <div class="action-bar">
-              <h2 data-i18n="security.app_fail2ban">Application Fail2ban</h2>
-              <div class="action-buttons">
-                <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
-                <button id="app-fail2ban-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
-                <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+              <div class="nc-fields">
+                <div class="nc-field">
+                  <label data-i18n="config.password_min_length">Minimum Length</label>
+                  <input type="number" id="password-policy-min-length" class="form-control" min="8" max="128">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
+                  <input type="number" id="password-policy-expiry" class="form-control" min="0" max="36500">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
+                  <input type="number" id="password-policy-history" class="form-control" min="0" max="24">
+                </div>
+                <div class="nc-field">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="password-policy-upper" class="form-checkbox" />
+                    <span data-i18n="config.password_require_upper">Require uppercase letters</span>
+                  </label>
+                </div>
+                <div class="nc-field">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="password-policy-lower" class="form-checkbox" />
+                    <span data-i18n="config.password_require_lower">Require lowercase letters</span>
+                  </label>
+                </div>
+                <div class="nc-field">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="password-policy-digit" class="form-checkbox" />
+                    <span data-i18n="config.password_require_digit">Require digits</span>
+                  </label>
+                </div>
+                <div class="nc-field">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="password-policy-special" class="form-checkbox" />
+                    <span data-i18n="config.password_require_special">Require special characters</span>
+                  </label>
+                </div>
               </div>
             </div>
 
-            <!-- 配置 -->
-            <div class="nc-fields">
-              <div class="nc-field">
-                <label data-i18n="security.enabled">Enabled</label>
-                <select id="app-fail2ban-enabled" class="form-control">
-                  <option value="true" data-i18n="common.yes">Yes</option>
-                  <option value="false" data-i18n="common.no">No</option>
-                </select>
+            <div class="config-card">
+              <div class="config-card-header">
+                <div class="config-card-title">
+                  <span class="icon">🛡️</span>
+                  <span data-i18n="security.app_fail2ban">Application Fail2ban</span>
+                </div>
+                <div class="cert-manager-actions">
+                  <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
+                  <button id="app-fail2ban-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
+                  <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
+                </div>
               </div>
-              <div class="nc-field">
-                <label data-i18n="security.findtime">Find Time (s)</label>
-                <input type="number" id="app-fail2ban-findtime" class="form-control" min="60" max="86400">
+
+              <!-- 配置 -->
+              <div class="nc-fields">
+                <div class="nc-field">
+                  <label data-i18n="security.enabled">Enabled</label>
+                  <select id="app-fail2ban-enabled" class="form-control">
+                    <option value="true" data-i18n="common.yes">Yes</option>
+                    <option value="false" data-i18n="common.no">No</option>
+                  </select>
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="security.findtime">Find Time (s)</label>
+                  <input type="number" id="app-fail2ban-findtime" class="form-control" min="60" max="86400">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="security.maxretry">Max Retry</label>
+                  <input type="number" id="app-fail2ban-maxretry" class="form-control" min="1" max="100">
+                </div>
+                <div class="nc-field">
+                  <label data-i18n="security.bantime">Ban Time (s)</label>
+                  <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800">
+                </div>
               </div>
-              <div class="nc-field">
-                <label data-i18n="security.maxretry">Max Retry</label>
-                <input type="number" id="app-fail2ban-maxretry" class="form-control" min="1" max="100">
+
+              <!-- 日志路径提示 -->
+              <p id="app-fail2ban-log-path-hint" class="form-hint"></p>
+
+              <!-- 已封禁 IP -->
+              <h4 class="mt-md" data-i18n="security.banned_ips">Banned IPs</h4>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="security.ip_address">IP Address</th>
+                      <th data-i18n="security.remaining_seconds" class="col-center">Remaining (s)</th>
+                      <th class="col-center" data-i18n="common.actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="app-fail2ban-banned-tbody">
+                    <tr class="empty-row"><td colspan="3" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <div class="nc-field">
-                <label data-i18n="security.bantime">Ban Time (s)</label>
-                <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800">
+
+              <!-- 追踪中的 IP -->
+              <h4 class="mt-md" data-i18n="security.tracked_ips">Tracked IPs</h4>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="security.ip_address">IP Address</th>
+                      <th data-i18n="security.failure_count" class="col-center">Failure Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="app-fail2ban-tracked-tbody">
+                    <tr class="empty-row"><td colspan="2" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- 手动封禁/解封 -->
+              <h4 class="mt-md" data-i18n="security.manual_ban">Manual Ban/Unban</h4>
+              <div class="form-group-inline">
+                <input type="text" id="app-fail2ban-ip-input" class="form-control" placeholder="192.168.1.100">
+                <button type="button" id="app-fail2ban-ban-btn" class="btn btn-danger btn-sm" data-i18n="security.ban_ip">Ban IP</button>
+                <button type="button" id="app-fail2ban-unban-btn" class="btn btn-success btn-sm" data-i18n="security.unban_ip">Unban IP</button>
               </div>
             </div>
-
-            <!-- 日志路径提示 -->
-            <p id="app-fail2ban-log-path-hint" class="form-hint"></p>
-
-            <!-- 已封禁 IP -->
-            <h4 class="mt-md" data-i18n="security.banned_ips">Banned IPs</h4>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="security.ip_address">IP Address</th>
-                    <th data-i18n="security.remaining_seconds" class="col-center">Remaining (s)</th>
-                    <th class="col-center" data-i18n="common.actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="app-fail2ban-banned-tbody">
-                  <tr class="empty-row"><td colspan="3" class="text-center" data-i18n="common.no_data">No data available</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <!-- 追踪中的 IP -->
-            <h4 class="mt-md" data-i18n="security.tracked_ips">Tracked IPs</h4>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="security.ip_address">IP Address</th>
-                    <th data-i18n="security.failure_count" class="col-center">Failure Count</th>
-                  </tr>
-                </thead>
-                <tbody id="app-fail2ban-tracked-tbody">
-                  <tr class="empty-row"><td colspan="2" class="text-center" data-i18n="common.no_data">No data available</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <!-- 手动封禁/解封 -->
-            <h4 class="mt-md" data-i18n="security.manual_ban">Manual Ban/Unban</h4>
-            <div class="form-group-inline">
-              <input type="text" id="app-fail2ban-ip-input" class="form-control" placeholder="192.168.1.100">
-              <button type="button" id="app-fail2ban-ban-btn" class="btn btn-danger btn-sm" data-i18n="security.ban_ip">Ban IP</button>
-              <button type="button" id="app-fail2ban-unban-btn" class="btn btn-success btn-sm" data-i18n="security.unban_ip">Unban IP</button>
-            </div>
-          </article>
-          </section>
+          </div>
         </div>
       </section>
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01337"></script>
+  <script type="module" src="/static/js/app.js?v=01338"></script>
 </body>
 </html>

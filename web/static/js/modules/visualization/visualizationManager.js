@@ -232,6 +232,35 @@ function bindTopologyEvents() {
     });
   }
 
+  // 画布显示比例控制：下拉选档缩放（配合拖拽平移实现局部放大），+/- 步进缩放
+  const zoomSelect = elementCache.get("topology-zoom-level");
+  if (zoomSelect) {
+    zoomSelect.addEventListener("change", () => {
+      if (zoomSelect.value === "fit") {
+        topologyVisualization.fitView();
+        return;
+      }
+      const scale = parseFloat(zoomSelect.value);
+      if (Number.isFinite(scale) && scale > 0) {
+        topologyVisualization.setZoom(scale);
+      }
+    });
+  }
+
+  const zoomInBtn = elementCache.get("topology-zoom-in");
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener("click", () => {
+      topologyVisualization.zoomBy(1.25);
+    });
+  }
+
+  const zoomOutBtn = elementCache.get("topology-zoom-out");
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener("click", () => {
+      topologyVisualization.zoomBy(0.8);
+    });
+  }
+
   const openConnModalBtn = elementCache.get("open-topology-connection-modal");
   if (openConnModalBtn) {
     openConnModalBtn.addEventListener("click", openTopologyConnectionModal);

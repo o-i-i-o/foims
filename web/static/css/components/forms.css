@@ -1,5 +1,4 @@
 .form-group {
-  margin-bottom: var(--space-md);
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
@@ -65,7 +64,6 @@
   min-height: 1lh;    /* 最小1行高度，lh=行高单位 */
   max-height: 300px;  /* 超过这个高度，出现滚动条 */
   resize: none;       /* 关闭右下角拖拽手柄 */
-  padding: 6px 8px;
   box-sizing: border-box;
 }
 

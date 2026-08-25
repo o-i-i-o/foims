@@ -1312,7 +1312,11 @@
     "container_coords": "容器坐标",
     "container_room": "房间",
     "container_cabinet": "机柜",
-    "container_coord_hint": "设置坐标会将容器内全部设备整体平移（与拖动容器效果一致）。"
+    "container_coord_hint": "设置坐标会将容器内全部设备整体平移（与拖动容器效果一致）。",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
+    "zoom_level": "画布显示比例",
+    "zoom_fit": "适应画布"
   },
   "init": {
     "title": "IPMA 系统初始化",
