@@ -1,3 +1,5 @@
+import { withVersion } from "./resourceLoader.js";
+
 let i18nInstance = null;
 
 /* 支持的语言清单：翻译文件按需加载（首屏只拉当前语言，切换时再取另一份），
@@ -20,9 +22,12 @@ function getInitialLanguage() {
   return browserLang;
 }
 
-// cache: 'no-store' 保证始终读到最新翻译文件（新增 key 后不受中间缓存影响）
+// 语言包位于 /static/i18n/（不在 /static/js/ 下）：生产 nginx 对 /static/js/
+// 强制 no-cache（ES 模块需再验证），语言包走版本化 URL（?v=MODULE_VERSION）
+// 才能落入 /static/ 的 immutable 长缓存桶 —— 版本号 bump 即失效，
+// 重复访问零请求；未压缩体积 ~110KB，gzip 后线上 ~29KB
 function fetchTranslations(lang) {
-  return fetch(`/static/js/i18n/${lang}.json`, { cache: "no-store" }).then((r) => r.json());
+  return fetch(withVersion(`/static/i18n/${lang}.json`)).then((r) => r.json());
 }
 
 export async function initI18n() {
@@ -61,7 +66,12 @@ export async function initI18n() {
           replaceOptions = {};
         }
 
-        const value = key.split(".").reduce((obj, k) => (obj && typeof obj === "object" ? obj[k] : undefined), this.translations[this.language]);
+        const value = key
+          .split(".")
+          .reduce(
+            (obj, k) => (obj && typeof obj === "object" ? obj[k] : undefined),
+            this.translations[this.language]
+          );
 
         if (typeof value !== "string") {
           return defaultValue !== null ? defaultValue : key;
@@ -142,7 +152,9 @@ export async function initI18n() {
       },
 
       getNativeName(code) {
-        return this.translations[code]?.language?.native_name || FALLBACK_NATIVE_NAMES[code] || code;
+        return (
+          this.translations[code]?.language?.native_name || FALLBACK_NATIVE_NAMES[code] || code
+        );
       }
     };
 

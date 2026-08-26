@@ -24,13 +24,6 @@ export function translateServerMessage(data) {
 
 export class ApiClient {
   static #pendingRequests = new Map();
-  static #requestTimestamps = new Map();
-
-  static THROTTLE_INTERVAL = 1000;
-
-  static requestQueue = [];
-
-  static MAX_CONCURRENT_REQUESTS = 3;
 
   static #hashBody(body) {
     if (body instanceof FormData) {
@@ -42,8 +35,6 @@ export class ApiClient {
     }
     return String(body);
   }
-
-  static currentRequests = 0;
 
   static #isRedirecting = false;
 
@@ -62,24 +53,18 @@ export class ApiClient {
     const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : "";
     const requestKey = `${url}_${method}${bodyHash}`;
 
+    // 并发相同 GET 共享同一 Promise，避免重复请求
     if (method === "GET" && retryCount === 0 && this.#pendingRequests.has(requestKey)) {
       return this.#pendingRequests.get(requestKey);
     }
 
+    // 会话维护：距上次刷新超过阈值时先刷新一次（refreshPromise 单飞去重）。
+    // 不再做客户端并发上限与同键节流：浏览器 HTTP/2 多路复用 + 服务端
+    // 限流（默认 200 请求/分钟/用户）已足够，人为排队只会放大串行延迟
     const now = Date.now();
-
     if (!this.isPublicAuthEndpoint(url) && now - this.#lastRefreshTime > this.#refreshThresholdMs) {
       await this.refreshToken();
     }
-
-    const lastRequestTime = this.#requestTimestamps.get(requestKey) || 0;
-    if (now - lastRequestTime < this.THROTTLE_INTERVAL) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.THROTTLE_INTERVAL - (now - lastRequestTime))
-      );
-    }
-
-    this.#requestTimestamps.set(requestKey, Date.now());
 
     const defaultOptions = {
       headers: {
@@ -105,55 +90,24 @@ export class ApiClient {
       delete mergedOptions.headers["Content-Type"];
     }
 
-    if (this.currentRequests >= this.MAX_CONCURRENT_REQUESTS) {
-      const { promise, resolve } = Promise.withResolvers();
-      this.requestQueue.push({
-        url,
-        options: mergedOptions,
-        retryCount,
-        requestKey,
-        resolve
-      });
-      this.processQueue();
-      return promise;
-    } else {
-      return this.processRequest(url, mergedOptions, retryCount, requestKey);
-    }
+    return this.processRequest(url, mergedOptions, retryCount, requestKey);
   }
 
   static async processRequest(url, options, retryCount, requestKey) {
-    this.currentRequests++;
-
     const requestPromise = this.makeRequest(url, options, retryCount, requestKey);
 
     this.#pendingRequests.set(requestKey, requestPromise);
 
     try {
       const result = await requestPromise;
+      // 资源写操作成功后广播：下拉选项短期缓存（resources.js）等据此失效。
+      // 用事件而非直接导入，避免 apiClient ↔ resources 循环依赖
+      if (result?.success && (options.method || "GET").toUpperCase() !== "GET") {
+        document.dispatchEvent(new CustomEvent("ipma:data-mutation", { detail: { url } }));
+      }
       return result;
     } finally {
       this.#pendingRequests.delete(requestKey);
-      this.currentRequests--;
-      this.processQueue();
-    }
-  }
-
-  static processQueue() {
-    while (this.currentRequests < this.MAX_CONCURRENT_REQUESTS && this.requestQueue.length > 0) {
-      const queueItem = this.requestQueue.shift();
-      if (queueItem) {
-        this.processRequest(
-          queueItem.url,
-          queueItem.options,
-          queueItem.retryCount,
-          queueItem.requestKey
-        )
-          .then(queueItem.resolve)
-          .catch((error) => {
-            console.error("Queue request error:", error);
-            queueItem.resolve({ success: false, message: error.message, errorType: "queue_error" });
-          });
-      }
     }
   }
 
@@ -175,6 +129,7 @@ export class ApiClient {
                 suggestedAction: errorData.suggested_action || ""
               };
             } catch (jsonError) {
+              console.error("认证失败响应体非 JSON:", jsonError);
               return {
                 success: false,
                 message: t("api.auth_failed"),
@@ -196,7 +151,8 @@ export class ApiClient {
             }, 1500);
           }
           return { success: false, message: t("api.token_expired"), errorType: "token_expired" };
-        } else if (response.status === 429 && retryCount < 3) {
+        }
+        if (response.status === 429 && retryCount < 3) {
           const retryAfter = response.headers.get("Retry-After") || 2;
           const delay = parseInt(retryAfter) * 1000;
 
@@ -215,6 +171,7 @@ export class ApiClient {
             suggestedAction: errorData.suggested_action || ""
           };
         } catch (jsonError) {
+          console.error("错误响应体非 JSON:", jsonError);
           return {
             success: false,
             message: `${t("api.request_failed")}: ${response.status}`,
@@ -253,7 +210,7 @@ export class ApiClient {
           success: true,
           data: await response.blob(),
           isBlob: true,
-          filename: filename
+          filename
         };
       }
 
@@ -283,7 +240,6 @@ export class ApiClient {
         errorType = "timeout";
       } else if (error.message.includes("Network")) {
         errorMessage = t("api.network_failed");
-        errorType = "network_error";
       }
 
       return {
@@ -296,7 +252,9 @@ export class ApiClient {
   }
 
   static isPublicAuthEndpoint(url) {
-    if (typeof url !== "string") return false;
+    if (typeof url !== "string") {
+      return false;
+    }
     const normalizedUrl = url.split("?")[0];
     return (
       normalizedUrl === "/api/auth/login" ||

@@ -1,12 +1,19 @@
 import { TopologyCore } from "./TopologyCore.js";
-import { TopologyRenderer } from "./TopologyRenderer.js";
+import { TopologyRenderer, cabinetGroupKey } from "./TopologyRenderer.js";
 import { TopologyDataManager } from "./TopologyDataManager.js";
+import { SVG_NS } from "./SVGCore.js";
 import { showConfirm } from "../../utils/confirm.js";
 import { showToast } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
 import { loadModal, openModal, closeModal } from "../../utils/modalLoader.js";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
+// 推挤位移分配：自身固定不动；对方固定时承担全部推量；双方可动时对半分摊
+function separateShift(selfFixed, otherFixed, push) {
+  if (selfFixed) {
+    return 0;
+  }
+  return otherFixed ? push : push / 2;
+}
 
 // 房间容器留白：左右下内边距与顶部标题区高度
 const ROOM_PADDING = 40;
@@ -70,7 +77,9 @@ export class TopologyVisualization {
 
   /// 当前筛选下可见的节点
   visibleNodes() {
-    if (!this.orgFilterSet) return this.nodes;
+    if (!this.orgFilterSet) {
+      return this.nodes;
+    }
     return this.nodes.filter((n) => n.org_id && this.orgFilterSet.has(n.org_id));
   }
 
@@ -94,7 +103,9 @@ export class TopologyVisualization {
 
   async deleteDevice(deviceId) {
     const confirmed = await showConfirm(t("viz.confirm_remove_device"));
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     const success = await this.dataManager.deleteTopologyNode(deviceId);
     if (success) {
@@ -184,13 +195,19 @@ export class TopologyVisualization {
     const g = this.core.connectionsGroup.querySelector(
       `[data-connection-id="${CSS.escape(connectionId)}"]`
     );
-    if (!g) return;
+    if (!g) {
+      return;
+    }
 
     const path = g.querySelector(".topology-connection");
-    if (path) path.classList.add("selected");
+    if (path) {
+      path.classList.add("selected");
+    }
 
     const conn = this.connectionsMap.get(connectionId);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
 
     await this._openConnectionDetail(conn);
   }
@@ -198,34 +215,35 @@ export class TopologyVisualization {
   /// 连线详情弹窗：展示两端设备与端口（逻辑连线含成员端口，派生连线含途经线路）
   async _openConnectionDetail(conn) {
     const modal = await loadModal("topology-connection-detail-modal");
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
 
     const setText = (id, text) => {
       const el = modal.querySelector(`#${id}`);
-      if (el) el.textContent = text;
+      if (el) {
+        el.textContent = text;
+      }
     };
     const toggle = (id, show) => {
       const el = modal.querySelector(`#${id}`);
-      if (el) el.classList.toggle("hidden", !show);
+      if (el) {
+        el.classList.toggle("hidden", !show);
+      }
     };
 
-    const typeKey = conn.derived
-      ? "viz.connection_type_derived"
-      : conn.connection_type === "logical"
-        ? "viz.connection_type_logical"
-        : "viz.connection_type_physical";
+    let typeKey = "viz.connection_type_physical";
+    if (conn.derived) {
+      typeKey = "viz.connection_type_derived";
+    } else if (conn.connection_type === "logical") {
+      typeKey = "viz.connection_type_logical";
+    }
     setText("topo-conn-detail-type", t(typeKey));
     setText("topo-conn-detail-label", conn.label || "");
     toggle("topo-conn-detail-label", Boolean(conn.label));
 
-    setText(
-      "topo-conn-detail-source-device",
-      conn.source_device_name || conn.source_device_id
-    );
-    setText(
-      "topo-conn-detail-target-device",
-      conn.target_device_name || conn.target_device_id
-    );
+    setText("topo-conn-detail-source-device", conn.source_device_name || conn.source_device_id);
+    setText("topo-conn-detail-target-device", conn.target_device_name || conn.target_device_id);
     setText("topo-conn-detail-source-port", conn.source_port_label || t("viz.no_port"));
     setText("topo-conn-detail-target-port", conn.target_port_label || t("viz.no_port"));
 
@@ -262,9 +280,12 @@ export class TopologyVisualization {
       };
     }
 
-    const closeButtons = modal.querySelectorAll('[data-modal-id="topology-connection-detail-modal"]');
+    // onclick 赋值幂等：模态框保持打开期间重复查看连线详情不会叠加监听
+    const closeButtons = modal.querySelectorAll(
+      '[data-modal-id="topology-connection-detail-modal"]'
+    );
     closeButtons.forEach((btn) => {
-      btn.addEventListener("click", () => this._deselectConnection());
+      btn.onclick = () => this._deselectConnection();
     });
 
     openModal("topology-connection-detail-modal");
@@ -272,7 +293,9 @@ export class TopologyVisualization {
 
   async _deleteConnection(connectionId) {
     const confirmed = await showConfirm(t("viz.connection_delete_confirm"));
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     const success = await this.dataManager.deleteConnection(connectionId);
     if (success) {
@@ -282,7 +305,9 @@ export class TopologyVisualization {
   }
 
   _deselectConnection() {
-    if (!this.selectedConnectionId) return;
+    if (!this.selectedConnectionId) {
+      return;
+    }
     this.core.connectionsGroup
       .querySelectorAll(".selected, .selected-group, .conn-delete-marker")
       .forEach((el) => {
@@ -357,11 +382,7 @@ export class TopologyVisualization {
       const room = rooms.get(roomKey);
       room.nodes.push(node);
 
-      const cabinetKey = node.cabinet_id
-        ? `cab:${node.cabinet_id}`
-        : node.cabinet_name
-          ? `cab:name:${node.cabinet_name}`
-          : null;
+      const cabinetKey = cabinetGroupKey(node);
       if (cabinetKey) {
         if (!room.cabinets.has(cabinetKey)) {
           room.cabinets.set(cabinetKey, {
@@ -395,7 +416,9 @@ export class TopologyVisualization {
 
   /// 分组节点包围盒（含容器留白），空分组返回 null
   _groupBox(nodes, padding, header) {
-    if (nodes.length === 0) return null;
+    if (nodes.length === 0) {
+      return null;
+    }
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -423,7 +446,9 @@ export class TopologyVisualization {
 
     this._collectSpatialGroups().forEach((room) => {
       const roomBox = this._groupBox(room.nodes, ROOM_PADDING, ROOM_HEADER);
-      if (!roomBox) return;
+      if (!roomBox) {
+        return;
+      }
 
       const roomG = this._drawContainerRect(roomBox, {
         kind: "room",
@@ -438,7 +463,9 @@ export class TopologyVisualization {
 
       room.cabinets.forEach((cabinet) => {
         const cabBox = this._groupBox(cabinet.nodes, CABINET_PADDING, CABINET_HEADER);
-        if (!cabBox) return;
+        if (!cabBox) {
+          return;
+        }
         const cabG = this._drawContainerRect(cabBox, {
           kind: "cabinet",
           key: cabinet.key,
@@ -499,7 +526,9 @@ export class TopologyVisualization {
         `[data-device-id="${CSS.escape(node.device_id)}"]`
       );
       const rect = el?.querySelector("rect");
-      if (!rect) return;
+      if (!rect) {
+        return;
+      }
       node.x = Math.round(parseFloat(rect.getAttribute("x")));
       node.y = Math.round(parseFloat(rect.getAttribute("y")));
       node.width = parseFloat(rect.getAttribute("width")) || node.width || 200;
@@ -546,12 +575,16 @@ export class TopologyVisualization {
         box: this._groupBox(entry.nodes, entry.padding, entry.header)
       }))
       .filter((entry) => entry.box);
-    if (boxes.length < 2) return false;
+    if (boxes.length < 2) {
+      return false;
+    }
 
     let moved = false;
 
     const shiftGroup = (entry, dx, dy) => {
-      if (dx === 0 && dy === 0) return;
+      if (dx === 0 && dy === 0) {
+        return;
+      }
       entry.nodes.forEach((node) => {
         node.x = Math.round((node.x || 0) + dx);
         node.y = Math.round((node.y || 0) + dy);
@@ -571,39 +604,42 @@ export class TopologyVisualization {
           const b = boxes[j];
           const overlapX = Math.min(a.box.maxX, b.box.maxX) - Math.max(a.box.minX, b.box.minX);
           const overlapY = Math.min(a.box.maxY, b.box.maxY) - Math.max(a.box.minY, b.box.minY);
-          if (overlapX <= 0 || overlapY <= 0) continue;
+          if (overlapX <= 0 || overlapY <= 0) {
+            continue;
+          }
 
           adjusted = true;
-          const aFixed = a.key === fixedKey;
-          const bFixed = b.key === fixedKey;
-          const aCenterX = (a.box.minX + a.box.maxX) / 2;
-          const bCenterX = (b.box.minX + b.box.maxX) / 2;
-
-          if (overlapX <= overlapY) {
-            // 水平推开：左边的向左、右边的向右
-            const push = overlapX + gap;
-            const aLeft = aCenterX <= bCenterX;
-            const aShift = aFixed ? 0 : bFixed ? push : push / 2;
-            const bShift = bFixed ? 0 : aFixed ? push : push / 2;
-            shiftGroup(a, aLeft ? -aShift : aShift, 0);
-            shiftGroup(b, aLeft ? bShift : -bShift, 0);
-          } else {
-            // 垂直推开：上边的向上、下边的向下
-            const push = overlapY + gap;
-            const aCenterY = (a.box.minY + a.box.maxY) / 2;
-            const bCenterY = (b.box.minY + b.box.maxY) / 2;
-            const aTop = aCenterY <= bCenterY;
-            const aShift = aFixed ? 0 : bFixed ? push : push / 2;
-            const bShift = bFixed ? 0 : aFixed ? push : push / 2;
-            shiftGroup(a, 0, aTop ? -aShift : aShift);
-            shiftGroup(b, 0, aTop ? bShift : -bShift);
-          }
+          this._separateOverlappingPair(a, b, overlapX, overlapY, gap, fixedKey, shiftGroup);
         }
       }
-      if (!adjusted) break;
+      if (!adjusted) {
+        break;
+      }
     }
 
     return moved;
+  }
+
+  /// 单对相交分组的推开：沿穿透量较小的轴整体平移，固定组不动
+  _separateOverlappingPair(a, b, overlapX, overlapY, gap, fixedKey, shiftGroup) {
+    const aFixed = a.key === fixedKey;
+    const bFixed = b.key === fixedKey;
+
+    if (overlapX <= overlapY) {
+      // 水平推开：左边的向左、右边的向右
+      const aShift = separateShift(aFixed, bFixed, overlapX + gap);
+      const bShift = separateShift(bFixed, aFixed, overlapX + gap);
+      const aLeft = (a.box.minX + a.box.maxX) / 2 <= (b.box.minX + b.box.maxX) / 2;
+      shiftGroup(a, aLeft ? -aShift : aShift, 0);
+      shiftGroup(b, aLeft ? bShift : -bShift, 0);
+    } else {
+      // 垂直推开：上边的向上、下边的向下
+      const aShift = separateShift(aFixed, bFixed, overlapY + gap);
+      const bShift = separateShift(bFixed, aFixed, overlapY + gap);
+      const aTop = (a.box.minY + a.box.maxY) / 2 <= (b.box.minY + b.box.maxY) / 2;
+      shiftGroup(a, 0, aTop ? -aShift : aShift);
+      shiftGroup(b, 0, aTop ? bShift : -bShift);
+    }
   }
 
   /// 自动布局：按 房间 → 机柜 分组排布。
@@ -653,7 +689,7 @@ export class TopologyVisualization {
       });
 
       // 散件区：机柜行下方（无机柜时从 (0, 0) 开始）
-      let looseY = room.cabinets.length > 0 ? cabinetsHeight + ROOM_PADDING : 0;
+      const looseY = room.cabinets.length > 0 ? cabinetsHeight + ROOM_PADDING : 0;
       room.loose.forEach((node, i) => {
         const col = i % LOOSE_COLS;
         const row = Math.floor(i / LOOSE_COLS);
@@ -674,7 +710,9 @@ export class TopologyVisualization {
     let column = 0;
 
     blocks.forEach(({ room, box }) => {
-      if (!box) return;
+      if (!box) {
+        return;
+      }
       if (column >= ROOM_COLS) {
         column = 0;
         cursorX = 100;
@@ -709,10 +747,14 @@ export class TopologyVisualization {
   /** 按分组键查找容器名称（房间或机柜）。 */
   _findGroupLabel(kind, key) {
     for (const room of this._collectSpatialGroups()) {
-      if (kind === "room" && room.key === key) return room.label;
+      if (kind === "room" && room.key === key) {
+        return room.label;
+      }
       if (kind === "cabinet") {
         const cab = room.cabinets.find((c) => c.key === key);
-        if (cab) return cab.label;
+        if (cab) {
+          return cab.label;
+        }
       }
     }
     return "";
@@ -723,9 +765,13 @@ export class TopologyVisualization {
    * 保存时与容器拖动一致——组内全部设备整体平移后重排并保存坐标。
    */
   async openContainerCoordinateModal(kind, key, box) {
-    if (!box) return;
+    if (!box) {
+      return;
+    }
     const modal = await loadModal("topology-container-modal");
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
 
     const nameLabel = modal.querySelector("#topology-container-name");
     if (nameLabel) {
@@ -757,23 +803,28 @@ export class TopologyVisualization {
   async moveContainerOrigin(kind, key, targetX, targetY) {
     const members = this.visibleNodes().filter((node) => {
       if (kind === "cabinet") {
-        const cabKey = node.cabinet_id
-          ? `cab:${node.cabinet_id}`
-          : node.cabinet_name
-            ? `cab:name:${node.cabinet_name}`
-            : null;
-        return cabKey === key;
+        return cabinetGroupKey(node) === key;
       }
       return (node.room_id ? `room:${node.room_id}` : "room:none") === key;
     });
-    if (members.length === 0) return;
+    if (members.length === 0) {
+      return;
+    }
 
     // 以组内设备实际包围盒推算当前容器原点，保证与拖动语义一致
-    const box = this._groupBox(members, kind === "room" ? ROOM_PADDING : CABINET_PADDING, kind === "room" ? ROOM_HEADER : CABINET_HEADER);
-    if (!box) return;
+    const box = this._groupBox(
+      members,
+      kind === "room" ? ROOM_PADDING : CABINET_PADDING,
+      kind === "room" ? ROOM_HEADER : CABINET_HEADER
+    );
+    if (!box) {
+      return;
+    }
     const dx = targetX - box.minX;
     const dy = targetY - box.minY;
-    if (dx === 0 && dy === 0) return;
+    if (dx === 0 && dy === 0) {
+      return;
+    }
 
     members.forEach((node) => {
       node.x = Math.round((node.x || 0) + dx);
@@ -789,7 +840,9 @@ export class TopologyVisualization {
     const element = this.core.elementsGroup.querySelector(
       `[data-device-id="${CSS.escape(deviceId)}"]`
     );
-    if (!element) return;
+    if (!element) {
+      return;
+    }
     this.core._setElementPosition(element, x, y);
     this.core._snapElementToGrid(element);
     this._handleNodeDragEnd(deviceId);
@@ -810,8 +863,14 @@ export class TopologyVisualization {
       containerRects.forEach((rect) => {
         minX = Math.min(minX, parseFloat(rect.getAttribute("x")));
         minY = Math.min(minY, parseFloat(rect.getAttribute("y")));
-        maxX = Math.max(maxX, parseFloat(rect.getAttribute("x")) + parseFloat(rect.getAttribute("width")));
-        maxY = Math.max(maxY, parseFloat(rect.getAttribute("y")) + parseFloat(rect.getAttribute("height")));
+        maxX = Math.max(
+          maxX,
+          parseFloat(rect.getAttribute("x")) + parseFloat(rect.getAttribute("width"))
+        );
+        maxY = Math.max(
+          maxY,
+          parseFloat(rect.getAttribute("y")) + parseFloat(rect.getAttribute("height"))
+        );
       });
     } else {
       this.visibleNodes().forEach((n) => {

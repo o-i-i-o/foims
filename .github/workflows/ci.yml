@@ -13,6 +13,70 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 阻断级：ES 模块语法与 i18n JSON 解析校验（零配置，确定性结果）。
+      # id/注册表/i18n 键/版本号一致性由 cargo test 的
+      # tests/frontend_consistency.rs 覆盖（随下方 build job 运行）。
+      - name: JS 模块语法校验
+        working-directory: web
+        run: |
+          set -e
+          count=0
+          for f in $(find static/js -name '*.js'); do
+            node --input-type=module --check < "$f"
+            count=$((count+1))
+          done
+          echo "语法校验通过：$count 个 JS 文件"
+
+      - name: i18n JSON 校验
+        working-directory: web
+        run: |
+          set -e
+          for f in static/i18n/*.json; do
+            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$f"
+          done
+
+      # 阻断级：lint 栈（本地已全绿；格式归 prettier、代码质量归 eslint，
+      # CSS 归 stylelint、HTML 归 htmlhint、纯工具函数归 jest —— 职责划分
+      # 见 web/eslint.config.mjs 与 docs/code-style.md 3.6）
+      - name: 安装 lint 依赖
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: ESLint（代码质量 + import/sonarjs 插件）
+        working-directory: web
+        run: npx eslint static/js tests
+
+      - name: Stylelint（CSS）
+        working-directory: web
+        run: npx stylelint "static/css/**/*.css"
+
+      - name: HTMLHint（入口页与模态片段）
+        working-directory: web
+        run: |
+          npx htmlhint "static/*.html" "static/modals/**/*.html"
+          npx htmlhint "static/*.html" --rules='{"doctype-first":true,"html-lang-require":true,"title-require":true}'
+
+      - name: Prettier 格式检查
+        working-directory: web
+        run: npx prettier --check static/js tests eslint.config.mjs jest.config.mjs babel.config.cjs
+
+      - name: Jest 单元测试（纯工具模块）
+        working-directory: web
+        run: npx jest
+
+      - name: Depcheck（依赖健康检查）
+        working-directory: web
+        run: npx depcheck
+
   build:
     runs-on: ubuntu-latest
     permissions:

@@ -73,6 +73,12 @@ pub async fn get_available_org_types(
     ))
 }
 
+/// 类型 key 允许的字符：Unicode 字母/数字（含中文）、下划线、连字符。
+/// 拒绝 HTML 元字符，防止类型名注入前端 innerHTML 渲染。
+fn is_valid_type_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '-'
+}
+
 /// 校验 levels 映射格式并返回根类型
 /// levels 格式: { "type_a": ["type_b"], "type_b": ["type_c", "type_d"], ... }
 pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, AppError> {
@@ -103,6 +109,13 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         if key.len() > 50 {
             return Err(AppError::Validation(
                 msg("server.org_template.validation.type_name_too_long").with("name", key),
+            ));
+        }
+        if let Some(invalid) = key.chars().find(|c| !is_valid_type_char(*c)) {
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.type_name_invalid")
+                    .with("name", key)
+                    .with("char", invalid),
             ));
         }
 
@@ -265,9 +278,19 @@ pub fn validate_icons_mapping(
                 msg("server.org_template.validation.icon_type_undefined").with("type", key),
             ));
         }
-        if !value.is_string() {
+        let Some(icon_str) = value.as_str() else {
             return Err(AppError::Validation(
                 msg("server.org_template.validation.icon_not_string").with("type", key),
+            ));
+        };
+        // 图标值渲染进前端 innerHTML，仅允许图标 key / emoji 等纯文本，禁止 HTML 元字符
+        let invalid = icon_str.len() > 20
+            || icon_str
+                .chars()
+                .any(|c| matches!(c, '<' | '>' | '&' | '"' | '\'' | '`' | '=') || c.is_control());
+        if invalid {
+            return Err(AppError::Validation(
+                msg("server.org_template.validation.icon_value_invalid").with("type", key),
             ));
         }
     }

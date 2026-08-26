@@ -92,7 +92,10 @@ export async function submitWorkstationForm() {
       const xInput = elementCache.getValue("workstation-x");
       const yInput = elementCache.getValue("workstation-y");
       const hasPosition =
-        xInput !== "" && yInput !== "" && !Number.isNaN(Number(xInput)) && !Number.isNaN(Number(yInput));
+        xInput !== "" &&
+        yInput !== "" &&
+        !Number.isNaN(Number(xInput)) &&
+        !Number.isNaN(Number(yInput));
       document.dispatchEvent(
         new CustomEvent("ipma:workstation-saved", {
           detail: {

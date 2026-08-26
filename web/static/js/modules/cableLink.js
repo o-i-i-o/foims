@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
+import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -66,7 +66,9 @@ function getLinkTypeLabel(type) {
 
 export async function loadCableLinksData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
-  if (sortBy) tableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    tableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const result = await apiGet(
@@ -160,14 +162,18 @@ let cableTableClickHandler = null;
 // 行内打印按钮委托（eventManager 只委托 edit/delete，data-action 按钮由模块自管）
 function bindCablePrintRowEvents() {
   const table = elementCache.get("cable-links-table");
-  if (!table) return;
+  if (!table) {
+    return;
+  }
   if (cableTableClickHandler) {
     table.removeEventListener("click", cableTableClickHandler);
   }
 
   cableTableClickHandler = (e) => {
     const btn = e.target.closest('button[data-action="print-label"]');
-    if (!btn) return;
+    if (!btn) {
+      return;
+    }
     const item = lastLoadedItems.find((it) => it.id === btn.dataset.id);
     if (item) {
       printCableLabels([item]);
@@ -184,7 +190,9 @@ export async function openCableLabelPrintModal() {
   }
 
   const modal = await loadModal("cable-label-print-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const tbody = modal.querySelector("#cable-label-print-table tbody");
   tbody.innerHTML = lastLoadedItems
@@ -207,15 +215,15 @@ export async function openCableLabelPrintModal() {
   const allCheck = modal.querySelector("#cable-label-print-all");
   allCheck.checked = true;
   allCheck.onchange = () => {
-    modal
-      .querySelectorAll(".cable-label-print-check")
-      .forEach((check) => {
-        check.checked = allCheck.checked;
-      });
+    modal.querySelectorAll(".cable-label-print-check").forEach((check) => {
+      check.checked = allCheck.checked;
+    });
     updateCount();
   };
   tbody.onclick = (e) => {
-    if (e.target.classList.contains("cable-label-print-check")) updateCount();
+    if (e.target.classList.contains("cable-label-print-check")) {
+      updateCount();
+    }
   };
   updateCount();
 
@@ -330,7 +338,9 @@ async function loadScopeOptions(scopeType, scopeSelectId) {
     }
   };
   const config = scopeApis[scopeType];
-  if (!config) return;
+  if (!config) {
+    return;
+  }
   await fillSelect(scopeSelectId, config.url, { ...config, errorLabel: "范围" });
 }
 
@@ -368,16 +378,18 @@ async function loadDeviceOptions(side, { roomId = null, cabinetId = null } = {})
 // 动态加载端点选项（依据端点类型 + 已选范围）
 async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedId = null) {
   const select = elementCache.get(selectId);
-  if (!select) return;
+  if (!select) {
+    return;
+  }
 
   select.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
-  if (!scopeValue) return;
+  if (!scopeValue) {
+    return;
+  }
 
   try {
     if (endpointType === "net_outlet") {
-      const result = await apiGet(
-        `/api/resources/options/net-outlets?room_id=${scopeValue}`
-      );
+      const result = await apiGet(`/api/resources/options/net-outlets?room_id=${scopeValue}`);
       const data = result.success ? result.data : {};
       const items = (data.items || data || []).map((o) => ({ id: o.id, label: o.name }));
       appendOptions(select, items);
@@ -428,7 +440,9 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
     console.error("加载端点选项失败:", e);
   }
 
-  if (selectedId) select.value = selectedId;
+  if (selectedId) {
+    select.value = selectedId;
+  }
 }
 
 // 类型切换：更新范围选择器标签/可见性、设备接口流程级联行的显隐，并加载范围选项
@@ -443,24 +457,36 @@ async function onTypeChange(side) {
   const deviceSelect = elementCache.get(ids.deviceSelect);
   const idSelect = elementCache.get(ids.idSelect);
 
-  if (idSelect) idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
-  if (scopeSelect) scopeSelect.value = "";
+  if (idSelect) {
+    idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
+  }
+  if (scopeSelect) {
+    scopeSelect.value = "";
+  }
 
   const cfg = type ? ENDPOINT_SCOPE[type] : null;
   if (!cfg) {
-    if (scopeGroup) scopeGroup.style.display = "none";
+    if (scopeGroup) {
+      scopeGroup.style.display = "none";
+    }
     flowRow?.classList.add("hidden");
     return;
   }
-  if (scopeLabel) scopeLabel.textContent = t(cfg.labelKey) || cfg.scope;
-  if (scopeGroup) scopeGroup.style.display = "";
+  if (scopeLabel) {
+    scopeLabel.textContent = t(cfg.labelKey) || cfg.scope;
+  }
+  if (scopeGroup) {
+    scopeGroup.style.display = "";
+  }
   // 设备接口流程：显示 机柜（可选）+ 设备 级联行，其余类型隐藏
   flowRow?.classList.toggle("hidden", !cfg.deviceFlow);
   if (cfg.deviceFlow) {
-    if (cabinetSelect)
+    if (cabinetSelect) {
       cabinetSelect.innerHTML = `<option value="">${t("cable_link.cabinet_any")}</option>`;
-    if (deviceSelect)
+    }
+    if (deviceSelect) {
       deviceSelect.innerHTML = `<option value="">${t("cable_link.select_device")}</option>`;
+    }
   }
   await loadScopeOptions(cfg.scope, ids.scopeSelect);
 }
@@ -472,7 +498,9 @@ async function onScopeChange(side) {
   const scopeValue = elementCache.get(ids.scopeSelect)?.value;
   const idSelect = elementCache.get(ids.idSelect);
 
-  if (idSelect) idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
+  if (idSelect) {
+    idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
+  }
 
   if (type === "device_interface") {
     await loadCabinetOptions(side, scopeValue);
@@ -489,7 +517,9 @@ async function onCabinetChange(side) {
   const cabinetId = elementCache.get(ids.cabinetSelect)?.value;
   const idSelect = elementCache.get(ids.idSelect);
 
-  if (idSelect) idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
+  if (idSelect) {
+    idSelect.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
+  }
   await loadDeviceOptions(side, cabinetId ? { cabinetId } : { roomId: scopeValue });
 }
 
@@ -504,7 +534,9 @@ async function onDeviceChange(side) {
 
 // 还原整合类型的真实 endpoint_type 与 id
 function decodeEndpoint(type, rawValue) {
-  if (!rawValue) return { type: "", id: "" };
+  if (!rawValue) {
+    return { type: "", id: "" };
+  }
   if (type === "device_interface") {
     const idx = rawValue.indexOf(":");
     if (idx > 0) {
@@ -514,7 +546,7 @@ function decodeEndpoint(type, rawValue) {
   return { type, id: rawValue };
 }
 
-let changeHandlers = {};
+const changeHandlers = {};
 
 // 编辑回填：按端点类型驱动级联选择器（类型→范围→机柜（可选）→设备→端点），
 // 与新建表单完全复用，回填后所有选择器保持可编辑
@@ -590,7 +622,9 @@ export async function openCableLinkModal(cableLink = null) {
       }
     };
     changeHandlers[key] = handlers[evt];
-    if (sel) sel.addEventListener("change", changeHandlers[key]);
+    if (sel) {
+      sel.addEventListener("change", changeHandlers[key]);
+    }
   });
 
   // 编辑与新建复用同一表单：级联选择器始终可见、可编辑
@@ -622,7 +656,9 @@ export async function openCableLinkModal(cableLink = null) {
     });
   } else {
     title.textContent = t("cable_link.add");
-    if (form) form.reset();
+    if (form) {
+      form.reset();
+    }
     elementCache.setValue("cable-link-id", "");
     elementCache.setValue("cable-link-link-type", "ethernet");
     elementCache.setValue("cable-link-tested", "0");

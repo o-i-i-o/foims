@@ -9,9 +9,15 @@ import { t } from "./i18n.js";
 
 /** 从 API 响应中提取列表（兼容裸数组与 {items} 分页结构）。 */
 function extractItems(result) {
-  if (!result.success || !result.data) return [];
-  if (Array.isArray(result.data)) return result.data;
-  if (Array.isArray(result.data.items)) return result.data.items;
+  if (!result.success || !result.data) {
+    return [];
+  }
+  if (Array.isArray(result.data)) {
+    return result.data;
+  }
+  if (Array.isArray(result.data.items)) {
+    return result.data.items;
+  }
   return [];
 }
 
@@ -23,6 +29,57 @@ function buildOption(value, label, disabled = false) {
   option.disabled = disabled;
   return option;
 }
+
+/**
+ * 等待目标元素出现（模态框注入前的短暂窗口）。
+ * 调用方常把填充函数与 openModal 并行执行，模态框 DOM 可能尚未注入。
+ * 用 setTimeout 轮询而非 rAF：隐藏标签页 rAF 完全暂停会让超时判定失效。
+ */
+function waitForElement(id, timeoutMs = 3000) {
+  const direct = document.getElementById(id);
+  if (direct) {
+    return Promise.resolve(direct);
+  }
+
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const check = () => {
+      const el = document.getElementById(id);
+      if (el || performance.now() - start > timeoutMs) {
+        resolve(el);
+      } else {
+        setTimeout(check, 50);
+      }
+    };
+    check();
+  });
+}
+
+/**
+ * 下拉选项请求短期缓存（10s TTL）：弹窗短时间内重复打开时不再全量重拉
+ * page_size=1000 的选项列表。资源写操作成功后由 apiClient 广播的
+ * ipma:data-mutation 事件即时失效（见 apiClient.js），避免"刚建的资源
+ * 10 秒内选不到、编辑回显被清空"的新鲜度回归。
+ */
+const OPTION_FETCH_TTL = 10 * 1000;
+const optionFetchCache = new Map();
+
+function fetchOptionItems(url) {
+  const hit = optionFetchCache.get(url);
+  if (hit && Date.now() - hit.time < OPTION_FETCH_TTL) {
+    return hit.promise;
+  }
+  const promise = apiGet(url).catch((error) => {
+    optionFetchCache.delete(url);
+    throw error;
+  });
+  optionFetchCache.set(url, { time: Date.now(), promise });
+  return promise;
+}
+
+document.addEventListener("ipma:data-mutation", () => {
+  optionFetchCache.clear();
+});
 
 /**
  * 通用下拉填充。
@@ -47,23 +104,31 @@ export async function fillSelect(selectId, url, opts = {}) {
     itemToLabel,
     errorLabel = "选项"
   } = opts;
-  const select = document.getElementById(selectId);
-  if (!select) return;
-
-  const currentValue = select.value;
-
   let fetched = [];
   if (prefetched) {
     fetched = prefetched;
   } else if (url) {
     try {
-      fetched = extractItems(await apiGet(url));
+      fetched = extractItems(await fetchOptionItems(url));
     } catch (error) {
       console.error(`加载${errorLabel}失败:`, error);
-      select.replaceChildren(buildOption("", t("common.load_failed"), true));
+      const errSelect = await waitForElement(selectId);
+      if (errSelect) {
+        errSelect.replaceChildren(buildOption("", t("common.load_failed"), true));
+      }
       return;
     }
   }
+
+  // 数据就绪后再查询目标元素：入口即查会在"与 openModal 并行"的调用方式下
+  // 因模态框 DOM 未注入而静默丢弃（曾导致设备模板下拉为空、编辑回显丢失）
+  const select = await waitForElement(selectId);
+  if (!select) {
+    console.warn(`fillSelect: 目标元素 #${selectId} 不存在，已跳过填充`);
+    return;
+  }
+
+  const currentValue = select.value;
 
   const items = fetched.filter(filter || (() => true));
   const options = [placeholderKey ? buildOption("", t(placeholderKey)) : null]
@@ -102,8 +167,12 @@ const DATA_CENTER_ROOM_TYPE_LIST = "data_center,telecom_closet,other";
 /** 构造房间列表 API 地址（org_id / room_type 过滤由后端执行）。 */
 function buildRoomsUrl(orgId, roomTypes) {
   const params = new URLSearchParams({ page_size: "1000" });
-  if (orgId) params.set("org_id", orgId);
-  if (roomTypes) params.set("room_type", roomTypes);
+  if (orgId) {
+    params.set("org_id", orgId);
+  }
+  if (roomTypes) {
+    params.set("room_type", roomTypes);
+  }
   return `/api/resources/rooms?${params.toString()}`;
 }
 
@@ -148,12 +217,12 @@ export function loadDataCenterRoomsForSelect(selectId = "cabinet-room", orgId = 
  * 或具体类型（如 "office"/"other"），可叠加组织过滤。
  */
 export function loadVisualizationRoomsForSelect(selectId, roomTypes, orgId = null) {
-  const resolved =
-    roomTypes === "office"
-      ? OFFICE_ROOM_TYPE_LIST
-      : roomTypes === "datacenter"
-        ? DATA_CENTER_ROOM_TYPE_LIST
-        : roomTypes;
+  let resolved = roomTypes;
+  if (roomTypes === "office") {
+    resolved = OFFICE_ROOM_TYPE_LIST;
+  } else if (roomTypes === "datacenter") {
+    resolved = DATA_CENTER_ROOM_TYPE_LIST;
+  }
   return fillSelect(selectId, buildRoomsUrl(orgId, resolved), {
     placeholderKey: "room.select_room",
     emptyKey: "room.no_room_data",
@@ -167,7 +236,9 @@ export async function loadRoomNetworksForCabinet(
   containerId = "cabinet-inherited-networks"
 ) {
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const showHint = (key) => {
     container.replaceChildren();
@@ -213,7 +284,9 @@ export async function loadRoomNetworksForCabinet(
         ["IPv4", network.ipv4_cidr],
         ["IPv6", network.ipv6_cidr]
       ]) {
-        if (!cidr) continue;
+        if (!cidr) {
+          continue;
+        }
         const div = document.createElement("div");
         div.className = "small";
         div.textContent = `${label}: ${cidr}`;
@@ -257,7 +330,7 @@ export function loadOrgsForSelect(selectId = "room-org-id") {
       placeholderKey: "organization.select_org",
       errorLabel: "组织",
       itemToLabel: (org) =>
-        `\u00A0\u00A0\u00A0\u00A0`.repeat(org.depth) + `${org.name} (${org.org_type})`
+        `${"\u00A0\u00A0\u00A0\u00A0".repeat(org.depth)}${org.name} (${org.org_type})`
     });
   })();
 }
@@ -271,7 +344,9 @@ export async function getOrgSubtreeIds(orgId) {
       const walk = (nodes, inside) => {
         nodes.forEach((node) => {
           const hit = inside || node.id === orgId;
-          if (hit) ids.add(node.id);
+          if (hit) {
+            ids.add(node.id);
+          }
           if (node.children && node.children.length > 0) {
             walk(node.children, hit);
           }
@@ -309,14 +384,10 @@ export function loadWorkstationsForSelect(selectId, roomId = null) {
       errorLabel: "工位"
     });
   }
-  return fillSelect(
-    selectId,
-    `/api/resources/workstations?room_id=${roomId}&page_size=1000`,
-    {
-      placeholderKey: "device.select_workstation",
-      errorLabel: "工位"
-    }
-  );
+  return fillSelect(selectId, `/api/resources/workstations?room_id=${roomId}&page_size=1000`, {
+    placeholderKey: "device.select_workstation",
+    errorLabel: "工位"
+  });
 }
 
 /**
@@ -349,8 +420,11 @@ export function loadPositionsForSelect(selectId, cabinetId = null, roomId = null
     });
   }
   const params = new URLSearchParams({ page_size: "1000" });
-  if (cabinetId) params.set("cabinet_id", cabinetId);
-  else params.set("room_id", roomId);
+  if (cabinetId) {
+    params.set("cabinet_id", cabinetId);
+  } else {
+    params.set("room_id", roomId);
+  }
   return fillSelect(selectId, `/api/resources/positions?${params.toString()}`, {
     placeholderKey: "device.select_position",
     errorLabel: "机位"

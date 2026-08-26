@@ -68,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.67"
+version = "0.15.74"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -136,11 +136,17 @@ totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 rust-i18n = "4.2.1"
 time = "0.3.55"
 
+
 [lints]
 workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }
+serde_json = { workspace = true }
+regex = "1"
+audit = "0.8.0"
+cargo-llvm-cov = "0.9.0"
+cargo-fuzz = "0.13.2"
 
 [features]
 default = []

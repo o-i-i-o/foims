@@ -1,0 +1,45 @@
+2026-08-26T21:05:33.815128  WARN ipma_log::en: Logging init warning: 创建日志文件 /var/log/ipma/2026-08-26-21-05.zh.log 失败: Permission denied (os error 13)
+2026-08-26T21:05:33.815346  WARN ipma_log::en: Logging init warning: 创建日志文件 /var/log/ipma/2026-08-26-21-05.en.log 失败: Permission denied (os error 13)
+2026-08-26T21:05:33.815663  INFO ipma_log::en: Log output to: ipma.zh.log, ipma.en.log
+2026-08-26T21:05:33.815694  INFO ipma_log::en: Starting IPMA server...
+2026-08-26T21:05:33.815713  INFO ipma_log::en: Configuration loaded successfully
+2026-08-26T21:05:33.817016  WARN ipma_log::en: Failed to create key backup: Permission denied (os error 13), does not affect operation
+2026-08-26T21:05:33.817042  INFO ipma_log::en: Encryption key integrity check passed
+2026-08-26T21:05:33.817066  INFO ipma_log::en: Main key path: /etc/ipma/encryption.key
+2026-08-26T21:05:33.817091  INFO ipma_log::en: Backup key path: /etc/ipma/encryption.key.backup
+2026-08-26T21:05:33.817129  WARN ipma_log::en: Failed to read backup key: Permission denied (os error 13)
+2026-08-26T21:05:34.084549  INFO ipma_log::en: Database connection pool created: max=20, min=5, acquire_timeout=15s, idle_timeout=60s, max_lifetime=1800s
+2026-08-26T21:05:34.084576  INFO ipma_log::en: System startup time initialized
+2026-08-26T21:05:34.084909  INFO ipma_log::en: Application fail2ban cleanup task started
+2026-08-26T21:05:34.088012  INFO ipma_log::en: Cron scheduler started successfully
+2026-08-26T21:05:34.088032  INFO ipma_log::en: Scheduler started successfully
+2026-08-26T21:05:34.088057  INFO ipma_log::en: Database connection pool health check task started (every 30s)
+2026-08-26T21:05:34.089298  INFO ipma_log::en: Rate limit middleware enabled
+2026-08-26T21:05:34.089322  INFO ipma_log::en: IP limit: 1000/60s
+2026-08-26T21:05:34.089341  INFO ipma_log::en: User limit: 200/60s
+2026-08-26T21:05:34.089360  INFO ipma_log::en: Login limit: 5/60s
+2026-08-26T21:05:34.089380  INFO ipma_log::en: Email limit: 5/3600s
+2026-08-26T21:05:34.089423  INFO ipma_log::en: Initialization mode disabled: full application routes available
+2026-08-26T21:05:34.089443  INFO ipma_log::en: Listening on: UDS (/tmp/ipma-dev.sock)
+2026-08-26T21:05:34.089460  INFO ipma_log::en: Static file serving: nginx
+2026-08-26T21:05:34.090561  WARN ipma: 设置 UDS socket 属组为 nginx 失败（非 root 运行？），保持仅属主可访问: Operation not permitted (os error 1)
+2026-08-26T21:05:34.097063  INFO ipma_log::en: UDS server started (h2c): /tmp/ipma-dev.sock
+2026-08-26T21:05:34.097082  INFO ipma_log::en: System startup complete, waiting for requests...
+2026-08-26T21:05:48.239577  INFO ipma_log::en: User admin logged in successfully
+2026-08-26T21:05:48.240077  WARN ipma_log::en: Failed to open auth log file /var/log/ipma/auth.log: Permission denied (os error 13)
+2026-08-26T21:37:32.416253  INFO ipma_log::en: SIGTERM received
+2026-08-26T21:37:32.416270  INFO ipma_log::en: Shutdown signal received, starting graceful shutdown
+2026-08-26T21:37:32.416327  INFO ipma_log::en: JWT cache cleanup task received shutdown signal, stopping
+2026-08-26T21:37:32.416368  INFO ipma_log::en: DB pool health check task received shutdown signal, stopping
+2026-08-26T21:37:32.416385  INFO ipma_log::en: 1. Stopping new connections and waiting for requests to complete...
+2026-08-26T21:37:32.416399  INFO ipma_log::en: Rate limit cleanup task received shutdown signal, stopping
+2026-08-26T21:37:32.417124  INFO ipma_log::en: Server stopped accepting new connections
+2026-08-26T21:37:32.417137  INFO ipma_log::en: 2. Waiting for server task to finish...
+2026-08-26T21:37:32.417149  INFO ipma_log::en: All server tasks finished
+2026-08-26T21:37:32.417160  INFO ipma_log::en: 3. Shutting down background tasks...
+2026-08-26T21:37:33.418387  INFO ipma_log::en: Shutdown signal sent to background tasks
+2026-08-26T21:37:33.418427  INFO ipma_log::en: 4. Shutting down the scheduler...
+2026-08-26T21:37:33.418470  INFO ipma_log::en: Scheduler shut down
+2026-08-26T21:37:33.418507  INFO ipma_log::en: 5. Shutting down the database connection pool...
+2026-08-26T21:37:33.422009  INFO ipma_log::en: Database connection pool closed
+2026-08-26T21:37:33.422397  INFO ipma_log::en: System shut down gracefully

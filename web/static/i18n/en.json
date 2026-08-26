@@ -904,15 +904,15 @@
     "all": "All Notifications",
     "unread": "Unread",
     "read": "Read",
-    "clear_read": "Clear Read",
+    "mark_all_read": "Mark All Read",
     "time": "Time",
     "title": "Title",
     "content": "Content",
     "status": "Status",
     "no_data": "No notifications",
     "mark_read": "Mark as read",
-    "cleared_read": "Read notifications cleared",
-    "confirm_clear_read": "Clear all read notifications?"
+    "marked_all_read": "All notifications marked as read",
+    "confirm_mark_all_read": "Mark all notifications as read?"
   },
   "ip": {
     "ip_address": "IP Address",
@@ -1318,6 +1318,22 @@
     "zoom_out": "Zoom out",
     "zoom_level": "Canvas zoom level",
     "zoom_fit": "Fit Canvas"
+  },
+  "import_export": {
+    "backup_failed": "Failed to back up configuration",
+    "download_template_failed": "Failed to download import template",
+    "export_db_failed": "Failed to export database",
+    "export_db_success": "Database exported, downloading",
+    "export_failed": "Export failed",
+    "file_too_large": "File is too large, please check and retry",
+    "import_failed": "Import failed",
+    "import_success": "Data imported successfully",
+    "importing": "Importing data...",
+    "invalid_file_type": "Invalid file type, please choose a file in the required format",
+    "restore_error": "Error restoring configuration",
+    "restore_failed": "Failed to restore configuration",
+    "restore_success": "Configuration restored successfully",
+    "result_item": "Table {{table}}: {{inserted}} inserted, {{updated}} updated"
   },
   "init": {
     "title": "IPMA System Initialization",
@@ -1933,6 +1949,7 @@
         "child_type_undefined": "Child type \"{{type}}\" is not defined in the mapping; add it as a key",
         "children_not_array": "Children of type \"{{name}}\" must be an array",
         "icon_not_string": "The icon of type \"{{type}}\" must be a string",
+        "icon_value_invalid": "The icon value of type \"{{type}}\" contains disallowed characters",
         "icon_type_undefined": "Type \"{{type}}\" in icon mapping is not defined in levels",
         "icons_must_be_object": "icons must be an object (type-to-icon mapping)",
         "levels_cycle": "Cycle detected in template hierarchy; check parent-child relations",
@@ -1944,6 +1961,7 @@
         "root_type_missing": "No root type found (all types appear as children; cycle exists)",
         "root_type_multiple": "Multiple root types found: {{types}}; ensure exactly one root type",
         "type_name_required": "Type name is required",
+        "type_name_invalid": "Type name \"{{name}}\" contains disallowed characters (only letters, digits, CJK characters, underscores and hyphens are allowed)",
         "type_name_too_long": "Type name \"{{name}}\" must not exceed 50 characters",
         "type_not_defined": "Type \"{{type}}\" is not defined in the template"
       },

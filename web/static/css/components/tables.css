@@ -13,6 +13,7 @@
 
 .data-table {
   width: 100%;
+
   /* 强制至少铺满容器：表格处于 flex 等上下文时不因内容收缩 */
   min-width: 100%;
   border-collapse: collapse;
@@ -52,6 +53,7 @@
 .data-table th .btn {
   height: 30px;
   min-width: 60px;
+
   /* 固定高度下禁止换行，避免文字溢出按钮 */
   white-space: nowrap;
 }
@@ -235,7 +237,7 @@
   color: var(--color-text-muted);
   transition: all 0.2s ease;
   opacity: 0.5;
-  font-family: "monospace";
+  font-family: monospace;
   letter-spacing: -2px;
 }
 
@@ -251,7 +253,7 @@
 .data-table th.sortable.sorted::after {
   opacity: 1;
   color: var(--color-primary);
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .data-table th.sortable.sorted.asc::after {

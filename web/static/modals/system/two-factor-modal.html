@@ -9,7 +9,8 @@
       <div id="two-factor-setup-step">
         <p class="hint-text" data-i18n="two_factor.scan_hint">Scan the QR code below with your authenticator app, or enter the key manually:</p>
         <div class="qr-code-container">
-          <img id="two-factor-qr-code" src="" alt="2FA QR Code">
+          <!-- src 由 userManager.js 打开时以 data URI 动态填充，初始留空避免对当前页发起无效请求 -->
+          <img id="two-factor-qr-code" alt="2FA QR Code">
         </div>
         <div class="form-group">
           <label for="two-factor-secret" data-i18n="two_factor.secret_key">Secret Key</label>

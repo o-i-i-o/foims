@@ -19,7 +19,7 @@
 .required {
   color: var(--color-danger);
   margin-left: 2px;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 /* ===== 控件基样式：.form-group 内控件 / .form-control 工具类 / 网卡管理 .nc-input 共用 ===== */
@@ -141,7 +141,7 @@ select.nc-input:not([multiple]) {
 
 .form-row-container:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgb(102 126 234 / 0.1);
+  box-shadow: 0 2px 8px rgb(102 126 234 / 10%);
 }
 
 .form-row-container .form-row {

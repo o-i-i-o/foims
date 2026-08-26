@@ -99,7 +99,9 @@ function updateActiveTab(tabBtns, tabContents, activeBtn, tabId) {
 function loadTabData(tabId) {
   nextFrame(async () => {
     const config = TAB_CONFIG[tabId];
-    if (!config) return;
+    if (!config) {
+      return;
+    }
 
     const module = await loadModule(config.module);
 

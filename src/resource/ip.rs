@@ -27,6 +27,7 @@ struct IpListFilters {
     search: Option<String>,
     status: Option<String>,
     device_name: Option<String>,
+    device_type: Option<String>,
     network: Option<String>,
     ip_address: Option<String>,
     network_id: Option<Uuid>,
@@ -82,6 +83,13 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
             .push_bind(pattern)
             .push(")");
     }
+    if let Some(pattern) = &filters.device_type {
+        next(builder, &mut first);
+        builder
+            .push("device_type ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
     if let Some(pattern) = &filters.network {
         next(builder, &mut first);
         builder
@@ -121,6 +129,9 @@ pub async fn get_ip_managers(
     let device_name = query
         .get("device_name")
         .map_or("", std::string::String::as_str);
+    let device_type = query
+        .get("device_type")
+        .map_or("", std::string::String::as_str);
     let network = query.get("network").map_or("", std::string::String::as_str);
     let ip_address = query
         .get("ip_address")
@@ -131,6 +142,7 @@ pub async fn get_ip_managers(
         search: (!search.is_empty()).then(|| crate::utils::escape_like(search)),
         status: (!status.is_empty()).then(|| status.to_string()),
         device_name: (!device_name.is_empty()).then(|| crate::utils::escape_like(device_name)),
+        device_type: (!device_type.is_empty()).then(|| crate::utils::escape_like(device_type)),
         network: (!network.is_empty()).then(|| crate::utils::escape_like(network)),
         ip_address: (!ip_address.is_empty()).then(|| crate::utils::escape_like(ip_address)),
         network_id: query

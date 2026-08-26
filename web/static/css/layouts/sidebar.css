@@ -1,14 +1,14 @@
 .sidebar {
   background: var(--color-bg-white);
-  box-shadow: 2px 0 4px rgb(0 0 0 / 0.1);
+  box-shadow: 2px 0 4px rgb(0 0 0 / 10%);
   width: var(--sidebar-width);
   height: 100vh;
   position: fixed;
   top: 0;
   left: 0;
-  overflow-y: auto;
+  overflow: hidden auto;
+
   /* 收起过渡期间裁剪尚未收缩完的文字，避免横向滚动条闪现 */
-  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   transition: width var(--sidebar-anim-duration) var(--sidebar-anim-easing);
@@ -28,7 +28,7 @@ body.sidebar-collapsed .main-content {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
   color: var(--color-bg-white);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
   text-align: center;
 }
 
@@ -70,24 +70,25 @@ body.sidebar-collapsed .sidebar-title {
   padding: 0;
   border: none;
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 20%);
   color: var(--color-bg-white);
   cursor: pointer;
   transition: background-color var(--transition-fast);
 }
 
 .sidebar-toggle:hover {
-  background: rgb(255 255 255 / 0.35);
+  background: rgb(255 255 255 / 35%);
 }
 
 .sidebar-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.4);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 40%);
 }
 
 .sidebar-toggle svg {
   width: 18px;
   height: 18px;
+
   /* 单箭头随状态旋转 180°，代替双图标切换 */
   transition: transform var(--sidebar-anim-duration) var(--sidebar-anim-easing);
 }
@@ -100,8 +101,7 @@ body.sidebar-collapsed .sidebar-toggle svg {
   list-style: none;
   padding: var(--space-md) 0;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   min-height: 0;
 }
 
@@ -132,7 +132,7 @@ body.sidebar-collapsed .sidebar-toggle svg {
 }
 
 .sidebar-menu li a.active {
-  background-color: rgb(102 126 234 / 0.1);
+  background-color: rgb(102 126 234 / 10%);
   border-left-color: var(--color-primary);
   color: var(--color-primary);
   font-weight: 500;
@@ -216,9 +216,10 @@ body.sidebar-collapsed .sidebar .nav-text {
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-bg-white);
   border-radius: var(--radius-md);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   color: var(--color-text-secondary);
   overflow: hidden;
+
   /* 收起时 gap 归零配合文字 max-width 归零，图标平滑滑动到正中 */
   transition: gap var(--sidebar-anim-duration) var(--sidebar-anim-easing);
 }
@@ -248,7 +249,7 @@ body.sidebar-collapsed .sidebar-footer .user-info {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   overflow: hidden;
   transition:
     gap var(--sidebar-anim-duration) var(--sidebar-anim-easing),

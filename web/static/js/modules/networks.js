@@ -1,5 +1,5 @@
 // 导入必要的模块
-import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
+import { apiGet } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -39,7 +39,9 @@ export async function loadNetworkRegionsData(
   sortOrder = null
 ) {
   currentNetworkRegionPage = page;
-  if (sortBy) networkRegionTableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    networkRegionTableState.setSort(sortBy, sortOrder);
+  }
   try {
     const result = await apiGet(
       `/api/resources/network-regions?page=${page}&page_size=${currentNetworkRegionPageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`
@@ -60,14 +62,18 @@ export async function loadNetworkRegionsData(
         {
           field: "ipv4_cidrs",
           render: (v) => {
-            if (!v || v.length === 0) return "-";
+            if (!v || v.length === 0) {
+              return "-";
+            }
             return v.map((cidr) => escapeHtml(cidr)).join("<br>");
           }
         },
         {
           field: "ipv6_cidrs",
           render: (v) => {
-            if (!v || v.length === 0) return "-";
+            if (!v || v.length === 0) {
+              return "-";
+            }
             return v.map((cidr) => escapeHtml(cidr)).join("<br>");
           }
         },
@@ -125,7 +131,9 @@ export async function loadNetworksData(
 ) {
   currentNetworkPage = page;
   currentFilters = filters;
-  if (sortBy) networkTableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    networkTableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const params = new URLSearchParams({
@@ -135,10 +143,18 @@ export async function loadNetworksData(
       sort_order: networkTableState.sortOrder
     });
 
-    if (filters.name) params.append("name", filters.name);
-    if (filters.region) params.append("network_region", filters.region);
-    if (filters.ipv4) params.append("ipv4_cidr", filters.ipv4);
-    if (filters.ipv6) params.append("ipv6_cidr", filters.ipv6);
+    if (filters.name) {
+      params.append("name", filters.name);
+    }
+    if (filters.region) {
+      params.append("network_region", filters.region);
+    }
+    if (filters.ipv4) {
+      params.append("ipv4_cidr", filters.ipv4);
+    }
+    if (filters.ipv6) {
+      params.append("ipv6_cidr", filters.ipv6);
+    }
 
     const url = `/api/resources/networks?${params.toString()}`;
     const result = await apiGet(url);
@@ -236,12 +252,16 @@ function applyNetworkFilters() {
 
 // 计算网段的总IP数量
 function calculateTotalIps(cidr) {
-  if (!cidr) return 0;
+  if (!cidr) {
+    return 0;
+  }
 
   try {
     // 解析CIDR，提取子网掩码长度
     const parts = cidr.split("/");
-    if (parts.length !== 2) return 0;
+    if (parts.length !== 2) {
+      return 0;
+    }
 
     const prefixLength = parseInt(parts[1]);
     // 计算总IP数量：2^(32 - 子网掩码长度) - 2（减去网络地址和广播地址）
@@ -254,22 +274,26 @@ function calculateTotalIps(cidr) {
 
 // 生成网段的所有IP地址
 function generateIpAddresses(cidr) {
-  if (!cidr) return [];
+  if (!cidr) {
+    return [];
+  }
 
   try {
     // 解析CIDR
     const parts = cidr.split("/");
-    if (parts.length !== 2) return [];
+    if (parts.length !== 2) {
+      return [];
+    }
 
     const ip = parts[0];
-    const prefixLength = parseInt(parts[1]);
 
     // 简单实现：只处理IPv4地址
-    if (!/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(ip)) return [];
+    if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+      return [];
+    }
 
     // 计算网络地址
     const ipParts = ip.split(".").map(Number);
-    const networkAddress = ipParts.join(".");
 
     // 计算总IP数量
     const totalIps = calculateTotalIps(cidr);
@@ -301,15 +325,23 @@ function generateIpAddresses(cidr) {
 
 // 生成 /22 或 /23 网段划分为 /24 的子网列表
 function generateSubnet24List(cidr) {
-  if (!cidr) return [];
+  if (!cidr) {
+    return [];
+  }
   const parts = cidr.split("/");
-  if (parts.length !== 2) return [];
+  if (parts.length !== 2) {
+    return [];
+  }
   const prefixLength = parseInt(parts[1], 10);
-  if (prefixLength !== 22 && prefixLength !== 23) return [];
+  if (prefixLength !== 22 && prefixLength !== 23) {
+    return [];
+  }
 
   const ip = parts[0];
   const ipParts = ip.split(".").map(Number);
-  if (ipParts.length !== 4 || ipParts.some((p) => isNaN(p))) return [];
+  if (ipParts.length !== 4 || ipParts.some((p) => isNaN(p))) {
+    return [];
+  }
 
   // /22 掩码第三段 252，/23 掩码第三段 254
   const maskThird = prefixLength === 22 ? 252 : 254;
@@ -323,18 +355,30 @@ function generateSubnet24List(cidr) {
   return subnets;
 }
 
+// IP 可视化块的状态样式类（首渲染与局部刷新两处共用）
+function ipBlockStatusClass(isUsed, status) {
+  if (!isUsed) {
+    return "ip-unused";
+  }
+  return status === "active" ? "ip-used-active" : "ip-used-inactive";
+}
+
+// IP 可视化块悬浮提示中的状态文案
+function ipStateText(isUsed, status) {
+  if (!isUsed) {
+    return t("network.unused");
+  }
+  return status === "active" ? t("status.active") : t("status.inactive");
+}
+
 // 渲染 IP 可视化块
 function renderIpBlocks(ipAddresses, ipStatusMap) {
   return ipAddresses
     .map((ip) => {
       const isUsed = ipStatusMap.has(ip);
       const status = ipStatusMap.get(ip) || "unused";
-      const statusClass = isUsed
-        ? status === "active"
-          ? "ip-used-active"
-          : "ip-used-inactive"
-        : "ip-unused";
-      const tooltipText = `${escapeHtml(ip)} (${isUsed ? (status === "active" ? t("status.active") : t("status.inactive")) : t("network.unused")})`;
+      const statusClass = ipBlockStatusClass(isUsed, status);
+      const tooltipText = `${escapeHtml(ip)} (${ipStateText(isUsed, status)})`;
       return `
       <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
         <span class="ip-label">${ip.split(".").pop()}</span>
@@ -347,9 +391,23 @@ function renderIpBlocks(ipAddresses, ipStatusMap) {
 // 显示网段使用情况
 export async function showNetworkUsage(id) {
   try {
-    const networkResult = await apiGet(`/api/resources/networks/${id}`);
+    // 网段详情、IP 列表与模态框 HTML 三路互不依赖，并行加载
+    const [networkResult, ipResult, modal] = await Promise.all([
+      apiGet(`/api/resources/networks/${id}`),
+      apiGet(`/api/resources/ip?network_id=${id}&page_size=1000`),
+      openModal("subnet-usage-modal")
+    ]);
     if (!networkResult.success) {
+      closeModal("subnet-usage-modal");
       showToast(t("network.load_failed"), "error");
+      return;
+    }
+    if (!ipResult.success) {
+      closeModal("subnet-usage-modal");
+      showToast(t("ip.load_failed"), "error");
+      return;
+    }
+    if (!modal) {
       return;
     }
 
@@ -357,22 +415,11 @@ export async function showNetworkUsage(id) {
     const hasIPv4 = !!network.ipv4_cidr;
     const hasIPv6 = !!network.ipv6_cidr;
 
-    const ipResult = await apiGet(`/api/resources/ip?network_id=${id}&page_size=1000`);
-    if (!ipResult.success) {
-      showToast(t("ip.load_failed"), "error");
-      return;
-    }
-
     const ipData = ipResult.data?.data || ipResult.data?.items || ipResult.data || [];
     const allNetworkIps = Array.isArray(ipData) ? ipData : [];
     const isIPv6 = (ip) => ip.ip_address && ip.ip_address.includes(":");
     const ipv4Ips = allNetworkIps.filter((ip) => !isIPv6(ip));
     const ipv6Ips = allNetworkIps.filter((ip) => isIPv6(ip));
-
-    const modal = await openModal("subnet-usage-modal");
-    if (!modal) {
-      return;
-    }
 
     // 网段名置于 IPv4/IPv6 切换按钮行左侧，仅用于标识当前查看的网段
     const nameEl = modal.querySelector("#subnet-usage-network-name");
@@ -446,7 +493,7 @@ export async function showNetworkUsage(id) {
 }
 
 // 构建网段使用详情弹窗的 IPv4 动态正文。
-function buildIPv4Content(network, networkIps, networkId) {
+function buildIPv4Content(network, networkIps, _networkId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
   const prefixLength = cidr ? parseInt(cidr.split("/")[1], 10) : 32;
@@ -467,6 +514,30 @@ function buildIPv4Content(network, networkIps, networkId) {
   const usedIps = networkIps.length;
   const unusedIps = totalIps - usedIps;
   const usageRate = totalIps > 0 ? ((usedIps / totalIps) * 100).toFixed(2) : "0.00";
+
+  // 可视化区域三态：掩码过小不渲染 / 含 /24 子网时带切换标签 / 单块网格
+  const renderVisualizationBlock = () => {
+    if (prefixLength < 22) {
+      return `<div class="ip-grid-empty" role="alert">${t("network.visualization_too_many_ips")}</div>`;
+    }
+    if (subnet24List.length > 0) {
+      return `<div class="subnet-24-tabs" role="tablist">
+                ${subnet24List
+                  .map(
+                    (sub, idx) => `
+                  <button type="button" class="subnet-24-btn${idx === 0 ? " active" : ""}" data-cidr="${escapeHtml(sub)}" role="tab">${escapeHtml(sub)}</button>
+                `
+                  )
+                  .join("")}
+              </div>
+              <div class="ip-grid" id="ip-grid" data-active-cidr="${escapeHtml(activeSubnet24 || "")}">
+                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
+              </div>`;
+    }
+    return `<div class="ip-grid" id="ip-grid">
+                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
+              </div>`;
+  };
 
   return `
     <div class="usage-stats">
@@ -522,26 +593,7 @@ function buildIPv4Content(network, networkIps, networkId) {
     
     <div class="usage-visualization">
       <h5>${t("network.ip_visualization")}</h5>
-      ${
-        prefixLength < 22
-          ? `<div class="ip-grid-empty" role="alert">${t("network.visualization_too_many_ips")}</div>`
-          : subnet24List.length > 0
-            ? `<div class="subnet-24-tabs" role="tablist">
-                ${subnet24List
-                  .map(
-                    (sub, idx) => `
-                  <button type="button" class="subnet-24-btn${idx === 0 ? " active" : ""}" data-cidr="${escapeHtml(sub)}" role="tab">${escapeHtml(sub)}</button>
-                `
-                  )
-                  .join("")}
-              </div>
-              <div class="ip-grid" id="ip-grid" data-active-cidr="${escapeHtml(activeSubnet24 || "")}">
-                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
-              </div>`
-            : `<div class="ip-grid" id="ip-grid">
-                ${renderIpBlocks(allIpAddresses, ipStatusMap)}
-              </div>`
-      }
+      ${renderVisualizationBlock()}
     </div>
     
     <div class="usage-ips">
@@ -586,7 +638,7 @@ function buildIPv4Content(network, networkIps, networkId) {
   `;
 }
 
-function buildIPv6Content(network, networkIps, networkId) {
+function buildIPv6Content(network, networkIps, _networkId) {
   const hasIPv6Config = !!network.ipv6_cidr;
 
   if (!hasIPv6Config) {
@@ -704,14 +756,18 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
     subnet24Buttons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const subCidr = btn.dataset.cidr;
-        if (!subCidr) return;
+        if (!subCidr) {
+          return;
+        }
         const subIps = generateIpAddresses(subCidr);
         subnet24Buttons.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         ipGrid.dataset.activeCidr = subCidr;
         ipGrid.innerHTML = renderIpBlocks(subIps, ipStatusMap);
         // 重置过滤器
-        if (filterSelect) filterSelect.value = "all";
+        if (filterSelect) {
+          filterSelect.value = "all";
+        }
       });
     });
   }
@@ -725,15 +781,13 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
         const status = block.dataset.status;
         const isUsed = status !== "unused";
 
-        if (filterValue === "all") {
-          block.style.display = "block";
-        } else if (filterValue === "used" && isUsed) {
-          block.style.display = "block";
-        } else if (filterValue === "unused" && !isUsed) {
-          block.style.display = "block";
-        } else {
-          block.style.display = "none";
-        }
+        // .ip-block 布局为 flex（CSS 定义），恢复显示时用空串回到样式表取值；
+        // 置 "block" 会覆盖 flex 导致块内 label 失去居中
+        const visible =
+          filterValue === "all" ||
+          (filterValue === "used" && isUsed) ||
+          (filterValue === "unused" && !isUsed);
+        block.style.display = visible ? "" : "none";
       });
     });
   }
@@ -745,9 +799,14 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
       refreshButton.disabled = true;
 
       try {
-        const refreshIpResult = await apiGet("/api/resources/ip?page_size=1000");
+        // 与首次打开一致按 network_id 过滤请求：全库拉取在 IP 超过
+        // page_size 上限时还会静默缺数据
+        const refreshIpResult = await apiGet(
+          `/api/resources/ip?network_id=${networkId}&page_size=1000`
+        );
         if (refreshIpResult.success) {
-          const allIps = refreshIpResult.data.data || refreshIpResult.data || [];
+          const allIps =
+            refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
             (ip) => ip.network_id === networkId && !isIPv6(ip)
@@ -766,12 +825,8 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
               const ip = block.dataset.ip;
               const isUsed = newIpStatusMap.has(ip);
               const status = newIpStatusMap.get(ip) || "unused";
-              const statusClass = isUsed
-                ? status === "active"
-                  ? "ip-used-active"
-                  : "ip-used-inactive"
-                : "ip-unused";
-              const tooltipText = `${ip} (${isUsed ? (status === "active" ? t("status.active") : t("status.inactive")) : t("network.unused")})`;
+              const statusClass = ipBlockStatusClass(isUsed, status);
+              const tooltipText = `${ip} (${ipStateText(isUsed, status)})`;
 
               block.className = `ip-block ${statusClass}`;
               block.dataset.status = isUsed ? status : "unused";
@@ -825,9 +880,14 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
       refreshButton.disabled = true;
 
       try {
-        const refreshIpResult = await apiGet("/api/resources/ip?page_size=1000");
+        // 与首次打开一致按 network_id 过滤请求：全库拉取在 IP 超过
+        // page_size 上限时还会静默缺数据
+        const refreshIpResult = await apiGet(
+          `/api/resources/ip?network_id=${networkId}&page_size=1000`
+        );
         if (refreshIpResult.success) {
-          const allIps = refreshIpResult.data.data || refreshIpResult.data || [];
+          const allIps =
+            refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
             (ip) => ip.network_id === networkId && isIPv6(ip)
@@ -930,7 +990,9 @@ export async function deleteNetworkRegion(id) {
 // ====== CIDR 动态输入框管理 ======
 function addCidrInputRow(containerId, cidrType, value = "") {
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const row = document.createElement("div");
   row.className = "cidr-input-row";
@@ -976,12 +1038,16 @@ function addCidrInputRow(containerId, cidrType, value = "") {
 
 function getCidrValues(containerId) {
   const container = document.getElementById(containerId);
-  if (!container) return null;
+  if (!container) {
+    return null;
+  }
 
   const values = [];
   container.querySelectorAll(".cidr-input").forEach((input) => {
     const val = input.value.trim();
-    if (val) values.push(val);
+    if (val) {
+      values.push(val);
+    }
   });
 
   return values.length > 0 ? values : null;
@@ -989,7 +1055,9 @@ function getCidrValues(containerId) {
 
 function clearCidrInputs(containerId) {
   const container = document.getElementById(containerId);
-  if (container) container.innerHTML = "";
+  if (container) {
+    container.innerHTML = "";
+  }
 }
 
 // ====== 提交网络区域表单 ======
@@ -1062,7 +1130,9 @@ export async function submitNetworkForm() {
   ];
   for (const { family, gateway, cidr, isValid } of gatewayChecks) {
     const gatewayTrimmed = gateway ? gateway.trim() : "";
-    if (!gatewayTrimmed) continue;
+    if (!gatewayTrimmed) {
+      continue;
+    }
     if (!isValid(gatewayTrimmed)) {
       showToast(t("network.gateway_invalid", { family }), "warning");
       return;
@@ -1078,7 +1148,9 @@ export async function submitNetworkForm() {
   }
 
   const parseDnsList = (dnsStr) => {
-    if (!dnsStr || !dnsStr.trim()) return null;
+    if (!dnsStr || !dnsStr.trim()) {
+      return null;
+    }
     const dnsList = dnsStr
       .split(/[,\s]+/)
       .map((dns) => dns.trim())
@@ -1093,8 +1165,12 @@ export async function submitNetworkForm() {
   const ipv4_dns = parseDnsList(ipv4_dns_str);
   const ipv6_dns = parseDnsList(ipv6_dns_str);
 
-  if (ipv4_dns === null && ipv4_dns_str && ipv4_dns_str.trim()) return;
-  if (ipv6_dns === null && ipv6_dns_str && ipv6_dns_str.trim()) return;
+  if (ipv4_dns === null && ipv4_dns_str && ipv4_dns_str.trim()) {
+    return;
+  }
+  if (ipv6_dns === null && ipv6_dns_str && ipv6_dns_str.trim()) {
+    return;
+  }
 
   const networkData = {
     name,
@@ -1152,7 +1228,9 @@ export async function openNetworkRegionModal(networkRegion = null) {
     }
   } else {
     title.textContent = t("network.add_region");
-    if (form) form.reset();
+    if (form) {
+      form.reset();
+    }
     elementCache.setValue("network-region-id", "");
     addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4");
     addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6");
@@ -1188,7 +1266,9 @@ export async function openNetworkModal(network = null) {
     elementCache.setValue("network-description", network.description || "");
   } else {
     title.textContent = t("network.add_network");
-    if (form) form.reset();
+    if (form) {
+      form.reset();
+    }
     elementCache.setValue("network-id", "");
   }
 }

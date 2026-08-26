@@ -43,7 +43,9 @@ export class SVGDataManager {
       if (result.success && Array.isArray(result.data?.items)) {
         return result.data.items;
       }
-      if (result.success) return [];
+      if (result.success) {
+        return [];
+      }
       this._notifyLoadFailure(result.message, "获取工位数据");
       return [];
     } catch (error) {
@@ -59,7 +61,9 @@ export class SVGDataManager {
       if (result.success && Array.isArray(result.data?.items)) {
         return result.data.items;
       }
-      if (result.success) return [];
+      if (result.success) {
+        return [];
+      }
       this._notifyLoadFailure(result.message, "获取IP");
       return [];
     } catch (error) {
@@ -99,7 +103,9 @@ export class SVGDataManager {
         const ipMap = new Map();
         if (Array.isArray(ipManagers)) {
           ipManagers.forEach((ipManager) => {
-            if (!ipManager.workstation_id) return;
+            if (!ipManager.workstation_id) {
+              return;
+            }
             ipMap.set(ipManager.workstation_id, ipManager);
           });
         }
@@ -163,10 +169,15 @@ export class SVGDataManager {
         }
 
         if (hasSavedLayout) {
+          // 布局项以小写 id 建 Map：工位多时避免每个工位全量 find（O(N×M)）
+          const layoutById = new Map();
+          layoutData.forEach((item) => {
+            if (item.element_type !== "door" && item.id) {
+              layoutById.set(item.id.toLowerCase(), item);
+            }
+          });
           workstations.forEach((workstation, index) => {
-            const savedItem = layoutData.find(
-              (item) => item.id.toLowerCase() === workstation.id.toLowerCase()
-            );
+            const savedItem = layoutById.get(workstation.id.toLowerCase());
             if (savedItem && savedItem.position) {
               workstation.position = savedItem.position;
             } else {
@@ -179,8 +190,8 @@ export class SVGDataManager {
               workstation.position = {
                 x: 150 + col * (width + gap),
                 y: 100 + row * (height + gap),
-                width: width,
-                height: height
+                width,
+                height
               };
             }
             workstation.ipManager = ipMap.get(workstation.id);
@@ -207,14 +218,17 @@ export class SVGDataManager {
         }
 
         return hasSavedLayout;
-      } else if (this.core.type === "cabinet") {
+      }
+      if (this.core.type === "cabinet") {
         const token = this.beginCabinetRender();
 
         const [layoutResult, cabinets] = await Promise.all([
           this.apiGet(`/api/resources/layouts/positions/${id}`),
           this.fetchCabinetsByRoom(id)
         ]);
-        if (token !== this.cabinetRenderToken) return false;
+        if (token !== this.cabinetRenderToken) {
+          return false;
+        }
 
         let layoutData = [];
         let hasSavedLayout = false;
@@ -273,12 +287,12 @@ export class SVGDataManager {
    */
   async layoutAndRenderCabinets(cabinets, layoutData, token) {
     const containerHeight = await this.waitForContainerHeight();
-    if (token !== this.cabinetRenderToken) return false;
+    if (token !== this.cabinetRenderToken) {
+      return false;
+    }
 
     const padding = CABINET_EDGE_PADDING;
-    const maxCapacity = Math.max(
-      ...cabinets.map((c) => c.capacity ?? DEFAULT_CABINET_CAPACITY)
-    );
+    const maxCapacity = Math.max(...cabinets.map((c) => c.capacity ?? DEFAULT_CABINET_CAPACITY));
     const uHeight = Math.floor((containerHeight - padding * 2 - 40) / maxCapacity);
 
     let minX = Infinity;
@@ -329,17 +343,19 @@ export class SVGDataManager {
    */
   async renderCabinetBatches(cabinets, token) {
     for (let i = 0; i < cabinets.length; i += CABINET_BATCH_SIZE) {
-      if (token !== this.cabinetRenderToken) return false;
+      if (token !== this.cabinetRenderToken) {
+        return false;
+      }
       const batch = cabinets.slice(i, i + CABINET_BATCH_SIZE);
       batch.forEach((cabinet) => this.renderer.drawCabinet(cabinet));
 
       const positionIds = batch.flatMap((cabinet) =>
         (cabinet.positions || []).map((position) => position.id)
       );
-      const ipMap = positionIds.length
-        ? await this.fetchIpMapByPositions(positionIds)
-        : new Map();
-      if (token !== this.cabinetRenderToken) return false;
+      const ipMap = positionIds.length ? await this.fetchIpMapByPositions(positionIds) : new Map();
+      if (token !== this.cabinetRenderToken) {
+        return false;
+      }
 
       batch.forEach((cabinet) => this.drawCabinetPositions(cabinet, ipMap));
     }
@@ -395,7 +411,9 @@ export class SVGDataManager {
 
       const id = el.dataset.id;
       const rect = el.querySelector("rect");
-      if (!rect) return;
+      if (!rect) {
+        return;
+      }
 
       const position = {
         x: parseFloat(rect.getAttribute("x")),

@@ -43,7 +43,7 @@
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  font-weight: bold;
+  font-weight: 700;
   font-size: 0.95rem;
   line-height: 1;
 }
@@ -79,7 +79,7 @@
 
 .network-config-wrapper {
   width: 100%;
-  flex: 1 !important;
+  flex: 1 !important; /* stylelint-disable-line declaration-no-important -- 压制表单控件默认宽度 */
   min-width: 0;
 }
 
@@ -105,7 +105,7 @@
   background-color: var(--color-danger);
   color: var(--color-bg-white);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgb(198 96 106 / 0.3);
+  box-shadow: 0 2px 8px rgb(198 96 106 / 30%);
 }
 
 .remove-network-config-btn:active {

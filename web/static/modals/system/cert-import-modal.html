@@ -11,17 +11,17 @@
           <label for="cert-file">
             <span data-i18n="cert.cert_file">Certificate File (PEM format)</span><span class="required">*</span>
           </label>
-          <input type="file" id="cert-file" name="cert_file" accept=".pem,.crt" required />
+          <input type="file" id="cert-file" name="cert_file" accept=".pem,.crt" required>
         </div>
         <div class="form-group">
           <label for="key-file">
             <span data-i18n="cert.key_file">Private Key File (PEM format)</span><span class="required">*</span>
           </label>
-          <input type="file" id="key-file" name="key_file" accept=".pem,.key" required />
+          <input type="file" id="key-file" name="key_file" accept=".pem,.key" required>
         </div>
         <div class="form-group">
           <label for="cert-ca-file" data-i18n="cert.ca_file">CA Certificate (optional)</label>
-          <input type="file" id="cert-ca-file" name="ca_file" accept=".pem,.crt,.cer" />
+          <input type="file" id="cert-ca-file" name="ca_file" accept=".pem,.crt,.cer">
           <span class="hint-text" data-i18n="cert.ca_file_hint">Optionally attach the issuing CA so terminals can download and trust the root certificate; it is only used for export, not for signing</span>
         </div>
         <span class="hint-text" data-i18n="cert.import_hint">Encrypted private keys are not supported; please provide an unencrypted PEM key. Certificate and key are only used by this server's HTTPS/nginx and cannot be downloaded</span>

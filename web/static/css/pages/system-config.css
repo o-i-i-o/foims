@@ -42,17 +42,7 @@
 
 .config-card:hover {
   border-color: var(--color-primary-light);
-  box-shadow: 0 4px 12px rgb(102 126 234 / 0.1);
-}
-
-/* 标题/操作行：h2 + 按钮组，或仅一个主操作按钮 */
-.action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-md);
+  box-shadow: 0 4px 12px rgb(102 126 234 / 10%);
 }
 
 .config-card-header {
@@ -150,30 +140,6 @@
   color: var(--color-text-muted);
 }
 
-.port-config-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  background: var(--color-bg-white);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-}
-
-.port-config-row label {
-  min-width: 100px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.port-config-row input[type="number"] {
-  width: 100px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 0.9rem;
-}
-
 .config-actions {
   display: flex;
   gap: var(--space-md);
@@ -211,14 +177,9 @@
   text-align: center;
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .config-row {
     grid-template-columns: 1fr;
-  }
-
-  .port-config-row {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .config-actions {
@@ -230,102 +191,7 @@
   }
 }
 
-/* 服务状态 */
-.service-status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}
-
-.status-item {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--color-bg);
-  border-radius: var(--radius-sm);
-}
-
-.status-label {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  margin-bottom: var(--space-xs);
-}
-
-.status-value {
-  font-size: 1rem;
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-/* 作用域限定在 .status-value 上，避免与 badges.css 的 .status-active/.status-inactive 冲突 */
-.status-value.status-active,
-.status-value.status-enabled {
-  color: var(--color-success);
-}
-
-.status-value.status-inactive,
-.status-value.status-disabled {
-  color: var(--color-danger);
-}
-
-/* 端口配置组件 */
-.port-config {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  width: 100%;
-  flex-wrap: wrap;
-  padding: var(--space-md);
-  background: var(--color-bg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-}
-
-.port-config .toggle-group {
-  flex-shrink: 0;
-}
-
-.port-config input[type="number"] {
-  flex-grow: 1;
-  max-width: 120px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 0.9rem;
-  transition: all var(--transition-fast);
-}
-
-.port-config input[type="number"]:focus {
-  outline: none;
-  border-color: var(--control-border-focus);
-  box-shadow: var(--control-shadow);
-}
-
-.port-config label {
-  min-width: 80px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-}
-
-@media (max-width: 576px) {
-  .port-config {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .port-config input[type="number"] {
-    max-width: 100%;
-    width: 100%;
-  }
-}
-
 /* ==================== 证书管理卡片 ==================== */
-
-.cert-manager-card {
-  margin-top: 16px;
-}
 
 .cert-manager-actions {
   display: flex;
@@ -378,22 +244,15 @@
 
 .cert-type-generated {
   color: #1565c0;
-  background: rgba(21, 101, 192, 0.12);
+  background: rgb(21 101 192 / 12%);
 }
 
 .cert-type-imported {
   color: #2e7d32;
-  background: rgba(46, 125, 50, 0.12);
+  background: rgb(46 125 50 / 12%);
 }
 
 /* ==================== 站点根 CA 区块 ==================== */
-
-.cert-ca-section {
-  padding: 12px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 10px;
-  background: var(--color-bg-secondary, #fafafa);
-}
 
 .cert-section-header {
   display: flex;

@@ -18,7 +18,7 @@ function maskToNull(value) {
  * IP 明细来自网卡管理器（网卡 → 网口 → IP）并展平，
  * 仅取 ip_address 等字段，SNMP 请求只使用首个 IP。
  */
-export function getDeviceFormValues() {
+function getDeviceFormValues() {
   const ips = [];
   const cardManager = getNetworkCardManager();
   if (cardManager) {
@@ -130,9 +130,10 @@ export async function testSnmpConnection() {
     if (result.success) {
       showToast(t("device.snmp_test_success"), "success");
     } else {
-      showToast(t("device.snmp_test_failed") + ": " + result.message, "error");
+      showToast(`${t("device.snmp_test_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
+    console.error("SNMP 连通性测试请求失败:", error);
     showToast(t("device.snmp_test_failed"), "error");
   } finally {
     if (testBtn) {
@@ -168,15 +169,22 @@ export async function getDeviceInfoFromSnmp() {
 
     if (result.success && result.data) {
       const info = result.data;
-      if (info.brand) elementCache.setValue("device-brand", info.brand);
-      if (info.model) elementCache.setValue("device-model", info.model);
+      if (info.brand) {
+        elementCache.setValue("device-brand", info.brand);
+      }
+      if (info.model) {
+        elementCache.setValue("device-model", info.model);
+      }
       // 主机名只读，仅由 SNMP 拉取填充
-      if (info.hostname) elementCache.setValue("device-hostname", info.hostname);
+      if (info.hostname) {
+        elementCache.setValue("device-hostname", info.hostname);
+      }
       showToast(t("device.snmp_info_success"), "success");
     } else {
-      showToast(t("device.snmp_info_failed") + ": " + result.message, "error");
+      showToast(`${t("device.snmp_info_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
+    console.error("SNMP 信息拉取请求失败:", error);
     showToast(t("device.snmp_info_failed"), "error");
   } finally {
     if (getInfoBtn) {

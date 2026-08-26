@@ -32,13 +32,17 @@ export class SVGVisualization {
       this.core.currentRoomId = roomId;
       this.core.elementsGroup.innerHTML = "";
 
-      const workstations = await this.dataManager.fetchWorkstationsByRoom(roomId);
-      const ipManagers = await this.dataManager.fetchIps();
+      const [workstations, ipManagers] = await Promise.all([
+        this.dataManager.fetchWorkstationsByRoom(roomId),
+        this.dataManager.fetchIps()
+      ]);
 
       const ipMap = new Map();
       if (Array.isArray(ipManagers)) {
         ipManagers.forEach((ipManager) => {
-          if (!ipManager.workstation_id) return;
+          if (!ipManager.workstation_id) {
+            return;
+          }
           const existing = ipMap.get(ipManager.workstation_id);
           if (!existing || (existing.status !== "active" && ipManager.status === "active")) {
             ipMap.set(ipManager.workstation_id, ipManager);
@@ -78,8 +82,8 @@ export class SVGVisualization {
         workstation.position = {
           x: startX + col * (width + gap),
           y: startY + row * (height + gap),
-          width: width,
-          height: height
+          width,
+          height
         };
 
         this.renderer.drawWorkstation(workstation);
@@ -90,12 +94,7 @@ export class SVGVisualization {
       // viewBox 同时覆盖容器尺寸，网格背景铺满画布（与 loadSavedLayout 保持一致）
       const cw = this.container.clientWidth || 0;
       const ch = this.container.clientHeight || 0;
-      this.core.setViewBox(
-        0,
-        0,
-        Math.max(1000, totalWidth, cw),
-        Math.max(800, totalHeight, ch)
-      );
+      this.core.setViewBox(0, 0, Math.max(1000, totalWidth, cw), Math.max(800, totalHeight, ch));
 
       setTimeout(() => {
         this.saveLayout();
@@ -123,11 +122,13 @@ export class SVGVisualization {
       }
 
       const token = this.dataManager.beginCabinetRender();
-      if (token !== this.dataManager.cabinetRenderToken) return;
+      if (token !== this.dataManager.cabinetRenderToken) {
+        return;
+      }
 
       // 复用与 loadSavedLayout 相同的布局与分批渲染（无保存布局，纯自动排列）
-      const finished = await this.dataManager.layoutAndRenderCabinets(cabinets, [], token);
-      if (!finished) return;
+      // 返回 false 表示渲染代次已被并发操作取代，无需后续处理
+      await this.dataManager.layoutAndRenderCabinets(cabinets, [], token);
     } catch (error) {
       console.error("自动绘制机位图失败:", error);
       this.core.showToast(`${t("viz.draw_positions_failed")}: ${error.message}`, "error");

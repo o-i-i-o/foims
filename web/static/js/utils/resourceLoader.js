@@ -5,29 +5,21 @@ const preloadedModules = new Set();
 /* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
    JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
    避免同一模块因 URL 不同产生双实例、双份独立状态 */
-export const MODULE_VERSION = "01339";
+export const MODULE_VERSION = "01346";
 
 export function withVersion(path) {
-  if (!path) return path;
+  if (!path) {
+    return path;
+  }
   return path.includes("?") ? `${path}&v=${MODULE_VERSION}` : `${path}?v=${MODULE_VERSION}`;
 }
 
+/* 模块注册表：仅收录真正经 loadModule 动态加载的模块。
+   静态导入的工具（apiClient/ui/toast 等）不在此列 —— 混注册会让读者
+   误判哪些是活的懒加载入口（双实例问题见 loadModule 注释）。 */
 const MODULE_REGISTRY = {
-  apiClient: "/static/js/utils/apiClient.js",
-  confirm: "/static/js/utils/confirm.js",
-  formatter: "/static/js/utils/formatter.js",
-  helpers: "/static/js/utils/helpers.js",
-  i18n: "/static/js/utils/i18n.js",
   networkCardManager: "/static/js/utils/networkCardManager.js",
-  modalLoader: "/static/js/utils/modalLoader.js",
-  pagination: "/static/js/utils/pagination.js",
-  resources: "/static/js/utils/resources.js",
-  sessionManager: "/static/js/utils/sessionManager.js",
-  styleLoader: "/static/js/utils/styleLoader.js",
-  toast: "/static/js/utils/toast.js",
-  ui: "/static/js/utils/ui.js",
   dashboard: "/static/js/modules/dashboard.js",
-  navigation: "/static/js/modules/navigation.js",
   networks: "/static/js/modules/networks.js",
   organization: "/static/js/modules/organization.js",
   room: "/static/js/modules/room.js",
@@ -40,13 +32,8 @@ const MODULE_REGISTRY = {
   log: "/static/js/modules/log.js",
   ipmanager: "/static/js/modules/ipmanager.js",
   resourceTabs: "/static/js/modules/resourceTabs.js",
-  eventManager: "/static/js/modules/eventManager.js",
   authManager: "/static/js/modules/authManager.js",
   device: "/static/js/modules/device.js",
-  devicePorts: "/static/js/modules/devicePorts.js",
-  unifiedDevicePorts: "/static/js/modules/unifiedDevicePorts.js",
-  deviceMacLldp: "/static/js/modules/deviceMacLldp.js",
-  deviceSnmp: "/static/js/modules/deviceSnmp.js",
   visualizationManager: "/static/js/modules/visualization/visualizationManager.js",
   SVGVisualization: "/static/js/modules/visualization/SVGVisualization.js",
   TopologyVisualization: "/static/js/modules/visualization/TopologyVisualization.js",
@@ -149,24 +136,6 @@ function preloadModules(moduleNames) {
   return Promise.allSettled(moduleNames.map((name) => preloadModule(name)));
 }
 
-function prefetchModule(moduleName) {
-  const basePath = MODULE_REGISTRY[moduleName];
-  if (!basePath || preloadedModules.has(moduleName)) {
-    return;
-  }
-
-  // 无版本号 URL 与实际 import 地址一致，modulepreload 提示才真正命中
-  const link = document.createElement("link");
-  link.rel = "modulepreload";
-  link.href = basePath;
-  document.head.appendChild(link);
-  preloadedModules.add(moduleName);
-}
-
-export function prefetchModules(moduleNames) {
-  moduleNames.forEach((name) => prefetchModule(name));
-}
-
 export function schedulePreload(moduleNames, options = {}) {
   const { delay = 1000, priority = "low" } = options;
 
@@ -185,8 +154,4 @@ export function schedulePreload(moduleNames, options = {}) {
   } else {
     setTimeout(execute, delay);
   }
-}
-
-export function getCachedModule(moduleName) {
-  return moduleCache.get(moduleName) || null;
 }

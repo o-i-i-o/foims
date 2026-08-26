@@ -197,7 +197,7 @@
 /* 可视化浮窗：fixed 定位配合鼠标视口坐标，按画布四象限翻转显示 */
 .tooltip {
   position: fixed;
-  background-color: rgb(0 0 0 / 0.8);
+  background-color: rgb(0 0 0 / 80%);
   color: var(--color-bg-white);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
@@ -226,6 +226,7 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: #fafbfc;
+
   /* 画布可左键拖拽平移：默认抓手提示，按住拖动时切换 grabbing */
   cursor: grab;
 }
@@ -263,38 +264,47 @@
   fill: #e3f2fd;
   stroke: #1976d2;
 }
+
 .topology-device-node.type-network_device rect {
   fill: #e3f2fd;
   stroke: #1565c0;
 }
+
 .topology-device-node.type-server rect {
   fill: #e8f5e9;
   stroke: #388e3c;
 }
+
 .topology-device-node.type-router rect {
   fill: #fff3e0;
   stroke: #f57c00;
 }
+
 .topology-device-node.type-camera rect {
   fill: #fce4ec;
   stroke: #c62828;
 }
+
 .topology-device-node.type-phone rect {
   fill: #f3e5f5;
   stroke: #7b1fa2;
 }
+
 .topology-device-node.type-pc rect {
   fill: #f5f5f5;
   stroke: #9e9e9e;
 }
+
 .topology-device-node.type-laptop rect {
   fill: #f5f5f5;
   stroke: #757575;
 }
+
 .topology-device-node.type-printer rect {
   fill: #fff8e1;
   stroke: #f9a825;
 }
+
 .topology-device-node.type-other rect {
   fill: #f5f5f5;
   stroke: #9e9e9e;
@@ -369,6 +379,7 @@
   font-size: 10px;
   fill: var(--color-text-secondary);
   dominant-baseline: middle;
+
   /* 白色描边光环：标签叠在连线/节点上时保持可读（端口名称不再被覆盖） */
   paint-order: stroke;
   stroke: var(--color-bg);
@@ -377,21 +388,6 @@
 }
 
 /* 信息点链中间节点（设备 → 信息点 → ... → 目标设备） */
-.topology-outlet-node {
-  cursor: help;
-}
-
-.topology-outlet-node circle {
-  transition:
-    fill var(--transition-fast),
-    stroke var(--transition-fast);
-}
-
-.topology-outlet-node:hover circle {
-  fill: #ffe0b2;
-  stroke: #e65100;
-}
-
 .topology-outlet-label {
   font-size: 9px;
   fill: #e65100;
@@ -452,7 +448,7 @@
 .btn.btn-warning.active-mode {
   background-color: #e65100;
   color: var(--color-bg-white);
-  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.3);
+  box-shadow: 0 0 0 3px rgb(255 152 0 / 30%);
 }
 
 /* 拓扑设备详情弹窗 */
@@ -616,7 +612,7 @@
 .topology-detail-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
+  background: rgb(0 0 0 / 50%);
   z-index: 9999;
 }
 
@@ -728,20 +724,13 @@
 }
 
 .topology-container {
-  fill: rgb(25 118 210 / 0.04);
+  fill: rgb(25 118 210 / 4%);
   stroke: #90a4ae;
   stroke-width: 1.2;
   stroke-dasharray: 8 4;
 }
 
 /* 机柜容器：房间内层级，样式弱于房间外框 */
-.topology-container.container-cabinet {
-  fill: rgb(94 53 177 / 0.05);
-  stroke: #b39ddb;
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-}
-
 .topology-container-label {
   font-size: 13px;
   font-weight: 700;
@@ -749,19 +738,10 @@
   dominant-baseline: middle;
 }
 
-.container-cabinet .topology-container-label {
-  font-size: 11px;
-  fill: #5e35b1;
-}
-
 .topology-container-count {
   font-size: 11px;
   fill: #78909c;
   dominant-baseline: middle;
-}
-
-.container-cabinet .topology-container-count {
-  font-size: 10px;
 }
 
 /* ==================== 连线详情弹窗 ==================== */

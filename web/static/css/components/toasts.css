@@ -34,7 +34,6 @@
   pointer-events: auto;
   font-size: 14px;
   line-height: 1.4;
-
   opacity: 0;
   transform: translateX(120%);
   transition:
@@ -59,12 +58,15 @@
 .toast.toast-success {
   border-left-color: var(--color-success);
 }
+
 .toast.toast-error {
   border-left-color: var(--color-danger);
 }
+
 .toast.toast-warning {
   border-left-color: var(--color-warning);
 }
+
 .toast.toast-info {
   border-left-color: var(--color-info);
 }
@@ -78,12 +80,15 @@
 .toast.toast-success .toast-icon {
   color: var(--color-success);
 }
+
 .toast.toast-error .toast-icon {
   color: var(--color-danger);
 }
+
 .toast.toast-warning .toast-icon {
   color: var(--color-warning);
 }
+
 .toast.toast-info .toast-icon {
   color: var(--color-info);
 }
@@ -91,9 +96,10 @@
 .toast .toast-message {
   flex: 1 1 auto;
   color: var(--color-text);
+
   /* showToast 的 message 可能含换行（如备份文件名），保留换行并防溢出 */
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .toast-close {

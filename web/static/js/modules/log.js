@@ -45,8 +45,8 @@ function translateNotificationContent(content) {
     if (parsed && typeof parsed === "object" && typeof parsed.key === "string") {
       return t(parsed.key, parsed.params || {});
     }
-  } catch (e) {
-    // 历史纯文本内容，原样展示
+  } catch {
+    // 历史纯文本内容，解析失败属预期，原样展示
   }
   return content;
 }
@@ -86,7 +86,9 @@ function getResourceTypeText(type) {
 // 初始化日志管理标签页
 export function initLogTabs() {
   const logsContainer = document.getElementById("logs");
-  if (!logsContainer) return;
+  if (!logsContainer) {
+    return;
+  }
 
   // 初始化搜索和刷新功能
   initLogSearch();
@@ -226,15 +228,25 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
       sort_order
     } = searchParams;
     const tableState = logSortStates[logType] || logSortStates.operation;
-    if (sort_by) tableState.setSort(sort_by, sort_order);
+    if (sort_by) {
+      tableState.setSort(sort_by, sort_order);
+    }
 
     let apiUrl;
     if (logType === "operation") {
       const params = new URLSearchParams();
-      if (resource_type) params.append("resource_type", resource_type);
-      if (resource_id) params.append("resource_id", resource_id);
-      if (user_id) params.append("user_id", user_id);
-      if (action) params.append("action", action);
+      if (resource_type) {
+        params.append("resource_type", resource_type);
+      }
+      if (resource_id) {
+        params.append("resource_id", resource_id);
+      }
+      if (user_id) {
+        params.append("user_id", user_id);
+      }
+      if (action) {
+        params.append("action", action);
+      }
       params.append("page", page);
       params.append("page_size", page_size);
       params.append("sort_by", tableState.sortBy);
@@ -288,7 +300,8 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             const resourceTypeText = getResourceTypeText(log.resource_type);
             const resultText = log.result ? t("common.success") : t("common.failed");
 
-            // 安全地处理日志详情数据
+            // 安全地处理日志详情数据：整行 JSON 编码后挂到 data-log，
+            // 详情弹窗解码回对象（见 view-log-details 点击委托）
             const logData = encodeURIComponent(JSON.stringify(log));
 
             rowHtml += `
@@ -304,7 +317,6 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             `;
           } else {
             const loginResultText = log.success ? t("common.success") : t("common.failed");
-            const logData = encodeURIComponent(JSON.stringify(log));
             rowHtml += `
               <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
               <td>${escapeHtml(log.username)}</td>
@@ -362,7 +374,9 @@ export async function loadNotificationsData(
   sortOrder = null
 ) {
   try {
-    if (sortBy) notificationTableState.setSort(sortBy, sortOrder);
+    if (sortBy) {
+      notificationTableState.setSort(sortBy, sortOrder);
+    }
 
     const params = new URLSearchParams();
     if (filterStatus && filterStatus !== "all") {
@@ -424,12 +438,13 @@ export async function loadNotificationsData(
   }
 }
 
-// 标记通知为已读
+// 标记通知为已读（刷新时保留当前过滤视图）
 async function markNotificationAsRead(notificationId) {
   try {
     const result = await apiPut(`/api/notifications/${notificationId}/read`, {});
     if (result.success) {
-      loadNotificationsData();
+      const filter = document.getElementById("notifications-filter")?.value || "all";
+      loadNotificationsData(filter);
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -439,28 +454,31 @@ async function markNotificationAsRead(notificationId) {
   }
 }
 
-// 清除已读通知
-export async function clearReadNotifications() {
-  const confirmed = await showConfirm(t("notifications.confirm_clear_read"));
+// 全部标记已读（后端语义即为 mark-all-read；刷新时保留当前过滤视图）
+export async function markAllNotificationsRead() {
+  const confirmed = await showConfirm(t("notifications.confirm_mark_all_read"));
   if (!confirmed) {
     return;
   }
   try {
     const result = await apiPut("/api/notifications/mark-all-read", {});
     if (result.success) {
-      loadNotificationsData();
-      showToast(t("notifications.cleared_read"), "success");
+      const filter = document.getElementById("notifications-filter")?.value || "all";
+      loadNotificationsData(filter);
+      showToast(t("notifications.marked_all_read"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
   } catch (error) {
-    console.error("清除已读通知失败:", error);
+    console.error("标记全部已读失败:", error);
     showToast(t("common.operation_failed_retry"), "error");
   }
 }
 
 function initLogEvents() {
-  if (initLogEvents.initialized) return;
+  if (initLogEvents.initialized) {
+    return;
+  }
   initLogEvents.initialized = true;
 
   document.addEventListener("click", (e) => {
@@ -485,6 +503,7 @@ function initLogEvents() {
             const log = JSON.parse(logData);
             showLogDetails(log);
           } catch (e2) {
+            console.error("解析未编码日志数据失败:", e2);
             showToast(t("logs.view_detail_failed"), "error");
           }
         }
@@ -524,11 +543,15 @@ async function showLogDetails(log) {
   const resultText = log.result ? t("common.success") : t("common.failed");
 
   const modal = await openModal("log-details-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const setText = (selector, text) => {
     const el = modal.querySelector(selector);
-    if (el) el.textContent = text;
+    if (el) {
+      el.textContent = text;
+    }
   };
 
   setText("#log-detail-time", new Date(log.created_at).toLocaleString());
@@ -550,6 +573,8 @@ async function showLogDetails(log) {
         const details = typeof log.details === "string" ? JSON.parse(log.details) : log.details;
         detailsEl.innerHTML = `<pre class="log-details-json">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
       } catch (e) {
+        // details 非合法 JSON 时退回纯文本展示
+        console.error("日志详情解析失败:", e);
         detailsEl.innerHTML = `<p>${escapeHtml(String(log.details))}</p>`;
       }
     } else {
@@ -557,4 +582,3 @@ async function showLogDetails(log) {
     }
   }
 }
-

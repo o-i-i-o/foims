@@ -110,9 +110,9 @@ export function getIcon(name) {
  */
 function listBadgeIcon(letter) {
   return svgTall(
-    `<circle cx="12" cy="6" r="6" fill="var(--color-bg-white)" stroke="none"/>`
-      + `<text x="12" y="8.9" text-anchor="middle" font-size="9" font-weight="700" font-family="inherit" fill="currentColor" stroke="none">${letter}</text>`
-      + '<line x1="8" y1="18" x2="21" y2="18"/><line x1="8" y1="24" x2="21" y2="24"/><line x1="8" y1="30" x2="21" y2="30"/><line x1="3" y1="18" x2="3.01" y2="18"/><line x1="3" y1="24" x2="3.01" y2="24"/><line x1="3" y1="30" x2="3.01" y2="30"/>',
+    '<circle cx="12" cy="6" r="6" fill="var(--color-bg-white)" stroke="none"/>' +
+      `<text x="12" y="8.9" text-anchor="middle" font-size="9" font-weight="700" font-family="inherit" fill="currentColor" stroke="none">${letter}</text>` +
+      '<line x1="8" y1="18" x2="21" y2="18"/><line x1="8" y1="24" x2="21" y2="24"/><line x1="8" y1="30" x2="21" y2="30"/><line x1="3" y1="18" x2="3.01" y2="18"/><line x1="3" y1="24" x2="3.01" y2="24"/><line x1="3" y1="30" x2="3.01" y2="30"/>',
     "combo-icon"
   );
 }
@@ -130,8 +130,10 @@ function listBadgeIcon(letter) {
  */
 export function iconButton({ icon, label, cls = "", attrs = "", badge = "" }) {
   const safeLabel = escapeHtml(label);
+  const clsPart = cls ? ` ${cls}` : "";
+  const attrsPart = attrs ? ` ${attrs}` : "";
   const badgeHtml = badge
     ? `<span class="icon-badge" aria-hidden="true">${escapeHtml(badge)}</span>`
     : "";
-  return `<button type="button" class="icon-btn${cls ? ` ${cls}` : ""}" data-tooltip="${safeLabel}" aria-label="${safeLabel}"${attrs ? ` ${attrs}` : ""}>${getIcon(icon)}${badgeHtml}</button>`;
+  return `<button type="button" class="icon-btn${clsPart}" data-tooltip="${safeLabel}" aria-label="${safeLabel}"${attrsPart}>${getIcon(icon)}${badgeHtml}</button>`;
 }

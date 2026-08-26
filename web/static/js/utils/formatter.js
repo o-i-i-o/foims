@@ -1,7 +1,9 @@
 import { t } from "./i18n.js";
 
 export function formatDateTime(dateStr) {
-  if (!dateStr) return "-";
+  if (!dateStr) {
+    return "-";
+  }
   const date = new Date(dateStr);
   return date.toLocaleString();
 }
@@ -37,34 +39,58 @@ export function getRoomTypeName(type) {
 }
 
 export function getActionIcon(action) {
-  if (!action) return "📋";
+  if (!action) {
+    return "📋";
+  }
   const actionLower = action.toLowerCase();
-  if (actionLower.includes("create") || actionLower.includes("add")) return "➕";
-  if (actionLower.includes("update") || actionLower.includes("edit")) return "✏️";
-  if (actionLower.includes("delete") || actionLower.includes("remove")) return "🗑️";
-  if (actionLower.includes("login")) return "🔐";
-  if (actionLower.includes("logout")) return "🚪";
+  if (actionLower.includes("create") || actionLower.includes("add")) {
+    return "➕";
+  }
+  if (actionLower.includes("update") || actionLower.includes("edit")) {
+    return "✏️";
+  }
+  if (actionLower.includes("delete") || actionLower.includes("remove")) {
+    return "🗑️";
+  }
+  if (actionLower.includes("login")) {
+    return "🔐";
+  }
+  if (actionLower.includes("logout")) {
+    return "🚪";
+  }
   return "📋";
 }
 
 export function formatTime(timestamp) {
-  if (!timestamp) return "-";
+  if (!timestamp) {
+    return "-";
+  }
   const date = new Date(timestamp);
   const now = new Date();
   const diff = now - date;
 
-  if (diff < 60000) return t("time.just_now");
-  if (diff < 3600000) return t("time.minutes_ago", { count: Math.floor(diff / 60000) });
-  if (diff < 86400000) return t("time.hours_ago", { count: Math.floor(diff / 3600000) });
+  if (diff < 60000) {
+    return t("time.just_now");
+  }
+  if (diff < 3600000) {
+    return t("time.minutes_ago", { count: Math.floor(diff / 60000) });
+  }
+  if (diff < 86400000) {
+    return t("time.hours_ago", { count: Math.floor(diff / 3600000) });
+  }
   return date.toLocaleDateString();
 }
 
 export function getOperationTypeText(action) {
-  if (!action) return "-";
+  if (!action) {
+    return "-";
+  }
   return t(`logs.operation_types.${action}`, action);
 }
 
 export function getResourceTypeText(resourceType) {
-  if (!resourceType) return "-";
+  if (!resourceType) {
+    return "-";
+  }
   return t(`logs.resource_types.${resourceType}`, resourceType);
 }

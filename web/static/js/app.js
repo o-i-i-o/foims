@@ -22,6 +22,7 @@ import {
   checkLoginStatus
 } from "./modules/authManager.js";
 import { schedulePreload, lazyLoad, loadModule } from "./utils/resourceLoader.js";
+import { prefetchModalsOnIdle } from "./utils/modalLoader.js";
 
 // ==========================================
 // 应用初始化
@@ -32,9 +33,9 @@ import { schedulePreload, lazyLoad, loadModule } from "./utils/resourceLoader.js
  */
 async function initApp() {
   try {
-    await initI18n();
-    // 登录态校验为后续步骤的门槛（失败时由 authManager 跳转登录页）
-    await checkLoginStatus();
+    // i18n 与登录态校验互不依赖（checkLoginStatus 走原生 fetch、不经过
+    // translateServerMessage），并行执行省一个串行 RTT
+    await Promise.all([initI18n(), checkLoginStatus()]);
 
     initNavigation();
     initLanguageMenu();
@@ -98,7 +99,6 @@ function getResourceCallbacks() {
     submitWorkstationForm: createCallback("workstation", "submitWorkstationForm"),
     submitCabinetForm: createCallback("cabinet", "submitCabinetForm"),
     submitCabinetPositionForm: createCallback("position", "submitCabinetPositionForm"),
-    submitDevicePortForm: createCallback("devicePorts", "submitDevicePortForm"),
     submitUserForm: createCallback("userManager", "submitUserForm"),
     submitOrgForm: createCallback("organization", "submitOrgForm"),
     submitCableLinkForm: createCallback("cableLink", "submitCableLinkForm"),
@@ -106,7 +106,7 @@ function getResourceCallbacks() {
   };
 }
 
-function initResourcePreloading() {
+async function initResourcePreloading() {
   // apiClient/toast/confirm/formatter/ui 已在 app.js 静态导入图中随主入口并行加载，
   // 无需重复 modulepreload；此处只预热纯动态加载的业务模块
   schedulePreload(
@@ -119,7 +119,6 @@ function initResourcePreloading() {
       "position",
       "cableLink",
       "device",
-      "devicePorts",
       "ipmanager",
       "visualizationManager"
     ],
@@ -127,6 +126,9 @@ function initResourcePreloading() {
   );
 
   lazyLoad("dashboard", { when: "idle" });
+
+  // idle 分批预热全部模态框 HTML 进内存缓存，首开任意弹框零网络等待
+  prefetchModalsOnIdle();
 }
 
 // 等待所有样式表加载完成，避免 FOUC

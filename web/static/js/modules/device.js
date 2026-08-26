@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
+import { apiGet, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
@@ -15,7 +15,7 @@ import {
   initSortEvents
 } from "../utils/ui.js";
 
-import { openModal, closeModal } from "../utils/modalLoader.js";
+import { openModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
@@ -76,7 +76,9 @@ let deviceTableClickHandler = null;
 
 export async function loadDevicesData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
-  if (sortBy) tableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    tableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const result = await apiGet(
@@ -95,15 +97,23 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
           className: "index-column"
         },
         { field: "name", render: (v) => escapeHtml(v) },
-        { field: "device_type", render: (v) => getDeviceTypeName(v), className: "col-center" },
+        {
+          field: "device_type",
+          render: (v) => escapeHtml(getDeviceTypeName(v)),
+          className: "col-center"
+        },
         { field: "brand", render: (v) => escapeHtml(v) || "-" },
         { field: "model", render: (v) => escapeHtml(v) || "-" },
         {
           field: "workstation_name",
           render: (v, row) => {
-            if (v) return `${t("device.workstation")}: ${escapeHtml(v)}`;
-            if (row.cabinet_name)
-              return `${t("device.position")}: ${escapeHtml(row.cabinet_name)}${row.start_u ? ` ${row.start_u}-${row.end_u}U` : ""}`;
+            if (v) {
+              return `${t("device.workstation")}: ${escapeHtml(v)}`;
+            }
+            if (row.cabinet_name) {
+              const uRange = row.start_u ? ` ${row.start_u}-${row.end_u}U` : "";
+              return `${t("device.position")}: ${escapeHtml(row.cabinet_name)}${uRange}`;
+            }
             return "-";
           }
         },
@@ -148,7 +158,9 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
 
 function bindDeviceButtonsEvents() {
   const table = elementCache.get("devices-table");
-  if (!table) return;
+  if (!table) {
+    return;
+  }
 
   if (deviceTableClickHandler) {
     table.removeEventListener("click", deviceTableClickHandler);
@@ -201,8 +213,12 @@ export async function deleteDevice(id) {
 function setupMutualExclusion() {
   const workstationSelect = elementCache.get("device-workstation-id");
   const positionSelect = elementCache.get("device-position-id");
-  if (!workstationSelect || !positionSelect) return;
-  if (workstationSelect.dataset.bound || positionSelect.dataset.bound) return;
+  if (!workstationSelect || !positionSelect) {
+    return;
+  }
+  if (workstationSelect.dataset.bound || positionSelect.dataset.bound) {
+    return;
+  }
 
   workstationSelect.addEventListener("change", () => {
     if (workstationSelect.value) {
@@ -222,19 +238,29 @@ function setupMutualExclusion() {
 
 function setupTemplateAutoFill() {
   const templateSelect = elementCache.get("device-template-id");
-  if (!templateSelect || templateSelect.dataset.bound) return;
+  if (!templateSelect || templateSelect.dataset.bound) {
+    return;
+  }
 
   templateSelect.addEventListener("change", async () => {
     const templateId = templateSelect.value;
-    if (!templateId) return;
+    if (!templateId) {
+      return;
+    }
 
     try {
       const result = await apiGet(`/api/resources/device-templates/${templateId}`);
       if (result.success && result.data) {
         const tmpl = result.data;
-        if (tmpl.device_type) elementCache.setValue("device-type", tmpl.device_type);
-        if (tmpl.brand) elementCache.setValue("device-brand", tmpl.brand);
-        if (tmpl.model) elementCache.setValue("device-model", tmpl.model);
+        if (tmpl.device_type) {
+          elementCache.setValue("device-type", tmpl.device_type);
+        }
+        if (tmpl.brand) {
+          elementCache.setValue("device-brand", tmpl.brand);
+        }
+        if (tmpl.model) {
+          elementCache.setValue("device-model", tmpl.model);
+        }
       }
     } catch (error) {
       console.error("加载模板详情失败:", error);
@@ -246,13 +272,17 @@ function setupTemplateAutoFill() {
 function setupSaveAsTemplateToggle() {
   const checkbox = document.getElementById("device-save-as-template");
   const nameGroup = document.getElementById("device-template-name-group");
-  if (!checkbox || !nameGroup || checkbox.dataset.bound) return;
+  if (!checkbox || !nameGroup || checkbox.dataset.bound) {
+    return;
+  }
 
   checkbox.addEventListener("change", () => {
     nameGroup.classList.toggle("hidden", !checkbox.checked);
     if (!checkbox.checked) {
       const nameInput = document.getElementById("device-template-name");
-      if (nameInput) nameInput.value = "";
+      if (nameInput) {
+        nameInput.value = "";
+      }
     }
   });
   checkbox.dataset.bound = "true";
@@ -260,7 +290,9 @@ function setupSaveAsTemplateToggle() {
 
 function setupTemplateManageBtn() {
   const btn = document.getElementById("device-template-manage-btn");
-  if (!btn || btn.dataset.bound) return;
+  if (!btn || btn.dataset.bound) {
+    return;
+  }
   btn.dataset.bound = "true";
   btn.addEventListener("click", () => openDeviceTemplateModal());
 }
@@ -278,19 +310,19 @@ const DEVICE_TYPE_OPTIONS = [
 ];
 
 async function openDeviceTemplateModal() {
-  const { default: modalLoader } = await import("../utils/modalLoader.js");
-  const modal = await modalLoader.loadModal("device-template-modal");
-  if (!modal) return;
-
-  modal.classList.add("active");
-  document.body.style.overflow = "hidden";
+  const modal = await openModal("device-template-modal");
+  if (!modal) {
+    return;
+  }
 
   await loadDeviceTemplateList();
 }
 
 async function loadDeviceTemplateList() {
   const listEl = document.getElementById("device-template-list");
-  if (!listEl) return;
+  if (!listEl) {
+    return;
+  }
 
   try {
     const result = await apiGet("/api/resources/device-templates");
@@ -330,7 +362,9 @@ async function loadDeviceTemplateList() {
       btn.addEventListener("click", async () => {
         const item = btn.closest(".device-template-item");
         const id = item?.dataset.id;
-        if (id) await editDeviceTemplate(id);
+        if (id) {
+          await editDeviceTemplate(id);
+        }
       });
     });
 
@@ -339,7 +373,9 @@ async function loadDeviceTemplateList() {
         const item = btn.closest(".device-template-item");
         const id = item?.dataset.id;
         const name = item?.querySelector(".device-template-name")?.textContent;
-        if (id) await deleteDeviceTemplate(id, name);
+        if (id) {
+          await deleteDeviceTemplate(id, name);
+        }
       });
     });
   } catch (error) {
@@ -351,12 +387,16 @@ async function loadDeviceTemplateList() {
 async function editDeviceTemplate(id) {
   try {
     const result = await apiGet(`/api/resources/device-templates/${id}`);
-    if (!result.success || !result.data) return;
+    if (!result.success || !result.data) {
+      return;
+    }
 
     const tmpl = result.data;
     const listEl = document.getElementById("device-template-list");
     const itemEl = listEl?.querySelector(`.device-template-item[data-id="${id}"]`);
-    if (!itemEl) return;
+    if (!itemEl) {
+      return;
+    }
 
     const typeOptions = DEVICE_TYPE_OPTIONS.map(
       (opt) =>
@@ -433,7 +473,9 @@ async function editDeviceTemplate(id) {
 async function deleteDeviceTemplate(id, name) {
   const { default: showConfirm } = await import("../utils/confirm.js");
   const confirmed = await showConfirm(t("common.confirm_delete", { name: name || "" }));
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const result = await apiDelete(`/api/resources/device-templates/${id}`);
@@ -451,7 +493,9 @@ async function deleteDeviceTemplate(id, name) {
 
 function setupSnmpVersionToggle() {
   const snmpVersionSelect = elementCache.get("device-snmp-version");
-  if (!snmpVersionSelect || snmpVersionSelect.dataset.bound) return;
+  if (!snmpVersionSelect || snmpVersionSelect.dataset.bound) {
+    return;
+  }
   snmpVersionSelect.addEventListener("change", toggleSnmpConfig);
   snmpVersionSelect.dataset.bound = "true";
 }
@@ -473,7 +517,9 @@ function setupSnmpButtons() {
 
 function setupRoomCascade() {
   const roomSelect = elementCache.get("device-room-id");
-  if (!roomSelect || roomSelect.dataset.bound) return;
+  if (!roomSelect || roomSelect.dataset.bound) {
+    return;
+  }
   roomSelect.addEventListener("change", async () => {
     const roomId = roomSelect.value || null;
     await loadWorkstationsForSelect("device-workstation-id", roomId);
@@ -528,7 +574,9 @@ function setupRoomFilterCascade() {
 
 function setupCabinetCascade() {
   const cabinetSelect = elementCache.get("device-cabinet-id");
-  if (!cabinetSelect || cabinetSelect.dataset.bound) return;
+  if (!cabinetSelect || cabinetSelect.dataset.bound) {
+    return;
+  }
   cabinetSelect.addEventListener("change", async () => {
     const cabinetId = cabinetSelect.value || null;
     elementCache.setValue("device-position-id", "");
@@ -656,6 +704,75 @@ export async function submitDeviceForm() {
   return success;
 }
 
+/** 编辑路径回显：基础字段 → 房间上下文（工位/机柜/机位五路并行）→ 网卡数据 */
+async function fillDeviceFormForEdit(device, cardManager, roomDetailPromise) {
+  elementCache.setValue("device-id", device.id);
+  elementCache.setValue("device-name", device.name);
+  elementCache.setValue("device-hostname", device.hostname || "");
+  elementCache.setValue("device-type", device.device_type || "other");
+  elementCache.setValue("device-brand", device.brand || "");
+  elementCache.setValue("device-model", device.model || "");
+  elementCache.setValue("device-seller", device.seller || "");
+  elementCache.setValue("device-location", device.location || "");
+  elementCache.setValue("device-serial-number", device.serial_number || "");
+  elementCache.setValue("device-description", device.description || "");
+
+  setSnmpFieldValues(device);
+
+  if (device.template_id) {
+    elementCache.setValue("device-template-id", device.template_id);
+  }
+
+  if (device.room_id) {
+    // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列；
+    // 工位/机柜/机位下拉与房间网段上下文仅依赖 room_id，五路并行
+    const roomResult = await roomDetailPromise;
+    const room = roomResult?.success ? roomResult.data : null;
+    const orgId = room?.org_id || null;
+    const roomType = room?.room_type ? room.room_type.toLowerCase() : null;
+    if (orgId) {
+      elementCache.setValue("device-org-id", orgId);
+    }
+    if (roomType) {
+      elementCache.setValue("device-room-type", roomType);
+    }
+
+    // 机位下拉：优先按机柜过滤；历史数据机位未挂机柜时按房间回退；否则全量
+    let positionsLoad;
+    if (device.cabinet_id) {
+      positionsLoad = loadPositionsForSelect("device-position-id", device.cabinet_id);
+    } else if (device.position_id) {
+      positionsLoad = loadPositionsForSelect("device-position-id", null, device.room_id);
+    } else {
+      positionsLoad = loadPositionsForSelect("device-position-id");
+    }
+
+    await Promise.all([
+      loadRoomsForSelect("device-room-id", { orgId, roomType }),
+      loadWorkstationsForSelect("device-workstation-id", device.room_id),
+      loadCabinetsForSelect("device-cabinet-id", device.room_id),
+      positionsLoad,
+      cardManager.setRoomContext(device.room_id)
+    ]);
+
+    elementCache.setValue("device-room-id", device.room_id);
+  } else {
+    await cardManager.setRoomContext(null);
+  }
+
+  if (device.cabinet_id) {
+    elementCache.setValue("device-cabinet-id", device.cabinet_id);
+  }
+  if (device.workstation_id) {
+    elementCache.setValue("device-workstation-id", device.workstation_id);
+  }
+  if (device.position_id) {
+    elementCache.setValue("device-position-id", device.position_id);
+  }
+
+  await cardManager.loadExisting(device.cards || []);
+}
+
 export async function openDeviceModal(device = null) {
   // 打开模态、模板下拉、组织下拉、房间数据互不依赖，并行加载
   // （编辑路径的房间列表需按所属组织/类型过滤：先并行取房间详情，再加载过滤列表，
@@ -671,7 +788,9 @@ export async function openDeviceModal(device = null) {
     loadModule("networkCardManager")
   ]);
   const modal = document.getElementById("device-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const title = elementCache.get("device-modal-title");
   const form = elementCache.get("device-form");
@@ -682,66 +801,20 @@ export async function openDeviceModal(device = null) {
 
   if (device) {
     title.textContent = t("device.edit");
-    elementCache.setValue("device-id", device.id);
-    elementCache.setValue("device-name", device.name);
-    elementCache.setValue("device-hostname", device.hostname || "");
-    elementCache.setValue("device-type", device.device_type || "other");
-    elementCache.setValue("device-brand", device.brand || "");
-    elementCache.setValue("device-model", device.model || "");
-    elementCache.setValue("device-seller", device.seller || "");
-    elementCache.setValue("device-location", device.location || "");
-    elementCache.setValue("device-serial-number", device.serial_number || "");
-    elementCache.setValue("device-description", device.description || "");
-
-    setSnmpFieldValues(device);
-
-    if (device.template_id) elementCache.setValue("device-template-id", device.template_id);
-
-    if (device.room_id) {
-      // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列；
-      // 工位/机柜/机位下拉与房间网段上下文仅依赖 room_id，五路并行
-      const roomResult = await roomDetailPromise;
-      const room = roomResult?.success ? roomResult.data : null;
-      const orgId = room?.org_id || null;
-      const roomType = room?.room_type ? room.room_type.toLowerCase() : null;
-      if (orgId) elementCache.setValue("device-org-id", orgId);
-      if (roomType) elementCache.setValue("device-room-type", roomType);
-
-      await Promise.all([
-        loadRoomsForSelect("device-room-id", { orgId, roomType }),
-        loadWorkstationsForSelect("device-workstation-id", device.room_id),
-        loadCabinetsForSelect("device-cabinet-id", device.room_id),
-        device.cabinet_id
-          ? loadPositionsForSelect("device-position-id", device.cabinet_id)
-          : device.position_id
-            ? // 历史数据：机位可能未挂接机柜，按房间回退加载以便回显
-              loadPositionsForSelect("device-position-id", null, device.room_id)
-            : loadPositionsForSelect("device-position-id"),
-        cardManager.setRoomContext(device.room_id)
-      ]);
-
-      elementCache.setValue("device-room-id", device.room_id);
-    } else {
-      await cardManager.setRoomContext(null);
-    }
-
-    if (device.cabinet_id) elementCache.setValue("device-cabinet-id", device.cabinet_id);
-    if (device.workstation_id)
-      elementCache.setValue("device-workstation-id", device.workstation_id);
-    if (device.position_id) elementCache.setValue("device-position-id", device.position_id);
-
-    if (cardManager) {
-      await cardManager.loadExisting(device.cards || []);
-    }
+    await fillDeviceFormForEdit(device, cardManager, roomDetailPromise);
   } else {
     title.textContent = t("device.add");
     form.reset();
     elementCache.setValue("device-id", "");
     resetSnmpFields();
     const saveAsTemplateCheckbox = document.getElementById("device-save-as-template");
-    if (saveAsTemplateCheckbox) saveAsTemplateCheckbox.checked = false;
+    if (saveAsTemplateCheckbox) {
+      saveAsTemplateCheckbox.checked = false;
+    }
     const templateNameGroup = document.getElementById("device-template-name-group");
-    if (templateNameGroup) templateNameGroup.classList.add("hidden");
+    if (templateNameGroup) {
+      templateNameGroup.classList.add("hidden");
+    }
 
     if (cardManager) {
       await cardManager.setRoomContext(null);

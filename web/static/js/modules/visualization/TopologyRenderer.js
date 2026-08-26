@@ -1,6 +1,25 @@
 import { t } from "../../utils/i18n.js";
+import { SVG_NS } from "./SVGCore.js";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
+// 文本锚点/基线居中（设备名、类型、IP 等标签的通用设置，成对出现）
+function centerText(textEl) {
+  textEl.setAttribute("text-anchor", "middle");
+  textEl.setAttribute("dominant-baseline", "middle");
+}
+
+/**
+ * 机柜分组键：优先按 id，无 id 时按名称；不属于任何机柜返回 null。
+ * 渲染与容器拖动两处共用，分组语义必须一致。
+ */
+export function cabinetGroupKey(node) {
+  if (node.cabinet_id) {
+    return `cab:${node.cabinet_id}`;
+  }
+  if (node.cabinet_name) {
+    return `cab:name:${node.cabinet_name}`;
+  }
+  return null;
+}
 
 const DEVICE_COLORS = {
   switch: { fill: "#e3f2fd", stroke: "#1976d2" },
@@ -149,11 +168,7 @@ export class TopologyRenderer {
     // 分组键与 TopologyVisualization._collectSpatialGroups 一致，
     // 容器（房间/机柜分组框）拖动时按此键匹配并整体移动组内节点
     g.dataset.roomKey = device.room_id ? `room:${device.room_id}` : "room:none";
-    const cabinetKey = device.cabinet_id
-      ? `cab:${device.cabinet_id}`
-      : device.cabinet_name
-        ? `cab:name:${device.cabinet_name}`
-        : null;
+    const cabinetKey = cabinetGroupKey(device);
     if (cabinetKey) {
       g.dataset.cabinetKey = cabinetKey;
     }
@@ -201,8 +216,7 @@ export class TopologyRenderer {
     nameText.textContent = device.device_name || "Unknown";
     nameText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     nameText.setAttribute("y", y + 22);
-    nameText.setAttribute("text-anchor", "middle");
-    nameText.setAttribute("dominant-baseline", "middle");
+    centerText(nameText);
     nameText.dataset.relX = TEXT_OFFSET_X;
     nameText.dataset.relY = 22;
     g.appendChild(nameText);
@@ -212,8 +226,7 @@ export class TopologyRenderer {
     typeText.textContent = getDeviceTypeLabel(device.device_type) || device.device_type || "";
     typeText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     typeText.setAttribute("y", y + 40);
-    typeText.setAttribute("text-anchor", "middle");
-    typeText.setAttribute("dominant-baseline", "middle");
+    centerText(typeText);
     typeText.dataset.relX = TEXT_OFFSET_X;
     typeText.dataset.relY = 40;
     g.appendChild(typeText);
@@ -223,8 +236,7 @@ export class TopologyRenderer {
     ipText.textContent = device.ip_address || device.room_name || "";
     ipText.setAttribute("x", x + w / 2 + TEXT_OFFSET_X);
     ipText.setAttribute("y", y + 58);
-    ipText.setAttribute("text-anchor", "middle");
-    ipText.setAttribute("dominant-baseline", "middle");
+    centerText(ipText);
     ipText.dataset.relX = TEXT_OFFSET_X;
     ipText.dataset.relY = 58;
     g.appendChild(ipText);
@@ -276,7 +288,9 @@ export class TopologyRenderer {
   drawConnection(connection) {
     const sourcePos = this.core.getNodePosition(connection.source_device_id);
     const targetPos = this.core.getNodePosition(connection.target_device_id);
-    if (!sourcePos || !targetPos) return null;
+    if (!sourcePos || !targetPos) {
+      return null;
+    }
 
     const sourceAnchor = this._getBestAnchor(connection.source_device_id, sourcePos, targetPos);
     const targetAnchor = this._getBestAnchor(connection.target_device_id, targetPos, sourcePos);
@@ -291,6 +305,9 @@ export class TopologyRenderer {
     g.dataset.connectionId = connection.id;
     g.dataset.connectionType = connection.connection_type;
     g.dataset.derived = connection.derived ? "true" : "false";
+    // 记录端点设备，供拖拽时增量重画相关连线
+    g.dataset.sourceDevice = connection.source_device_id;
+    g.dataset.targetDevice = connection.target_device_id;
 
     const path = document.createElementNS(SVG_NS, "path");
     path.classList.add("topology-connection");
@@ -364,7 +381,9 @@ export class TopologyRenderer {
       connection.source_port_label || "",
       "source"
     );
-    if (sourceLabel) group.appendChild(sourceLabel);
+    if (sourceLabel) {
+      group.appendChild(sourceLabel);
+    }
 
     const targetLabel = this._createConnectionLabel(
       targetAnchor.x,
@@ -372,7 +391,9 @@ export class TopologyRenderer {
       connection.target_port_label || "",
       "target"
     );
-    if (targetLabel) group.appendChild(targetLabel);
+    if (targetLabel) {
+      group.appendChild(targetLabel);
+    }
   }
 
   /// 逻辑连接（链路聚合）：加粗虚线 + 中点徽标 + 成员端口摘要
@@ -403,8 +424,7 @@ export class TopologyRenderer {
     badgeLabel.textContent = badgeText;
     badgeLabel.setAttribute("x", midX);
     badgeLabel.setAttribute("y", midY + 4);
-    badgeLabel.setAttribute("text-anchor", "middle");
-    badgeLabel.setAttribute("dominant-baseline", "middle");
+    centerText(badgeLabel);
     badge.appendChild(badgeLabel);
     group.appendChild(badge);
 
@@ -421,7 +441,9 @@ export class TopologyRenderer {
     group.appendChild(countLabel);
 
     const memberLabel = (anchor, members, type) => {
-      if (!members || members.length === 0) return null;
+      if (!members || members.length === 0) {
+        return null;
+      }
       const text = members
         .slice(0, 4)
         .map((m) => m.port_number || m.port_id.slice(0, 8))
@@ -434,9 +456,13 @@ export class TopologyRenderer {
       );
     };
     const srcLabel = memberLabel(sourceAnchor, connection.source_members, "source");
-    if (srcLabel) group.appendChild(srcLabel);
+    if (srcLabel) {
+      group.appendChild(srcLabel);
+    }
     const tgtLabel = memberLabel(targetAnchor, connection.target_members, "target");
-    if (tgtLabel) group.appendChild(tgtLabel);
+    if (tgtLabel) {
+      group.appendChild(tgtLabel);
+    }
   }
 
   /// 绘制途经的中间节点（信息点=圆形，配线架=方形）
@@ -476,8 +502,7 @@ export class TopologyRenderer {
     label.textContent = hopName;
     label.setAttribute("x", point.x);
     label.setAttribute("y", point.y - 15);
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("dominant-baseline", "middle");
+    centerText(label);
     node.appendChild(label);
 
     const indexLabel = document.createElementNS(SVG_NS, "text");
@@ -485,8 +510,7 @@ export class TopologyRenderer {
     indexLabel.textContent = String(index + 1);
     indexLabel.setAttribute("x", point.x);
     indexLabel.setAttribute("y", point.y + 3.5);
-    indexLabel.setAttribute("text-anchor", "middle");
-    indexLabel.setAttribute("dominant-baseline", "middle");
+    centerText(indexLabel);
     node.appendChild(indexLabel);
 
     const typeLabel =
@@ -497,14 +521,15 @@ export class TopologyRenderer {
 
   /// 在一段线路中点标注线缆标签
   _drawCableLabel(group, cable, from, to) {
-    if (!cable || !cable.cable_label) return;
+    if (!cable || !cable.cable_label) {
+      return;
+    }
     const label = document.createElementNS(SVG_NS, "text");
     label.classList.add("topology-cable-label");
     label.textContent = cable.cable_label;
     label.setAttribute("x", (from.x + to.x) / 2);
     label.setAttribute("y", (from.y + to.y) / 2 - 6);
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("dominant-baseline", "middle");
+    centerText(label);
     group.appendChild(label);
   }
 
@@ -524,8 +549,7 @@ export class TopologyRenderer {
     cross.textContent = "×";
     cross.setAttribute("x", midPoint.x);
     cross.setAttribute("y", midPoint.y - 22.5);
-    cross.setAttribute("text-anchor", "middle");
-    cross.setAttribute("dominant-baseline", "middle");
+    centerText(cross);
     marker.appendChild(cross);
 
     marker.dataset.tooltip = t("viz.delete_connection");
@@ -549,8 +573,11 @@ export class TopologyRenderer {
 
     let anchor;
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) anchor = { x: sourcePos.x + sourcePos.width, y: cy, dir: "right" };
-      else anchor = { x: sourcePos.x, y: cy, dir: "left" };
+      if (dx > 0) {
+        anchor = { x: sourcePos.x + sourcePos.width, y: cy, dir: "right" };
+      } else {
+        anchor = { x: sourcePos.x, y: cy, dir: "left" };
+      }
     } else if (dy > 0) {
       anchor = { x: cx, y: sourcePos.y + sourcePos.height, dir: "bottom" };
     } else {
@@ -608,25 +635,34 @@ export class TopologyRenderer {
   }
 
   _createConnectionLabel(x, y, text, type) {
-    if (!text) return null;
+    if (!text) {
+      return null;
+    }
     const label = document.createElementNS(SVG_NS, "text");
     label.classList.add("topology-connection-label");
     label.textContent = text;
     label.setAttribute("x", x);
     label.setAttribute("y", type === "source" ? y - 10 : y + 16);
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("dominant-baseline", "middle");
+    centerText(label);
     return label;
   }
 
   updateConnectionPaths(deviceId) {
-    const affectedConnections = this.core.connectionsGroup.querySelectorAll(
-      `.topology-connection-group`
-    );
+    // 仅重画与被拖设备相关的连线（deviceId 为空时全量重画）。
+    // 同一设备对 (A,B) 的连线总是一起命中，平行偏移计数在子集内保持一致，
+    // 避免每 mousemove 全量删除重建所有连线造成拓扑页拖拽卡顿
+    const selector = deviceId
+      ? `.topology-connection-group[data-source-device="${deviceId}"], .topology-connection-group[data-target-device="${deviceId}"]`
+      : ".topology-connection-group";
+    const affectedGroups = this.core.connectionsGroup.querySelectorAll(selector);
+    if (affectedGroups.length === 0) {
+      return;
+    }
+
     this._connectionPairCount.clear();
     this._anchorSlots.clear();
     const toRedraw = [];
-    affectedConnections.forEach((g) => {
+    affectedGroups.forEach((g) => {
       const connectionId = g.dataset.connectionId;
       const conn = this._connectionsMap?.get(connectionId);
       if (conn) {

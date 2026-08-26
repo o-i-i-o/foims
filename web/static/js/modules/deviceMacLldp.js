@@ -2,10 +2,20 @@
 
 import { apiGet, apiPost } from "../utils/apiClient.js";
 
-import { elementCache } from "../utils/helpers.js";
 import { escapeHtml, showToast } from "../utils/ui.js";
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
+
+// IPv4/IPv6 标签页互斥切换：激活当前按钮与其对应内容面板
+function activateTabPane(modal, btn) {
+  modal.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  modal.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+  const targetTab = modal.querySelector(`#${btn.dataset.tab}-tab`);
+  if (targetTab) {
+    targetTab.classList.add("active");
+  }
+}
 
 // ==================== MAC 表函数 ====================
 
@@ -17,7 +27,9 @@ async function viewArpTable(deviceId) {
   }
 
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal("arp-modal");
+    if (e.target === modal) {
+      closeModal("arp-modal");
+    }
   });
 
   let isFirstLoad = true;
@@ -79,15 +91,8 @@ async function viewArpTable(deviceId) {
 
         if (isFirstLoad) {
           const tabBtns = modal.querySelectorAll(".tab-btn");
-          const tabContents = modal.querySelectorAll(".tab-content");
           tabBtns.forEach((btn) => {
-            btn.addEventListener("click", () => {
-              tabBtns.forEach((b) => b.classList.remove("active"));
-              btn.classList.add("active");
-              tabContents.forEach((c) => c.classList.remove("active"));
-              const targetTab = modal.querySelector("#" + btn.dataset.tab + "-tab");
-              if (targetTab) targetTab.classList.add("active");
-            });
+            btn.addEventListener("click", () => activateTabPane(modal, btn));
           });
 
           const ipv4Search = modal.querySelector("#ipv4-search");
@@ -107,8 +112,17 @@ async function viewArpTable(deviceId) {
             bindCollapseEvents(container);
           };
 
-          ipv4Search.addEventListener("input", ipv4SearchHandler);
-          ipv6Search.addEventListener("input", ipv6SearchHandler);
+          // MAC 表可达数千行，搜索按 300ms 防抖，避免每次按键全量重建两表
+          const debounceInput = (handler) => {
+            let timer = null;
+            return () => {
+              clearTimeout(timer);
+              timer = setTimeout(handler, 300);
+            };
+          };
+
+          ipv4Search.addEventListener("input", debounceInput(ipv4SearchHandler));
+          ipv6Search.addEventListener("input", debounceInput(ipv6SearchHandler));
 
           syncBtn.addEventListener("click", syncMacData);
 
@@ -183,7 +197,7 @@ function renderMacTable(entries, type) {
     items.forEach((entry) => {
       html += `<tr><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.ip_address)}</td><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.mac_address)}</td></tr>`;
     });
-    html += `</table></div></div>`;
+    html += "</table></div></div>";
     groupIndex++;
   }
 
@@ -248,7 +262,9 @@ function groupByNetwork(entries, type) {
           const aParts = a.ip_address.split(".").map(Number);
           const bParts = b.ip_address.split(".").map(Number);
           for (let i = 0; i < 4; i++) {
-            if (aParts[i] !== bParts[i]) return aParts[i] - bParts[i];
+            if (aParts[i] !== bParts[i]) {
+              return aParts[i] - bParts[i];
+            }
           }
           return 0;
         }
@@ -260,7 +276,9 @@ function groupByNetwork(entries, type) {
 }
 
 function filterEntries(entries, searchTerm) {
-  if (!searchTerm) return entries;
+  if (!searchTerm) {
+    return entries;
+  }
   const term = searchTerm.toLowerCase();
   return entries.filter(
     (e) => e.ip_address.toLowerCase().includes(term) || e.mac_address.toLowerCase().includes(term)
@@ -277,7 +295,9 @@ async function viewLldpNeighbors(deviceId) {
   }
 
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal("lldp-modal");
+    if (e.target === modal) {
+      closeModal("lldp-modal");
+    }
   });
 
   const loadLldpData = async () => {

@@ -14,7 +14,7 @@
 /* 打印时只保留标签打印区 */
 @media print {
   body > *:not(.cable-label-print-area) {
-    display: none !important;
+    display: none !important; /* stylelint-disable-line declaration-no-important -- 打印时隐藏页面 UI */
   }
 
   .cable-label-print-area {
@@ -37,7 +37,6 @@
   justify-content: space-around;
   align-items: center;
   padding: 1mm 0.5mm;
-  page-break-inside: avoid;
   break-inside: avoid;
 }
 

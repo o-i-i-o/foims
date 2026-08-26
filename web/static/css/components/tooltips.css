@@ -4,7 +4,7 @@
   left: 0;
   z-index: var(--z-tooltip);
   padding: 4px 10px;
-  background: rgb(33 37 41 / 0.94);
+  background: rgb(33 37 41 / 94%);
   color: var(--color-bg-white);
   font-size: 0.8125rem;
   line-height: 1.4;

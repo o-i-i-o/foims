@@ -1,5 +1,6 @@
 import { t } from "../../utils/i18n.js";
 import { DEFAULT_CABINET_CAPACITY } from "./SVGDataManager.js";
+import { SVG_NS } from "./SVGCore.js";
 
 export class SVGRenderer {
   constructor(core) {
@@ -8,7 +9,7 @@ export class SVGRenderer {
   }
 
   drawWorkstation(workstation) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const group = document.createElementNS(SVG_NS, "g");
     group.className.baseVal = "workstation-element";
     group.dataset.id = workstation.id;
 
@@ -18,7 +19,7 @@ export class SVGRenderer {
     const width = workstation.position.width ?? 160;
     const height = workstation.position.height ?? 160;
 
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
     rect.setAttribute("width", width);
@@ -87,7 +88,6 @@ export class SVGRenderer {
    * @param {Object} line { label, value, valueClass }
    */
   labelText(x, y, relY, { label, value, valueClass }) {
-    const SVG_NS = "http://www.w3.org/2000/svg";
     const text = document.createElementNS(SVG_NS, "text");
     text.setAttribute("x", x);
     text.setAttribute("y", y);
@@ -108,7 +108,7 @@ export class SVGRenderer {
   }
 
   drawCabinet(cabinet) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const group = document.createElementNS(SVG_NS, "g");
     group.className.baseVal = "cabinet-element";
     group.dataset.id = cabinet.id;
 
@@ -119,13 +119,13 @@ export class SVGRenderer {
     const height = cabinet.position.height || capacity * 20 + 40;
     const uHeight = (height - 40) / capacity;
 
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
     rect.setAttribute("width", width);
     rect.setAttribute("height", height);
 
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const text = document.createElementNS(SVG_NS, "text");
     text.setAttribute("x", x + width / 2);
     text.setAttribute("y", y + 20);
     text.dataset.relY = 20;
@@ -146,7 +146,7 @@ export class SVGRenderer {
     for (let i = 1; i <= capacity; i++) {
       const y = startY + (capacity - i) * uHeight;
 
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("x1", baseX + 10);
       line.setAttribute("y1", y);
       line.setAttribute("x2", baseX + width - 10);
@@ -160,7 +160,7 @@ export class SVGRenderer {
       group.appendChild(line);
 
       if (i % 5 === 0 || i === 1 || i === capacity) {
-        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const text = document.createElementNS(SVG_NS, "text");
         text.setAttribute("x", baseX + 5);
         text.setAttribute("y", y + uHeight / 2);
         text.dataset.relX = 5;
@@ -173,7 +173,7 @@ export class SVGRenderer {
   }
 
   drawCabinetPosition(position, cabinet) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const group = document.createElementNS(SVG_NS, "g");
     group.className.baseVal = "cabinet-position-element";
     group.dataset.id = position.id;
     group.dataset.cabinetId = cabinet.id;
@@ -196,13 +196,13 @@ export class SVGRenderer {
     group.dataset.relX = 20;
     group.dataset.relY = y - cabinetY;
 
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
     rect.setAttribute("width", 110);
     rect.setAttribute("height", height);
 
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const text = document.createElementNS(SVG_NS, "text");
     text.setAttribute("x", x + 55);
     text.setAttribute("y", y + height / 2 + 4);
     text.dataset.relX = 55;
@@ -246,7 +246,7 @@ export class SVGRenderer {
    *   生成随机 UUID 仅作 DOM 标识（后端按 room_id+element_type 落库，不使用该 id）
    */
   drawDoor(id = null) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const group = document.createElementNS(SVG_NS, "g");
     group.className.baseVal = "door-element";
     group.dataset.elementType = "door";
     group.dataset.id = id || crypto.randomUUID();
@@ -256,7 +256,7 @@ export class SVGRenderer {
     const width = 40;
     const height = 80;
 
-    const doorFrame = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const doorFrame = document.createElementNS(SVG_NS, "rect");
     doorFrame.setAttribute("x", x);
     doorFrame.setAttribute("y", y);
     doorFrame.setAttribute("width", width);
@@ -265,7 +265,7 @@ export class SVGRenderer {
     doorFrame.style.stroke = "var(--color-text-secondary)";
     doorFrame.setAttribute("stroke-width", "2");
 
-    const doorHandle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    const doorHandle = document.createElementNS(SVG_NS, "circle");
     doorHandle.setAttribute("cx", x + width - 10);
     doorHandle.setAttribute("cy", y + height / 2);
     doorHandle.setAttribute("r", 3);
@@ -273,7 +273,7 @@ export class SVGRenderer {
     doorHandle.dataset.relCx = width - 10;
     doorHandle.dataset.relCy = height / 2;
 
-    const doorLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const doorLabel = document.createElementNS(SVG_NS, "text");
     doorLabel.setAttribute("x", x + width / 2);
     doorLabel.setAttribute("y", y - 10);
     doorLabel.dataset.relX = 0;

@@ -24,6 +24,19 @@ import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
 import { loadDataCenterRoomsForSelect, loadRoomNetworksForCabinet } from "../utils/resources.js";
 
+// 两个动态列表管理器（机位/配线架）共用的 init：确保容器、绑定底部
+// "添加一行"按钮（无论容器是否找到），容器缺失时返回 false 交由调用方处理
+function initDynamicListContainer(manager) {
+  manager.ensureContainer();
+  manager.bindExternalAddButton();
+  if (!manager.container) {
+    return false;
+  }
+  manager.container.innerHTML = "";
+  manager.updateEmptyState();
+  return true;
+}
+
 // ==========================================
 // 机柜机位动态管理模块
 // ==========================================
@@ -45,15 +58,7 @@ class CabinetPositionsManager extends DynamicRowManager {
   }
 
   init() {
-    this.ensureContainer();
-    // 无论 container 是否找到，都要绑定底部"添加机位"按钮
-    this.bindExternalAddButton();
-
-    if (!this.container) return false;
-
-    this.container.innerHTML = "";
-    this.updateEmptyState();
-    return true;
+    return initDynamicListContainer(this);
   }
 
   createRow(data = {}) {
@@ -94,7 +99,9 @@ class CabinetPositionsManager extends DynamicRowManager {
     // 无论 container 是否找到，都要绑定底部"添加机位"按钮
     this.bindExternalAddButton();
 
-    if (!this.container) return;
+    if (!this.container) {
+      return;
+    }
     this.container.innerHTML = "";
 
     if (positions?.length) {
@@ -104,7 +111,9 @@ class CabinetPositionsManager extends DynamicRowManager {
   }
 
   collectData() {
-    if (!this.ensureContainer()) return { positions: [] };
+    if (!this.ensureContainer()) {
+      return { positions: [] };
+    }
     const items = this.container.querySelectorAll(".cabinet-position-item");
     const positions = [];
     for (const item of items) {
@@ -147,12 +156,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
   }
 
   init() {
-    this.ensureContainer();
-    this.bindExternalAddButton();
-    if (!this.container) return false;
-    this.container.innerHTML = "";
-    this.updateEmptyState();
-    return true;
+    return initDynamicListContainer(this);
   }
 
   createRow(data = {}) {
@@ -178,7 +182,9 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
   loadExisting(patchPanels) {
     this.ensureContainer();
     this.bindExternalAddButton();
-    if (!this.container) return;
+    if (!this.container) {
+      return;
+    }
     this.container.innerHTML = "";
     if (patchPanels?.length) {
       patchPanels.forEach((pp) => this.addItem(pp));
@@ -187,7 +193,9 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
   }
 
   collectData() {
-    if (!this.ensureContainer()) return [];
+    if (!this.ensureContainer()) {
+      return [];
+    }
     const items = this.container.querySelectorAll(".cabinet-patch-panel-item");
     const patchPanels = [];
     for (const item of items) {
@@ -220,7 +228,9 @@ let roomSelectHandler = null;
 // 加载机柜数据
 export async function loadCabinetsData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
-  if (sortBy) tableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    tableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const result = await apiGet(
@@ -287,7 +297,9 @@ let cabinetTableClickHandler = null;
 
 function bindCabinetButtonsEvents() {
   const table = elementCache.get("cabinets-table");
-  if (!table) return;
+  if (!table) {
+    return;
+  }
 
   if (cabinetTableClickHandler) {
     table.removeEventListener("click", cabinetTableClickHandler);
@@ -396,7 +408,9 @@ export async function openCabinetModal(cabinet = null) {
       elementCache.setValue("cabinet-room", cabinet.room_id);
       await loadRoomNetworksForCabinet(cabinet.room_id);
     }
-    if (capacityInput) capacityInput.value = cabinet.capacity || 42;
+    if (capacityInput) {
+      capacityInput.value = cabinet.capacity || 42;
+    }
     elementCache.setValue("cabinet-description", cabinet.description || "");
 
     // 加载现有机位
@@ -406,7 +420,9 @@ export async function openCabinetModal(cabinet = null) {
   } else {
     // 添加模式
     title.textContent = t("cabinet.add_cabinet");
-    if (form) form.reset();
+    if (form) {
+      form.reset();
+    }
     elementCache.setValue("cabinet-id", "");
     const inheritedNetworksContainer = elementCache.get("cabinet-inherited-networks");
     if (inheritedNetworksContainer) {

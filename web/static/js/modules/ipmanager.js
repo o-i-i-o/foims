@@ -40,7 +40,9 @@ async function loadDevicesForPullMac() {
   try {
     const result = await apiGet("/api/resources/devices?page_size=1000");
     const select = document.getElementById("pull-mac-device-select");
-    if (!select) return;
+    if (!select) {
+      return;
+    }
 
     select.innerHTML = `<option value="">${t("ip.select_device")}</option>`;
 
@@ -81,7 +83,9 @@ async function loadNetworksForPullMac() {
   try {
     const result = await apiGet("/api/resources/networks?page_size=1000");
     const select = document.getElementById("pull-mac-network-select");
-    if (!select) return;
+    if (!select) {
+      return;
+    }
 
     select.innerHTML = `<option value="">${t("ip.select_network")}</option>`;
 
@@ -112,7 +116,9 @@ async function loadNetworksForPullMac() {
 // 打开拉取MAC模态框（MAC 地址表头“拉取”按钮入口）
 async function openPullMacModal() {
   const modal = await loadModal("pull-mac-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   await Promise.all([loadDevicesForPullMac(), loadNetworksForPullMac()]);
 
@@ -178,15 +184,26 @@ export async function loadIpMacData(
 ) {
   currentFilters = filters;
   currentPage = page;
-  if (sortBy) ipTableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    ipTableState.setSort(sortBy, sortOrder);
+  }
 
   try {
-    const { device_name = "", network = "", ip_address = "" } = filters;
+    const { device_name = "", device_type = "", network = "", ip_address = "" } = filters;
 
     const params = new URLSearchParams();
-    if (device_name) params.append("device_name", device_name);
-    if (network) params.append("network", network);
-    if (ip_address) params.append("ip_address", ip_address);
+    if (device_name) {
+      params.append("device_name", device_name);
+    }
+    if (device_type) {
+      params.append("device_type", device_type);
+    }
+    if (network) {
+      params.append("network", network);
+    }
+    if (ip_address) {
+      params.append("ip_address", ip_address);
+    }
     params.append("page", page);
     params.append("page_size", currentPageSize);
     params.append("sort_by", ipTableState.sortBy);
@@ -279,9 +296,13 @@ export async function loadIpMacData(
 
 export const initIpMacFunctions = () => {
   const ipSection = document.getElementById("ip");
-  if (!ipSection) return;
+  if (!ipSection) {
+    return;
+  }
 
-  if (ipSection.dataset.initialized === "true") return;
+  if (ipSection.dataset.initialized === "true") {
+    return;
+  }
   ipSection.dataset.initialized = "true";
 
   initIpFilters();
@@ -298,7 +319,12 @@ export const initIpMacFunctions = () => {
 };
 
 export function initIpFilters() {
-  const filterIds = ["ip-device-name-filter", "ip-network-filter", "ip-address-filter"];
+  const filterIds = [
+    "ip-device-name-filter",
+    "ip-device-type-filter",
+    "ip-network-filter",
+    "ip-address-filter"
+  ];
 
   const debouncedFilter = debounce(applyIpFilters, 300);
 
@@ -315,6 +341,7 @@ export function initIpFilters() {
 function applyIpFilters() {
   const filters = {
     device_name: document.getElementById("ip-device-name-filter")?.value || "",
+    device_type: document.getElementById("ip-device-type-filter")?.value || "",
     network: document.getElementById("ip-network-filter")?.value || "",
     ip_address: document.getElementById("ip-address-filter")?.value || ""
   };

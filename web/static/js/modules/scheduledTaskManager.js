@@ -12,7 +12,6 @@ import {
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { iconButton } from "../utils/icons.js";
-import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
 let devices = [];
@@ -63,25 +62,27 @@ function setupEventListeners() {
     );
     taskTable.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
-      if (!btn) return;
+      if (!btn) {
+        return;
+      }
       const action = btn.dataset.action;
       const taskId = btn.dataset.taskId;
       const taskName = btn.dataset.taskName;
       switch (action) {
         case "run-task":
-          window.runScheduledTask(taskId);
+          runScheduledTask(taskId);
           break;
         case "toggle-task":
-          window.toggleScheduledTask(taskId);
+          toggleScheduledTask(taskId);
           break;
         case "edit-task":
-          window.editScheduledTask(taskId);
+          editScheduledTask(taskId);
           break;
         case "view-logs":
-          window.viewTaskLogs(taskName);
+          viewTaskLogs(taskName);
           break;
         case "delete-task":
-          window.deleteScheduledTask(taskId);
+          deleteScheduledTask(taskId);
           break;
       }
     });
@@ -91,7 +92,9 @@ function setupEventListeners() {
 /* 模态框每次打开均为全新 DOM（closeModal 后销毁），此处随开随绑，无需防重绑 */
 function bindTaskModalEvents() {
   document.getElementById("scheduled-task-type")?.addEventListener("change", handleTaskTypeChange);
-  document.getElementById("scheduled-task-form")?.addEventListener("submit", handleScheduledTaskSubmit);
+  document
+    .getElementById("scheduled-task-form")
+    ?.addEventListener("submit", handleScheduledTaskSubmit);
 }
 
 function handleTaskTypeChange(e) {
@@ -99,9 +102,7 @@ function handleTaskTypeChange(e) {
   const isMacSync = taskType === "mac_sync";
 
   document.getElementById("mac-sync-config")?.classList.toggle("hidden", !isMacSync);
-  document
-    .getElementById("mac-sync-network-config")
-    ?.classList.toggle("hidden", !isMacSync);
+  document.getElementById("mac-sync-network-config")?.classList.toggle("hidden", !isMacSync);
   document
     .getElementById("log-cleanup-config")
     ?.classList.toggle("hidden", taskType !== "log_cleanup");
@@ -114,7 +115,9 @@ function handleTaskTypeChange(e) {
 
 function populateDeviceSelect() {
   const select = document.getElementById("scheduled-task-device-id");
-  if (!select) return;
+  if (!select) {
+    return;
+  }
 
   select.innerHTML = `<option value="">${t("scheduled_tasks.config_fields.select_device")}</option>`;
   devices.forEach((dev) => {
@@ -127,7 +130,9 @@ function populateDeviceSelect() {
 
 function populateNetworkSelect() {
   const select = document.getElementById("scheduled-task-network-id");
-  if (!select) return;
+  if (!select) {
+    return;
+  }
 
   select.innerHTML = `<option value="">${t("scheduled_tasks.config_fields.select_network")}</option>`;
   networks.forEach((net) => {
@@ -140,9 +145,13 @@ function populateNetworkSelect() {
 
 async function loadScheduledTasks(sortBy = null, sortOrder = null) {
   const tbody = document.getElementById("scheduled-tasks-tbody");
-  if (!tbody) return;
+  if (!tbody) {
+    return;
+  }
 
-  if (sortBy) taskTableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    taskTableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const response = await apiGet(
@@ -162,7 +171,9 @@ async function loadScheduledTasks(sortBy = null, sortOrder = null) {
 
 function renderScheduledTasks(tasks) {
   const tbody = document.getElementById("scheduled-tasks-tbody");
-  if (!tbody) return;
+  if (!tbody) {
+    return;
+  }
 
   if (tasks.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="no-data">${t("scheduled_tasks.no_tasks")}</td></tr>`;
@@ -175,7 +186,7 @@ function renderScheduledTasks(tasks) {
     row.innerHTML = `
             <td class="index-column">${index + 1}</td>
             <td>${escapeHtml(task.name)}</td>
-            <td class="col-center">${t("scheduled_tasks.task_types." + task.task_type) || task.task_type}</td>
+            <td class="col-center">${t(`scheduled_tasks.task_types.${task.task_type}`) || escapeHtml(task.task_type)}</td>
             <td><code>${escapeHtml(task.cron_expression)}</code></td>
             <td class="col-center">
                 <span class="status-badge ${task.enabled ? "status-active" : "status-inactive"}">
@@ -196,30 +207,40 @@ function renderScheduledTasks(tasks) {
   });
 }
 
-window.openCreateScheduledTaskModal = async function () {
+async function openCreateScheduledTaskModal() {
   const modal = await openModal("scheduled-task-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   bindTaskModalEvents();
-  document.getElementById("scheduled-task-modal-title").textContent = t("scheduled_tasks.create_task");
+  document.getElementById("scheduled-task-modal-title").textContent = t(
+    "scheduled_tasks.create_task"
+  );
   document.getElementById("scheduled-task-form").reset();
   document.getElementById("scheduled-task-id").value = "";
   document.getElementById("scheduled-task-cron").value = "0 */6 * * *";
   document.getElementById("scheduled-task-enabled").checked = true;
   handleTaskTypeChange({ target: { value: "mac_sync" } });
-};
+}
 
-window.editScheduledTask = async function (id) {
+async function editScheduledTask(id) {
   try {
     const response = await apiGet(`/api/system/scheduled-tasks/${id}`);
-    if (!response.success) return;
+    if (!response.success) {
+      return;
+    }
     const task = response.data;
 
     const modal = await openModal("scheduled-task-modal");
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
 
     bindTaskModalEvents();
-    document.getElementById("scheduled-task-modal-title").textContent = t("scheduled_tasks.edit_task");
+    document.getElementById("scheduled-task-modal-title").textContent = t(
+      "scheduled_tasks.edit_task"
+    );
     document.getElementById("scheduled-task-id").value = task.id;
     document.getElementById("scheduled-task-name").value = task.name;
     document.getElementById("scheduled-task-type").value = task.task_type;
@@ -237,7 +258,7 @@ window.editScheduledTask = async function (id) {
   } catch (error) {
     console.error("Failed to load task:", error);
   }
-};
+}
 
 async function handleScheduledTaskSubmit(e) {
   e.preventDefault();
@@ -292,7 +313,7 @@ async function handleScheduledTaskSubmit(e) {
       closeModal("scheduled-task-modal");
       await loadScheduledTasks();
     } else {
-      showToast(t("scheduled_tasks.save_failed") + ": " + (response.message || ""), "error");
+      showToast(`${t("scheduled_tasks.save_failed")}: ${response.message || ""}`, "error");
     }
   } catch (error) {
     console.error("Failed to save task:", error);
@@ -300,7 +321,7 @@ async function handleScheduledTaskSubmit(e) {
   }
 }
 
-window.toggleScheduledTask = async function (id) {
+async function toggleScheduledTask(id) {
   try {
     const response = await apiPost(`/api/system/scheduled-tasks/${id}/toggle`);
     if (response.success) {
@@ -313,36 +334,40 @@ window.toggleScheduledTask = async function (id) {
     console.error("Failed to toggle task:", error);
     showToast(t("scheduled_tasks.toggle_failed"), "error");
   }
-};
+}
 
-window.runScheduledTask = async function (id) {
+async function runScheduledTask(id) {
   const confirmed = await showConfirm(t("scheduled_tasks.confirm_run"));
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const response = await apiPost(`/api/system/scheduled-tasks/${id}/run`);
     if (response.success) {
       const result = response.data?.result;
       if (result && result.ok) {
-        showToast(t("scheduled_tasks.run_success") + ": " + result.ok, "success");
+        showToast(`${t("scheduled_tasks.run_success")}: ${result.ok}`, "success");
       } else if (result && result.err) {
-        showToast(t("scheduled_tasks.run_failed") + ": " + result.err, "error");
+        showToast(`${t("scheduled_tasks.run_failed")}: ${result.err}`, "error");
       } else {
         showToast(t("scheduled_tasks.run_success"), "success");
       }
       await loadScheduledTasks();
     } else {
-      showToast(t("scheduled_tasks.run_failed") + ": " + (response.message || ""), "error");
+      showToast(`${t("scheduled_tasks.run_failed")}: ${response.message || ""}`, "error");
     }
   } catch (error) {
     console.error("Failed to run task:", error);
     showToast(t("scheduled_tasks.run_failed"), "error");
   }
-};
+}
 
-window.deleteScheduledTask = async function (id) {
+async function deleteScheduledTask(id) {
   const confirmed = await showConfirm(t("scheduled_tasks.confirm_delete"));
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const response = await apiDelete(`/api/system/scheduled-tasks/${id}`);
@@ -353,20 +378,26 @@ window.deleteScheduledTask = async function (id) {
   } catch (error) {
     console.error("Failed to delete task:", error);
   }
-};
+}
 
-window.viewTaskLogs = async function (taskName) {
+async function viewTaskLogs(taskName) {
   const modal = await openModal("task-logs-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const tbody = document.getElementById("task-logs-tbody");
-  if (!tbody) return;
+  if (!tbody) {
+    return;
+  }
 
   try {
     const response = await apiGet(
       `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`
     );
-    if (!response.success) return;
+    if (!response.success) {
+      return;
+    }
 
     const logs = response.data || [];
     if (logs.length === 0) {
@@ -391,4 +422,4 @@ window.viewTaskLogs = async function (taskName) {
   } catch (error) {
     console.error("Failed to load task logs:", error);
   }
-};
+}

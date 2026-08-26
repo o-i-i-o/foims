@@ -2,7 +2,7 @@
  * IPMA 系统初始化 - 入口模块
  *
  * 由 init_index.html 以 <script type="module"> 加载。
- * 负责在 DOM 就绪后绑定事件、暴露 inline onclick 所需的全局函数，并触发首次检查。
+ * 负责在 DOM 就绪后绑定事件并触发首次检查。
  */
 import { state } from "./state.js";
 import { goToStep, setInitMode } from "./ui.js";
@@ -14,10 +14,6 @@ import {
   getVerificationCode
 } from "./api.js";
 import { initI18n, changeLanguage } from "../../utils/i18n.js";
-
-// init_index.html 使用 inline onclick 调用以下两个函数，需挂到 window。
-window.getVerificationCode = getVerificationCode;
-window.setInitMode = setInitMode;
 
 document.addEventListener("DOMContentLoaded", async () => {
   await initI18n();
@@ -33,6 +29,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (state.currentStep >= 2) {
       checkDatabaseStatus();
     }
+  });
+
+  document.getElementById("pg-recheck-btn")?.addEventListener("click", () => {
+    location.reload();
+  });
+
+  document.querySelectorAll(".init-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setInitMode(tab.dataset.mode);
+    });
+  });
+
+  document.querySelectorAll(".get-captcha-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      getVerificationCode();
+    });
   });
 
   document.getElementById("init-mode-form")?.addEventListener("submit", handleInitModeSubmit);

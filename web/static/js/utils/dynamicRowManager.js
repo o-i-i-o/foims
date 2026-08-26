@@ -46,9 +46,13 @@ export class DynamicRowManager {
 
   /** 绑定容器外的「添加」按钮（如机柜底部的添加按钮） */
   bindExternalAddButton() {
-    if (!this.config.externalAddButtonId) return;
+    if (!this.config.externalAddButtonId) {
+      return;
+    }
     const addBtn = document.getElementById(this.config.externalAddButtonId);
-    if (!addBtn) return;
+    if (!addBtn) {
+      return;
+    }
     if (this.addHandler) {
       addBtn.removeEventListener("click", this.addHandler);
     }
@@ -58,7 +62,9 @@ export class DynamicRowManager {
 
   /** 根据 item 数量显示/隐藏空状态占位 */
   updateEmptyState() {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
     const { itemSelector, emptyClassName, emptyMode, addBtnSelector } = this.config;
     const existing = this.container.querySelector(`.${emptyClassName}`);
     const items = this.container.querySelectorAll(itemSelector);
@@ -85,7 +91,9 @@ export class DynamicRowManager {
 
   /** 仅在末行显示「添加」按钮（showInRowAddButton 时） */
   updateAddButtons() {
-    if (!this.ensureContainer() || !this.config.showInRowAddButton) return;
+    if (!this.ensureContainer() || !this.config.showInRowAddButton) {
+      return;
+    }
     const { itemSelector, addBtnSelector } = this.config;
     const items = this.container.querySelectorAll(itemSelector);
     items.forEach((item, index) => {
@@ -99,9 +107,13 @@ export class DynamicRowManager {
 
   /** 添加一行：移除空状态 → 构造行 → 追加 → 刷新按钮 */
   addItem(data = {}) {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
     const emptyState = this.container.querySelector(`.${this.config.emptyClassName}`);
-    if (emptyState) emptyState.remove();
+    if (emptyState) {
+      emptyState.remove();
+    }
     const item = this.createRow(data);
     this.container.appendChild(item);
     this.updateAddButtons();

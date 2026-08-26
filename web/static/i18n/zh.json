@@ -904,15 +904,15 @@
     "all": "全部通知",
     "unread": "未读",
     "read": "已读",
-    "clear_read": "清除已读",
+    "mark_all_read": "全部标记已读",
     "time": "时间",
     "title": "标题",
     "content": "内容",
     "status": "状态",
     "no_data": "暂无通知数据",
     "mark_read": "标记已读",
-    "cleared_read": "已读通知已清除",
-    "confirm_clear_read": "确定要清除所有已读通知吗？"
+    "marked_all_read": "全部通知已标记为已读",
+    "confirm_mark_all_read": "确定要将所有通知标记为已读吗？"
   },
   "ip": {
     "ip_address": "IP地址",
@@ -1318,6 +1318,22 @@
     "zoom_out": "缩小",
     "zoom_level": "画布显示比例",
     "zoom_fit": "适应画布"
+  },
+  "import_export": {
+    "backup_failed": "备份配置失败",
+    "download_template_failed": "下载导入模板失败",
+    "export_db_failed": "导出数据库失败",
+    "export_db_success": "数据库导出成功，正在下载",
+    "export_failed": "导出失败",
+    "file_too_large": "文件过大，请检查后重试",
+    "import_failed": "导入失败",
+    "import_success": "数据导入成功",
+    "importing": "正在导入数据...",
+    "invalid_file_type": "文件类型不正确，请选择指定格式的文件",
+    "restore_error": "恢复配置出错",
+    "restore_failed": "恢复配置失败",
+    "restore_success": "配置恢复成功",
+    "result_item": "表 {{table}}：新增 {{inserted}} 条，更新 {{updated}} 条"
   },
   "init": {
     "title": "IPMA 系统初始化",
@@ -1933,6 +1949,7 @@
         "child_type_undefined": "子类型「{{type}}」未在映射中定义，请添加该类型作为 key",
         "children_not_array": "类型「{{name}}」的子级必须是数组",
         "icon_not_string": "类型「{{type}}」的图标必须是字符串",
+        "icon_value_invalid": "类型「{{type}}」的图标值包含不允许的字符",
         "icon_type_undefined": "图标映射中的类型「{{type}}」未在 levels 中定义",
         "icons_must_be_object": "icons 必须是一个对象（类型→图标映射）",
         "levels_cycle": "模板层级存在循环引用，请检查类型间的父子关系",
@@ -1944,6 +1961,7 @@
         "root_type_missing": "未找到根类型（所有类型都作为子级出现，存在循环引用）",
         "root_type_multiple": "存在多个根类型：{{types}}，请确保只有一个根类型",
         "type_name_required": "类型名称不能为空",
+        "type_name_invalid": "类型名称「{{name}}」包含不允许的字符（仅支持中文、字母、数字、下划线、连字符）",
         "type_name_too_long": "类型名称「{{name}}」长度不能超过50个字符",
         "type_not_defined": "类型「{{type}}」未在模板中定义"
       },

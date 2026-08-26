@@ -2,13 +2,13 @@
    尺寸自适应已由 auto-fit grid、min()、clamp() 在基础样式中原生完成，不再依赖断点覆盖。 */
 
 /* 中屏：侧边栏收窄（宽度统一由 --sidebar-width 变量驱动，侧栏与主内容区自动同步） */
-@media (max-width: 992px) {
+@media (width <= 992px) {
   :root {
     --sidebar-width: 200px;
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   /* ===== 侧边栏折叠为顶部横向导航（结构性变化） ===== */
   .sidebar {
     width: 100%;
@@ -245,7 +245,7 @@
 }
 
 /* 超小屏幕 */
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .stat-card h3 {
     font-size: 0.8rem;
   }

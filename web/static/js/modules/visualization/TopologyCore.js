@@ -1,4 +1,4 @@
-const SVG_NS = "http://www.w3.org/2000/svg";
+import { SVG_NS } from "./SVGCore.js";
 
 export class TopologyCore {
   constructor(containerId, callbacks = {}) {
@@ -124,11 +124,15 @@ export class TopologyCore {
    * 配合设备/容器坐标输入框精确定位。
    */
   _renderGridRuler() {
-    if (!this.gridRulerGroup) return;
+    if (!this.gridRulerGroup) {
+      return;
+    }
     const vb = this.svg.viewBox.baseVal;
     const group = this.gridRulerGroup;
     group.innerHTML = "";
-    if (!vb.width || !vb.height) return;
+    if (!vb.width || !vb.height) {
+      return;
+    }
 
     const step = this.gridSize * 5;
     // 标注字号随视口宽度缩放，缩放后保持可读
@@ -182,7 +186,9 @@ export class TopologyCore {
       this.gridRect.setAttribute("width", width);
       this.gridRect.setAttribute("height", height);
     }
-    if (this._gridRulerRaf) return;
+    if (this._gridRulerRaf) {
+      return;
+    }
     this._gridRulerRaf = requestAnimationFrame(() => {
       this._gridRulerRaf = 0;
       this._renderGridRuler();
@@ -237,10 +243,14 @@ export class TopologyCore {
       return;
     }
 
-    if (e.button !== 0) return;
+    if (e.button !== 0) {
+      return;
+    }
 
     const anchor = e.target.closest(".port-anchor");
-    if (anchor) return;
+    if (anchor) {
+      return;
+    }
 
     // 容器（房间/机柜分组框）拖动：整体移动组内全部设备节点
     const containerG = e.target.closest(".topology-container-group");
@@ -333,7 +343,9 @@ export class TopologyCore {
   }
 
   _updateTooltip(e) {
-    if (!this.tooltip) return;
+    if (!this.tooltip) {
+      return;
+    }
     const target = e.target.closest("[data-tooltip]");
     if (!target || !target.dataset.tooltip) {
       this._hideTooltip();
@@ -392,7 +404,11 @@ export class TopologyCore {
               height: parseFloat(rect.getAttribute("height"))
             }
           : null;
-        this.callbacks.onContainerClick(drag.groupEl.dataset.containerKind, drag.groupEl.dataset.containerKey, box);
+        this.callbacks.onContainerClick(
+          drag.groupEl.dataset.containerKind,
+          drag.groupEl.dataset.containerKey,
+          box
+        );
       } else if (this.callbacks.onCanvasClick) {
         // 容器内空白处的单击视同画布点击（保持清空选中等既有行为）
         this.callbacks.onCanvasClick();
@@ -427,7 +443,9 @@ export class TopologyCore {
     const newWidth = vb.width * delta;
     const newHeight = vb.height * delta;
 
-    if (newWidth < 300 || newWidth > 30000) return;
+    if (newWidth < 300 || newWidth > 30000) {
+      return;
+    }
 
     const newX = mousePos.x - (mousePos.x - vb.x) * delta;
     const newY = mousePos.y - (mousePos.y - vb.y) * delta;
@@ -456,7 +474,9 @@ export class TopologyCore {
     const newWidth = containerWidth / clamped;
     const newHeight = newWidth * (vb.height / vb.width);
 
-    if (newWidth < 300 || newWidth > 30000) return;
+    if (newWidth < 300 || newWidth > 30000) {
+      return;
+    }
 
     this.setViewBox(centerX - newWidth / 2, centerY - newHeight / 2, newWidth, newHeight);
     this._updateZoomIndicator();
@@ -473,7 +493,6 @@ export class TopologyCore {
     const portDir = anchor.dataset.portDir;
     const portId = anchor.dataset.portId || null;
 
-    const svgPos = this._getSvgCoordinates(e);
     const anchorPos = {
       x: parseFloat(anchor.getAttribute("cx")),
       y: parseFloat(anchor.getAttribute("cy"))
@@ -527,10 +546,11 @@ export class TopologyCore {
 
   _setElementPosition(element, x, y) {
     const rect = element.querySelector("rect");
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
 
     const width = parseFloat(rect.getAttribute("width")) || 200;
-    const height = parseFloat(rect.getAttribute("height")) || 100;
 
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
@@ -564,21 +584,26 @@ export class TopologyCore {
   _startContainerDrag(containerG, e) {
     const kind = containerG.dataset.containerKind;
     const key = containerG.dataset.containerKey;
-    if (!kind || !key) return false;
+    if (!kind || !key) {
+      return false;
+    }
 
     const members = [...this.elementsGroup.querySelectorAll("[data-device-id]")].filter((el) =>
       kind === "cabinet" ? el.dataset.cabinetKey === key : el.dataset.roomKey === key
     );
-    if (members.length === 0) return false;
+    if (members.length === 0) {
+      return false;
+    }
 
     const rect = containerG.querySelector("rect");
-    if (!rect) return false;
+    if (!rect) {
+      return false;
+    }
 
     this.isContainerDragging = true;
     this.hasMoved = false;
     // 推挤分组时被拖容器保持不动：房间容器即房间键，机柜容器取首个成员的房间键
-    const fixedKey =
-      kind === "room" ? key : members[0].dataset.roomKey || "room:none";
+    const fixedKey = kind === "room" ? key : members[0].dataset.roomKey || "room:none";
     this.containerDrag = {
       groupEl: containerG,
       rectStart: {
@@ -616,15 +641,29 @@ export class TopologyCore {
     });
     drag.memberStart.forEach(({ el, x, y }) => {
       this._setElementPosition(el, x + dx, y + dy);
+    });
+    this._scheduleContainerDragRefresh();
+  }
+
+  /** 容器拖拽的连线重画合并到每帧一次：成员多时避免 N 次/帧的重画请求 */
+  _scheduleContainerDragRefresh() {
+    if (this._containerDragFrame) {
+      return;
+    }
+    this._containerDragFrame = requestAnimationFrame(() => {
+      this._containerDragFrame = null;
       if (this.callbacks.onNodeDrag) {
-        this.callbacks.onNodeDrag(el.dataset.deviceId);
+        // 空 deviceId 表示全量重画（一次覆盖全部成员的位移）
+        this.callbacks.onNodeDrag(null);
       }
     });
   }
 
   _snapElementToGrid(element) {
     const rect = element.querySelector("rect");
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
     const x = parseFloat(rect.getAttribute("x"));
     const y = parseFloat(rect.getAttribute("y"));
     const snappedX = Math.round(x / this.gridSize) * this.gridSize;
@@ -662,17 +701,17 @@ export class TopologyCore {
    */
   _updateZoomIndicator() {
     const indicator = document.getElementById("topology-zoom-level");
-    if (!indicator) return;
+    if (!indicator) {
+      return;
+    }
     if (indicator.tagName !== "SELECT") {
-      indicator.textContent = Math.round(this.getZoomScale() * 100) + "%";
+      indicator.textContent = `${Math.round(this.getZoomScale() * 100)}%`;
       return;
     }
 
     const scale = this.getZoomScale();
     const preset = [...indicator.options].find(
-      (opt) =>
-        opt.value !== "fit" &&
-        Math.abs(parseFloat(opt.value) - scale) / scale <= 0.02
+      (opt) => opt.value !== "fit" && Math.abs(parseFloat(opt.value) - scale) / scale <= 0.02
     );
 
     const dynamicId = "zoom-current";
@@ -687,7 +726,7 @@ export class TopologyCore {
         indicator.insertBefore(opt, indicator.firstChild);
       }
       const opt = indicator.querySelector(`option[value="${dynamicId}"]`);
-      opt.textContent = Math.round(scale * 100) + "%";
+      opt.textContent = `${Math.round(scale * 100)}%`;
       indicator.value = dynamicId;
     }
   }
@@ -702,9 +741,13 @@ export class TopologyCore {
 
   getNodePosition(deviceId) {
     const element = this.elementsGroup.querySelector(`[data-device-id="${deviceId}"]`);
-    if (!element) return null;
+    if (!element) {
+      return null;
+    }
     const rect = element.querySelector("rect");
-    if (!rect) return null;
+    if (!rect) {
+      return null;
+    }
     return {
       x: parseFloat(rect.getAttribute("x")),
       y: parseFloat(rect.getAttribute("y")),
@@ -715,7 +758,9 @@ export class TopologyCore {
 
   getAnchorPosition(deviceId, direction) {
     const pos = this.getNodePosition(deviceId);
-    if (!pos) return null;
+    if (!pos) {
+      return null;
+    }
     switch (direction) {
       case "top":
         return { x: pos.x + pos.width / 2, y: pos.y };

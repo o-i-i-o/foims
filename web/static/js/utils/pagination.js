@@ -21,7 +21,9 @@ export function renderPagination(
   total,
   options = {}
 ) {
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const pagination = document.createElement("div");
   pagination.className = "pagination";
@@ -31,10 +33,10 @@ export function renderPagination(
 
   const pageNumbers = generatePageNumbers(currentPage, totalPages);
 
-  let pageButtonsHtml = pageNumbers
+  const pageButtonsHtml = pageNumbers
     .map((page) => {
       if (page === "...") {
-        return `<span class="pagination-ellipsis">...</span>`;
+        return '<span class="pagination-ellipsis">...</span>';
       }
       const activeClass = page === currentPage ? "active" : "";
       return `<button class="pagination-page ${activeClass}" data-page="${page}">${page}</button>`;
@@ -102,7 +104,9 @@ export function renderPagination(
         onPageChange(page);
       }
     };
-    if (jumpBtn) jumpBtn.addEventListener("click", doJump);
+    if (jumpBtn) {
+      jumpBtn.addEventListener("click", doJump);
+    }
     if (jumpInput) {
       jumpInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -118,7 +122,7 @@ export function renderPagination(
   container.appendChild(pagination);
 }
 
-function buildPageSizeSelector(options, current, totalPages) {
+function buildPageSizeSelector(options, current, _totalPages) {
   const opts = options
     .map(
       (size) =>

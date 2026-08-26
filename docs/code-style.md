@@ -109,8 +109,13 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 
 - 格式以 prettier（`.prettierrc`）为准：2 空格缩进、双引号、分号、
   模板字符串（不用 `+` 拼接）、`const` 优先。
-- 异步一律 `async/await`（不用 `.then` 链）；事件一律 `addEventListener`
-  （不用 `.onclick=` 赋值）；常驻节点防重复绑定用 `dataset.bound` 标志。
+- 异步一律 `async/await`（不用 `.then` 链）。事件绑定按节点生命周期分两类
+  （详见 3.7 模态框生命周期）：
+  - **常驻节点**（页面表格、document 委托）：`addEventListener` +
+    `dataset.bound` 标志防重复绑定；
+  - **模态框内部节点**（DOM 随 closeModal 销毁重建）：优先
+    `onclick/onsubmit` 属性幂等赋值；确需 addEventListener 时必须在
+    函数内成对 removeEventListener，禁止依赖"反正会重建"而裸绑。
 - DOM 访问优先 `elementCache`；表格渲染统一 `renderTable`（含 loading 等
   多态的特殊页面除外，如 fail2ban/scheduledTask）。
 - 用户通知一律 `showToast`；`alert/confirm` 禁用，确认框用 `showConfirm`。
@@ -179,14 +184,83 @@ for name, p in re.findall(r'(\w+):\s+"(/static/js/[^"]+)"', open(f"{base}/utils/
 EOF
 
 # i18n 双向 parity
-node -e "const zh=require('./web/static/js/i18n/zh.json'),en=require('./web/static/js/i18n/en.json'); \
+node -e "const zh=require('./web/static/i18n/zh.json'),en=require('./web/static/i18n/en.json'); \
 const f=(o,p='')=>Object.entries(o).flatMap(([k,v])=>typeof v==='object'?f(v,p+k+'.'):[p+k]); \
 const z=new Set(f(zh)),e=new Set(f(en)); \
 console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k=>!z.has(k)));"
 
-# 格式化（有 node 工具链时）
-npx prettier --config web/.prettierrc --write "web/static/js/**/*.js" "web/static/css/**/*.css"
+# 前端 lint 全量（需 node/npm；格式归 prettier，代码质量归 eslint，
+# CSS 归 stylelint，HTML 归 htmlhint，纯工具函数归 jest）
+cd web && npm ci && npm run lint && npm run format:check && npm test
 ```
+
+lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 平面配置）/
+`web/.stylelintrc.json` / `web/.htmlhintrc` / `web/.prettierrc`）：
+- **eslint**：代码质量与潜在缺陷（no-unused-vars、eqeqeq、no-else-return、prefer-const 等）
+  外加插件：`eslint-plugin-import`（导入规范与死链）、`eslint-plugin-sonarjs`
+  （复杂度/重复串/隐患模式，认知复杂度阈值 40、重复串阈值 6，校准理由见配置内注释）、
+  `eslint-config-prettier`（关闭与 prettier 冲突的格式规则，置于配置末尾）；
+  格式类规则已全部移交 prettier，避免两者对模板串/三元换行的判定冲突；
+- **prettier**：仅管 `static/js` 与 lint 配置文件（CSS 按上文约定保持 4 空格
+  手工排版，见 `web/.prettierignore`）；
+- **stylelint**：CSS 结构性检查（基线 `stylelint-config-standard` + 项目覆盖规则）；
+  `!important` 默认禁止，打印隐藏/工具类等压制场景
+  以 `/* stylelint-disable-line declaration-no-important -- 原因 */` 显式豁免；
+  SVG 几何属性 `rx/ry` 因标准属性值表未收录而在配置中豁免；
+- **htmlhint**：入口页与模态片段共用 `web/.htmlhintrc`（片段无 doctype/lang，
+  相应文档级规则关闭）；入口页另跑 `npm run lint:html:entries` 补查
+  doctype-first/html-lang-require/title-require；
+- **jest**：`tests/` 下纯工具模块单元测试（network IP/CIDR、helpers、
+  sessionManager），jsdom 环境、babel 按当前 Node 目标转译（无实验 flag），
+  `npm test` 运行；
+- **depcheck**：依赖健康检查（CLI 工具类依赖在 `web/.depcheckrc` 豁免），
+  `npm run depcheck` 运行；
+- **lighthouse-ci**（`web/lighthouserc.json`）：对登录页与初始化向导做
+  性能/可访问性/最佳实践/SEO 审计，`npm run lighthouse` 运行；
+  需本机可用 Chromium/Chrome（CI 可用 `browser-actions/setup-chrome`），
+  断言暂为 warn 级基线，结果不外传。
+- **抑制约定**：个别经评估的误报以 `// eslint-disable-next-line <rule> -- 中文理由`
+  行内豁免（与 stylelint 同款约定），禁止无理由豁免与文件级豁免。
+
+### 3.6.1 已知豁免清单
+
+- `sonarjs/no-duplicate-string` 白名单：`device-*-id` 等模态框元素 id
+  必须保持字面量（`tests/frontend_consistency.rs` 按字面量正则做悬空校验）；
+- `sonarjs/no-hardcoded-passwords`：`login.js` 的 `"password-login"` 为登录
+  方式枚举值（与 index.html 的 data-tab 联动），非密钥；
+- `sonarjs/pseudo-random` / `sonarjs/void-use`：登录页角色动画的
+  `Math.random` 抖动延迟与 `void offsetHeight` 强制 reflow，均非安全场景。
+
+### 3.7 模态框生命周期（唯一权威范式）
+
+全站模态框统一走 `modalLoader.js`，生命周期为：
+**`closeModal` 即销毁 DOM（`modal.remove()`）→ 下次打开从 `htmlCache`
+重新注入全新节点**。所有绑定与填充策略都建立在这个事实上：
+
+- **打开范式**："数据预取并行、填充串行于 DOM 就绪后"。
+  `Promise.all` 只并行原始数据请求与 `openModal`；`fillSelect` 内部
+  会等待目标元素出现（`waitForElement`），因此与 `openModal` 并行调用
+  安全；其余手写填充必须在 `await openModal()` 之后执行。
+- **绑定范式**：模态内按钮用 `onclick = fn` 幂等赋值（重复打开/
+  刷新重绑不叠加监听）；容器级委托用 `dataset.bound` 标志。
+  历史教训（device.js 网卡区域注释）：模态 DOM 每次销毁重建，模块级
+  "已绑定"标志位会导致第二次打开时新 DOM 零监听 —— 禁止使用。
+- **禁止跨模态复用 id**：两个模态框同屏时 `getElementById` 只返回文档序
+  第一个，监听会绑错元素。同类别按钮 id 必须加模态前缀区分。
+- **层叠模态**：`openModal/closeModal` 内部维护打开计数，只有归零才恢复
+  `body.overflow`；不要在业务代码里直接改 `document.body.style.overflow`。
+- **并行加载**：模态框 HTML（`openModal`）与首屏数据请求互不依赖时放同
+  一个 `Promise.all`；首次打开的 HTML 已由 `prefetchModalsOnIdle` 在空闲
+  时预热进内存缓存，无需担心串行 RTT。
+- **安全**：任何拼进 `innerHTML`/模板字符串的用户可控值（名称、描述、
+  枚举回退值）必须过 `escapeHtml`；`renderTable` 的 render 回调返回
+  字符串时同样适用。
+
+### 3.8 校验命令（cargo test 集成）
+
+id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测试
+（`tests/frontend_consistency.rs`），随 `cargo test` 运行，无需 Node
+工具链。
 
 ## 4. 布局约定速查
 

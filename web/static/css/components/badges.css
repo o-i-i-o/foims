@@ -26,12 +26,6 @@
   border: 1px solid var(--color-danger-border);
 }
 
-.status-reserved {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
-  border: 1px solid var(--color-warning-border);
-}
-
 .two-factor-enabled {
   background: var(--color-info-bg);
   color: var(--color-info-text);

@@ -3,7 +3,7 @@
  * 处理全局事件绑定和委托
  */
 
-import { loadModule, getCachedModule } from "../utils/resourceLoader.js";
+import { loadModule } from "../utils/resourceLoader.js";
 import { t } from "../utils/i18n.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modalLoader.js";
@@ -29,7 +29,6 @@ const DELETE_FUNCTIONS = {
   "cabinets-table": { module: "cabinet", fn: "deleteCabinet" },
   "cable-links-table": { module: "cableLink", fn: "deleteCableLink" },
   "devices-table": { module: "device", fn: "deleteDevice" },
-  "device-ports-table": { module: "devicePorts", fn: "deleteDevicePort" },
   "users-table": { module: "userManager", fn: "deleteUser" }
 };
 
@@ -44,19 +43,28 @@ const DELETE_FUNCTIONS = {
  */
 const PRELOAD_MODULES = ["log", "systemManager"];
 
-async function preloadModules() {
-  await Promise.all(PRELOAD_MODULES.map((name) => loadModule(name)));
+/** idle 时预热日志/系统模块；事件绑定不再被模块加载阻塞 */
+function preloadModulesOnIdle() {
+  const run = () => {
+    Promise.allSettled(PRELOAD_MODULES.map((name) => loadModule(name)));
+  };
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(run, { timeout: 5000 });
+  } else {
+    setTimeout(run, 2000);
+  }
 }
 
-function getModule(name) {
-  return getCachedModule(name);
+/** 懒加载模块：loadModule 内部有缓存与并发去重，重复调用无额外开销 */
+async function getModule(name) {
+  return loadModule(name);
 }
 
 /**
  * 初始化所有事件监听器
  */
-export async function initEventListeners() {
-  await preloadModules();
+export function initEventListeners() {
+  preloadModulesOnIdle();
   initButtonEventBindings();
   initGlobalClickHandlers();
   initSelectChangeHandlers();
@@ -85,7 +93,6 @@ const RESOURCE_FORM_CALLBACK_MAP = {
   "cabinet-form": "submitCabinetForm",
   "cabinet-position-form": "submitCabinetPositionForm",
   "user-form": "submitUserForm",
-  "device-port-form-expanded": "submitDevicePortForm",
   "organization-form": "submitOrgForm",
   "org-template-editor-form": "submitOrgTemplateForm",
   "cable-link-form": "submitCableLinkForm",
@@ -137,100 +144,94 @@ const BUTTON_EVENT_BINDINGS = [
   {
     id: "refresh-notifications-btn",
     event: "click",
-    handler: () => {
-      const { loadNotificationsData } = getModule("log");
+    handler: async () => {
+      const { loadNotificationsData } = await getModule("log");
       const filter = document.getElementById("notifications-filter");
       loadNotificationsData(filter?.value || "all");
     }
   },
   {
-    id: "clear-read-notifications-btn",
+    id: "mark-all-read-btn",
     event: "click",
-    handler: () => {
-      const { clearReadNotifications } = getModule("log");
-      clearReadNotifications();
+    handler: async () => {
+      const { markAllNotificationsRead } = await getModule("log");
+      markAllNotificationsRead();
     }
   },
   {
     id: "test-smtp-btn",
     event: "click",
-    handler: () => {
-      const { testSmtpConnection } = getModule("systemManager");
+    handler: async () => {
+      const { testSmtpConnection } = await getModule("systemManager");
       testSmtpConnection();
     }
   },
   {
     id: "test-ldap-btn",
     event: "click",
-    handler: () => {
-      const { testLdapConnection } = getModule("systemManager");
+    handler: async () => {
+      const { testLdapConnection } = await getModule("systemManager");
       testLdapConnection();
     }
   },
   {
     id: "test-sso-btn",
     event: "click",
-    handler: () => {
-      const { testSsoConnection } = getModule("systemManager");
+    handler: async () => {
+      const { testSsoConnection } = await getModule("systemManager");
       testSsoConnection();
     }
   },
   {
     id: "import-csv-btn",
     event: "click",
-    handler: () => {
-      const { importCsvData } = getModule("systemManager");
+    handler: async () => {
+      const { importCsvData } = await getModule("systemManager");
       importCsvData();
     }
   },
   {
     id: "download-template-btn",
     event: "click",
-    handler: () => {
-      const { downloadTemplate } = getModule("systemManager");
+    handler: async () => {
+      const { downloadTemplate } = await getModule("systemManager");
       downloadTemplate();
     }
   },
   {
     id: "export-csv-btn",
     event: "click",
-    handler: () => {
-      const { exportCsvData } = getModule("systemManager");
+    handler: async () => {
+      const { exportCsvData } = await getModule("systemManager");
       exportCsvData();
     }
   },
   {
     id: "export-database-btn",
     event: "click",
-    handler: () => {
-      const { exportDatabase } = getModule("systemManager");
+    handler: async () => {
+      const { exportDatabase } = await getModule("systemManager");
       exportDatabase();
     }
   },
   {
     id: "backup-config-btn",
     event: "click",
-    handler: () => {
-      const { backupConfig } = getModule("systemManager");
+    handler: async () => {
+      const { backupConfig } = await getModule("systemManager");
       backupConfig();
     }
   },
   {
     id: "restore-config-btn",
     event: "click",
-    handler: () => {
-      const { restoreConfig } = getModule("systemManager");
+    handler: async () => {
+      const { restoreConfig } = await getModule("systemManager");
       restoreConfig();
     }
-  },
-  {
-    id: "logout-btn",
-    event: "click",
-    handler: () => {
-      const { logoutUser } = getModule("authManager");
-      logoutUser();
-    }
   }
+  // logout-btn 不在此绑定：authManager.initLogout()（app.js 调用）已绑定同一按钮，
+  // 此处再绑会导致每次退出触发两次 logoutUser（二次请求 401 竞态）
   // 语言切换由 languageMenu 模块负责（下拉选择，见 modules/languageMenu.js）
 ];
 
@@ -374,8 +375,8 @@ async function handleEditDeleteClick(e) {
 function initSelectChangeHandlers() {
   const notificationsFilter = document.getElementById("notifications-filter");
 
-  notificationsFilter?.addEventListener("change", (e) => {
-    const { loadNotificationsData } = getModule("log");
+  notificationsFilter?.addEventListener("change", async (e) => {
+    const { loadNotificationsData } = await getModule("log");
     loadNotificationsData(e.target.value);
   });
 }

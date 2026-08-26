@@ -1,6 +1,6 @@
 import { apiGet } from "../utils/apiClient.js";
-import { showToast, escapeHtml } from "../utils/ui.js";
-import { cache, safeAsync, nextFrame } from "../utils/helpers.js";
+import { escapeHtml } from "../utils/ui.js";
+import { cache, safeAsync } from "../utils/helpers.js";
 import {
   getStatusText,
   getDeviceTypeName,
@@ -102,7 +102,7 @@ async function loadTopLists() {
   renderTopLists(topLists);
 }
 
-async function fetchTopData(url, type) {
+async function fetchTopData(url, _type) {
   const result = await apiGet(url);
   // 各列表接口均为 paged_response，形状固定为 items
   if (result.success) {
@@ -115,14 +115,15 @@ function renderTopLists(data) {
   renderTopNetworks(data.networks);
   renderTopIPs(data.ips);
   renderTopRooms(data.rooms);
-  renderTopDevices(data.devices);
   renderTopCabinets(data.cabinets);
   renderTopLogs(data.logs);
 }
 
 function renderTopNetworks(items) {
   const container = document.getElementById("top-networks-list");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!items || items.length === 0) {
     container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_network_data")}</li>`;
@@ -150,7 +151,9 @@ function renderTopNetworks(items) {
 
 function renderTopIPs(items) {
   const container = document.getElementById("top-ips-list");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!items || items.length === 0) {
     container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_ip_data")}</li>`;
@@ -179,7 +182,9 @@ function renderTopIPs(items) {
 
 function renderTopRooms(items) {
   const container = document.getElementById("top-rooms-list");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!items || items.length === 0) {
     container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_room_data")}</li>`;
@@ -205,37 +210,11 @@ function renderTopRooms(items) {
     .join("");
 }
 
-function renderTopDevices(items) {
-  const container = document.getElementById("top-devices-list");
-  if (!container) return;
-
-  if (!items || items.length === 0) {
-    container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_device_data")}</li>`;
-    return;
-  }
-
-  container.innerHTML = items
-    .slice(0, 5)
-    .map(
-      (dev) => `
-    <li>
-      <div class="item-name">
-        <span class="item-icon">🔀</span>
-        <div>
-          <div>${escapeHtml(dev.name || "-")}</div>
-          <div class="item-meta">${escapeHtml(dev.ip_address || "-")}</div>
-        </div>
-      </div>
-      <span class="item-value">${escapeHtml(dev.brand || "-")}</span>
-    </li>
-  `
-    )
-    .join("");
-}
-
 function renderTopCabinets(items) {
   const container = document.getElementById("top-cabinets-list");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!items || items.length === 0) {
     container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_cabinet_data")}</li>`;
@@ -263,7 +242,9 @@ function renderTopCabinets(items) {
 
 function renderTopLogs(items) {
   const container = document.getElementById("top-logs-list");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!items || items.length === 0) {
     container.innerHTML = `<li class="empty-list-item">${t("dashboard.no_log_data")}</li>`;
@@ -291,14 +272,20 @@ function renderTopLogs(items) {
 
 function initDashboardClickHandlers() {
   const dashboard = document.getElementById("dashboard");
-  if (!dashboard) return;
+  if (!dashboard) {
+    return;
+  }
 
-  if (dashboard.dataset.clickInitialized === "true") return;
+  if (dashboard.dataset.clickInitialized === "true") {
+    return;
+  }
   dashboard.dataset.clickInitialized = "true";
 
   dashboard.addEventListener("click", (e) => {
     const card = e.target.closest(".stat-card.clickable, .dashboard-card");
-    if (!card) return;
+    if (!card) {
+      return;
+    }
 
     // 如果点击的是链接或按钮，不进行卡片级别的跳转
     if (e.target.closest("a") || e.target.closest("button")) {
@@ -330,12 +317,13 @@ function initDashboardClickHandlers() {
 function renderCharts(data) {
   renderDeviceTypeChart(data.ips?.by_device_type || {});
   renderIpStatusChart(data.ips?.by_status || {});
-  renderRoomTypeChart(data.rooms_by_type || {});
 }
 
 function renderDeviceTypeChart(deviceTypes) {
   const container = document.getElementById("device-type-chart");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const total = Object.values(deviceTypes).reduce((a, b) => a + b, 0);
   if (total === 0) {
@@ -352,7 +340,7 @@ function renderDeviceTypeChart(deviceTypes) {
     const name = getDeviceTypeName(type);
     html += `
       <div class="chart-bar-item">
-        <div class="chart-bar-label">${name}</div>
+        <div class="chart-bar-label">${escapeHtml(name)}</div>
         <div class="chart-bar-container">
           <div class="chart-bar-fill" style="width: ${percentage}%; background-color: ${colors[index % colors.length]}"></div>
         </div>
@@ -368,7 +356,9 @@ function renderDeviceTypeChart(deviceTypes) {
 
 function renderIpStatusChart(statusData) {
   const container = document.getElementById("ip-status-chart");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const total = Object.values(statusData).reduce((a, b) => a + b, 0);
   if (total === 0) {
@@ -393,7 +383,7 @@ function renderIpStatusChart(statusData) {
 
   for (const [status, count] of Object.entries(statusData)) {
     const percentage = ((count / total) * 100).toFixed(1);
-    const name = statusNames[status] || status;
+    const name = statusNames[status] || escapeHtml(status);
     const color = colors[status] || "var(--status-fallback)";
 
     html += `
@@ -408,55 +398,6 @@ function renderIpStatusChart(statusData) {
   container.innerHTML = html;
 }
 
-function renderRoomTypeChart(roomTypes) {
-  const container = document.getElementById("room-type-chart");
-  if (!container) return;
-
-  const total = Object.values(roomTypes).reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
-    return;
-  }
-
-  const typeNames = {
-    office: t("room.type_office"),
-    lobby: t("room.type_lobby"),
-    reception: t("room.type_reception"),
-    data_center: t("room.type_datacenter"),
-    telecom_closet: t("room.type_telecom_closet"),
-    other: t("room.type_other")
-  };
-
-  const colors = {
-    office: "var(--room-office)",
-    lobby: "var(--room-office)",
-    reception: "var(--room-office)",
-    data_center: "var(--room-data-center)",
-    telecom_closet: "var(--room-telecom-closet)",
-    other: "var(--status-fallback)"
-  };
-
-  let html = '<div class="chart-donut">';
-
-  for (const [type, count] of Object.entries(roomTypes)) {
-    const percentage = ((count / total) * 100).toFixed(1);
-    const name = typeNames[type] || type;
-    const color = colors[type] || "var(--status-fallback)";
-
-    html += `
-      <div class="chart-donut-item">
-        <div class="chart-donut-segment" style="background-color: ${color}">
-          <span class="chart-donut-value">${count}</span>
-        </div>
-        <div class="chart-donut-label">${name} (${percentage}%)</div>
-      </div>
-    `;
-  }
-
-  html += "</div>";
-  container.innerHTML = html;
-}
-
 async function loadFallbackData() {
   try {
     const [networksResponse, regionsResponse, ipResponse] = await Promise.all([
@@ -466,12 +407,22 @@ async function loadFallbackData() {
     ]);
 
     const getCount = (response) => {
-      if (!response.success) return 0;
+      if (!response.success) {
+        return 0;
+      }
       const data = response.data;
-      if (data.total !== undefined) return data.total;
-      if (Array.isArray(data)) return data.length;
-      if (data.items) return data.items.length;
-      if (data.data && Array.isArray(data.data)) return data.data.length;
+      if (data.total !== undefined) {
+        return data.total;
+      }
+      if (Array.isArray(data)) {
+        return data.length;
+      }
+      if (data.items) {
+        return data.items.length;
+      }
+      if (data.data && Array.isArray(data.data)) {
+        return data.data.length;
+      }
       return 0;
     };
 

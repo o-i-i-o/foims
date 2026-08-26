@@ -13,7 +13,7 @@
 }
 
 .hidden {
-  display: none !important;
+  display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
 }
 
 .text-muted {
@@ -31,6 +31,7 @@
 .w-auto {
   width: auto;
 }
+
 /* 表单行内的横向组合（label + checkbox + 按钮等） */
 .form-group-inline {
   display: flex;

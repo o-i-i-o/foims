@@ -19,6 +19,10 @@ import { isIPv6, isIpInCidr, isValidIP } from "./network.js";
 
 const DEFAULT_PORT_NAME = "eth0";
 
+// 高频 i18n 键（网卡/网口标题，各出现 10+ 次），抽常量避免字面量散落
+const T_KEY_NETWORK_CARD = "device.network_card";
+const T_KEY_NETWORK_PORT = "device.network_port";
+
 // 唯一 ID 生成器（用于 label-input 显式关联）
 let uniqueIdCounter = 0;
 function generateUniqueId(prefix = "nc") {
@@ -85,7 +89,9 @@ export class NetworkCardManager {
 
   clear() {
     const container = this.getContainer();
-    if (container) container.innerHTML = "";
+    if (container) {
+      container.innerHTML = "";
+    }
   }
 
   /**
@@ -137,11 +143,15 @@ export class NetworkCardManager {
   /** 刷新已渲染 IP 行的区域/网段下拉（保留当前选择） */
   refreshIpRowDropdowns() {
     const container = this.getContainer();
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     container.querySelectorAll(".nc-ip-item").forEach((el) => {
       const regionSelect = el.querySelector(".ip-region");
       const networkSelect = el.querySelector(".ip-network");
-      if (!regionSelect || !networkSelect) return;
+      if (!regionSelect || !networkSelect) {
+        return;
+      }
       const currentNetworkId = networkSelect.value;
       this.renderRegionOptions(regionSelect);
       this.renderNetworkOptions(networkSelect, regionSelect.value, currentNetworkId);
@@ -176,9 +186,13 @@ export class NetworkCardManager {
 
   networkOptionLabel(n, legacy = false) {
     const cidrs = [];
-    if (n.ipv4_cidr) cidrs.push(n.ipv4_cidr);
-    if (n.ipv6_cidr) cidrs.push(n.ipv6_cidr);
-    const cidrStr = cidrs.length > 0 ? ` (${cidrs.join(" / ")})` : "";
+    if (n.ipv4_cidr) {
+      cidrs.push(n.ipv4_cidr);
+    }
+    if (n.ipv6_cidr) {
+      cidrs.push(n.ipv6_cidr);
+    }
+    const cidrStr = cidrs.length > 0 ? ` (${escapeHtml(cidrs.join(" / "))})` : "";
     const mark = legacy ? ` [${t("device.network_not_in_room")}]` : "";
     return `${escapeHtml(n.name)}${cidrStr}${mark}`;
   }
@@ -207,7 +221,9 @@ export class NetworkCardManager {
 
   getNetworkCidr(networkId, ipAddress) {
     const network = this.networks.find((n) => n.id === networkId);
-    if (!network) return { cidr: null, hasCidr: false };
+    if (!network) {
+      return { cidr: null, hasCidr: false };
+    }
     const isV6 = isIPv6(ipAddress);
     const cidr = isV6 ? network.ipv6_cidr : network.ipv4_cidr;
     return { cidr, hasCidr: !!cidr };
@@ -215,7 +231,9 @@ export class NetworkCardManager {
 
   async init() {
     const container = this.getContainer();
-    if (!container) return false;
+    if (!container) {
+      return false;
+    }
     container.innerHTML = "";
     this.resetLegacyData();
     this.bindAddButton();
@@ -225,15 +243,21 @@ export class NetworkCardManager {
 
   bindAddButton() {
     const btn = document.getElementById(this.addBtnId);
-    if (!btn) return;
-    if (this.addHandler) btn.removeEventListener("click", this.addHandler);
+    if (!btn) {
+      return;
+    }
+    if (this.addHandler) {
+      btn.removeEventListener("click", this.addHandler);
+    }
     this.addHandler = () => this.addCard();
     btn.addEventListener("click", this.addHandler);
   }
 
   async addCard(cardData = null) {
     const container = this.getContainer();
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     const data = cardData || {};
     const card = this.createCardElement(data);
     // 先在分离 DOM 上完成端口/IP 子树的构建与绑定，再一次性插入，避免逐级触发重排
@@ -248,7 +272,7 @@ export class NetworkCardManager {
 
     div.innerHTML = `
       <header class="card-level-bar">
-        <h3 id="${uid}-title" class="level-badge level-card">${t("device.network_card")}</h3>
+        <h3 id="${uid}-title" class="level-badge level-card">${t(T_KEY_NETWORK_CARD)}</h3>
         <div class="level-actions">
           <button type="button" class="btn btn-danger btn-sm remove-card-btn" aria-label="${t("device.delete_network_card")}">${t("common.delete")}</button>
           <button type="button" class="btn btn-secondary btn-sm add-port-btn" aria-label="${t("device.add_network_port")}">${t("device.add_network_port")}</button>
@@ -314,7 +338,7 @@ export class NetworkCardManager {
 
     div.innerHTML = `
       <header class="port-level-bar">
-        <h3 id="${uid}-title" class="level-badge level-port">${t("device.network_port")}</h3>
+        <h3 id="${uid}-title" class="level-badge level-port">${t(T_KEY_NETWORK_PORT)}</h3>
         <div class="level-actions">
           <button type="button" class="btn btn-danger btn-sm remove-port-btn" aria-label="${t("device.delete_network_port")}">${t("common.delete")}</button>
           <button type="button" class="btn btn-secondary btn-sm add-ip-btn" aria-label="${t("ip.add_ip")}">${t("ip.add_ip")}</button>
@@ -382,7 +406,9 @@ export class NetworkCardManager {
 
   removePort(port) {
     const card = port.closest(".network-card-item");
-    if (!card) return;
+    if (!card) {
+      return;
+    }
     const ports = card.querySelectorAll(".nc-port-item");
     if (ports.length <= 1) {
       showToast(t("device.at_least_one_port"), "warning");
@@ -472,9 +498,7 @@ export class NetworkCardManager {
       }
       try {
         const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(networkId)}`);
-        const first = result.success
-          ? (result.data?.available_ips || [])[0]
-          : null;
+        const first = result.success ? (result.data?.available_ips || [])[0] : null;
         if (first) {
           addressInput.value = first;
           showToast(t("device.auto_assign_success", { ip: first }), "success");
@@ -519,14 +543,20 @@ export class NetworkCardManager {
       }
       this.renderNetworkOptions(networkSelect, regionSelect.value, ipData.network_id || null);
 
-      if (addressInput) addressInput.value = ipData.ip_address || "";
-      if (descriptionInput) descriptionInput.value = ipData.description || "";
+      if (addressInput) {
+        addressInput.value = ipData.ip_address || "";
+      }
+      if (descriptionInput) {
+        descriptionInput.value = ipData.description || "";
+      }
     }
   }
 
   removeIp(ipElement) {
     const port = ipElement.closest(".nc-port-item");
-    if (!port) return;
+    if (!port) {
+      return;
+    }
     const ips = port.querySelectorAll(".nc-ip-item");
     if (ips.length <= 1) {
       showToast(t("device.at_least_one_ip"), "warning");
@@ -537,7 +567,9 @@ export class NetworkCardManager {
 
   async loadExisting(cards) {
     const container = this.getContainer();
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     container.innerHTML = "";
     this.resetLegacyData();
     this.bindAddButton();
@@ -554,7 +586,9 @@ export class NetworkCardManager {
 
   collectData() {
     const container = this.getContainer();
-    if (!container) return { cards: [], errors: [] };
+    if (!container) {
+      return { cards: [], errors: [] };
+    }
     if (!this.roomId) {
       return { cards: [], errors: [t("device.select_room_first")] };
     }
@@ -570,7 +604,7 @@ export class NetworkCardManager {
       const cardDesc = cardEl.querySelector(".card-description")?.value?.trim() || null;
 
       if (!cardName) {
-        errors.push(`${t("device.network_card")} ${cardNum}: ${t("device.card_name_required")}`);
+        errors.push(`${t(T_KEY_NETWORK_CARD)} ${cardNum}: ${t("device.card_name_required")}`);
         return;
       }
 
@@ -589,13 +623,13 @@ export class NetworkCardManager {
 
         if (!portName) {
           errors.push(
-            `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum}: ${t("device.port_name_required")}`
+            `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum}: ${t("device.port_name_required")}`
           );
           return;
         }
         if (portVlan !== null && (isNaN(portVlan) || portVlan < 1 || portVlan > 4094)) {
           errors.push(
-            `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum}: ${t("device.vlan_invalid")}`
+            `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum}: ${t("device.vlan_invalid")}`
           );
           return;
         }
@@ -609,29 +643,31 @@ export class NetworkCardManager {
           const ipDescription = ipEl.querySelector(".ip-description")?.value?.trim() || null;
           const networkRegionId = ipEl.querySelector(".ip-region")?.value || null;
 
-          if (!networkId && !ipAddress && !ipDescription) return;
+          if (!networkId && !ipAddress && !ipDescription) {
+            return;
+          }
 
           if (!networkId) {
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.network_required")}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.network_required")}`
             );
             return;
           }
           if (!this.roomNetworkIds.has(networkId)) {
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.network_not_in_room")}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.network_not_in_room")}`
             );
             return;
           }
           if (!ipAddress) {
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.ip_required")}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.ip_required")}`
             );
             return;
           }
           if (!isValidIP(ipAddress)) {
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.ip_invalid")}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.ip_invalid")}`
             );
             return;
           }
@@ -640,13 +676,13 @@ export class NetworkCardManager {
           if (!cidrResult.hasCidr) {
             const ipType = isIPv6(ipAddress) ? "IPv6" : "IPv4";
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.cidr_not_supported")} ${ipType} ${t("device.address")}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.cidr_not_supported")} ${ipType} ${t("device.address")}`
             );
             return;
           }
           if (cidrResult.cidr && !isIpInCidr(ipAddress, cidrResult.cidr)) {
             errors.push(
-              `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum} - IP ${ipNum}: ${t("device.ip_not_in_cidr")} ${cidrResult.cidr}`
+              `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.ip_not_in_cidr")} ${cidrResult.cidr}`
             );
             return;
           }
@@ -656,13 +692,15 @@ export class NetworkCardManager {
             ip_address: ipAddress,
             description: ipDescription
           };
-          if (networkRegionId) ipData.network_region_id = networkRegionId;
+          if (networkRegionId) {
+            ipData.network_region_id = networkRegionId;
+          }
           ips.push(ipData);
         });
 
         if (ips.length === 0) {
           errors.push(
-            `${t("device.network_card")} ${cardNum} - ${t("device.network_port")} ${portNum}: ${t("device.at_least_one_ip")}`
+            `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum}: ${t("device.at_least_one_ip")}`
           );
         }
 
@@ -679,7 +717,7 @@ export class NetworkCardManager {
       });
 
       if (ports.length === 0) {
-        errors.push(`${t("device.network_card")} ${cardNum}: ${t("device.at_least_one_port")}`);
+        errors.push(`${t(T_KEY_NETWORK_CARD)} ${cardNum}: ${t("device.at_least_one_port")}`);
       }
 
       cards.push({

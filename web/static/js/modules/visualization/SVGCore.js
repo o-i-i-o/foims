@@ -2,6 +2,9 @@ import { apiGet, apiPost, apiDelete } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
 import { showConfirm } from "../../utils/confirm.js";
 
+// SVG 命名空间（visualization 各模块共用，唯一定义处）
+export const SVG_NS = "http://www.w3.org/2000/svg";
+
 export class SVGCore {
   constructor(containerId, type, callbacks = {}) {
     this.container = document.getElementById(containerId);
@@ -40,7 +43,7 @@ export class SVGCore {
   _initSVG() {
     this.container.innerHTML = "";
 
-    this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.svg = document.createElementNS(SVG_NS, "svg");
     this.svg.className.baseVal = "visualization-svg";
     this.svg.setAttribute("width", "100%");
     this.svg.setAttribute("height", "100%");
@@ -66,10 +69,10 @@ export class SVGCore {
     this._createGridBackground();
     this._createGridRulerGroup();
 
-    this.elementsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.elementsGroup = document.createElementNS(SVG_NS, "g");
     this.svg.appendChild(this.elementsGroup);
 
-    this.alignmentLinesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.alignmentLinesGroup = document.createElementNS(SVG_NS, "g");
     this.alignmentLinesGroup.className.baseVal = "alignment-lines";
     this.svg.appendChild(this.alignmentLinesGroup);
 
@@ -94,25 +97,29 @@ export class SVGCore {
   fitViewBoxToContainer() {
     const w = this.container.clientWidth || 0;
     const h = this.container.clientHeight || 0;
-    if (!w || !h) return;
+    if (!w || !h) {
+      return;
+    }
     const vb = this.svg.viewBox.baseVal;
-    if (vb.width >= w && vb.height >= h) return;
+    if (vb.width >= w && vb.height >= h) {
+      return;
+    }
     this.setViewBox(0, 0, Math.max(vb.width, w), Math.max(vb.height, h));
   }
 
   _createDefs() {
     // 重建时先移除旧 defs，避免产生重复的 pattern id
     this.svg.querySelector("defs")?.remove();
-    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    const defs = document.createElementNS(SVG_NS, "defs");
 
-    const gridPattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+    const gridPattern = document.createElementNS(SVG_NS, "pattern");
     const gridId = `grid-${this.type}`;
     gridPattern.setAttribute("id", gridId);
     gridPattern.setAttribute("width", this.gridSize);
     gridPattern.setAttribute("height", this.gridSize);
     gridPattern.setAttribute("patternUnits", "userSpaceOnUse");
 
-    const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const gridPath = document.createElementNS(SVG_NS, "path");
     gridPath.setAttribute("d", `M ${this.gridSize} 0 L 0 0 0 ${this.gridSize}`);
     gridPath.setAttribute("fill", "none");
     gridPath.setAttribute("stroke", "var(--border-light)");
@@ -132,7 +139,7 @@ export class SVGCore {
    */
   _createGridBackground() {
     this.gridRect?.remove();
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const rect = document.createElementNS(SVG_NS, "rect");
     const vb = this.svg.viewBox.baseVal;
     rect.setAttribute("x", vb.x);
     rect.setAttribute("y", vb.y);
@@ -150,7 +157,7 @@ export class SVGCore {
    * 顶边/左边标注画布坐标，配合坐标输入框精确定位。
    */
   _createGridRulerGroup() {
-    this.gridRulerGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.gridRulerGroup = document.createElementNS(SVG_NS, "g");
     this.gridRulerGroup.className.baseVal = "grid-ruler";
     this.svg.appendChild(this.gridRulerGroup);
     this._renderGridRuler();
@@ -158,13 +165,16 @@ export class SVGCore {
 
   /** 按当前 viewBox 重绘主网格与坐标标注（viewBox 变化后调用）。 */
   _renderGridRuler() {
-    if (!this.gridRulerGroup) return;
+    if (!this.gridRulerGroup) {
+      return;
+    }
     const vb = this.svg.viewBox.baseVal;
     const group = this.gridRulerGroup;
     group.innerHTML = "";
-    if (!vb.width || !vb.height) return;
+    if (!vb.width || !vb.height) {
+      return;
+    }
 
-    const SVG_NS = "http://www.w3.org/2000/svg";
     const step = this.gridSize * 5;
     // 标注字号随视口宽度缩放，缩放后保持可读
     const fontSize = Math.max(9, Math.min(14, vb.width / 100));
@@ -208,7 +218,7 @@ export class SVGCore {
     }
   }
 
-  /** 统一的 viewBox 更新入口：背景矩形、主网格与坐标标注同步重绘。 */
+  /** 统一的 viewBox 更新入口：背景矩形同步铺满，rAF 节流重绘主网格与坐标标注（平移/缩放/ResizeObserver 高频触发）。 */
   setViewBox(x, y, width, height) {
     this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
     // 背景矩形跟随 viewBox 铺满可视区域（pattern 为 userSpaceOnUse，坐标不受影响）
@@ -218,7 +228,13 @@ export class SVGCore {
       this.gridRect.setAttribute("width", width);
       this.gridRect.setAttribute("height", height);
     }
-    this._renderGridRuler();
+    if (this._gridRulerRaf) {
+      return;
+    }
+    this._gridRulerRaf = requestAnimationFrame(() => {
+      this._gridRulerRaf = 0;
+      this._renderGridRuler();
+    });
   }
 
   _initTooltip() {
@@ -254,7 +270,9 @@ export class SVGCore {
   }
 
   _handleMouseDown(e) {
-    if (e.button !== 0) return;
+    if (e.button !== 0) {
+      return;
+    }
     const target = e.target.closest("[data-id]");
     if (target) {
       this.isDragging = true;
@@ -299,7 +317,7 @@ export class SVGCore {
     this._updateTooltip(e);
   }
 
-  _handleMouseUp(e) {
+  _handleMouseUp(_e) {
     if (this.isDragging && !this.hasMoved && this.selectedElement) {
       this._handleElementClick(this.selectedElement);
     }
@@ -309,7 +327,12 @@ export class SVGCore {
     }
 
     // 拖拽落定后通知上层（可视化层据此自动保存坐标，实现页面直接编辑位置）
-    if (this.isDragging && this.hasMoved && this.selectedElement && this.callbacks.onPositionChanged) {
+    if (
+      this.isDragging &&
+      this.hasMoved &&
+      this.selectedElement &&
+      this.callbacks.onPositionChanged
+    ) {
       this.callbacks.onPositionChanged(this.selectedElement.dataset.id);
     }
 
@@ -319,10 +342,11 @@ export class SVGCore {
 
   _setElementPosition(element, x, y) {
     const rect = element.querySelector("rect");
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
 
     const width = parseFloat(rect.getAttribute("width")) || 160;
-    const height = parseFloat(rect.getAttribute("height")) || 160;
 
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
@@ -390,7 +414,9 @@ export class SVGCore {
 
   _snapElementToGrid(element) {
     const rect = element.querySelector("rect");
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
 
     const x = parseFloat(rect.getAttribute("x"));
     const y = parseFloat(rect.getAttribute("y"));
@@ -403,15 +429,24 @@ export class SVGCore {
     }
   }
 
+  // 从元素 class 推断节点类型（工位/机柜/机位），未知返回空串
+  _elementTypeOf(element) {
+    const typeByClass = [
+      ["workstation-element", "workstation"],
+      ["cabinet-element", "cabinet"],
+      ["cabinet-position-element", "cabinet-position"]
+    ];
+    for (const [cls, type] of typeByClass) {
+      if (element.classList.contains(cls)) {
+        return type;
+      }
+    }
+    return "";
+  }
+
   _handleElementClick(element) {
     const id = element.dataset.id;
-    const elementType = element.classList.contains("workstation-element")
-      ? "workstation"
-      : element.classList.contains("cabinet-element")
-        ? "cabinet"
-        : element.classList.contains("cabinet-position-element")
-          ? "cabinet-position"
-          : "";
+    const elementType = this._elementTypeOf(element);
 
     // 画布当前坐标随事件透传（工位模态框坐标输入框回填用）
     const rect = element.querySelector("rect");
@@ -458,7 +493,9 @@ export class SVGCore {
     this._clearAlignmentLines();
 
     const rect = element.querySelector("rect");
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
 
     const x = parseFloat(rect.getAttribute("x"));
     const y = parseFloat(rect.getAttribute("y"));
@@ -473,7 +510,9 @@ export class SVGCore {
 
     otherElements.forEach((other) => {
       const otherRect = other.querySelector("rect");
-      if (!otherRect) return;
+      if (!otherRect) {
+        return;
+      }
 
       const ox = parseFloat(otherRect.getAttribute("x"));
       const oy = parseFloat(otherRect.getAttribute("y"));
@@ -511,7 +550,7 @@ export class SVGCore {
   }
 
   _drawAlignmentLine(x1, y1, x2, y2) {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    const line = document.createElementNS(SVG_NS, "line");
     line.setAttribute("x1", x1);
     line.setAttribute("y1", y1);
     line.setAttribute("x2", x2);
@@ -530,7 +569,9 @@ export class SVGCore {
   }
 
   _updateTooltip(e) {
-    if (!this.tooltip) return;
+    if (!this.tooltip) {
+      return;
+    }
     const target = e.target.closest("[data-tooltip]");
     if (!target || !target.dataset.tooltip) {
       this._hideTooltip();
@@ -585,7 +626,9 @@ export class SVGCore {
       this._cabinetViewHeight = height;
       // rAF 节流：滚动时仅更新 viewBox 与网格位置
       this.container.addEventListener("scroll", () => {
-        if (this._cabinetScrollRaf) return;
+        if (this._cabinetScrollRaf) {
+          return;
+        }
         this._cabinetScrollRaf = requestAnimationFrame(() => {
           this._cabinetScrollRaf = 0;
           this._applyCabinetScroll(this.container.scrollLeft);

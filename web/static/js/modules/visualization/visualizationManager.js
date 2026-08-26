@@ -31,7 +31,9 @@ function createVisualizationCallbacks() {
 let workstationAutoSaveTimer = null;
 
 function scheduleWorkstationAutoSave() {
-  if (!workstationVisualization) return;
+  if (!workstationVisualization) {
+    return;
+  }
   clearTimeout(workstationAutoSaveTimer);
   workstationAutoSaveTimer = setTimeout(() => {
     workstationVisualization.saveLayout({ silent: true });
@@ -42,12 +44,16 @@ function scheduleWorkstationAutoSave() {
 function bindWorkstationSavedEvent() {
   document.addEventListener("ipma:workstation-saved", (e) => {
     const { id, x, y } = e.detail || {};
-    if (!workstationVisualization || !id || x == null || y == null) return;
+    if (!workstationVisualization || !id || x == null || y == null) {
+      return;
+    }
 
     const element = workstationVisualization.core.elementsGroup.querySelector(
       `[data-id="${CSS.escape(id)}"]`
     );
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     workstationVisualization.core._setElementPosition(element, x, y);
     workstationVisualization.core._snapElementToGrid(element);
@@ -57,7 +63,9 @@ function bindWorkstationSavedEvent() {
 
 function initTabSwitching() {
   const visualizationContainer = elementCache.get("visualization");
-  if (!visualizationContainer) return;
+  if (!visualizationContainer) {
+    return;
+  }
 
   const tabBtns = visualizationContainer.querySelectorAll(".tab-btn");
   const tabContents = visualizationContainer.querySelectorAll(".tab-content");
@@ -125,7 +133,9 @@ function bindSelectEvents() {
  * 无布局时自动排布并落库，保证"选择房间即显示工位布局"。
  */
 async function showWorkstationRoom(roomId) {
-  if (!workstationVisualization || !roomId) return;
+  if (!workstationVisualization || !roomId) {
+    return;
+  }
   const hasLayout = await workstationVisualization.loadSavedLayout(roomId);
   if (!hasLayout) {
     await workstationVisualization.autoDrawWorkstations(roomId);
@@ -283,7 +293,9 @@ function fillTopologyConnectionDeviceOptions(selectEl, excludeId) {
   const devices = topologyVisualization.nodes.slice();
   selectEl.innerHTML = "";
   devices.forEach((d) => {
-    if (excludeId && d.device_id === excludeId) return;
+    if (excludeId && d.device_id === excludeId) {
+      return;
+    }
     const option = document.createElement("option");
     option.value = d.device_id;
     option.textContent = d.device_name || d.device_id;
@@ -293,10 +305,14 @@ function fillTopologyConnectionDeviceOptions(selectEl, excludeId) {
 
 async function loadTopologyConnectionPorts(selectEl, deviceId) {
   selectEl.innerHTML = "";
-  if (!deviceId) return;
+  if (!deviceId) {
+    return;
+  }
   try {
     const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=200`);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     const ports = result.data?.items ?? [];
     ports.forEach((p) => {
       const option = document.createElement("option");
@@ -321,7 +337,9 @@ function updateTopologyConnectionFormVisibility() {
 
 async function openTopologyConnectionModal() {
   const modal = await loadModal("topology-connection-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const typeSelect = elementCache.get("topo-conn-type");
   const sourceSelect = elementCache.get("topo-conn-source-device");
@@ -405,7 +423,9 @@ async function openTopologyConnectionModal() {
 async function applyDefaultWorkstationOrg() {
   try {
     const result = await apiGet("/api/resources/organizations/tree");
-    if (!result.success || !Array.isArray(result.data) || result.data.length === 0) return;
+    if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+      return;
+    }
     const firstRoot = result.data[0];
     const children = firstRoot.children || [];
     const target = children.length > 0 ? children[children.length - 1] : firstRoot;
@@ -416,14 +436,18 @@ async function applyDefaultWorkstationOrg() {
 }
 
 async function loadInitialData() {
-  // 先填充组织选项，再按默认筛选（全类别）加载两个视图的房间列表
+  // 三个组织下拉共享同一 tree 请求（apiClient 并发去重）；
+  // applyDefaultWorkstationOrg 需要解析 tree 结果，与下拉填充并行即可
   await Promise.all([
     loadOrgsForSelect("viz-org-select"),
     loadOrgsForSelect("cabinet-viz-org-select"),
-    loadOrgsForSelect("topology-org-select")
+    loadOrgsForSelect("topology-org-select"),
+    applyDefaultWorkstationOrg()
   ]);
-  await applyDefaultWorkstationOrg();
-  await Promise.all([refreshVisualizationRooms("workstation"), refreshVisualizationRooms("cabinet")]);
+  await Promise.all([
+    refreshVisualizationRooms("workstation"),
+    refreshVisualizationRooms("cabinet")
+  ]);
 }
 
 // 窗口尺寸变化时机柜视图按新容器高度重排（防抖），保证柜底始终贴近屏幕底部
@@ -431,8 +455,12 @@ let cabinetResizeTimer = null;
 
 function bindCabinetResizeRelayout() {
   window.addEventListener("resize", () => {
-    if (!cabinetVisualization) return;
-    if (getActiveSubtab("visualization") !== "cabinet-visualization") return;
+    if (!cabinetVisualization) {
+      return;
+    }
+    if (getActiveSubtab("visualization") !== "cabinet-visualization") {
+      return;
+    }
 
     clearTimeout(cabinetResizeTimer);
     cabinetResizeTimer = setTimeout(() => {
@@ -445,21 +473,19 @@ function bindCabinetResizeRelayout() {
 }
 
 export async function initVisualization() {
-  if (visualizationInitialized) return;
+  if (visualizationInitialized) {
+    return;
+  }
 
   try {
-    const { SVGVisualization } = await loadModule(
-      "SVGVisualization",
-      "/static/js/modules/visualization/SVGVisualization.js"
-    );
-    const { TopologyVisualization } = await loadModule(
-      "TopologyVisualization",
-      "/static/js/modules/visualization/TopologyVisualization.js"
-    );
-    const { TopologyModal } = await loadModule(
-      "TopologyModal",
-      "/static/js/modules/visualization/TopologyModal.js"
-    );
+    const [{ SVGVisualization }, { TopologyVisualization }, { TopologyModal }] = await Promise.all([
+      loadModule("SVGVisualization", "/static/js/modules/visualization/SVGVisualization.js"),
+      loadModule(
+        "TopologyVisualization",
+        "/static/js/modules/visualization/TopologyVisualization.js"
+      ),
+      loadModule("TopologyModal", "/static/js/modules/visualization/TopologyModal.js")
+    ]);
 
     initTabSwitching();
 

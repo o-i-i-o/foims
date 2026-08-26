@@ -10,16 +10,15 @@ import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
-import {
-  getOrgIcon,
-  getAllOrgTypes,
-  loadOrgTypesFromAPI
-} from "../config/org-config.js";
 import { ORG_ICON_GROUPS, renderOrgIcon, DEFAULT_ORG_ICON } from "../config/org-icons.js";
+import { getOrgIcon } from "../config/org-config.js";
 
 // ==========================================
 // 常量定义
 // ==========================================
+
+// 高频兜底文案键（文件内出现 10+ 次），抽常量避免字面量散落
+const T_KEY_OPERATION_FAILED = "common.operation_failed";
 
 /** 模板图标缓存 { templateId: { type_name: icon } } */
 let templateIconsById = {};
@@ -50,10 +49,14 @@ function getOrgTypeLabel(orgType) {
 
 /** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
 function findRootType(levels) {
-  if (!levels || typeof levels !== "object" || Array.isArray(levels)) return null;
+  if (!levels || typeof levels !== "object" || Array.isArray(levels)) {
+    return null;
+  }
   const allChildren = new Set();
   Object.values(levels).forEach((children) => {
-    if (Array.isArray(children)) children.forEach((c) => allChildren.add(c));
+    if (Array.isArray(children)) {
+      children.forEach((c) => allChildren.add(c));
+    }
   });
   const roots = Object.keys(levels).filter((k) => !allChildren.has(k));
   return roots.length === 1 ? roots[0] : null;
@@ -62,7 +65,9 @@ function findRootType(levels) {
 /** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
 function renderLevelsMapping(levels, separator = "<br>") {
   const rootType = findRootType(levels);
-  if (!rootType) return "";
+  if (!rootType) {
+    return "";
+  }
   const paths = [];
   function findPaths(type, currentPath) {
     const children = levels[type] || [];
@@ -73,7 +78,8 @@ function renderLevelsMapping(levels, separator = "<br>") {
     }
   }
   findPaths(rootType, []);
-  return paths.map((p) => p.join(" → ")).join(separator);
+  // 层级 key 为用户可编辑的自由文本，拼接结果统一转义防注入
+  return paths.map((p) => escapeHtml(p.join(" → "))).join(separator);
 }
 
 let allExpanded = false;
@@ -89,9 +95,13 @@ export function initOrganization() {
 
 function bindOrgEvents() {
   const container = document.getElementById("organization-tree-container");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
-  if (container.dataset.initialized === "true") return;
+  if (container.dataset.initialized === "true") {
+    return;
+  }
   container.dataset.initialized = "true";
 
   container.addEventListener("click", handleTreeClick);
@@ -128,7 +138,9 @@ function bindOrgEvents() {
 
 export async function loadOrganizationTree() {
   const container = document.getElementById("organization-tree-container");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   try {
     const [treeResult, templatesResult] = await Promise.all([
@@ -196,11 +208,12 @@ async function renderTreeNode(node, depth) {
   const icon = await getNodeIcon(node.org_type, node.template_id);
   const typeLabel = getOrgTypeLabel(node.org_type);
 
+  const toggleStateClass = allExpanded ? "expanded" : "";
   const toggleBtn = hasChildren
-    ? `<span class="org-toggle ${allExpanded ? "expanded" : ""}" data-action="toggle" role="button" tabindex="0">
+    ? `<span class="org-toggle ${toggleStateClass}" data-action="toggle" role="button" tabindex="0">
          <svg class="org-toggle-icon" width="16" height="16" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
        </span>`
-    : `<span class="org-toggle-placeholder"></span>`;
+    : '<span class="org-toggle-placeholder"></span>';
 
   const addChildBtns = getAllowedChildButtons(node);
 
@@ -208,7 +221,7 @@ async function renderTreeNode(node, depth) {
     ${toggleBtn}
     <span class="org-node-icon">${renderOrgIcon(icon)}</span>
     <span class="org-node-name">${escapeHtml(node.name)}</span>
-    <span class="org-node-type-badge" data-type="${node.org_type}">${typeLabel}</span>
+    <span class="org-node-type-badge" data-type="${escapeHtml(node.org_type)}">${escapeHtml(typeLabel)}</span>
     ${node.description ? `<span class="org-node-desc" title="${escapeHtml(node.description)}">${escapeHtml(node.description)}</span>` : ""}
     <span class="org-node-actions">
       ${addChildBtns}
@@ -258,7 +271,9 @@ function renderEmptyState(container) {
 
 function handleTreeClick(e) {
   const target = e.target.closest("[data-action]");
-  if (!target) return;
+  if (!target) {
+    return;
+  }
 
   const action = target.dataset.action;
 
@@ -288,10 +303,14 @@ function handleTreeClick(e) {
 
 function toggleNode(toggleEl) {
   const wrapper = toggleEl.closest(".org-node-wrapper");
-  if (!wrapper) return;
+  if (!wrapper) {
+    return;
+  }
 
   const children = wrapper.querySelector(":scope > .org-children");
-  if (!children) return;
+  if (!children) {
+    return;
+  }
 
   const isHidden = children.style.display === "none";
   children.style.display = isHidden ? "" : "none";
@@ -336,9 +355,13 @@ function handleOrgSearch(e) {
       while (parent) {
         parent.style.display = "";
         const children = parent.querySelector(":scope > .org-children");
-        if (children) children.style.display = "";
+        if (children) {
+          children.style.display = "";
+        }
         const toggle = parent.querySelector(":scope > .org-node .org-toggle");
-        if (toggle) toggle.classList.add("expanded");
+        if (toggle) {
+          toggle.classList.add("expanded");
+        }
         parent = parent.parentElement?.closest(".org-node-wrapper");
       }
     } else {
@@ -409,7 +432,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
       }
       templateSelectContainer?.classList.add("hidden");
     } catch (error) {
-      handleError(error, t("common.operation_failed"));
+      handleError(error, t(T_KEY_OPERATION_FAILED));
     }
   } else {
     // 新增根节点 - 需要选择模板
@@ -452,7 +475,7 @@ export async function openOrgModal(org = null, parentId = null, presetType = nul
             }
           };
         } catch (error) {
-          handleError(error, t("common.operation_failed"));
+          handleError(error, t(T_KEY_OPERATION_FAILED));
         }
       }
     }
@@ -466,7 +489,9 @@ function populateTypeSelectWithOptions(select, options, presetType) {
     option.value = opt.type_path || opt.type;
     option.textContent = opt.label || getOrgTypeLabel(opt.type);
     option.dataset.typeName = opt.type;
-    if (presetType && opt.type === presetType) option.selected = true;
+    if (presetType && opt.type === presetType) {
+      option.selected = true;
+    }
     select.appendChild(option);
   });
   select.disabled = false;
@@ -478,10 +503,10 @@ export async function editOrganization(id) {
     if (result.success) {
       openOrgModal(result.data);
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -489,7 +514,9 @@ export async function deleteOrganization(id, name) {
   const confirmed = await import("../utils/confirm.js").then((m) =>
     m.showConfirm(t("organization.delete_confirm", { name }))
   );
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const result = await apiDelete(`/api/resources/organizations/${id}`);
@@ -497,10 +524,10 @@ export async function deleteOrganization(id, name) {
       showToast(t("organization.delete_success"), "success");
       loadOrganizationTree();
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -510,20 +537,30 @@ export async function deleteOrganization(id, name) {
 
 /** 性别取值显示文案 */
 function genderText(gender) {
-  if (gender === "male") return t("employee.gender_male");
-  if (gender === "female") return t("employee.gender_female");
+  if (gender === "male") {
+    return t("employee.gender_male");
+  }
+  if (gender === "female") {
+    return t("employee.gender_female");
+  }
   return t("employee.gender_unknown");
 }
 
 /** 打开人员管理模态框（orgName 用于标题展示） */
 export async function openEmployeeModal(orgId, orgName) {
   const modal = await openModal("employee-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const orgIdInput = document.getElementById("employee-modal-org-id");
-  if (orgIdInput) orgIdInput.value = orgId || "";
+  if (orgIdInput) {
+    orgIdInput.value = orgId || "";
+  }
   const orgNameEl = document.getElementById("employee-modal-org-name");
-  if (orgNameEl) orgNameEl.textContent = orgName ? ` - ${orgName}` : "";
+  if (orgNameEl) {
+    orgNameEl.textContent = orgName ? ` - ${orgName}` : "";
+  }
 
   const addBtn = document.getElementById("employee-add-btn");
   if (addBtn) {
@@ -536,7 +573,9 @@ export async function openEmployeeModal(orgId, orgName) {
 /** 加载组织下的员工列表 */
 async function loadEmployeeList(orgId) {
   const tbody = document.querySelector("#employee-table tbody");
-  if (!tbody) return;
+  if (!tbody) {
+    return;
+  }
 
   try {
     const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
@@ -583,10 +622,14 @@ async function loadEmployeeList(orgId) {
 /** 打开员工编辑模态框（employee 为 null 时是新增） */
 async function openEmployeeEditModal(orgId, employee) {
   const modal = await openModal("employee-edit-modal");
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
 
   const title = document.getElementById("employee-edit-modal-title");
-  if (title) title.textContent = employee ? t("employee.edit_title") : t("employee.add_title");
+  if (title) {
+    title.textContent = employee ? t("employee.edit_title") : t("employee.add_title");
+  }
 
   elementCache.setValue("employee-edit-id", employee?.id || "");
   elementCache.setValue("employee-edit-org-id", orgId || "");
@@ -624,10 +667,10 @@ async function openEmployeeEditModal(orgId, employee) {
         form.reset();
         loadEmployeeList(orgId);
       } else {
-        showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+        showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
       }
     } catch (error) {
-      handleError(error, t("common.operation_failed"));
+      handleError(error, t(T_KEY_OPERATION_FAILED));
     }
   };
 }
@@ -637,7 +680,9 @@ async function deleteEmployee(employee) {
   const confirmed = await import("../utils/confirm.js").then((m) =>
     m.showConfirm(t("employee.delete_confirm", { name: employee.name }))
   );
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const result = await apiDelete(`/api/resources/employees/${employee.id}`);
@@ -646,10 +691,10 @@ async function deleteEmployee(employee) {
       const orgId = document.getElementById("employee-modal-org-id")?.value;
       loadEmployeeList(orgId);
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -710,10 +755,10 @@ export async function submitOrgForm() {
       closeModal("organization-modal");
       loadOrganizationTree();
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -728,7 +773,9 @@ export async function openTemplateManagement() {
   await openModal("org-template-modal", t("org_template.management"));
 
   const listContainer = document.getElementById("org-template-list");
-  if (!listContainer) return;
+  if (!listContainer) {
+    return;
+  }
 
   try {
     const templates = await getTemplates();
@@ -769,12 +816,16 @@ function renderTemplateList(container, templates) {
 
 function bindTemplateMgmtEvents() {
   const listContainer = document.getElementById("org-template-list");
-  if (!listContainer || listContainer.dataset.initialized === "true") return;
+  if (!listContainer || listContainer.dataset.initialized === "true") {
+    return;
+  }
   listContainer.dataset.initialized = "true";
 
   listContainer.addEventListener("click", (e) => {
     const target = e.target.closest("[data-action]");
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     const action = target.dataset.action;
     const templateId = target.dataset.templateId;
@@ -797,7 +848,7 @@ async function editTemplate(id) {
       openTemplateEditor(result.data);
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -805,7 +856,9 @@ async function openTemplateEditor(template = null) {
   await openModal("org-template-editor-modal", t("org_template.editor_title"));
 
   const form = document.getElementById("org-template-editor-form");
-  if (!form) return;
+  if (!form) {
+    return;
+  }
 
   form.reset();
   document.getElementById("org-template-editor-id").value = template?.id || "";
@@ -830,7 +883,9 @@ async function openTemplateEditor(template = null) {
     treeContainer.dataset.bound = "true";
     treeContainer.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-action]");
-      if (!btn) return;
+      if (!btn) {
+        return;
+      }
 
       if (btn.dataset.action === "add-type-child") {
         const node = btn.closest(".org-template-type-node");
@@ -853,7 +908,9 @@ async function openTemplateEditor(template = null) {
     if (!quickFill.dataset.bound) {
       quickFill.dataset.bound = "true";
       quickFill.addEventListener("change", async () => {
-        if (!quickFill.value) return;
+        if (!quickFill.value) {
+          return;
+        }
         try {
           const templates = await getTemplates();
           const template = templates.find((t) => t.name === quickFill.value);
@@ -873,7 +930,9 @@ async function openTemplateEditor(template = null) {
 function createTypeNode(type = "", isRoot = false, icon = "") {
   const wrapper = document.createElement("div");
   wrapper.className = "org-template-type-node";
-  if (isRoot) wrapper.classList.add("org-template-type-root");
+  if (isRoot) {
+    wrapper.classList.add("org-template-type-root");
+  }
 
   const row = document.createElement("div");
   row.className = "org-template-type-row";
@@ -903,7 +962,9 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
   input.className = "form-control org-template-type-input";
   input.placeholder = t("org_template.type_placeholder");
   input.maxLength = 50;
-  if (type) input.value = type;
+  if (type) {
+    input.value = type;
+  }
 
   // 类型徽标预览
   const badgePreview = document.createElement("span");
@@ -956,9 +1017,15 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
   return wrapper;
 }
 
+/** 当前打开的图标选择面板的清理函数（含 document 级监听移除） */
+let dismissActiveIconPicker = null;
+
 /** 显示图标选择面板（按 业务组织/物理地点/功能空间 分组的 SVG 图标） */
 function showIconPicker(iconBtn) {
-  // 关闭已有面板
+  // 关闭已有面板，同步移除其 document 级关闭监听（避免遗留至无关点击）
+  if (dismissActiveIconPicker) {
+    dismissActiveIconPicker();
+  }
   document.querySelectorAll(".org-icon-picker").forEach((p) => p.remove());
 
   const picker = document.createElement("div");
@@ -981,12 +1048,14 @@ function showIconPicker(iconBtn) {
       btn.dataset.icon = item.key;
       btn.title = t(item.labelKey);
       btn.innerHTML = renderOrgIcon(item.key);
-      if (item.key === iconBtn.dataset.icon) btn.classList.add("active");
+      if (item.key === iconBtn.dataset.icon) {
+        btn.classList.add("active");
+      }
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         iconBtn.dataset.icon = item.key;
         iconBtn.innerHTML = renderOrgIcon(item.key);
-        picker.remove();
+        dismissPicker();
       });
       grid.appendChild(btn);
     }
@@ -998,13 +1067,20 @@ function showIconPicker(iconBtn) {
   iconBtn.style.position = "relative";
   iconBtn.appendChild(picker);
 
-  // 点击外部关闭
-  const closePicker = (e) => {
-    if (!picker.contains(e.target) && e.target !== iconBtn) {
-      picker.remove();
-      document.removeEventListener("click", closePicker);
+  // 点击外部关闭；选中图标时同样经由 dismissPicker 移除监听
+  const dismissPicker = () => {
+    picker.remove();
+    document.removeEventListener("click", closePicker);
+    if (dismissActiveIconPicker === dismissPicker) {
+      dismissActiveIconPicker = null;
     }
   };
+  const closePicker = (e) => {
+    if (!picker.contains(e.target) && e.target !== iconBtn) {
+      dismissPicker();
+    }
+  };
+  dismissActiveIconPicker = dismissPicker;
   setTimeout(() => document.addEventListener("click", closePicker), 0);
 }
 
@@ -1050,12 +1126,16 @@ function collectMapping(container) {
 
   function processNode(node) {
     const type = getTypeOfNode(node);
-    if (!type) return;
+    if (!type) {
+      return;
+    }
     const cc = getChildrenContainer(node);
     const childTypes = [];
     if (cc) {
       for (const childNode of cc.children) {
-        if (!childNode.classList.contains("org-template-type-node")) continue;
+        if (!childNode.classList.contains("org-template-type-node")) {
+          continue;
+        }
         const childType = getTypeOfNode(childNode);
         if (childType) {
           childTypes.push(childType);
@@ -1081,7 +1161,9 @@ function collectIcons(container) {
 
   function processNode(node) {
     const type = getTypeOfNode(node);
-    if (!type) return;
+    if (!type) {
+      return;
+    }
     const iconBtn = node.querySelector(":scope > .org-template-type-row .org-template-icon-btn");
     if (iconBtn && iconBtn.dataset.icon) {
       icons[type] = iconBtn.dataset.icon;
@@ -1089,7 +1171,9 @@ function collectIcons(container) {
     const cc = getChildrenContainer(node);
     if (cc) {
       for (const childNode of cc.children) {
-        if (!childNode.classList.contains("org-template-type-node")) continue;
+        if (!childNode.classList.contains("org-template-type-node")) {
+          continue;
+        }
         processNode(childNode);
       }
     }
@@ -1126,7 +1210,9 @@ async function deleteTemplate(id, name) {
   const confirmed = await import("../utils/confirm.js").then((m) =>
     m.showConfirm(t("org_template.delete_confirm", { name }))
   );
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     const result = await apiDelete(`/api/resources/org-templates/${id}`);
@@ -1136,10 +1222,10 @@ async function deleteTemplate(id, name) {
       // 模板变更可能影响节点类型解析（重命名/层级变化），重载组织树保证徽标一致
       await loadOrganizationTree();
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }
 
@@ -1164,7 +1250,7 @@ export async function submitOrgTemplateForm() {
 
   const data = {
     name: name.trim(),
-    levels: levels,
+    levels,
     icons: Object.keys(icons).length > 0 ? icons : null,
     description: description || null
   };
@@ -1187,9 +1273,9 @@ export async function submitOrgTemplateForm() {
       // 模板变更可能影响节点类型解析（重命名/层级变化），重载组织树保证徽标一致
       await loadOrganizationTree();
     } else {
-      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+      showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
     }
   } catch (error) {
-    handleError(error, t("common.operation_failed"));
+    handleError(error, t(T_KEY_OPERATION_FAILED));
   }
 }

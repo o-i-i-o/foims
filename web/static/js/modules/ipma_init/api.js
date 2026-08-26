@@ -14,6 +14,9 @@ import { translateServerMessage } from "../../utils/apiClient.js";
 import { state } from "./state.js";
 import { goToStep, showError, showLoading, hideLoading } from "./ui.js";
 
+// 各检查步骤共用的兜底错误文案键
+const T_KEY_UNKNOWN_ERROR = "init.unknown_error";
+
 // 安全解析 JSON 响应：后端返回空 body / 非 JSON / 网络中断时给出可读错误，
 // 而不是抛 "Unexpected end of JSON input" 这类让用户困惑的消息。
 // 解析成功后统一翻译 message（后端返回 i18n key + message_params），
@@ -29,6 +32,7 @@ const parseJsonResponse = async (response) => {
   try {
     return translateServerMessage(JSON.parse(text));
   } catch (e) {
+    console.error("初始化接口响应非 JSON:", e, text.slice(0, 200));
     return {
       success: false,
       message: `${t("init.parse_invalid_json", { status: response.status })}`,
@@ -66,7 +70,7 @@ export const checkPostgreSQL = async () => {
       pgStatusElement.innerHTML = `
                 <div class="status-error">✗</div>
                 <h3>${t("init.pg_check_failed")}</h3>
-                <p>${escapeHtml(result.error || t("init.unknown_error"))}</p>
+                <p>${escapeHtml(result.error || t(T_KEY_UNKNOWN_ERROR))}</p>
                 <div class="error-guide">
                     <h4>${t("init.pg_suggestion")}</h4>
                     <ul>
@@ -138,7 +142,7 @@ export const checkDatabaseStatus = async () => {
         dbStatusElement.innerHTML = `
                     <div class="status-error">✗</div>
                     <h3>${t("init.db_connect_failed")}</h3>
-                    <p>${t("init.db_connect_error")}: ${escapeHtml(dbStatus.error || t("init.unknown_error"))}</p>
+                    <p>${t("init.db_connect_error")}: ${escapeHtml(dbStatus.error || t(T_KEY_UNKNOWN_ERROR))}</p>
                     <p>${t("init.will_auto_create_db")}</p>
                 `;
         dbStatusElement.classList.add("status-error");
@@ -171,7 +175,7 @@ export const handleInitModeSubmit = async (e) => {
 
   try {
     let apiEndpoint = "";
-    let requestBody = { verification: verificationCode };
+    const requestBody = { verification: verificationCode };
 
     if (state.initMode === "create") {
       apiEndpoint = "/api/init/db/create";
@@ -200,13 +204,12 @@ export const handleInitModeSubmit = async (e) => {
             goToStep(3);
           }, 1000);
         } else {
-          showError(`${t("init.operation_failed")}: ${result.message || t("init.unknown_error")}`);
+          showError(`${t("init.operation_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
           nextButton.disabled = false;
         }
         return;
-      } else {
-        apiEndpoint = "/api/init/db/import";
       }
+      apiEndpoint = "/api/init/db/import";
     }
 
     const response = await fetch(apiEndpoint, {
@@ -228,7 +231,7 @@ export const handleInitModeSubmit = async (e) => {
         goToStep(3);
       }, 1000);
     } else {
-      showError(`${t("init.operation_failed")}: ${result.message || t("init.unknown_error")}`);
+      showError(`${t("init.operation_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
       nextButton.disabled = false;
     }
   } catch (error) {
@@ -255,7 +258,7 @@ export const handleAdminAccountSubmit = async (e) => {
 
   const initConfig = {
     username: formData.get("username"),
-    password: password,
+    password,
     email: formData.get("email"),
     role: "admin",
     verification: formData.get("verification")
@@ -281,13 +284,16 @@ export const handleAdminAccountSubmit = async (e) => {
             method: "POST",
             headers: { "Content-Type": "application/json" }
           });
-        } catch (error) {}
+        } catch (error) {
+          // 跳转前尽力通知登出，失败不阻断跳转
+          console.warn("best-effort logout failed:", error);
+        }
         setTimeout(() => {
           window.location.href = "/main.html";
         }, 2000);
       }, 3000);
     } else {
-      showError(`${t("init.init_failed")}: ${result.message || t("init.unknown_error")}`);
+      showError(`${t("init.init_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
     }
   } catch (error) {
     hideLoading();
@@ -311,7 +317,7 @@ export const getVerificationCode = async () => {
     if (result.success) {
       showToast(result.message);
     } else {
-      showError(`${t("init.captcha_failed")}: ${result.message || t("init.unknown_error")}`);
+      showError(`${t("init.captcha_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
     }
   } catch (error) {
     hideLoading();

@@ -24,7 +24,7 @@
   margin-bottom: 15px;
   color: var(--color-text, #333);
   font-size: 14px;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 /* NIC 分组标题（与端口分组同款，仅多一个类型标记颜色） */
@@ -204,7 +204,7 @@
 }
 
 /* ============ 响应式 ============ */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .port-grid {
     grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   }

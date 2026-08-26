@@ -1,0 +1,11 @@
+# depcheck 豁免清单：以下均为 npm scripts / CI 经 CLI 调用的工具链依赖，
+# 源码中无 import 引用属预期（本包只提供 lint/test 运行环境，无构建产物）
+ignores:
+  - "@lhci/cli"
+  - "depcheck"
+  - "htmlhint"
+  - "jest"
+  - "jest-environment-jsdom"
+  - "stylelint-config-standard"
+  - "@babel/preset-env"
+  - "babel-jest"

@@ -2,7 +2,6 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
-  renderTable,
   formatDateTime,
   appendPaginationToTable,
   escapeHtml,
@@ -20,12 +19,17 @@ import { showConfirm } from "../utils/confirm.js";
 
 // 角色显示（等保三权分立：admin/secadmin/auditor/user）
 function roleLabel(role) {
-  if (role === "admin") return t("user.role_admin");
-  if (role === "secadmin") return t("user.role_secadmin");
-  if (role === "auditor") return t("user.role_auditor");
+  if (role === "admin") {
+    return t("user.role_admin");
+  }
+  if (role === "secadmin") {
+    return t("user.role_secadmin");
+  }
+  if (role === "auditor") {
+    return t("user.role_auditor");
+  }
   return t("user.role_user");
 }
-
 
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
@@ -34,7 +38,9 @@ const userTableState = createSortState("created_at", "desc");
 // 加载用户数据
 export async function loadUsersData(page = currentUserPage, sortBy = null, sortOrder = null) {
   currentUserPage = page;
-  if (sortBy) userTableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    userTableState.setSort(sortBy, sortOrder);
+  }
   try {
     const response = await apiGet(
       `/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`
@@ -183,7 +189,7 @@ export async function deleteUser(userId) {
       showToast(t("user.delete_user") + t("common.success"), "success");
       loadUsersData();
     } else {
-      showToast(t("user.delete_user") + t("common.failed") + "：" + response.message, "error");
+      showToast(`${t("user.delete_user") + t("common.failed")}：${response.message}`, "error");
     }
   } catch (error) {
     console.error("删除用户失败:", error);
@@ -196,7 +202,9 @@ export async function deleteUser(userId) {
 let userEventsInitialized = false;
 
 function initUserEvents() {
-  if (userEventsInitialized) return;
+  if (userEventsInitialized) {
+    return;
+  }
   userEventsInitialized = true;
 
   initSortEvents("users-table", userTableState, loadUsersData);
@@ -232,7 +240,7 @@ function initUserEvents() {
 export { initUserEvents };
 
 // 打开2FA模态框
-window.openTwoFactorModal = async function (userId, username, isEnabled) {
+async function openTwoFactorModal(userId, username, isEnabled) {
   // openModal 是异步的（按需拉取模板再挂载），必须 await 拿到真实 DOM，
   // 否则后续 querySelector 全部失效，二维码与密钥不会加载
   const modal = await openModal("two-factor-modal");
@@ -246,8 +254,6 @@ window.openTwoFactorModal = async function (userId, username, isEnabled) {
   const manageStep = modal.querySelector("#two-factor-manage-step");
   const enableBtn = modal.querySelector("#two-factor-enable-btn");
   const disableBtn = modal.querySelector("#two-factor-disable-btn");
-  const qrCodeImg = modal.querySelector("#two-factor-qr-code");
-  const secretInput = modal.querySelector("#two-factor-secret");
   const verifyCodeInput = modal.querySelector("#two-factor-verify-code");
   const disableCodeInput = modal.querySelector("#two-factor-disable-code");
   const errorDiv = modal.querySelector("#two-factor-error");
@@ -270,8 +276,12 @@ window.openTwoFactorModal = async function (userId, username, isEnabled) {
   }
 
   // 清空输入框
-  if (verifyCodeInput) verifyCodeInput.value = "";
-  if (disableCodeInput) disableCodeInput.value = "";
+  if (verifyCodeInput) {
+    verifyCodeInput.value = "";
+  }
+  if (disableCodeInput) {
+    disableCodeInput.value = "";
+  }
 
   // 确保有一个隐藏的输入字段来存储userId
   let userIdInput = modal.querySelector("#two-factor-user-id");
@@ -299,7 +309,7 @@ window.openTwoFactorModal = async function (userId, username, isEnabled) {
     // 初始化2FA配置
     await initTwoFactorConfig(userId);
   }
-};
+}
 
 // 初始化2FA配置
 async function initTwoFactorConfig(userId) {
@@ -320,7 +330,7 @@ async function initTwoFactorConfig(userId) {
       // 显示QR码和密钥
       const qrCodeImg = elementCache.get("two-factor-qr-code");
       if (qrCodeImg && qr_code_base64) {
-        qrCodeImg.src = "data:image/png;base64," + qr_code_base64;
+        qrCodeImg.src = `data:image/png;base64,${qr_code_base64}`;
       }
 
       const secretInput = elementCache.get("two-factor-secret");
@@ -334,7 +344,7 @@ async function initTwoFactorConfig(userId) {
         uriInput.value = otpauth_url;
       }
     } else {
-      showToast(t("two_factor.fetch_config_failed") + "：" + response.message, "error");
+      showToast(`${t("two_factor.fetch_config_failed")}：${response.message}`, "error");
     }
   } catch (error) {
     console.error("获取2FA配置失败:", error);
@@ -375,7 +385,7 @@ async function handleTwoFactorEnable() {
         loadUsersData();
       }, 2000);
     } else {
-      errorDiv.textContent = t("two_factor.enable_failed") + "：" + response.message;
+      errorDiv.textContent = `${t("two_factor.enable_failed")}：${response.message}`;
       errorDiv.classList.add("show");
     }
   } catch (error) {
@@ -417,7 +427,7 @@ async function handleTwoFactorDisable() {
       closeModal("two-factor-modal");
       loadUsersData();
     } else {
-      errorDiv.textContent = t("two_factor.disable_failed") + "：" + response.message;
+      errorDiv.textContent = `${t("two_factor.disable_failed")}：${response.message}`;
       errorDiv.classList.add("show");
     }
   } catch (error) {
@@ -465,7 +475,7 @@ export async function submitUserForm() {
       loadUsersData();
     } else {
       showToast(
-        (userId ? t("user.update_failed") : t("user.add_failed")) + "：" + response.message,
+        `${userId ? t("user.update_failed") : t("user.add_failed")}：${response.message}`,
         "error"
       );
     }

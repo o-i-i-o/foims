@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>IPMA - 系统初始化</title>
     <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01333">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01333">
-    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01333">
-    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01333"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01346">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01346">
+    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01346">
+    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01346"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -56,7 +57,7 @@
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-primary" onclick="location.reload()" data-i18n="init.pg_recheck">重新检查</button>
+                        <button type="button" class="btn btn-primary" id="pg-recheck-btn" data-i18n="init.pg_recheck">重新检查</button>
                         <button type="button" class="btn btn-success" disabled data-i18n="init.next">下一步</button>
                     </div>
                 </div>
@@ -71,11 +72,11 @@
                     </div>
 
                     <div class="init-tabs">
-                        <div class="init-tab active" data-mode="create" onclick="setInitMode('create')">
+                        <div class="init-tab active" data-mode="create" role="button" tabindex="0">
                             <span class="tab-icon">📝</span>
                             <span class="tab-text" data-i18n="init.tab_create_db">新建数据库</span>
                         </div>
-                        <div class="init-tab" data-mode="import" onclick="setInitMode('import')">
+                        <div class="init-tab" data-mode="import" role="button" tabindex="0">
                             <span class="tab-icon">📁</span>
                             <span class="tab-text" data-i18n="init.tab_import_db">导入数据库</span>
                         </div>
@@ -110,7 +111,7 @@
                             <label for="verification-step2" data-i18n="init.console_captcha">控制台验证码:</label>
                             <div style="display: flex; gap: 10px;">
                                 <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
-                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()" data-i18n="init.get_captcha">获取验证码</button>
+                                <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
                             <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>
@@ -145,7 +146,7 @@
                             <label for="verification" data-i18n="init.console_captcha">控制台验证码:</label>
                             <div style="display: flex; gap: 10px;">
                                 <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
-                                <button type="button" class="btn btn-primary" onclick="getVerificationCode()" data-i18n="init.get_captcha">获取验证码</button>
+                                <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
                             <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>

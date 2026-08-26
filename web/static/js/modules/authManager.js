@@ -9,7 +9,9 @@ import { elementCache } from "../utils/helpers.js";
 
 const parseDuration = (durationStr) => {
   const match = durationStr.match(/^(\d+)([smhd])$/);
-  if (!match) return 15 * 60;
+  if (!match) {
+    return 15 * 60;
+  }
 
   const value = parseInt(match[1], 10);
   const unit = match[2];
@@ -117,7 +119,9 @@ export const initChangePassword = () => {
   const changeBtn = document.getElementById("change-password-btn");
   changeBtn?.addEventListener("click", async () => {
     const modal = await loadModal("change-password-modal");
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
 
     const form = elementCache.get("change-password-form");
     form.onsubmit = async (e) => {
@@ -150,6 +154,7 @@ export const initChangePassword = () => {
           showToast(result.message, "error");
         }
       } catch (error) {
+        console.error("修改密码请求失败:", error);
         showToast(t("auth.change_password_failed"), "error");
       }
     };
@@ -227,7 +232,9 @@ const resetTimeout = (timeoutMinutes) => {
 };
 
 const startPageTimeout = async () => {
-  if (!SessionManager.hasSession()) return;
+  if (!SessionManager.hasSession()) {
+    return;
+  }
 
   // 移除旧的监听器
   if (boundResetTimeout && boundEvents) {

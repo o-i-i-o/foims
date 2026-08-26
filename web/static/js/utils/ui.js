@@ -1,10 +1,8 @@
 import { showToast } from "./toast.js";
-import { showConfirm, confirmDelete } from "./confirm.js";
+import { showConfirm } from "./confirm.js";
 import { renderPagination } from "./pagination.js";
-import { formatDateTime } from "./formatter.js";
 import { closeModal, openModal } from "./modalLoader.js";
 import { apiPost, apiPut, apiDelete } from "./apiClient.js";
-import { escapeHtml } from "./helpers.js";
 import { t } from "./i18n.js";
 
 export { showToast } from "./toast.js";
@@ -46,7 +44,9 @@ export function createSortState(defaultBy = "name", defaultOrder = "asc") {
 
 export function updateSortIcons(tableId, sortState) {
   const table = typeof tableId === "string" ? document.getElementById(tableId) : tableId;
-  if (!table) return;
+  if (!table) {
+    return;
+  }
 
   table.querySelectorAll("th.sortable").forEach((th) => {
     const sortKey = th.dataset.sort;
@@ -62,12 +62,16 @@ export function updateSortIcons(tableId, sortState) {
 
 export function initSortEvents(tableId, sortState, loadDataFn) {
   const table = typeof tableId === "string" ? document.getElementById(tableId) : tableId;
-  if (!table) return;
+  if (!table) {
+    return;
+  }
 
   table.querySelectorAll("th.sortable").forEach((th) => {
     th.addEventListener("click", (e) => {
       // 表头内嵌过滤输入框、弹层等控件时不触发排序
-      if (e.target.closest("input, select, textarea, button, a, .th-search-popover")) return;
+      if (e.target.closest("input, select, textarea, button, a, .th-search-popover")) {
+        return;
+      }
       const sortKey = th.dataset.sort;
       sortState.toggle(sortKey);
       loadDataFn(1, sortState.by, sortState.order);
@@ -92,7 +96,9 @@ export function initThSearchPopovers(tableSelector) {
     const toggle = th.querySelector(".th-search-toggle");
     const popover = th.querySelector(".th-search-popover");
     const input = popover?.querySelector("input");
-    if (!toggle || !popover || !input) return;
+    if (!toggle || !popover || !input) {
+      return;
+    }
 
     toggle.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -153,7 +159,9 @@ export function debounce(func, wait) {
 export function renderTable(container, dataOrOptions, renderFn, emptyMessage, colSpan) {
   const el = typeof container === "string" ? document.querySelector(container) : container;
 
-  if (!el) return;
+  if (!el) {
+    return;
+  }
 
   let data, columns, empty, colspan;
 
@@ -170,13 +178,16 @@ export function renderTable(container, dataOrOptions, renderFn, emptyMessage, co
     }
 
     tbody.innerHTML = "";
+    // 与对象形态一致走 DocumentFragment，避免逐行 append 到活 DOM
+    const fragment = document.createDocumentFragment();
     data.forEach((row, index) => {
       const tr = document.createElement("tr");
       if (renderFn) {
         tr.innerHTML = renderFn(row, index);
       }
-      tbody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+    tbody.appendChild(fragment);
   } else if (typeof dataOrOptions === "object" && dataOrOptions !== null) {
     const options = dataOrOptions;
     data = options.data || [];
@@ -245,7 +256,9 @@ export function renderTable(container, dataOrOptions, renderFn, emptyMessage, co
 
 export function getElementValue(id) {
   const element = document.getElementById(id);
-  if (!element) return "";
+  if (!element) {
+    return "";
+  }
 
   if (element.type === "checkbox") {
     return element.checked;
@@ -254,7 +267,7 @@ export function getElementValue(id) {
   return element.value?.trim() ?? "";
 }
 
-export function handleError(error, defaultMessage = t("common.operation_failed")) {
+export function handleError(error, defaultMessage = t("common.operation_failed"), fallback = null) {
   console.error("Error:", error);
 
   if (error.message) {
@@ -263,6 +276,11 @@ export function handleError(error, defaultMessage = t("common.operation_failed")
     showToast(error, "error");
   } else {
     showToast(defaultMessage, "error");
+  }
+
+  // 列表加载失败时重渲染为可重试的空表提示（部分调用方传入）
+  if (typeof fallback === "function") {
+    fallback();
   }
 }
 
@@ -297,10 +315,9 @@ export async function handleFormSubmit(config) {
       }
 
       return true;
-    } else {
-      showToast(result.message || errorMessage, "error");
-      return false;
     }
+    showToast(result.message || errorMessage, "error");
+    return false;
   } catch (error) {
     handleError(error, errorMessage);
     return false;
@@ -334,7 +351,9 @@ export async function handleDelete(
   const errorMessage = options.errorMessage || t("common.delete_failed");
 
   const confirmed = await showConfirm(confirmMessage);
-  if (!confirmed) return { success: false, cancelled: true };
+  if (!confirmed) {
+    return { success: false, cancelled: true };
+  }
 
   try {
     let result;
@@ -352,10 +371,9 @@ export async function handleDelete(
         await refreshCallback();
       }
       return { success: true };
-    } else {
-      showToast(result.message || errorMessage, "error");
-      return { success: false, message: result.message };
     }
+    showToast(result.message || errorMessage, "error");
+    return { success: false, message: result.message };
   } catch (error) {
     handleError(error, errorMessage);
     return { success: false, message: error.message };
@@ -365,13 +383,15 @@ export async function handleDelete(
 export function appendPaginationToTable(container, data, onPageChange, options = {}) {
   const el = typeof container === "string" ? document.querySelector(container) : container;
 
-  if (!el) return;
+  if (!el) {
+    return;
+  }
 
   const tableContainer = el.closest(".table-container");
   let paginationContainer;
 
   if (tableContainer) {
-    let existingPagination = tableContainer.querySelector(".pagination-container");
+    const existingPagination = tableContainer.querySelector(".pagination-container");
     if (existingPagination) {
       existingPagination.remove();
     }

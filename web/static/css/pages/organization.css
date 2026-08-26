@@ -40,6 +40,9 @@
 /* 树节点 */
 .org-node-wrapper {
   position: relative;
+
+  /* 入场动画（keyframes 在 utilities/animations.css） */
+  animation: org-fade-in var(--transition-slow) ease;
 }
 
 .org-node {
@@ -127,52 +130,52 @@
 }
 
 .org-node-type-badge[data-type="headquarters"] {
-  background: rgb(102 126 234 / 0.15);
+  background: rgb(102 126 234 / 15%);
   color: #5568d3;
 }
 
 .org-node-type-badge[data-type="building"] {
-  background: rgb(0 123 255 / 0.1);
+  background: rgb(0 123 255 / 10%);
   color: var(--color-blue);
 }
 
 .org-node-type-badge[data-type="floor"] {
-  background: rgb(23 162 184 / 0.1);
+  background: rgb(23 162 184 / 10%);
   color: var(--color-info);
 }
 
 .org-node-type-badge[data-type="data_center"] {
-  background: rgb(220 53 69 / 0.1);
+  background: rgb(220 53 69 / 10%);
   color: var(--color-danger);
 }
 
 .org-node-type-badge[data-type="telecom_closet"] {
-  background: rgb(111 66 193 / 0.1);
+  background: rgb(111 66 193 / 10%);
   color: var(--color-ipv6);
 }
 
 .org-node-type-badge[data-type="office"] {
-  background: rgb(40 167 69 / 0.1);
+  background: rgb(40 167 69 / 10%);
   color: var(--color-success);
 }
 
 .org-node-type-badge[data-type="hall"] {
-  background: rgb(255 193 7 / 0.1);
+  background: rgb(255 193 7 / 10%);
   color: var(--color-warning-text);
 }
 
 .org-node-type-badge[data-type="workstation"] {
-  background: rgb(108 117 125 / 0.1);
+  background: rgb(108 117 125 / 10%);
   color: var(--color-secondary);
 }
 
 .org-node-type-badge[data-type="cabinet"] {
-  background: rgb(111 66 193 / 0.1);
+  background: rgb(111 66 193 / 10%);
   color: var(--color-ipv6);
 }
 
 .org-node-type-badge[data-type="cabinet_position"] {
-  background: rgb(253 126 20 / 0.1);
+  background: rgb(253 126 20 / 10%);
   color: #fd7e14;
 }
 
@@ -209,7 +212,7 @@
 
 .btn-add-child:hover {
   background: var(--color-success);
-  color: white;
+  color: #fff;
 }
 
 /* 树节点图标按钮形态：无边框、透明底，与全局 icon-btn 风格统一 */
@@ -226,7 +229,7 @@
 
 /* 悬浮浅色着色（与 btn-edit/btn-delete 的悬浮反馈一致） */
 .icon-btn.btn-add-child:hover {
-  background: rgb(40 167 69 / 0.12);
+  background: rgb(40 167 69 / 12%);
 }
 
 .icon-btn.btn-employees:hover {
@@ -236,7 +239,7 @@
 /* 人员管理模态框 */
 .employee-modal-org {
   color: var(--color-text-secondary);
-  font-weight: normal;
+  font-weight: 400;
   font-size: 0.9em;
   margin-left: 6px;
 }
@@ -286,7 +289,7 @@
 }
 
 /* 响应式 */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .org-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -311,10 +314,6 @@
   }
 }
 
-/* 动画（@keyframes orgFadeIn 已统一移至 utilities/animations.css） */
-.org-node-wrapper {
-  animation: orgFadeIn var(--transition-slow) ease;
-}
 
 /* ==========================================
  * 模板管理样式
@@ -411,7 +410,7 @@
   font-size: var(--font-size-xs);
   font-weight: 600;
   background: var(--color-primary);
-  color: white;
+  color: #fff;
   flex-shrink: 0;
   letter-spacing: 1px;
 }
@@ -581,27 +580,3 @@
 }
 
 /* 快捷填充行 */
-.org-template-quick-fill-row {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
-  padding-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.org-template-quick-fill-label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.org-template-quick-fill-row select {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}

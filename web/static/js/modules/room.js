@@ -41,26 +41,36 @@ function isCacheValid(timestamp) {
 }
 
 function extractItems(result) {
-  if (!result.success || !result.data) return [];
-  if (Array.isArray(result.data)) return result.data;
-  if (result.data.items && Array.isArray(result.data.items)) return result.data.items;
+  if (!result.success || !result.data) {
+    return [];
+  }
+  if (Array.isArray(result.data)) {
+    return result.data;
+  }
+  if (result.data.items && Array.isArray(result.data.items)) {
+    return result.data.items;
+  }
   return [];
 }
 
 // 更新选择框选项
 function updateSelect(select, data, placeholder = t("room.select_option")) {
   const currentValue = select.value;
-  select.innerHTML =
-    `<option value="">${placeholder}</option>` +
-    data.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+  select.innerHTML = `<option value="">${placeholder}</option>${data
+    .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
+    .join("")}`;
 
-  if (currentValue) select.value = currentValue;
+  if (currentValue) {
+    select.value = currentValue;
+  }
   return select;
 }
 
 // 加载网络区域
 async function loadNetworkRegions(select) {
-  if (!select) return [];
+  if (!select) {
+    return [];
+  }
 
   const now = Date.now();
   if (networkCache.networkRegions && isCacheValid(networkCache.cacheTime)) {
@@ -86,7 +96,9 @@ async function loadNetworkRegions(select) {
 
 // 加载网段
 async function loadNetworks(regionId, select, excludeIds = []) {
-  if (!select) return [];
+  if (!select) {
+    return [];
+  }
 
   const cacheKey = regionId || "all";
   const cached = networkCache.networks.get(cacheKey);
@@ -126,7 +138,9 @@ class EventHandler {
 
   bind(element, event, handler) {
     const oldHandler = this.handlers.get(element);
-    if (oldHandler) element.removeEventListener(event, oldHandler);
+    if (oldHandler) {
+      element.removeEventListener(event, oldHandler);
+    }
 
     element.addEventListener(event, handler);
     this.handlers.set(element, handler);
@@ -201,7 +215,9 @@ class NetworkConfigManager {
   }
 
   async addItem() {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
 
     const div = document.createElement("div");
     div.innerHTML = this.createItemHTML();
@@ -218,7 +234,9 @@ class NetworkConfigManager {
   }
 
   updateAddButtons() {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
 
     const items = this.container.querySelectorAll(".network-config-item");
     items.forEach((item, index) => {
@@ -257,7 +275,9 @@ class NetworkConfigManager {
   }
 
   removeItem(item) {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
     const items = this.container.querySelectorAll(".network-config-item");
     if (items.length <= 1) {
       showToast(t("room.keep_one_network"), "warning");
@@ -273,7 +293,9 @@ class NetworkConfigManager {
     const regionId = regionSelect.value;
     const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
 
-    if (!networkSelect) return;
+    if (!networkSelect) {
+      return;
+    }
 
     networkSelect.innerHTML = `<option value="">${t("network.select_segment")}</option>`;
     if (regionId) {
@@ -282,26 +304,38 @@ class NetworkConfigManager {
   }
 
   async updateNetworkSelects() {
-    if (!this.ensureContainer()) return;
+    if (!this.ensureContainer()) {
+      return;
+    }
     const selectedIds = this.getSelectedNetworkIds();
     const items = this.container.querySelectorAll(".network-config-item");
 
-    for (const item of items) {
-      const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
-      const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
-      const currentValue = networkSelect.value;
-      const regionId = regionSelect.value;
+    // 各行网段加载互不依赖（loadNetworks 有区域级缓存），并行执行
+    await Promise.all(
+      Array.from(items).map((item) => {
+        const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
+        const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
+        const currentValue = networkSelect.value;
+        const regionId = regionSelect.value;
 
-      if (regionId) {
+        if (!regionId) {
+          return Promise.resolve();
+        }
+
         const otherIds = selectedIds.filter((id) => id !== currentValue);
-        await loadNetworks(regionId, networkSelect, otherIds);
-        if (currentValue) networkSelect.value = currentValue;
-      }
-    }
+        return loadNetworks(regionId, networkSelect, otherIds).then(() => {
+          if (currentValue) {
+            networkSelect.value = currentValue;
+          }
+        });
+      })
+    );
   }
 
   getSelectedNetworkIds() {
-    if (!this.ensureContainer()) return [];
+    if (!this.ensureContainer()) {
+      return [];
+    }
     const selects = this.container.querySelectorAll(`.${this.options.networkSelectClass}`);
     return Array.from(selects)
       .map((s) => s.value)
@@ -311,7 +345,9 @@ class NetworkConfigManager {
   async loadExistingNetworks(networks, allNetworks) {
     // closeModal 会移除模态框 DOM，需重新获取 container
     this.ensureContainer();
-    if (!this.container) return;
+    if (!this.container) {
+      return;
+    }
 
     if (!networks?.length) {
       await this.init();
@@ -330,7 +366,9 @@ class NetworkConfigManager {
     const items = await Promise.all(
       networks.map(async (network) => {
         const networkInfo = networkMap.get(network.id);
-        if (!networkInfo) return null;
+        if (!networkInfo) {
+          return null;
+        }
 
         const div = document.createElement("div");
         div.innerHTML = this.createItemHTML();
@@ -351,7 +389,9 @@ class NetworkConfigManager {
     );
 
     for (const item of items) {
-      if (!item) continue;
+      if (!item) {
+        continue;
+      }
       this.container.appendChild(item);
       this.bindItemEvents(item);
     }
@@ -360,7 +400,9 @@ class NetworkConfigManager {
   }
 
   collectData() {
-    if (!this.ensureContainer()) return { networkIds: [], hasEmpty: false };
+    if (!this.ensureContainer()) {
+      return { networkIds: [], hasEmpty: false };
+    }
 
     const selects = this.container.querySelectorAll(`.${this.options.networkSelectClass}`);
     const networkIds = [];
@@ -423,8 +465,9 @@ function renderManagerControl(data = {}) {
   const legacyText = !managerId && data.manager ? data.manager : "";
   const options = [
     `<option value="">${t("workstation.manager_unassigned")}</option>`,
-    ...roomOrgEmployees.map((emp) =>
-      `<option value="${emp.id}" ${managerId === emp.id ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
+    ...roomOrgEmployees.map(
+      (emp) =>
+        `<option value="${emp.id}" ${managerId === emp.id ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
     )
   ];
   if (legacyText) {
@@ -438,7 +481,9 @@ function renderManagerControl(data = {}) {
 /** 收集单个管理人控件的值：下拉取员工 id，文本/遗留选项取文本 */
 function collectManagerValue(item) {
   const control = item.querySelector(".child-manager");
-  if (!control) return { manager: null, manager_employee_id: null };
+  if (!control) {
+    return { manager: null, manager_employee_id: null };
+  }
   if (control.tagName === "SELECT") {
     const value = control.value;
     if (value && value !== "text") {
@@ -459,7 +504,9 @@ function collectManagerValue(item) {
 function refreshManagerSelects() {
   document.querySelectorAll("#room-children-container .child-manager").forEach((control) => {
     const formGroup = control.parentElement;
-    if (!formGroup) return;
+    if (!formGroup) {
+      return;
+    }
 
     const isSelect = control.tagName === "SELECT";
     const selectedValue = isSelect ? control.value : "";
@@ -551,7 +598,9 @@ class RoomChildListManager extends DynamicRowManager {
   }
 
   collectItems() {
-    if (!this.ensureContainer()) return [];
+    if (!this.ensureContainer()) {
+      return [];
+    }
     const items = this.container.querySelectorAll(".room-child-item");
     if (this.kind === "workstation") {
       return Array.from(items).map((item) => {
@@ -636,7 +685,9 @@ class RoomChildrenManager {
 
   bindTypeChange() {
     const typeSelect = document.getElementById("room-type");
-    if (!typeSelect) return;
+    if (!typeSelect) {
+      return;
+    }
     if (this.typeChangeHandler) {
       typeSelect.removeEventListener("change", this.typeChangeHandler);
     }
@@ -726,7 +777,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
   init(roomId = null) {
     this.roomId = roomId;
     this.ensureContainer();
-    if (!this.container) return false;
+    if (!this.container) {
+      return false;
+    }
 
     this.container.innerHTML = "";
     this.updateEmptyState();
@@ -756,7 +809,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
 
   async loadExisting(room) {
     this.ensureContainer();
-    if (!this.container) return;
+    if (!this.container) {
+      return;
+    }
     this.container.innerHTML = "";
 
     const netOutlets = room?.net_outlets || [];
@@ -766,7 +821,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
   }
 
   collectData() {
-    if (!this.ensureContainer()) return [];
+    if (!this.ensureContainer()) {
+      return [];
+    }
     const items = this.container.querySelectorAll(".room-net-outlet-item");
     const netOutlets = [];
     for (const item of items) {
@@ -793,7 +850,9 @@ let currentPageSize = DEFAULT_PAGE_SIZE;
 
 export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder = null) {
   currentPage = page;
-  if (sortBy) tableState.setSort(sortBy, sortOrder);
+  if (sortBy) {
+    tableState.setSort(sortBy, sortOrder);
+  }
 
   try {
     const roomsData = await apiGet(
@@ -850,7 +909,8 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
           field: "id",
           render: (v, row) => {
             const roomTypeLower = (row.room_type || "").toLowerCase();
-            const isCabinetRoom = roomTypeLower === "data_center" || roomTypeLower === "telecom_closet";
+            const isCabinetRoom =
+              roomTypeLower === "data_center" || roomTypeLower === "telecom_closet";
             return `
           ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-id="${v}"` })}
           ${iconButton({ icon: "list", label: isCabinetRoom ? t("room.cabinets") : t("room.workstations"), cls: "btn-primary btn-room-children-list", attrs: `data-room-id="${v}" data-room-type="${escapeHtml(row.room_type || "")}"` })}
@@ -890,7 +950,9 @@ let roomTableClickHandler = null;
 
 function bindRoomButtonsEvents() {
   const table = elementCache.get("rooms-table");
-  if (!table) return;
+  if (!table) {
+    return;
+  }
 
   if (roomTableClickHandler) {
     table.removeEventListener("click", roomTableClickHandler);
@@ -1173,7 +1235,9 @@ export async function openRoomModal(room = null) {
     roomNetOutletsManager.loadExisting(room);
   } else {
     title.textContent = t("room.add");
-    if (form) form.reset();
+    if (form) {
+      form.reset();
+    }
     elementCache.setValue("room-id", "");
 
     // 初始化子项管理器为默认空状态
@@ -1192,7 +1256,9 @@ export async function openRoomModal(room = null) {
 // （模态框每次打开会重建 DOM，因此每次都需重新绑定）
 function bindRoomOrgEmployeeSync() {
   const orgSelect = document.getElementById("room-org-id");
-  if (!orgSelect) return;
+  if (!orgSelect) {
+    return;
+  }
   orgSelect.addEventListener("change", async (e) => {
     await loadRoomOrgEmployees(e.target.value);
     refreshManagerSelects();

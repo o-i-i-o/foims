@@ -85,9 +85,11 @@ header.ip-level-bar {
 .level-card {
   background: var(--color-primary);
 }
+
 .level-port {
   background: var(--color-info);
 }
+
 .level-ip {
   background: var(--color-success);
 }
@@ -137,7 +139,7 @@ header.ip-level-bar {
 }
 
 /* ===== 响应式 ===== */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .nc-fields {
     grid-template-columns: 1fr;
   }

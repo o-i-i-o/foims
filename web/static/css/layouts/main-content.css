@@ -24,14 +24,6 @@
   border-bottom: 2px solid var(--color-border-light);
 }
 
-.section-header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-lg);
-  gap: var(--space-md);
-  align-items: center;
-}
-
 .tabs {
   display: flex;
   background: var(--color-bg);
@@ -111,14 +103,6 @@
   display: block;
 }
 
-.section-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
 .toolbar {
   display: flex;
   gap: var(--space-lg);
@@ -130,10 +114,6 @@
 }
 
 .section-divider {
-  margin: var(--space-md) 0;
-}
-
-.form-divider {
   margin: var(--space-md) 0;
 }
 

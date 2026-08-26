@@ -41,7 +41,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-md) var(--space-lg);
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, rgb(118 75 162 / 0.1) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, rgb(118 75 162 / 10%) 100%);
   border-bottom: 1px solid var(--color-border-light);
 }
 
@@ -163,7 +163,7 @@
   border: 1px solid var(--color-border-light);
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .dashboard-stats {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }

@@ -10,8 +10,8 @@
 :root {
   --color-primary: #667eea;
   --color-primary-hover: #5568d3;
-  --color-primary-light: rgb(102 126 234 / 0.1);
-  --color-primary-shadow: rgb(102 126 234 / 0.3);
+  --color-primary-light: rgb(102 126 234 / 10%);
+  --color-primary-shadow: rgb(102 126 234 / 30%);
   --color-gradient-end: #764ba2;
   --color-secondary: #6c757d;
   --color-secondary-hover: #5a6268;
@@ -56,12 +56,12 @@
   --control-height: 44px;
   --control-padding-x: 0.85rem;
   --control-padding-y: 0.6rem;
-  --control-shadow: 0 0 0 3px rgb(102 126 234 / 0.2);
+  --control-shadow: 0 0 0 3px rgb(102 126 234 / 20%);
   --btn-height: 44px;
   --btn-padding-x: 1.1rem;
-  --shadow-sm: 0 2px 4px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.15);
-  --shadow-lg: 0 10px 30px rgb(0 0 0 / 0.2);
+  --shadow-sm: 0 2px 4px rgb(0 0 0 / 10%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 15%);
+  --shadow-lg: 0 10px 30px rgb(0 0 0 / 20%);
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -76,6 +76,7 @@
   --space-xl: 2rem;
   --sidebar-width: 240px;
   --sidebar-width-collapsed: 64px;
+
   /* 侧边栏收起/展开动画：宽度、外边距、内边距等共用同一时序保证同步 */
   --sidebar-anim-duration: 0.3s;
   --sidebar-anim-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -85,6 +86,7 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
+
   /* 等宽字体：密码输入框 / IPv6 地址 / CIDR 标签等共用 */
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
   --z-dropdown: 1000;
@@ -121,6 +123,5 @@
   --room-office: #17a2b8;
   --room-data-center: #fd7e14;
   --room-telecom-closet: #6f42c1;
-
-  --shadow-xl: 0 20px 40px rgb(0 0 0 / 0.25);
+  --shadow-xl: 0 20px 40px rgb(0 0 0 / 25%);
 }

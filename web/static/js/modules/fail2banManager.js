@@ -35,16 +35,19 @@ async function loadAppFail2banStatus() {
   const trackedTbody = elementCache.get("app-fail2ban-tracked-tbody");
   const logPathHint = elementCache.get("app-fail2ban-log-path-hint");
 
-  if (bannedTbody)
+  if (bannedTbody) {
     bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
-  if (trackedTbody)
+  }
+  if (trackedTbody) {
     trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
+  }
 
   try {
     const result = await apiGet("/api/system/fail2ban/app/status");
     if (!result.success || !result.data) {
-      if (bannedTbody)
+      if (bannedTbody) {
         bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+      }
       return;
     }
 
@@ -97,7 +100,9 @@ async function loadAppFail2banStatus() {
               t("security.unban_confirm") || "Unban this IP?",
               ip
             );
-            if (confirmed) await doUnbanIp(ip);
+            if (confirmed) {
+              await doUnbanIp(ip);
+            }
           });
         });
       }
@@ -122,8 +127,9 @@ async function loadAppFail2banStatus() {
     }
   } catch (err) {
     console.error("loadAppFail2banStatus error:", err);
-    if (bannedTbody)
+    if (bannedTbody) {
       bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+    }
   }
 }
 
@@ -183,7 +189,9 @@ async function handleUnbanIp() {
     return;
   }
   const confirmed = await showConfirm(t("security.unban_confirm") || "Unban this IP?", ip);
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
   await doUnbanIp(ip);
   ipInput.value = "";
 }

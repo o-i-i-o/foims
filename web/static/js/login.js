@@ -11,6 +11,14 @@ import { loginUser } from "./modules/authManager.js";
 import { t, initI18n, changeLanguage } from "./utils/i18n.js";
 import { SessionManager } from "./utils/sessionManager.js";
 
+// 登录页角色（吉祥物）共用的瞳孔位移：登录失败时看向左下，密码聚焦时看向别处
+const PUPIL_ERROR = "translate(-3px, 4px)";
+const PUPIL_LOOKING_AWAY = "translate(-5px, -5px)";
+
+// 角色眨眼/偷看动画的随机调度延迟
+// eslint-disable-next-line sonarjs/pseudo-random -- 纯动画抖动延迟，非安全场景
+const randomDelay = (spread, base) => Math.random() * spread + base;
+
 /**
  * 登录管理器类
  * 负责处理登录页面的所有逻辑和状态
@@ -24,8 +32,9 @@ class LoginManager {
       TWO_FACTOR: "two_factor"
     };
 
-    // 登录模式枚举
+    // 登录模式枚举（枚举值与 index.html 的 data-tab/id 对应，非密钥）
     this.LoginMode = {
+      // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- 登录方式标识，与 HTML 的 data-tab="password-login" 联动
       PASSWORD: "password-login",
       EMAIL: "email-login",
       LDAP: "ldap-login",
@@ -110,7 +119,22 @@ class LoginManager {
 
     // 检查是否处于初始化模式（config.toml [init].enabled = true）
     // 若是，则跳转到初始化页，不继续登录流程
-    if (await this.checkInitMode()) return;
+    if (await this.checkInitMode()) {
+      return;
+    }
+
+    // 登录页未加载 eventManager（其模态关闭委托只随 main.html 安装），
+    // 此处补齐等价委托：忘记密码等模态的关闭按钮/背景点击才能关闭
+    document.addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal")) {
+        closeModal(e.target.id);
+        return;
+      }
+      const closeTrigger = e.target.closest("[data-modal-id]");
+      if (closeTrigger) {
+        closeModal(closeTrigger.dataset.modalId);
+      }
+    });
 
     // SSO 回跳错误提示（须在 cleanUrlParams 清理地址栏前捕获）
     const ssoErrorKey = new URLSearchParams(window.location.search).get("sso_error");
@@ -125,8 +149,12 @@ class LoginManager {
     this.setupCaDownload();
 
     // 图形验证码图片点击刷新（连续登录失败触发后显示）
-    document.getElementById("captcha-image")?.addEventListener("click", () => this.refreshCaptcha("password"));
-    document.getElementById("ldap-captcha-image")?.addEventListener("click", () => this.refreshCaptcha("ldap"));
+    document
+      .getElementById("captcha-image")
+      ?.addEventListener("click", () => this.refreshCaptcha("password"));
+    document
+      .getElementById("ldap-captcha-image")
+      ?.addEventListener("click", () => this.refreshCaptcha("ldap"));
 
     if (ssoErrorKey) {
       this.showError(t(ssoErrorKey));
@@ -175,7 +203,9 @@ class LoginManager {
   async setupAuthMethods() {
     try {
       const result = await apiGet("/api/auth/methods");
-      if (!result.success || !result.data) return;
+      if (!result.success || !result.data) {
+        return;
+      }
 
       const visibility = {
         "email-login": result.data.email !== false,
@@ -199,9 +229,13 @@ class LoginManager {
   async setupCaDownload() {
     try {
       const result = await apiGet("/api/certificate/ca/info");
-      if (!result.success || !result.data?.available) return;
+      if (!result.success || !result.data?.available) {
+        return;
+      }
       const entry = document.getElementById("ca-download-entry");
-      if (entry) entry.hidden = false;
+      if (entry) {
+        entry.hidden = false;
+      }
     } catch (error) {
       // 查询失败保持隐藏即可，不影响登录流程
       console.error("获取根证书状态失败:", error);
@@ -235,7 +269,9 @@ class LoginManager {
    * 处理 Tab 切换
    */
   handleTabClick(targetBtn) {
-    if (this.currentState === this.State.SUBMITTING) return;
+    if (this.currentState === this.State.SUBMITTING) {
+      return;
+    }
 
     // 移除所有 active 类
     this.dom.tabs.forEach((btn) => {
@@ -276,7 +312,9 @@ class LoginManager {
     e.preventDefault();
     this.clearError();
 
-    if (this.currentState === this.State.SUBMITTING) return;
+    if (this.currentState === this.State.SUBMITTING) {
+      return;
+    }
 
     const rememberMe = this.dom.rememberMeCheckbox.checked;
 
@@ -333,7 +371,9 @@ class LoginManager {
   /** 显示验证码并加载新图（点击图片可刷新） */
   async showCaptcha(form) {
     const group = document.getElementById(form === "ldap" ? "ldap-captcha-group" : "captcha-group");
-    if (!group) return;
+    if (!group) {
+      return;
+    }
     group.hidden = false;
     await this.refreshCaptcha(form);
   }
@@ -341,7 +381,9 @@ class LoginManager {
   /** 拉取新验证码图片 */
   async refreshCaptcha(form) {
     const image = document.getElementById(form === "ldap" ? "ldap-captcha-image" : "captcha-image");
-    if (!image) return;
+    if (!image) {
+      return;
+    }
     try {
       const result = await apiGet("/api/auth/captcha");
       if (result.success && result.data) {
@@ -358,10 +400,12 @@ class LoginManager {
     const state = this.captchaState[form];
     state.failures += 1;
     const input = document.getElementById(form === "ldap" ? "ldap-captcha-input" : "captcha-input");
-    if (input) input.value = "";
+    if (input) {
+      input.value = "";
+    }
 
-    const required = messageKey === "server.auth.captcha_required" ||
-      messageKey === "server.auth.captcha_invalid";
+    const required =
+      messageKey === "server.auth.captcha_required" || messageKey === "server.auth.captcha_invalid";
     if (required || state.failures >= 3) {
       this.showCaptcha(form);
     }
@@ -635,8 +679,11 @@ class LoginManager {
    */
   setButtonLoadingContent(btn, text) {
     const txt = btn.querySelector(".btn-text");
-    if (txt) txt.textContent = text;
-    else btn.textContent = text;
+    if (txt) {
+      txt.textContent = text;
+    } else {
+      btn.textContent = text;
+    }
   }
 
   /**
@@ -644,24 +691,40 @@ class LoginManager {
    */
   resetButtonContent(btn, text) {
     const txt = btn.querySelector(".btn-text");
-    if (txt) txt.textContent = text;
+    if (txt) {
+      txt.textContent = text;
+    }
     const hoverTxt = btn.querySelector(".btn-hover-content > span");
-    if (hoverTxt) hoverTxt.textContent = text;
+    if (hoverTxt) {
+      hoverTxt.textContent = text;
+    }
   }
 
   formatErrorMessage(message) {
-    if (!message) return t("api.failed");
+    if (!message) {
+      return t("api.failed");
+    }
 
     // 尝试使用 i18n 翻译
     if (message.includes(".")) {
       const translated = t(message);
-      if (translated !== message) return translated;
+      if (translated !== message) {
+        return translated;
+      }
     }
 
-    if (message.includes("账户已禁用")) return t("api.account_disabled");
-    if (message.includes("失败次数过多")) return t("login.too_many_attempts");
-    if (message.includes("系统未初始化")) return t("login.system_not_init");
-    if (message.includes("SMTP未配置")) return t("login.email_service_not_configed");
+    if (message.includes("账户已禁用")) {
+      return t("api.account_disabled");
+    }
+    if (message.includes("失败次数过多")) {
+      return t("login.too_many_attempts");
+    }
+    if (message.includes("系统未初始化")) {
+      return t("login.system_not_init");
+    }
+    if (message.includes("SMTP未配置")) {
+      return t("login.email_service_not_configed");
+    }
 
     return message;
   }
@@ -727,7 +790,9 @@ class LoginManager {
       }
     } catch (error) {
       let msg = t("login.send_failed");
-      if (error.message && error.message.includes("Network")) msg = t("login.network_failed");
+      if (error.message && error.message.includes("Network")) {
+        msg = t("login.network_failed");
+      }
       forgotPasswordError.textContent = msg;
       forgotPasswordError.classList.add("show");
     } finally {
@@ -748,14 +813,16 @@ class LoginManager {
         window.location.href = "/init_index.html";
         return true;
       }
-    } catch (e) {
-      // 接口不可用时按非初始化模式处理（保持登录页可用）
+    } catch {
+      // 接口不可用时按非初始化模式处理（保持登录页可用），解析失败属预期回退
     }
     return false;
   }
 
   async checkLoginStatus() {
-    if (!SessionManager.hasSession()) return;
+    if (!SessionManager.hasSession()) {
+      return;
+    }
 
     try {
       const response = await fetch("/api/auth/me", {
@@ -775,8 +842,8 @@ class LoginManager {
         }
         SessionManager.clear();
       }
-    } catch (e) {
-      // Ignore check login status errors
+    } catch {
+      // 登录态探测失败不影响登录页可用性，静默回退到未登录展示
     }
   }
 
@@ -790,7 +857,9 @@ class LoginManager {
   initPasswordToggle() {
     this.showPassword = false;
     const toggleBtn = this.dom.togglePasswordBtn;
-    if (!toggleBtn) return;
+    if (!toggleBtn) {
+      return;
+    }
 
     toggleBtn.addEventListener("click", () => {
       this.showPassword = !this.showPassword;
@@ -799,7 +868,9 @@ class LoginManager {
       this.dom.eyeOffIcon.style.display = this.showPassword ? "block" : "none";
       this.updateCharacters();
       // 密码可见时，可能触发紫色角色偷看
-      if (this.showPassword) this.schedulePeek();
+      if (this.showPassword) {
+        this.schedulePeek();
+      }
     });
   }
 
@@ -824,7 +895,9 @@ class LoginManager {
     document.addEventListener("mousemove", (e) => {
       this.mouseX = e.clientX;
       this.mouseY = e.clientY;
-      if (!this.isTyping && !this.isLoginError) this.updateCharacters();
+      if (!this.isTyping && !this.isLoginError) {
+        this.updateCharacters();
+      }
     });
 
     // 用户名输入框：输入时角色互看
@@ -878,7 +951,7 @@ class LoginManager {
           this.scheduleBlinkPurple();
         }, 150);
       },
-      Math.random() * 4000 + 3000
+      randomDelay(4000, 3000)
     );
   }
 
@@ -894,10 +967,9 @@ class LoginManager {
           this.scheduleBlinkBlack();
         }, 150);
       },
-      Math.random() * 4000 + 3000
+      randomDelay(4000, 3000)
     );
   }
-
   // 密码可见时，紫色角色偶尔偷看
   schedulePeek() {
     if (this.dom.passwordInput.value.length > 0 && this.showPassword) {
@@ -913,7 +985,7 @@ class LoginManager {
             }, 800);
           }
         },
-        Math.random() * 3000 + 2000
+        randomDelay(3000, 2000)
       );
     }
   }
@@ -942,25 +1014,31 @@ class LoginManager {
     return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist };
   }
 
-  // 更新所有角色姿态
+  // 更新所有角色姿态：身体/眼睛/瞳孔按角色拆分到独立方法
   updateCharacters() {
     const purple = document.getElementById("char-purple");
     const black = document.getElementById("char-black");
     const orange = document.getElementById("char-orange");
     const yellow = document.getElementById("char-yellow");
-    if (!purple || !black || !orange || !yellow) return;
-
-    const purplePos = this.calcPosition(purple);
-    const blackPos = this.calcPosition(black);
-    const orangePos = this.calcPosition(orange);
-    const yellowPos = this.calcPosition(yellow);
+    if (!purple || !black || !orange || !yellow) {
+      return;
+    }
 
     const pwdLen = this.dom.passwordInput.value.length;
     const isShowingPwd = pwdLen > 0 && this.showPassword;
     // 密码框聚焦且密码不可见时，角色看向别处
     const isLookingAway = this.isPasswordFocused && !this.showPassword;
+    const ctx = { isShowingPwd, isLookingAway };
 
-    // ---- 紫色身体 ----
+    this._updatePurpleCharacter(ctx, this.calcPosition(purple));
+    this._updateBlackCharacter(ctx, this.calcPosition(black));
+    this._updateOrangeCharacter(ctx, this.calcPosition(orange));
+    this._updateYellowCharacter(ctx, this.calcPosition(yellow));
+  }
+
+  // 紫色角色：身体倾斜 + 眼睛/瞳孔（含眨眼与密码可见时的偷看）
+  _updatePurpleCharacter({ isShowingPwd, isLookingAway }, purplePos) {
+    const purple = document.getElementById("char-purple");
     if (isShowingPwd) {
       purple.style.transform = "skewX(0deg)";
       purple.style.height = "370px";
@@ -975,7 +1053,6 @@ class LoginManager {
       purple.style.height = "370px";
     }
 
-    // 紫色眼睛
     const purpleEyes = document.getElementById("purple-eyes");
     const purpleEyeL = document.getElementById("purple-eye-l");
     const purpleEyeR = document.getElementById("purple-eye-r");
@@ -988,13 +1065,13 @@ class LoginManager {
       if (this.isLoginError) {
         purpleEyes.style.left = "30px";
         purpleEyes.style.top = "55px";
-        purplePupilL.style.transform = "translate(-3px, 4px)";
-        purplePupilR.style.transform = "translate(-3px, 4px)";
+        purplePupilL.style.transform = PUPIL_ERROR;
+        purplePupilR.style.transform = PUPIL_ERROR;
       } else if (isLookingAway) {
         purpleEyes.style.left = "20px";
         purpleEyes.style.top = "25px";
-        purplePupilL.style.transform = "translate(-5px, -5px)";
-        purplePupilR.style.transform = "translate(-5px, -5px)";
+        purplePupilL.style.transform = PUPIL_LOOKING_AWAY;
+        purplePupilR.style.transform = PUPIL_LOOKING_AWAY;
       } else if (isShowingPwd) {
         purpleEyes.style.left = "20px";
         purpleEyes.style.top = "35px";
@@ -1008,15 +1085,18 @@ class LoginManager {
         purplePupilL.style.transform = "translate(3px, 4px)";
         purplePupilR.style.transform = "translate(3px, 4px)";
       } else {
-        purpleEyes.style.left = 45 + purplePos.faceX + "px";
-        purpleEyes.style.top = 40 + purplePos.faceY + "px";
+        purpleEyes.style.left = `${45 + purplePos.faceX}px`;
+        purpleEyes.style.top = `${40 + purplePos.faceY}px`;
         const po = this.calcPupilOffset(purpleEyeL, 5);
         purplePupilL.style.transform = `translate(${po.x}px, ${po.y}px)`;
         purplePupilR.style.transform = `translate(${po.x}px, ${po.y}px)`;
       }
     }
+  }
 
-    // ---- 黑色身体 ----
+  // 黑色角色：身体倾斜 + 眼睛/瞳孔（含眨眼）
+  _updateBlackCharacter({ isShowingPwd, isLookingAway }, blackPos) {
+    const black = document.getElementById("char-black");
     if (isShowingPwd) {
       black.style.transform = "skewX(0deg)";
     } else if (isLookingAway) {
@@ -1029,7 +1109,6 @@ class LoginManager {
       black.style.transform = `skewX(${blackPos.bodySkew}deg)`;
     }
 
-    // 黑色眼睛
     const blackEyes = document.getElementById("black-eyes");
     const blackEyeL = document.getElementById("black-eye-l");
     const blackEyeR = document.getElementById("black-eye-r");
@@ -1042,8 +1121,8 @@ class LoginManager {
       if (this.isLoginError) {
         blackEyes.style.left = "15px";
         blackEyes.style.top = "40px";
-        blackPupilL.style.transform = "translate(-3px, 4px)";
-        blackPupilR.style.transform = "translate(-3px, 4px)";
+        blackPupilL.style.transform = PUPIL_ERROR;
+        blackPupilR.style.transform = PUPIL_ERROR;
       } else if (isLookingAway) {
         blackEyes.style.left = "10px";
         blackEyes.style.top = "20px";
@@ -1060,18 +1139,21 @@ class LoginManager {
         blackPupilL.style.transform = "translate(0px, -4px)";
         blackPupilR.style.transform = "translate(0px, -4px)";
       } else {
-        blackEyes.style.left = 26 + blackPos.faceX + "px";
-        blackEyes.style.top = 32 + blackPos.faceY + "px";
+        blackEyes.style.left = `${26 + blackPos.faceX}px`;
+        blackEyes.style.top = `${32 + blackPos.faceY}px`;
         const bo = this.calcPupilOffset(blackEyeL, 4);
         blackPupilL.style.transform = `translate(${bo.x}px, ${bo.y}px)`;
         blackPupilR.style.transform = `translate(${bo.x}px, ${bo.y}px)`;
       }
     }
+  }
 
-    // ---- 橙色身体 ----
+  // 橙色角色：身体倾斜 + 眼睛/瞳孔 + 失败时的难过嘴
+  _updateOrangeCharacter({ isShowingPwd, isLookingAway }, orangePos) {
+    const orange = document.getElementById("char-orange");
     const orangeMouth = document.getElementById("orange-mouth");
     if (this.isLoginError && orangeMouth) {
-      orangeMouth.style.left = 80 + orangePos.faceX + "px";
+      orangeMouth.style.left = `${80 + orangePos.faceX}px`;
       orangeMouth.style.top = "130px";
     }
     if (isShowingPwd) {
@@ -1080,7 +1162,6 @@ class LoginManager {
       orange.style.transform = `skewX(${orangePos.bodySkew}deg)`;
     }
 
-    // 橙色眼睛
     const orangeEyes = document.getElementById("orange-eyes");
     const orangePupilL = document.getElementById("orange-pupil-l");
     const orangePupilR = document.getElementById("orange-pupil-r");
@@ -1088,35 +1169,37 @@ class LoginManager {
       if (this.isLoginError) {
         orangeEyes.style.left = "60px";
         orangeEyes.style.top = "95px";
-        orangePupilL.style.transform = "translate(-3px, 4px)";
-        orangePupilR.style.transform = "translate(-3px, 4px)";
+        orangePupilL.style.transform = PUPIL_ERROR;
+        orangePupilR.style.transform = PUPIL_ERROR;
       } else if (isLookingAway) {
         orangeEyes.style.left = "50px";
         orangeEyes.style.top = "75px";
-        orangePupilL.style.transform = "translate(-5px, -5px)";
-        orangePupilR.style.transform = "translate(-5px, -5px)";
+        orangePupilL.style.transform = PUPIL_LOOKING_AWAY;
+        orangePupilR.style.transform = PUPIL_LOOKING_AWAY;
       } else if (isShowingPwd) {
         orangeEyes.style.left = "50px";
         orangeEyes.style.top = "85px";
         orangePupilL.style.transform = "translate(-5px, -4px)";
         orangePupilR.style.transform = "translate(-5px, -4px)";
       } else {
-        orangeEyes.style.left = 82 + orangePos.faceX + "px";
-        orangeEyes.style.top = 90 + orangePos.faceY + "px";
+        orangeEyes.style.left = `${82 + orangePos.faceX}px`;
+        orangeEyes.style.top = `${90 + orangePos.faceY}px`;
         const oo = this.calcPupilOffset(orangePupilL, 5);
         orangePupilL.style.transform = `translate(${oo.x}px, ${oo.y}px)`;
         orangePupilR.style.transform = `translate(${oo.x}px, ${oo.y}px)`;
       }
     }
+  }
 
-    // ---- 黄色身体 ----
+  // 黄色角色：身体倾斜 + 眼睛/瞳孔/嘴
+  _updateYellowCharacter({ isShowingPwd, isLookingAway }, yellowPos) {
+    const yellow = document.getElementById("char-yellow");
     if (isShowingPwd) {
       yellow.style.transform = "skewX(0deg)";
     } else {
       yellow.style.transform = `skewX(${yellowPos.bodySkew}deg)`;
     }
 
-    // 黄色眼睛 & 嘴
     const yellowEyes = document.getElementById("yellow-eyes");
     const yellowPupilL = document.getElementById("yellow-pupil-l");
     const yellowPupilR = document.getElementById("yellow-pupil-r");
@@ -1125,16 +1208,16 @@ class LoginManager {
       if (this.isLoginError) {
         yellowEyes.style.left = "35px";
         yellowEyes.style.top = "45px";
-        yellowPupilL.style.transform = "translate(-3px, 4px)";
-        yellowPupilR.style.transform = "translate(-3px, 4px)";
+        yellowPupilL.style.transform = PUPIL_ERROR;
+        yellowPupilR.style.transform = PUPIL_ERROR;
         yellowMouth.style.left = "30px";
         yellowMouth.style.top = "92px";
         yellowMouth.style.transform = "rotate(-8deg)";
       } else if (isLookingAway) {
         yellowEyes.style.left = "20px";
         yellowEyes.style.top = "30px";
-        yellowPupilL.style.transform = "translate(-5px, -5px)";
-        yellowPupilR.style.transform = "translate(-5px, -5px)";
+        yellowPupilL.style.transform = PUPIL_LOOKING_AWAY;
+        yellowPupilR.style.transform = PUPIL_LOOKING_AWAY;
         yellowMouth.style.left = "15px";
         yellowMouth.style.top = "78px";
         yellowMouth.style.transform = "rotate(0deg)";
@@ -1147,13 +1230,13 @@ class LoginManager {
         yellowMouth.style.top = "88px";
         yellowMouth.style.transform = "rotate(0deg)";
       } else {
-        yellowEyes.style.left = 52 + yellowPos.faceX + "px";
-        yellowEyes.style.top = 40 + yellowPos.faceY + "px";
+        yellowEyes.style.left = `${52 + yellowPos.faceX}px`;
+        yellowEyes.style.top = `${40 + yellowPos.faceY}px`;
         const yo = this.calcPupilOffset(yellowPupilL, 5);
         yellowPupilL.style.transform = `translate(${yo.x}px, ${yo.y}px)`;
         yellowPupilR.style.transform = `translate(${yo.x}px, ${yo.y}px)`;
-        yellowMouth.style.left = 40 + yellowPos.faceX + "px";
-        yellowMouth.style.top = 88 + yellowPos.faceY + "px";
+        yellowMouth.style.left = `${40 + yellowPos.faceX}px`;
+        yellowMouth.style.top = `${88 + yellowPos.faceY}px`;
         yellowMouth.style.transform = "rotate(0deg)";
       }
     }
@@ -1179,6 +1262,7 @@ class LoginManager {
 
     // 重置 shake 动画（移除 class → 强制 reflow → 重新添加）
     shakeEls.forEach((el) => el.classList.remove("shake-head"));
+    // eslint-disable-next-line sonarjs/void-use -- 读取 offsetHeight 强制 reflow，以重放 shake 动画
     void document.body.offsetHeight;
 
     this.isLoginError = true;
@@ -1187,7 +1271,9 @@ class LoginManager {
 
     // 显示橙色难过嘴
     const orangeMouth = document.getElementById("orange-mouth");
-    if (orangeMouth) orangeMouth.classList.add("visible");
+    if (orangeMouth) {
+      orangeMouth.classList.add("visible");
+    }
 
     // 身体过渡(0.7s)结束后再开始摇头
     setTimeout(() => {
@@ -1198,7 +1284,9 @@ class LoginManager {
     this.errorRecoverTimer = setTimeout(() => {
       this.isLoginError = false;
       this.errorRecoverTimer = null;
-      if (orangeMouth) orangeMouth.classList.remove("visible");
+      if (orangeMouth) {
+        orangeMouth.classList.remove("visible");
+      }
       shakeEls.forEach((el) => el.classList.remove("shake-head"));
       this.updateCharacters();
     }, 2500);

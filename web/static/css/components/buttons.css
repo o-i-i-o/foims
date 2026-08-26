@@ -17,7 +17,7 @@
   width: auto;
   min-width: 120px;
   height: var(--btn-height);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
 }
 
 .btn:hover {
@@ -41,7 +41,7 @@
 
 .btn-primary:hover {
   background: var(--color-primary-hover);
-  box-shadow: 0 4px 12px rgb(102 126 234 / 0.3);
+  box-shadow: 0 4px 12px rgb(102 126 234 / 30%);
 }
 
 .btn-secondary {
@@ -51,7 +51,7 @@
 
 .btn-secondary:hover {
   background: var(--color-secondary-hover);
-  box-shadow: 0 4px 12px rgb(108 117 125 / 0.3);
+  box-shadow: 0 4px 12px rgb(108 117 125 / 30%);
 }
 
 .btn-edit {
@@ -61,7 +61,7 @@
 
 .btn-edit:hover {
   background: var(--color-info-hover);
-  box-shadow: 0 2px 8px rgb(23 162 184 / 0.3);
+  box-shadow: 0 2px 8px rgb(23 162 184 / 30%);
 }
 
 .btn-delete,
@@ -73,7 +73,7 @@
 .btn-delete:hover,
 .btn-danger:hover {
   background: var(--color-danger-hover);
-  box-shadow: 0 2px 8px rgb(220 53 69 / 0.3);
+  box-shadow: 0 2px 8px rgb(220 53 69 / 30%);
 }
 
 .btn-warning {
@@ -83,7 +83,7 @@
 
 .btn-warning:hover {
   background: #e0a800;
-  box-shadow: 0 2px 8px rgb(255 193 7 / 0.3);
+  box-shadow: 0 2px 8px rgb(255 193 7 / 30%);
 }
 
 .btn-sm {
@@ -177,7 +177,7 @@
 .icon-btn.btn-edit:hover,
 .icon-btn.btn-secondary:hover,
 .icon-btn.btn-info:hover {
-  background: rgb(23 162 184 / 0.12);
+  background: rgb(23 162 184 / 12%);
   color: var(--color-info-hover);
 }
 
@@ -188,7 +188,7 @@
 
 .icon-btn.btn-delete:hover,
 .icon-btn.btn-danger:hover {
-  background: rgb(220 53 69 / 0.1);
+  background: rgb(220 53 69 / 10%);
   color: var(--color-danger-hover);
 }
 
@@ -208,7 +208,7 @@
 
 .icon-btn.btn-success:hover,
 .icon-btn.btn-add-child:hover {
-  background: rgb(40 167 69 / 0.12);
+  background: rgb(40 167 69 / 12%);
 }
 
 .icon-btn.btn-warning {
@@ -216,7 +216,7 @@
 }
 
 .icon-btn.btn-warning:hover {
-  background: rgb(255 193 7 / 0.15);
+  background: rgb(255 193 7 / 15%);
   color: #d39e00;
 }
 

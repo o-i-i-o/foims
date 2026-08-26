@@ -6,6 +6,9 @@ const loadedModals = new Set();
 const loadingModals = new Map();
 const htmlCache = new Map();
 
+// 层叠模态框计数：设备模态框上再开端口详情等场景，仅当全部关闭时恢复页面滚动
+let openModalCount = 0;
+
 // 模态框清单：按功能模块分组存放于 modals/ 对应子目录
 const MODAL_REGISTRY = {
   // 公共
@@ -32,7 +35,6 @@ const MODAL_REGISTRY = {
   // 设备模块
   "device-modal": "/static/modals/device/device-modal.html",
   "device-template-modal": "/static/modals/device/device-template-modal.html",
-  "device-ports-group-modal": "/static/modals/device/device-ports-group-modal.html",
   "device-port-detail-modal": "/static/modals/device/device-port-detail-modal.html",
   "unified-device-ports-modal": "/static/modals/device/unified-device-ports-modal.html",
   "port-conflict-modal": "/static/modals/device/port-conflict-modal.html",
@@ -43,7 +45,8 @@ const MODAL_REGISTRY = {
   "cable-label-print-modal": "/static/modals/cable/cable-label-print-modal.html",
   // 可视化
   "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
-  "topology-connection-detail-modal": "/static/modals/visualization/topology-connection-detail-modal.html",
+  "topology-connection-detail-modal":
+    "/static/modals/visualization/topology-connection-detail-modal.html",
   "topology-container-modal": "/static/modals/visualization/topology-container-modal.html",
   "topology-detail-modal": "/static/modals/visualization/topology-detail-modal.html",
   // 日志
@@ -152,9 +155,20 @@ export async function openModal(id, title = "") {
     modal = await loadModal(id);
   }
 
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
+
+  // 激活状态判定放在（可能的）await 之后：并发首开时两个调用方共享
+  // loadModal 的同一 Promise，先恢复者完成激活，后恢复者据此跳过计数，
+  // 否则 openModalCount 虚高、closeModal 归不了零，body.overflow 永久锁死
+  const alreadyActive = modal.classList.contains("active");
 
   modal.classList.add("active");
+
+  if (!alreadyActive) {
+    openModalCount++;
+  }
 
   if (title) {
     const titleElement = modal.querySelector(".modal-title");
@@ -171,7 +185,11 @@ export async function openModal(id, title = "") {
 export function closeModal(id) {
   const modal = document.getElementById(id);
 
-  if (!modal) return;
+  if (!modal) {
+    return;
+  }
+
+  const wasActive = modal.classList.contains("active");
 
   modal.classList.remove("active");
 
@@ -189,8 +207,44 @@ export function closeModal(id) {
     container.innerHTML = "";
   });
 
-  document.body.style.overflow = "";
+  if (wasActive) {
+    openModalCount = Math.max(0, openModalCount - 1);
+  }
+  if (openModalCount === 0) {
+    document.body.style.overflow = "";
+  }
 
   modal.remove();
   loadedModals.delete(id);
+}
+
+/**
+ * idle 时分批预热模态框 HTML 到内存缓存（只 fetch 不注入 DOM）。
+ * 单个模态框平均不足 5KB，预热后首次打开任意弹框零网络等待；
+ * 每批之间让出主线程，不与首屏资源争抢带宽。
+ */
+export function prefetchModalsOnIdle(delay = 2500) {
+  const ids = Object.keys(MODAL_REGISTRY);
+  const BATCH_SIZE = 6;
+  let index = 0;
+
+  const runBatch = () => {
+    ids.slice(index, index + BATCH_SIZE).forEach((id) => {
+      fetchModalHtml(id);
+    });
+    index += BATCH_SIZE;
+    if (index < ids.length) {
+      scheduleNext(runBatch, 500);
+    }
+  };
+
+  const scheduleNext = (task, timeout) => {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(task, { timeout: Math.max(timeout, 5000) });
+    } else {
+      setTimeout(task, timeout);
+    }
+  };
+
+  scheduleNext(runBatch, delay);
 }

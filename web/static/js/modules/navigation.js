@@ -31,7 +31,6 @@ const SIDEBAR_COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
  */
 export function initNavigation() {
   const navLinks = document.querySelectorAll(".nav-link");
-  const contentSections = document.querySelectorAll(".content-section");
 
   applyRoleVisibility();
   bindNavClickHandlers(navLinks);
@@ -49,7 +48,9 @@ export function initNavigation() {
 export function applyRoleVisibility() {
   const user = SessionManager.getUser();
   const role = user?.role || "user";
-  if (!["auditor", "secadmin"].includes(role)) return;
+  if (!["auditor", "secadmin"].includes(role)) {
+    return;
+  }
 
   const hiddenSections =
     role === "auditor"
@@ -241,10 +242,12 @@ function loadInitialPage() {
  * @param {string} targetId - 目标页面 ID
  */
 async function loadPageContent(targetId) {
-  await loadPageStyles(targetId);
+  // 页面专属 CSS 与模块 JS 互不依赖，并行加载省一段串行等待
+  const stylesReady = loadPageStyles(targetId);
   updateNavActiveState(targetId);
   updateContentVisibility(targetId);
-  await executePageLoader(targetId);
+  const loaderReady = executePageLoader(targetId);
+  await Promise.all([stylesReady, loaderReady]);
 }
 
 /**

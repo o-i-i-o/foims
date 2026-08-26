@@ -64,7 +64,8 @@ class CacheManager {
         );
       }
     } catch (e) {
-      // Ignore localStorage errors
+      // localStorage 不可用/数据损坏时放弃缓存，保留内存态继续工作
+      console.error(`读取 localStorage 缓存失败（${this.localStorageKey}）:`, e);
     }
   }
 
@@ -85,6 +86,15 @@ class CacheManager {
         console.warn("localStorage配额超限，已清理缓存");
       }
     }
+  }
+
+  /** 落盘防抖：dashboard 等一次加载会 set 多个键，合并为一次序列化 */
+  scheduleSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.saveToStorage();
+    }, 200);
   }
 
   get(key) {
@@ -110,17 +120,20 @@ class CacheManager {
     });
 
     if (persist) {
-      this.saveToStorage();
+      this.scheduleSave();
     }
   }
 
   delete(key) {
     this.caches.delete(key);
-    this.saveToStorage();
+    this.scheduleSave();
   }
 
   clear() {
     this.caches.clear();
+    // 取消挂起的防抖落盘，避免 removeItem 后又被空快照写回
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
     localStorage.removeItem(this.localStorageKey);
   }
 
@@ -141,6 +154,31 @@ class CacheManager {
       clearInterval(this.cleanupIntervalId);
     }
     this.cleanupIntervalId = setInterval(() => this.cleanup(), 60 * 1000);
+
+    this.bindVisibilityPause();
+  }
+
+  /** 页面不可见时暂停清理与落盘，避免后台标签页周期性唤醒主线程（只注册一次） */
+  bindVisibilityPause() {
+    if (this.visibilityBound) {
+      return;
+    }
+    this.visibilityBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        this.stopCleanupInterval();
+      } else if (!this.cleanupIntervalId) {
+        this.startCleanupInterval();
+      }
+    });
+    // 跳转登录页/刷新前冲刷挂起的防抖写，避免丢失最后一次缓存
+    window.addEventListener("pagehide", () => {
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        this.saveToStorage();
+      }
+    });
   }
 
   stopCleanupInterval() {
@@ -166,92 +204,16 @@ class CacheManager {
 
 export const cache = new CacheManager();
 
-class ErrorHandler {
-  constructor() {
-    this.handlers = new Map();
-    this.defaultHandler = this.logError;
-  }
-
-  register(errorType, handler) {
-    this.handlers.set(errorType, handler);
-  }
-
-  handle(error, context = t("common.operation_failed"), options = {}) {
-    const errorInfo = this.parseError(error);
-    const handler = this.handlers.get(errorInfo.type) || this.defaultHandler;
-
-    handler(errorInfo, context, options);
-  }
-
-  parseError(error) {
-    if (typeof error === "string") {
-      return { type: "unknown", message: error, original: error };
-    }
-
-    if (error instanceof Error) {
-      return {
-        type: this.getErrorType(error),
-        message: error.message,
-        stack: error.stack,
-        original: error
-      };
-    }
-
-    if (typeof error === "object" && error !== null) {
-      return {
-        type: error.errorType || error.type || "api",
-        message: error.message || t("common.unknown_error"),
-        details: error.errorDetails || error.details,
-        original: error
-      };
-    }
-
-    return { type: "unknown", message: String(error), original: error };
-  }
-
-  getErrorType(error) {
-    if (error.name === "NetworkError" || error.message.includes("network")) {
-      return "network";
-    }
-    if (error.name === "TimeoutError" || error.message.includes("timeout")) {
-      return "timeout";
-    }
-    if (error.name === "AbortError") {
-      return "cancelled";
-    }
-    if (error.message.includes("unauthorized") || error.message.includes("401")) {
-      return "auth";
-    }
-    return "unknown";
-  }
-
-  logError(errorInfo, context, options) {
-    if (options.showToast !== false) {
-      import("./ui.js").then(({ showToast }) => {
-        showToast(`${context}: ${errorInfo.message}`, "error");
-      });
-    }
-  }
-
-  wrapAsync(fn, context) {
-    return async (...args) => {
-      try {
-        return await fn(...args);
-      } catch (error) {
-        this.handle(error, context);
-        return null;
-      }
-    };
-  }
-}
-
-export const errorHandler = new ErrorHandler();
-
 export async function safeAsync(fn, context = t("common.operation_failed"), options = {}) {
   try {
     return await fn();
   } catch (error) {
-    errorHandler.handle(error, context, options);
+    console.error(context, error);
+    if (options.showToast !== false) {
+      // 动态导入避免 helpers ↔ ui 静态循环依赖
+      const { showToast } = await import("./ui.js");
+      showToast(`${context}: ${error?.message ?? error}`, "error");
+    }
     return options.defaultValue ?? null;
   }
 }
@@ -274,14 +236,6 @@ class ElementCache {
     return el;
   }
 
-  getMultiple(...ids) {
-    const result = {};
-    for (const id of ids) {
-      result[id.replace(/-/g, "_")] = this.get(id);
-    }
-    return result;
-  }
-
   getValue(id) {
     const el = this.get(id);
     return el ? el.value : "";
@@ -289,7 +243,9 @@ class ElementCache {
 
   setValue(id, value) {
     const el = this.get(id);
-    if (el) el.value = value;
+    if (el) {
+      el.value = value;
+    }
   }
 
   getChecked(id) {
@@ -299,7 +255,9 @@ class ElementCache {
 
   setChecked(id, checked) {
     const el = this.get(id);
-    if (el) el.checked = checked;
+    if (el) {
+      el.checked = checked;
+    }
   }
 
   clear(id) {
@@ -327,7 +285,9 @@ const HTML_ESCAPE_MAP = {
 };
 
 export function escapeHtml(text) {
-  if (!text) return "";
+  if (!text) {
+    return "";
+  }
   return String(text).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
 }
 
@@ -345,11 +305,14 @@ const SUBTAB_STORAGE_PREFIX = "ipma_subtab_";
  * @param {string} tabId - 子标签 ID（如 "devices"）
  */
 export function setActiveSubtab(pageId, tabId) {
-  if (!pageId || !tabId) return;
+  if (!pageId || !tabId) {
+    return;
+  }
   try {
     localStorage.setItem(SUBTAB_STORAGE_PREFIX + pageId, tabId);
   } catch (e) {
-    // 忽略 localStorage 不可用的情况
+    // localStorage 不可用时记录并跳过，不影响页面功能
+    console.error(`保存子标签偏好失败（${pageId}）:`, e);
   }
 }
 
@@ -359,10 +322,13 @@ export function setActiveSubtab(pageId, tabId) {
  * @returns {string|null} 子标签 ID，未记录或不可用时返回 null
  */
 export function getActiveSubtab(pageId) {
-  if (!pageId) return null;
+  if (!pageId) {
+    return null;
+  }
   try {
     return localStorage.getItem(SUBTAB_STORAGE_PREFIX + pageId);
   } catch (e) {
+    console.error(`读取子标签偏好失败（${pageId}）:`, e);
     return null;
   }
 }
