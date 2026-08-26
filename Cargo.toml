@@ -144,9 +144,6 @@ workspace = true
 tokio = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"
-audit = "0.8.0"
-cargo-llvm-cov = "0.9.0"
-cargo-fuzz = "0.13.2"
 
 [features]
 default = []
