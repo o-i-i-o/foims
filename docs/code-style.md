@@ -217,8 +217,12 @@ lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 �
   `npm run depcheck` 运行；
 - **lighthouse-ci**（`web/lighthouserc.json`）：对登录页与初始化向导做
   性能/可访问性/最佳实践/SEO 审计，`npm run lighthouse` 运行；
-  需本机可用 Chromium/Chrome（CI 可用 `browser-actions/setup-chrome`），
-  断言暂为 warn 级基线，结果不外传。
+  需本机可用 Chromium/Chrome（经 `CHROME_PATH` 指定，chrome-headless-shell
+  须连同 `icudtl.dat` 等伴随文件整目录使用）。2026-08 基线：两页
+  performance 100 / accessibility 100 / seo 100 / best-practices 96
+  （仅 errors-in-console：静态服务器把 /api/* 回 404 HTML 所致的环境产物，
+  生产 nginx 有后端代理，故该断言关闭）。类别断言 warn 级 minScore 0.9，
+  结果不外传。
 - **抑制约定**：个别经评估的误报以 `// eslint-disable-next-line <rule> -- 中文理由`
   行内豁免（与 stylelint 同款约定），禁止无理由豁免与文件级豁免。
 

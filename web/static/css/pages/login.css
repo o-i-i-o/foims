@@ -194,7 +194,7 @@
 
 .form-header p {
   font-size: 14px;
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 /* ============ 登录模式 Tabs（用户名密码 / 邮箱验证码） ============ */
@@ -260,7 +260,7 @@
 
 .view-desc {
   font-size: 14px;
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 /* 登录区段切换（用户名密码区 / 邮箱验证码区） */

@@ -3,6 +3,8 @@ node_modules
 .trae/
 /package*
 web/.trae/
+web/.lighthouseci/
 web-ts/
 config.toml
 .zcode/
+chrome-headless-shell-linux64/
