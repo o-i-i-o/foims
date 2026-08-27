@@ -22,7 +22,15 @@ import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
-import { loadDataCenterRoomsForSelect, loadRoomNetworksForCabinet } from "../utils/resources.js";
+import { loadDataCenterRoomsForSelect } from "../utils/resources.js";
+
+/** 清空动态列表的行与空状态占位，保留容器内的静态列头（机位列标题） */
+function resetDynamicListContainer(manager) {
+  const { itemSelector, emptyClassName } = manager.config;
+  manager.container
+    .querySelectorAll(`${itemSelector}, .${emptyClassName}`)
+    .forEach((el) => el.remove());
+}
 
 // 两个动态列表管理器（机位/配线架）共用的 init：确保容器、绑定底部
 // "添加一行"按钮（无论容器是否找到），容器缺失时返回 false 交由调用方处理
@@ -32,7 +40,7 @@ function initDynamicListContainer(manager) {
   if (!manager.container) {
     return false;
   }
-  manager.container.innerHTML = "";
+  resetDynamicListContainer(manager);
   manager.updateEmptyState();
   return true;
 }
@@ -102,7 +110,7 @@ class CabinetPositionsManager extends DynamicRowManager {
     if (!this.container) {
       return;
     }
-    this.container.innerHTML = "";
+    resetDynamicListContainer(this);
 
     if (positions?.length) {
       positions.forEach((pos) => this.addItem(pos));
@@ -185,7 +193,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
     if (!this.container) {
       return;
     }
-    this.container.innerHTML = "";
+    resetDynamicListContainer(this);
     if (patchPanels?.length) {
       patchPanels.forEach((pp) => this.addItem(pp));
     }
@@ -221,9 +229,6 @@ export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 const tableState = createSortState("name", "asc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
-
-// 房间选择事件监听器引用
-let roomSelectHandler = null;
 
 // 加载机柜数据
 export async function loadCabinetsData(page = currentPage, sortBy = null, sortOrder = null) {
@@ -378,26 +383,8 @@ export async function openCabinetModal(cabinet = null) {
   const form = elementCache.get("cabinet-form");
   const capacityInput = elementCache.get("cabinet-capacity");
 
-  // 加载机房选项
+  // 加载机房选项（机柜的网络配置由房间自动继承，不在表单中展示）
   await loadDataCenterRoomsForSelect();
-
-  // 获取房间选择框
-  const roomSelect = elementCache.get("cabinet-room");
-
-  // 移除旧的事件监听器
-  if (roomSelectHandler) {
-    roomSelect.removeEventListener("change", roomSelectHandler);
-  }
-
-  // 创建新的事件监听器
-  roomSelectHandler = async (event) => {
-    const roomId = event.target.value;
-    await loadRoomNetworksForCabinet(roomId);
-  };
-
-  if (roomSelect) {
-    roomSelect.addEventListener("change", roomSelectHandler);
-  }
 
   if (cabinet) {
     // 编辑模式
@@ -406,7 +393,6 @@ export async function openCabinetModal(cabinet = null) {
     elementCache.setValue("cabinet-name", cabinet.name);
     if (cabinet.room_id) {
       elementCache.setValue("cabinet-room", cabinet.room_id);
-      await loadRoomNetworksForCabinet(cabinet.room_id);
     }
     if (capacityInput) {
       capacityInput.value = cabinet.capacity || 42;
@@ -424,10 +410,6 @@ export async function openCabinetModal(cabinet = null) {
       form.reset();
     }
     elementCache.setValue("cabinet-id", "");
-    const inheritedNetworksContainer = elementCache.get("cabinet-inherited-networks");
-    if (inheritedNetworksContainer) {
-      inheritedNetworksContainer.innerHTML = `<p class="text-muted">${t("cabinet.inherited_networks_hint")}</p>`;
-    }
     // 初始化机位管理器为默认空状态
     cabinetPositionsManager.init();
     // 初始化配线架管理器为默认空状态

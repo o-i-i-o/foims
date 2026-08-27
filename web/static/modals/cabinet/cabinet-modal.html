@@ -24,22 +24,22 @@
             <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label data-i18n="cabinet.inherited_networks">Inherited Networks</label>
-            <div id="cabinet-inherited-networks">
-              <p class="text-muted" data-i18n="cabinet.inherited_networks_hint">Select a room to inherit its network configuration</p>
-            </div>
-          </div>
-        </div>
-        <!-- 机位动态管理区域 -->
+        <!-- 机位动态管理区域（首行列标题，列宽与输入行对齐） -->
         <div class="form-row">
           <div class="form-group">
             <div class="list-header">
               <label id="cabinet-positions-label" data-i18n="cabinet.positions">Positions</label>
               <button type="button" id="add-position-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Position" data-i18n-tooltip="cabinet.add_position" aria-label="Add Position" data-i18n-aria-label="cabinet.add_position"></button>
             </div>
-            <div id="cabinet-positions-container"></div>
+            <div id="cabinet-positions-container">
+              <div class="cabinet-columns-header" aria-hidden="true">
+                <label data-i18n="cabinet_position.name">Name</label>
+                <label data-i18n="cabinet_position.start_u">Start U</label>
+                <label data-i18n="cabinet_position.end_u">End U</label>
+                <label data-i18n="cabinet_position.description">Description</label>
+                <span class="cabinet-item-actions"></span>
+              </div>
+            </div>
           </div>
         </div>
         <!-- 配线架动态管理区域（参照房间信息点逻辑） -->

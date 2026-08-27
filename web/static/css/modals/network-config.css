@@ -196,6 +196,34 @@
   width: 100%;
 }
 
+/* 机位容器首行列标题：与输入行相同的 flex 列结构（前四列 flex:1 + 末列按钮组），
+   覆盖 modal 中 label 的定宽居中规则，保证标题与下方输入框逐列对齐 */
+#cabinet-positions-container .cabinet-columns-header {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  padding-bottom: var(--space-xs);
+  margin-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+#cabinet-positions-container .cabinet-columns-header > label {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding-top: 0;
+  margin: 0;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+#cabinet-positions-container .cabinet-columns-header > .cabinet-item-actions {
+  flex: none;
+  width: auto;
+}
+
 /* 单个列表项：仅作为容器内的一行，无独立卡片样式 */
 #room-net-outlets-container .room-net-outlet-item,
 #cabinet-positions-container .cabinet-position-item,
