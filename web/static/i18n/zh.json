@@ -589,6 +589,7 @@
     "position_hint": "坐标用于工位可视化画布定位（与网格标尺对应），留空表示保持当前位置。"
   },
   "cabinet": {
+    "room_required": "房间为必选项",
     "name": "机柜名称",
     "room": "房间",
     "capacity": "容量(U)",

@@ -589,6 +589,7 @@
     "position_hint": "Coordinates locate the workstation on the visualization canvas (matching the grid ruler); leave blank to keep the current position."
   },
   "cabinet": {
+    "room_required": "Room is required",
     "name": "Cabinet Name",
     "room": "Room",
     "capacity": "Capacity (U)",

@@ -432,7 +432,7 @@ export async function submitCabinetForm() {
   }
 
   if (!roomId) {
-    showToast(t("cabinet.select_room_first"), "warning");
+    showToast(t("cabinet.room_required"), "warning");
     return;
   }
 
