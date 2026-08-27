@@ -295,6 +295,40 @@
 
 /* ==================== 关于卡片：开源组件清单模态框 ==================== */
 
+/* 关于卡片内的“开源组件”入口：美化超链接（主题色 + 下划线动效 + 外链角标） */
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-sm);
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.about-link::after {
+  content: "↗";
+  font-size: 0.85em;
+  line-height: 1;
+  transition: transform var(--transition-fast);
+}
+
+.about-link:hover,
+.about-link:focus-visible {
+  color: var(--color-primary-hover);
+  border-bottom-color: currentColor;
+  outline: none;
+}
+
+.about-link:hover::after {
+  transform: translate(1px, -1px);
+}
+
 .open-source-intro {
   margin: 0 0 var(--space-md);
   color: var(--color-text-secondary);

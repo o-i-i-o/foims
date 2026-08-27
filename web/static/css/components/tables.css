@@ -278,6 +278,22 @@
   background-color: var(--color-primary);
 }
 
+/* 表头文字与行内操作按钮同行（如 IP 表 MAC 地址列的“拉取”按钮） */
+.data-table th.th-inline-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+
+.data-table th.th-inline-action .btn-sm {
+  min-width: 0;
+  height: 26px;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+}
+
 /* 表头搜索：放大镜图标 + 点击图标弹出的搜索输入框 */
 .data-table th.th-searchable {
   position: relative;

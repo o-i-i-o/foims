@@ -25,7 +25,7 @@ ipma（bin/lib）            业务 handler 与模型
 ├── crates/ipma-common      ApiResponse / ok_json / PG 错误归类（唯一副本）
 ├── crates/ipma-init        建库建表/校验/备份恢复
 ├── crates/ipma-visualization
-├── crates/ipma-data-manager CSV 导入导出
+├── crates/ipma-data-management CSV 导入导出
 └── crates/ipma-scheduler   定时任务
 ```
 

@@ -187,7 +187,7 @@ class NetworkConfigManager {
     return true;
   }
 
-  /** 绑定标题右侧的「添加」按钮，并同步按钮文案 */
+  /** 绑定标题右侧的「添加」按钮，并同步提示文案（图标按钮不覆写内容） */
   bindExternalAddButton() {
     const addBtn = document.getElementById(this.options.externalAddButtonId);
     if (!addBtn) {
@@ -198,7 +198,8 @@ class NetworkConfigManager {
     }
     this.addHandler = () => this.addItem();
     addBtn.addEventListener("click", this.addHandler);
-    addBtn.textContent = t("network.add_network_config");
+    addBtn.dataset.tooltip = t("network.add_network_config");
+    addBtn.setAttribute("aria-label", t("network.add_network_config"));
   }
 
   createItemHTML() {
@@ -218,9 +219,7 @@ class NetworkConfigManager {
             </select>
           </div>
           <div class="form-group network-config-actions">
-            <button type="button" class="btn btn-danger btn-sm ${removeBtnClass}">
-              ${t("common.delete")}
-            </button>
+            ${iconButton({ icon: "trash", label: t("common.delete"), cls: `btn-danger ${removeBtnClass}` })}
           </div>
         </div>
       </div>
@@ -433,7 +432,7 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 /** 当前房间所属组织下的员工（供工位管理人下拉选择；无组织时为空） */
 let roomOrgEmployees = [];
 
-/** 按组织加载员工列表（组织为空时清空选项并回退文本输入） */
+/** 按组织加载员工列表（组织为空时清空选项） */
 async function loadRoomOrgEmployees(orgId) {
   if (!orgId) {
     roomOrgEmployees = [];
@@ -448,13 +447,9 @@ async function loadRoomOrgEmployees(orgId) {
   }
 }
 
-/** 渲染工位管理人控件：有员工数据时为下拉（选员工），否则回退文本输入 */
+/** 渲染工位管理人下拉控件：组织人员是该字段唯一数据来源 */
 function renderManagerControl(data = {}) {
-  if (!roomOrgEmployees.length) {
-    return `<input type="text" class="child-manager form-control" value="${escapeHtml(data.manager || "")}" placeholder="${t("workstation.manager")}" autocomplete="off" />`;
-  }
   const managerId = data.manager_employee_id || "";
-  const legacyText = !managerId && data.manager ? data.manager : "";
   const options = [
     `<option value="">${t("workstation.manager_unassigned")}</option>`,
     ...roomOrgEmployees.map(
@@ -462,56 +457,29 @@ function renderManagerControl(data = {}) {
         `<option value="${emp.id}" ${managerId === emp.id ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
     )
   ];
-  if (legacyText) {
-    options.push(
-      `<option value="text" data-text="${escapeHtml(legacyText)}" selected>${escapeHtml(legacyText)}（${t("workstation.manager_legacy")}）</option>`
-    );
-  }
   return `<select class="child-manager form-control" autocomplete="off">${options.join("")}</select>`;
 }
 
-/** 收集单个管理人控件的值：下拉取员工 id，文本/遗留选项取文本 */
+/** 收集单个管理人控件的值：选中员工时仅提交员工 id */
 function collectManagerValue(item) {
   const control = item.querySelector(".child-manager");
-  if (!control) {
+  if (!control || control.tagName !== "SELECT") {
     return { manager: null, manager_employee_id: null };
   }
-  if (control.tagName === "SELECT") {
-    const value = control.value;
-    if (value && value !== "text") {
-      return { manager: null, manager_employee_id: value };
-    }
-    if (value === "text") {
-      const text = control.selectedOptions[0]?.dataset.text || "";
-      return { manager: text || null, manager_employee_id: null };
-    }
-    return { manager: null, manager_employee_id: null };
-  }
-  return { manager: (control.value || "").trim() || null, manager_employee_id: null };
+  const value = control.value;
+  return value ? { manager: null, manager_employee_id: value } : { manager: null, manager_employee_id: null };
 }
 
-/** 组织切换后按新员工列表重建管理人控件：
- * 文本输入在组织有员工时升级为下拉（当前文本保留为遗留选项），
- * 下拉在组织无员工时回退文本输入，仍有效的员工选择保持不变 */
+/** 组织切换后按新员工列表重建管理人下拉，仍有效的员工选择保持不变 */
 function refreshManagerSelects() {
   document.querySelectorAll("#room-children-container .child-manager").forEach((control) => {
     const formGroup = control.parentElement;
     if (!formGroup) {
       return;
     }
-
-    const isSelect = control.tagName === "SELECT";
-    const selectedValue = isSelect ? control.value : "";
-    const managerId = selectedValue && selectedValue !== "text" ? selectedValue : "";
-    const legacyText = isSelect
-      ? control.selectedOptions[0]?.dataset.text || ""
-      : (control.value || "").trim();
-
+    const selectedId = control.tagName === "SELECT" ? control.value : "";
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = renderManagerControl({
-      manager_employee_id: managerId,
-      manager: legacyText
-    });
+    wrapper.innerHTML = renderManagerControl({ manager_employee_id: selectedId });
     const next = wrapper.firstElementChild;
     if (next) {
       formGroup.replaceChildren(next);
@@ -551,7 +519,7 @@ class RoomChildListManager extends DynamicRowManager {
           ${renderManagerControl(data)}
         </div>
         <div class="form-group room-children-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-child-btn" })}
         </div>
       </div>
     `;
@@ -576,7 +544,7 @@ class RoomChildListManager extends DynamicRowManager {
           <input type="number" class="child-capacity form-control" value="${capacity}" min="1" max="48" placeholder="${t("cabinet.capacity")}" />
         </div>
         <div class="form-group room-children-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-child-btn" })}
         </div>
       </div>
     `;
@@ -799,7 +767,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
           <input type="text" class="net-outlet-name form-control" value="${escapeHtml(name)}" placeholder="${t("net_outlet.name")}" autocomplete="off" />
         </div>
         <div class="form-group room-net-outlets-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-net-outlet-btn" })}
         </div>
       </div>
     `;

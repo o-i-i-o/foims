@@ -110,6 +110,23 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["parent_id", "name"],
     },
+    // 员工挂在组织节点下（org_id 非空，业务键 = 组织 + 姓名）
+    TableSpec {
+        table: "employees",
+        columns: &[
+            Col::Ref {
+                csv: "org_path",
+                db: "org_id",
+                target: Target::OrgPath,
+            },
+            Col::Plain("name"),
+            Col::Plain("gender"),
+            Col::Plain("phone"),
+            Col::Plain("email"),
+            Col::Plain("hire_date"),
+        ],
+        key: &["org_id", "name"],
+    },
     // ---------- 房间模块 ----------
     TableSpec {
         table: "rooms",

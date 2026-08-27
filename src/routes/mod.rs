@@ -90,7 +90,7 @@ async fn data_export_csv(
     State(state): State<Arc<AppState>>,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::export_csv(state.as_ref().clone(), type_param)
+    ipma_data_management::export_csv(state.as_ref().clone(), type_param)
         .await
         .map_err(AppError::from)
 }
@@ -100,7 +100,7 @@ async fn data_import_csv(
     State(state): State<Arc<AppState>>,
     payload: Multipart,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::import_csv(state.as_ref().clone(), payload)
+    ipma_data_management::import_csv(state.as_ref().clone(), payload)
         .await
         .map_err(AppError::from)
 }
@@ -108,7 +108,7 @@ async fn data_import_csv(
 async fn data_download_template(
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::download_template(type_param)
+    ipma_data_management::download_template(type_param)
         .await
         .map_err(AppError::from)
 }
@@ -117,7 +117,7 @@ async fn data_export_database(
     _admin: crate::auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::export_database(state.as_ref().clone())
+    ipma_data_management::export_database(state.as_ref().clone())
         .await
         .map_err(AppError::from)
 }
@@ -125,9 +125,9 @@ async fn data_export_database(
 async fn data_clear_logs(
     _admin: crate::auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
-    AppJson(req): AppJson<ipma_data_manager::ClearLogsRequest>,
+    AppJson(req): AppJson<ipma_data_management::ClearLogsRequest>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::clear_logs(state.as_ref().clone(), req)
+    ipma_data_management::clear_logs(state.as_ref().clone(), req)
         .await
         .map_err(AppError::from)
 }
@@ -136,7 +136,7 @@ async fn data_get_logs_stats(
     _admin: crate::auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    ipma_data_manager::get_logs_stats(state.as_ref().clone())
+    ipma_data_management::get_logs_stats(state.as_ref().clone())
         .await
         .map_err(AppError::from)
 }

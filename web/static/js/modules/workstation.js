@@ -1,15 +1,53 @@
 // 导入必要的模块
 import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
-import { showToast, handleError } from "../utils/ui.js";
+import { showToast, handleError, escapeHtml } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modalLoader.js";
 
 import { t } from "../utils/i18n.js";
 
-import { loadRoomsForSelect } from "../utils/resources.js";
+import { loadRoomsForSelect, fetchRoomsForOptions } from "../utils/resources.js";
 
 import { elementCache } from "../utils/helpers.js";
+
+// 房间 → 所属组织映射（弹窗打开时随房间选项一并构建，供管理人下拉取员工）
+let roomOrgMap = new Map();
+
+/** 按组织加载员工到管理人下拉：组织人员是管理人唯一数据来源 */
+async function loadManagerOptions(orgId, selectedEmployeeId = "") {
+  const select = document.getElementById("workstation-manager");
+  if (!select) {
+    return;
+  }
+  let employees = [];
+  if (orgId) {
+    try {
+      const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
+      employees = result.success && Array.isArray(result.data) ? result.data : [];
+    } catch (error) {
+      console.error("加载组织员工失败:", error);
+    }
+  }
+  select.innerHTML = [
+    `<option value="">${t("workstation.manager_unassigned")}</option>`,
+    ...employees.map(
+      (emp) =>
+        `<option value="${emp.id}" ${emp.id === selectedEmployeeId ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
+    )
+  ].join("");
+}
+
+/** 房间切换 → 管理人选项跟随新房间的所属组织刷新（弹窗每次打开重建 DOM，需重绑） */
+function bindRoomManagerSync() {
+  const roomSelect = document.getElementById("workstation-room");
+  if (!roomSelect) {
+    return;
+  }
+  roomSelect.addEventListener("change", async (e) => {
+    await loadManagerOptions(roomOrgMap.get(e.target.value) || "");
+  });
+}
 
 // 编辑工位（可视化回调；position 为画布当前坐标，用于回填坐标输入框）
 export async function editWorkstation(id, position = null) {
@@ -32,8 +70,11 @@ export async function openWorkstationModal(workstation = null, position = null) 
   const title = elementCache.get("workstation-modal-title");
   const form = elementCache.get("workstation-form");
 
-  // 加载房间选项（只加载办公室）
+  // 加载房间选项（只加载办公室），并同步构建房间→组织映射供管理人下拉使用
+  const rooms = await fetchRoomsForOptions(null, true);
+  roomOrgMap = new Map(rooms.map((room) => [room.id, room.org_id || ""]));
   await loadRoomsForSelect("workstation-room", { onlyOffice: true });
+  bindRoomManagerSync();
 
   if (workstation) {
     // 编辑模式
@@ -41,7 +82,7 @@ export async function openWorkstationModal(workstation = null, position = null) 
     elementCache.setValue("workstation-id", workstation.id);
     elementCache.setValue("workstation-name", workstation.name);
     elementCache.setValue("workstation-room", workstation.room_id);
-    elementCache.setValue("workstation-manager", workstation.manager || "");
+    await loadManagerOptions(roomOrgMap.get(workstation.room_id) || "", workstation.manager_employee_id || "");
     elementCache.setValue("workstation-description", workstation.description || "");
     // 画布传入的当前坐标回填（房间管理入口无画布上下文，留空表示不动位置）
     elementCache.setValue("workstation-x", position ? String(Math.round(position.x)) : "");
@@ -51,6 +92,7 @@ export async function openWorkstationModal(workstation = null, position = null) 
     title.textContent = t("workstation.add");
     form.reset();
     elementCache.setValue("workstation-id", "");
+    await loadManagerOptions("");
   }
 }
 
@@ -59,7 +101,7 @@ export async function submitWorkstationForm() {
   const parsedId = id && id !== "" ? id : null;
   const name = elementCache.getValue("workstation-name");
   const roomId = elementCache.getValue("workstation-room");
-  const manager = elementCache.getValue("workstation-manager");
+  const managerEmployeeId = elementCache.getValue("workstation-manager");
   const description = elementCache.getValue("workstation-description");
 
   if (!name?.trim()) {
@@ -75,7 +117,7 @@ export async function submitWorkstationForm() {
   const workstationData = {
     name: name.trim(),
     room_id: roomId,
-    manager: manager.trim() || null,
+    manager_employee_id: managerEmployeeId || null,
     description: description.trim() || null
   };
 

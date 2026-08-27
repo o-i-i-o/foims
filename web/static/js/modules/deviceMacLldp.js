@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "../utils/apiClient.js";
 
 import { escapeHtml, showToast } from "../utils/ui.js";
 import { t } from "../utils/i18n.js";
+import { iconButton } from "../utils/icons.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 
 // IPv4/IPv6 标签页互斥切换：激活当前按钮与其对应内容面板
@@ -65,7 +66,7 @@ async function viewArpTable(deviceId) {
         if (entries.length === 0) {
           loadingEl.innerHTML = `
             <p style="color: #666; margin-bottom: 10px;">${t("device.no_mac_data")}</p>
-            <button class="btn btn-primary" id="sync-mac-empty-btn">${t("device.sync_from_snmp")}</button>
+            ${iconButton({ icon: "refresh", label: t("device.sync_from_snmp"), cls: "btn-primary", attrs: 'id="sync-mac-empty-btn"' })}
           `;
           modal.querySelector("#sync-mac-empty-btn").addEventListener("click", () => syncMacData());
           return;
@@ -329,7 +330,7 @@ async function viewLldpNeighbors(deviceId) {
         if (neighbors.length === 0) {
           loadingEl.innerHTML = `
             <p style="color: #666; margin-bottom: 10px;">${t("device.no_lldp_data")}</p>
-            <button class="btn btn-primary" id="sync-lldp-empty-btn">${t("device.sync_from_snmp")}</button>
+            ${iconButton({ icon: "refresh", label: t("device.sync_from_snmp"), cls: "btn-primary", attrs: 'id="sync-lldp-empty-btn"' })}
           `;
           modal
             .querySelector("#sync-lldp-empty-btn")

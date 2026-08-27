@@ -44,7 +44,7 @@ export class DynamicRowManager {
     return this.config.emptyHintText || "";
   }
 
-  /** 绑定容器外的「添加」按钮（标题右侧），并同步按钮文案 */
+  /** 绑定容器外的「添加」按钮（标题右侧），并同步提示文案（图标按钮不覆写内容） */
   bindExternalAddButton() {
     if (!this.config.externalAddButtonId) {
       return;
@@ -60,7 +60,8 @@ export class DynamicRowManager {
     addBtn.addEventListener("click", this.addHandler);
     const label = this.addLabel();
     if (label) {
-      addBtn.textContent = label;
+      addBtn.dataset.tooltip = label;
+      addBtn.setAttribute("aria-label", label);
     }
   }
 
@@ -104,7 +105,9 @@ export class DynamicRowManager {
       const addBtn = item.querySelector(addBtnSelector);
       if (addBtn) {
         addBtn.style.display = index === items.length - 1 ? "" : "none";
-        addBtn.textContent = this.addLabel();
+        const label = this.addLabel();
+        addBtn.dataset.tooltip = label;
+        addBtn.setAttribute("aria-label", label);
       }
     });
   }

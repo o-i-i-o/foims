@@ -9,7 +9,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 # Workspace crates
 ipma-common = { path = "../ipma-common" }
-ipma-data-manager = { path = "../ipma-data-manager" }
+ipma-data-management = { path = "../ipma-data-management" }
 
 sqlx = { workspace = true }
 serde = { workspace = true }

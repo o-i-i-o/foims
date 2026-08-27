@@ -1,6 +1,6 @@
 # IPMA 安全与关键模块缺陷分析报告
 
-> 生成时间：2026-08-23 ｜ 分析范围：src/（auth、system、utils、main）、crates/ipma-init、crates/ipma-data-manager
+> 生成时间：2026-08-23 ｜ 分析范围：src/（auth、system、utils、main）、crates/ipma-init、crates/ipma-data-management
 > 方法：代码逐行审查 + 单元测试实证 + 运行环境 API 实测（UDS 直连）
 > 严重程度：高（可导致权限突破/数据破坏）、中（可被利用但需条件）、低（健壮性/合规问题）
 
@@ -21,7 +21,7 @@
 | I-3 | 中 | init 完成到重启之间存在"毁库窗口" | `handlers/init.rs:103-107`、`main.rs:228` | `init.enabled` 是启动时内存快照，关闭 init 仅改写配置文件；调用 restart 前持有验证码者仍可 DROP DATABASE 重建。**建议**：配置写入成功后同步翻转 AtomicBool 内存开关 |
 | I-4 | 中 | `init_system` TOCTOU 并发竞态 | `handlers/init.rs:42-101` | `SELECT COUNT(*) FROM users` 与 INSERT 之间无事务/锁，并发可创建多个管理员（role 仅长度校验）。**建议**：事务 + advisory lock |
 | I-5 | 中 | `/tmp` 固定路径写入（symlink 竞争） | `handlers/database_ops.rs:184-239`（导入 SQL）、`src/system/config.rs:271-309`（`/tmp/ipma_restart.sh`） | root 服务向可预测路径写文件后执行；本地低权用户预置符号链接可劫持为任意文件写入/执行。**建议**：随机临时名 + `create_new`，或移至 /var/lib/ipma |
-| I-6 | 低 | `.pgpass`/密钥/配置文件"先写后 chmod"窗口 | `ipma-init/src/utils.rs:33-53`、`ipma-data-manager/src/backup.rs:13-48`、`src/crypto.rs:47-56` | **建议**：`OpenOptions::new().mode(0o600)` 原子创建 |
+| I-6 | 低 | `.pgpass`/密钥/配置文件"先写后 chmod"窗口 | `ipma-init/src/utils.rs:33-53`、`ipma-data-management/src/backup.rs:13-48`、`src/crypto.rs:47-56` | **建议**：`OpenOptions::new().mode(0o600)` 原子创建 |
 | I-7 | 低 | init 状态接口回传 DB 错误原文 | `handlers/status.rs:25-34,101-146` | 错误串含连接 host/user，仅应入日志 |
 | I-8 | 低 | 拼 postgres URL 未编码密码 | `handlers/database_ops.rs:56-59`、`status.rs:122-125` | 密码含 `@ : /` 时连接失败（与 `operations.rs:75-81` 的编码实现不一致） |
 
@@ -63,7 +63,7 @@
 
 | # | 严重度 | 问题 | 位置 | 说明 |
 |---|---|---|---|---|
-| S-1 | 中 | CSV 导出公式注入 | `ipma-data-manager/src/export.rs:253-273,426-465` | 名称/描述等用户可控字段以 `= + - @` 开头导出后可触发 Excel DDE。**建议**：危险前缀加 `'` 转义 |
+| S-1 | 中 | CSV 导出公式注入 | `ipma-data-management/src/export.rs:253-273,426-465` | 名称/描述等用户可控字段以 `= + - @` 开头导出后可触发 Excel DDE。**建议**：危险前缀加 `'` 转义 |
 | S-2 | 中 | SNMP 任意目标探测（SSRF 面） | `resource/device/snmp.rs:511-647` | 任意登录用户提供任意 ip:port（仅禁回环/组播/链路本地，私网放行）+ A-2 叠加构成内网扫描原语。**已实测**回环防护生效（返回 `loopback_forbidden`）。**建议**：限 admin；修 IPv6 目标缺 `[]` 问题（`snmp.rs:264,336,447`） |
 | S-3 | 低 | `169.254.169.254` 元数据端点检查为死代码 | `snmp.rs:588-604` | 该地址先命中 `is_link_local()` 返回 `link_local_forbidden`，专用分支不可达（单元测试已记录） |
 | S-4 | 低 | SNMP "v1" 分支实际按 v2c 发包 | `snmp.rs:180` | `"v1" \| "v2c" => Auth::v2c(...)`，v1 选项形同虚设（单元测试已记录） |

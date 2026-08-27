@@ -438,13 +438,12 @@ export async function loadNotificationsData(
   }
 }
 
-// 标记通知为已读（刷新时保留当前过滤视图）
+// 标记通知为已读（刷新时维持当前列表）
 async function markNotificationAsRead(notificationId) {
   try {
     const result = await apiPut(`/api/notifications/${notificationId}/read`, {});
     if (result.success) {
-      const filter = document.getElementById("notifications-filter")?.value || "all";
-      loadNotificationsData(filter);
+      loadNotificationsData();
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -454,7 +453,7 @@ async function markNotificationAsRead(notificationId) {
   }
 }
 
-// 全部标记已读（后端语义即为 mark-all-read；刷新时保留当前过滤视图）
+// 全部标记已读（后端语义即为 mark-all-read）
 export async function markAllNotificationsRead() {
   const confirmed = await showConfirm(t("notifications.confirm_mark_all_read"));
   if (!confirmed) {
@@ -463,8 +462,7 @@ export async function markAllNotificationsRead() {
   try {
     const result = await apiPut("/api/notifications/mark-all-read", {});
     if (result.success) {
-      const filter = document.getElementById("notifications-filter")?.value || "all";
-      loadNotificationsData(filter);
+      loadNotificationsData();
       showToast(t("notifications.marked_all_read"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -517,8 +515,6 @@ initLogEvents();
 // 初始化三张表（操作日志/登录日志/通知）的表头排序事件
 function initLogSortEvents() {
   const getSearchValue = () => document.getElementById("logs-search")?.value || "";
-  const getNotificationFilter = () =>
-    document.getElementById("notifications-filter")?.value || "all";
 
   initSortEvents("operation-logs-table", logSortStates.operation, (page, sortBy, sortOrder) =>
     loadLogsData("operation", {
@@ -532,7 +528,7 @@ function initLogSortEvents() {
     loadLogsData("login", { page, sort_by: sortBy, sort_order: sortOrder })
   );
   initSortEvents("notifications-table", notificationTableState, (page, sortBy, sortOrder) =>
-    loadNotificationsData(getNotificationFilter(), page, sortBy, sortOrder)
+    loadNotificationsData("all", page, sortBy, sortOrder)
   );
 }
 

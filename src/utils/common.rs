@@ -566,18 +566,30 @@ pub async fn send_mac_change_notification(
             ("new_mac", new_mac),
         ],
     );
-    crate::log::notification::create_notification(
-        pool,
-        "server.notification.mac_change.title",
-        &content,
-        "mac_change",
-        None,
+    // 通知目标：所有启用状态的管理员（admin/secadmin）按人各发一条，
+    // 已读状态随用户独立；此前统一写 user_id = NULL 的行不匹配任何人的
+    // 查询条件（user_id = $1），通知列表对所有用户恒为空
+    let admin_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'secadmin')",
     )
+    .fetch_all(pool)
     .await?;
+
+    for admin_id in &admin_ids {
+        crate::log::notification::create_notification(
+            pool,
+            "server.notification.mac_change.title",
+            &content,
+            "mac_change",
+            Some(admin_id),
+        )
+        .await?;
+    }
     log_info!(
         "log.mac_change.notification_created",
         workstation = workstation_name,
-        ip = ip_address
+        ip = ip_address,
+        recipients = admin_ids.len()
     );
 
     match crate::system::smtp::send_mac_change_email(

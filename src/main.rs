@@ -446,7 +446,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     if let Some(ref db_pool) = pool {
-        let scheduler_db_config = ipma_data_manager::DatabaseConfig {
+        let scheduler_db_config = ipma_data_management::DatabaseConfig {
             host: db_pool.db_config.host.clone(),
             port: db_pool.db_config.port,
             database: db_pool.db_config.database.clone(),

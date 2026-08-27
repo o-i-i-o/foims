@@ -11,13 +11,13 @@
 | # | 位置 | 初审问题 | 整改方式 | 二次审计 |
 | --- | --- | --- | --- | --- |
 | 1 | `SVGDataManager.js` `fetchIps` | 对同一 API 响应尝试 5 种结构（数组/`items`/`data`/`ip_managers`/`ips`） | 仅保留 `items` 一种解析；失败路径统一 `showToast`；补 `page_size=1000`（原缺省会因默认分页 20 条截断 IP 映射） | ✅ 已复核 |
-| 2 | `crates/ipma-data-manager/src/logs.rs` `clear_logs` | 清理日志 `days` 缺省回退 `0`（=删除全部日志） | `None` 时返回 `server.logs.days_required` 校验错误；定时任务执行器维持缺省 30 天（非危险默认）；前端本就显式传值 | ✅ 已复核 |
+| 2 | `crates/ipma-data-management/src/logs.rs` `clear_logs` | 清理日志 `days` 缺省回退 `0`（=删除全部日志） | `None` 时返回 `server.logs.days_required` 校验错误；定时任务执行器维持缺省 30 天（非危险默认）；前端本就显式传值 | ✅ 已复核 |
 | 3 | `src/auth/ldap.rs`、`src/auth/sso.rs` | 服务账号密码/secret 解密失败静默回退空串，以空凭据继续绑定 | 解密失败记 `log_error`（`password_decrypt_failed`/`secret_decrypt_failed`）并返回 `None`（配置视为不可用），杜绝空密码绑定 | ✅ 已复核 |
 | 4 | `TopologyRenderer.js`、`TopologyVisualization.js` | 节点坐标 `x \|\| 100` 等 falsy 陷阱（合法坐标 0 被改写） | 全部改 `??`，仅 `null/undefined` 时兜底；`SVGRenderer.js` 工位/机柜坐标同步改 `??`，工位默认尺寸统一为与自动布局一致的 160×160 | ✅ 已复核 |
 | 5 | `SVGRenderer.js` / `SVGDataManager.js` 机柜容量 | 容量缺省一处 42、一处 45，口径不一 | 统一常量 `DEFAULT_CABINET_CAPACITY = 42`（与后端建表 DDL `capacity INTEGER NOT NULL DEFAULT 42` 一致），两文件共享导入 | ✅ 已复核 |
 | 6 | 可视化各 DataManager `catch → return []`（约 16 处） | 请求失败静默降级空数据，用户无从区分"无数据"与"加载失败" | 两文件新增 `_notifyLoadFailure`（`console.error` + `showToast(viz.data_load_failed)`），失败路径全部接入 | ✅ 已复核 |
 | 7 | `src/system/config.rs` `get_notification_settings` | 收件人 JSON 解析失败 `unwrap_or_default()` 静默清空，MAC 变更通知失效 | 解析失败记 `log_error` 并返回 `server.notification.recipients_parse_failed` 错误，不再静默 | ✅ 已复核 |
-| 8 | `crates/ipma-data-manager/src/export.rs`（约 15 处） | 导出 CSV 字段缺失静默补空串/"?"，无日志 | 引用 ID 非空但名称解析失败时 `log_warn(log.import_export.export_ref_missing)`（含 `info_to_csv` 伴随列与拓扑连线回显两处路径）；可空列的 `Null → 空串` 行为保留（与 COALESCE 语义一致） | ✅ 已复核 |
+| 8 | `crates/ipma-data-management/src/export.rs`（约 15 处） | 导出 CSV 字段缺失静默补空串/"?"，无日志 | 引用 ID 非空但名称解析失败时 `log_warn(log.import_export.export_ref_missing)`（含 `info_to_csv` 伴随列与拓扑连线回显两处路径）；可空列的 `Null → 空串` 行为保留（与 COALESCE 语义一致） | ✅ 已复核 |
 | 9 | `src/auth/login.rs` `dummy_bcrypt_verify` | dummy 哈希生成失败回退空串，时间侧信道缓解静默失效 | 运行时生成失败回退到内置静态合法 bcrypt 哈希常量（`DUMMY_BCRYPT_FALLBACK`，cost 12 与 DEFAULT_COST 一致），缓解永不失效；空串守卫移除 | ✅ 已复核 |
 | 10 | `src/auth/utils.rs` `JwtUtils::new` | JWT 时长解析失败静默回退 3600s/604800s | 解析失败直接返回 `Err`（启动失败并指明哪个字段非法）；`config.toml` 默认 `15m`/`7d` 合法不受影响 | ✅ 已复核 |
 | 11 | 前端 `items \|\| result.data \|\| []` 等冗余分支（TopologyDataManager、position.js、visualizationManager.js、dashboard.js、ipmanager.js） | 后端分页键固定为 `items`，多余分支永不命中 | 统一改为 `result.data?.items ?? []`；返回裸数组的接口（拓扑节点/连线、room-cabinets）保留 `Array.isArray` 判定 | ✅ 已复核 |
@@ -67,7 +67,7 @@
 | `src/resource/network.rs` | `ipv4_cidrs.clone().unwrap_or_default()` | ✅ 与 COALESCE 语义一致 |
 | `src/system/certificate.rs` | SAN 缺省回退 `public_url` | ✅ |
 | `crates/ipma-visualization/src/topology.rs` | 连线类型缺省 `"physical"` 等 | ✅ |
-| `crates/ipma-data-manager/src/logs.rs` 定时任务 `days.unwrap_or(30)` | 缺省 30 天保留 | ✅ 非危险默认（API 层已强制显式传值） |
+| `crates/ipma-data-management/src/logs.rs` 定时任务 `days.unwrap_or(30)` | 缺省 30 天保留 | ✅ 非危险默认（API 层已强制显式传值） |
 
 ### 3.4 认证与安全
 

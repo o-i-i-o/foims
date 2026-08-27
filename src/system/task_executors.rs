@@ -7,13 +7,13 @@ use uuid::Uuid;
 use ipma_common::{AppMessage, log_debug, log_info, msg};
 
 /// 提取数据层错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏）
-pub(crate) fn data_error_message(e: ipma_data_manager::DataError) -> AppMessage {
+pub(crate) fn data_error_message(e: ipma_data_management::DataError) -> AppMessage {
     match e {
-        ipma_data_manager::DataError::Database(m)
-        | ipma_data_manager::DataError::NotFound(m)
-        | ipma_data_manager::DataError::Validation(m)
-        | ipma_data_manager::DataError::Conflict(m)
-        | ipma_data_manager::DataError::Internal(m) => m,
+        ipma_data_management::DataError::Database(m)
+        | ipma_data_management::DataError::NotFound(m)
+        | ipma_data_management::DataError::Validation(m)
+        | ipma_data_management::DataError::Conflict(m)
+        | ipma_data_management::DataError::Internal(m) => m,
     }
 }
 
@@ -31,10 +31,10 @@ impl TaskExecutor for BackupTaskExecutor {
 
         let result = tokio::task::spawn_blocking(move || {
             let backup_dir = "/var/lib/ipma/backups";
-            let path = ipma_data_manager::backup_to_file(&db_config, backup_dir, "ipma_backup")?;
-            ipma_data_manager::cleanup_old_backup_files(backup_dir, 7)?;
+            let path = ipma_data_management::backup_to_file(&db_config, backup_dir, "ipma_backup")?;
+            ipma_data_management::cleanup_old_backup_files(backup_dir, 7)?;
             let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            Ok::<(String, String), ipma_data_manager::DataError>((
+            Ok::<(String, String), ipma_data_management::DataError>((
                 path,
                 format!("{:.2}", file_size as f64 / (1024.0 * 1024.0)),
             ))
@@ -128,7 +128,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
             .and_then(serde_json::Value::as_i64)
             .unwrap_or(30) as i32;
 
-        let deleted = ipma_data_manager::clear_logs_core(&ctx.pool, days, "all")
+        let deleted = ipma_data_management::clear_logs_core(&ctx.pool, days, "all")
             .await
             .map_err(|e| SchedulerError::Execution(data_error_message(e)))?;
 

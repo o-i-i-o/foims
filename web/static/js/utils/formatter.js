@@ -18,10 +18,19 @@ export function getStatusText(status) {
 }
 
 export function getDeviceTypeName(type) {
+  // 与设备表的 9 种 device_type（device-modal.html 下拉）一一对应
   const typeNames = {
     workstation: t("device.workstation"),
     cabinet_position: t("device.cabinet_position"),
-    switch: t("device.switch")
+    switch: t("device_type.switch"),
+    desktop: t("device_type.desktop"),
+    laptop: t("device_type.laptop"),
+    printer: t("device_type.printer"),
+    server: t("device_type.server"),
+    network_device: t("device_type.network_device"),
+    camera: t("device_type.camera"),
+    phone: t("device_type.phone"),
+    other: t("device_type.other")
   };
   return typeNames[type] || type || "-";
 }

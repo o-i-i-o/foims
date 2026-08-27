@@ -30,8 +30,8 @@ pub struct TaskLog {
     pub duration: Option<i32>,
 }
 
-/// 数据库连接配置（复用 ipma-data-manager 的定义）
-pub use ipma_data_manager::DatabaseConfig;
+/// 数据库连接配置（复用 ipma-data-management 的定义）
+pub use ipma_data_management::DatabaseConfig;
 
 /// 任务执行上下文
 pub struct TaskContext {

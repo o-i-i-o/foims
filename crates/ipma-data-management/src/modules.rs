@@ -18,10 +18,10 @@ pub struct ModuleDef {
 /// 全部模块。数组顺序即全量导入的安全顺序（外键依赖拓扑序：
 /// 组织 → 房间 → 网络区域 → 机柜 → 设备 → 线路 → 可视化）。
 pub const MODULES: &[ModuleDef] = &[
-    // 组织管理：组织结构模板 + 组织树（parent_id 自引用，导入时按依赖排序）
+    // 组织管理：组织结构模板 + 组织树（parent_id 自引用，导入时按依赖排序）+ 员工
     ModuleDef {
         name: "organization",
-        tables: &["org_templates", "organizations"],
+        tables: &["org_templates", "organizations", "employees"],
     },
     // 房间模块：房间 + 工位 + 信息点
     ModuleDef {

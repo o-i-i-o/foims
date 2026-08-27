@@ -12,9 +12,10 @@ flowchart LR
     revoked_tokens["revoked_tokens 已撤销 JWT"]
   end
 
-  subgraph ORG["组织管理 (/api/resources/organizations, /org-templates)"]
+  subgraph ORG["组织管理 (/api/resources/organizations, /org-templates, /employees)"]
     organizations["organizations 组织树"]
     org_templates["org_templates 组织模板"]
+    employees["employees 组织人员"]
   end
 
   subgraph SPACE["空间管理 (/api/resources/rooms, /cabinets, /positions, /workstations)"]
@@ -85,7 +86,7 @@ flowchart LR
 
 跨模块说明：
 
-- **数据导入导出**（`/api/system/import-export/*`，crates/ipma-data-manager）：CSV 导入导出横跨上表 27 张（除
+- **数据导入导出**（`/api/system/import-export/*`，crates/ipma-data-management）：CSV 导入导出横跨上表 28 张（除
   users、encryption_keys、system_configs、scheduled_tasks、task_logs、operation_logs、login_logs、
   notifications、revoked_tokens 外的全部业务表）；`export/database` 走 pg_dump 全库导出。
 - **证书管理**（`/api/system/certificate/*`，crates/ipma-x509-manager）：仅文件系统，不涉及数据库。
@@ -419,7 +420,7 @@ erDiagram
 | 功能模块 | 路由前缀 | 处理代码 | 管理的表 |
 | --- | --- | --- | --- |
 | 认证与用户 | `/api/auth/*`、`/api/users` | `src/auth/` | users、login_logs（登录写入）、revoked_tokens |
-| 组织管理 | `/api/resources/organizations`、`/org-templates` | `src/resource/organization.rs`、`org_template.rs` | organizations、org_templates |
+| 组织管理 | `/api/resources/organizations`、`/org-templates`、`/employees` | `src/resource/organization.rs`、`org_template.rs`、`employee.rs` | organizations、org_templates、employees |
 | 空间管理 | `/api/resources/rooms`、`/cabinets`、`/positions`、`/workstations` | `src/resource/room.rs`、`cabinets.rs`、`position.rs`、`workstation.rs` | rooms、cabinets、positions、workstations、room_networks（房间侧同步） |
 | 网络管理 | `/api/resources/network-regions`、`/networks` | `src/resource/network.rs` | network_regions、network_cidrs、room_networks |
 | IP 管理 | `/api/resources/ip` | `src/resource/ip.rs` | ips（查询 device_interfaces、room_networks） |
@@ -430,7 +431,7 @@ erDiagram
 | 日志与通知 | `/api/logs/*`、`/api/notifications` | `src/log/` | operation_logs、login_logs、notifications |
 | 系统配置 | `/api/system/*` | `src/system/` | system_configs（证书模块除外，不涉及库） |
 | 定时任务 | `/api/system/scheduled-tasks` | `crates/ipma-scheduler` | scheduled_tasks、task_logs（另清理 revoked_tokens、token_usage） |
-| 数据导入导出 | `/api/system/import-export/*` | `crates/ipma-data-manager` | 27 张业务表（见上文 CSV 清单） |
+| 数据导入导出 | `/api/system/import-export/*` | `crates/ipma-data-management` | 28 张业务表（见上文 CSV 清单） |
 
 ## 四、视图与函数（非实体）
 

@@ -259,7 +259,8 @@ pub async fn get_workstation(
     ))
 }
 
-/// 更新工位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
+/// 更新工位（名称/房间/描述缺省保留旧值；管理人固定以员工 id 赋值，
+/// 组织人员是该字段唯一来源，`manager_employee_id = NULL` 表示清空）。
 pub async fn update_workstation(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -283,8 +284,8 @@ pub async fn update_workstation(
         "UPDATE workstations SET
          name = COALESCE($1, name),
          room_id = COALESCE($2, room_id),
-         manager = COALESCE((SELECT name FROM employees WHERE id = $3), $4, manager),
-         manager_employee_id = COALESCE($3, manager_employee_id),
+         manager = COALESCE((SELECT name FROM employees WHERE id = $3), $4),
+         manager_employee_id = $3,
          description = COALESCE($5, description),
          updated_at = $6
          WHERE id = $7",

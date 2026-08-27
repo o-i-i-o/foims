@@ -107,14 +107,14 @@ impl From<validator::ValidationErrors> for AppError {
     }
 }
 
-impl From<ipma_data_manager::DataError> for AppError {
-    fn from(err: ipma_data_manager::DataError) -> Self {
+impl From<ipma_data_management::DataError> for AppError {
+    fn from(err: ipma_data_management::DataError) -> Self {
         match err {
-            ipma_data_manager::DataError::Database(m) => AppError::Database(m),
-            ipma_data_manager::DataError::NotFound(m) => AppError::NotFound(m),
-            ipma_data_manager::DataError::Validation(m) => AppError::Validation(m),
-            ipma_data_manager::DataError::Conflict(m) => AppError::Conflict(m),
-            ipma_data_manager::DataError::Internal(m) => AppError::Internal(m),
+            ipma_data_management::DataError::Database(m) => AppError::Database(m),
+            ipma_data_management::DataError::NotFound(m) => AppError::NotFound(m),
+            ipma_data_management::DataError::Validation(m) => AppError::Validation(m),
+            ipma_data_management::DataError::Conflict(m) => AppError::Conflict(m),
+            ipma_data_management::DataError::Internal(m) => AppError::Internal(m),
         }
     }
 }

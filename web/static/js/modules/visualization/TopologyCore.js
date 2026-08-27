@@ -55,6 +55,9 @@ export class TopologyCore {
     this.svg.setAttribute("width", "100%");
     this.svg.setAttribute("height", "100%");
     this.svg.setAttribute("viewBox", "0 0 3000 2000");
+    // 内容锚定左上角：默认 xMidYMid 会在容器宽高比与 viewBox 不一致时把网格
+    // 整体居中，画布顶缘留出空白带，视觉上画布与工具栏之间偏离一段距离
+    this.svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
 
     this._createDefs();
 
@@ -93,12 +96,10 @@ export class TopologyCore {
 
     this.container.appendChild(this.svg);
 
+    // 尺寸/边框/背景由 CSS（visualization.css 的 #global-visualization-container，
+    // flex:1 随可用空间伸缩）控制：内联固定高度 calc(100vh - 200px) 会覆盖 flex
+    // 布局，工具栏实际占高与 200px 不符时画布顶缘错位、底部溢出
     this.container.style.overflow = "hidden";
-    this.container.style.height = "calc(100vh - 200px)";
-    this.container.style.minHeight = "500px";
-    this.container.style.border = "1px solid #ddd";
-    this.container.style.borderRadius = "4px";
-    this.container.style.backgroundColor = "#fafbfc";
   }
 
   _createDefs() {

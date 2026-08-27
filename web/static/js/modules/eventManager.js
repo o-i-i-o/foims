@@ -67,7 +67,6 @@ export function initEventListeners() {
   preloadModulesOnIdle();
   initButtonEventBindings();
   initGlobalClickHandlers();
-  initSelectChangeHandlers();
 }
 
 // ==========================================
@@ -141,15 +140,6 @@ export function initModals(callbacks = {}) {
 // ==========================================
 
 const BUTTON_EVENT_BINDINGS = [
-  {
-    id: "refresh-notifications-btn",
-    event: "click",
-    handler: async () => {
-      const { loadNotificationsData } = await getModule("log");
-      const filter = document.getElementById("notifications-filter");
-      loadNotificationsData(filter?.value || "all");
-    }
-  },
   {
     id: "mark-all-read-btn",
     event: "click",
@@ -373,10 +363,5 @@ async function handleEditDeleteClick(e) {
  * 初始化选择器变化处理器
  */
 function initSelectChangeHandlers() {
-  const notificationsFilter = document.getElementById("notifications-filter");
-
-  notificationsFilter?.addEventListener("change", async (e) => {
-    const { loadNotificationsData } = await getModule("log");
-    loadNotificationsData(e.target.value);
-  });
+  // 通知列表已移除已读/未读筛选下拉框，此处保留函数骨架供后续筛选器复用
 }

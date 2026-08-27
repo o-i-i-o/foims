@@ -8,6 +8,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use tokio::process::Command;
 use uuid::Uuid;
 use validator::Validate;
@@ -975,41 +976,93 @@ WantedBy=multi-user.target
 }
 
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+    let conn = state.pool()?.get_conn();
+
     let networks_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
     let regions_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_regions")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
     let ips_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
     let ips_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE status = 'active'")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
+    // IP 状态分布（status 为自由字符串，按实际取值分组返回）
+    let ip_status_rows = sqlx::query("SELECT status, COUNT(*) AS cnt FROM ips GROUP BY status")
+        .fetch_all(&conn)
+        .await?;
+    let ip_by_status: serde_json::Map<String, serde_json::Value> = ip_status_rows
+        .iter()
+        .map(|r| {
+            let status: String = r.get("status");
+            let cnt: i64 = r.get("cnt");
+            (status, serde_json::Value::from(cnt))
+        })
+        .collect();
+
+    // 设备类型分布（设备分布图表数据源）
+    let device_type_rows =
+        sqlx::query("SELECT device_type, COUNT(*) AS cnt FROM devices GROUP BY device_type")
+            .fetch_all(&conn)
+            .await?;
+    let devices_count: i64 = device_type_rows
+        .iter()
+        .map(|r| {
+            let cnt: i64 = r.get("cnt");
+            cnt
+        })
+        .sum();
+    let devices_by_type: serde_json::Map<String, serde_json::Value> = device_type_rows
+        .iter()
+        .map(|r| {
+            let dtype: String = r.get("device_type");
+            let cnt: i64 = r.get("cnt");
+            (dtype, serde_json::Value::from(cnt))
+        })
+        .collect();
+
     let rooms_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
     let cabinets_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cabinets")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
     let workstations_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workstations")
-        .fetch_one(&state.pool()?.get_conn())
+        .fetch_one(&conn)
         .await?;
 
-    let devices_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices")
-        .fetch_one(&state.pool()?.get_conn())
+    let positions_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM positions")
+        .fetch_one(&conn)
         .await?;
 
-    let users_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&state.pool()?.get_conn())
+    let users_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&conn)
         .await?;
+
+    let users_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = TRUE")
+        .fetch_one(&conn)
+        .await?;
+
+    let operations_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM operation_logs WHERE created_at >= NOW() - INTERVAL '24 hours'",
+    )
+    .fetch_one(&conn)
+    .await?;
+
+    let logins_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM login_logs WHERE created_at >= NOW() - INTERVAL '24 hours'",
+    )
+    .fetch_one(&conn)
+    .await?;
 
     let stats = serde_json::json!({
         "networks": {
@@ -1019,16 +1072,26 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<R
         "ips": {
             "total": ips_total,
             "active": ips_active,
-            "inactive": ips_total - ips_active
+            "inactive": ips_total - ips_active,
+            "by_status": ip_by_status
+        },
+        "devices": {
+            "total": devices_count,
+            "by_type": devices_by_type
         },
         "resources": {
             "rooms": rooms_count,
             "cabinets": cabinets_count,
             "workstations": workstations_count,
-            "devices": devices_count
+            "positions": positions_count
         },
         "users": {
-            "total": users_count
+            "total": users_total,
+            "active": users_active
+        },
+        "activity": {
+            "operations_24h": operations_24h,
+            "logins_24h": logins_24h
         }
     });
 

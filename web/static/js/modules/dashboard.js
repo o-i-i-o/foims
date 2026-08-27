@@ -49,20 +49,13 @@ export async function loadDashboardData(forceRefresh = false) {
 }
 
 function updateDashboardUI(data) {
+  // 页面仅展示以下统计卡；其余聚合字段（resources/users 等）供图表与后续扩展使用
   const elements = {
     "total-networks": data.networks?.networks || 0,
     "total-network-regions": data.networks?.regions || 0,
     "total-ip-addresses": data.ips?.total || 0,
     "active-devices": data.ips?.active || 0,
-    "today-operations": data.activity?.operations_24h || 0,
-    "total-users": data.users?.total || 0,
-    "active-users": data.users?.active || 0,
-    "total-rooms": data.locations?.rooms || 0,
-    "total-cabinets": data.locations?.cabinets || 0,
-    "total-workstations": data.locations?.workstations || 0,
-    "total-positions": data.locations?.positions || 0,
-    "total-devices": data.devices || 0,
-    "logins-24h": data.activity?.logins_24h || 0
+    "today-operations": data.activity?.operations_24h || 0
   };
 
   for (const [id, value] of Object.entries(elements)) {
@@ -315,7 +308,7 @@ function initDashboardClickHandlers() {
 }
 
 function renderCharts(data) {
-  renderDeviceTypeChart(data.ips?.by_device_type || {});
+  renderDeviceTypeChart(data.devices?.by_type || {});
   renderIpStatusChart(data.ips?.by_status || {});
 }
 

@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::db::DbPool;
 use crate::error::{AppError, msg};
-use ipma_data_manager::{DataError, DataProvider, DataResult, DatabaseConfig};
+use ipma_data_management::{DataError, DataProvider, DataResult, DatabaseConfig};
 use ipma_scheduler::TaskRegistry;
 use sqlx::PgPool;
 

@@ -1,4 +1,5 @@
 import { updatePageTranslations, t } from "./i18n.js";
+import { getIcon } from "./icons.js";
 import { MODULE_VERSION } from "./resourceLoader.js";
 import { showToast } from "./toast.js";
 
@@ -141,6 +142,13 @@ export async function loadModal(id) {
 
   document.body.appendChild(modal);
   loadedModals.add(id);
+
+  // 静态模板中的图标按钮以 data-icon 声明图标名，注入时统一填充 SVG
+  modal.querySelectorAll("button[data-icon]").forEach((btn) => {
+    if (!btn.querySelector("svg")) {
+      btn.insertAdjacentHTML("afterbegin", getIcon(btn.dataset.icon || ""));
+    }
+  });
 
   // 仅扫描模态框子树，避免每次开框对全文档跑多轮翻译查询
   updatePageTranslations(modal);

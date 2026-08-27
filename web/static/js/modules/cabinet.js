@@ -85,7 +85,7 @@ class CabinetPositionsManager extends DynamicRowManager {
           <input type="text" class="position-description form-control" value="${escapeHtml(description)}" placeholder="${t("cabinet_position.description")}" autocomplete="off" />
         </div>
         <div class="form-group cabinet-item-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-position-btn">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-position-btn" })}
         </div>
       </div>
     `;
@@ -171,7 +171,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
           <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet.patch_panel_name") || t("net_outlet.name")}" autocomplete="off" />
         </div>
         <div class="form-group cabinet-item-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-patch-panel-btn">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-patch-panel-btn" })}
         </div>
       </div>
     `;

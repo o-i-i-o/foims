@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-manager", "crates/ipma-scheduler", "crates/ipma-x509-manager"]
+members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-x509-manager"]
 resolver = "2"
 
 [workspace.package]
@@ -68,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.76"
+version = "0.15.77"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -79,7 +79,7 @@ license = "GPL-3.0-or-later"
 ipma-common = { path = "crates/ipma-common" }
 ipma-init = { path = "crates/ipma-init" }
 ipma-visualization = { path = "crates/ipma-visualization" }
-ipma-data-manager = { path = "crates/ipma-data-manager" }
+ipma-data-management = { path = "crates/ipma-data-management" }
 ipma-scheduler = { path = "crates/ipma-scheduler" }
 ipma-x509-manager = { path = "crates/ipma-x509-manager" }
 
@@ -108,6 +108,10 @@ async-trait = { workspace = true }
 # 主项目特有依赖
 
 bcrypt = "0.19.3"
+# rust_crypto 后端（纯 Rust，无 C 构建链）。其引入的 rsa 0.9 有
+# RUSTSEC-2023-0071（Marvin Attack，无修复版本），但 openidconnect
+# 本就无条件依赖同一 rsa，且本项目仅作 OIDC 客户端公钥验签与 HS256
+# 签名，不触及受影响的私钥运算路径
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
 rand = "0.10.2"
@@ -147,7 +151,3 @@ regex = "1"
 
 [features]
 default = []
-
-
-[patch.crates-io]
-rsa = { git = "https://github.com/RustCrypto/RSA", tag = "v0.10.0-rc.18" }

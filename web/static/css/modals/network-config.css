@@ -125,17 +125,6 @@
   flex: none;
 }
 
-.remove-network-config-btn:hover {
-  background-color: var(--color-danger);
-  color: var(--color-bg-white);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgb(198 96 106 / 30%);
-}
-
-.remove-network-config-btn:active {
-  transform: translateY(0);
-}
-
 /* 工位/机柜列表容器：统一卡片样式 */
 #room-children-container {
   background: var(--color-bg);

@@ -8,7 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 import { showToast, handleError, escapeHtml, debounce } from "../utils/ui.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
-import { iconButton } from "../utils/icons.js";
+import { iconButton, getIcon } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { ORG_ICON_GROUPS, renderOrgIcon, DEFAULT_ORG_ICON } from "../config/org-icons.js";
 import { getOrgIcon } from "../config/org-config.js";
@@ -598,19 +598,12 @@ async function loadEmployeeList(orgId) {
 
       const actions = tr.querySelector(".employee-actions-cell");
 
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "btn btn-secondary btn-sm";
-      editBtn.textContent = t("common.edit");
-      editBtn.addEventListener("click", () => openEmployeeEditModal(orgId, emp));
-      actions.appendChild(editBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "btn btn-danger btn-sm";
-      deleteBtn.textContent = t("common.delete");
-      deleteBtn.addEventListener("click", () => deleteEmployee(emp));
-      actions.appendChild(deleteBtn);
+      actions.innerHTML = `
+        ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit employee-edit-btn" })}
+        ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete employee-delete-btn" })}
+      `;
+      actions.querySelector(".employee-edit-btn")?.addEventListener("click", () => openEmployeeEditModal(orgId, emp));
+      actions.querySelector(".employee-delete-btn")?.addEventListener("click", () => deleteEmployee(emp));
 
       tbody.appendChild(tr);
     });
@@ -990,9 +983,10 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
 
   const addChildBtn = document.createElement("button");
   addChildBtn.type = "button";
-  addChildBtn.className = "btn btn-sm btn-add-child";
+  addChildBtn.className = "icon-btn btn-add-child";
   addChildBtn.dataset.action = "add-type-child";
-  addChildBtn.innerHTML = `<span class="btn-icon">+</span> <span class="btn-text">${t("org_template.add_child_type")}</span>`;
+  addChildBtn.title = t("org_template.add_child_type");
+  addChildBtn.innerHTML = getIcon("plus");
 
   row.appendChild(iconBtn);
   row.appendChild(input);
@@ -1002,10 +996,10 @@ function createTypeNode(type = "", isRoot = false, icon = "") {
   if (!isRoot) {
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.className = "btn btn-sm btn-delete";
+    removeBtn.className = "icon-btn btn-delete";
     removeBtn.dataset.action = "remove-type";
     removeBtn.title = t("common.delete");
-    removeBtn.textContent = "×";
+    removeBtn.innerHTML = getIcon("x");
     row.appendChild(removeBtn);
   }
 

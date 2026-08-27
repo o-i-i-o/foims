@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.76"
+version = "0.15.77"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -2106,7 +2106,7 @@ dependencies = [
  "futures-util",
  "hex",
  "ipma-common",
- "ipma-data-manager",
+ "ipma-data-management",
  "ipma-init",
  "ipma-scheduler",
  "ipma-visualization",
@@ -2151,7 +2151,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipma-data-manager"
+name = "ipma-data-management"
 version = "0.2.0"
 dependencies = [
  "async-trait",
@@ -2197,7 +2197,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "ipma-common",
- "ipma-data-manager",
+ "ipma-data-management",
  "serde",
  "serde_json",
  "sqlx",
@@ -5687,8 +5687,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "rsa"
-version = "0.10.0-rc.18"
-source = "git+https://github.com/RustCrypto/RSA?tag=v0.10.0-rc.18#e31a0209de98cce82de44a5efc241912eb38f6ea"

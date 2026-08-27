@@ -8,7 +8,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use ipma_data_manager::DatabaseConfig;
+use ipma_data_management::DatabaseConfig;
 use ipma_scheduler::{TaskContext, TaskLog, calculate_next_run};
 use serde_json;
 use uuid::Uuid;

@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01348">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01348">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01348">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01348">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01348">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01348">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01348">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01348">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01348">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01348">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01348">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01348">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01348">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01349">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01349">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01349">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01349">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01349">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01349">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01349">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01349">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01349">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01349">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01349">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01349">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01349">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -143,7 +143,7 @@
           <article class="stat-card stat-success clickable" data-nav="ip" data-tab="ip-manager">
             <div class="stat-icon">✅</div>
             <div class="stat-content">
-              <h3 data-i18n="dashboard.active_devices">Active Devices</h3>
+              <h3 data-i18n="dashboard.active_ips">Active IPs</h3>
               <div class="stat-value" id="active-devices">0</div>
             </div>
           </article>
@@ -494,7 +494,7 @@
                     <input type="text" id="ip-address-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search...">
                   </div>
                 </th>
-                <th class="sortable" data-sort="mac_address">
+                <th class="sortable th-inline-action" data-sort="mac_address">
                   <span data-i18n="ip.mac_address">MAC Address</span>
                   <button type="button" id="open-pull-mac-modal" class="btn btn-secondary btn-sm" data-i18n="ip.pull_short">Pull</button>
                 </th>
@@ -648,12 +648,6 @@
                   <th data-i18n="notifications.status" class="sortable col-center" data-sort="read">Status</th>
                   <th>
                     <div class="notifications-toolbar">
-                      <select id="notifications-filter" class="form-control form-control-sm w-auto" aria-label="Filter notifications">
-                        <option value="all" data-i18n="notifications.all">All</option>
-                        <option value="unread" data-i18n="notifications.unread">Unread</option>
-                        <option value="read" data-i18n="notifications.read">Read</option>
-                      </select>
-                      <button id="refresh-notifications-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
                       <button id="mark-all-read-btn" class="btn btn-secondary btn-sm" data-i18n="notifications.mark_all_read">Mark All Read</button>
                     </div>
                   </th>
@@ -730,7 +724,7 @@
                   <div class="field-value">boss@oi-io.cc</div>
                 </div>
               </div>
-                <button type="button" id="open-source-btn" class="btn btn-secondary" data-i18n="system.open_source_components">Open Source Components</button>
+                <a href="#" id="open-source-btn" class="about-link" role="button" data-i18n="system.open_source_components">Open Source Components</a>
             </div>
           </div>
         </div>
@@ -1380,6 +1374,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01348"></script>
+  <script type="module" src="/static/js/app.js?v=01349"></script>
 </body>
 </html>

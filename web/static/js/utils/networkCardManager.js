@@ -15,6 +15,7 @@ import { apiGet } from "./apiClient.js";
 import { showToast } from "./toast.js";
 import { t } from "./i18n.js";
 import { escapeHtml } from "./ui.js";
+import { iconButton } from "./icons.js";
 import { isIPv6, isIpInCidr, isValidIP } from "./network.js";
 
 const DEFAULT_PORT_NAME = "eth0";
@@ -274,8 +275,8 @@ export class NetworkCardManager {
       <header class="card-level-bar">
         <h3 id="${uid}-title" class="level-badge level-card">${t(T_KEY_NETWORK_CARD)}</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-card-btn" aria-label="${t("device.delete_network_card")}">${t("common.delete")}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-port-btn" aria-label="${t("device.add_network_port")}">${t("device.add_network_port")}</button>
+          ${iconButton({ icon: "trash", label: t("device.delete_network_card"), cls: "btn-danger remove-card-btn" })}
+          ${iconButton({ icon: "plus", label: t("device.add_network_port"), cls: "btn-success add-port-btn" })}
         </div>
       </header>
       <input type="hidden" class="card-id" value="${escapeHtml(cardData.id || "")}" />
@@ -340,8 +341,8 @@ export class NetworkCardManager {
       <header class="port-level-bar">
         <h3 id="${uid}-title" class="level-badge level-port">${t(T_KEY_NETWORK_PORT)}</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-port-btn" aria-label="${t("device.delete_network_port")}">${t("common.delete")}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-ip-btn" aria-label="${t("ip.add_ip")}">${t("ip.add_ip")}</button>
+          ${iconButton({ icon: "trash", label: t("device.delete_network_port"), cls: "btn-danger remove-port-btn" })}
+          ${iconButton({ icon: "plus", label: t("ip.add_ip"), cls: "btn-success add-ip-btn" })}
         </div>
       </header>
       <input type="hidden" class="port-id" value="${escapeHtml(portData.id || "")}" />
@@ -426,7 +427,7 @@ export class NetworkCardManager {
       <header class="ip-level-bar">
         <h3 id="${uid}-title" class="level-badge level-ip">IP</h3>
         <div class="level-actions">
-          <button type="button" class="btn btn-danger btn-sm remove-ip-btn" aria-label="${t("ip.delete_ip")}">${t("common.delete")}</button>
+          ${iconButton({ icon: "trash", label: t("ip.delete_ip"), cls: "btn-danger remove-ip-btn" })}
         </div>
       </header>
       <div class="nc-fields">
@@ -446,7 +447,7 @@ export class NetworkCardManager {
           <label for="${uid}-address">${t("ip.ip_address")}<span class="required" aria-hidden="true">*</span></label>
           <div class="nc-address-group">
             <input id="${uid}-address" type="text" class="ip-address nc-input" value="" placeholder="192.168.1.100" autocomplete="off" required />
-            <button type="button" class="btn btn-secondary btn-sm auto-assign-ip-btn" title="${t("device.auto_assign_ip")}" data-tooltip="${t("device.auto_assign_ip")}">${t("device.auto_assign_ip")}</button>
+            ${iconButton({ icon: "zap", label: t("device.auto_assign_ip"), cls: "btn-primary auto-assign-ip-btn" })}
           </div>
         </div>
         <div class="nc-field">

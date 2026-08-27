@@ -133,9 +133,12 @@ export function initSystemTabs() {
     clearLogsBtn.addEventListener("click", clearLogs);
   }
 
-  const openSourceBtn = elementCache.get("open-source-btn");
-  if (openSourceBtn) {
-    openSourceBtn.addEventListener("click", openOpenSourceModal);
+  const openSourceLink = elementCache.get("open-source-btn");
+  if (openSourceLink) {
+    openSourceLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      openOpenSourceModal();
+    });
   }
 
   // 密码策略卡片保存按钮（等保三级，安全管理员权限，面向全体用户）

@@ -587,7 +587,7 @@ function buildIPv4Content(network, networkIps, _networkId) {
           <option value="used">${t("network.used")}</option>
           <option value="unused">${t("network.unused")}</option>
         </select>
-        <button id="refresh-ipv4-usage" class="btn btn-sm btn-secondary">${t("common.refresh")}</button>
+        ${iconButton({ icon: "refresh", label: t("common.refresh"), cls: "btn-secondary", attrs: 'id="refresh-ipv4-usage"' })}
       </div>
     </div>
     
@@ -697,7 +697,7 @@ function buildIPv6Content(network, networkIps, _networkId) {
     <div class="ipv6-list-section">
       <div class="ipv6-list-header">
         <h5>${t("network.ipv6_list")}</h5>
-        <button id="refresh-ipv6-usage" class="btn btn-sm btn-secondary">${t("common.refresh")}</button>
+        ${iconButton({ icon: "refresh", label: t("common.refresh"), cls: "btn-secondary", attrs: 'id="refresh-ipv6-usage"' })}
       </div>
       <div class="table-responsive">
         <table class="table">

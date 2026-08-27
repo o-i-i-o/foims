@@ -201,6 +201,15 @@ export async function loadRoomsForSelect(selectId = "workstation-room", options 
   });
 }
 
+/**
+ * 拉取房间列表数据（与 loadRoomsForSelect 共享下拉缓存）。
+ * 供需要房间附加字段（如 org_id）的调用方复用，避免重复请求。
+ */
+export async function fetchRoomsForOptions(orgId = null, onlyOffice = true) {
+  const url = buildRoomsUrl(orgId, onlyOffice ? OFFICE_ROOM_TYPE_LIST : null);
+  return extractItems(await fetchOptionItems(url));
+}
+
 /** 加载机房类房间（数据中心/弱电井/其他）选项。 */
 export function loadDataCenterRoomsForSelect(selectId = "cabinet-room", orgId = null) {
   return fillSelect(selectId, buildRoomsUrl(orgId, DATA_CENTER_ROOM_TYPE_LIST), {
