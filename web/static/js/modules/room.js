@@ -163,6 +163,7 @@ class NetworkConfigManager {
   constructor(options) {
     this.options = options;
     this.container = null;
+    this.addHandler = null;
     this.eventHandler = new EventHandler(this);
   }
 
@@ -179,14 +180,29 @@ class NetworkConfigManager {
       console.error(`未找到${this.options.containerId}元素`);
       return false;
     }
+    this.bindExternalAddButton();
 
     this.container.innerHTML = "";
     await this.addItem();
     return true;
   }
 
+  /** 绑定标题右侧的「添加」按钮，并同步按钮文案 */
+  bindExternalAddButton() {
+    const addBtn = document.getElementById(this.options.externalAddButtonId);
+    if (!addBtn) {
+      return;
+    }
+    if (this.addHandler) {
+      addBtn.removeEventListener("click", this.addHandler);
+    }
+    this.addHandler = () => this.addItem();
+    addBtn.addEventListener("click", this.addHandler);
+    addBtn.textContent = t("network.add_network_config");
+  }
+
   createItemHTML() {
-    const { regionSelectClass, networkSelectClass, removeBtnClass, addBtnClass } = this.options;
+    const { regionSelectClass, networkSelectClass, removeBtnClass } = this.options;
 
     return `
       <div class="network-config-item">
@@ -204,9 +220,6 @@ class NetworkConfigManager {
           <div class="form-group network-config-actions">
             <button type="button" class="btn btn-danger btn-sm ${removeBtnClass}">
               ${t("common.delete")}
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm ${addBtnClass}" style="display: none;">
-              ${t("network.add_network_config")}
             </button>
           </div>
         </div>
@@ -229,35 +242,15 @@ class NetworkConfigManager {
     await loadNetworkRegions(regionSelect);
 
     this.bindItemEvents(item);
-    this.updateAddButtons();
     return item;
   }
 
-  updateAddButtons() {
-    if (!this.ensureContainer()) {
-      return;
-    }
-
-    const items = this.container.querySelectorAll(".network-config-item");
-    items.forEach((item, index) => {
-      const addBtn = item.querySelector(`.${this.options.addBtnClass}`);
-      if (addBtn) {
-        addBtn.style.display = index === items.length - 1 ? "" : "none";
-      }
-    });
-  }
-
   bindItemEvents(item) {
-    const { regionSelectClass, networkSelectClass, removeBtnClass, addBtnClass } = this.options;
+    const { regionSelectClass, networkSelectClass, removeBtnClass } = this.options;
 
     const removeBtn = item.querySelector(`.${removeBtnClass}`);
     if (removeBtn) {
       this.eventHandler.bind(removeBtn, "click", () => this.removeItem(item));
-    }
-
-    const addBtn = item.querySelector(`.${addBtnClass}`);
-    if (addBtn) {
-      this.eventHandler.bind(addBtn, "click", () => this.addItem());
     }
 
     const regionSelect = item.querySelector(`.${regionSelectClass}`);
@@ -285,7 +278,6 @@ class NetworkConfigManager {
     }
 
     item.remove();
-    this.updateAddButtons();
     this.updateNetworkSelects();
   }
 
@@ -396,7 +388,7 @@ class NetworkConfigManager {
       this.bindItemEvents(item);
     }
 
-    this.updateAddButtons();
+    this.bindExternalAddButton();
   }
 
   collectData() {
@@ -431,7 +423,7 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
   regionSelectClass: "network-region-select",
   networkSelectClass: "network-select",
   removeBtnClass: "remove-network-config-btn",
-  addBtnClass: "add-network-config-btn"
+  externalAddButtonId: "room-add-network-config-btn"
 });
 
 // ==========================================
@@ -539,6 +531,10 @@ class RoomChildListManager extends DynamicRowManager {
     return this.kind === "workstation" ? t("room.add_workstation") : t("room.add_cabinet");
   }
 
+  emptyHintText() {
+    return t("common.no_data");
+  }
+
   createWorkstationRow(data = {}) {
     const id = data.id || "";
     const name = data.name || "";
@@ -556,7 +552,6 @@ class RoomChildListManager extends DynamicRowManager {
         </div>
         <div class="form-group room-children-actions">
           <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t("common.delete")}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-child-btn" style="display: none;">${t("room.add_workstation")}</button>
         </div>
       </div>
     `;
@@ -582,7 +577,6 @@ class RoomChildListManager extends DynamicRowManager {
         </div>
         <div class="form-group room-children-actions">
           <button type="button" class="btn btn-danger btn-sm remove-child-btn">${t("common.delete")}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-child-btn" style="display: none;">${t("room.add_cabinet")}</button>
         </div>
       </div>
     `;
@@ -639,9 +633,8 @@ class RoomChildrenManager {
         itemSelector: ".room-child-item",
         emptyClassName: "room-child-empty",
         removeBtnSelector: ".remove-child-btn",
-        addBtnSelector: ".add-child-btn",
-        emptyMode: "button",
-        showInRowAddButton: true
+        externalAddButtonId: "add-room-workstation-btn",
+        emptyMode: "hint"
       },
       "workstation"
     );
@@ -651,9 +644,8 @@ class RoomChildrenManager {
         itemSelector: ".room-child-item",
         emptyClassName: "room-child-empty",
         removeBtnSelector: ".remove-child-btn",
-        addBtnSelector: ".add-child-btn",
-        emptyMode: "button",
-        showInRowAddButton: true
+        externalAddButtonId: "add-room-cabinet-btn",
+        emptyMode: "hint"
       },
       "cabinet"
     );
@@ -715,6 +707,9 @@ class RoomChildrenManager {
     this.bindTypeChange();
     this.updateSections();
     this.clearLists();
+    for (const list of [this.workstationList, this.cabinetList]) {
+      list.bindExternalAddButton();
+    }
   }
 
   loadExisting(children) {
@@ -722,6 +717,9 @@ class RoomChildrenManager {
     this.bindTypeChange();
     this.updateSections();
     this.clearLists();
+    for (const list of [this.workstationList, this.cabinetList]) {
+      list.bindExternalAddButton();
+    }
 
     if ((this.isOfficeRoom || this.isMixedRoom) && children?.workstations?.length) {
       children.workstations.forEach((ws) => this.workstationList.addItem(ws));
@@ -732,7 +730,6 @@ class RoomChildrenManager {
 
     for (const list of [this.workstationList, this.cabinetList]) {
       list.updateEmptyState();
-      list.updateAddButtons();
     }
   }
 
@@ -763,9 +760,8 @@ class RoomNetOutletsManager extends DynamicRowManager {
       itemSelector: ".room-net-outlet-item",
       emptyClassName: "room-net-outlet-empty",
       removeBtnSelector: ".remove-net-outlet-btn",
-      addBtnSelector: ".add-net-outlet-btn",
-      emptyMode: "button",
-      showInRowAddButton: true
+      externalAddButtonId: "add-room-net-outlet-btn",
+      emptyMode: "hint"
     });
     this.roomId = null;
   }
@@ -774,9 +770,14 @@ class RoomNetOutletsManager extends DynamicRowManager {
     return t("room.add_net_outlet") || t("net_outlet.add");
   }
 
+  emptyHintText() {
+    return t("common.no_data");
+  }
+
   init(roomId = null) {
     this.roomId = roomId;
     this.ensureContainer();
+    this.bindExternalAddButton();
     if (!this.container) {
       return false;
     }
@@ -799,7 +800,6 @@ class RoomNetOutletsManager extends DynamicRowManager {
         </div>
         <div class="form-group room-net-outlets-actions">
           <button type="button" class="btn btn-danger btn-sm remove-net-outlet-btn">${t("common.delete")}</button>
-          <button type="button" class="btn btn-secondary btn-sm add-net-outlet-btn" style="display: none;">${this.addLabel()}</button>
         </div>
       </div>
     `;
@@ -809,6 +809,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
 
   async loadExisting(room) {
     this.ensureContainer();
+    this.bindExternalAddButton();
     if (!this.container) {
       return;
     }
@@ -817,7 +818,6 @@ class RoomNetOutletsManager extends DynamicRowManager {
     const netOutlets = room?.net_outlets || [];
     netOutlets.forEach((no) => this.addItem(no));
     this.updateEmptyState();
-    this.updateAddButtons();
   }
 
   collectData() {

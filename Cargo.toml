@@ -68,7 +68,7 @@ tokio-cron-scheduler = "0.15.1"
 
 [package]
 name = "ipma"
-version = "0.15.74"
+version = "0.15.76"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -148,3 +148,6 @@ regex = "1"
 [features]
 default = []
 
+
+[patch.crates-io]
+rsa = { git = "https://github.com/RustCrypto/RSA", tag = "v0.10.0-rc.18" }

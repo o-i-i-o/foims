@@ -16,7 +16,7 @@
  *   removeBtnSelector    行内「删除」按钮选择器
  *   addBtnSelector       行内/空状态「添加」按钮选择器（按钮模式或在行内显示添加时必填）
  *   emptyMode            'hint'（纯文字提示）| 'button'（带添加按钮）
- *   externalAddButtonId  容器外的「添加」按钮 id（如机柜底部的添加机位按钮），可选
+ *   externalAddButtonId  容器外（标题右侧）的「添加」按钮 id，可选
  *   showInRowAddButton   是否在每行行内显示「添加」按钮（仅末行可见），默认 false
  */
 export class DynamicRowManager {
@@ -44,7 +44,7 @@ export class DynamicRowManager {
     return this.config.emptyHintText || "";
   }
 
-  /** 绑定容器外的「添加」按钮（如机柜底部的添加按钮） */
+  /** 绑定容器外的「添加」按钮（标题右侧），并同步按钮文案 */
   bindExternalAddButton() {
     if (!this.config.externalAddButtonId) {
       return;
@@ -58,6 +58,10 @@ export class DynamicRowManager {
     }
     this.addHandler = () => this.addItem();
     addBtn.addEventListener("click", this.addHandler);
+    const label = this.addLabel();
+    if (label) {
+      addBtn.textContent = label;
+    }
   }
 
   /** 根据 item 数量显示/隐藏空状态占位 */

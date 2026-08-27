@@ -30,21 +30,33 @@
             <input type="text" id="room-name" name="name" autocomplete="off" required>
         </div>
         <div class="form-group network-config-wrapper">
-            <label data-i18n="network.network_config">Network Config</label>
+            <div class="list-header">
+              <label data-i18n="network.network_config">Network Config</label>
+              <button type="button" id="room-add-network-config-btn" class="btn btn-secondary btn-sm list-add-btn" data-i18n="network.add_network_config">Add</button>
+            </div>
             <div id="network-configs-container"></div>
         </div>
         <!-- 工位/机柜动态管理区域："其他"类型房间两者皆可管理 -->
         <div class="form-group" id="room-workstations-group">
-            <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
+            <div class="list-header">
+              <label id="room-children-label" data-i18n="room.workstations">Workstations</label>
+              <button type="button" id="add-room-workstation-btn" class="btn btn-secondary btn-sm list-add-btn" data-i18n="room.add_workstation">Add Workstation</button>
+            </div>
             <div id="room-children-container"></div>
         </div>
         <div class="form-group hidden" id="room-cabinets-group">
-            <label id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</label>
+            <div class="list-header">
+              <label id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</label>
+              <button type="button" id="add-room-cabinet-btn" class="btn btn-secondary btn-sm list-add-btn" data-i18n="room.add_cabinet">Add Cabinet</button>
+            </div>
             <div id="room-cabinets-container"></div>
         </div>
         <!-- 信息点动态管理区域（所有房型通用） -->
         <div class="form-group">
-            <label id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</label>
+            <div class="list-header">
+              <label id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</label>
+              <button type="button" id="add-room-net-outlet-btn" class="btn btn-secondary btn-sm list-add-btn" data-i18n="room.add_net_outlet">Add Network Outlet</button>
+            </div>
             <div id="room-net-outlets-container"></div>
         </div>
         <div class="form-group">

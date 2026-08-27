@@ -614,10 +614,10 @@
     "positions_list": "机位列表",
     "patch_panels": "配线架",
     "add_patch_panel": "添加配线架",
-    "no_patch_panels_hint": "暂无配线架，点击下方按钮添加",
+    "no_patch_panels_hint": "暂无配线架，点击右上角按钮添加",
     "patch_panel_name": "配线架名称",
     "patch_panels_save_failed": "配线架保存失败",
-    "no_positions_hint": "暂无机位，点击下方按钮添加",
+    "no_positions_hint": "暂无机位，点击右上角按钮添加",
     "position_count": "机位数量"
   },
   "cabinet_position": {
@@ -904,7 +904,7 @@
     "all": "全部通知",
     "unread": "未读",
     "read": "已读",
-    "mark_all_read": "全部标记已读",
+    "mark_all_read": "标记已读",
     "time": "时间",
     "title": "标题",
     "content": "内容",

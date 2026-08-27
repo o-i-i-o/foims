@@ -614,10 +614,10 @@
     "positions_list": "Positions List",
     "patch_panels": "Patch Panels",
     "add_patch_panel": "Add Patch Panel",
-    "no_patch_panels_hint": "No patch panels yet, click the button below to add",
+    "no_patch_panels_hint": "No patch panels yet. Click the button at the top right to add one.",
     "patch_panel_name": "Patch Panel Name",
     "patch_panels_save_failed": "Failed to save patch panels",
-    "no_positions_hint": "No positions yet. Click the button below to add one.",
+    "no_positions_hint": "No positions yet. Click the button at the top right to add one.",
     "position_count": "Position Count"
   },
   "cabinet_position": {
