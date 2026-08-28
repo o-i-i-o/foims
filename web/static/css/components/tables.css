@@ -149,11 +149,17 @@
   font-size: 0.875rem;
 }
 
+/* 分页页脚：sticky 吸附在可视区底部（长表格滚动时始终可见），自然位置仍在表格之后；
+   不透明背景避免吸附时透出底下行内容 */
 .pagination-container {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
   width: 100%;
   padding: var(--space-md) 0;
   border-top: 1px solid var(--color-border);
   margin-top: auto;
+  background: var(--color-bg);
 }
 
 .pagination-wrapper {

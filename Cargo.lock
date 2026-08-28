@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.78"
+version = "0.15.79"
 dependencies = [
  "aes-gcm",
  "arc-swap",

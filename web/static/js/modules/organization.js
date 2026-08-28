@@ -599,8 +599,8 @@ async function loadEmployeeList(orgId) {
       const actions = tr.querySelector(".employee-actions-cell");
 
       actions.innerHTML = `
-        ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit employee-edit-btn" })}
-        ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete employee-delete-btn" })}
+        ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit employee-edit-btn", attrs: 'data-action="employee-edit"' })}
+        ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete employee-delete-btn", attrs: 'data-action="employee-delete"' })}
       `;
       actions.querySelector(".employee-edit-btn")?.addEventListener("click", () => openEmployeeEditModal(orgId, emp));
       actions.querySelector(".employee-delete-btn")?.addEventListener("click", () => deleteEmployee(emp));

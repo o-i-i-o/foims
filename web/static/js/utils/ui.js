@@ -391,13 +391,16 @@ export function appendPaginationToTable(container, data, onPageChange, options =
   let paginationContainer;
 
   if (tableContainer) {
-    const existingPagination = tableContainer.querySelector(".pagination-container");
-    if (existingPagination) {
-      existingPagination.remove();
+    // 分页插在 .table-container 之后（同级）：容器是 overflow-x 滚动容器，
+    // 内部元素 sticky 无法相对视口固定，移出后分页条才能吸附在页脚
+    tableContainer.querySelectorAll(".pagination-container").forEach((p) => p.remove());
+    const nextSibling = tableContainer.nextElementSibling;
+    if (nextSibling?.classList.contains("pagination-container")) {
+      nextSibling.remove();
     }
     paginationContainer = document.createElement("div");
     paginationContainer.className = "pagination-container";
-    tableContainer.appendChild(paginationContainer);
+    tableContainer.after(paginationContainer);
   } else {
     const existingPagination = el.querySelector(".pagination-wrapper");
     if (existingPagination) {

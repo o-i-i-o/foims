@@ -368,11 +368,15 @@ class NetworkConfigManager {
         const regionSelect = item.querySelector(`.${this.options.regionSelectClass}`);
         const networkSelect = item.querySelector(`.${this.options.networkSelectClass}`);
 
+        // 区域 id 以房间自带数据为准（brief 接口的 networks 含 network_region_id）；
+        // allNetworks 来自精简 options 接口（仅 id/name），不含该字段
+        const regionId = network.network_region_id || networkInfo.network_region_id;
+
         await loadNetworkRegions(regionSelect);
-        regionSelect.value = networkInfo.network_region_id;
+        regionSelect.value = regionId || "";
 
         const otherIds = selectedIds.filter((id) => id !== network.id);
-        await loadNetworks(networkInfo.network_region_id, networkSelect, otherIds);
+        await loadNetworks(regionId, networkSelect, otherIds);
         networkSelect.value = network.id;
 
         return item;
