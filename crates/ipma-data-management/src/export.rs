@@ -100,8 +100,6 @@ struct NameContext {
     nics: HashMap<String, String>,
     /// device_interfaces：id → (设备 id, 接口名)
     interfaces: HashMap<String, (String, String)>,
-    /// device_ports：id → (设备 id, 端口号)
-    ports: HashMap<String, (String, String)>,
     /// topology_connections：id → (源设备 id, 目标设备 id, 类型)
     connections: HashMap<String, (String, String, String)>,
 }
@@ -126,10 +124,9 @@ impl NameContext {
         None
     }
 
-    /// 设备端口编码为 "房间/设备名:端口号"。
+    /// 端口/接口统一编码为 "房间/设备名:端口名"（device_interfaces）。
     fn port_path(&self, id: &str) -> Option<String> {
-        let (device_id, port) = self.ports.get(id)?;
-        Some(format!("{}:{}", self.devices.get(device_id)?, port))
+        self.interface_path(id)
     }
 
     /// 接口编码为 "房间/设备名:接口名"。
@@ -217,11 +214,6 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
             .fetch_all(&mut *conn)
             .await?;
 
-    let ports: Vec<(String, String, String)> =
-        sqlx::query_as("SELECT id::text, device_id::text, port_number FROM device_ports")
-            .fetch_all(&mut *conn)
-            .await?;
-
     let connections: Vec<(String, String, String, String)> = sqlx::query_as(
         r"SELECT id::text, source_device_id::text, target_device_id::text, connection_type
            FROM topology_connections",
@@ -242,7 +234,6 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
             .into_iter()
             .map(|(i, d, n)| (i, (d, n)))
             .collect(),
-        ports: ports.into_iter().map(|(i, d, p)| (i, (d, p))).collect(),
         connections: connections
             .into_iter()
             .map(|(i, s, t, ty)| (i, (s, t, ty)))
@@ -354,7 +345,6 @@ fn endpoint_to_csv(ctx: &NameContext, row: &Value, id_col: &str) -> DataResult<S
         .and_then(Value::as_str)
         .unwrap_or_default();
     let resolved = match endpoint_type {
-        "device_port" => ctx.port_path(id),
         "device_interface" => ctx.interface_path(id),
         "net_outlet" => ctx
             .simple

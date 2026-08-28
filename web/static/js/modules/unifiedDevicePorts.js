@@ -1,51 +1,34 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
-import { showToast, handleError } from "../utils/ui.js";
+import { showToast, handleError, escapeHtml } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 import { t } from "../utils/i18n.js";
+import { INTERFACE_ROLES, PHYSICAL_TYPES } from "../utils/networkCardManager.js";
 
 /**
- * 设备端口管理（以 2026年5月版 device-ports-group-modal 布局为准）
+ * 统一设备端口管理（device_interfaces 单一模型）
  *
- * 组织结构：
- *   - 设备模态框手动管理的网口（NIC 接口）→ 渲染为一个或多个端口分组（蓝色调）
- *   - 端口模态框自身管理的二层端口（Switch 端口）→ 按端口名前缀分组（橙/绿色调）
- *   - 两类分组共用 .port-group / .port-item 样式，统一显示在 .port-groups-container 内
+ * 数据源为 GET /devices/{id}/nics（网卡 → 网口 → IP）：
+ *   - 每张网卡/板卡渲染为一个端口分组（手工网卡在前、自动板卡在后，
+ *     由后端 sort_order 保证顺序）；
+ *   - 设备模态框托管的网口（device_managed=1）与端口模态框/SNMP 同步
+ *     生成的网口（device_managed=0）统一展示，均可点击编辑；
+ *   - 端口详情模态框配置项与设备模态框网口容器一致，另含「设备管理」
+ *     复选框（勾选后该网口进入设备编辑模态框管理）。
  *
- * 功能：
- *   - 添加端口（二层）、端口详情编辑/删除
- *   - 从 SNMP 拉取端口（含端口名称冲突二次确认：覆盖/跳过/全部覆盖/全部跳过）
+ * SNMP 拉取：GET /snmp-ports 取实时端口，与现有网口按名称比对，
+ * 冲突项弹窗逐项选择覆盖/跳过；覆盖时不改动 device_managed。
  */
-
-const devicePortState = {
-  currentDeviceId: null,
-  currentDeviceName: null,
-  currentDeviceType: null
-};
 
 // SNMP 同步过程中待处理的冲突信息（供冲突对话框使用）
 const conflictState = {
   newPorts: [], // SNMP 拉取到的全部端口
-  existingMap: new Map(), // 已存在端口：key = port_number（小写）
-  decisions: {} // { portNumber: 'overwrite' | 'skip' }
+  existingMap: new Map(), // 已存在网口：key = name（小写）
+  decisions: {} // { name: 'overwrite' | 'skip' }
 };
-
-function setCurrentDevice(device) {
-  devicePortState.currentDeviceId = device.id;
-  devicePortState.currentDeviceName = device.name;
-  devicePortState.currentDeviceType = device.device_type;
-}
-
-function getCurrentDevice() {
-  return {
-    id: devicePortState.currentDeviceId,
-    name: devicePortState.currentDeviceName,
-    type: devicePortState.currentDeviceType
-  };
-}
 
 /**
  * 统一的设备端口管理入口
@@ -65,106 +48,103 @@ export async function manageUnifiedDevicePorts(deviceId, deviceName) {
       return;
     }
 
-    const { device_type, cards } = result.data;
-    setCurrentDevice({ id: deviceId, name: deviceName, device_type });
-    const device = getCurrentDevice();
+    const { cards } = result.data;
 
     const title = elementCache.get("unified-device-ports-modal-title");
     if (title) {
       title.textContent = `${deviceName} - ${t("device.unified_ports")}`;
     }
 
-    // 渲染：先把 NIC 作为分组渲染，网络设备再追加二层端口分组
-    await renderAllPortGroups(device, cards);
-
-    // 绑定底部按钮（添加端口 / 从SNMP获取 / 端口项点击）
-    bindModalButtons(device.id);
+    renderAllPortGroups(cards || []);
+    bindModalButtons(deviceId);
   } catch (error) {
     handleError(error, t("device.port_management_failed"));
   }
 }
 
 /**
- * 渲染所有端口分组：NIC 分组 + （网络设备）二层端口分组
+ * 渲染所有端口分组：每张网卡/板卡一组，组内为该卡的全部网口
  */
-async function renderAllPortGroups(device, cards) {
+function renderAllPortGroups(cards) {
   const container = document.querySelector(".port-groups-container");
   if (!container) {
     return;
   }
   container.innerHTML = "";
 
-  // 1. NIC 分组（设备模态框管理的网口）
-  renderNicPortGroups(container, cards);
-
-  // 2. 二层端口分组（端口模态框自身管理），无端口时接口返回空数组
-  await loadAndRenderDevicePorts(device.id, container);
-
-  // 若两类都为空，显示空提示
-  if (!container.children.length) {
-    container.innerHTML = `<p class="empty-message">${t("device.no_device_ports")}</p>`;
-  }
-}
-
-/**
- * 把 NIC（网卡→网口）渲染为端口分组
- * 每张网卡 = 一个 .port-group.is-nic-group，网卡下的每个网口 = 一个 .port-item.nic-interface
- */
-function renderNicPortGroups(container, cards) {
-  if (!Array.isArray(cards) || cards.length === 0) {
-    return;
-  }
+  // fragment 一次性挂载，分组多时避免逐组 append 触发多次重排
+  const fragment = document.createDocumentFragment();
+  let rendered = 0;
 
   cards.forEach((card) => {
     const ports = Array.isArray(card.ports) ? card.ports : [];
     if (ports.length === 0) {
       return;
     }
-
-    const groupElement = document.createElement("div");
-    groupElement.className = "port-group is-nic-group";
-
-    const groupTitle = document.createElement("h4");
-    const cardName = card.name || t("device.network_card");
-    groupTitle.textContent = `${cardName} (${ports.length})`;
-    groupElement.appendChild(groupTitle);
-
-    const portGrid = document.createElement("div");
-    portGrid.className = "port-grid";
-
-    ports.sort(
-      (a, b) =>
-        (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name).localeCompare(String(b.name))
-    );
-
-    // fragment 一次性挂载，端口多时避免逐项 append 触发多次重排
-    const portFragment = document.createDocumentFragment();
-    ports.forEach((iface) => {
-      portFragment.appendChild(createNicPortItem(card, iface));
-    });
-    portGrid.appendChild(portFragment);
-
-    groupElement.appendChild(portGrid);
-    container.appendChild(groupElement);
+    rendered += ports.length;
+    fragment.appendChild(createPortGroup(card, ports));
   });
+
+  if (rendered === 0) {
+    container.innerHTML = `<p class="empty-message">${t("device.no_device_ports")}</p>`;
+    return;
+  }
+  container.appendChild(fragment);
 }
 
 /**
- * 创建 NIC 网口项（只读展示，点击提示由设备模态框管理）
+ * 创建一个端口分组（网卡/板卡 = .port-group）
  */
-function createNicPortItem(card, iface) {
-  const portItem = document.createElement("div");
-  portItem.className = "port-item nic-interface";
-  portItem.dataset.kind = "nic";
-  portItem.dataset.portId = iface.id || "";
-  portItem.dataset.portNumber = iface.name || "";
-  portItem.dataset.portName = iface.name || "";
+function createPortGroup(card, ports) {
+  const groupElement = document.createElement("div");
+  // 自动板卡（SNMP 分组生成）与手工网卡以色调区分
+  groupElement.className = "port-group is-switch-group";
 
-  // 显示网口名的末尾数字，无数字则显示首字母
+  const groupTitle = document.createElement("h4");
+  const cardName = card.name || t("device.network_card");
+  groupTitle.textContent = `${cardName} (${ports.length})`;
+  groupElement.appendChild(groupTitle);
+
+  const portGrid = document.createElement("div");
+  portGrid.className = "port-grid";
+
+  ports.sort(
+    (a, b) =>
+      (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name).localeCompare(String(b.name))
+  );
+
+  const portFragment = document.createDocumentFragment();
+  ports.forEach((iface) => {
+    portFragment.appendChild(createPortItem(iface));
+  });
+  portGrid.appendChild(portFragment);
+
+  groupElement.appendChild(portGrid);
+  return groupElement;
+}
+
+/**
+ * 创建端口项（可点击编辑）
+ */
+function createPortItem(iface) {
+  const portItem = document.createElement("div");
+  portItem.className = `port-item ${iface.device_managed ? "nic-interface" : ""} status-${iface.status || "up"}`;
+  portItem.dataset.portId = iface.id || "";
+  portItem.dataset.name = iface.name || "";
+  portItem.dataset.physicalType = iface.physical_type || "other";
+  portItem.dataset.interfaceRole = iface.interface_role || "business";
+  portItem.dataset.vlanId = iface.vlan_id || "";
+  portItem.dataset.macAddress = iface.mac_address || "";
+  portItem.dataset.description = iface.description || "";
+  portItem.dataset.deviceManaged = iface.device_managed === true ? "1" : "0";
+  portItem.dataset.status = iface.status || "up";
+  portItem.dataset.speed = iface.speed || "";
+
+  // 显示端口名的末尾数字，无数字则显示首字母
   const display = extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3);
   portItem.textContent = display;
 
-  // tooltip：网口名 + MAC + IP（含所属网段/网络区域）
+  // tooltip：端口名 + MAC + IP（含所属网段/网络区域）+ 运行状态
   const ipList = Array.isArray(iface.ips)
     ? iface.ips
         .map((i) => {
@@ -180,82 +160,16 @@ function createNicPortItem(card, iface) {
   if (ipList.length) {
     tipParts.push(`IP: ${ipList.join(", ")}`);
   }
+  if (iface.status && iface.status !== "up") {
+    tipParts.push(`${t("ip.status")}: ${iface.status}`);
+  }
+  if (iface.speed) {
+    tipParts.push(`${t("device.speed")}: ${iface.speed}`);
+  }
 
   const tooltip = document.createElement("div");
   tooltip.className = "port-tooltip";
   tooltip.textContent = tipParts.join(" | ");
-  portItem.appendChild(tooltip);
-
-  return portItem;
-}
-
-/**
- * 加载并渲染二层端口（按端口名前缀分组）
- */
-async function loadAndRenderDevicePorts(deviceId, container) {
-  try {
-    const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=1000`);
-    if (!result.success || !result.data) {
-      return;
-    }
-
-    const ports = Array.isArray(result.data) ? result.data : result.data.items || [];
-    if (ports.length === 0) {
-      return;
-    }
-
-    const portGroups = groupPorts(ports);
-    renderDevicePortGroups(container, portGroups);
-  } catch (error) {
-    console.error("加载设备端口失败:", error);
-  }
-}
-
-/**
- * 渲染二层端口分组（追加到 container）
- */
-function renderDevicePortGroups(container, portGroups) {
-  Object.entries(portGroups).forEach(([groupName, ports]) => {
-    const groupElement = document.createElement("div");
-    groupElement.className = "port-group is-switch-group";
-
-    const groupTitle = document.createElement("h4");
-    groupTitle.textContent = `${groupName} (${ports.length})`;
-    groupElement.appendChild(groupTitle);
-
-    const portGrid = document.createElement("div");
-    portGrid.className = "port-grid";
-
-    ports.sort((a, b) => extractPortNumber(a.port_number) - extractPortNumber(b.port_number));
-    ports.forEach((port) => portGrid.appendChild(createDevicePortItem(port)));
-
-    groupElement.appendChild(portGrid);
-    container.appendChild(groupElement);
-  });
-}
-
-/**
- * 创建二层端口项（可点击编辑）
- */
-function createDevicePortItem(port) {
-  const portItem = document.createElement("div");
-  portItem.className = `port-item status-${port.status}`;
-  portItem.dataset.kind = "switch";
-  portItem.dataset.portId = port.id;
-  portItem.dataset.deviceId = port.device_id;
-  portItem.dataset.portNumber = port.port_number;
-  portItem.dataset.portName = port.port_name || "";
-  portItem.dataset.portType = port.port_type || "access";
-  portItem.dataset.vlanId = port.vlan_id || "";
-  portItem.dataset.status = port.status || "up";
-  portItem.dataset.speed = port.speed || "";
-  portItem.dataset.description = port.description || "";
-
-  portItem.textContent = extractPortLastNumber(port.port_number);
-
-  const tooltip = document.createElement("div");
-  tooltip.className = "port-tooltip";
-  tooltip.textContent = port.port_number;
   portItem.appendChild(tooltip);
 
   return portItem;
@@ -270,17 +184,8 @@ function bindModalButtons(deviceId) {
   const addPortBtn = elementCache.get("add-port-btn");
   if (addPortBtn) {
     addPortBtn.onclick = () => {
-      openPortDetailModal({
-        portId: "",
-        deviceId,
-        portNumber: "",
-        portName: "",
-        portType: "access",
-        vlanId: "",
-        status: "up",
-        speed: "",
-        description: ""
-      });
+      // 端口模态框新建的端口默认不进设备模态框（设备管理复选框不勾选）
+      openPortDetailModal({ portId: "", deviceId, name: "", deviceManaged: false });
     };
   }
 
@@ -292,7 +197,7 @@ function bindModalButtons(deviceId) {
     };
   }
 
-  // 端口项点击（事件委托）：二层端口 → 编辑；NIC → 提示由设备模态框管理。
+  // 端口项点击（事件委托）：统一打开端口详情编辑。
   // 容器为常驻节点，用 dataset.bound 防止重复绑定
   const container = document.querySelector(".port-groups-container");
   if (container && !container.dataset.bound) {
@@ -302,22 +207,16 @@ function bindModalButtons(deviceId) {
       if (!portItem) {
         return;
       }
-
-      if (portItem.dataset.kind === "nic") {
-        showToast(t("device.nic_managed_by_device_modal"), "info");
-        return;
-      }
-
       openPortDetailModal({
         portId: portItem.dataset.portId,
-        deviceId: portItem.dataset.deviceId,
-        portNumber: portItem.dataset.portNumber,
-        portName: portItem.dataset.portName,
-        portType: portItem.dataset.portType,
+        deviceId,
+        name: portItem.dataset.name,
+        physicalType: portItem.dataset.physicalType,
+        interfaceRole: portItem.dataset.interfaceRole,
         vlanId: portItem.dataset.vlanId,
-        status: portItem.dataset.status,
-        speed: portItem.dataset.speed,
-        description: portItem.dataset.description
+        macAddress: portItem.dataset.macAddress,
+        description: portItem.dataset.description,
+        deviceManaged: portItem.dataset.deviceManaged === "1"
       });
     });
   }
@@ -337,19 +236,36 @@ async function openPortDetailModal(portData) {
   if (title) {
     title.textContent = isNewPort
       ? t("device.add_port")
-      : `${t("device.port_detail")} - ${portData.portNumber}`;
+      : `${t("device.port_detail")} - ${portData.name}`;
+  }
+
+  // 物理形态/接口角色选项与设备模态框网口容器共用同一来源
+  const ptypeSelect = elementCache.get("device-port-ptype-expanded");
+  if (ptypeSelect) {
+    ptypeSelect.innerHTML = PHYSICAL_TYPES.map(
+      (opt) => `<option value="${opt.value}">${escapeHtml(opt.label())}</option>`
+    ).join("");
+    ptypeSelect.value = portData.physicalType || "other";
+  }
+  const roleSelect = elementCache.get("device-port-role-expanded");
+  if (roleSelect) {
+    roleSelect.innerHTML = INTERFACE_ROLES.map(
+      (opt) => `<option value="${opt.value}">${escapeHtml(opt.label())}</option>`
+    ).join("");
+    roleSelect.value = portData.interfaceRole || "business";
   }
 
   // 填充表单
   elementCache.setValue("device-port-id-expanded", portData.portId || "");
   elementCache.setValue("device-port-device-id-expanded", portData.deviceId || "");
-  elementCache.setValue("device-port-number-expanded", portData.portNumber || "");
-  elementCache.setValue("device-port-name-expanded", portData.portName || "");
-  elementCache.setValue("device-port-type-expanded", portData.portType || "access");
+  elementCache.setValue("device-port-name-expanded", portData.name || "");
   elementCache.setValue("device-port-vlan-expanded", portData.vlanId || "");
-  elementCache.setValue("device-port-status-expanded", portData.status || "up");
-  elementCache.setValue("device-port-speed-expanded", portData.speed || "");
+  elementCache.setValue("device-port-mac-expanded", portData.macAddress || "");
   elementCache.setValue("device-port-description-expanded", portData.description || "");
+  const managedCheckbox = elementCache.get("device-port-managed-expanded");
+  if (managedCheckbox) {
+    managedCheckbox.checked = portData.deviceManaged === true;
+  }
 
   if (deleteBtn) {
     deleteBtn.style.display = isNewPort ? "none" : "inline-block";
@@ -364,19 +280,20 @@ async function openPortDetailModal(portData) {
 }
 
 /**
- * 收集端口表单数据
+ * 收集端口表单数据（与设备模态框网口容器一致的配置项 + 设备管理标记）
  */
 function collectPortFormData() {
+  const vlanRaw = elementCache.getValue("device-port-vlan-expanded");
   return {
     id: elementCache.getValue("device-port-id-expanded"),
     deviceId: elementCache.getValue("device-port-device-id-expanded"),
-    port_number: elementCache.getValue("device-port-number-expanded"),
-    port_name: elementCache.getValue("device-port-name-expanded") || null,
-    port_type: elementCache.getValue("device-port-type-expanded") || "access",
-    vlan_id: elementCache.getValue("device-port-vlan-expanded") || null,
-    status: elementCache.getValue("device-port-status-expanded") || "up",
-    speed: elementCache.getValue("device-port-speed-expanded") || null,
-    description: elementCache.getValue("device-port-description-expanded") || null
+    name: elementCache.getValue("device-port-name-expanded"),
+    physical_type: elementCache.getValue("device-port-ptype-expanded") || "other",
+    interface_role: elementCache.getValue("device-port-role-expanded") || "business",
+    vlan_id: vlanRaw ? parseInt(vlanRaw, 10) : null,
+    mac_address: elementCache.getValue("device-port-mac-expanded") || null,
+    description: elementCache.getValue("device-port-description-expanded") || null,
+    device_managed: elementCache.get("device-port-managed-expanded")?.checked === true
   };
 }
 
@@ -385,21 +302,25 @@ function collectPortFormData() {
  */
 async function submitPortForm() {
   const data = collectPortFormData();
-  const { id, deviceId, port_number } = data;
+  const { id, deviceId, name } = data;
 
-  if (!port_number) {
-    showToast(t("device.port_number_required"), "warning");
+  if (!name?.trim()) {
+    showToast(t("device.port_name_required"), "warning");
+    return;
+  }
+  if (data.vlan_id !== null && (isNaN(data.vlan_id) || data.vlan_id < 1 || data.vlan_id > 4094)) {
+    showToast(t("device.vlan_invalid"), "warning");
     return;
   }
 
   const payload = {
-    port_number: data.port_number,
-    port_name: data.port_name,
-    port_type: data.port_type,
-    vlan_id: data.vlan_id ? parseInt(data.vlan_id, 10) : null,
-    status: data.status,
-    speed: data.speed,
-    description: data.description
+    name: name.trim(),
+    physical_type: data.physical_type,
+    interface_role: data.interface_role,
+    vlan_id: data.vlan_id,
+    mac_address: data.mac_address?.trim() || null,
+    description: data.description?.trim() || null,
+    device_managed: data.device_managed
   };
 
   const saveBtn = elementCache.get("save-port-btn");
@@ -412,9 +333,9 @@ async function submitPortForm() {
   try {
     let result;
     if (id) {
-      result = await apiPut(`/api/resources/devices/device-ports/${id}`, payload);
+      result = await apiPut(`/api/resources/devices/interfaces/${id}`, payload);
     } else {
-      result = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, payload);
+      result = await apiPost(`/api/resources/devices/${deviceId}/interfaces`, payload);
     }
 
     if (result.success) {
@@ -457,7 +378,7 @@ async function deletePort() {
   }
 
   try {
-    const result = await apiDelete(`/api/resources/devices/device-ports/${id}`);
+    const result = await apiDelete(`/api/resources/devices/interfaces/${id}`);
     if (result.success) {
       closeModal("device-port-detail-modal");
       showToast(t("device.port_delete_success"), "success");
@@ -479,10 +400,9 @@ async function deletePort() {
  * 刷新模态框内的端口分组视图（保存/删除/SNMP 同步后调用）
  */
 async function refreshModalView(deviceId) {
-  const device = getCurrentDevice();
   const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
   const cards = result.success && result.data ? result.data.cards || [] : [];
-  await renderAllPortGroups(device, cards);
+  renderAllPortGroups(cards);
   // 重新绑定（renderAllPortGroups 重置了 container.innerHTML，click 委托需重绑）
   bindModalButtons(deviceId);
 }
@@ -491,10 +411,11 @@ async function refreshModalView(deviceId) {
 // SNMP 拉取 + 端口名称冲突处理（覆盖 / 跳过 / 全部覆盖 / 全部跳过）
 // 流程：
 //   1. GET /snmp-ports 拿到 SNMP 实时端口（不落库）
-//   2. GET /device-ports 拿到现有端口
-//   3. 对比 port_number（忽略大小写），找出冲突项
+//   2. GET /nics 展平现有网口（含托管与非托管）
+//   3. 对比端口名称（忽略大小写），找出冲突项
 //   4. 若有冲突 → 弹出 port-conflict-modal 供用户逐项选择或一键全部
-//   5. 按决策走 POST（新增）/ PUT（覆盖），跳过的项不处理
+//   5. 按决策走 POST（新增）/ PUT（覆盖），跳过的项不处理；
+//      覆盖仅更新运行属性，不改动 device_managed 托管状态
 // ============================================================
 
 async function startSnmpSync(deviceId) {
@@ -515,25 +436,21 @@ async function startSnmpSync(deviceId) {
     }
     const newPorts = snmpResult.data;
 
-    // 2. 拉取现有端口
-    const existingResult = await apiGet(
-      `/api/resources/devices/${deviceId}/device-ports?page_size=1000`
-    );
+    // 2. 拉取现有网口（/nics 的 cards 展平）
+    const existingResult = await apiGet(`/api/resources/devices/${deviceId}/nics`);
     let existingPorts = [];
-    if (existingResult.success) {
-      existingPorts = Array.isArray(existingResult.data)
-        ? existingResult.data
-        : existingResult.data?.items || [];
+    if (existingResult.success && existingResult.data) {
+      existingPorts = (existingResult.data.cards || []).flatMap((c) => c.ports || []);
     }
 
     const existingMap = new Map();
-    existingPorts.forEach((p) => existingMap.set(String(p.port_number).toLowerCase(), p));
+    existingPorts.forEach((p) => existingMap.set(String(p.name).toLowerCase(), p));
 
     // 3. 对比分类
     const toAdd = [];
     const conflicts = [];
     newPorts.forEach((p) => {
-      const key = String(p.port_number).toLowerCase();
+      const key = String(p.name).toLowerCase();
       if (existingMap.has(key)) {
         conflicts.push({ snmpPort: p, existingPort: existingMap.get(key) });
       } else {
@@ -552,7 +469,7 @@ async function startSnmpSync(deviceId) {
     conflictState.existingMap = existingMap;
     conflictState.decisions = {};
     conflicts.forEach((c) => {
-      conflictState.decisions[String(c.snmpPort.port_number)] = "skip";
+      conflictState.decisions[String(c.snmpPort.name)] = "skip";
     });
 
     await showConflictModal(deviceId, toAdd, conflicts);
@@ -590,24 +507,24 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
 
       const num = document.createElement("div");
       num.className = "conflict-port-number";
-      num.textContent = c.snmpPort.port_number;
+      num.textContent = c.snmpPort.name;
 
       const detail = document.createElement("div");
       detail.className = "conflict-port-detail";
-      const oldName = c.existingPort.port_name || "-";
-      const newName = c.snmpPort.port_name || "-";
-      detail.textContent = `${t("device.conflict_existing")}: ${oldName} → ${t("device.conflict_new")}: ${newName}`;
+      const oldDesc = c.existingPort.description || c.existingPort.name;
+      const newDesc = c.snmpPort.description || c.snmpPort.name;
+      detail.textContent = `${t("device.conflict_existing")}: ${oldDesc} → ${t("device.conflict_new")}: ${newDesc}`;
 
       const select = document.createElement("select");
       select.className = "conflict-select";
-      select.dataset.portNumber = c.snmpPort.port_number;
+      select.dataset.portName = c.snmpPort.name;
       select.innerHTML = `
         <option value="skip">${t("device.conflict_skip")}</option>
         <option value="overwrite">${t("device.conflict_overwrite")}</option>
       `;
-      select.value = conflictState.decisions[c.snmpPort.port_number] || "skip";
+      select.value = conflictState.decisions[c.snmpPort.name] || "skip";
       select.addEventListener("change", () => {
-        conflictState.decisions[c.snmpPort.port_number] = select.value;
+        conflictState.decisions[c.snmpPort.name] = select.value;
       });
 
       row.appendChild(num);
@@ -623,7 +540,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
   if (skipAllBtn) {
     skipAllBtn.addEventListener("click", () => {
       conflicts.forEach((c) => {
-        conflictState.decisions[c.snmpPort.port_number] = "skip";
+        conflictState.decisions[String(c.snmpPort.name)] = "skip";
       });
       syncConflictSelections();
     });
@@ -631,7 +548,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
   if (overwriteAllBtn) {
     overwriteAllBtn.addEventListener("click", () => {
       conflicts.forEach((c) => {
-        conflictState.decisions[c.snmpPort.port_number] = "overwrite";
+        conflictState.decisions[String(c.snmpPort.name)] = "overwrite";
       });
       syncConflictSelections();
     });
@@ -642,7 +559,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
   if (confirmBtn) {
     confirmBtn.addEventListener("click", async () => {
       const toOverwrite = conflicts
-        .filter((c) => conflictState.decisions[c.snmpPort.port_number] === "overwrite")
+        .filter((c) => conflictState.decisions[String(c.snmpPort.name)] === "overwrite")
         .map((c) => c.snmpPort);
       closeModal("port-conflict-modal");
       await applySnmpResults(deviceId, toAdd, toOverwrite);
@@ -655,7 +572,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
  */
 function syncConflictSelections() {
   document.querySelectorAll(".conflict-select").forEach((sel) => {
-    const pn = sel.dataset.portNumber;
+    const pn = sel.dataset.portName;
     if (pn && conflictState.decisions[pn]) {
       sel.value = conflictState.decisions[pn];
     }
@@ -665,64 +582,85 @@ function syncConflictSelections() {
 /**
  * 应用 SNMP 同步结果
  * @param {string} deviceId
- * @param {Array} toAdd - 新增的端口
- * @param {Array} toOverwrite - 覆盖（更新）的端口
+ * @param {Array} toAdd - 新增的端口（device_managed=false，不进设备模态框）
+ * @param {Array} toOverwrite - 覆盖（更新运行属性）的端口
  */
 async function applySnmpResults(deviceId, toAdd, toOverwrite) {
   let added = 0,
     overwritten = 0,
     failed = 0;
 
-  const buildPayload = (p) => ({
-    port_number: p.port_number,
-    port_name: p.port_name || null,
-    port_type: p.port_type || "access",
+  // 新增：网卡按端口名前缀由后端自动生成
+  const buildCreatePayload = (p) => ({
+    name: p.name,
+    physical_type: "other",
+    interface_role: "business",
+    description: p.description || null,
+    port_type: p.port_type || null,
     vlan_id: p.vlan_id ?? null,
-    status: p.status || "up",
+    status: p.status || null,
     speed: p.speed || null,
-    description: p.description || null
+    device_managed: false
+  });
+
+  // 覆盖：仅更新运行属性与描述，不传 device_managed（保留原托管状态）
+  const buildOverwritePayload = (p) => ({
+    description: p.description || null,
+    port_type: p.port_type || null,
+    vlan_id: p.vlan_id ?? null,
+    status: p.status || null,
+    speed: p.speed || null
   });
 
   for (const p of toAdd) {
     try {
-      const r = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, buildPayload(p));
+      const r = await apiPost(
+        `/api/resources/devices/${deviceId}/interfaces`,
+        buildCreatePayload(p)
+      );
       if (r.success) {
         added++;
       } else {
         failed++;
       }
     } catch (e) {
-      console.error(`SNMP 同步新增端口 ${p.port_number} 失败:`, e);
+      console.error(`SNMP 同步新增端口 ${p.name} 失败:`, e);
       failed++;
     }
   }
 
   for (const p of toOverwrite) {
-    const key = String(p.port_number).toLowerCase();
+    const key = String(p.name).toLowerCase();
     const existing = conflictState.existingMap.get(key);
     if (!existing) {
       try {
-        const r = await apiPost(`/api/resources/devices/${deviceId}/device-ports`, buildPayload(p));
+        const r = await apiPost(
+          `/api/resources/devices/${deviceId}/interfaces`,
+          buildCreatePayload(p)
+        );
         if (r.success) {
           added++;
         } else {
           failed++;
         }
       } catch (e) {
-        console.error(`SNMP 同步新增端口 ${p.port_number} 失败:`, e);
+        console.error(`SNMP 同步新增端口 ${p.name} 失败:`, e);
         failed++;
       }
       continue;
     }
     try {
-      const r = await apiPut(`/api/resources/devices/device-ports/${existing.id}`, buildPayload(p));
+      const r = await apiPut(
+        `/api/resources/devices/interfaces/${existing.id}`,
+        buildOverwritePayload(p)
+      );
       if (r.success) {
         overwritten++;
       } else {
         failed++;
       }
     } catch (e) {
-      console.error(`SNMP 同步覆盖端口 ${p.port_number} 失败:`, e);
+      console.error(`SNMP 同步覆盖端口 ${p.name} 失败:`, e);
       failed++;
     }
   }
@@ -747,96 +685,13 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
   await refreshModalView(deviceId);
 }
 
-/**
- * 端口分组逻辑（按端口名前缀分组，小组并入"其他"）
- */
-function groupPorts(ports) {
-  const MIN_GROUP_SIZE = 3;
-  const rawGroups = {};
-
-  const portTypePatterns = [
-    { typeName: "Bridge-Aggregation", regex: /(Bridge-Aggregation)/, subGroup: false },
-    {
-      typeName: "Hundred-GigabitEthernet",
-      regex: /(Hundred-?GigabitEthernet)(\d+)/i,
-      subGroup: true
-    },
-    { typeName: "Forty-GigabitEthernet", regex: /(Forty-?GigabitEthernet)(\d+)/i, subGroup: true },
-    { typeName: "Ten-GigabitEthernet", regex: /(Ten-GigabitEthernet)(\d+)/, subGroup: true },
-    { typeName: "TenGigabitEthernet", regex: /(TenGigabitEthernet)(\d+)/, subGroup: true },
-    { typeName: "XGigabitEthernet", regex: /(XGigabitEthernet)(\d+)/, subGroup: true },
-    { typeName: "M-GigabitEthernet", regex: /(M-GigabitEthernet)(\d+)/, subGroup: true },
-    { typeName: "GigabitEthernet", regex: /(GigabitEthernet)(\d+)/, subGroup: true },
-    { typeName: "Vlan-interface", regex: /(Vlan-interface)/, subGroup: false },
-    { typeName: "FastEthernet", regex: /(FastEthernet)(\d+)/, subGroup: true },
-    { typeName: "Ethernet", regex: /(Ethernet)(\d+)/, subGroup: true }
-  ];
-
-  ports.forEach((port) => {
-    const portNumber = port.port_number;
-    let groupKey = t("device.port_group_other");
-
-    for (const { regex, subGroup } of portTypePatterns) {
-      const match = portNumber.match(regex);
-      if (match) {
-        if (subGroup && match[2]) {
-          groupKey = `${match[1]}${match[2]}`;
-        } else {
-          groupKey = match[1];
-        }
-        break;
-      }
-    }
-
-    if (!rawGroups[groupKey]) {
-      rawGroups[groupKey] = [];
-    }
-    rawGroups[groupKey].push(port);
-  });
-
-  const finalGroups = {};
-  const smallGroupPorts = [];
-
-  Object.entries(rawGroups).forEach(([groupName, groupPorts]) => {
-    if (groupPorts.length >= MIN_GROUP_SIZE) {
-      finalGroups[groupName] = groupPorts;
-    } else {
-      smallGroupPorts.push(...groupPorts);
-    }
-  });
-
-  if (smallGroupPorts.length > 0) {
-    const otherKey = t("device.port_group_other");
-    if (finalGroups[otherKey]) {
-      finalGroups[otherKey].push(...smallGroupPorts);
-    } else {
-      finalGroups[otherKey] = smallGroupPorts;
-    }
+function extractPortLastNumber(portName) {
+  if (typeof portName !== "string" || !portName) {
+    return portName || "";
   }
-
-  return finalGroups;
-}
-
-function extractPortNumber(portNumber) {
-  if (typeof portNumber !== "string" || !portNumber) {
-    return 0;
-  }
-  const match = portNumber.match(/\d+/g);
-  if (match) {
-    return parseInt(match.at(-1)) || 0;
-  }
-  return 0;
-}
-
-function extractPortLastNumber(portNumber) {
-  if (typeof portNumber !== "string" || !portNumber) {
-    return portNumber || "";
-  }
-  const match = portNumber.match(/\d+/g);
+  const match = portName.match(/\d+/g);
   if (match) {
     return match.at(-1);
   }
-  return portNumber;
+  return portName;
 }
-
-export { groupPorts };

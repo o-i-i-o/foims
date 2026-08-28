@@ -36,35 +36,32 @@ use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
 use crate::log::{get_login_logs, get_operation_logs};
+use crate::organization::{
+    create_org_template, create_organization, delete_org_template, delete_organization,
+    get_allowed_child_types, get_available_org_types, get_children, get_org_rooms,
+    get_org_template, get_org_templates, get_organization, get_organization_tree,
+    get_organizations, update_org_template, update_organization,
+};
 use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, create_cabinet,
     create_cabinet_position, create_cable_link, create_device, create_device_interface,
-    create_device_ip, create_device_port, create_net_outlet, create_network, create_network_region,
-    create_org_template, create_organization, create_room, create_topology_connection,
+    create_device_ip, create_net_outlet, create_network, create_network_region, create_room,
     create_workstation, delete_cabinet, delete_cabinet_position, delete_cable_link, delete_device,
-    delete_device_interface, delete_device_port, delete_device_template, delete_layout,
-    delete_net_outlet, delete_network, delete_network_region, delete_org_template,
-    delete_organization, delete_positions_layout, delete_room, delete_topology_connection,
-    delete_topology_node, delete_workstation, get_all_device_interfaces, get_all_device_ports,
-    get_allowed_child_types, get_available_ips, get_available_org_types, get_cabinet,
-    get_cabinet_networks, get_cabinet_position, get_cabinets, get_cabinets_by_network_region,
-    get_cable_link, get_cable_links, get_cable_path, get_children, get_device,
+    delete_device_interface, delete_device_template, delete_net_outlet, delete_network,
+    delete_network_region, delete_room, delete_workstation, get_all_device_interfaces,
+    get_available_ips, get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
+    get_cabinets_by_network_region, get_cable_link, get_cable_links, get_cable_path, get_device,
     get_device_info_snmp, get_device_interface, get_device_interfaces, get_device_ips,
     get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db, get_device_nics,
-    get_device_port, get_device_ports, get_device_ports_snmp, get_device_template,
-    get_device_templates, get_devices, get_ip_managers, get_layout, get_net_outlet,
-    get_net_outlets, get_network, get_network_region, get_network_regions, get_networks,
-    get_org_rooms, get_org_template, get_org_templates, get_organization, get_organization_tree,
-    get_organizations, get_patch_panels, get_positions, get_positions_layout, get_room,
-    get_room_brief, get_room_cabinets_with_positions, get_room_networks, get_rooms,
-    get_topology_connections, get_topology_nodes, get_workstation, get_workstations,
-    pull_ip_managers, save_layout, save_topology_nodes, sync_cabinet_patch_panels,
+    get_device_ports_snmp, get_device_template, get_device_templates, get_devices, get_ip_managers,
+    get_net_outlet, get_net_outlets, get_network, get_network_region, get_network_regions,
+    get_networks, get_patch_panels, get_positions, get_room, get_room_brief, get_room_networks,
+    get_rooms, get_workstation, get_workstations, pull_ip_managers, sync_cabinet_patch_panels,
     sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
     sync_room_children, sync_room_net_outlets, test_snmp_connection, test_snmp_connection_by_id,
-    trigger_auto_discover, update_cabinet, update_cabinet_position, update_cable_link,
-    update_device, update_device_interface, update_device_port, update_device_template,
-    update_net_outlet, update_network, update_network_region, update_org_template,
-    update_organization, update_room, update_workstation,
+    update_cabinet, update_cabinet_position, update_cable_link, update_device,
+    update_device_interface, update_device_template, update_net_outlet, update_network,
+    update_network_region, update_room, update_workstation,
 };
 use crate::routes::static_files::AppJson;
 use crate::system::app_fail2ban::{
@@ -83,6 +80,12 @@ use crate::system::config::{
 use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
+};
+use crate::visualization::{
+    create_topology_connection, delete_layout, delete_positions_layout, delete_topology_connection,
+    delete_topology_node, get_layout, get_positions_layout, get_room_cabinets_with_positions,
+    get_topology_connections, get_topology_nodes, save_layout, save_topology_nodes,
+    trigger_auto_discover,
 };
 
 async fn data_export_csv(
@@ -440,14 +443,14 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 员工管理（挂在组织节点下；GET 登录即可读供下拉使用）
         .route(
             "/api/resources/employees",
-            get(crate::resource::employee::get_employees)
-                .post(crate::resource::employee::create_employee),
+            get(crate::organization::employee::get_employees)
+                .post(crate::organization::employee::create_employee),
         )
         .route(
             "/api/resources/employees/{id}",
-            get(crate::resource::employee::get_employee)
-                .put(crate::resource::employee::update_employee)
-                .delete(crate::resource::employee::delete_employee),
+            get(crate::organization::employee::get_employee)
+                .put(crate::organization::employee::update_employee)
+                .delete(crate::organization::employee::delete_employee),
         )
         // 组织模板管理
         .route(
@@ -497,14 +500,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(update_device_template)
                 .delete(delete_device_template),
         )
-        // 设备管理（含交换机端口/设备接口/MAC/LLDP/SNMP 功能）
+        // 设备管理（含统一端口接口/MAC/LLDP/SNMP 功能）
         .route(
             "/api/resources/devices",
             get(get_devices).post(create_device),
-        )
-        .route(
-            "/api/resources/devices/device-ports",
-            get(get_all_device_ports),
         )
         .route(
             "/api/resources/devices/interfaces",
@@ -524,14 +523,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route(
             "/api/resources/devices/{id}/auto-assign-ip",
             post(auto_assign_device_ip),
-        )
-        .route(
-            "/api/resources/devices/{id}/device-ports",
-            get(get_device_ports).post(create_device_port),
-        )
-        .route(
-            "/api/resources/devices/{id}/device-ports/sync-snmp",
-            post(sync_ports_from_snmp),
         )
         .route(
             "/api/resources/devices/{id}/test-snmp",
@@ -566,14 +557,12 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(get_device_interfaces).post(create_device_interface),
         )
         .route(
-            "/api/resources/devices/{id}/network-config",
-            put(sync_device_network_config),
+            "/api/resources/devices/{id}/interfaces/sync-snmp",
+            post(sync_ports_from_snmp),
         )
         .route(
-            "/api/resources/devices/device-ports/{port_id}",
-            get(get_device_port)
-                .put(update_device_port)
-                .delete(delete_device_port),
+            "/api/resources/devices/{id}/network-config",
+            put(sync_device_network_config),
         )
         .route(
             "/api/resources/devices/interfaces/{interface_id}",

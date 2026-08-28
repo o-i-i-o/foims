@@ -284,13 +284,23 @@
   background-color: var(--color-primary);
 }
 
-/* 表头文字与行内操作按钮同行（如 IP 表 MAC 地址列的“拉取”按钮） */
+/* 表头文字与行内操作按钮同行（如 IP 表 MAC 地址列的“拉取”按钮）。
+   th 必须保持 table-cell：设为 flex 会脱离表格列宽算法，在 table-layout:fixed
+   下该列百分比宽度失效并挤乱相邻列，这里仅禁止换行并收窄排序箭头留白 */
 .data-table th.th-inline-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
   white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* 排序箭头移到右上角，避让行内按钮 */
+.data-table th.th-inline-action.sortable::after {
+  top: 6px;
+  transform: none;
+}
+
+.data-table th.th-inline-action > * {
+  vertical-align: middle;
 }
 
 .data-table th.th-inline-action .btn-sm {
@@ -446,18 +456,26 @@
 #cable-links-table th:nth-child(9) { width: 7%; }
 #cable-links-table th:nth-child(10) { width: 10%; }
 
-/* IP 表：序号/位置/设备名/类型/网络/IP地址/MAC/主机名/状态/最后发现/创建时间 */
+/* IP 表：序号/位置/名称/类型/网络/IP地址/MAC/设备端口/状态/最后在线/创建时间（合计 100%）。
+   配比按各列表头（含搜索图标/排序留白）单行所需宽度调校，避免中文表头竖排或 3+1 换行 */
 #ip-table th:nth-child(1) { width: 4%; }
-#ip-table th:nth-child(2) { width: 8%; }
-#ip-table th:nth-child(3) { width: 11%; }
-#ip-table th:nth-child(4) { width: 9%; }
-#ip-table th:nth-child(5) { width: 11%; }
-#ip-table th:nth-child(6) { width: 12%; }
-#ip-table th:nth-child(7) { width: 13%; }
-#ip-table th:nth-child(8) { width: 12%; }
-#ip-table th:nth-child(9) { width: 6%; }
-#ip-table th:nth-child(10) { width: 7%; }
-#ip-table th:nth-child(11) { width: 7%; }
+#ip-table th:nth-child(2) { width: 7.5%; }
+#ip-table th:nth-child(3) { width: 9.5%; }
+#ip-table th:nth-child(4) { width: 10%; }
+#ip-table th:nth-child(5) { width: 9.5%; }
+#ip-table th:nth-child(6) { width: 10.5%; }
+#ip-table th:nth-child(7) { width: 12.5%; }
+#ip-table th:nth-child(8) { width: 10%; }
+#ip-table th:nth-child(9) { width: 6.5%; }
+#ip-table th:nth-child(10) { width: 10%; }
+#ip-table th:nth-child(11) { width: 10%; }
+
+/* IP 表短列（状态/最后在线/创建时间）在上述配比下容不下默认 28px 排序留白，
+   表头会竖排换行；收窄为左 16 右 20（右侧仍避让排序箭头） */
+#ip-table th.sortable {
+  padding-left: 16px;
+  padding-right: 20px;
+}
 
 /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/搜索框 */
 #operation-logs-table th:nth-child(1) { width: 4%; }

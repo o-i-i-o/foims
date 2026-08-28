@@ -119,7 +119,7 @@ export class TopologyDataManager {
   async fetchDevicePorts(deviceId) {
     try {
       const result = await this.apiGet(
-        `/api/resources/devices/${deviceId}/device-ports?page_size=200`
+        `/api/resources/devices/${deviceId}/interfaces?page_size=200`
       );
       if (result.success) {
         // 后端分页响应形状固定为 items（paged_response）

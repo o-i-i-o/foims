@@ -309,7 +309,7 @@ async function loadTopologyConnectionPorts(selectEl, deviceId) {
     return;
   }
   try {
-    const result = await apiGet(`/api/resources/devices/${deviceId}/device-ports?page_size=200`);
+    const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces?page_size=200`);
     if (!result.success) {
       return;
     }
@@ -317,9 +317,9 @@ async function loadTopologyConnectionPorts(selectEl, deviceId) {
     ports.forEach((p) => {
       const option = document.createElement("option");
       option.value = p.id;
-      option.textContent = p.port_name
-        ? `${p.port_number} (${p.port_name})`
-        : p.port_number || p.id;
+      option.textContent = p.description
+        ? `${p.name} (${p.description})`
+        : p.name || p.id;
       selectEl.appendChild(option);
     });
   } catch (error) {

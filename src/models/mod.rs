@@ -103,6 +103,11 @@ pub fn validate_description_opt(value: &&String) -> Result<(), ValidationError> 
     validate_length_str(value, 255, "server.common.validation.description_length")
 }
 
+/// 设备接口速率（VARCHAR(20)）
+pub fn validate_speed_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 20, "server.device.validation.speed_length")
+}
+
 fn validate_length_str(
     value: &str,
     max_chars: usize,

@@ -29,8 +29,6 @@ let lastLoadedItems = [];
 
 const ENDPOINT_TYPE_LABELS = {
   net_outlet: t("cable_link.endpoint_net_outlet") || t("net_outlet.name"),
-  // 设备端口与设备接口在前端整合为「设备接口」，列表统一显示
-  device_port: t("cable_link.endpoint_device_interface"),
   device_interface: t("cable_link.endpoint_device_interface"),
   patch_panel: t("cable_link.endpoint_patch_panel")
 };
@@ -44,10 +42,9 @@ const ENDPOINT_SCOPE = {
   patch_panel: { scope: "cabinet", labelKey: "cable_link.scope_cabinet" }
 };
 
-// 设备接口（整合）下拉值的前缀，提交时据此还原真实 endpoint_type
+// 设备接口下拉值的前缀，提交时据此还原真实 endpoint_type
 const MERGED_TYPE_PREFIX = {
-  device_interface: "device_interface:",
-  device_port: "device_port:"
+  device_interface: "device_interface:"
 };
 
 const LINK_TYPE_LABELS = {
@@ -292,14 +289,14 @@ export async function deleteCableLink(id) {
 }
 
 // ==========================================
-// 端点类型整合 + 级联选择器
+// 端点类型 + 级联选择器
 // ==========================================
 // 各端点类型对应一条级联链：
 //   信息点 → 房间 → 信息点
 //   配线架 → 机柜 → 配线架（独立表，通过 /patch-panels 拉取）
-//   设备接口（整合类型）→ 房间 → 机柜（可选）→ 设备 → 端点，
-//     端点下拉同时包含设备接口与设备端口（optgroup 分组），
-//     选项值用前缀编码（device_interface:<id> / device_port:<id>），提交时还原真实类型。
+//   设备接口 → 房间 → 机柜（可选）→ 设备 → 端点，
+//     端点下拉为设备全部网口（统一端口模型 /interfaces），
+//     选项值用前缀编码（device_interface:<id>），提交时还原真实类型。
 
 function getSideIds(side) {
   return {
@@ -394,17 +391,13 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
       const items = (data.items || data || []).map((o) => ({ id: o.id, label: o.name }));
       appendOptions(select, items);
     } else if (endpointType === "device_interface") {
-      // 整合：并发拉取该设备的接口与端口，optgroup 分组，值前缀编码
-      const [ifaceRes, portRes] = await Promise.all([
-        apiGet(`/api/resources/devices/${scopeValue}/interfaces?page_size=1000`),
-        apiGet(`/api/resources/devices/${scopeValue}/device-ports?page_size=1000`)
-      ]);
+      // 统一端口模型：设备全部网口（托管 + SNMP 端口）均来自 /interfaces
+      const ifaceRes = await apiGet(
+        `/api/resources/devices/${scopeValue}/interfaces?page_size=1000`
+      );
       const ifaces = (ifaceRes.success ? ifaceRes.data?.items || ifaceRes.data || [] : [])
         .filter((di) => !di.physical_type || di.physical_type !== "virtual")
         .map((di) => ({ id: di.id, label: di.name || di.id }));
-      const ports = (portRes.success ? portRes.data?.items || portRes.data || [] : []).map(
-        (sp) => ({ id: sp.id, label: sp.port_number || sp.port_name || sp.id })
-      );
 
       if (ifaces.length) {
         const og = document.createElement("optgroup");
@@ -413,17 +406,6 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
           const o = document.createElement("option");
           o.value = `${MERGED_TYPE_PREFIX.device_interface}${i.id}`;
           o.textContent = i.label;
-          og.appendChild(o);
-        });
-        select.appendChild(og);
-      }
-      if (ports.length) {
-        const og = document.createElement("optgroup");
-        og.label = t("cable_link.endpoint_device_port");
-        ports.forEach((p) => {
-          const o = document.createElement("option");
-          o.value = `${MERGED_TYPE_PREFIX.device_port}${p.id}`;
-          o.textContent = p.label;
           og.appendChild(o);
         });
         select.appendChild(og);
@@ -552,21 +534,18 @@ const changeHandlers = {};
 // 与新建表单完全复用，回填后所有选择器保持可编辑
 async function populateEndpointCascade(side, ep) {
   const ids = getSideIds(side);
-  // device_port / device_interface 统一映射为「设备接口」选项
-  const displayType =
-    ep.type === "device_port" || ep.type === "device_interface" ? "device_interface" : ep.type;
-  elementCache.setValue(ids.typeSelect, displayType);
+  elementCache.setValue(ids.typeSelect, ep.type);
   await onTypeChange(side);
 
-  if (displayType === "net_outlet") {
+  if (ep.type === "net_outlet") {
     elementCache.setValue(ids.scopeSelect, ep.roomId || "");
     await onScopeChange(side);
     elementCache.setValue(ids.idSelect, ep.id);
-  } else if (displayType === "patch_panel") {
+  } else if (ep.type === "patch_panel") {
     elementCache.setValue(ids.scopeSelect, ep.cabinetId || "");
     await onScopeChange(side);
     elementCache.setValue(ids.idSelect, ep.id);
-  } else if (displayType === "device_interface") {
+  } else if (ep.type === "device_interface") {
     elementCache.setValue(ids.scopeSelect, ep.roomId || "");
     await onScopeChange(side);
     if (ep.cabinetId) {
@@ -575,12 +554,8 @@ async function populateEndpointCascade(side, ep) {
     }
     elementCache.setValue(ids.deviceSelect, ep.deviceId || "");
     await onDeviceChange(side);
-    // 整合类型的端点值为前缀编码（device_interface:<id> / device_port:<id>）
-    const prefix =
-      ep.type === "device_port"
-        ? MERGED_TYPE_PREFIX.device_port
-        : MERGED_TYPE_PREFIX.device_interface;
-    elementCache.setValue(ids.idSelect, `${prefix}${ep.id}`);
+    // 端点值为前缀编码（device_interface:<id>）
+    elementCache.setValue(ids.idSelect, `${MERGED_TYPE_PREFIX.device_interface}${ep.id}`);
   }
 }
 

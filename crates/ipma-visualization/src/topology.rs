@@ -268,11 +268,8 @@ async fn derive_physical_connections(
             FROM cable_links
         ),
         start_points AS (
-            SELECT 'device_port'::VARCHAR AS ep_type, dp.id AS ep_id, dp.device_id,
-                   dp.port_number AS ep_label
-            FROM device_ports dp
-            UNION ALL
-            SELECT 'device_interface'::VARCHAR, di.id, di.device_id, di.name
+            SELECT 'device_interface'::VARCHAR AS ep_type, di.id AS ep_id, di.device_id,
+                   di.name AS ep_label
             FROM device_interfaces di
             WHERE di.physical_type <> 'virtual'
         ),
@@ -301,18 +298,11 @@ async fn derive_physical_connections(
             SELECT w.src_device_id, w.src_ep_id, w.src_label, w.depth,
                    w.cur_id AS tgt_ep_id,
                    w.via_types, w.via_ids, w.via_cables, w.via_cable_labels,
-                   CASE w.cur_type
-                     WHEN 'device_port' THEN dp.device_id
-                     WHEN 'device_interface' THEN di.device_id
-                   END AS tgt_device_id,
-                   CASE w.cur_type
-                     WHEN 'device_port' THEN dp.port_number
-                     WHEN 'device_interface' THEN di.name
-                   END AS tgt_label
+                   di.device_id AS tgt_device_id,
+                   di.name AS tgt_label
             FROM walk w
-            LEFT JOIN device_ports dp ON w.cur_type = 'device_port' AND dp.id = w.cur_id
-            LEFT JOIN device_interfaces di ON w.cur_type = 'device_interface' AND di.id = w.cur_id
-            WHERE w.depth > 0 AND w.cur_type IN ('device_port', 'device_interface')
+            JOIN device_interfaces di ON w.cur_type = 'device_interface' AND di.id = w.cur_id
+            WHERE w.depth > 0 AND w.cur_type = 'device_interface'
         )
         SELECT DISTINCT ON (LEAST(r.src_ep_id, r.tgt_ep_id), GREATEST(r.src_ep_id, r.tgt_ep_id))
                'cable:' || md5(r.via_cables::text) AS id,
@@ -444,21 +434,21 @@ async fn stored_connections(
                  tc.source_device_port_id, tc.target_device_port_id,
                  tc.label, tc.auto_discovered,
                  sd.name AS source_device_name, td.name AS target_device_name,
-                 sp.port_number AS source_port_label, tp.port_number AS target_port_label,
+                 sp.name AS source_port_label, tp.name AS target_port_label,
                  COALESCE(
                    (SELECT json_agg(json_build_object(
                              'side', m.side, 'port_id', m.device_port_id,
-                             'port_number', dp.port_number) ORDER BY dp.port_number)
+                             'port_number', di.name) ORDER BY di.name)
                     FROM topology_connection_members m
-                    JOIN device_ports dp ON dp.id = m.device_port_id
+                    JOIN device_interfaces di ON di.id = m.device_port_id
                     WHERE m.connection_id = tc.id),
                    '[]'::json
                  ) AS members
           FROM topology_connections tc
           JOIN devices sd ON sd.id = tc.source_device_id
           JOIN devices td ON td.id = tc.target_device_id
-          LEFT JOIN device_ports sp ON sp.id = tc.source_device_port_id
-          LEFT JOIN device_ports tp ON tp.id = tc.target_device_port_id
+          LEFT JOIN device_interfaces sp ON sp.id = tc.source_device_port_id
+          LEFT JOIN device_interfaces tp ON tp.id = tc.target_device_port_id
           ORDER BY tc.created_at",
     )
     .fetch_all(pool)
@@ -527,7 +517,7 @@ async fn ports_belong_to_device(
     device_id: Uuid,
 ) -> Result<bool, VisualizationError> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM device_ports WHERE id = ANY($1) AND device_id = $2",
+        "SELECT COUNT(*) FROM device_interfaces WHERE id = ANY($1) AND device_id = $2",
     )
     .bind(port_ids)
     .bind(device_id)

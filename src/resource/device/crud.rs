@@ -760,15 +760,13 @@ pub async fn delete_device(
         return Err(AppError::NotFound(msg("server.device.not_found")));
     }
 
-    // 预清理引用本设备端口/接口的线路：devices 级联删除 device_ports/
-    // device_interfaces 时会触发 cable_links 的防删触发器，直接 DELETE
-    // 会报 500 且设备永远无法删除（db-schema-review R1，已实测确认）。
+    // 预清理引用本设备接口的线路：devices 级联删除 device_interfaces
+    // 时会触发 cable_links 的防删触发器，直接 DELETE 会报 500 且设备
+    // 永远无法删除（db-schema-review R1，已实测确认）。
     // 与 delete_device_interface / apply_network_config 的清理口径一致。
     sqlx::query(
         r"DELETE FROM cable_links
-         WHERE (a_endpoint_type = 'device_port' AND a_endpoint_id IN (SELECT id FROM device_ports WHERE device_id = $1))
-            OR (b_endpoint_type = 'device_port' AND b_endpoint_id IN (SELECT id FROM device_ports WHERE device_id = $1))
-            OR (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))
+         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))
             OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))",
     )
     .bind(id)
@@ -777,7 +775,7 @@ pub async fn delete_device(
 
     // 拓扑逻辑连线成员引用本设备端口：随设备删除一并清理
     sqlx::query(
-        "DELETE FROM topology_connection_members WHERE device_id = $1 OR device_port_id IN (SELECT id FROM device_ports WHERE device_id = $1)",
+        "DELETE FROM topology_connection_members WHERE device_id = $1 OR device_port_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
     )
     .bind(id)
     .execute(&mut *tx)

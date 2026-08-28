@@ -34,7 +34,6 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 设备
         "devices",
         "device_nics",
-        "device_ports",
         "device_interfaces",
         "device_macs",
         "device_lldps",
@@ -292,22 +291,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         vec!["id", "name", "cabinet_id", "created_at", "updated_at"],
     );
     columns.insert(
-        "device_ports",
-        vec![
-            "id",
-            "device_id",
-            "port_number",
-            "port_name",
-            "port_type",
-            "vlan_id",
-            "status",
-            "speed",
-            "description",
-            "created_at",
-            "updated_at",
-        ],
-    );
-    columns.insert(
         "device_interfaces",
         vec![
             "id",
@@ -320,6 +303,10 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "vlan_id",
             "description",
             "sort_order",
+            "port_type",
+            "status",
+            "speed",
+            "device_managed",
             "created_at",
             "updated_at",
         ],

@@ -40,8 +40,8 @@ const CARD_TYPES = [
   { value: "other", label: () => t("device.card_type_other") }
 ];
 
-// 物理形态：网口的物理接口规格
-const PHYSICAL_TYPES = [
+// 物理形态：网口的物理接口规格（device-port-detail-modal 复用）
+export const PHYSICAL_TYPES = [
   { value: "rj45", label: () => t("device.physical_type_rj45") },
   { value: "sfp", label: () => t("device.physical_type_sfp") },
   { value: "sfp_plus", label: () => t("device.physical_type_sfp_plus") },
@@ -53,8 +53,8 @@ const PHYSICAL_TYPES = [
   { value: "other", label: () => t("device.physical_type_other") }
 ];
 
-// 接口角色：网口的用途定位
-const INTERFACE_ROLES = [
+// 接口角色：网口的用途定位（device-port-detail-modal 复用）
+export const INTERFACE_ROLES = [
   { value: "management", label: () => t("device.interface_role_management") },
   { value: "business", label: () => t("device.interface_role_business") },
   { value: "loopback", label: () => t("device.interface_role_loopback") },
@@ -575,12 +575,21 @@ export class NetworkCardManager {
     this.resetLegacyData();
     this.bindAddButton();
 
-    if (!cards || cards.length === 0) {
+    // 仅加载设备模态框托管的网口（device_managed=0 的 SNMP/端口模态框
+    // 网口不在设备表单展示）；空网卡（板卡）整体跳过
+    const managedCards = (cards || [])
+      .map((card) => ({
+        ...card,
+        ports: (card.ports || []).filter((p) => p.device_managed !== false)
+      }))
+      .filter((card) => (card.ports || []).length > 0);
+
+    if (managedCards.length === 0) {
       await this.addCard();
       return;
     }
 
-    for (const cardData of cards) {
+    for (const cardData of managedCards) {
       await this.addCard(cardData);
     }
   }
@@ -713,6 +722,8 @@ export class NetworkCardManager {
           mac_address: portMac,
           vlan_id: portVlan,
           description: portDesc,
+          // 设备模态框新建/编辑的网口一律托管（表单不展示该复选框）
+          device_managed: true,
           ips
         });
       });

@@ -3,8 +3,8 @@
 mod cabinets;
 mod cable_links;
 mod device_interfaces;
+mod device_macs;
 mod device_nics;
-mod device_ports;
 mod device_templates;
 mod devices;
 mod element;
@@ -64,13 +64,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 设备（引用 workstations/positions/device_templates）
     devices::create(pool).await?;
 
-    // 设备端口/MAC/LLDP（引用 devices）
-    device_ports::create(pool).await?;
+    // 设备 MAC/LLDP（引用 devices）
+    device_macs::create(pool).await?;
 
     // 设备网卡（引用 devices，先于 device_interfaces 创建）
     device_nics::create(pool).await?;
 
-    // 设备三层接口/网口（引用 devices 与 device_nics）
+    // 统一端口/网口（引用 devices 与 device_nics）
     device_interfaces::create(pool).await?;
 
     // 信息点（引用 rooms）
@@ -79,13 +79,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 配线架（引用 cabinets）
     patch_panels::create(pool).await?;
 
-    // 物理链路（引用 device_ports/net_outlets/patch_panels/device_interfaces 由触发器校验）
+    // 物理链路（引用 net_outlets/patch_panels/device_interfaces 由触发器校验）
     cable_links::create(pool).await?;
 
     // IP（引用 device_interfaces/network_cidrs）
     ips::create(pool).await?;
 
-    // 拓扑（引用 devices/device_ports）
+    // 拓扑（引用 devices/device_interfaces）
     topology::create(pool).await?;
 
     // 日志/令牌/通知（引用 users）

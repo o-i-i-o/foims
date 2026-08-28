@@ -1,4 +1,8 @@
-//! 设备接口（device_interfaces）表结构创建。
+//! 统一端口/网口表（device_interfaces）结构创建。
+//!
+//! 设备端口（原 device_ports）与设备网口已合并：`port_type`/`status`/
+//! `speed` 为网络设备端口的二层属性（SNMP 维护），`device_managed`
+//! 标记网口是否在设备编辑模态框中展示维护。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -17,6 +21,12 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             vlan_id INTEGER,
             description TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
+            port_type VARCHAR(20) NOT NULL DEFAULT 'access' CHECK (port_type IN (
+                'access', 'trunk', 'uplink', 'stack', 'console'
+            )),
+            status VARCHAR(20) NOT NULL DEFAULT 'up',
+            speed VARCHAR(20),
+            device_managed BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(device_id, name)

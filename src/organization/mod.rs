@@ -1,11 +1,20 @@
-//! 组织架构管理（树形结构与类型解析）。
+//! 组织与人员模块（组织架构/员工/组织模板）。
+//!
+//! 与资源管理（`resource`）平级的业务模块：组织树的 CRUD 直接定义于
+//! 本文件，员工挂在组织节点下（`employee`），组织类型模板见
+//! `org_template`。
+
+pub mod employee;
+pub mod org_template;
+
+pub use employee::*;
+pub use org_template::*;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::models::{
     OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
 };
-use crate::resource::org_template::{MAX_ORG_DEPTH, get_allowed_children};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};

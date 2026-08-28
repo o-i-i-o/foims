@@ -38,13 +38,12 @@ pub const MODULES: &[ModuleDef] = &[
         name: "cabinet",
         tables: &["cabinets", "positions", "patch_panels"],
     },
-    // 设备模块：设备模板 + 设备 + 端口/MAC/LLDP/网卡/接口 + IP
+    // 设备模块：设备模板 + 设备 + MAC/LLDP/网卡/统一端口接口 + IP
     ModuleDef {
         name: "device",
         tables: &[
             "device_templates",
             "devices",
-            "device_ports",
             "device_macs",
             "device_lldps",
             "device_nics",

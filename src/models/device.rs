@@ -7,82 +7,6 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 交换机端口模型 ====================
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct DevicePort {
-    pub id: Uuid,
-    pub device_id: Uuid,
-    pub port_number: String,
-    pub port_name: Option<String>,
-    pub port_type: String,
-    pub vlan_id: Option<i32>,
-    pub status: String,
-    pub speed: Option<String>,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct DevicePortWithDevice {
-    pub id: Uuid,
-    pub device_id: Uuid,
-    pub device_name: String,
-    pub device_ip: Option<String>,
-    #[sqlx(default)]
-    pub device_network_name: Option<String>,
-    #[sqlx(default)]
-    pub device_network_region: Option<String>,
-    pub port_number: String,
-    pub port_name: Option<String>,
-    pub port_type: String,
-    pub vlan_id: Option<i32>,
-    pub status: String,
-    pub speed: Option<String>,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct DevicePortCreate {
-    #[validate(length(
-        min = 1,
-        max = 30,
-        message = "server.device.validation.port_number_length"
-    ))]
-    pub port_number: String,
-    #[validate(length(max = 50, message = "server.device.validation.port_name_length"))]
-    pub port_name: Option<String>,
-    pub port_type: Option<String>,
-    pub vlan_id: Option<i32>,
-    pub status: Option<String>,
-    #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
-    pub speed: Option<String>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct DevicePortUpdate {
-    #[validate(length(
-        min = 1,
-        max = 30,
-        message = "server.device.validation.port_number_length"
-    ))]
-    pub port_number: Option<String>,
-    #[validate(length(max = 50, message = "server.device.validation.port_name_length"))]
-    pub port_name: Option<String>,
-    pub port_type: Option<String>,
-    pub vlan_id: Option<i32>,
-    pub status: Option<String>,
-    #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
-    pub speed: Option<String>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
-}
-
 // ==================== 设备网卡模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -127,7 +51,12 @@ pub struct NetworkCardUpdate {
     pub description: Option<Option<String>>,
 }
 
-// ==================== 设备三层接口/网口模型 ====================
+// ==================== 统一端口/网口模型（device_interfaces） ====================
+//
+// 设备端口与设备网口已合并为同一模型：普通设备为「网卡-网口-IP」
+// 层级，网络设备为「板卡-端口」（板卡即网卡，按端口名前缀自动生成）。
+// device_managed 标记网口是否在设备编辑模态框中展示与维护：
+// 设备模态框新建的网口为 true，端口模态框/SNMP 同步生成的为 false。
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct DeviceInterface {
@@ -141,6 +70,14 @@ pub struct DeviceInterface {
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
     pub sort_order: i32,
+    /// 二层端口类型（网络设备端口属性，SNMP 维护）
+    pub port_type: String,
+    /// 端口状态（up/down/admin-down，SNMP 维护）
+    pub status: String,
+    /// 端口速率（SNMP 维护）
+    pub speed: Option<String>,
+    /// 是否由设备模态框托管（在设备编辑界面展示）
+    pub device_managed: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -158,6 +95,10 @@ pub struct DeviceInterfaceWithDevice {
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
     pub sort_order: i32,
+    pub port_type: String,
+    pub status: String,
+    pub speed: Option<String>,
+    pub device_managed: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -170,6 +111,8 @@ pub struct DeviceInterfaceCreate {
         message = "server.device.validation.interface_name_length"
     ))]
     pub name: String,
+    /// 归属网卡；缺省时按端口名前缀自动生成/复用网卡
+    pub nic_id: Option<Uuid>,
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
     #[validate(length(max = 20, message = "server.device.validation.mac_length"))]
@@ -177,6 +120,12 @@ pub struct DeviceInterfaceCreate {
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
+    pub port_type: Option<String>,
+    pub status: Option<String>,
+    #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
+    pub speed: Option<String>,
+    /// 设备模态框托管标记；缺省 false（端口模态框/SNMP 来源）
+    pub device_managed: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -202,9 +151,31 @@ pub struct DeviceInterfaceUpdate {
         message = "server.common.validation.description_length"
     ))]
     pub description: Option<Option<String>>,
+    pub port_type: Option<String>,
+    pub status: Option<String>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_speed_opt",
+        message = "server.device.validation.speed_length"
+    ))]
+    pub speed: Option<Option<String>>,
+    /// 缺省表示不修改（SNMP 覆盖同步时保留原值）
+    pub device_managed: Option<bool>,
 }
 
 // ==================== SNMP 相关模型 ====================
+
+/// SNMP 实时拉取的端口（未落库的原始数据，字段与统一网口模型对齐）
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SnmpPort {
+    /// 端口标识（如 xg1/0/0/1、GigabitEthernet1/0/1）
+    pub name: String,
+    pub port_type: Option<String>,
+    pub vlan_id: Option<i32>,
+    pub status: Option<String>,
+    pub speed: Option<String>,
+    pub description: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnmpTestRequest {
@@ -535,58 +506,6 @@ mod tests {
     use super::*;
     use validator::Validate;
 
-    // ---------- 设备端口 ----------
-
-    #[test]
-    fn test_device_port_create_valid() -> Result<(), serde_json::Error> {
-        let req: DevicePortCreate = serde_json::from_value(serde_json::json!({
-            "port_number": "G1/0/1",
-            "port_name": "上联口",
-            "port_type": "ge",
-            "vlan_id": 100,
-            "status": "up",
-            "speed": "1G",
-            "description": "核心上联"
-        }))?;
-        assert!(req.validate().is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn test_device_port_create_port_number_length() -> Result<(), serde_json::Error> {
-        // 端口号必填且最长 30 字符
-        let empty: DevicePortCreate =
-            serde_json::from_value(serde_json::json!({ "port_number": "" }))?;
-        let Err(errors) = empty.validate() else {
-            panic!("空端口号应被拒绝");
-        };
-        assert!(errors.errors().contains_key("port_number"));
-
-        let long: DevicePortCreate = serde_json::from_value(serde_json::json!({
-            "port_number": "P".repeat(31)
-        }))?;
-        let Err(errors2) = long.validate() else {
-            panic!("超长端口号应被拒绝");
-        };
-        assert!(errors2.errors().contains_key("port_number"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_device_port_update_invalid_fields() -> Result<(), serde_json::Error> {
-        // 端口号超长与速度超长同时报错
-        let req: DevicePortUpdate = serde_json::from_value(serde_json::json!({
-            "port_number": "P".repeat(31),
-            "speed": "S".repeat(21)
-        }))?;
-        let Err(errors) = req.validate() else {
-            panic!("非法端口更新应被拒绝");
-        };
-        assert!(errors.errors().contains_key("port_number"));
-        assert!(errors.errors().contains_key("speed"));
-        Ok(())
-    }
-
     // ---------- 设备网卡 ----------
 
     #[test]
@@ -646,12 +565,26 @@ mod tests {
     fn test_device_interface_create_valid() -> Result<(), serde_json::Error> {
         let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
             "name": "eth0",
-            "physical_type": "electrical",
+            "physical_type": "rj45",
             "interface_role": "management",
             "mac_address": "AA:BB:CC:DD:EE:FF",
             "vlan_id": 10
         }))?;
         assert!(req.validate().is_ok());
+        assert_eq!(req.device_managed, None, "未显式指定时缺省不托管");
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_interface_create_snmp_port_defaults() -> Result<(), serde_json::Error> {
+        // 端口模态框/SNMP 来源：仅携带名称与端口属性，托管标记缺省
+        let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+            "name": "xg1/0/0/1",
+            "port_type": "access",
+            "status": "up"
+        }))?;
+        assert!(req.validate().is_ok());
+        assert_eq!(req.nic_id, None, "网卡由后端按名称前缀自动生成");
         Ok(())
     }
 
@@ -664,12 +597,14 @@ mod tests {
         }))?;
         assert_eq!(req.mac_address, Some(None));
         assert_eq!(req.description, Some(Some("新描述".to_string())));
+        assert_eq!(req.device_managed, None, "字段缺失表示不修改托管标记");
         assert!(req.validate().is_ok());
 
         // 字段全部缺失 → 双层均为 None
         let empty: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert_eq!(empty.mac_address, None);
         assert_eq!(empty.description, None);
+        assert_eq!(empty.speed, None);
         Ok(())
     }
 
@@ -701,6 +636,24 @@ mod tests {
         let null_mac: DeviceInterfaceUpdate =
             serde_json::from_value(serde_json::json!({ "mac_address": null }))?;
         assert!(null_mac.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_interface_update_speed_length_enforced() -> Result<(), serde_json::Error> {
+        // 双层 Option 的速率长度校验：超长拒绝、null 清除合法
+        let req: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
+            "speed": "S".repeat(21)
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("超长速率应被拒绝");
+        };
+        assert!(errors.errors().contains_key("speed"));
+
+        let null_speed: DeviceInterfaceUpdate =
+            serde_json::from_value(serde_json::json!({ "speed": null }))?;
+        assert_eq!(null_speed.speed, Some(None));
+        assert!(null_speed.validate().is_ok());
         Ok(())
     }
 

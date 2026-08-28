@@ -1,17 +1,19 @@
 //! 物理链路表（cable_links）结构、触发器与路径查询函数。
 //!
-//! 防删触发器保证被链路引用的端点资源（端口/信息点/配线架/物理接口）
+//! 防删触发器保证被链路引用的端点资源（信息点/配线架/设备接口）
 //! 不可删除；`validate_cable_link_endpoints` 校验端点存在性与物理形态
-//! （接口必须为实际连接器，非 virtual）。触发器函数体与
-//! `scripts/port-type-split.sql` 等变更脚本保持一致，修改需同步。
+//! （接口必须为实际连接器，非 virtual），并禁止同一设备的两个端口
+//! 互连（防自环）。任意两台不同设备允许直连。触发器函数体与
+//! `scripts/sql/2026-08-28-unified-device-interfaces.sql` 等变更脚本
+//! 保持一致，修改需同步。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS cable_links (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel')),
+            a_endpoint_type VARCHAR(20) NOT NULL CHECK (a_endpoint_type IN ('net_outlet','device_interface','patch_panel')),
             a_endpoint_id   UUID NOT NULL,
-            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('device_port','net_outlet','device_interface','patch_panel')),
+            b_endpoint_type VARCHAR(20) NOT NULL CHECK (b_endpoint_type IN ('net_outlet','device_interface','patch_panel')),
             b_endpoint_id   UUID NOT NULL,
             link_type   VARCHAR(20) NOT NULL DEFAULT 'ethernet' CHECK (link_type IN ('ethernet','fiber','console')),
             cable_label VARCHAR(50),
@@ -56,17 +58,17 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// 创建链路端点校验触发器（A/B 端点存在性 + 接口物理形态 + 禁止设备直连）。
+/// 创建链路端点校验触发器（A/B 端点存在性 + 接口物理形态 + 禁止同设备端口互连）。
 async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE OR REPLACE FUNCTION validate_cable_link_endpoints() RETURNS TRIGGER AS $$
         DECLARE
             endpoint_exists BOOLEAN := FALSE;
             iface_ptype VARCHAR(20);
+            a_dev_id UUID;
+            b_dev_id UUID;
         BEGIN
             CASE NEW.a_endpoint_type
-                WHEN 'device_port' THEN
-                    SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.a_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
@@ -89,8 +91,6 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             endpoint_exists := FALSE;
             iface_ptype := NULL;
             CASE NEW.b_endpoint_type
-                WHEN 'device_port' THEN
-                    SELECT EXISTS(SELECT 1 FROM device_ports WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'net_outlet' THEN
                     SELECT EXISTS(SELECT 1 FROM net_outlets WHERE id = NEW.b_endpoint_id) INTO endpoint_exists;
                 WHEN 'device_interface' THEN
@@ -111,7 +111,12 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             END IF;
 
             IF NEW.a_endpoint_type = 'device_interface' AND NEW.b_endpoint_type = 'device_interface' THEN
-                RAISE EXCEPTION '不允许两台设备直连，必须经过交换机或信息点';
+                SELECT device_id INTO a_dev_id FROM device_interfaces WHERE id = NEW.a_endpoint_id;
+                SELECT device_id INTO b_dev_id FROM device_interfaces WHERE id = NEW.b_endpoint_id;
+                IF a_dev_id IS NOT NULL AND a_dev_id = b_dev_id THEN
+                    RAISE EXCEPTION '不允许同一台设备的两个端口互相直连（可能形成环路）: device=%, port_a=%, port_b=%',
+                        a_dev_id, NEW.a_endpoint_id, NEW.b_endpoint_id;
+                END IF;
             END IF;
 
             RETURN NEW;
@@ -133,14 +138,6 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 端点资源防删触发器：(端点类型, 所在表, 函数名, 触发器名, 报错文案资源名, 附加守卫)
     // 附加守卫用于放行无需保护的记录（如 virtual 接口未被链路引用语义覆盖）
     const PREVENT_DELETION_TRIGGERS: &[(&str, &str, &str, &str, &str, &str)] = &[
-        (
-            "device_port",
-            "device_ports",
-            "prevent_device_port_deletion_if_linked",
-            "trg_device_ports_prevent_delete_linked",
-            "设备端口",
-            "TRUE",
-        ),
         (
             "net_outlet",
             "net_outlets",
@@ -229,9 +226,9 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         SELECT b_endpoint_id, b_endpoint_type, a_endpoint_id, a_endpoint_type, id, cable_label, 'cable'::VARCHAR
         FROM cable_links
         UNION ALL
-        SELECT sp1.id, 'device_port', sp2.id, 'device_port', NULL::UUID, NULL::VARCHAR, 'internal'::VARCHAR
-        FROM device_ports sp1
-        JOIN device_ports sp2 ON sp1.device_id = sp2.device_id AND sp1.id <> sp2.id
+        SELECT di1.id, 'device_interface', di2.id, 'device_interface', NULL::UUID, NULL::VARCHAR, 'internal'::VARCHAR
+        FROM device_interfaces di1
+        JOIN device_interfaces di2 ON di1.device_id = di2.device_id AND di1.id <> di2.id
     ),
     path_cte AS (
         SELECT
@@ -262,7 +259,6 @@ async fn create_path_function(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         p.node_type,
         p.node_id,
         CASE p.node_type
-            WHEN 'device_port'      THEN (SELECT sp.port_number || ' @ ' || d.name FROM device_ports sp JOIN devices d ON sp.device_id = d.id WHERE sp.id = p.node_id)
             WHEN 'net_outlet'       THEN (SELECT name FROM net_outlets WHERE id = p.node_id)
             WHEN 'device_interface' THEN (SELECT di.name || ' @ ' || d.name FROM device_interfaces di JOIN devices d ON di.device_id = d.id WHERE di.id = p.node_id)
             WHEN 'patch_panel'      THEN (SELECT name FROM patch_panels WHERE id = p.node_id)

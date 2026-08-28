@@ -211,9 +211,9 @@ export class TopologyModal {
             .map(
               (p) => `
             <tr>
-              <td>${this._escapeHtml(p.port_number || "")}</td>
-              <td>${this._escapeHtml(p.port_name || "")}</td>
-              <td>${this._escapeHtml(p.admin_status || p.oper_status || "")}</td>
+              <td>${this._escapeHtml(p.name || "")}</td>
+              <td>${this._escapeHtml(p.description || "")}</td>
+              <td>${this._escapeHtml(p.status || "")}</td>
             </tr>`
             )
             .join("")}

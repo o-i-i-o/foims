@@ -228,9 +228,9 @@ impl Resolver {
                     .map_err(|_| miss(&value))?;
                 self.cached_lookup(
                     conn,
-                    format!("port|{device_id}|{port}"),
-                    r"SELECT id::text FROM device_ports
-                       WHERE device_id = $1 AND port_number = $2"
+                    format!("iface|{device_id}|{port}"),
+                    r"SELECT id::text FROM device_interfaces
+                       WHERE device_id = $1 AND name = $2"
                         .to_string(),
                     vec![device_id, port.to_string()],
                 )
@@ -370,23 +370,16 @@ impl Resolver {
     ) -> DataResult<String> {
         let not_found = || DataError::Validation(msg("server.import_export.ref_not_found"));
         match kind {
-            "device_port" | "device_interface" => {
+            "device_interface" => {
                 let Some((room, device, ident)) = names::split_device_scoped(value) else {
                     return Err(not_found());
                 };
                 let device_id = self
                     .resolve_device(conn, &format!("{room}/{device}"))
                     .await?;
-                let (table, ident_col) = if kind == "device_port" {
-                    ("device_ports", "port_number")
-                } else {
-                    ("device_interfaces", "name")
-                };
-                // 表/列名来自静态映射
-                let sql = format!(
-                    "SELECT id::text FROM {table} WHERE device_id = $1 AND {ident_col} = $2"
-                );
-                Self::query_id(conn, sql, vec![device_id, ident.to_string()])
+                let sql =
+                    "SELECT id::text FROM device_interfaces WHERE device_id = $1 AND name = $2";
+                Self::query_id(conn, sql.to_string(), vec![device_id, ident.to_string()])
                     .await?
                     .ok_or_else(not_found)
             }

@@ -34,9 +34,8 @@ flowchart LR
   subgraph DEV["设备管理 (/api/resources/devices)"]
     devices["devices 设备"]
     device_templates["device_templates 设备模板"]
-    device_nics["device_nics 网卡"]
-    device_interfaces["device_interfaces 网络接口"]
-    device_ports["device_ports 交换机端口"]
+    device_nics["device_nics 网卡/板卡"]
+    device_interfaces["device_interfaces 统一端口/网口"]
     device_macs["device_macs MAC 地址表"]
     device_lldps["device_lldps LLDP 邻居"]
   end
@@ -119,7 +118,6 @@ erDiagram
   devices ||--o{ device_nics : "device_id"
   devices ||--o{ device_interfaces : "device_id"
   device_nics |o--o{ device_interfaces : "nic_id SET NULL"
-  devices ||--o{ device_ports : "device_id"
   devices ||--o{ device_macs : "device_id"
   devices ||--o{ device_lldps : "device_id"
 
@@ -128,7 +126,6 @@ erDiagram
   network_cidrs |o--o{ ips : "network_id"
 
   %% ===== 布线（多态端点，触发器校验） =====
-  device_ports ..o{ cable_links : "a/b_endpoint_id 多态"
   net_outlets ..o{ cable_links : "a/b_endpoint_id 多态"
   device_interfaces ..o{ cable_links : "a/b_endpoint_id 多态"
   patch_panels ..o{ cable_links : "a/b_endpoint_id 多态"
@@ -143,11 +140,11 @@ erDiagram
   devices ||--o| topology_nodes : "device_id 唯一"
   devices ||--o{ topology_connections : "source_device_id"
   devices ||--o{ topology_connections : "target_device_id"
-  device_ports |o--o{ topology_connections : "source_device_port_id SET NULL"
-  device_ports |o--o{ topology_connections : "target_device_port_id SET NULL"
+  device_interfaces |o--o{ topology_connections : "source_device_port_id SET NULL"
+  device_interfaces |o--o{ topology_connections : "target_device_port_id SET NULL"
   topology_connections ||--o{ topology_connection_members : "connection_id"
   devices ||--o{ topology_connection_members : "device_id"
-  device_ports ||--o{ topology_connection_members : "device_port_id"
+  device_interfaces ||--o{ topology_connection_members : "device_port_id"
 
   %% ===== 用户 / 日志 / 令牌 =====
   users |o--o{ operation_logs : "user_id SET NULL"
@@ -246,14 +243,10 @@ erDiagram
     text interface_role "management/business/loopback/uplink"
     macaddr mac_address
     int vlan_id
-  }
-  device_ports {
-    uuid id PK
-    uuid device_id FK "CASCADE"
-    int port_number "device 内唯一"
-    text port_type "access/trunk/uplink/stack/console"
-    int vlan_id
-    text status
+    text port_type "access/trunk/uplink/stack/console（二层属性，SNMP 维护）"
+    text status "up/down/admin-down"
+    text speed
+    bool device_managed "是否在设备编辑模态框托管"
   }
   device_macs {
     uuid id PK
@@ -410,8 +403,8 @@ erDiagram
 ```
 
 图中 `..o{（虚线）` 表示 `cable_links` 的**多态逻辑外键**：`a/b_endpoint_id` 按
-`a/b_endpoint_type` 指向 `device_ports` / `net_outlets` / `device_interfaces` /
-`patch_panels` 四表之一，无真实 FK 约束，由触发器 `validate_cable_link_endpoints`
+`a/b_endpoint_type` 指向 `net_outlets` / `device_interfaces` / `patch_panels`
+三表之一，无真实 FK 约束，由触发器 `validate_cable_link_endpoints`
 校验存在性，并由反向触发器阻止被引用端点删除。`|o--` 表示可空外键，`||--` 表示
 非空外键，`||--o|` 表示一对一（UNIQUE）。
 
@@ -420,11 +413,11 @@ erDiagram
 | 功能模块 | 路由前缀 | 处理代码 | 管理的表 |
 | --- | --- | --- | --- |
 | 认证与用户 | `/api/auth/*`、`/api/users` | `src/auth/` | users、login_logs（登录写入）、revoked_tokens |
-| 组织管理 | `/api/resources/organizations`、`/org-templates`、`/employees` | `src/resource/organization.rs`、`org_template.rs`、`employee.rs` | organizations、org_templates、employees |
+| 组织管理 | `/api/resources/organizations`、`/org-templates`、`/employees` | `src/organization/` | organizations、org_templates、employees |
 | 空间管理 | `/api/resources/rooms`、`/cabinets`、`/positions`、`/workstations` | `src/resource/room.rs`、`cabinets.rs`、`position.rs`、`workstation.rs` | rooms、cabinets、positions、workstations、room_networks（房间侧同步） |
 | 网络管理 | `/api/resources/network-regions`、`/networks` | `src/resource/network.rs` | network_regions、network_cidrs、room_networks |
 | IP 管理 | `/api/resources/ip` | `src/resource/ip.rs` | ips（查询 device_interfaces、room_networks） |
-| 设备管理 | `/api/resources/devices` | `src/resource/device/` | devices、device_templates、device_nics、device_interfaces、device_ports、device_macs、device_lldps、ips（自动分配） |
+| 设备管理 | `/api/resources/devices` | `src/resource/device/` | devices、device_templates、device_nics、device_interfaces（统一端口）、device_macs、device_lldps、ips（自动分配） |
 | 布线管理 | `/api/resources/net-outlets`、`/patch-panels`、`/cable-links` | `src/resource/net_outlet.rs`、`patch_panel.rs`、`cable_link.rs` | net_outlets、patch_panels、cable_links |
 | 可视化-布局 | `/api/resources/layouts` | `crates/ipma-visualization/layout.rs` | workstation_layouts、cabinet_layouts、element_layouts |
 | 可视化-拓扑 | `/api/resources/topology` | `crates/ipma-visualization/topology.rs` | topology_nodes、topology_connections、topology_connection_members（物理连线由 cable_links 派生） |

@@ -24,6 +24,80 @@ use crate::utils::common::{RequestMeta, log_op_best_effort};
 pub const DEFAULT_CARD_NAME: &str = "网卡1";
 /// 默认网口名称
 pub const DEFAULT_PORT_NAME: &str = "eth0";
+/// 自动生成网卡（板卡）的排序基值：排在设备模态框手工网卡之后
+const AUTO_NIC_SORT_ORDER: i32 = 1000;
+/// device_nics.name 列宽（VARCHAR(50)，与校验规则一致）
+const NIC_NAME_MAX_CHARS: usize = 50;
+
+/// 按端口名推导自动网卡（板卡）分组前缀。
+///
+/// 交换机端口名形如 `xg1/0/0/1`（板卡/槽位/端口），取首个 `/` 之前
+/// 的板卡段 `xg1`；无 `/` 的名称（如 `eth0`）去掉尾部数字合并同组，
+/// 结果为空时回退整名。
+pub fn port_group_prefix(port_name: &str) -> &str {
+    if let Some(pos) = port_name.find('/') {
+        let prefix = &port_name[..pos];
+        if !prefix.is_empty() {
+            return prefix;
+        }
+    }
+    let trimmed = port_name.trim_end_matches(|c: char| c.is_ascii_digit());
+    if trimmed.is_empty() {
+        port_name
+    } else {
+        trimmed
+    }
+}
+
+/// 取设备的自动分组网卡（不存在则创建），返回网卡 id。
+///
+/// 网卡名为 `{设备名}-{分组前缀}`（超长按字符截断到列宽），类型 other；
+/// 与手工网卡重名时直接复用，保证同名分组落在同一张网卡下。
+pub async fn get_or_create_auto_nic(
+    tx: &mut PgConnection,
+    device_id: Uuid,
+    group: &str,
+) -> Result<Uuid, AppError> {
+    let device_name: String = sqlx::query_scalar("SELECT name FROM devices WHERE id = $1")
+        .bind(device_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound(msg("server.device.not_found")),
+            e => AppError::from(e),
+        })?;
+
+    let mut nic_name = format!("{device_name}-{group}");
+    if nic_name.chars().count() > NIC_NAME_MAX_CHARS {
+        nic_name = nic_name.chars().take(NIC_NAME_MAX_CHARS).collect();
+    }
+
+    let now = Utc::now();
+    let inserted: Option<Uuid> = sqlx::query_scalar(
+        r"INSERT INTO device_nics (id, device_id, name, card_type, sort_order, created_at, updated_at)
+         VALUES ($1, $2, $3, 'other', $4, $5, $6)
+         ON CONFLICT (device_id, name) DO NOTHING
+         RETURNING id",
+    )
+    .bind(Uuid::new_v4())
+    .bind(device_id)
+    .bind(&nic_name)
+    .bind(AUTO_NIC_SORT_ORDER)
+    .bind(now)
+    .bind(now)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(id) = inserted {
+        return Ok(id);
+    }
+
+    sqlx::query_scalar("SELECT id FROM device_nics WHERE device_id = $1 AND name = $2")
+        .bind(device_id)
+        .bind(&nic_name)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::from)
+}
 
 /// 同步设备的网卡配置（网卡 → 网口 → IP），整体替换
 pub async fn sync_device_network_config(
@@ -72,8 +146,10 @@ pub async fn sync_device_network_config(
     Ok(crate::error::ok_json(cards, "server.device.nic.synced"))
 }
 
-/// 应用网卡配置：先删除设备下所有 IP/网口/网卡，再按 cards 重建。
-/// 若 cards 为空，则自动生成一张默认网卡 + 一个默认网口（可管理）。
+/// 应用网卡配置：整体替换设备模态框托管的网口（device_managed=TRUE），
+/// 保留端口模态框/SNMP 生成的端口（device_managed=FALSE）及其网卡；
+/// 清理不再被任何网口引用的网卡。若 cards 为空，则自动生成一张默认
+/// 网卡 + 一个默认网口（托管）。
 pub async fn apply_network_config(
     tx: &mut PgConnection,
     device_id: Uuid,
@@ -81,30 +157,37 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // 删除现有数据（顺序：IP → cable_links → 网口 → 网卡）
+    // 删除托管网口的关联数据（顺序：IP → cable_links → 网口）；
+    // 非托管网口（SNMP/端口模态框来源）不受设备表单同步影响
     sqlx::query(
-        "DELETE FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
+        "DELETE FROM ips WHERE device_interface_id IN (
+            SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed)",
     )
     .bind(device_id)
     .execute(&mut *tx)
     .await?;
-    // 删除与设备接口相关的电缆链接
     sqlx::query(
         r"DELETE FROM cable_links
-         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))
-            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (SELECT id FROM device_interfaces WHERE device_id = $1))",
+         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (
+                SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed))
+            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (
+                SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed))",
     )
     .bind(device_id)
     .execute(&mut *tx)
     .await?;
-    sqlx::query("DELETE FROM device_interfaces WHERE device_id = $1")
+    sqlx::query("DELETE FROM device_interfaces WHERE device_id = $1 AND device_managed")
         .bind(device_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM device_nics WHERE device_id = $1")
-        .bind(device_id)
-        .execute(&mut *tx)
-        .await?;
+    // 仅删除不再被任何网口引用的网卡（自动板卡仍被非托管端口引用则保留）
+    sqlx::query(
+        "DELETE FROM device_nics WHERE device_id = $1 AND id NOT IN (
+            SELECT nic_id FROM device_interfaces WHERE device_id = $1 AND nic_id IS NOT NULL)",
+    )
+    .bind(device_id)
+    .execute(&mut *tx)
+    .await?;
 
     // cards 为空时自动生成默认可管理网卡 + 网口
     let cards_to_insert: Vec<NetworkCardSyncItem> = if cards.is_empty() {
@@ -143,8 +226,8 @@ pub async fn apply_network_config(
             validate_interface_role(interface_role)?;
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, device_managed, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12)",
             )
             .bind(port_id)
             .bind(device_id)
@@ -486,6 +569,31 @@ mod tests {
                 "应返回 Validation 错误，实际: {err}"
             );
         }
+    }
+
+    // ==================== 自动网卡分组 ====================
+
+    #[test]
+    fn test_port_group_prefix_slash_names() {
+        // 含 / 的端口名取首个板卡段（保留板卡号）
+        assert_eq!(port_group_prefix("xg1/0/0/1"), "xg1");
+        assert_eq!(
+            port_group_prefix("GigabitEthernet1/0/1"),
+            "GigabitEthernet1"
+        );
+        assert_eq!(port_group_prefix("FortyGigE1/0/24"), "FortyGigE1");
+    }
+
+    #[test]
+    fn test_port_group_prefix_plain_names() {
+        // 无 / 的端口名去尾部数字合并同组；纯数字/空串回退整名
+        assert_eq!(port_group_prefix("eth0"), "eth");
+        assert_eq!(port_group_prefix("eth10"), "eth");
+        assert_eq!(port_group_prefix("Vlan-interface"), "Vlan-interface");
+        assert_eq!(port_group_prefix("123"), "123");
+        assert_eq!(port_group_prefix(""), "");
+        // 首段为空的病态输入走去尾数字路径，结果仅影响分组展示
+        assert_eq!(port_group_prefix("/0/1"), "/0/");
     }
 
     // ==================== 默认网卡配置 ====================

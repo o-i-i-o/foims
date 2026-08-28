@@ -52,11 +52,12 @@ pub enum Target {
     /// 行内 `device` 伴随列 + 本列接口名，指向 device_interfaces
     /// （仅 ips 表使用，该表无 device_id 列）。
     DeviceInterface,
-    /// 本列值自编码为 "房间/设备名:端口号"，指向 device_ports。
+    /// 本列值自编码为 "房间/设备名:端口名"，指向 device_interfaces
+    /// （统一端口模型，拓扑连线引用）。
     DevicePort,
     /// 跳接线路多态端点：同表 `type_col` 列给出端点类型，本列值为该类型
-    /// 的名称路径（device_port="房间/设备:端口号"、device_interface=
-    /// "房间/设备:接口名"、net_outlet="信息点名"、patch_panel="房间/机柜/配线架名"）。
+    /// 的名称路径（device_interface="房间/设备:端口名"、net_outlet=
+    /// "信息点名"、patch_panel="房间/机柜/配线架名"）。
     Endpoint { type_col: &'static str },
     /// 行内 `source_device`/`target_device`/`connection_type` 伴随列组合，
     /// 指向 topology_connections（仅成员表使用；物理连接无唯一约束，
@@ -336,24 +337,6 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         key: &["room_id", "name"],
     },
     TableSpec {
-        table: "device_ports",
-        columns: &[
-            Col::Ref {
-                csv: "device",
-                db: "device_id",
-                target: Target::Device,
-            },
-            Col::Plain("port_number"),
-            Col::Plain("port_name"),
-            Col::Plain("port_type"),
-            Col::Plain("vlan_id"),
-            Col::Plain("status"),
-            Col::Plain("speed"),
-            Col::Plain("description"),
-        ],
-        key: &["device_id", "port_number"],
-    },
-    TableSpec {
         table: "device_macs",
         columns: &[
             Col::Ref {
@@ -420,6 +403,10 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             Col::Plain("vlan_id"),
             Col::Plain("description"),
             Col::Plain("sort_order"),
+            Col::Plain("port_type"),
+            Col::Plain("status"),
+            Col::Plain("speed"),
+            Col::Plain("device_managed"),
         ],
         key: &["device_id", "name"],
     },

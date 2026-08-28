@@ -131,15 +131,8 @@ const VIEWS: &[(&str, &str)] = &[
         r"
         CREATE VIEW cable_links_with_details AS
         WITH endpoint_labels AS (
-            SELECT sp.id, 'device_port'::VARCHAR AS etype,
-                   (sp.port_number || ' @ ' || d.name) AS label,
-                   d.room_id, cab.id AS cabinet_id, sp.device_id
-            FROM device_ports sp
-            JOIN devices d ON sp.device_id = d.id
-            LEFT JOIN positions p ON d.position_id = p.id
-            LEFT JOIN cabinets cab ON p.cabinet_id = cab.id
-            UNION ALL
-            SELECT id, 'net_outlet'::VARCHAR, name::text, room_id, NULL::UUID, NULL::UUID
+            SELECT id, 'net_outlet'::VARCHAR AS etype, name::text AS label,
+                   room_id, NULL::UUID AS cabinet_id, NULL::UUID AS device_id
             FROM net_outlets
             UNION ALL
             SELECT di.id, 'device_interface'::VARCHAR, (di.name || ' @ ' || d.name),

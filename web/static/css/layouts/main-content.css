@@ -15,6 +15,29 @@
   display: block;
 }
 
+/* ===== 分页页脚贴底 =====
+   含分页的区块拉伸为至少满视口的弹性列：表格较短时分页仍贴住屏幕底部，
+   长表格滚动场景由 .pagination-container 的 sticky 吸附兜底。
+   分页节点由 ui.js 插在 .table-container 的同级之后，故按该结构匹配 */
+.content-section.active:has(.pagination-container) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* 激活的 tab-content 作为中间层继续向下传递弹性高度 */
+.content-section.active > .tab-content.active:has(> .pagination-container) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 表格容器占据剩余空间，把分页推到区块底部 */
+.content-section.active > .table-container:has(+ .pagination-container),
+.content-section.active > .tab-content.active > .table-container:has(+ .pagination-container) {
+  flex: 1;
+}
+
 .content-section h2 {
   margin-bottom: var(--space-lg);
   color: var(--color-text);

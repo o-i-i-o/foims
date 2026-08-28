@@ -24,12 +24,7 @@ use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 
 /// 合法的端点资源类型。
-const VALID_ENDPOINT_TYPES: [&str; 4] = [
-    "device_port",
-    "net_outlet",
-    "device_interface",
-    "patch_panel",
-];
+const VALID_ENDPOINT_TYPES: [&str; 3] = ["net_outlet", "device_interface", "patch_panel"];
 /// 合法的链路类型。
 const VALID_LINK_TYPES: [&str; 3] = ["ethernet", "fiber", "console"];
 /// `cable_links_with_details` 视图与 `CableLinkWithDetails` 映射对应的列清单。
@@ -182,6 +177,33 @@ pub async fn get_cable_links(
     ))
 }
 
+/// 校验两个 device_interface 端点不属于同一台设备。
+///
+/// 任意两台不同设备允许直连；同一设备的两个端口经物理线路互连
+/// 会形成自环，应用层先行拦截（数据库触发器为 CSV 导入等旁路兜底）。
+async fn ensure_interfaces_on_different_devices(
+    tx: &mut sqlx::PgConnection,
+    a_id: Uuid,
+    b_id: Uuid,
+) -> Result<(), AppError> {
+    let same_device: bool = sqlx::query_scalar(
+        r"SELECT EXISTS(
+            SELECT 1 FROM device_interfaces a
+            JOIN device_interfaces b ON a.device_id = b.device_id
+            WHERE a.id = $1 AND b.id = $2)",
+    )
+    .bind(a_id)
+    .bind(b_id)
+    .fetch_one(tx)
+    .await?;
+    if same_device {
+        return Err(AppError::Validation(msg(
+            "server.cable_link.same_device_ports_forbidden",
+        )));
+    }
+    Ok(())
+}
+
 /// 创建物理链路（端点校验后按规范序写入）。
 pub async fn create_cable_link(
     State(state): State<Arc<AppState>>,
@@ -196,12 +218,6 @@ pub async fn create_cable_link(
     if req.a_endpoint_type == req.b_endpoint_type && req.a_endpoint_id == req.b_endpoint_id {
         return Err(AppError::Validation(msg(
             "server.cable_link.self_connection_forbidden",
-        )));
-    }
-
-    if req.a_endpoint_type == "device_interface" && req.b_endpoint_type == "device_interface" {
-        return Err(AppError::Validation(msg(
-            "server.cable_link.direct_connection_forbidden",
         )));
     }
 
@@ -220,6 +236,11 @@ pub async fn create_cable_link(
     let tested = req.tested.unwrap_or(false);
 
     let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // 任意两台不同设备允许直连；仅禁止同一设备的两个端口互连（环路风险）
+    if a_type == "device_interface" && b_type == "device_interface" {
+        ensure_interfaces_on_different_devices(&mut tx, a_id, b_id).await?;
+    }
 
     sqlx::query(
         "INSERT INTO cable_links (id, a_endpoint_type, a_endpoint_id, b_endpoint_type, b_endpoint_id, link_type, cable_label, length_m, tested, created_at, updated_at)
@@ -308,11 +329,6 @@ pub async fn update_cable_link(
                     "server.cable_link.self_connection_forbidden",
                 )));
             }
-            if a_type == "device_interface" && b_type == "device_interface" {
-                return Err(AppError::Validation(msg(
-                    "server.cable_link.direct_connection_forbidden",
-                )));
-            }
             Some(sort_endpoints(a_type, a_id, b_type, b_id))
         }
         (None, None, None, None) => None,
@@ -331,6 +347,14 @@ pub async fn update_cable_link(
         .await?;
     if !exists {
         return Err(AppError::NotFound(msg("server.cable_link.not_found")));
+    }
+
+    // 端点变更时校验不属于同一设备（与 create 同一口径）
+    if let Some((a_type, a_id, b_type, b_id)) = &new_endpoints
+        && a_type == "device_interface"
+        && b_type == "device_interface"
+    {
+        ensure_interfaces_on_different_devices(&mut tx, *a_id, *b_id).await?;
     }
 
     let has_field_update = req.link_type.is_some()
@@ -547,11 +571,12 @@ mod tests {
 
     #[test]
     fn test_sort_endpoints_orders_by_type_string() {
-        // 类型不同时按类型字符串升序：device_port < net_outlet
+        // 类型不同时按类型字符串升序：device_interface < net_outlet
         let id_x = Uuid::new_v4();
         let id_y = Uuid::new_v4();
-        let (a_type, a_id, b_type, b_id) = sort_endpoints("net_outlet", id_x, "device_port", id_y);
-        assert_eq!(a_type, "device_port");
+        let (a_type, a_id, b_type, b_id) =
+            sort_endpoints("net_outlet", id_x, "device_interface", id_y);
+        assert_eq!(a_type, "device_interface");
         assert_eq!(a_id, id_y);
         assert_eq!(b_type, "net_outlet");
         assert_eq!(b_id, id_x);
@@ -591,7 +616,7 @@ mod tests {
     #[test]
     fn test_sort_endpoints_commutative() {
         // 交换输入顺序应得到完全相同的规范化结果（A/B 双向存储去重依据）
-        let type_a = "device_port";
+        let type_a = "device_interface";
         let id_a = Uuid::new_v4();
         let type_b = "patch_panel";
         let id_b = Uuid::new_v4();

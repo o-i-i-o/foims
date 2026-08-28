@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
 use crate::error::{AppError, msg};
-use crate::models::{DevicePortCreate, SnmpTestRequest};
+use crate::models::{SnmpPort, SnmpTestRequest};
 use crate::routes::static_files::AppJson;
 use ipma_common::{AppMessage, log_info, log_warn};
 
@@ -493,7 +493,7 @@ fn extract_model(sys_descr: &str) -> String {
 
 pub async fn get_device_ports_via_snmp(
     params: &SnmpParamsLegacy,
-) -> Result<Vec<DevicePortCreate>, SnmpError> {
+) -> Result<Vec<SnmpPort>, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
 
@@ -534,9 +534,8 @@ pub async fn get_device_ports_via_snmp(
             .as_str()
             .map_or_else(|| if_index.clone(), std::string::ToString::to_string);
 
-        ports.push(DevicePortCreate {
-            port_number: port_number.clone(),
-            port_name: None,
+        ports.push(SnmpPort {
+            name: port_number.clone(),
             port_type: None,
             vlan_id: None,
             status: None,
