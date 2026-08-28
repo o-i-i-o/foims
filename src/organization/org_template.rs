@@ -551,9 +551,12 @@ pub async fn update_org_template(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
+    // FOR UPDATE 锁定模板行，与 create_organization 的模板读取互斥：
+    // 组织创建基于旧 levels 校验 type_path 期间，本事务的 levels 更新
+    // 无法提交，反之亦然，避免存量节点在新模板下无法解析（TOCTOU）
     let existing = sqlx::query_as::<_, OrgTemplate>(
         "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-         FROM org_templates WHERE id = $1",
+         FROM org_templates WHERE id = $1 FOR UPDATE",
     )
     .bind(id)
     .fetch_optional(&mut *tx)

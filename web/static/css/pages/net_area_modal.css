@@ -2,3 +2,10 @@
 flex: 1;
 justify-content: center;
 }
+
+/* CIDR 双列顶部对齐：上方通用规则的 justify-content:center 在纵向列上
+   会把行数少的一列（如仅 1 条 IPv6）垂直居中，与另一列标题错位；
+   这里强制从顶部起排，尾部自然留白 */
+#network-region-modal .form-group.cidr-column {
+justify-content: flex-start;
+}

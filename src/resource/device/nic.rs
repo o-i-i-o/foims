@@ -157,6 +157,19 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
+    // 快照托管网口的二层运行属性（端口类型/状态/速率，由端口模态框或
+    // SNMP 维护）：设备表单整体替换网口后按 id 回填，避免被默认值重置
+    let runtime_attrs: HashMap<Uuid, (String, String, Option<String>)> =
+        sqlx::query_as::<_, (Uuid, String, String, Option<String>)>(
+            "SELECT id, port_type, status, speed FROM device_interfaces WHERE device_id = $1 AND device_managed",
+        )
+        .bind(device_id)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|(id, port_type, status, speed)| (id, (port_type, status, speed)))
+        .collect();
+
     // 删除托管网口的关联数据（顺序：IP → cable_links → 网口）；
     // 非托管网口（SNMP/端口模态框来源）不受设备表单同步影响
     sqlx::query(
@@ -224,10 +237,15 @@ pub async fn apply_network_config(
             validate_physical_type(physical_type)?;
             let interface_role = port.interface_role.as_deref().unwrap_or("business");
             validate_interface_role(interface_role)?;
+            // 设备表单不含二层属性：存量端口恢复快照值，新端口用默认值
+            let (port_type, status, speed) = match runtime_attrs.get(&port_id) {
+                Some((pt, st, sp)) => (pt.clone(), st.clone(), sp.clone()),
+                None => ("access".to_string(), "up".to_string(), None),
+            };
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, device_managed, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12)",
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, device_managed, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14, $15)",
             )
             .bind(port_id)
             .bind(device_id)
@@ -239,6 +257,9 @@ pub async fn apply_network_config(
             .bind(port.vlan_id)
             .bind(&port.description)
             .bind(port_idx as i32)
+            .bind(&port_type)
+            .bind(&status)
+            .bind(&speed)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)

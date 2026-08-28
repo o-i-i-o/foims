@@ -210,9 +210,14 @@ pub async fn get_organizations(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let parent_id = query
-        .get("parent_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
+    let parent_id_raw = query.get("parent_id").cloned();
+    let parent_id = parent_id_raw.as_ref().and_then(|id| Uuid::parse_str(id).ok());
+    // parent_id 参数给了但解析失败时直接返回校验错误（避免误当全量查询）
+    if parent_id_raw.is_some() && parent_id.is_none() {
+        return Err(AppError::Validation(msg(
+            "server.common.validation.uuid_invalid",
+        )));
+    }
     let root_only = query
         .get("root_only")
         .map(|v| v == "true" || v == "1")
@@ -496,10 +501,12 @@ pub async fn create_organization(
 
         let parent_level = parent.level_index;
 
-        // 获取模板定义
+        // 获取模板定义；FOR UPDATE 与 update_org_template 互斥，防止本事务
+        // 基于旧 levels 完成 type_path 校验后，模板更新并发提交新 levels，
+        // 导致新节点在提交后的模板下无法解析（TOCTOU）
         let template: OrgTemplate = sqlx::query_as::<_, OrgTemplate>(
             "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-             FROM org_templates WHERE id = $1",
+             FROM org_templates WHERE id = $1 FOR UPDATE",
         )
         .bind(parent_template_id)
         .fetch_optional(&mut *tx)
@@ -562,8 +569,9 @@ pub async fn create_organization(
             AppError::Validation(msg("server.organization.root_template_required"))
         })?;
 
+        // 锁定模板行，与模板更新/删除互斥（同子节点路径的并发防护）
         let template_exists: Option<Uuid> =
-            sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1")
+            sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1 FOR UPDATE")
                 .bind(template_id)
                 .fetch_optional(&mut *tx)
                 .await?;

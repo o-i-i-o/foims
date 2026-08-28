@@ -167,6 +167,8 @@
     "vlan_id": "VLAN ID",
     "port_type_access": "Access",
     "port_type_trunk": "Trunk",
+    "port_type_stack": "Stack",
+    "port_type_console": "Console",
     "port_type_hybrid": "Hybrid",
     "port_type_uplink": "Uplink",
     "port_status_up": "Up",

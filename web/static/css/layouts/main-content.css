@@ -38,6 +38,13 @@
   flex: 1;
 }
 
+/* 表格保持自然行高：容器的剩余空间在数据尾部留白即可，
+   不能让表格（tables.css 中 .data-table 的 flex: 1）跟着拉伸把行高撑大 */
+.content-section.active > .table-container:has(+ .pagination-container) > .data-table,
+.content-section.active > .tab-content.active > .table-container:has(+ .pagination-container) > .data-table {
+  flex: 0 0 auto;
+}
+
 .content-section h2 {
   margin-bottom: var(--space-lg);
   color: var(--color-text);

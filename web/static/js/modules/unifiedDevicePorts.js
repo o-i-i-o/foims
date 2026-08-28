@@ -137,6 +137,7 @@ function createPortItem(iface) {
   portItem.dataset.macAddress = iface.mac_address || "";
   portItem.dataset.description = iface.description || "";
   portItem.dataset.deviceManaged = iface.device_managed === true ? "1" : "0";
+  portItem.dataset.portType = iface.port_type || "access";
   portItem.dataset.status = iface.status || "up";
   portItem.dataset.speed = iface.speed || "";
 
@@ -185,7 +186,14 @@ function bindModalButtons(deviceId) {
   if (addPortBtn) {
     addPortBtn.onclick = () => {
       // 端口模态框新建的端口默认不进设备模态框（设备管理复选框不勾选）
-      openPortDetailModal({ portId: "", deviceId, name: "", deviceManaged: false });
+      openPortDetailModal({
+        portId: "",
+        deviceId,
+        name: "",
+        deviceManaged: false,
+        portType: "access",
+        status: "up"
+      });
     };
   }
 
@@ -216,7 +224,10 @@ function bindModalButtons(deviceId) {
         vlanId: portItem.dataset.vlanId,
         macAddress: portItem.dataset.macAddress,
         description: portItem.dataset.description,
-        deviceManaged: portItem.dataset.deviceManaged === "1"
+        deviceManaged: portItem.dataset.deviceManaged === "1",
+        portType: portItem.dataset.portType,
+        status: portItem.dataset.status,
+        speed: portItem.dataset.speed
       });
     });
   }
@@ -262,6 +273,9 @@ async function openPortDetailModal(portData) {
   elementCache.setValue("device-port-vlan-expanded", portData.vlanId || "");
   elementCache.setValue("device-port-mac-expanded", portData.macAddress || "");
   elementCache.setValue("device-port-description-expanded", portData.description || "");
+  elementCache.setValue("device-port-porttype-expanded", portData.portType || "access");
+  elementCache.setValue("device-port-status-expanded", portData.status || "up");
+  elementCache.setValue("device-port-speed-expanded", portData.speed || "");
   const managedCheckbox = elementCache.get("device-port-managed-expanded");
   if (managedCheckbox) {
     managedCheckbox.checked = portData.deviceManaged === true;
@@ -270,12 +284,13 @@ async function openPortDetailModal(portData) {
   if (deleteBtn) {
     deleteBtn.style.display = isNewPort ? "none" : "inline-block";
   }
-  // 模态框每次打开都会重建 DOM，直接绑定无需防重
+  // 模态框 DOM 关闭后不销毁、再次打开时复用，onclick 赋值覆盖旧监听
+  // 保证幂等；addEventListener 会叠加监听导致一次点击多次提交
   if (saveBtn) {
-    saveBtn.addEventListener("click", () => submitPortForm());
+    saveBtn.onclick = () => submitPortForm();
   }
   if (deleteBtn) {
-    deleteBtn.addEventListener("click", () => deletePort());
+    deleteBtn.onclick = () => deletePort();
   }
 }
 
@@ -284,6 +299,7 @@ async function openPortDetailModal(portData) {
  */
 function collectPortFormData() {
   const vlanRaw = elementCache.getValue("device-port-vlan-expanded");
+  const speedRaw = elementCache.getValue("device-port-speed-expanded");
   return {
     id: elementCache.getValue("device-port-id-expanded"),
     deviceId: elementCache.getValue("device-port-device-id-expanded"),
@@ -293,7 +309,10 @@ function collectPortFormData() {
     vlan_id: vlanRaw ? parseInt(vlanRaw, 10) : null,
     mac_address: elementCache.getValue("device-port-mac-expanded") || null,
     description: elementCache.getValue("device-port-description-expanded") || null,
-    device_managed: elementCache.get("device-port-managed-expanded")?.checked === true
+    device_managed: elementCache.get("device-port-managed-expanded")?.checked === true,
+    port_type: elementCache.getValue("device-port-porttype-expanded") || "access",
+    status: elementCache.getValue("device-port-status-expanded") || "up",
+    speed: speedRaw?.trim() || null
   };
 }
 
@@ -320,7 +339,10 @@ async function submitPortForm() {
     vlan_id: data.vlan_id,
     mac_address: data.mac_address?.trim() || null,
     description: data.description?.trim() || null,
-    device_managed: data.device_managed
+    device_managed: data.device_managed,
+    port_type: data.port_type,
+    status: data.status,
+    speed: data.speed
   };
 
   const saveBtn = elementCache.get("save-port-btn");
@@ -534,36 +556,36 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
     });
   }
 
-  // 全部跳过 / 全部覆盖
+  // 全部跳过 / 全部覆盖：冲突模态框按钮常驻复用，onclick 赋值防监听叠加
   const skipAllBtn = document.getElementById("conflict-skip-all-btn");
   const overwriteAllBtn = document.getElementById("conflict-overwrite-all-btn");
   if (skipAllBtn) {
-    skipAllBtn.addEventListener("click", () => {
+    skipAllBtn.onclick = () => {
       conflicts.forEach((c) => {
         conflictState.decisions[String(c.snmpPort.name)] = "skip";
       });
       syncConflictSelections();
-    });
+    };
   }
   if (overwriteAllBtn) {
-    overwriteAllBtn.addEventListener("click", () => {
+    overwriteAllBtn.onclick = () => {
       conflicts.forEach((c) => {
         conflictState.decisions[String(c.snmpPort.name)] = "overwrite";
       });
       syncConflictSelections();
-    });
+    };
   }
 
   // 确认 → 应用决策
   const confirmBtn = document.getElementById("conflict-confirm-btn");
   if (confirmBtn) {
-    confirmBtn.addEventListener("click", async () => {
+    confirmBtn.onclick = async () => {
       const toOverwrite = conflicts
         .filter((c) => conflictState.decisions[String(c.snmpPort.name)] === "overwrite")
         .map((c) => c.snmpPort);
       closeModal("port-conflict-modal");
       await applySnmpResults(deviceId, toAdd, toOverwrite);
-    });
+    };
   }
 }
 
