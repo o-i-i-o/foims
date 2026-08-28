@@ -39,14 +39,14 @@ use crate::utils::pagination::{Pagination, paged_response};
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,
                 di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-                di.description, di.sort_order, di.port_type, di.status, di.speed,
+                di.description, di.sort_order, di.port_type, di.status, di.speed, di.trunk_id,
                 di.device_managed, di.created_at, di.updated_at";
 
 /// 校验二层端口类型枚举（与 device_interfaces.port_type CHECK 一致）。
 fn validate_port_type(port_type: &str) -> Result<(), AppError> {
     if !matches!(
         port_type,
-        "access" | "trunk" | "uplink" | "stack" | "console"
+        "access" | "trunk" | "hybrid" | "uplink" | "stack" | "console"
     ) {
         return Err(AppError::Validation(msg(
             "server.device.interface.port_type_invalid",
@@ -230,9 +230,9 @@ pub async fn create_device_interface(
     sqlx::query(
         r"INSERT INTO device_interfaces (
             id, device_id, nic_id, name, physical_type, interface_role, mac_address,
-            vlan_id, description, port_type, status, speed, device_managed, sort_order,
+            vlan_id, description, port_type, status, speed, trunk_id, device_managed, sort_order,
             created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, $14, $15)",
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $16)",
     )
     .bind(id)
     .bind(device_id)
@@ -246,6 +246,7 @@ pub async fn create_device_interface(
     .bind(port_type)
     .bind(status)
     .bind(&req.speed)
+    .bind(req.trunk_id)
     .bind(req.device_managed.unwrap_or(false))
     .bind(now)
     .bind(now)
@@ -371,6 +372,9 @@ pub async fn update_device_interface(
         }
         if let Some(speed) = &req.speed {
             sep.push("speed = ").push_bind_unseparated(speed);
+        }
+        if let Some(trunk_id) = req.trunk_id {
+            sep.push("trunk_id = ").push_bind_unseparated(trunk_id);
         }
         if let Some(device_managed) = req.device_managed {
             sep.push("device_managed = ")
@@ -503,6 +507,8 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
         port_type: port.port_type.clone(),
         status: port.status.clone(),
         speed: port.speed.clone(),
+        // SNMP 同步来源不涉及 hybrid 端口的 Native VLAN 配置
+        trunk_id: None,
         device_managed: Some(false),
     }
 }

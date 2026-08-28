@@ -49,30 +49,43 @@ fn totp_replay_store() -> &'static TotpReplayStore {
     TOTP_REPLAY_STORE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-fn is_totp_code_replayed(user_id: Uuid, code: &str) -> bool {
-    let store = totp_replay_store();
-    if let Ok(map) = store.lock()
-        && let Some(used) = map.get(&user_id)
-        && used
-            .iter()
-            .any(|(used_code, used_at)| used_code == code && used_at.elapsed() < TOTP_REPLAY_TTL)
-    {
-        return true;
-    }
-    false
+/// 吊销检查所需的数据库不可用时返回 503，中间件内无法用 `?` 传播，统一走此响应
+fn db_unavailable_response() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ipma_common::ApiResponse::<()>::error(msg(
+            "server.db.operation_failed",
+        ))),
+    )
+        .into_response()
 }
 
-fn record_totp_usage(user_id: Uuid, code: &str) {
+/// 原子占位一个 TOTP 码：未被使用则登记并返回 true，TTL 内已使用则返回 false。
+/// 「先占位、后校验、失败回滚」替代旧的「检查→异步校验→记录」三步，
+/// 消除并发请求携带同一验证码时同时通过重放检查的竞态窗口。
+fn claim_totp_code(user_id: Uuid, code: &str) -> bool {
     let store = totp_replay_store();
-    if let Ok(mut map) = store.lock() {
-        let entry = map.entry(user_id).or_default();
-        // 先按 TTL 清理过期项，再追加并截断到保留数量
-        entry.retain(|(_, used_at)| used_at.elapsed() < TOTP_REPLAY_TTL);
-        entry.push((code.to_string(), std::time::Instant::now()));
-        if entry.len() > TOTP_REPLAY_KEEP {
-            let drop_count = entry.len() - TOTP_REPLAY_KEEP;
-            entry.drain(0..drop_count);
-        }
+    let mut map = store.lock().unwrap_or_else(|e| e.into_inner());
+    let entry = map.entry(user_id).or_default();
+    // 先按 TTL 清理过期项，再查重与登记
+    entry.retain(|(_, used_at)| used_at.elapsed() < TOTP_REPLAY_TTL);
+    if entry.iter().any(|(used_code, _)| used_code == code) {
+        return false;
+    }
+    entry.push((code.to_string(), std::time::Instant::now()));
+    if entry.len() > TOTP_REPLAY_KEEP {
+        let drop_count = entry.len() - TOTP_REPLAY_KEEP;
+        entry.drain(0..drop_count);
+    }
+    true
+}
+
+/// 回滚占位：TOTP 校验失败时释放该码，避免占位语义误伤用户的合法重试
+fn release_totp_code(user_id: Uuid, code: &str) {
+    let store = totp_replay_store();
+    let mut map = store.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(entry) = map.get_mut(&user_id) {
+        entry.retain(|(used_code, _)| used_code != code);
     }
 }
 
@@ -118,18 +131,29 @@ pub async fn auth_middleware(
             .into_response();
     }
 
-    // 检查令牌是否已被撤销
-    if let Ok(pool) = state.pool()
-        && let Ok(revoked) = crate::utils::common::is_token_revoked(&pool.get_conn(), &token).await
-        && revoked
-    {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ipma_common::ApiResponse::<()>::error(msg(
-                "server.auth.token_revoked",
-            ))),
-        )
-            .into_response();
+    // 检查令牌是否已被撤销。数据库不可用时 fail-closed 拒绝请求
+    // （与 refresh 流程策略一致），防止 DB 故障期间被吊销令牌继续通行
+    match state.pool() {
+        Ok(pool) => match crate::utils::common::is_token_revoked(&pool.get_conn(), &token).await {
+            Ok(true) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ipma_common::ApiResponse::<()>::error(msg(
+                        "server.auth.token_revoked",
+                    ))),
+                )
+                    .into_response();
+            }
+            Ok(false) => {}
+            Err(e) => {
+                ipma_common::log_error!("log.auth.check_revoke_failed", error = e);
+                return db_unavailable_response();
+            }
+        },
+        Err(e) => {
+            ipma_common::log_error!("log.auth.check_revoke_failed", error = e);
+            return db_unavailable_response();
+        }
     }
 
     let (ip_address, user_agent) = get_client_info_from_parts(&parts);
@@ -208,9 +232,9 @@ pub async fn login(
 
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁（用户名维度拦截
     // 分布式来源针对同一账户的爆破，A-1）
-    let client_ip = meta.ip_address.clone();
-    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+    let client_ip = meta.ip_address.as_str();
+    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -237,7 +261,7 @@ pub async fn login(
             // 等价 bcrypt 校验后再返回，抹平用户名枚举时间侧信道（A-4）
             dummy_bcrypt_verify(&req.password).await;
             crate::system::app_fail2ban::record_login_failure(
-                &client_ip,
+                client_ip,
                 &req.username,
                 "server.login_log.user_not_found",
             );
@@ -253,7 +277,7 @@ pub async fn login(
 
     if !status {
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.account_disabled",
         );
@@ -279,8 +303,8 @@ pub async fn login(
         )));
     }
 
-    let password_for_verify = req.password.clone();
-    let hash_for_verify = password_hash.clone();
+    let password_for_verify = req.password;
+    let hash_for_verify = password_hash;
     let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
         .await
         .map_err(|e| {
@@ -291,7 +315,7 @@ pub async fn login(
         })?;
     if !valid {
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.invalid_password",
         );
@@ -373,7 +397,7 @@ pub async fn login(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(&client_ip, &username);
+    crate::system::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.success", username = username);
 
     build_login_response(user, login_tokens, meta.is_secure)
@@ -391,9 +415,9 @@ pub async fn login_with_email_code(
 
     // 应用层 fail2ban：邮箱验证码同样纳入 IP/账户维度爆破防护（A-5）
     //（此前仅密码/TOTP 登录有联动，6 位数字码可被不限速爆破）
-    let client_ip = meta.ip_address.clone();
-    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+    let client_ip = meta.ip_address.as_str();
+    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -429,7 +453,7 @@ pub async fn login_with_email_code(
         None => {
             // 未注册邮箱：记录失败计入 fail2ban（防止对任意邮箱爆破验证码）
             crate::system::app_fail2ban::record_login_failure(
-                &client_ip,
+                client_ip,
                 email,
                 "server.login_log.user_not_found",
             );
@@ -473,11 +497,25 @@ pub async fn login_with_email_code(
         let trimmed_input_code = req.code.trim();
         let trimmed_db_code = c.trim();
         if constant_time_eq(trimmed_db_code, trimmed_input_code) && e > Utc::now() {
-            verified = true;
-            if let Err(e) = sqlx::query("UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL WHERE id = $1")
-                .bind(id).execute(&conn).await
+            // 验证与作废同语句原子完成：验证码一次性语义不被并发请求破坏
+            match sqlx::query(
+                "UPDATE users SET two_factor_email_code = NULL, two_factor_email_code_expiry = NULL \
+                 WHERE id = $1 AND BTRIM(two_factor_email_code) = $2",
+            )
+            .bind(id)
+            .bind(trimmed_db_code)
+            .execute(&conn)
+            .await
             {
-                ipma_common::log_warn!("log.auth.clear_2fa_code_failed", error = e);
+                Ok(result) if result.rows_affected() > 0 => verified = true,
+                // affected=0：验证码已被并发请求抢先消费，按验证失败处理
+                Ok(_) => {}
+                // 清除失败按验证失败处理（fail-closed），用户重新获取验证码即可
+                Err(e) => {
+                    return Err(AppError::Database(
+                        msg("server.db.operation_failed").with("error", e),
+                    ));
+                }
             }
         }
     }
@@ -485,7 +523,7 @@ pub async fn login_with_email_code(
     if !verified {
         // 错误验证码计入 fail2ban：连续失败即封禁该 IP 与该邮箱（A-5）
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.invalid_email_code",
         );
@@ -552,7 +590,7 @@ pub async fn login_with_email_code(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(&client_ip, &username);
+    crate::system::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.email_code_success", username = username);
 
     build_login_response(user, login_tokens, meta.is_secure)
@@ -611,9 +649,9 @@ pub async fn login_with_two_factor(
     let conn = state.pool()?.get_conn();
 
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁
-    let client_ip = meta.ip_address.clone();
-    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+    let client_ip = meta.ip_address.as_str();
+    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -642,7 +680,7 @@ pub async fn login_with_two_factor(
                 dummy_bcrypt_verify(password).await;
             }
             crate::system::app_fail2ban::record_login_failure(
-                &client_ip,
+                client_ip,
                 &req.username,
                 "server.login_log.user_not_found",
             );
@@ -652,12 +690,10 @@ pub async fn login_with_two_factor(
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
 
-    let password = req
+    let password_for_verify = req
         .password
-        .as_deref()
         .ok_or_else(|| AppError::Validation(msg("server.auth.2fa_password_required")))?;
-    let password_for_verify = password.to_string();
-    let hash_for_verify = password_hash.clone();
+    let hash_for_verify = password_hash;
     let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
         .await
         .map_err(|e| {
@@ -668,7 +704,7 @@ pub async fn login_with_two_factor(
         })?;
     if !valid {
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.invalid_password",
         );
@@ -677,7 +713,7 @@ pub async fn login_with_two_factor(
 
     if !status {
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.account_disabled",
         );
@@ -724,8 +760,9 @@ pub async fn login_with_two_factor(
             .build()
         {
             Ok(totp) => {
-                let code = req.two_factor_code.clone();
-                if is_totp_code_replayed(id, &code) {
+                let code = req.two_factor_code;
+                // 原子占位后再校验，失败回滚，见 claim_totp_code 注释
+                if !claim_totp_code(id, &code) {
                     if let Err(e) = log_login(
                         &conn,
                         &username,
@@ -749,8 +786,9 @@ pub async fn login_with_two_factor(
                     AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
                 })?;
                 if valid {
-                    record_totp_usage(id, &code);
                     verified = true;
+                } else {
+                    release_totp_code(id, &code);
                 }
             }
             Err(e) => {
@@ -775,7 +813,7 @@ pub async fn login_with_two_factor(
 
     if !verified {
         crate::system::app_fail2ban::record_login_failure(
-            &client_ip,
+            client_ip,
             &username,
             "server.login_log.invalid_2fa_code",
         );
@@ -832,7 +870,7 @@ pub async fn login_with_two_factor(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(&client_ip, &user.username);
+    crate::system::app_fail2ban::record_login_success(client_ip, &user.username);
     ipma_common::log_info!("log.login.2fa_success", username = user.username);
 
     build_login_response(user, login_tokens, meta.is_secure)
@@ -895,7 +933,7 @@ pub async fn logout(
         }
     }
 
-    // 撤销 refresh_token
+    // 撤销 refresh_token（长期凭证，撤销失败必须让客户端感知登出未完成）
     if let Some(refresh_token) = refresh_token
         && let Ok(claims) = state.jwt_utils.validate_token(&refresh_token)
     {
@@ -910,7 +948,10 @@ pub async fn logout(
         )
         .await
         {
-            ipma_common::log_warn!("log.auth.revoke_refresh_token_failed", error = e);
+            ipma_common::log_error!("log.auth.revoke_refresh_token_failed", error = e);
+            return Err(AppError::Database(
+                msg("server.db.operation_failed").with("error", e),
+            ));
         }
     }
 
@@ -1091,34 +1132,42 @@ pub async fn forgot_password(
     .fetch_optional(&conn)
     .await;
 
-    if let Ok(Some((_user_id, _username, _two_factor_enabled))) = user_result {
-        let reset_token = Uuid::new_v4().to_string();
-        let expiry = Utc::now() + chrono::Duration::hours(1);
+    match user_result {
+        Ok(Some((_user_id, _username, _two_factor_enabled))) => {
+            let reset_token = Uuid::new_v4().to_string();
+            let expiry = Utc::now() + chrono::Duration::hours(1);
 
-        if let Err(e) = sqlx::query(
-            "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3",
-        )
-        .bind(&reset_token)
-        .bind(expiry)
-        .bind(email)
-        .execute(&conn)
-        .await
-        {
-            ipma_common::log_error!("log.auth.save_reset_token_failed", error = e);
-        } else {
-            let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
-            if let Some(ref _config) = smtp_config {
-                // 使用应用公共URL（而非SMTP主机名）构建重置链接
-                let base_url = state.config.server.public_url.trim_end_matches('/');
-                let reset_link = format!("{base_url}/reset-password?token={reset_token}");
-                let email_body = format!("请点击以下链接重置密码：{reset_link}");
-                if let Err(e) =
-                    crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body)
-                        .await
-                {
-                    ipma_common::log_error!("log.auth.send_reset_email_failed", error = e);
+            if let Err(e) = sqlx::query(
+                "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3",
+            )
+            .bind(&reset_token)
+            .bind(expiry)
+            .bind(email)
+            .execute(&conn)
+            .await
+            {
+                ipma_common::log_error!("log.auth.save_reset_token_failed", error = e);
+            } else {
+                let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
+                if let Some(ref _config) = smtp_config {
+                    // 使用应用公共URL（而非SMTP主机名）构建重置链接
+                    let base_url = state.config.server.public_url.trim_end_matches('/');
+                    let reset_link = format!("{base_url}/reset-password?token={reset_token}");
+                    let email_body = format!("请点击以下链接重置密码：{reset_link}");
+                    if let Err(e) =
+                        crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body)
+                            .await
+                    {
+                        ipma_common::log_error!("log.auth.send_reset_email_failed", error = e);
+                    }
                 }
             }
+        }
+        Ok(None) => {}
+        // 对外仍返回统一成功响应（防用户枚举），但 DB 错误必须记录：
+        // 否则用户"收不到重置邮件"时无任何排查线索
+        Err(e) => {
+            ipma_common::log_error!("log.auth.forgot_password_query_failed", error = e);
         }
     }
 
@@ -1419,8 +1468,9 @@ pub async fn enable_two_factor(
         .build()
         .map_err(|e| AppError::Internal(msg("server.auth.totp_create_failed").with("error", e)))?;
 
-    let code = req.code.clone();
-    if is_totp_code_replayed(target_user_id, &code) {
+    let code = req.code;
+    // 原子占位后再校验，失败回滚，见 claim_totp_code 注释
+    if !claim_totp_code(target_user_id, &code) {
         return Err(AppError::Validation(msg("server.auth.2fa_code_reused")));
     }
     let code_for_check = code.clone();
@@ -1430,9 +1480,9 @@ pub async fn enable_two_factor(
             AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
         })?;
     if !valid {
+        release_totp_code(target_user_id, &code);
         return Err(AppError::Validation(msg("server.auth.code_wrong")));
     }
-    record_totp_usage(target_user_id, &code);
 
     sqlx::query(
         "UPDATE users SET two_factor_enabled = true, two_factor_verified = true WHERE id = $1",
@@ -1511,8 +1561,9 @@ pub async fn disable_two_factor(
             .map_err(|e| {
                 AppError::Internal(msg("server.auth.2fa_secret_too_short").with("error", e))
             })?;
-        let code = req.code.clone();
-        if is_totp_code_replayed(target_user_id, &code) {
+        let code = req.code;
+        // 原子占位后再校验，失败回滚，见 claim_totp_code 注释
+        if !claim_totp_code(target_user_id, &code) {
             return Err(AppError::Validation(msg("server.auth.2fa_code_reused")));
         }
         let code_for_check = code.clone();
@@ -1523,8 +1574,9 @@ pub async fn disable_two_factor(
                     AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
                 })?;
         if valid {
-            record_totp_usage(target_user_id, &code);
             verified = true;
+        } else {
+            release_totp_code(target_user_id, &code);
         }
     }
 
@@ -1604,19 +1656,25 @@ pub(crate) async fn find_or_create_external_user(
         .fetch_optional(conn)
         .await?
     {
-        let (id, db_username, db_email, role, status, two_factor_enabled, auth_provider) = row;
+        let (id, db_username, mut db_email, role, status, two_factor_enabled, auth_provider) = row;
         if auth_provider != provider {
             return Err(AppError::Conflict(msg("server.auth.provider_mismatch")));
         }
-        // 同步外部侧邮箱变化（邮箱冲突时保留原值）
+        // 同步外部侧邮箱变化（同步失败保留原值并告警，外部账户仍可正常登录）
         if let Some(new_email) = email
             && new_email != db_email
         {
-            let _ = sqlx::query("UPDATE users SET email = $2, updated_at = NOW() WHERE id = $1")
+            match sqlx::query("UPDATE users SET email = $2, updated_at = NOW() WHERE id = $1")
                 .bind(id)
                 .bind(new_email)
                 .execute(conn)
-                .await;
+                .await
+            {
+                Ok(_) => db_email = new_email.to_string(),
+                Err(e) => {
+                    ipma_common::log_warn!("log.auth.external_email_sync_failed", error = e);
+                }
+            }
         }
         return Ok(ExternalUser {
             id,

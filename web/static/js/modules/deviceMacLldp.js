@@ -50,7 +50,7 @@ async function viewArpTable(deviceId) {
     try {
       const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
       if (!deviceResult.success) {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.load_failed")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.load_failed")}</p>`;
         return;
       }
 
@@ -65,7 +65,7 @@ async function viewArpTable(deviceId) {
 
         if (entries.length === 0) {
           loadingEl.innerHTML = `
-            <p style="color: #666; margin-bottom: 10px;">${t("device.no_mac_data")}</p>
+            <p class="mac-lldp-text-muted">${t("device.no_mac_data")}</p>
             ${iconButton({ icon: "refresh", label: t("device.sync_from_snmp"), cls: "btn-primary", attrs: 'id="sync-mac-empty-btn"' })}
           `;
           modal.querySelector("#sync-mac-empty-btn").addEventListener("click", () => syncMacData());
@@ -133,10 +133,10 @@ async function viewArpTable(deviceId) {
         loadingEl.classList.add("hidden");
         contentEl.classList.remove("hidden");
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.load_mac_failed")}: ${escapeHtml(result.message || "")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.load_mac_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t("common.load_failed")}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("common.load_failed")}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -152,7 +152,7 @@ async function viewArpTable(deviceId) {
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>
-      <p style="margin-top: 10px; color: #666;">${t("device.syncing_mac")}</p>
+      <p class="mac-lldp-text-syncing">${t("device.syncing_mac")}</p>
     `;
 
     try {
@@ -160,10 +160,10 @@ async function viewArpTable(deviceId) {
       if (result.success) {
         await loadArpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.sync_failed")}: ${escapeHtml(result.message || "")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.sync_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t("device.sync_failed")}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.sync_failed")}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -174,7 +174,7 @@ async function viewArpTable(deviceId) {
 
 function renderMacTable(entries, type) {
   if (entries.length === 0) {
-    return `<p style="text-align: center; color: #666; padding: 20px;">${type === "ipv4" ? "IPv4" : "IPv6"} ${t("common.no_data")}</p>`;
+    return `<p class="mac-table-empty">${type === "ipv4" ? "IPv4" : "IPv6"} ${t("common.no_data")}</p>`;
   }
 
   const groups = groupByNetwork(entries, type);
@@ -185,18 +185,19 @@ function renderMacTable(entries, type) {
   for (const [network, items] of Object.entries(groups)) {
     const groupId = `${type}-group-${groupIndex}`;
     const displayStyle = defaultCollapsed ? "none" : "block";
+    // 初始折叠态由模板内联给出，折叠切换时由 bindCollapseEvents 改写内联 transform
     const iconRotate = defaultCollapsed ? "rotate(-90deg)" : "rotate(0deg)";
 
-    html += `<div style="margin-bottom: 10px;">
-      <div class="network-group-header" data-target="${groupId}" style="background: #f5f5f5; padding: 8px 12px; font-weight: bold; border-left: 3px solid #4CAF50; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+    html += `<div class="mac-network-group">
+      <div class="network-group-header" data-target="${groupId}">
         <span>${escapeHtml(network)} (${items.length} ${t("common.records")})</span>
-        <span class="collapse-icon" style="transition: transform 0.2s; transform: ${iconRotate};">▼</span>
+        <span class="collapse-icon mac-collapse-icon" style="transform: ${iconRotate};">▼</span>
       </div>
       <div id="${groupId}" class="network-group-content" style="display: ${displayStyle};">
-        <table style="width:100%; border-collapse: collapse;">
-          <tr><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t("device.ip_address")}</th><th style="border:1px solid #ddd; padding:6px; text-align:left; background:#fafafa;">${t("device.mac_address")}</th></tr>`;
+        <table class="mac-group-table">
+          <tr><th>${t("device.ip_address")}</th><th>${t("device.mac_address")}</th></tr>`;
     items.forEach((entry) => {
-      html += `<tr><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.ip_address)}</td><td style="border:1px solid #ddd; padding:6px;">${escapeHtml(entry.mac_address)}</td></tr>`;
+      html += `<tr><td>${escapeHtml(entry.ip_address)}</td><td>${escapeHtml(entry.mac_address)}</td></tr>`;
     });
     html += "</table></div></div>";
     groupIndex++;
@@ -314,7 +315,7 @@ async function viewLldpNeighbors(deviceId) {
     try {
       const deviceResult = await apiGet(`/api/resources/devices/${deviceId}`);
       if (!deviceResult.success) {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.load_failed")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.load_failed")}</p>`;
         return;
       }
 
@@ -329,7 +330,7 @@ async function viewLldpNeighbors(deviceId) {
 
         if (neighbors.length === 0) {
           loadingEl.innerHTML = `
-            <p style="color: #666; margin-bottom: 10px;">${t("device.no_lldp_data")}</p>
+            <p class="mac-lldp-text-muted">${t("device.no_lldp_data")}</p>
             ${iconButton({ icon: "refresh", label: t("device.sync_from_snmp"), cls: "btn-primary", attrs: 'id="sync-lldp-empty-btn"' })}
           `;
           modal
@@ -342,10 +343,10 @@ async function viewLldpNeighbors(deviceId) {
         loadingEl.classList.add("hidden");
         contentEl.classList.remove("hidden");
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.load_lldp_failed")}: ${escapeHtml(result.message || "")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.load_lldp_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t("common.load_failed")}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("common.load_failed")}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -361,7 +362,7 @@ async function viewLldpNeighbors(deviceId) {
     syncBtn.disabled = true;
     loadingEl.innerHTML = `
       <div class="spinner"></div>
-      <p style="margin-top: 10px; color: #666;">${t("device.syncing_lldp")}</p>
+      <p class="mac-lldp-text-syncing">${t("device.syncing_lldp")}</p>
     `;
 
     try {
@@ -369,10 +370,10 @@ async function viewLldpNeighbors(deviceId) {
       if (result.success) {
         await loadLldpData();
       } else {
-        loadingEl.innerHTML = `<p style="color: red;">${t("device.sync_failed")}: ${escapeHtml(result.message || "")}</p>`;
+        loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.sync_failed")}: ${escapeHtml(result.message || "")}</p>`;
       }
     } catch (err) {
-      loadingEl.innerHTML = `<p style="color: red;">${t("device.sync_failed")}: ${escapeHtml(err.message)}</p>`;
+      loadingEl.innerHTML = `<p class="mac-lldp-text-error">${t("device.sync_failed")}: ${escapeHtml(err.message)}</p>`;
     } finally {
       syncBtn.disabled = false;
     }
@@ -386,15 +387,15 @@ async function viewLldpNeighbors(deviceId) {
 
 function renderLldpTable(neighbors) {
   return `
-    <table class="table table-bordered" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+    <table class="table table-bordered lldp-table">
       <thead>
-        <tr style="background-color: var(--bg-secondary, #f0f2f5);">
-          <th style="width: 60px; text-align: center; border: 1px solid var(--border-color, #ddd); padding: 12px 8px; font-weight: 600;">${t("common.index")}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t("device.local_port")}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t("device.neighbor_device")}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t("device.neighbor_port")}</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">Chassis ID</th>
-          <th style="border: 1px solid var(--border-color, #ddd); padding: 12px 10px; font-weight: 600;">${t("device.system_description")}</th>
+        <tr>
+          <th class="lldp-col-index">${t("common.index")}</th>
+          <th>${t("device.local_port")}</th>
+          <th>${t("device.neighbor_device")}</th>
+          <th>${t("device.neighbor_port")}</th>
+          <th>Chassis ID</th>
+          <th>${t("device.system_description")}</th>
         </tr>
       </thead>
       <tbody>
@@ -410,13 +411,13 @@ function renderLldpTable(neighbors) {
               neighborPort = n.neighbor_port_id;
             }
             return `
-          <tr style="background-color: ${i % 2 === 0 ? "var(--bg-primary, #fff)" : "var(--bg-tertiary, #fafbfc)"};">
-            <td style="text-align: center; color: var(--text-muted, #888); border: 1px solid var(--border-color, #ddd); padding: 10px 8px;">${i + 1}</td>
-            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-weight: 500;">${escapeHtml(n.local_port || "-")}</td>
-            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${escapeHtml(n.neighbor_sys_name || "-")}</td>
-            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px;">${escapeHtml(neighborPort)}</td>
-            <td style="border: 1px solid var(--border-color, #ddd); padding: 10px; font-family: monospace; font-size: 0.9em;">${escapeHtml(n.neighbor_chassis_id || "-")}</td>
-            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border-color, #ddd); padding: 10px; font-size: 0.9em; color: var(--text-secondary, #666);" title="${escapeHtml(n.neighbor_sys_desc || "")}">${escapeHtml(n.neighbor_sys_desc || "-")}</td>
+          <tr>
+            <td class="lldp-index">${i + 1}</td>
+            <td class="lldp-port">${escapeHtml(n.local_port || "-")}</td>
+            <td>${escapeHtml(n.neighbor_sys_name || "-")}</td>
+            <td>${escapeHtml(neighborPort)}</td>
+            <td class="lldp-chassis">${escapeHtml(n.neighbor_chassis_id || "-")}</td>
+            <td class="lldp-desc" title="${escapeHtml(n.neighbor_sys_desc || "")}">${escapeHtml(n.neighbor_sys_desc || "-")}</td>
           </tr>
         `;
           })

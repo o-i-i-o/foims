@@ -21,7 +21,6 @@ allow_attributes = "warn"
 [workspace.dependencies]
 # Axum
 axum = { version = "0.8.9", features = ["macros", "multipart", "ws", "http2"] }
-tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.7.0", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
 
@@ -41,7 +40,6 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 # Async
 tokio = { version = "1.53.1", features = ["full"] }
-futures-util = "0.3.34"
 
 # Date/Time
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -66,9 +64,15 @@ async-trait = "0.1.92"
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
 
+# 密码哈希 / 随机数 / TOML 序列化 / 日志时间格式化（多 crate 共享）
+bcrypt = "0.19.3"
+rand = "0.10.2"
+toml = "1.1.4"
+time = "0.3.55"
+
 [package]
 name = "ipma"
-version = "0.15.82"
+version = "0.15.84"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -85,7 +89,6 @@ ipma-x509-manager = { path = "crates/ipma-x509-manager" }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }
-tower = { workspace = true }
 tower-http = { workspace = true }
 axum-extra = { workspace = true }
 sqlx = { workspace = true }
@@ -93,28 +96,27 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 validator = { workspace = true }
 tokio = { workspace = true }
-futures-util = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 aes-gcm = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
-csv = { workspace = true }
-zip = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
+bcrypt = { workspace = true }
+rand = { workspace = true }
+toml = { workspace = true }
+time = { workspace = true }
 
 # 主项目特有依赖
 
-bcrypt = "0.19.3"
 # rust_crypto 后端（纯 Rust，无 C 构建链）。其引入的 rsa 0.9 有
 # RUSTSEC-2023-0071（Marvin Attack，无修复版本），但 openidconnect
 # 本就无条件依赖同一 rsa，且本项目仅作 OIDC 客户端公钥验签与 HS256
 # 签名，不触及受影响的私钥运算路径
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 sha2 = "0.11.0"
-rand = "0.10.2"
 
 # 外部认证（LDAP / OIDC SSO）
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
@@ -123,13 +125,10 @@ openidconnect = { version = "4.0", default-features = false, features = ["reqwes
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
 
 ipnetwork = "0.21.1"
-macaddr = "1.0.1"
-pnet = "0.35"
 
 async-snmp = "0.18.1"
 
 config = { version = "0.15.25", features = ["toml"] }
-toml = "1.1.4"
 
 dashmap = "6.2.1"
 arc-swap = "1.9.2"
@@ -138,15 +137,12 @@ totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 
 
 rust-i18n = "4.2.1"
-time = "0.3.55"
 
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true }
-serde_json = { workspace = true }
 regex = "1"
 
 [features]

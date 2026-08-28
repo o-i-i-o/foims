@@ -391,7 +391,6 @@ async fn sso_callback_inner(
     // 一次性消费 state（不存在/过期均拒绝），防 CSRF 与重放
     let state_value = params
         .state
-        .clone()
         .ok_or_else(|| AppError::Unauthorized(msg("server.sso.state_invalid")))?;
     let pending = sso_state_store()
         .remove(&state_value)
@@ -401,7 +400,6 @@ async fn sso_callback_inner(
 
     let code = params
         .code
-        .clone()
         .ok_or_else(|| AppError::Unauthorized(msg("server.sso.code_missing")))?;
 
     let redirect_uri = resolve_redirect_uri(&config, &headers, meta.is_secure);
@@ -602,7 +600,7 @@ pub async fn update_sso_config(
             .ok_or_else(|| AppError::NotFound(msg("server.sso.not_configured_secret")))?
             .client_secret
     } else {
-        req.client_secret.clone()
+        req.client_secret
     };
 
     // 变更签发者后旧发现文档缓存失效

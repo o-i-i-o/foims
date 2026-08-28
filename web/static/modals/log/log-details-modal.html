@@ -6,35 +6,36 @@
       <button type="button" class="close" data-modal-id="log-details-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
+      <!-- 键值对 dl 化：dt 为字段名、dd 为字段值（id 保留，JS 按 id 填充） -->
       <div class="log-detail-grid">
-        <div class="log-detail-item">
-          <label data-i18n="logs.operation_time">Operation Time</label>
-          <div id="log-detail-time"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.operator">Operator</label>
-          <div id="log-detail-user"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.operation_type">Operation Type</label>
-          <div id="log-detail-type"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.result">Result</label>
-          <div id="log-detail-result"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.resource_type">Resource Type</label>
-          <div id="log-detail-resource-type"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.resource_id">Resource ID</label>
-          <div id="log-detail-resource-id"></div>
-        </div>
-        <div class="log-detail-item">
-          <label data-i18n="logs.ip_address">IP Address</label>
-          <div id="log-detail-ip"></div>
-        </div>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.operation_time">Operation Time</dt>
+          <dd id="log-detail-time"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.operator">Operator</dt>
+          <dd id="log-detail-user"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.operation_type">Operation Type</dt>
+          <dd id="log-detail-type"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.result">Result</dt>
+          <dd id="log-detail-result"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.resource_type">Resource Type</dt>
+          <dd id="log-detail-resource-type"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.resource_id">Resource ID</dt>
+          <dd id="log-detail-resource-id"></dd>
+        </dl>
+        <dl class="log-detail-item">
+          <dt data-i18n="logs.ip_address">IP Address</dt>
+          <dd id="log-detail-ip"></dd>
+        </dl>
       </div>
       <div class="log-detail-section">
         <label data-i18n="logs.details">Details</label>

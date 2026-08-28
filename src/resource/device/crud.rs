@@ -328,7 +328,7 @@ pub async fn create_device(
     .await?;
 
     // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
-    let cards = req.cards.clone().unwrap_or_default();
+    let cards = req.cards.unwrap_or_default();
     super::nic::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
     let ip_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
@@ -372,29 +372,30 @@ pub async fn create_device(
 
     tx.commit().await?;
 
+    // req 在此之后不再使用，字段直接移动，避免逐字段克隆
     let device = Device {
         id,
-        name: req.name.clone(),
-        hostname: req.hostname.clone(),
+        name: req.name,
+        hostname: req.hostname,
         device_type: final_device_type,
         brand: final_brand,
         model: final_model,
-        serial_number: req.serial_number.clone(),
+        serial_number: req.serial_number,
         workstation_id: req.workstation_id,
         position_id: req.position_id,
         room_id: req.room_id,
         template_id: req.template_id,
-        seller: req.seller.clone(),
-        location: req.location.clone(),
+        seller: req.seller,
+        location: req.location,
         snmp_version: Some(snmp_version),
         snmp_community: encrypted_community,
-        snmp_username: req.snmp_username.clone(),
-        snmp_auth_protocol: req.snmp_auth_protocol.clone(),
+        snmp_username: req.snmp_username,
+        snmp_auth_protocol: req.snmp_auth_protocol,
         snmp_auth_password: encrypted_auth_password,
-        snmp_priv_protocol: req.snmp_priv_protocol.clone(),
+        snmp_priv_protocol: req.snmp_priv_protocol,
         snmp_priv_password: encrypted_priv_password,
         snmp_port: Some(snmp_port),
-        description: req.description.clone(),
+        description: req.description,
         created_at: now,
         updated_at: now,
     };
@@ -456,9 +457,9 @@ pub async fn get_device(
     let cards = cards?;
 
     let (decrypted_community, decrypted_auth, decrypted_priv) = tokio::join!(
-        crate::crypto::decrypt_credential_async(device.snmp_community.clone()),
-        crate::crypto::decrypt_credential_async(device.snmp_auth_password.clone()),
-        crate::crypto::decrypt_credential_async(device.snmp_priv_password.clone()),
+        crate::crypto::decrypt_credential_async(device.snmp_community.as_deref()),
+        crate::crypto::decrypt_credential_async(device.snmp_auth_password.as_deref()),
+        crate::crypto::decrypt_credential_async(device.snmp_priv_password.as_deref()),
     );
     let decrypted_community = decrypted_community?;
     let decrypted_auth = decrypted_auth?;

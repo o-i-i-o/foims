@@ -194,11 +194,11 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
     };
 
     // 检测非根节点间的循环引用（DFS 染色法）
-    let mut visited: std::collections::HashMap<&String, u8> = std::collections::HashMap::new();
+    let mut visited: std::collections::HashMap<&str, u8> = std::collections::HashMap::new();
     fn has_cycle<'a>(
-        node: &'a String,
+        node: &'a str,
         levels_map: &'a serde_json::Map<String, serde_json::Value>,
-        visited: &mut std::collections::HashMap<&'a String, u8>,
+        visited: &mut std::collections::HashMap<&'a str, u8>,
     ) -> bool {
         match visited.get(node) {
             Some(&2) => return false,
@@ -221,7 +221,7 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         visited.insert(node, 2);
         false
     }
-    if has_cycle(&root_type, levels_map, &mut visited) {
+    if has_cycle(root_type.as_str(), levels_map, &mut visited) {
         return Err(AppError::Validation(msg(
             "server.org_template.validation.levels_cycle",
         )));
@@ -341,11 +341,11 @@ pub fn compute_type_name_mapping(
 
     let mut mapping = std::collections::HashMap::new();
 
-    fn collect_mapping<'a>(
+    fn collect_mapping(
         old_key: &str,
-        old_map: &'a serde_json::Map<String, serde_json::Value>,
+        old_map: &serde_json::Map<String, serde_json::Value>,
         new_key: &str,
-        new_map: &'a serde_json::Map<String, serde_json::Value>,
+        new_map: &serde_json::Map<String, serde_json::Value>,
         mapping: &mut std::collections::HashMap<String, String>,
     ) -> bool {
         mapping.insert(old_key.to_string(), new_key.to_string());

@@ -125,43 +125,44 @@ pub async fn update_system_config(
 ) -> Result<Response, AppError> {
     let mut new_config = state.config.clone();
 
-    if let Some(database) = &req.database {
+    // req 各分支互斥且按值取出，避免逐子结构克隆
+    if let Some(database) = req.database {
         // 防止脱敏值覆写真实密码
-        let mut db_config = database.clone();
+        let mut db_config = database;
         if db_config.password == "***" {
             db_config.password = state.config.database.password.clone();
         }
         new_config.database = db_config;
     }
 
-    if let Some(server) = &req.server {
-        new_config.server = server.clone();
+    if let Some(server) = req.server {
+        new_config.server = server;
     }
 
-    if let Some(jwt) = &req.jwt {
+    if let Some(jwt) = req.jwt {
         // 防止脱敏值覆写真实密钥
-        let mut jwt_config = jwt.clone();
+        let mut jwt_config = jwt;
         if jwt_config.secret == "***" {
             jwt_config.secret = state.config.jwt.secret.clone();
         }
         new_config.jwt = jwt_config;
     }
 
-    if let Some(init) = &req.init {
+    if let Some(init) = req.init {
         if init.enabled != state.config.init.enabled {
             return Err(AppError::Validation(msg(
                 "server.system.init_mode_api_forbidden",
             )));
         }
-        new_config.init = init.clone();
+        new_config.init = init;
     }
 
-    if let Some(rate_limit) = &req.rate_limit {
-        new_config.rate_limit = rate_limit.clone();
+    if let Some(rate_limit) = req.rate_limit {
+        new_config.rate_limit = rate_limit;
     }
 
-    if let Some(snmp) = &req.snmp {
-        new_config.snmp = snmp.clone();
+    if let Some(snmp) = req.snmp {
+        new_config.snmp = snmp;
     }
 
     let config_path = crate::config::get_config_file_path();

@@ -360,7 +360,7 @@ pub async fn create_network(
     if let Some(ref ipv4) = ipv4_cidr_val
         && !crate::utils::cidr_belongs_to_region(
             ipv4,
-            &network_region.ipv4_cidrs.clone().unwrap_or_default(),
+            network_region.ipv4_cidrs.as_deref().unwrap_or_default(),
         )
     {
         return Err(AppError::Validation(msg(
@@ -371,7 +371,7 @@ pub async fn create_network(
     if let Some(ref ipv6) = ipv6_cidr_val
         && !crate::utils::cidr_belongs_to_region(
             ipv6,
-            &network_region.ipv6_cidrs.clone().unwrap_or_default(),
+            network_region.ipv6_cidrs.as_deref().unwrap_or_default(),
         )
     {
         return Err(AppError::Validation(msg(
@@ -414,9 +414,6 @@ pub async fn create_network(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    let ipv4_dns_array: Option<Vec<String>> = req.ipv4_dns.clone();
-    let ipv6_dns_array: Option<Vec<String>> = req.ipv6_dns.clone();
-
     sqlx::query(
         "INSERT INTO network_cidrs (id, name, network_region_id, ipv4_cidr, ipv6_cidr, ipv4_gateway, ipv6_gateway, ipv4_dns, ipv6_dns, description, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS CIDR), CAST($5 AS CIDR), CAST($6 AS INET), CAST($7 AS INET), $8::INET[], $9::INET[], $10, $11, $12)"
@@ -428,8 +425,8 @@ pub async fn create_network(
     .bind(&ipv6_cidr_val)
     .bind(&req.ipv4_gateway)
     .bind(&req.ipv6_gateway)
-    .bind(&ipv4_dns_array)
-    .bind(&ipv6_dns_array)
+    .bind(&req.ipv4_dns)
+    .bind(&req.ipv6_dns)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -454,6 +451,7 @@ pub async fn create_network(
     .await;
     log_info!("log.network.created", name = full_network_name, id = id);
 
+    // req 在此之后不再使用，字段直接移动
     let network = Network {
         id,
         name: full_network_name,
@@ -461,11 +459,11 @@ pub async fn create_network(
         network_region: network_region.name,
         ipv4_cidr: ipv4_cidr_val,
         ipv6_cidr: ipv6_cidr_val,
-        ipv4_gateway: req.ipv4_gateway.clone(),
-        ipv6_gateway: req.ipv6_gateway.clone(),
-        ipv4_dns: req.ipv4_dns.clone(),
-        ipv6_dns: req.ipv6_dns.clone(),
-        description: req.description.clone(),
+        ipv4_gateway: req.ipv4_gateway,
+        ipv6_gateway: req.ipv6_gateway,
+        ipv4_dns: req.ipv4_dns,
+        ipv6_dns: req.ipv6_dns,
+        description: req.description,
         created_at: now,
         updated_at: now,
     };
@@ -608,7 +606,10 @@ pub async fn update_network(
         // 校验 IPv4 CIDR 是否属于所在区域的 CIDR 范围
         if !crate::utils::cidr_belongs_to_region(
             ipv4,
-            &target_network_region.ipv4_cidrs.clone().unwrap_or_default(),
+            target_network_region
+                .ipv4_cidrs
+                .as_deref()
+                .unwrap_or_default(),
         ) {
             return Err(AppError::Validation(msg(
                 "server.network.ipv4_not_in_region",
@@ -642,16 +643,16 @@ pub async fn update_network(
         // 校验 IPv6 CIDR 是否属于所在区域的 CIDR 范围
         if !crate::utils::cidr_belongs_to_region(
             ipv6,
-            &target_network_region.ipv6_cidrs.clone().unwrap_or_default(),
+            target_network_region
+                .ipv6_cidrs
+                .as_deref()
+                .unwrap_or_default(),
         ) {
             return Err(AppError::Validation(msg(
                 "server.network.ipv6_not_in_region",
             )));
         }
     }
-
-    let ipv4_dns_array: Option<Vec<String>> = req.ipv4_dns.clone();
-    let ipv6_dns_array: Option<Vec<String>> = req.ipv6_dns.clone();
 
     // 网关校验：以请求值（缺省回退库中现值）与最终生效的 CIDR 核对，
     // 确保"只改 CIDR 不改网关"等部分更新后的数据仍保持一致
@@ -698,8 +699,8 @@ pub async fn update_network(
     .bind(&req.ipv6_cidr)
     .bind(&req.ipv4_gateway)
     .bind(&req.ipv6_gateway)
-    .bind(&ipv4_dns_array)
-    .bind(&ipv6_dns_array)
+    .bind(&req.ipv4_dns)
+    .bind(&req.ipv6_dns)
     .bind(&req.description)
     .bind(now)
     .bind(id)

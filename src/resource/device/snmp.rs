@@ -68,9 +68,9 @@ pub struct DecryptedSnmpCredentials {
 
 impl DecryptedSnmpCredentials {
     pub async fn from_device_snmp_async(switch: &DeviceForSnmp) -> Result<Self, AppError> {
-        let community = decrypt_credential_async(switch.snmp_community.clone()).await?;
-        let auth_password = decrypt_credential_async(switch.snmp_auth_password.clone()).await?;
-        let priv_password = decrypt_credential_async(switch.snmp_priv_password.clone()).await?;
+        let community = decrypt_credential_async(switch.snmp_community.as_deref()).await?;
+        let auth_password = decrypt_credential_async(switch.snmp_auth_password.as_deref()).await?;
+        let priv_password = decrypt_credential_async(switch.snmp_priv_password.as_deref()).await?;
         Ok(Self {
             community,
             auth_password,
@@ -573,6 +573,7 @@ pub async fn test_snmp_connection(
         version = version_label
     );
 
+    // req 在解构后不再使用，字段按所有权移动；设备配置作为回退值（req 优先）
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(device_id) = req.device_id {
             let conn = state.pool()?.get_conn();
@@ -580,48 +581,35 @@ pub async fn test_snmp_connection(
 
             let creds = DecryptedSnmpCredentials::from_device_snmp_async(&switch).await?;
 
-            let version = req
-                .snmp_version
-                .clone()
-                .or(switch.snmp_version.clone())
-                .unwrap_or_else(|| "v2c".to_string());
-            let community = req.snmp_community.clone().or(creds.community);
-            let username = req.snmp_username.clone().or(switch.snmp_username);
-            let auth_proto = req.snmp_auth_protocol.clone().or(switch.snmp_auth_protocol);
-            let auth_pass = req.snmp_auth_password.clone().or(creds.auth_password);
-            let priv_proto = req.snmp_priv_protocol.clone().or(switch.snmp_priv_protocol);
-            let priv_pass = req.snmp_priv_password.clone().or(creds.priv_password);
-            let port = req.snmp_port.or(switch.snmp_port).unwrap_or(161);
-
             (
-                req.ip_address.clone().or(ip_address),
-                version,
-                community,
-                username,
-                auth_proto,
-                auth_pass,
-                priv_proto,
-                priv_pass,
-                port,
+                req.ip_address.or(ip_address),
+                req.snmp_version
+                    .or(switch.snmp_version)
+                    .unwrap_or_else(|| "v2c".to_string()),
+                req.snmp_community.or(creds.community),
+                req.snmp_username.or(switch.snmp_username),
+                req.snmp_auth_protocol.or(switch.snmp_auth_protocol),
+                req.snmp_auth_password.or(creds.auth_password),
+                req.snmp_priv_protocol.or(switch.snmp_priv_protocol),
+                req.snmp_priv_password.or(creds.priv_password),
+                req.snmp_port.or(switch.snmp_port).unwrap_or(161),
             )
         } else {
             (
-                req.ip_address.clone(),
-                req.snmp_version
-                    .clone()
-                    .unwrap_or_else(|| "v2c".to_string()),
-                req.snmp_community.clone(),
-                req.snmp_username.clone(),
-                req.snmp_auth_protocol.clone(),
-                req.snmp_auth_password.clone(),
-                req.snmp_priv_protocol.clone(),
-                req.snmp_priv_password.clone(),
+                req.ip_address,
+                req.snmp_version.unwrap_or_else(|| "v2c".to_string()),
+                req.snmp_community,
+                req.snmp_username,
+                req.snmp_auth_protocol,
+                req.snmp_auth_password,
+                req.snmp_priv_protocol,
+                req.snmp_priv_password,
                 req.snmp_port.unwrap_or(161),
             )
         };
 
     let ip = match ip {
-        Some(ref s) if !s.is_empty() => s.clone(),
+        Some(s) if !s.is_empty() => s,
         _ => return Err(AppError::Validation(msg("server.device.snmp.ip_required"))),
     };
 

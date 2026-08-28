@@ -76,6 +76,8 @@ pub struct DeviceInterface {
     pub status: String,
     /// 端口速率（SNMP 维护）
     pub speed: Option<String>,
+    /// Trunk 端口的 Native VLAN id（仅 trunk/hybrid 类型使用）
+    pub trunk_id: Option<i32>,
     /// 是否由设备模态框托管（在设备编辑界面展示）
     pub device_managed: bool,
     pub created_at: DateTime<Utc>,
@@ -98,6 +100,7 @@ pub struct DeviceInterfaceWithDevice {
     pub port_type: String,
     pub status: String,
     pub speed: Option<String>,
+    pub trunk_id: Option<i32>,
     pub device_managed: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -124,6 +127,8 @@ pub struct DeviceInterfaceCreate {
     pub status: Option<String>,
     #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
     pub speed: Option<String>,
+    /// Trunk 端口的 Native VLAN id（其他类型留空）
+    pub trunk_id: Option<i32>,
     /// 设备模态框托管标记；缺省 false（端口模态框/SNMP 来源）
     pub device_managed: Option<bool>,
 }
@@ -159,6 +164,10 @@ pub struct DeviceInterfaceUpdate {
         message = "server.device.validation.speed_length"
     ))]
     pub speed: Option<Option<String>>,
+    /// 双层 Option：null 显式清空（非 trunk/hybrid 类型留空即清除）、
+    /// 缺失不修改、数值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub trunk_id: Option<Option<i32>>,
     /// 缺省表示不修改（SNMP 覆盖同步时保留原值）
     pub device_managed: Option<bool>,
 }

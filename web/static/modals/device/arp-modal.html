@@ -6,16 +6,17 @@
       <button type="button" class="close" data-modal-id="arp-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body modal-body-scroll">
-      <div id="arp-loading" class="modal-loading" role="dialog" aria-modal="true">
+      <!-- 加载中状态提示（非对话框）：用 status 角色向辅助技术播报 -->
+      <div id="arp-loading" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text" data-i18n="device.loading_mac_table">Loading MAC table</p>
       </div>
       <div id="arp-content" class="hidden">
         <div class="tab-container">
           <div class="tab-toolbar">
-            <div class="tab-buttons">
-              <button type="button" class="tab-btn active" data-tab="ipv4">IPv4</button>
-              <button type="button" class="tab-btn" data-tab="ipv6">IPv6</button>
+            <div class="tab-buttons" role="tablist">
+              <button type="button" class="tab-btn active" data-tab="ipv4" role="tab" aria-selected="true">IPv4</button>
+              <button type="button" class="tab-btn" data-tab="ipv6" role="tab" aria-selected="false">IPv6</button>
             </div>
             <button type="button" class="icon-btn btn-primary" id="sync-mac-btn" data-icon="refresh" data-tooltip="Sync from SNMP" data-i18n-tooltip="device.sync_from_snmp" aria-label="Sync from SNMP" data-i18n-aria-label="device.sync_from_snmp"></button>
           </div>

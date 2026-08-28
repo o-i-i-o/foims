@@ -354,8 +354,15 @@ pub async fn set_ca_cert_only(cert_pem: Vec<u8>) -> Result<(), CertManagerError>
                 msg("server.certificate.write_failed").with("error", e.to_string()),
             )
         })?;
-    // 清除可能存在的旧私钥，确保 CA 状态一致（cert-only 不可签发）
-    let _ = tokio::fs::remove_file(ca_key_path()).await;
+    // 清除可能存在的旧私钥，确保 CA 状态一致（cert-only 不可签发）。
+    // 删除失败不能静默：残留私钥会破坏"cert-only 不可签发"的不变量
+    if let Err(e) = tokio::fs::remove_file(ca_key_path()).await
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(CertManagerError::Internal(
+            msg("server.certificate.write_failed").with("error", e),
+        ));
+    }
     Ok(())
 }
 

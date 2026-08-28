@@ -20,6 +20,8 @@ import { getDeviceTypeName } from "../utils/formatter.js";
 
 import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
 
+import { fillSelect, fetchOptionItems } from "../utils/resources.js";
+
 const IP_PAGE_SIZE = 100;
 let currentPageSize = IP_PAGE_SIZE;
 
@@ -37,80 +39,82 @@ const ipTableState = createSortState("updated_at", "desc");
 
 // 加载设备列表到拉取MAC模态框（仅列出配置了 SNMP 的设备）
 async function loadDevicesForPullMac() {
+  // 拉取走 resources.js 的共享下拉缓存（10s TTL，写操作成功后自动失效），
+  // page_size=1000 全量拉取语义与原实现一致
+  let result = null;
   try {
-    const result = await apiGet("/api/resources/devices?page_size=1000");
-    const select = document.getElementById("pull-mac-device-select");
-    if (!select) {
-      return;
-    }
-
-    select.innerHTML = `<option value="">${t("ip.select_device")}</option>`;
-
-    if (result.success) {
-      const devices = result.data?.items ?? [];
-
-      if (devices.length === 0) {
-        select.innerHTML = `<option value="">${t("ip.no_device_data")}</option>`;
-        return;
-      }
-
-      let hasSnmpDevice = false;
-      devices.forEach((dev) => {
-        if (dev.snmp_community || dev.snmp_username) {
-          hasSnmpDevice = true;
-          const option = document.createElement("option");
-          option.value = dev.id;
-          option.textContent = `${dev.name} (${dev.ip_address || "-"})`;
-          select.appendChild(option);
-        }
-      });
-
-      if (!hasSnmpDevice) {
-        select.innerHTML = `<option value="">${t("ip.no_snmp_device")}</option>`;
-      }
-    }
+    result = await fetchOptionItems("/api/resources/devices?page_size=1000");
   } catch (error) {
     console.error("加载设备列表失败:", error);
+  }
+
+  // 请求异常时与原实现一致：置入失败短提示占位项（fillSelect 的失败路径
+  // 固定用 common.load_failed，无法表达该专属文案，故此处单独处理）
+  if (!result) {
     const select = document.getElementById("pull-mac-device-select");
     if (select) {
       select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
     }
+    return;
   }
+
+  // success=false 时与原实现一致：仅保留占位项
+  const devices = result.success ? result.data?.items ?? [] : null;
+  if (devices === null) {
+    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.select_device" });
+    return;
+  }
+  if (devices.length === 0) {
+    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.no_device_data" });
+    return;
+  }
+
+  const snmpDevices = devices.filter((dev) => dev.snmp_community || dev.snmp_username);
+  if (snmpDevices.length === 0) {
+    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.no_snmp_device" });
+    return;
+  }
+
+  await fillSelect("pull-mac-device-select", null, {
+    items: snmpDevices,
+    placeholderKey: "ip.select_device",
+    itemToLabel: (dev) => `${dev.name} (${dev.ip_address || "-"})`
+  });
 }
 
 // 加载网段列表到拉取MAC模态框
 async function loadNetworksForPullMac() {
+  let result = null;
   try {
-    const result = await apiGet("/api/resources/networks?page_size=1000");
-    const select = document.getElementById("pull-mac-network-select");
-    if (!select) {
-      return;
-    }
-
-    select.innerHTML = `<option value="">${t("ip.select_network")}</option>`;
-
-    if (result.success && result.data) {
-      const networks = result.data?.items ?? [];
-
-      if (networks.length === 0) {
-        select.innerHTML = `<option value="">${t("ip.no_network_data")}</option>`;
-        return;
-      }
-
-      networks.forEach((network) => {
-        const option = document.createElement("option");
-        option.value = network.id;
-        option.textContent = `${network.name} (${network.ipv4_cidr || network.ipv6_cidr || "-"})`;
-        select.appendChild(option);
-      });
-    }
+    result = await fetchOptionItems("/api/resources/networks?page_size=1000");
   } catch (error) {
     console.error("加载网段列表失败:", error);
+  }
+
+  if (!result) {
     const select = document.getElementById("pull-mac-network-select");
     if (select) {
       select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
     }
+    return;
   }
+
+  const networks = result.success && result.data ? (result.data?.items ?? []) : null;
+  if (networks === null) {
+    // success=false 或无 data 时与原实现一致：仅保留占位项
+    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.select_network" });
+    return;
+  }
+  if (networks.length === 0) {
+    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.no_network_data" });
+    return;
+  }
+
+  await fillSelect("pull-mac-network-select", null, {
+    items: networks,
+    placeholderKey: "ip.select_network",
+    itemToLabel: (network) => `${network.name} (${network.ipv4_cidr || network.ipv6_cidr || "-"})`
+  });
 }
 
 // 打开拉取MAC模态框（MAC 地址表头“拉取”按钮入口）

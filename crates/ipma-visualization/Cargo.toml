@@ -22,7 +22,6 @@ serde_json = { workspace = true }
 
 # Utilities
 uuid = { workspace = true }
-tracing = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]

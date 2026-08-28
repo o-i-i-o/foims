@@ -55,6 +55,19 @@ function waitForElement(id, timeoutMs = 3000) {
   });
 }
 
+/** 解析下拉目标：字符串按 id 等待元素出现（模态框注入窗口），元素引用直接使用。 */
+function resolveSelectTarget(target) {
+  if (typeof target !== "string") {
+    return Promise.resolve(target);
+  }
+  return waitForElement(target);
+}
+
+/** 生成日志用的目标描述（元素引用没有 id 可打）。 */
+function describeSelectTarget(target) {
+  return typeof target === "string" ? `#${target}` : "目标 select 元素";
+}
+
 /**
  * 下拉选项请求短期缓存（10s TTL）：弹窗短时间内重复打开时不再全量重拉
  * page_size=1000 的选项列表。资源写操作成功后由 apiClient 广播的
@@ -64,7 +77,11 @@ function waitForElement(id, timeoutMs = 3000) {
 const OPTION_FETCH_TTL = 10 * 1000;
 const optionFetchCache = new Map();
 
-function fetchOptionItems(url) {
+/**
+ * 拉取下拉选项原始响应（带 10s TTL 共享缓存）。
+ * 导出供调用方需要"先取数据再做分支渲染"的场景复用同一份缓存。
+ */
+export function fetchOptionItems(url) {
   const hit = optionFetchCache.get(url);
   if (hit && Date.now() - hit.time < OPTION_FETCH_TTL) {
     return hit.promise;
@@ -84,7 +101,8 @@ document.addEventListener("ipma:data-mutation", () => {
 /**
  * 通用下拉填充。
  *
- * @param {string} selectId 目标 select 元素 id
+ * @param {string|Element} selectTarget 目标 select 元素 id 或元素引用
+ *   （元素引用用于动态行内没有 id 的 select，如房间网段配置行）
  * @param {string|null} url API 地址（返回数组或 {items} 结构）；传入 null
  *   且提供 opts.items 时不发请求（用于已预取或纯占位场景）
  * @param {Object} [opts]
@@ -95,7 +113,7 @@ document.addEventListener("ipma:data-mutation", () => {
  * @param {Function} [opts.itemToLabel] 自定义展示文本（item => string，默认 item.name）
  * @param {string} [opts.errorLabel] 失败日志中的资源名
  */
-export async function fillSelect(selectId, url, opts = {}) {
+export async function fillSelect(selectTarget, url, opts = {}) {
   const {
     items: prefetched,
     placeholderKey,
@@ -112,7 +130,7 @@ export async function fillSelect(selectId, url, opts = {}) {
       fetched = extractItems(await fetchOptionItems(url));
     } catch (error) {
       console.error(`加载${errorLabel}失败:`, error);
-      const errSelect = await waitForElement(selectId);
+      const errSelect = await resolveSelectTarget(selectTarget);
       if (errSelect) {
         errSelect.replaceChildren(buildOption("", t("common.load_failed"), true));
       }
@@ -122,9 +140,9 @@ export async function fillSelect(selectId, url, opts = {}) {
 
   // 数据就绪后再查询目标元素：入口即查会在"与 openModal 并行"的调用方式下
   // 因模态框 DOM 未注入而静默丢弃（曾导致设备模板下拉为空、编辑回显丢失）
-  const select = await waitForElement(selectId);
+  const select = await resolveSelectTarget(selectTarget);
   if (!select) {
-    console.warn(`fillSelect: 目标元素 #${selectId} 不存在，已跳过填充`);
+    console.warn(`fillSelect: ${describeSelectTarget(selectTarget)} 不存在，已跳过填充`);
     return;
   }
 

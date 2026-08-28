@@ -414,7 +414,7 @@ export async function loadNotificationsData(
             </span>
           </td>
           <td class="col-center">
-            ${!notification.read ? iconButton({ icon: "check", label: t("notifications.mark_read"), cls: "btn-primary mark-read", attrs: `data-id="${notification.id}"` }) : ""}
+            ${!notification.read ? iconButton({ icon: "check", label: t("notifications.mark_read"), cls: "btn-primary mark-read", attrs: `data-id="${escapeHtml(notification.id)}"` }) : ""}
           </td>
         `;
         tbody.appendChild(row);

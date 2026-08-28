@@ -27,7 +27,14 @@ function getInitialLanguage() {
 // 才能落入 /static/ 的 immutable 长缓存桶 —— 版本号 bump 即失效，
 // 重复访问零请求；未压缩体积 ~110KB，gzip 后线上 ~29KB
 function fetchTranslations(lang) {
-  return fetch(withVersion(`/static/i18n/${lang}.json`)).then((r) => r.json());
+  // 非 2xx 响应的 body 通常不是合法 JSON：先校验状态再解析，
+  // 失败抛出含 HTTP 状态的错误，由调用方 catch 兜底（保持原语言/回退实例）
+  return fetch(withVersion(`/static/i18n/${lang}.json`)).then((r) => {
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}`);
+    }
+    return r.json();
+  });
 }
 
 export async function initI18n() {

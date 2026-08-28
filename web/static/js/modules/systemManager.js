@@ -82,7 +82,7 @@ export function initSystemTabs() {
       try {
         await saveSystemConfig();
       } catch (err) {
-        console.error("saveSystemConfig error:", err);
+        console.error("保存系统配置失败:", err);
       }
     });
   }

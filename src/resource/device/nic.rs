@@ -1,6 +1,6 @@
 //! 设备网卡管理：网卡-网口-IP 层级与整体同步。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -149,7 +149,8 @@ pub async fn sync_device_network_config(
 /// 应用网卡配置：整体替换设备模态框托管的网口（device_managed=TRUE），
 /// 保留端口模态框/SNMP 生成的端口（device_managed=FALSE）及其网卡；
 /// 清理不再被任何网口引用的网卡。若 cards 为空，则自动生成一张默认
-/// 网卡 + 一个默认网口（托管）。
+/// 网卡 + 一个默认网口（托管）。提交的网口名与幸存非托管网口重名
+/// （或请求内网卡间重名）时返回冲突错误。
 pub async fn apply_network_config(
     tx: &mut PgConnection,
     device_id: Uuid,
@@ -157,17 +158,50 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // 快照托管网口的二层运行属性（端口类型/状态/速率，由端口模态框或
-    // SNMP 维护）：设备表单整体替换网口后按 id 回填，避免被默认值重置
-    let runtime_attrs: HashMap<Uuid, (String, String, Option<String>)> =
-        sqlx::query_as::<_, (Uuid, String, String, Option<String>)>(
-            "SELECT id, port_type, status, speed FROM device_interfaces WHERE device_id = $1 AND device_managed",
+    // cards 为空时自动生成默认可管理网卡 + 网口（借用切片，避免整树拷贝）
+    let default_cards;
+    let effective_cards: &[NetworkCardSyncItem] = if cards.is_empty() {
+        default_cards = [default_card_sync_item()];
+        &default_cards
+    } else {
+        cards
+    };
+
+    // 幸存的非托管网口（SNMP/端口模态框来源）与本次提交的托管网口共用
+    // (device_id, name) 唯一约束：预检重名返回精确错误，避免 INSERT 撞
+    // 唯一约束后整个设备保存以通用冲突回滚
+    let surviving_names: HashSet<String> = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM device_interfaces WHERE device_id = $1 AND NOT device_managed",
+    )
+    .bind(device_id)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .collect();
+    let mut seen_names: HashSet<&str> = HashSet::new();
+    for card in effective_cards {
+        for port in &card.ports {
+            if !seen_names.insert(port.name.as_str()) || surviving_names.contains(&port.name) {
+                return Err(AppError::Conflict(msg(
+                    "server.device.interface.name_exists",
+                )));
+            }
+        }
+    }
+
+    // 快照托管网口的二层运行属性（端口类型/状态/速率/Trunk id，由端口
+    // 模态框或 SNMP 维护）：设备表单整体替换网口后按 id 回填，避免被默认值重置
+    let runtime_attrs: HashMap<Uuid, (String, String, Option<String>, Option<i32>)> =
+        sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<i32>)>(
+            "SELECT id, port_type, status, speed, trunk_id FROM device_interfaces WHERE device_id = $1 AND device_managed",
         )
         .bind(device_id)
         .fetch_all(&mut *tx)
         .await?
         .into_iter()
-        .map(|(id, port_type, status, speed)| (id, (port_type, status, speed)))
+        .map(|(id, port_type, status, speed, trunk_id)| {
+            (id, (port_type, status, speed, trunk_id))
+        })
         .collect();
 
     // 删除托管网口的关联数据（顺序：IP → cable_links → 网口）；
@@ -202,14 +236,7 @@ pub async fn apply_network_config(
     .execute(&mut *tx)
     .await?;
 
-    // cards 为空时自动生成默认可管理网卡 + 网口
-    let cards_to_insert: Vec<NetworkCardSyncItem> = if cards.is_empty() {
-        vec![default_card_sync_item()]
-    } else {
-        cards.to_vec()
-    };
-
-    for (card_idx, card) in cards_to_insert.iter().enumerate() {
+    for (card_idx, card) in effective_cards.iter().enumerate() {
         card.validate()?;
         let card_id = card.id.unwrap_or_else(Uuid::new_v4);
         let card_type = card.card_type.as_deref().unwrap_or("pcie");
@@ -238,14 +265,14 @@ pub async fn apply_network_config(
             let interface_role = port.interface_role.as_deref().unwrap_or("business");
             validate_interface_role(interface_role)?;
             // 设备表单不含二层属性：存量端口恢复快照值，新端口用默认值
-            let (port_type, status, speed) = match runtime_attrs.get(&port_id) {
-                Some((pt, st, sp)) => (pt.clone(), st.clone(), sp.clone()),
-                None => ("access".to_string(), "up".to_string(), None),
+            let (port_type, status, speed, trunk_id) = match runtime_attrs.get(&port_id) {
+                Some((pt, st, sp, tid)) => (pt.clone(), st.clone(), sp.clone(), *tid),
+                None => ("access".to_string(), "up".to_string(), None, None),
             };
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, device_managed, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14, $15)",
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, trunk_id, device_managed, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, TRUE, $15, $16)",
             )
             .bind(port_id)
             .bind(device_id)
@@ -260,6 +287,7 @@ pub async fn apply_network_config(
             .bind(&port_type)
             .bind(&status)
             .bind(&speed)
+            .bind(trunk_id)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)

@@ -401,6 +401,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             Col::Plain("interface_role"),
             Col::Plain("mac_address"),
             Col::Plain("vlan_id"),
+            Col::Plain("trunk_id"),
             Col::Plain("description"),
             Col::Plain("sort_order"),
             Col::Plain("port_type"),

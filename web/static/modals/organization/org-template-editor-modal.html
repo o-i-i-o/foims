@@ -13,13 +13,14 @@
           <input type="text" id="org-template-editor-name" name="name" autocomplete="off" required>
         </div>
         <div class="form-group">
-          <label data-i18n="org_template.quick_fill">Quick Fill</label>
+          <label for="org-template-quick-fill" data-i18n="org_template.quick_fill">Quick Fill</label>
           <select id="org-template-quick-fill">
             <option value="" data-i18n="org_template.select_quick_fill">Select a preset...</option>
           </select>
         </div>
         <div class="form-group">
-          <label data-i18n="org_template.levels">Hierarchy</label>
+          <!-- 层级树为动态容器、无单一控件可关联：改为分组标题 span（样式与原 label 一致） -->
+          <span class="group-label" data-i18n="org_template.levels">Hierarchy</span>
           <label class="checkbox-label">
             <input type="checkbox" id="org-template-save-preset">
             <span data-i18n="org_template.save_as_preset">Save as Preset Template</span>

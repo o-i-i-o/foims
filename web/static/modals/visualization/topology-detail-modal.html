@@ -1,9 +1,9 @@
 <template id="topology-detail-modal-template">
-<div id="topology-detail-modal" class="topology-detail-modal">
-  <div class="topology-detail-header">
+<div id="topology-detail-modal" class="topology-detail-modal" role="dialog" aria-modal="true" aria-labelledby="topology-detail-title">
+  <header class="topology-detail-header">
     <h3 id="topology-detail-title"></h3>
     <button type="button" class="topology-detail-close" aria-label="Close">&times;</button>
-  </div>
+  </header>
   <div class="topology-detail-tabs">
     <button type="button" class="toggle-ports active" data-panel="ports" data-i18n="visualization.show_ports">Show Ports</button>
     <button type="button" class="toggle-macs" data-panel="macs" data-i18n="visualization.show_macs">Show MACs</button>
@@ -14,7 +14,7 @@
     <div class="topology-panel macs-panel hidden"></div>
     <div class="topology-panel lldp-panel hidden"></div>
   </div>
-  <div class="topology-detail-footer">
+  <footer class="topology-detail-footer">
     <div class="topology-detail-coords">
       <div class="coord-field">
         <label for="topology-detail-x" data-i18n="workstation.position_x">X Coordinate</label>
@@ -27,6 +27,6 @@
       <button type="button" class="btn btn-primary btn-sm" id="topology-detail-save-pos-btn" data-i18n="viz.save_position">Save Position</button>
       <button type="button" class="btn btn-danger btn-sm topology-remove-btn" data-i18n="visualization.remove_from_topology">Remove</button>
     </div>
-  </div>
+  </footer>
 </div>
 </template>

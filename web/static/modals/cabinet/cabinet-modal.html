@@ -28,15 +28,17 @@
         <div class="form-row">
           <div class="form-group">
             <div class="list-header">
-              <label id="cabinet-positions-label" data-i18n="cabinet.positions">Positions</label>
+              <!-- 指向动态容器的分组标题：无控件可关联，改为语义中性的 span（.list-title） -->
+              <span class="list-title" id="cabinet-positions-label" data-i18n="cabinet.positions">Positions</span>
               <button type="button" id="add-position-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Position" data-i18n-tooltip="cabinet.add_position" aria-label="Add Position" data-i18n-aria-label="cabinet.add_position"></button>
             </div>
             <div id="cabinet-positions-container">
+              <!-- 纯列标题：非表单控件标注，改为 span（CSS 选择器已同步） -->
               <div class="cabinet-columns-header" aria-hidden="true">
-                <label data-i18n="cabinet_position.name">Name</label>
-                <label data-i18n="cabinet_position.start_u">Start U</label>
-                <label data-i18n="cabinet_position.end_u">End U</label>
-                <label data-i18n="cabinet_position.description">Description</label>
+                <span data-i18n="cabinet_position.name">Name</span>
+                <span data-i18n="cabinet_position.start_u">Start U</span>
+                <span data-i18n="cabinet_position.end_u">End U</span>
+                <span data-i18n="cabinet_position.description">Description</span>
                 <span class="cabinet-item-actions"></span>
               </div>
             </div>
@@ -46,7 +48,7 @@
         <div class="form-row">
           <div class="form-group">
             <div class="list-header">
-              <label id="cabinet-patch-panels-label" data-i18n="cabinet.patch_panels">Patch Panels</label>
+              <span class="list-title" id="cabinet-patch-panels-label" data-i18n="cabinet.patch_panels">Patch Panels</span>
               <button type="button" id="add-patch-panel-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Patch Panel" data-i18n-tooltip="cabinet.add_patch_panel" aria-label="Add Patch Panel" data-i18n-aria-label="cabinet.add_patch_panel"></button>
             </div>
             <div id="cabinet-patch-panels-container"></div>

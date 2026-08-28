@@ -75,9 +75,9 @@ export const checkPostgreSQL = async () => {
                     <h4>${t("init.pg_suggestion")}</h4>
                     <ul>
                         ${!result.installed ? `<li>${t("init.pg_install_hint")}</li>` : ""}
-                        ${result.installed && !result.running ? "<li>请启动 PostgreSQL 服务</li>" : ""}
-                        <li>确保数据库配置正确</li>
-                        <li>检查网络连接和防火墙设置</li>
+                        ${result.installed && !result.running ? `<li>${t("init.pg_start_hint")}</li>` : ""}
+                        <li>${t("init.pg_config_hint")}</li>
+                        <li>${t("init.pg_network_hint")}</li>
                     </ul>
                 </div>
             `;

@@ -2,6 +2,7 @@ import { TopologyDataManager } from "./TopologyDataManager.js";
 import { t, updatePageTranslations } from "../../utils/i18n.js";
 import { fetchModalHtml } from "../../utils/modalLoader.js";
 import { showToast } from "../../utils/ui.js";
+import { escapeHtml } from "../../utils/helpers.js";
 
 export class TopologyModal {
   constructor() {
@@ -211,9 +212,9 @@ export class TopologyModal {
             .map(
               (p) => `
             <tr>
-              <td>${this._escapeHtml(p.name || "")}</td>
-              <td>${this._escapeHtml(p.description || "")}</td>
-              <td>${this._escapeHtml(p.status || "")}</td>
+              <td>${escapeHtml(p.name || "")}</td>
+              <td>${escapeHtml(p.description || "")}</td>
+              <td>${escapeHtml(p.status || "")}</td>
             </tr>`
             )
             .join("")}
@@ -239,9 +240,9 @@ export class TopologyModal {
             .map(
               (m) => `
             <tr>
-              <td>${this._escapeHtml(m.mac_address || "")}</td>
-              <td>${this._escapeHtml(m.vlan_id != null ? String(m.vlan_id) : "")}</td>
-              <td>${this._escapeHtml(m.port_name || m.interface_name || "")}</td>
+              <td>${escapeHtml(m.mac_address || "")}</td>
+              <td>${escapeHtml(m.vlan_id != null ? String(m.vlan_id) : "")}</td>
+              <td>${escapeHtml(m.port_name || m.interface_name || "")}</td>
             </tr>`
             )
             .join("")}
@@ -267,22 +268,13 @@ export class TopologyModal {
             .map(
               (n) => `
             <tr>
-              <td>${this._escapeHtml(n.local_port || n.local_interface || "")}</td>
-              <td>${this._escapeHtml(n.system_name || n.neighbor_name || "")}</td>
-              <td>${this._escapeHtml(n.neighbor_port || n.remote_interface || "")}</td>
+              <td>${escapeHtml(n.local_port || n.local_interface || "")}</td>
+              <td>${escapeHtml(n.system_name || n.neighbor_name || "")}</td>
+              <td>${escapeHtml(n.neighbor_port || n.remote_interface || "")}</td>
             </tr>`
             )
             .join("")}
         </tbody>
       </table>`;
-  }
-
-  _escapeHtml(str) {
-    if (!str) {
-      return "";
-    }
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
   }
 }

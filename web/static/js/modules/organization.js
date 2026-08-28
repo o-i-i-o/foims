@@ -225,9 +225,9 @@ async function renderTreeNode(node, depth) {
     ${node.description ? `<span class="org-node-desc" title="${escapeHtml(node.description)}">${escapeHtml(node.description)}</span>` : ""}
     <span class="org-node-actions">
       ${addChildBtns}
-      ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-action="edit" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
-      ${iconButton({ icon: "users", label: t("organization.manage_employees"), cls: "btn-employees", attrs: `data-action="employees" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
-      ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-action="delete" data-id="${node.id}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "edit", label: t("common.edit"), cls: "btn-edit", attrs: `data-action="edit" data-id="${escapeHtml(node.id)}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "users", label: t("organization.manage_employees"), cls: "btn-employees", attrs: `data-action="employees" data-id="${escapeHtml(node.id)}" data-name="${escapeHtml(node.name)}"` })}
+      ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-delete", attrs: `data-action="delete" data-id="${escapeHtml(node.id)}" data-name="${escapeHtml(node.name)}"` })}
     </span>
   `;
 
@@ -257,7 +257,7 @@ function getAllowedChildButtons(node) {
     icon: "plusCircle",
     label: t("organization.add_child"),
     cls: "btn-add-child",
-    attrs: `data-action="add-child" data-parent-id="${node.id}"`
+    attrs: `data-action="add-child" data-parent-id="${escapeHtml(node.id)}"`
   });
 }
 

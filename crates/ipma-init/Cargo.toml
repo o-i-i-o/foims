@@ -24,15 +24,15 @@ serde_json = { workspace = true }
 validator = { workspace = true }
 
 # Password hashing
-bcrypt = "0.19.3"
+bcrypt = { workspace = true }
 
 # Utilities
 chrono = { workspace = true }
 uuid = { workspace = true }
-rand = "0.10.2"
+rand = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-toml = "1.1.4"
+toml = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]

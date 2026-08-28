@@ -20,113 +20,37 @@ import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
-import { loadOrgsForSelect } from "../utils/resources.js";
+import { fillSelect, loadOrgsForSelect } from "../utils/resources.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
 // ==========================================
 // 网段配置管理模块 - 仅用于房间管理
 // ==========================================
 
-// 网络请求缓存
-const networkCache = {
-  networkRegions: null,
-  networks: new Map(),
-  cacheTime: 0,
-  CACHE_TTL: 60 * 1000
-};
-
-// 检查缓存是否有效
-function isCacheValid(timestamp) {
-  return timestamp && Date.now() - timestamp < networkCache.CACHE_TTL;
-}
-
-function extractItems(result) {
-  if (!result.success || !result.data) {
-    return [];
-  }
-  if (Array.isArray(result.data)) {
-    return result.data;
-  }
-  if (result.data.items && Array.isArray(result.data.items)) {
-    return result.data.items;
-  }
-  return [];
-}
-
-// 更新选择框选项
-function updateSelect(select, data, placeholder = t("room.select_option")) {
-  const currentValue = select.value;
-  select.innerHTML = `<option value="">${placeholder}</option>${data
-    .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
-    .join("")}`;
-
-  if (currentValue) {
-    select.value = currentValue;
-  }
-  return select;
-}
-
-// 加载网络区域
+// 加载网络区域选项（请求缓存与失效统一走 resources.js 的下拉缓存）
 async function loadNetworkRegions(select) {
   if (!select) {
-    return [];
+    return;
   }
-
-  const now = Date.now();
-  if (networkCache.networkRegions && isCacheValid(networkCache.cacheTime)) {
-    updateSelect(select, networkCache.networkRegions, t("network.select_region"));
-    return networkCache.networkRegions;
-  }
-
-  try {
-    const result = await apiGet("/api/resources/options/network-regions");
-    const items = extractItems(result);
-    if (items.length > 0) {
-      networkCache.networkRegions = items;
-      networkCache.cacheTime = now;
-      updateSelect(select, items, t("network.select_region"));
-      return items;
-    }
-  } catch (error) {
-    console.error("加载网络区域失败:", error);
-  }
-
-  return [];
+  await fillSelect(select, "/api/resources/options/network-regions", {
+    placeholderKey: "network.select_region",
+    errorLabel: "网络区域"
+  });
 }
 
-// 加载网段
+// 加载网段选项（excludeIds 过滤已被其他行选中的网段，避免一行重复选择）
 async function loadNetworks(regionId, select, excludeIds = []) {
   if (!select) {
-    return [];
+    return;
   }
-
-  const cacheKey = regionId || "all";
-  const cached = networkCache.networks.get(cacheKey);
-
-  if (cached && isCacheValid(cached.timestamp)) {
-    const filtered = cached.data.filter((n) => !excludeIds.includes(n.id));
-    updateSelect(select, filtered, t("network.select_segment"));
-    return filtered;
-  }
-
-  try {
-    const url = regionId
-      ? `/api/resources/options/networks?region_id=${regionId}`
-      : "/api/resources/options/networks";
-    const result = await apiGet(url);
-
-    const items = extractItems(result);
-    if (items.length > 0) {
-      networkCache.networks.set(cacheKey, { data: items, timestamp: Date.now() });
-      const filtered = items.filter((n) => !excludeIds.includes(n.id));
-      updateSelect(select, filtered, t("network.select_segment"));
-      return filtered;
-    }
-  } catch (error) {
-    console.error("加载网段失败:", error);
-  }
-
-  return [];
+  const url = regionId
+    ? `/api/resources/options/networks?region_id=${regionId}`
+    : "/api/resources/options/networks";
+  await fillSelect(select, url, {
+    placeholderKey: "network.select_segment",
+    filter: (n) => !excludeIds.includes(n.id),
+    errorLabel: "网段"
+  });
 }
 
 // 事件处理器工厂

@@ -18,9 +18,10 @@ BEGIN;
 -- 1. device_interfaces 扩展统一端口列
 ALTER TABLE device_interfaces
     ADD COLUMN IF NOT EXISTS port_type VARCHAR(20) NOT NULL DEFAULT 'access'
-        CHECK (port_type IN ('access', 'trunk', 'uplink', 'stack', 'console')),
+        CHECK (port_type IN ('access', 'trunk', 'hybrid', 'uplink', 'stack', 'console')),
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'up',
     ADD COLUMN IF NOT EXISTS speed VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS trunk_id INTEGER,
     ADD COLUMN IF NOT EXISTS device_managed BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 存量网口全部来自设备模态框，标记为托管

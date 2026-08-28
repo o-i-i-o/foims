@@ -21,7 +21,8 @@
           <table id="cable-label-print-table" class="data-table">
             <thead>
               <tr>
-                <th class="col-center"></th>
+                <!-- 空表头为勾选列：用视觉隐藏文本提供可访问名称（复用现有 i18n key） -->
+                <th class="col-center"><span class="sr-only" data-i18n="cable_link.print_select_all">Select all</span></th>
                 <th data-i18n="cable_link.a_endpoint_no">A Endpoint No.</th>
                 <th data-i18n="cable_link.b_endpoint_no">B Endpoint No.</th>
               </tr>

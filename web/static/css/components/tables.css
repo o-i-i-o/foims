@@ -523,3 +523,131 @@
 #scheduled-tasks-table th:nth-child(6) { width: 16%; }
 #scheduled-tasks-table th:nth-child(7) { width: 16%; }
 #scheduled-tasks-table th:nth-child(8) { width: 14%; }
+
+/* ==========================================
+   设备 MAC 表 / LLDP 邻居表（deviceMacLldp.js 模态框专用，
+   由 JS 模板渲染，类名以 mac-/lldp- 前缀隔离）
+   ========================================== */
+
+/* MAC 表空数据提示 */
+.mac-table-empty {
+  text-align: center;
+  color: #666;
+  padding: 20px;
+}
+
+/* MAC 表按网段分组的外层容器 */
+.mac-network-group {
+  margin-bottom: 10px;
+}
+
+/* MAC 表可点击的网段分组标题行（点击折叠/展开组内明细） */
+.network-group-header {
+  background: #f5f5f5;
+  padding: 8px 12px;
+  font-weight: bold;
+  border-left: 3px solid #4caf50;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+/* MAC 表分组标题右侧折叠箭头（transform 由 JS 按折叠状态内联切换） */
+.mac-collapse-icon {
+  transition: transform 0.2s;
+}
+
+/* MAC 表组内明细表 */
+.mac-group-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mac-group-table th {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: left;
+  background: #fafafa;
+}
+
+.mac-group-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+}
+
+/* LLDP 邻居表 */
+.lldp-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.lldp-table thead tr {
+  background-color: var(--bg-secondary, #f0f2f5);
+}
+
+.lldp-table th {
+  border: 1px solid var(--border-color, #ddd);
+  padding: 12px 10px;
+  font-weight: 600;
+}
+
+.lldp-table th.lldp-col-index {
+  width: 60px;
+  text-align: center;
+}
+
+/* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
+.lldp-table tbody tr:nth-child(odd) {
+  background-color: var(--bg-primary, #fff);
+}
+
+.lldp-table tbody tr:nth-child(even) {
+  background-color: var(--bg-tertiary, #fafbfc);
+}
+
+.lldp-table td {
+  border: 1px solid var(--border-color, #ddd);
+  padding: 10px;
+}
+
+.lldp-table td.lldp-index {
+  text-align: center;
+  color: var(--text-muted, #888);
+  padding: 10px 8px;
+}
+
+.lldp-table td.lldp-port {
+  font-weight: 500;
+}
+
+.lldp-table td.lldp-chassis {
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.lldp-table td.lldp-desc {
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9em;
+  color: var(--text-secondary, #666);
+}
+
+/* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
+.mac-lldp-text-error {
+  color: red;
+}
+
+.mac-lldp-text-muted {
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.mac-lldp-text-syncing {
+  margin-top: 10px;
+  color: #666;
+}

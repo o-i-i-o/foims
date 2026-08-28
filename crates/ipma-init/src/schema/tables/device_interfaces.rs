@@ -22,10 +22,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             description TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
             port_type VARCHAR(20) NOT NULL DEFAULT 'access' CHECK (port_type IN (
-                'access', 'trunk', 'uplink', 'stack', 'console'
+                'access', 'trunk', 'hybrid', 'uplink', 'stack', 'console'
             )),
             status VARCHAR(20) NOT NULL DEFAULT 'up',
             speed VARCHAR(20),
+            trunk_id INTEGER,
             device_managed BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

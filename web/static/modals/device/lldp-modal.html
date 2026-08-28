@@ -6,7 +6,8 @@
       <button type="button" class="close" data-modal-id="lldp-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body modal-body-scroll">
-      <div id="lldp-loading" class="modal-loading" role="dialog" aria-modal="true">
+      <!-- 加载中状态提示（非对话框）：用 status 角色向辅助技术播报 -->
+      <div id="lldp-loading" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text" data-i18n="device.loading_lldp">Loading LLDP</p>
       </div>

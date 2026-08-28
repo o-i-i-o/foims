@@ -92,7 +92,14 @@
   gap: var(--space-xs);
 }
 
-.config-field label {
+/* 只读字段 dl 化后：重置 dl/dd 的浏览器默认边距，保持原布局 */
+dl.config-field,
+.config-field dd {
+  margin: 0;
+}
+
+.config-field label,
+.config-field dt {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -147,6 +154,13 @@
   margin-top: var(--space-lg);
   border-top: 1px solid var(--color-border-light);
   flex-wrap: wrap;
+}
+
+/* 安全卡片“手动封禁”行：新增的 IP 输入框关联标签，与同卡片 nc-field 标签视觉一致 */
+#security-tab .form-group-inline label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .config-actions .btn {
@@ -295,12 +309,19 @@
 
 /* ==================== 关于卡片：开源组件清单模态框 ==================== */
 
-/* 关于卡片内的“开源组件”入口：美化超链接（主题色 + 下划线动效 + 外链角标） */
+/* 关于卡片内的“开源组件”入口：原 <a> 模拟链接已按钮化，
+   先做按钮 reset（去边框/背景/内边距、继承字体、手型光标），
+   再保留主题色 + 下划线动效 + 外链角标，视觉与原链接一致 */
 .about-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-top: var(--space-sm);
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
   color: var(--color-primary);
   font-size: 0.9rem;
   font-weight: 500;

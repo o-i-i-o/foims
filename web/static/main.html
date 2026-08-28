@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01355">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01355">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01355">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01355">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01355">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01355">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01355">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01355">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01355">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01355">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01355">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01355">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01355">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01357">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01357">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01357">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01357">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01357">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01357">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01357">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01357">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01357">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01357">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01357">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01357">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01357">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -158,10 +158,10 @@
         
         <div class="dashboard-grid">
           <article class="dashboard-card" data-nav="resources" data-tab="networks">
-            <div class="dashboard-card-header">
+            <header class="dashboard-card-header">
               <h3><span class="card-icon">🌐</span><span data-i18n="dashboard.top_networks">Top Networks</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
+            </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-networks-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -172,10 +172,10 @@
           </article>
           
           <article class="dashboard-card" data-nav="resources" data-tab="ip-manager">
-            <div class="dashboard-card-header">
+            <header class="dashboard-card-header">
               <h3><span class="card-icon">🔗</span><span data-i18n="dashboard.recent_ips">Recent IP Assignments</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
+            </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-ips-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -186,10 +186,10 @@
           </article>
           
           <article class="dashboard-card" data-nav="resources" data-tab="rooms">
-            <div class="dashboard-card-header">
+            <header class="dashboard-card-header">
               <h3><span class="card-icon">🏠</span><span data-i18n="dashboard.top_rooms">Top Rooms</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
+            </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-rooms-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -200,10 +200,10 @@
           </article>
           
           <article class="dashboard-card" data-nav="resources" data-tab="cabinets">
-            <div class="dashboard-card-header">
+            <header class="dashboard-card-header">
               <h3><span class="card-icon">🗄️</span><span data-i18n="dashboard.top_cabinets">Top Cabinets</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
+            </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-cabinets-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -214,10 +214,10 @@
           </article>
           
           <article class="dashboard-card" data-nav="logs">
-            <div class="dashboard-card-header">
+            <header class="dashboard-card-header">
               <h3><span class="card-icon">📋</span><span data-i18n="dashboard.recent_logs">Recent Activity</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </div>
+            </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-logs-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -230,15 +230,15 @@
         
         <div class="dashboard-charts">
           <article class="chart-card">
-            <div class="chart-card-header">
+            <header class="chart-card-header">
               <h3><span class="card-icon">📱</span><span data-i18n="dashboard.device_distribution">Device Distribution</span></h3>
-            </div>
+            </header>
             <div id="device-type-chart" class="chart-container"></div>
           </article>
           <article class="chart-card">
-            <div class="chart-card-header">
+            <header class="chart-card-header">
               <h3><span class="card-icon">📊</span><span data-i18n="dashboard.ip_status">IP Status</span></h3>
-            </div>
+            </header>
             <div id="ip-status-chart" class="chart-container"></div>
           </article>
         </div>
@@ -676,56 +676,58 @@
 
         <div id="system-info-tab" class="tab-content active" role="tabpanel">
           <div class="system-config-section">
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🖥️</span>
                   <span data-i18n="system.info">System Info</span>
                 </div>
-              </div>
+              </header>
+              <!-- 只读字段 dl 化：dl/dt/dd 语义化键值对（dd 默认边距已在 CSS 重置） -->
               <div class="config-row">
-                <div class="config-field">
-                  <label data-i18n="system.system_name">System Name</label>
-                  <div class="field-value" id="system-name">IPMA</div>
-                </div>
-                <div class="config-field">
-                  <label data-i18n="system.database_status">Database Status</label>
-                  <div class="field-value" id="database-status">-</div>
-                </div>
-                <div class="config-field">
-                  <label data-i18n="system.system_time">System Time</label>
-                  <div class="field-value" id="system-time">-</div>
-                </div>
-                <div class="config-field">
-                  <label data-i18n="system.uptime">System Uptime</label>
-                  <div class="field-value" id="system-uptime">-</div>
-                </div>
+                <dl class="config-field">
+                  <dt data-i18n="system.system_name">System Name</dt>
+                  <dd class="field-value" id="system-name">IPMA</dd>
+                </dl>
+                <dl class="config-field">
+                  <dt data-i18n="system.database_status">Database Status</dt>
+                  <dd class="field-value" id="database-status">-</dd>
+                </dl>
+                <dl class="config-field">
+                  <dt data-i18n="system.system_time">System Time</dt>
+                  <dd class="field-value" id="system-time">-</dd>
+                </dl>
+                <dl class="config-field">
+                  <dt data-i18n="system.uptime">System Uptime</dt>
+                  <dd class="field-value" id="system-uptime">-</dd>
+                </dl>
               </div>
-            </div>
+            </section>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">ℹ️</span>
                   <span data-i18n="system.about">About</span>
                 </div>
-              </div>
+              </header>
               <div class="config-row">
-                <div class="config-field">
-                  <label data-i18n="system.version">System Version</label>
-                  <div class="field-value" id="system-version">-</div>
-                </div>
-                <div class="config-field">
-                  <label data-i18n="system.author">Author</label>
-                  <div class="field-value">oi-io</div>
-                </div>
-                <div class="config-field">
-                  <label data-i18n="system.contact">Contact</label>
-                  <div class="field-value">boss@oi-io.cc</div>
-                </div>
+                <dl class="config-field">
+                  <dt data-i18n="system.version">System Version</dt>
+                  <dd class="field-value" id="system-version">-</dd>
+                </dl>
+                <dl class="config-field">
+                  <dt data-i18n="system.author">Author</dt>
+                  <dd class="field-value">oi-io</dd>
+                </dl>
+                <dl class="config-field">
+                  <dt data-i18n="system.contact">Contact</dt>
+                  <dd class="field-value">boss@oi-io.cc</dd>
+                </dl>
               </div>
-                <a href="#" id="open-source-btn" class="about-link" role="button" data-i18n="system.open_source_components">Open Source Components</a>
-            </div>
+                <!-- 原模拟链接按钮化：.about-link 已补按钮 reset，视觉不变 -->
+                <button type="button" id="open-source-btn" class="about-link" data-i18n="system.open_source_components">Open Source Components</button>
+            </section>
           </div>
         </div>
 
@@ -756,13 +758,13 @@
         <div id="system-config-tab" class="tab-content" role="tabpanel">
           <div class="system-config-section">
             <form id="system-config-form">
-              <div class="config-card">
-                <div class="config-card-header">
+              <section class="config-card">
+                <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">⏱️</span>
                     <span data-i18n="config.session_settings">Session Settings</span>
                   </div>
-                </div>
+                </header>
                 <div class="config-row">
                   <div class="config-field">
                     <label for="page-timeout" data-i18n="config.page_timeout">Page Timeout (minutes)</label>
@@ -776,16 +778,16 @@
                   </div>
                 </div>
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
-              </div>
+              </section>
             </form>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🔐</span>
                   <span data-i18n="cert.manager_title">Certificate Management</span>
                 </div>
-              </div>
+              </header>
 
               <div class="cert-section">
                 <div class="cert-section-header">
@@ -836,11 +838,11 @@
                   </table>
                 </div>
               </div>
-            </div>
+            </section>
 
             <form id="ldap-config-form">
-              <div class="config-card">
-                <div class="config-card-header">
+              <section class="config-card">
+                <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">🗂️</span>
                     <span data-i18n="ldap.title">LDAP Configuration</span>
@@ -849,7 +851,7 @@
                     <input type="checkbox" id="ldap-enabled" aria-label="Enable LDAP authentication" data-i18n-aria-label="ldap.enabled">
                     <span data-i18n="ldap.enabled">Enable LDAP Authentication</span>
                   </label>
-                </div>
+                </header>
                 <div class="config-row">
                   <div class="config-field">
                     <label for="ldap-url" data-i18n="ldap.server_url">LDAP Server Address</label>
@@ -890,12 +892,12 @@
                   <button type="button" id="test-ldap-btn" class="btn btn-secondary btn-sm" data-i18n="ldap.test_connection">Test Connection</button>
                   <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                 </div>
-              </div>
+              </section>
             </form>
 
             <form id="sso-config-form">
-              <div class="config-card">
-                <div class="config-card-header">
+              <section class="config-card">
+                <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">🔐</span>
                     <span data-i18n="sso.title">SSO Configuration (OIDC)</span>
@@ -904,7 +906,7 @@
                     <input type="checkbox" id="sso-enabled" aria-label="Enable SSO authentication" data-i18n-aria-label="sso.enabled">
                     <span data-i18n="sso.enabled">Enable SSO Authentication</span>
                   </label>
-                </div>
+                </header>
                 <div class="config-row">
                   <div class="config-field">
                     <label for="sso-issuer-url" data-i18n="sso.issuer_url">Issuer URL</label>
@@ -940,7 +942,7 @@
                   <button type="button" id="test-sso-btn" class="btn btn-secondary btn-sm" data-i18n="sso.test_connection">Test Connection</button>
                   <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                 </div>
-              </div>
+              </section>
             </form>
           </div>
         </div>
@@ -948,13 +950,13 @@
         <div id="system-notification-tab" class="tab-content" role="tabpanel">
           <div class="notification-config-section">
             <form id="smtp-config-form">
-              <div class="config-card">
-                <div class="config-card-header">
+              <section class="config-card">
+                <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">📧</span>
                     <span data-i18n="smtp.server_settings">SMTP Server Settings</span>
                   </div>
-                </div>
+                </header>
                 <div class="config-row">
                   <div class="config-field">
                     <label for="smtp-host" data-i18n="smtp.host">SMTP Server</label>
@@ -991,17 +993,17 @@
                 </div>
                 <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
                 <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
-              </div>
+              </section>
             </form>
             
             <div class="notification-settings-section">
-              <div class="config-card">
-                <div class="config-card-header">
+              <section class="config-card">
+                <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">🔔</span>
                     <span data-i18n="notification.mac_change_settings">MAC Address Change Notification</span>
                   </div>
-                </div>
+                </header>
                 <div class="config-row">
                   <div class="config-field">
                     <label data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</label>
@@ -1012,20 +1014,20 @@
                 <div class="config-actions">
                   <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </div>
 
         <div id="data-management-tab" class="tab-content" role="tabpanel">
           <div class="system-config-section">
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🗃️</span>
                   <span data-i18n="data-management.data_management">Data Management</span>
                 </div>
-              </div>
+              </header>
               <div class="data-management-container">
                 <section class="section">
                   <h3 data-i18n="data-management.csv_import">CSV Data Import</h3>
@@ -1060,15 +1062,15 @@
                   </div>
                 </section>
               </div>
-            </div>
+            </section>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🗄️</span>
                   <span data-i18n="data-management.database_management">Database Management</span>
                 </div>
-              </div>
+              </header>
               <div class="database-management-container">
                 <section class="section">
                   <h3 data-i18n="data-management.db_export">Database Export</h3>
@@ -1087,15 +1089,15 @@
                   </div>
                 </section>
               </div>
-            </div>
+            </section>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">📋</span>
                   <span data-i18n="logs.manager">Log Management</span>
                 </div>
-              </div>
+              </header>
               <div class="data-management-container">
                 <section class="section">
                   <h3 data-i18n="logs.stats">Log Statistics</h3>
@@ -1140,25 +1142,25 @@
                   <h3 data-i18n="logs.forwarding_title">Log Forwarding</h3>
                   <div class="nc-fields">
                     <div class="nc-field">
-                      <label data-i18n="logs.forwarding_enabled">Enabled</label>
+                      <label for="log-forwarding-enabled" data-i18n="logs.forwarding_enabled">Enabled</label>
                       <select id="log-forwarding-enabled" class="form-control">
                         <option value="true" data-i18n="common.yes">Yes</option>
                         <option value="false" data-i18n="common.no">No</option>
                       </select>
                     </div>
                     <div class="nc-field">
-                      <label data-i18n="logs.forwarding_protocol">Protocol</label>
+                      <label for="log-forwarding-protocol" data-i18n="logs.forwarding_protocol">Protocol</label>
                       <select id="log-forwarding-protocol" class="form-control">
                         <option value="udp">UDP</option>
                         <option value="tcp">TCP</option>
                       </select>
                     </div>
                     <div class="nc-field">
-                      <label data-i18n="logs.forwarding_host">Collector Host</label>
+                      <label for="log-forwarding-host" data-i18n="logs.forwarding_host">Collector Host</label>
                       <input type="text" id="log-forwarding-host" class="form-control" data-i18n-placeholder="logs.forwarding_host_placeholder" placeholder="e.g., 192.168.1.10" autocomplete="off">
                     </div>
                     <div class="nc-field">
-                      <label data-i18n="logs.forwarding_port">Port</label>
+                      <label for="log-forwarding-port" data-i18n="logs.forwarding_port">Port</label>
                       <input type="number" id="log-forwarding-port" class="form-control" min="1" max="65535" placeholder="514">
                     </div>
                   </div>
@@ -1169,7 +1171,7 @@
                   </div>
                 </section>
               </div>
-            </div>
+            </section>
           </div>
         </div>
         
@@ -1195,70 +1197,70 @@
 
         <div id="security-tab" class="tab-content" role="tabpanel">
           <div class="system-config-section">
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🚦</span>
                   <span data-i18n="config.rate_limit_settings">Rate Limit Settings</span>
                 </div>
                 <button id="rate-limit-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
-              </div>
+              </header>
 
               <div class="nc-fields">
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
+                  <label for="rate-limit-enabled" data-i18n="config.rate_limit_enabled">Enable Rate Limiting</label>
                   <select id="rate-limit-enabled" class="form-control">
                     <option value="true" data-i18n="common.yes">Yes</option>
                     <option value="false" data-i18n="common.no">No</option>
                   </select>
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
+                  <label for="rate-limit-ip" data-i18n="config.rate_limit_ip">IP Limit (requests/minute)</label>
                   <input type="number" id="rate-limit-ip" class="form-control" min="1" max="10000">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
+                  <label for="rate-limit-user" data-i18n="config.rate_limit_user">User Limit (requests/minute)</label>
                   <input type="number" id="rate-limit-user" class="form-control" min="1" max="10000">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
+                  <label for="rate-limit-login" data-i18n="config.rate_limit_login">Login Limit (attempts/minute)</label>
                   <input type="number" id="rate-limit-login" class="form-control" min="1" max="100">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_window">Time Window (seconds)</label>
+                  <label for="rate-limit-window" data-i18n="config.rate_limit_window">Time Window (seconds)</label>
                   <input type="number" id="rate-limit-window" class="form-control" min="10" max="3600">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
+                  <label for="rate-limit-email" data-i18n="config.rate_limit_email">Email Limit (per hour)</label>
                   <input type="number" id="rate-limit-email" class="form-control" min="1" max="100">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
+                  <label for="rate-limit-email-window" data-i18n="config.rate_limit_email_window">Email Window (seconds)</label>
                   <input type="number" id="rate-limit-email-window" class="form-control" min="60" max="86400">
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🔑</span>
                   <span data-i18n="config.password_policy">Password Policy</span>
                 </div>
                 <button id="password-policy-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
-              </div>
+              </header>
 
               <div class="nc-fields">
                 <div class="nc-field">
-                  <label data-i18n="config.password_min_length">Minimum Length</label>
+                  <label for="password-policy-min-length" data-i18n="config.password_min_length">Minimum Length</label>
                   <input type="number" id="password-policy-min-length" class="form-control" min="8" max="128">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
+                  <label for="password-policy-expiry" data-i18n="config.password_expiry">Validity Period (days, 0 = disabled)</label>
                   <input type="number" id="password-policy-expiry" class="form-control" min="0" max="36500">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
+                  <label for="password-policy-history" data-i18n="config.password_history">History Check (recent N, 0 = disabled)</label>
                   <input type="number" id="password-policy-history" class="form-control" min="0" max="24">
                 </div>
                 <div class="nc-field">
@@ -1286,10 +1288,10 @@
                   </label>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div class="config-card">
-              <div class="config-card-header">
+            <section class="config-card">
+              <header class="config-card-header">
                 <div class="config-card-title">
                   <span class="icon">🛡️</span>
                   <span data-i18n="security.app_fail2ban">Application Fail2ban</span>
@@ -1299,27 +1301,27 @@
                   <button id="app-fail2ban-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
                   <button id="app-fail2ban-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
                 </div>
-              </div>
+              </header>
 
               <!-- 配置 -->
               <div class="nc-fields">
                 <div class="nc-field">
-                  <label data-i18n="security.enabled">Enabled</label>
+                  <label for="app-fail2ban-enabled" data-i18n="security.enabled">Enabled</label>
                   <select id="app-fail2ban-enabled" class="form-control">
                     <option value="true" data-i18n="common.yes">Yes</option>
                     <option value="false" data-i18n="common.no">No</option>
                   </select>
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="security.findtime">Find Time (s)</label>
+                  <label for="app-fail2ban-findtime" data-i18n="security.findtime">Find Time (s)</label>
                   <input type="number" id="app-fail2ban-findtime" class="form-control" min="60" max="86400">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="security.maxretry">Max Retry</label>
+                  <label for="app-fail2ban-maxretry" data-i18n="security.maxretry">Max Retry</label>
                   <input type="number" id="app-fail2ban-maxretry" class="form-control" min="1" max="100">
                 </div>
                 <div class="nc-field">
-                  <label data-i18n="security.bantime">Ban Time (s)</label>
+                  <label for="app-fail2ban-bantime" data-i18n="security.bantime">Ban Time (s)</label>
                   <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800">
                 </div>
               </div>
@@ -1363,17 +1365,18 @@
               <!-- 手动封禁/解封 -->
               <h4 class="mt-md" data-i18n="security.manual_ban">Manual Ban/Unban</h4>
               <div class="form-group-inline">
+                <label for="app-fail2ban-ip-input" data-i18n="system.app_fail2ban_ip">IP Address</label>
                 <input type="text" id="app-fail2ban-ip-input" class="form-control" placeholder="192.168.1.100">
                 <button type="button" id="app-fail2ban-ban-btn" class="btn btn-danger btn-sm" data-i18n="security.ban_ip">Ban IP</button>
                 <button type="button" id="app-fail2ban-unban-btn" class="btn btn-success btn-sm" data-i18n="security.unban_ip">Unban IP</button>
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </section>
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01355"></script>
+  <script type="module" src="/static/js/app.js?v=01357"></script>
 </body>
 </html>

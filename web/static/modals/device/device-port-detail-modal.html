@@ -29,6 +29,7 @@
             <select id="device-port-porttype-expanded" name="port_type">
               <option value="access" data-i18n="device.port_type_access">Access</option>
               <option value="trunk" data-i18n="device.port_type_trunk">Trunk</option>
+              <option value="hybrid" data-i18n="device.port_type_hybrid">Hybrid</option>
               <option value="uplink" data-i18n="device.port_type_uplink">Uplink</option>
               <option value="stack" data-i18n="device.port_type_stack">Stack</option>
               <option value="console" data-i18n="device.port_type_console">Console</option>
@@ -45,23 +46,29 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="device-port-vlan-expanded" data-i18n="device.vlan_id">VLAN ID</label>
-            <input type="number" id="device-port-vlan-expanded" name="vlan_id" min="1" max="4094" autocomplete="off">
+            <label for="device-port-trunkid-expanded" data-i18n="device.trunk_id" data-i18n-title="device.trunk_id_hint" title="">Trunk ID</label>
+            <input type="number" id="device-port-trunkid-expanded" name="trunk_id" min="1" max="4094" autocomplete="off">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
+            <label for="device-port-vlan-expanded" data-i18n="device.vlan_id">VLAN ID</label>
+            <input type="number" id="device-port-vlan-expanded" name="vlan_id" min="1" max="4094" autocomplete="off">
+          </div>
+          <div class="form-group">
             <label for="device-port-speed-expanded" data-i18n="device.speed">Speed</label>
             <input type="text" id="device-port-speed-expanded" name="speed" autocomplete="off" placeholder="e.g., 1000Mbps">
           </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="device-port-mac-expanded" data-i18n="ip.mac_address">MAC Address</label>
             <input type="text" id="device-port-mac-expanded" name="mac_address" autocomplete="off" placeholder="00:11:22:33:44:55">
           </div>
-        </div>
-        <div class="form-group form-group-inline">
-          <label for="device-port-managed-expanded" data-i18n="device.device_managed" data-i18n-title="device.device_managed_hint" title="">Device Managed</label>
-          <input type="checkbox" id="device-port-managed-expanded" name="device_managed" class="form-checkbox">
+          <div class="form-group form-group-inline">
+            <label for="device-port-managed-expanded" data-i18n="device.device_managed" data-i18n-title="device.device_managed_hint" title="">Device Managed</label>
+            <input type="checkbox" id="device-port-managed-expanded" name="device_managed" class="form-checkbox">
+          </div>
         </div>
         <div class="form-group">
           <label for="device-port-description-expanded" data-i18n="common.description">Description</label>

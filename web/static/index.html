@@ -6,52 +6,53 @@
     <meta name="description" content="IPMA系统登录页面">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>IPMA - 系统登录</title>
-    <link rel="stylesheet" href="/static/css/pages/login.css?v=01355">
+    <link rel="stylesheet" href="/static/css/pages/login.css?v=01357">
   </head>
-  <body class="login-body" role="document">
+  <!-- body 即文档主体，无需多余 role -->
+  <body class="login-body">
     <div id="login-page">
       <!-- ============ 左面板（品牌 + 动画角色） ============ -->
       <div class="left-panel">
 
         <div class="characters-wrapper">
           <div class="characters-scene" id="characters-scene">
-            <!-- 紫色角色 -->
+            <!-- 紫色角色（各部件初始坐标/尺寸收编到 login.css 的角色类中，数值与原内联样式一致） -->
             <div class="character char-purple" id="char-purple">
-              <div class="eyes" id="purple-eyes" style="left: 45px; top: 40px; gap: 28px">
-                <div class="eyeball" id="purple-eye-l" style="width: 18px; height: 18px">
-                  <div class="pupil" id="purple-pupil-l" style="width: 7px; height: 7px"></div>
+              <div class="eyes" id="purple-eyes">
+                <div class="eyeball" id="purple-eye-l">
+                  <div class="pupil" id="purple-pupil-l"></div>
                 </div>
-                <div class="eyeball" id="purple-eye-r" style="width: 18px; height: 18px">
-                  <div class="pupil" id="purple-pupil-r" style="width: 7px; height: 7px"></div>
+                <div class="eyeball" id="purple-eye-r">
+                  <div class="pupil" id="purple-pupil-r"></div>
                 </div>
               </div>
             </div>
             <!-- 黑色角色 -->
             <div class="character char-black" id="char-black">
-              <div class="eyes" id="black-eyes" style="left: 26px; top: 32px; gap: 20px">
-                <div class="eyeball" id="black-eye-l" style="width: 16px; height: 16px">
-                  <div class="pupil" id="black-pupil-l" style="width: 6px; height: 6px"></div>
+              <div class="eyes" id="black-eyes">
+                <div class="eyeball" id="black-eye-l">
+                  <div class="pupil" id="black-pupil-l"></div>
                 </div>
-                <div class="eyeball" id="black-eye-r" style="width: 16px; height: 16px">
-                  <div class="pupil" id="black-pupil-r" style="width: 6px; height: 6px"></div>
+                <div class="eyeball" id="black-eye-r">
+                  <div class="pupil" id="black-pupil-r"></div>
                 </div>
               </div>
             </div>
             <!-- 橙色角色 -->
             <div class="character char-orange" id="char-orange">
-              <div class="eyes" id="orange-eyes" style="left: 82px; top: 90px; gap: 28px">
+              <div class="eyes" id="orange-eyes">
                 <div class="bare-pupil" id="orange-pupil-l"></div>
                 <div class="bare-pupil" id="orange-pupil-r"></div>
               </div>
-              <div class="orange-mouth" id="orange-mouth" style="left: 90px; top: 120px"></div>
+              <div class="orange-mouth" id="orange-mouth"></div>
             </div>
             <!-- 黄色角色 -->
             <div class="character char-yellow" id="char-yellow">
-              <div class="eyes" id="yellow-eyes" style="left: 52px; top: 40px; gap: 20px">
+              <div class="eyes" id="yellow-eyes">
                 <div class="bare-pupil" id="yellow-pupil-l"></div>
                 <div class="bare-pupil" id="yellow-pupil-r"></div>
               </div>
-              <div class="yellow-mouth" id="yellow-mouth" style="left: 40px; top: 88px"></div>
+              <div class="yellow-mouth" id="yellow-mouth"></div>
             </div>
           </div>
         </div>
@@ -126,7 +127,8 @@
                           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                           <circle cx="12" cy="12" r="3"></circle>
                         </svg>
-                        <svg id="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none">
+                        <!-- 与 eye-icon 互斥显示，由 JS 切换 hidden 属性 -->
+                        <svg id="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden>
                           <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
                           <line x1="1" y1="1" x2="23" y2="23"></line>
                         </svg>
@@ -246,13 +248,13 @@
                 <!-- 主登录按钮（带 hover 滑动箭头） -->
                 <button type="submit" id="login-submit-btn" class="btn-login" aria-label="登录" data-i18n-aria-label="login.sign_in">
                   <span class="btn-text" data-i18n="login.sign_in">登录</span>
-                  <div class="btn-hover-content">
+                  <span class="btn-hover-content">
                     <span data-i18n="login.sign_in">登录</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="5" y1="12" x2="19" y2="12" />
                       <polyline points="12 5 19 12 12 19" />
                     </svg>
-                  </div>
+                  </span>
                 </button>
 
                 <!-- 保持登录 + 忘记密码（同一行） -->
@@ -261,7 +263,8 @@
                     <input type="checkbox" name="remember" id="remember-me" aria-label="保持登录" data-i18n-aria-label="login.remember_me">
                     <span data-i18n="login.remember_me">保持登录</span>
                   </label>
-                  <a href="#" id="forgot-password-link" class="forgot-link" data-i18n="login.forgot_password">忘记密码？</a>
+                  <!-- 原 div 模拟链接按钮化：.link-button 提供按钮 reset，.forgot-link 保留原链接视觉 -->
+                  <button type="button" id="forgot-password-link" class="forgot-link link-button" data-i18n="login.forgot_password">忘记密码？</button>
                 </div>
               </form>
             </div>
@@ -296,13 +299,13 @@
 
                 <button type="submit" id="two-factor-submit-btn" class="btn-login">
                   <span class="btn-text" data-i18n="login.verify_and_sign_in">验证并登录</span>
-                  <div class="btn-hover-content">
+                  <span class="btn-hover-content">
                     <span data-i18n="login.verify_and_sign_in">验证并登录</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="5" y1="12" x2="19" y2="12" />
                       <polyline points="12 5 19 12 12 19" />
                     </svg>
-                  </div>
+                  </span>
                 </button>
 
                 <button type="button" id="back-to-login-btn" class="btn-text-full" data-i18n="login.back_to_login">
@@ -325,6 +328,6 @@
 
     
 
-    <script type="module" src="/static/js/login.js?v=01355"></script>
+    <script type="module" src="/static/js/login.js?v=01357"></script>
   </body>
 </html>

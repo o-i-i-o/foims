@@ -10,10 +10,10 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01355">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01355">
-    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01355">
-    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01355"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01357">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01357">
+    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01357">
+    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01357"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -73,14 +73,15 @@
                     </div>
 
                     <div class="init-tabs">
-                        <div class="init-tab active" data-mode="create" role="button" tabindex="0">
+                        <!-- 原 div 模拟按钮按钮化：键盘交互由 button 原生支持 -->
+                        <button type="button" class="init-tab active" data-mode="create">
                             <span class="tab-icon">📝</span>
                             <span class="tab-text" data-i18n="init.tab_create_db">新建数据库</span>
-                        </div>
-                        <div class="init-tab" data-mode="import" role="button" tabindex="0">
+                        </button>
+                        <button type="button" class="init-tab" data-mode="import">
                             <span class="tab-icon">📁</span>
                             <span class="tab-text" data-i18n="init.tab_import_db">导入数据库</span>
-                        </div>
+                        </button>
                     </div>
 
                     <form id="init-mode-form" class="init-form">
@@ -96,7 +97,8 @@
                             </div>
                         </div>
 
-                        <div id="import-panel" style="display: none;">
+                        <!-- 显隐由 JS 切换 hidden 属性 -->
+                        <div id="import-panel" hidden>
                             <div class="panel-description">
                                 <h4 data-i18n="init.tab_import_db">导入数据库</h4>
                                 <p>从SQL备份文件恢复数据库，适用于数据迁移或恢复。</p>
@@ -110,7 +112,7 @@
 
                         <div class="form-group">
                             <label for="verification-step2" data-i18n="init.console_captcha">控制台验证码:</label>
-                            <div style="display: flex; gap: 10px;">
+                            <div class="button-row">
                                 <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
                                 <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
@@ -145,7 +147,7 @@
                         </div>
                         <div class="form-group">
                             <label for="verification" data-i18n="init.console_captcha">控制台验证码:</label>
-                            <div style="display: flex; gap: 10px;">
+                            <div class="button-row">
                                 <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
                                 <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
@@ -172,9 +174,10 @@
             </div>
         </div>
 
-        <div id="error-message" class="error-message" style="display: none;"></div>
+        <!-- 显隐由 JS 切换 hidden 属性 -->
+        <div id="error-message" class="error-message" hidden></div>
 
-        <div id="loading" class="loading" style="display: none;">
+        <div id="loading" class="loading" hidden>
             <div class="loading-spinner"></div>
             <p data-i18n="init.processing">正在处理...</p>
         </div>

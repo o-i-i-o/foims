@@ -211,7 +211,9 @@ pub async fn get_organizations(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     let parent_id_raw = query.get("parent_id").cloned();
-    let parent_id = parent_id_raw.as_ref().and_then(|id| Uuid::parse_str(id).ok());
+    let parent_id = parent_id_raw
+        .as_ref()
+        .and_then(|id| Uuid::parse_str(id).ok());
     // parent_id 参数给了但解析失败时直接返回校验错误（避免误当全量查询）
     if parent_id_raw.is_some() && parent_id.is_none() {
         return Err(AppError::Validation(msg(

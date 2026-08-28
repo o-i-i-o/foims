@@ -14,14 +14,19 @@ use std::net::IpAddr;
 /// 解析 "房间/名称"。
 pub fn split_room_scoped(value: &str) -> Option<(&str, &str)> {
     let (room, name) = value.split_once('/')?;
-    validate_segmented(room, name)
+    if !validate_segmented(room, name) {
+        return None;
+    }
+    Some((room, name))
 }
 
 /// 解析 "房间/机柜/机位名"（机位/配线架名作为末段）。
 pub fn split_cabinet_scoped(value: &str) -> Option<(&str, &str, &str)> {
     let (room, rest) = value.split_once('/')?;
     let (cabinet, name) = rest.split_once('/')?;
-    validate_segmented(room, cabinet)?;
+    if !validate_segmented(room, cabinet) {
+        return None;
+    }
     if name.is_empty() {
         return None;
     }
@@ -32,18 +37,18 @@ pub fn split_cabinet_scoped(value: &str) -> Option<(&str, &str, &str)> {
 pub fn split_device_scoped(value: &str) -> Option<(&str, &str, &str)> {
     let (device_path, port) = value.rsplit_once(':')?;
     let (room, device) = device_path.split_once('/')?;
-    validate_segmented(room, device)?;
+    if !validate_segmented(room, device) {
+        return None;
+    }
     if port.is_empty() {
         return None;
     }
     Some((room, device, port))
 }
 
-fn validate_segmented<'a>(head: &'a str, tail: &'a str) -> Option<(&'a str, &'a str)> {
-    if head.is_empty() || tail.is_empty() {
-        return None;
-    }
-    Some((head, tail))
+/// 校验两段名称均非空（空段视为非法）
+fn validate_segmented(head: &str, tail: &str) -> bool {
+    !head.is_empty() && !tail.is_empty()
 }
 
 /// 解析 inet 值（可选 /nn 后缀，按 PG 语义忽略掩码只取地址）。

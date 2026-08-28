@@ -93,12 +93,18 @@
   width: 100%;
 }
 
-/* 标题行内 label 覆盖 modal 的定宽居中规则，按内容自适应 */
-.modal .form-group .list-header label {
+/* 标题行内 label 覆盖 modal 的定宽居中规则，按内容自适应；
+   .list-title 为原无控件可关联的 label 改成的 span 分组标题，视觉与原 label 一致 */
+.modal .form-group .list-header label,
+.modal .form-group .list-header .list-title {
   width: auto;
   min-width: 0;
   text-align: left;
   padding-top: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .list-add-btn {
@@ -207,7 +213,9 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
-#cabinet-positions-container .cabinet-columns-header > label {
+/* 列标题已由 label 改为 span：选择器同步扩展，样式不变 */
+#cabinet-positions-container .cabinet-columns-header > label,
+#cabinet-positions-container .cabinet-columns-header > span {
   flex: 1;
   min-width: 0;
   width: auto;

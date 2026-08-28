@@ -127,8 +127,10 @@ fn load_encryption_key() -> Vec<u8> {
     key
 }
 
-pub fn get_encryption_key() -> Vec<u8> {
-    ENCRYPTION_KEY.get_or_init(load_encryption_key).clone()
+/// 返回进程级加密密钥的静态借用（OnceLock 初始化后永不改变），
+/// 避免每次加解密都复制 32 字节密钥
+pub fn get_encryption_key() -> &'static [u8] {
+    ENCRYPTION_KEY.get_or_init(load_encryption_key)
 }
 
 pub fn check_key_integrity() -> Result<(), String> {
@@ -165,7 +167,7 @@ pub fn check_key_integrity() -> Result<(), String> {
 
 pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     let key = get_encryption_key();
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| {
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| {
         log_error!("log.crypto.cipher_init_failed", error = e);
         AppError::Internal(msg("server.common.cipher_init_failed").with("error", e))
     })?;
@@ -187,8 +189,8 @@ pub fn encrypt_password(password: &str) -> Result<String, AppError> {
 
 pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     let key = get_encryption_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("解密失败: 加密密钥长度不正确: {e}"))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| format!("解密失败: 加密密钥长度不正确: {e}"))?;
 
     let decoded = BASE64
         .decode(encrypted_password)
@@ -237,9 +239,10 @@ pub async fn decrypt_password_async(encrypted: String) -> Result<String, String>
         .map_err(|e| format!("解密任务失败: {e}"))?
 }
 
-pub async fn decrypt_credential_async(value: Option<String>) -> Result<Option<String>, AppError> {
+/// 按借用接收待解密凭据，由调用方决定所有权，避免调用点为跨 await 传递而克隆
+pub async fn decrypt_credential_async(value: Option<&str>) -> Result<Option<String>, AppError> {
     match value {
-        Some(v) => decrypt_password_async(v)
+        Some(v) => decrypt_password_async(v.to_string())
             .await
             .map(Some)
             .map_err(|e| AppError::Internal(msg("server.common.decrypt_failed").with("error", e))),
@@ -418,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn test_decrypt_credential_async_invalid_value() {
         // 非法密文经异步链路返回错误
-        let result = decrypt_credential_async(Some("!!!bad-base64!!!".to_string())).await;
+        let result = decrypt_credential_async(Some("!!!bad-base64!!!")).await;
         assert!(result.is_err(), "非法密文应返回错误");
     }
 }

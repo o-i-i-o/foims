@@ -179,7 +179,12 @@
   margin-bottom: 16px;
 }
 
-.log-detail-item label {
+/* 键值对 dl 化：重置 dl/dd 浏览器默认边距，保持原布局 */
+dl.log-detail-item {
+  margin: 0;
+}
+
+.log-detail-item dt {
   display: block;
   margin-bottom: 2px;
   font-weight: 500;
@@ -187,7 +192,8 @@
   color: var(--color-text-muted);
 }
 
-.log-detail-item > div {
+.log-detail-item dd {
+  margin: 0;
   font-size: 0.9rem;
   color: var(--color-text-light);
   word-break: break-all;

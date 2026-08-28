@@ -11,41 +11,15 @@ import {
 
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
+import { fillSelect } from "../utils/resources.js";
 import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
-
-let devices = [];
-let networks = [];
 
 const taskTableState = createSortState("created_at", "desc");
 
 export async function initScheduledTaskManager() {
-  await loadDevices();
-  await loadNetworks();
   await loadScheduledTasks();
   setupEventListeners();
-}
-
-async function loadDevices() {
-  try {
-    const response = await apiGet("/api/resources/devices?page_size=1000");
-    if (response.success) {
-      devices = response.data?.items || response.data || [];
-    }
-  } catch (error) {
-    console.error("Failed to load devices:", error);
-  }
-}
-
-async function loadNetworks() {
-  try {
-    const response = await apiGet("/api/resources/networks");
-    if (response.success) {
-      networks = response.data || [];
-    }
-  } catch (error) {
-    console.error("Failed to load networks:", error);
-  }
 }
 
 function setupEventListeners() {
@@ -97,7 +71,7 @@ function bindTaskModalEvents() {
     ?.addEventListener("submit", handleScheduledTaskSubmit);
 }
 
-function handleTaskTypeChange(e) {
+async function handleTaskTypeChange(e) {
   const taskType = e.target.value;
   const isMacSync = taskType === "mac_sync";
 
@@ -108,38 +82,26 @@ function handleTaskTypeChange(e) {
     ?.classList.toggle("hidden", taskType !== "log_cleanup");
 
   if (isMacSync) {
-    populateDeviceSelect();
-    populateNetworkSelect();
+    // 选项就绪后再返回，编辑场景的调用方依赖此时序回显选中值
+    await Promise.all([populateDeviceSelect(), populateNetworkSelect()]);
   }
 }
 
+// 下拉选项改由 resources.js 的 fillSelect 按需拉取（10s TTL 共享缓存），
+// 不再于页面初始化时整表预载
 function populateDeviceSelect() {
-  const select = document.getElementById("scheduled-task-device-id");
-  if (!select) {
-    return;
-  }
-
-  select.innerHTML = `<option value="">${t("scheduled_tasks.config_fields.select_device")}</option>`;
-  devices.forEach((dev) => {
-    const option = document.createElement("option");
-    option.value = dev.id;
-    option.textContent = dev.name || dev.hostname || dev.id;
-    select.appendChild(option);
+  return fillSelect("scheduled-task-device-id", "/api/resources/devices?page_size=1000", {
+    placeholderKey: "scheduled_tasks.config_fields.select_device",
+    itemToLabel: (dev) => dev.name || dev.hostname || dev.id,
+    errorLabel: "设备"
   });
 }
 
 function populateNetworkSelect() {
-  const select = document.getElementById("scheduled-task-network-id");
-  if (!select) {
-    return;
-  }
-
-  select.innerHTML = `<option value="">${t("scheduled_tasks.config_fields.select_network")}</option>`;
-  networks.forEach((net) => {
-    const option = document.createElement("option");
-    option.value = net.id;
-    option.textContent = net.name || net.id;
-    select.appendChild(option);
+  return fillSelect("scheduled-task-network-id", "/api/resources/networks", {
+    placeholderKey: "scheduled_tasks.config_fields.select_network",
+    itemToLabel: (net) => net.name || net.id,
+    errorLabel: "网段"
   });
 }
 
@@ -247,7 +209,8 @@ async function editScheduledTask(id) {
     document.getElementById("scheduled-task-cron").value = task.cron_expression;
     document.getElementById("scheduled-task-enabled").checked = task.enabled;
 
-    handleTaskTypeChange({ target: { value: task.task_type } });
+    // 等待选项填充完成后再回显选中值（fillSelect 为异步填充）
+    await handleTaskTypeChange({ target: { value: task.task_type } });
 
     if (task.task_type === "mac_sync" && task.config) {
       document.getElementById("scheduled-task-device-id").value = task.config.device_id || "";

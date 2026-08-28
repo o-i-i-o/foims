@@ -35,18 +35,18 @@ export const goToStep = (stepNum) => {
 export const showError = (message) => {
   const errorElement = document.getElementById("error-message");
   errorElement.textContent = message;
-  errorElement.style.display = "block";
+  errorElement.hidden = false;
   setTimeout(() => {
-    errorElement.style.display = "none";
+    errorElement.hidden = true;
   }, 5000);
 };
 
 export const showLoading = () => {
-  document.getElementById("loading").style.display = "flex";
+  document.getElementById("loading").hidden = false;
 };
 
 export const hideLoading = () => {
-  document.getElementById("loading").style.display = "none";
+  document.getElementById("loading").hidden = true;
 };
 
 /**
@@ -64,10 +64,10 @@ export const setInitMode = (mode) => {
   const importPanel = document.getElementById("import-panel");
 
   if (mode === "create") {
-    createPanel.style.display = "block";
-    importPanel.style.display = "none";
+    createPanel.hidden = false;
+    importPanel.hidden = true;
   } else {
-    createPanel.style.display = "none";
-    importPanel.style.display = "block";
+    createPanel.hidden = true;
+    importPanel.hidden = false;
   }
 };

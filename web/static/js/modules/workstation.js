@@ -153,7 +153,6 @@ export async function submitWorkstationForm() {
     } else {
       const errorMsg = result.message || t("common.check_input");
       showToast(`${t("common.operation_failed")}: ${errorMsg}`, "error");
-      console.error("服务器返回错误:", result);
     }
   } catch (error) {
     console.error("提交工位表单失败:", error);

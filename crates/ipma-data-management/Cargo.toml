@@ -37,7 +37,6 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 
 # Logging
-tracing = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }

@@ -453,6 +453,18 @@
   opacity: 0.8;
 }
 
+/* 通用链接按钮：div/a 模拟链接按钮化时的按钮 reset（置于 .forgot-link 之前，具体类可覆盖下划线等细节） */
+.link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .forgot-link {
   font-size: 13px;
   color: #5b21b6;
@@ -711,6 +723,62 @@
 
 .orange-mouth.visible {
   opacity: 1;
+}
+
+/* 各角色部件初始坐标/尺寸（原内联样式收编为角色类，数值与原值逐像素一致；
+   JS 动画运行时会以行内样式覆盖 left/top/height，不冲突） */
+.char-purple .eyes {
+  left: 45px;
+  top: 40px;
+  gap: 28px;
+}
+
+.char-purple .eyeball {
+  width: 18px;
+  height: 18px;
+}
+
+.char-purple .pupil {
+  width: 7px;
+  height: 7px;
+}
+
+.char-black .eyes {
+  left: 26px;
+  top: 32px;
+  gap: 20px;
+}
+
+.char-black .eyeball {
+  width: 16px;
+  height: 16px;
+}
+
+.char-black .pupil {
+  width: 6px;
+  height: 6px;
+}
+
+.char-orange .eyes {
+  left: 82px;
+  top: 90px;
+  gap: 28px;
+}
+
+.char-orange .orange-mouth {
+  left: 90px;
+  top: 120px;
+}
+
+.char-yellow .eyes {
+  left: 52px;
+  top: 40px;
+  gap: 20px;
+}
+
+.char-yellow .yellow-mouth {
+  left: 40px;
+  top: 88px;
 }
 
 /* 摇头动画：脸部部件左右摆动 */

@@ -306,6 +306,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "port_type",
             "status",
             "speed",
+            "trunk_id",
             "device_managed",
             "created_at",
             "updated_at",

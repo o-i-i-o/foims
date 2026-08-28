@@ -23,9 +23,9 @@ import { INTERFACE_ROLES, PHYSICAL_TYPES } from "../utils/networkCardManager.js"
  * 冲突项弹窗逐项选择覆盖/跳过；覆盖时不改动 device_managed。
  */
 
-// SNMP 同步过程中待处理的冲突信息（供冲突对话框使用）
+// SNMP 同步过程中待处理的冲突信息（供冲突对话框使用）。
+// 仅在弹出冲突对话框的轮次写入，每轮同步整体重建，不跨轮残留
 const conflictState = {
-  newPorts: [], // SNMP 拉取到的全部端口
   existingMap: new Map(), // 已存在网口：key = name（小写）
   decisions: {} // { name: 'overwrite' | 'skip' }
 };
@@ -140,6 +140,7 @@ function createPortItem(iface) {
   portItem.dataset.portType = iface.port_type || "access";
   portItem.dataset.status = iface.status || "up";
   portItem.dataset.speed = iface.speed || "";
+  portItem.dataset.trunkId = iface.trunk_id || "";
 
   // 显示端口名的末尾数字，无数字则显示首字母
   const display = extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3);
@@ -227,7 +228,8 @@ function bindModalButtons(deviceId) {
         deviceManaged: portItem.dataset.deviceManaged === "1",
         portType: portItem.dataset.portType,
         status: portItem.dataset.status,
-        speed: portItem.dataset.speed
+        speed: portItem.dataset.speed,
+        trunkId: portItem.dataset.trunkId
       });
     });
   }
@@ -276,6 +278,7 @@ async function openPortDetailModal(portData) {
   elementCache.setValue("device-port-porttype-expanded", portData.portType || "access");
   elementCache.setValue("device-port-status-expanded", portData.status || "up");
   elementCache.setValue("device-port-speed-expanded", portData.speed || "");
+  elementCache.setValue("device-port-trunkid-expanded", portData.trunkId || "");
   const managedCheckbox = elementCache.get("device-port-managed-expanded");
   if (managedCheckbox) {
     managedCheckbox.checked = portData.deviceManaged === true;
@@ -290,7 +293,7 @@ async function openPortDetailModal(portData) {
     saveBtn.onclick = () => submitPortForm();
   }
   if (deleteBtn) {
-    deleteBtn.onclick = () => deletePort();
+    deleteBtn.onclick = () => deletePort(portData);
   }
 }
 
@@ -300,6 +303,7 @@ async function openPortDetailModal(portData) {
 function collectPortFormData() {
   const vlanRaw = elementCache.getValue("device-port-vlan-expanded");
   const speedRaw = elementCache.getValue("device-port-speed-expanded");
+  const trunkIdRaw = elementCache.getValue("device-port-trunkid-expanded");
   return {
     id: elementCache.getValue("device-port-id-expanded"),
     deviceId: elementCache.getValue("device-port-device-id-expanded"),
@@ -312,7 +316,8 @@ function collectPortFormData() {
     device_managed: elementCache.get("device-port-managed-expanded")?.checked === true,
     port_type: elementCache.getValue("device-port-porttype-expanded") || "access",
     status: elementCache.getValue("device-port-status-expanded") || "up",
-    speed: speedRaw?.trim() || null
+    speed: speedRaw?.trim() || null,
+    trunk_id: trunkIdRaw ? parseInt(trunkIdRaw, 10) : null
   };
 }
 
@@ -331,6 +336,13 @@ async function submitPortForm() {
     showToast(t("device.vlan_invalid"), "warning");
     return;
   }
+  if (
+    data.trunk_id !== null &&
+    (isNaN(data.trunk_id) || data.trunk_id < 1 || data.trunk_id > 4094)
+  ) {
+    showToast(t("device.trunk_invalid"), "warning");
+    return;
+  }
 
   const payload = {
     name: name.trim(),
@@ -342,7 +354,8 @@ async function submitPortForm() {
     device_managed: data.device_managed,
     port_type: data.port_type,
     status: data.status,
-    speed: data.speed
+    speed: data.speed,
+    trunk_id: data.trunk_id
   };
 
   const saveBtn = elementCache.get("save-port-btn");
@@ -379,10 +392,11 @@ async function submitPortForm() {
 
 /**
  * 删除端口
+ * @param {Object} portData - 打开模态框时传入的端口数据（id/deviceId 显式透传，不经表单回读）
  */
-async function deletePort() {
-  const data = collectPortFormData();
-  const { id, deviceId } = data;
+async function deletePort(portData) {
+  const id = portData?.portId || "";
+  const deviceId = portData?.deviceId || "";
   if (!id) {
     return;
   }
@@ -425,7 +439,9 @@ async function refreshModalView(deviceId) {
   const result = await apiGet(`/api/resources/devices/${deviceId}/nics`);
   const cards = result.success && result.data ? result.data.cards || [] : [];
   renderAllPortGroups(cards);
-  // 重新绑定（renderAllPortGroups 重置了 container.innerHTML，click 委托需重绑）
+  // 端口项 click 委托绑在常驻的 container 自身，renderAllPortGroups 清空
+  // innerHTML 不会移除该监听，dataset.bound 守卫也使本函数不会重复绑定；
+  // 此处再次调用仅为幂等地重设页脚按钮的 onclick
   bindModalButtons(deviceId);
 }
 
@@ -480,14 +496,13 @@ async function startSnmpSync(deviceId) {
       }
     });
 
-    // 4. 无冲突 → 直接新增
+    // 4. 无冲突 → 直接新增（本轮无冲突端口，跳过数固定为 0）
     if (conflicts.length === 0) {
-      await applySnmpResults(deviceId, toAdd, []);
+      await applySnmpResults(deviceId, toAdd, [], 0);
       return;
     }
 
     // 5. 有冲突 → 弹出冲突对话框
-    conflictState.newPorts = newPorts;
     conflictState.existingMap = existingMap;
     conflictState.decisions = {};
     conflicts.forEach((c) => {
@@ -583,8 +598,10 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
       const toOverwrite = conflicts
         .filter((c) => conflictState.decisions[String(c.snmpPort.name)] === "overwrite")
         .map((c) => c.snmpPort);
+      // 跳过数取自本轮冲突列表快照，避免上一轮冲突状态残留导致统计错误
+      const skippedCount = conflicts.length - toOverwrite.length;
       closeModal("port-conflict-modal");
-      await applySnmpResults(deviceId, toAdd, toOverwrite);
+      await applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount);
     };
   }
 }
@@ -606,8 +623,9 @@ function syncConflictSelections() {
  * @param {string} deviceId
  * @param {Array} toAdd - 新增的端口（device_managed=false，不进设备模态框）
  * @param {Array} toOverwrite - 覆盖（更新运行属性）的端口
+ * @param {number} skippedCount - 本轮确认时被跳过的冲突端口数（无冲突轮次为 0）
  */
-async function applySnmpResults(deviceId, toAdd, toOverwrite) {
+async function applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount) {
   let added = 0,
     overwritten = 0,
     failed = 0;
@@ -634,12 +652,10 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
     speed: p.speed || null
   });
 
-  for (const p of toAdd) {
+  // 新增单个端口的公共流程：POST + 成功/失败计数（toAdd 循环与覆盖兜底分支共用）
+  const createPort = async (p) => {
     try {
-      const r = await apiPost(
-        `/api/resources/devices/${deviceId}/interfaces`,
-        buildCreatePayload(p)
-      );
+      const r = await apiPost(`/api/resources/devices/${deviceId}/interfaces`, buildCreatePayload(p));
       if (r.success) {
         added++;
       } else {
@@ -649,26 +665,18 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
       console.error(`SNMP 同步新增端口 ${p.name} 失败:`, e);
       failed++;
     }
+  };
+
+  for (const p of toAdd) {
+    await createPort(p);
   }
 
   for (const p of toOverwrite) {
     const key = String(p.name).toLowerCase();
     const existing = conflictState.existingMap.get(key);
     if (!existing) {
-      try {
-        const r = await apiPost(
-          `/api/resources/devices/${deviceId}/interfaces`,
-          buildCreatePayload(p)
-        );
-        if (r.success) {
-          added++;
-        } else {
-          failed++;
-        }
-      } catch (e) {
-        console.error(`SNMP 同步新增端口 ${p.name} 失败:`, e);
-        failed++;
-      }
+      // 本轮快照中找不到原网口时退化为新增
+      await createPort(p);
       continue;
     }
     try {
@@ -694,9 +702,8 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite) {
   if (overwritten) {
     parts.push(`${t("device.sync_overwritten")} ${overwritten}`);
   }
-  const skipped = conflictState.newPorts.length - toAdd.length - toOverwrite.length;
-  if (skipped > 0) {
-    parts.push(`${t("device.sync_skipped")} ${skipped}`);
+  if (skippedCount > 0) {
+    parts.push(`${t("device.sync_skipped")} ${skippedCount}`);
   }
   if (failed) {
     parts.push(`${t("device.sync_failed")} ${failed}`);

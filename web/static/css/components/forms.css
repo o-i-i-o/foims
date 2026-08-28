@@ -15,6 +15,27 @@
   flex-shrink: 0;
 }
 
+/* 分组标题（.group-label）：原无控件可关联的 label 改为 span 后沿用其视觉，
+   规则与 .form-group label:not(.checkbox-label) / .modal .form-group label 保持一致 */
+.group-label {
+  display: block;
+  min-width: 100px;
+  margin-bottom: 0;
+  font-weight: 500;
+  color: var(--color-text-light);
+  font-size: 0.9rem;
+  padding-top: 0.85rem;
+  flex-shrink: 0;
+}
+
+.modal .form-group .group-label {
+  width: 100px;
+  min-width: 100px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding-top: 0;
+}
+
 .form-group label .required,
 .required {
   color: var(--color-danger);
@@ -296,8 +317,10 @@ select.nc-input:not([multiple]) {
 }
 
 /* 标题与输入行同宽、左缘对齐：选择器需覆盖 modals.css 的
-   .modal .form-row .form-group label（定宽居中）规则 */
-.modal .form-row .form-group.cidr-column > label {
+   .modal .form-row .form-group label（定宽居中）规则；
+   .group-label 为原 label 改成的 span 分组标题，同样适用 */
+.modal .form-row .form-group.cidr-column > label,
+.modal .form-row .form-group.cidr-column > .group-label {
   width: 100%;
   max-width: 320px;
   min-width: 0;

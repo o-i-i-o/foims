@@ -599,14 +599,19 @@ class LoginManager {
    * 通用倒计时
    */
   startCountdown(btn, seconds) {
+    // 新倒计时开始前先清掉旧 interval，避免连续触发时多个计时器叠加互抢文本
+    if (this.countdownTimer) {
+      clearInterval(this.countdownTimer);
+    }
     let countdown = seconds;
     btn.textContent = `${t("login.code_sent")}(${countdown})`;
     btn.disabled = true;
 
-    const timer = setInterval(() => {
+    this.countdownTimer = setInterval(() => {
       countdown--;
       if (countdown <= 0) {
-        clearInterval(timer);
+        clearInterval(this.countdownTimer);
+        this.countdownTimer = null;
         this.setLoadingState(btn, false);
       } else {
         btn.textContent = `${t("login.code_sent")}(${countdown})`;
@@ -864,8 +869,9 @@ class LoginManager {
     toggleBtn.addEventListener("click", () => {
       this.showPassword = !this.showPassword;
       this.dom.passwordInput.type = this.showPassword ? "text" : "password";
-      this.dom.eyeIcon.style.display = this.showPassword ? "none" : "block";
-      this.dom.eyeOffIcon.style.display = this.showPassword ? "block" : "none";
+      // 用 hidden 属性切换两个图标的互斥显隐
+      this.dom.eyeIcon.hidden = this.showPassword;
+      this.dom.eyeOffIcon.hidden = !this.showPassword;
       this.updateCharacters();
       // 密码可见时，可能触发紫色角色偷看
       if (this.showPassword) {
