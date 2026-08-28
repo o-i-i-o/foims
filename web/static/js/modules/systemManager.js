@@ -48,7 +48,7 @@ export function initSystemTabs() {
         } else if (tabId === "system-notification") {
           loadSmtpConfig();
           loadNotificationSettings();
-        } else if (tabId === "import-export") {
+        } else if (tabId === "data-management") {
           loadLogsStats();
           loadLogForwarding();
         } else if (tabId === "scheduled-tasks") {

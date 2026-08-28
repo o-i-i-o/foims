@@ -72,7 +72,7 @@ time = "0.3.55"
 
 [package]
 name = "ipma"
-version = "0.15.84"
+version = "0.15.85"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
