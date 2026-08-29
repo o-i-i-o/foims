@@ -22,29 +22,7 @@ pub async fn save_layout<P: DbProvider>(
     meta: RequestMeta,
     AppJson(req): AppJson<LayoutSaveRequest>,
 ) -> Result<Response, AppError> {
-    let visualization_req = crate::layout::LayoutSaveRequest {
-        r#type: req.r#type.clone(),
-        room_id: req.room_id,
-        network_region_id: req.network_region_id,
-        cabinet_id: req.cabinet_id,
-        layout: req
-            .layout
-            .iter()
-            .map(|item| crate::layout::LayoutItem {
-                id: item.id,
-                position: crate::layout::Position {
-                    x: item.position.x,
-                    y: item.position.y,
-                    width: item.position.width,
-                    height: item.position.height,
-                    rotation: item.position.rotation,
-                },
-                element_type: item.element_type.clone(),
-            })
-            .collect(),
-    };
-
-    let result = crate::layout::save_layout(&state.pool()?.get_conn(), visualization_req)
+    let result = crate::layout::save_layout(&state.pool()?.get_conn(), req.clone())
         .await
         .map_err(AppError::from)?;
 

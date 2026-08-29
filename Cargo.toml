@@ -86,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "ipma"
-version = "0.15.91"
+version = "0.15.92"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"

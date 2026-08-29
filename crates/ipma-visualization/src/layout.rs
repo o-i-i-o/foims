@@ -1,10 +1,14 @@
-//! 可视化布局管理：布局模型、错误类型与统一 API 响应再导出。
+//! 可视化布局管理：错误类型与布局业务函数。
+//!
+//! 布局模型（Position/LayoutItem/LayoutSaveRequest）唯一副本位于
+//! `ipma-models`，本 crate 直接复用；SVG 渲染所需的 i32 取整访问器
+//! 亦随类型定义在 models 中。
 
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use ipma_common::{AppMessage, DbErrorKind, msg};
-use serde::{Deserialize, Serialize};
+use ipma_models::LayoutSaveRequest;
 use serde_json;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -81,55 +85,6 @@ impl From<sqlx::Error> for VisualizationError {
 
 /// 统一 API 响应结构与成功响应构造（由 ipma-common 提供，保持原有路径兼容）。
 pub use ipma_common::{ApiResponse, ok_json};
-
-// ==================== 布局模型 ====================
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Position {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-    pub rotation: f64,
-}
-
-impl Position {
-    pub fn x_i32(&self) -> i32 {
-        self.x.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
-    }
-
-    pub fn y_i32(&self) -> i32 {
-        self.y.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
-    }
-
-    pub fn width_i32(&self) -> i32 {
-        self.width.round().clamp(0.0, i32::MAX as f64) as i32
-    }
-
-    pub fn height_i32(&self) -> i32 {
-        self.height.round().clamp(0.0, i32::MAX as f64) as i32
-    }
-
-    pub fn rotation_i32(&self) -> i32 {
-        self.rotation.round().clamp(0.0, 360.0) as i32
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LayoutSaveRequest {
-    pub r#type: String,
-    pub room_id: Option<Uuid>,
-    pub network_region_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
-    pub layout: Vec<LayoutItem>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LayoutItem {
-    pub id: Uuid,
-    pub position: Position,
-    pub element_type: String,
-}
 
 // ==================== 布局管理函数 ====================
 
@@ -460,6 +415,7 @@ pub async fn get_room_cabinets_with_positions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ipma_models::{LayoutItem, Position};
 
     /// 构造指定字段的坐标
     fn pos(x: f64, y: f64, width: f64, height: f64, rotation: f64) -> Position {

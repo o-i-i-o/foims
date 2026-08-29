@@ -15,7 +15,31 @@ pub struct Position {
     pub rotation: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+impl Position {
+    /// SVG 渲染坐标取整（四舍五入并钳制到 i32 范围）。
+    pub fn x_i32(&self) -> i32 {
+        self.x.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+    }
+
+    pub fn y_i32(&self) -> i32 {
+        self.y.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+    }
+
+    /// 尺寸/旋转取整（负值钳制为 0；旋转钳制到 0..=360）。
+    pub fn width_i32(&self) -> i32 {
+        self.width.round().clamp(0.0, i32::MAX as f64) as i32
+    }
+
+    pub fn height_i32(&self) -> i32 {
+        self.height.round().clamp(0.0, i32::MAX as f64) as i32
+    }
+
+    pub fn rotation_i32(&self) -> i32 {
+        self.rotation.round().clamp(0.0, 360.0) as i32
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct LayoutSaveRequest {
     pub r#type: String,
     pub room_id: Option<Uuid>,
@@ -24,7 +48,7 @@ pub struct LayoutSaveRequest {
     pub layout: Vec<LayoutItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct LayoutItem {
     pub id: Uuid,
     pub position: Position,

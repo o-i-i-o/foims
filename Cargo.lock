@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.91"
+version = "0.15.92"
 dependencies = [
  "async-trait",
  "axum",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-models"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "ipma-common",
