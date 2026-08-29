@@ -14,8 +14,8 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::crypto::decrypt_credential_async;
 use crate::routes::static_files::AppJson;
+use ipma_common::crypto::decrypt_credential_async;
 use ipma_common::{AppError, msg};
 use ipma_common::{AppMessage, log_info, log_warn};
 use ipma_models::{SnmpPort, SnmpTestRequest};
@@ -1086,7 +1086,7 @@ mod tests {
 
     /// 构造不依赖数据库的 AppState（连接池为 None，SNMP 测试走直接 IP 输入路径）
     fn make_state() -> Arc<AppState> {
-        use crate::config::{
+        use ipma_common::config::{
             Config, DatabaseConfig, InitConfig, JwtConfig, ListenConfig, RateLimitConfig,
             ServerConfig, SnmpConfig,
         };

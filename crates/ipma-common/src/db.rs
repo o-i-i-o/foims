@@ -11,7 +11,7 @@ use tokio::time;
 use tracing::debug;
 
 use crate::config::DatabaseConfig;
-use ipma_common::{log_error, log_info, log_warn};
+use crate::{log_error, log_info, log_warn};
 
 pub fn url_encode_component(s: &str) -> String {
     let mut result = String::with_capacity(s.len());

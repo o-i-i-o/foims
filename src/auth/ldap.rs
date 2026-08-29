@@ -20,10 +20,10 @@ use crate::app_state::AppState;
 use crate::auth::login::{
     ExternalUser, build_login_response, find_or_create_external_user, log_login,
 };
-use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
 use ipma_common::AppError;
+use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::msg;
 use ipma_models::LdapLoginRequest;
 

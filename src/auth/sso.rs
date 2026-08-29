@@ -29,10 +29,10 @@ use crate::auth::login::{
     append_cookie_to_response, create_auth_cookie, find_or_create_external_user,
     issue_external_login_tokens,
 };
-use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
 use ipma_common::AppError;
+use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::{log_info, msg};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
 use openidconnect::reqwest;

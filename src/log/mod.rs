@@ -28,7 +28,7 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::prelude::*;
 
-use crate::config::I18nConfig;
+use ipma_common::config::I18nConfig;
 
 /// 时间格式候选，按优先级排列，解析失败时逐级降级
 const TIME_FORMATS: [&str; 3] = [

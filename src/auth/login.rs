@@ -22,10 +22,10 @@ use crate::auth::extractor::{AccessToken, RefreshToken, SecureFlag};
 use crate::auth::utils::{
     JwtUtils, extract_token_from_parts, get_client_info_from_parts, hash_password,
 };
-use crate::crypto::{decrypt_password_async, encrypt_password_async};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::msg;
 use ipma_models::{
     EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, SendLoginCodeRequest,

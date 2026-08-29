@@ -70,6 +70,13 @@ rand = "0.10.2"
 toml = "1.1.4"
 time = "0.3.55"
 
+# 网络 / 哈希 / 并发表 / 配置加载（主程序与 ipma-common 共享）
+ipnetwork = "0.21.1"
+sha2 = "0.11.0"
+dashmap = "6.2.1"
+arc-swap = "1.9.2"
+config = { version = "0.15.25", features = ["toml"] }
+
 [package]
 name = "ipma"
 version = "0.15.87"
@@ -100,7 +107,7 @@ tokio = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
-aes-gcm = { workspace = true }
+sha2 = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
 thiserror = { workspace = true }
@@ -117,7 +124,6 @@ time = { workspace = true }
 # 本就无条件依赖同一 rsa，且本项目仅作 OIDC 客户端公钥验签与 HS256
 # 签名，不触及受影响的私钥运算路径
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
-sha2 = "0.11.0"
 
 # 外部认证（LDAP / OIDC SSO）
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
@@ -125,14 +131,11 @@ openidconnect = { version = "4.0", default-features = false, features = ["reqwes
 
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
 
-ipnetwork = "0.21.1"
+ipnetwork = { workspace = true }
 
 async-snmp = "0.18.1"
 
-config = { version = "0.15.25", features = ["toml"] }
-
-dashmap = "6.2.1"
-arc-swap = "1.9.2"
+dashmap = { workspace = true }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 

@@ -2091,8 +2091,6 @@ dependencies = [
 name = "ipma"
 version = "0.15.87"
 dependencies = [
- "aes-gcm",
- "arc-swap",
  "async-snmp",
  "async-trait",
  "axum",
@@ -2100,7 +2098,6 @@ dependencies = [
  "base64 0.23.1",
  "bcrypt",
  "chrono",
- "config",
  "dashmap",
  "hex",
  "ipma-common",
@@ -2136,12 +2133,23 @@ dependencies = [
 
 [[package]]
 name = "ipma-common"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "aes-gcm",
+ "arc-swap",
  "axum",
+ "base64 0.23.1",
+ "config",
+ "dashmap",
+ "hex",
+ "ipnetwork",
+ "rand 0.10.2",
  "serde",
+ "serde_json",
+ "sha2 0.11.0",
  "sqlx",
  "thiserror 2.0.20",
+ "tokio",
  "tracing",
  "validator",
 ]

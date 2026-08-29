@@ -13,8 +13,8 @@ use axum::response::{IntoResponse, Response};
 use dashmap::DashMap;
 use serde_json::json;
 
-use crate::utils::{get_real_ip_from_parts, normalize_ipv4_address};
-use ipma_common::{log_info, log_warn, msg};
+use crate::net::{get_real_ip_from_parts, normalize_ipv4_address};
+use crate::{log_info, log_warn, msg};
 
 const DEFAULT_EMAIL_LIMIT: u32 = 5;
 const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
@@ -57,7 +57,7 @@ fn extract_user_id_from_parts(parts: &Parts) -> Option<String> {
 
 #[derive(Debug, Clone)]
 pub struct RateLimitError {
-    pub message: ipma_common::AppMessage,
+    pub message: crate::AppMessage,
     pub retry_after: u64,
 }
 

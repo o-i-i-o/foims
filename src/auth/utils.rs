@@ -1,9 +1,9 @@
 //! 认证辅助工具。
 
-use crate::config::{Config, parse_duration};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{Duration, Utc};
 use dashmap::DashMap;
+use ipma_common::config::{Config, parse_duration};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -350,8 +350,8 @@ pub fn extract_cookie_from_parts(parts: &axum::http::request::Parts, name: &str)
 
 // 从 axum 请求 parts 中获取客户端信息（IP、User-Agent）
 pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String, String) {
-    let ip_address = crate::utils::common::get_real_ip_from_parts(parts);
-    let user_agent = crate::utils::common::get_user_agent_from_parts(parts);
+    let ip_address = ipma_common::net::get_real_ip_from_parts(parts);
+    let user_agent = ipma_common::net::get_user_agent_from_parts(parts);
     (ip_address, user_agent)
 }
 
@@ -371,7 +371,7 @@ pub async fn hash_password(password: &str) -> Result<String, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
+    use ipma_common::config::{
         Config, DatabaseConfig, InitConfig, JwtConfig as FileJwtConfig, ListenConfig,
         RateLimitConfig, ServerConfig, SnmpConfig,
     };

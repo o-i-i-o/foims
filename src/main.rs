@@ -18,8 +18,6 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use ipma::app_state::AppState;
-use ipma::config::Config;
-use ipma::db::DbPool;
 use ipma::routes::get_init_status;
 use ipma::routes::init_routes;
 use ipma::routes::static_files::get_web_dir;
@@ -32,6 +30,8 @@ use ipma::system::task_executors::{
 use ipma::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
 };
+use ipma_common::config::Config;
+use ipma_common::db::DbPool;
 use ipma_init::{DatabaseConfig as InitDatabaseConfig, InitContext};
 use ipma_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 
@@ -286,7 +286,7 @@ fn configure_app_services(
                 query_timeout_secs: app_state.config.database.query_timeout_secs,
                 health_check_interval_secs: app_state.config.database.health_check_interval_secs,
             },
-            ipma::config::get_config_file_path(),
+            ipma_common::config::get_config_file_path(),
             app_state.config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
@@ -406,7 +406,7 @@ async fn main() -> std::io::Result<()> {
 
     ipma_common::log_info!("system.config_loaded");
 
-    if let Err(e) = ipma::crypto::check_key_integrity() {
+    if let Err(e) = ipma_common::crypto::check_key_integrity() {
         ipma_common::log_error!("system.key_integrity_check_failed", error = e);
     }
 

@@ -5,9 +5,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::auth::utils::JwtUtils;
-use crate::config::Config;
-use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::db::DbPool;
+use ipma_common::config::Config;
+use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
+use ipma_common::db::DbPool;
 use ipma_common::{AppError, msg};
 use ipma_data_management::{DataError, DataProvider, DataResult, DatabaseConfig};
 use ipma_scheduler::TaskRegistry;

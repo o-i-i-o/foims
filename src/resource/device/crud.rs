@@ -1,13 +1,13 @@
 //! 设备 CRUD 与跨设备列表查询。
 
 use crate::app_state::AppState;
-use crate::crypto::encrypt_password_async;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::crypto::encrypt_password_async;
 use ipma_common::{AppError, msg};
 use ipma_models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use sqlx::Row;
@@ -457,9 +457,9 @@ pub async fn get_device(
     let cards = cards?;
 
     let (decrypted_community, decrypted_auth, decrypted_priv) = tokio::join!(
-        crate::crypto::decrypt_credential_async(device.snmp_community.as_deref()),
-        crate::crypto::decrypt_credential_async(device.snmp_auth_password.as_deref()),
-        crate::crypto::decrypt_credential_async(device.snmp_priv_password.as_deref()),
+        ipma_common::crypto::decrypt_credential_async(device.snmp_community.as_deref()),
+        ipma_common::crypto::decrypt_credential_async(device.snmp_auth_password.as_deref()),
+        ipma_common::crypto::decrypt_credential_async(device.snmp_priv_password.as_deref()),
     );
     let decrypted_community = decrypted_community?;
     let decrypted_auth = decrypted_auth?;

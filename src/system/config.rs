@@ -14,24 +14,24 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::config::{Config, I18nConfig, ServerConfig};
 use crate::routes::static_files::AppJson;
 use crate::system::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
 use ipma_common::AppError;
+use ipma_common::config::{Config, I18nConfig, ServerConfig};
 use ipma_common::{log_error, log_info, log_warn, msg};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSystemConfigRequest {
-    pub database: Option<crate::config::DatabaseConfig>,
+    pub database: Option<ipma_common::config::DatabaseConfig>,
     pub server: Option<ServerConfig>,
-    pub jwt: Option<crate::config::JwtConfig>,
-    pub init: Option<crate::config::InitConfig>,
-    pub rate_limit: Option<crate::config::RateLimitConfig>,
-    pub snmp: Option<crate::config::SnmpConfig>,
+    pub jwt: Option<ipma_common::config::JwtConfig>,
+    pub init: Option<ipma_common::config::InitConfig>,
+    pub rate_limit: Option<ipma_common::config::RateLimitConfig>,
+    pub snmp: Option<ipma_common::config::SnmpConfig>,
 }
 
 pub fn record_start_time() {
@@ -47,7 +47,7 @@ pub fn init_start_time() {
 }
 
 async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
 
     let toml_str = toml::to_string_pretty(config)?;
@@ -165,7 +165,7 @@ pub async fn update_system_config(
         new_config.snmp = snmp;
     }
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
 
     save_config_to_file(&new_config).await.map_err(|e| {
@@ -331,7 +331,7 @@ pub async fn disable_init_mode(
     let mut new_config = state.config.clone();
     new_config.init.enabled = false;
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -399,7 +399,7 @@ pub async fn restore_config(
         new_config.jwt.secret = state.config.jwt.secret.clone();
     }
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -456,7 +456,7 @@ pub async fn update_session_timeout_config(
 
     current_config.server.session_timeout = req.session_timeout;
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -527,7 +527,7 @@ pub async fn update_language_setting(
     i18n.log_language = language;
     current_config.i18n = Some(i18n);
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -568,7 +568,7 @@ pub async fn update_page_timeout_config(
 
     current_config.server.page_timeout = req.page_timeout;
 
-    let config_path = crate::config::get_config_file_path();
+    let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
