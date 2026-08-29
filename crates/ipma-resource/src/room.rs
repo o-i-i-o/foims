@@ -1,12 +1,12 @@
 //! 房间资源管理（含网络绑定与子资源级联）。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{
     CabinetBrief, NetOutletBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate,
@@ -18,8 +18,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-pub async fn get_rooms(
-    State(state): State<Arc<AppState>>,
+pub async fn get_rooms<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -35,7 +35,7 @@ pub async fn get_rooms(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = ipma_common::net::escape_like(&search);
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => " ORDER BY r.name DESC",
@@ -211,8 +211,8 @@ pub async fn get_rooms(
     ))
 }
 
-pub async fn create_room(
-    State(state): State<Arc<AppState>>,
+pub async fn create_room<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<RoomCreate>,
 ) -> Result<Response, AppError> {
@@ -297,8 +297,8 @@ pub async fn create_room(
 /// 完整详情接口的组装视图查询较多，而编辑弹窗需要
 /// name/room_type/org_id/description/networks 以及工位/机柜/信息点子项，
 /// 此处在一次并行查询内取齐，避免编辑保存时空列表同步误删既有子项。
-pub async fn get_room_brief(
-    State(state): State<Arc<AppState>>,
+pub async fn get_room_brief<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -373,8 +373,8 @@ pub async fn get_room_brief(
     ))
 }
 
-pub async fn get_room(
-    State(state): State<Arc<AppState>>,
+pub async fn get_room<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let room = sqlx::query_as::<_, Room>(
@@ -514,8 +514,8 @@ pub async fn get_room(
     ))
 }
 
-pub async fn update_room(
-    State(state): State<Arc<AppState>>,
+pub async fn update_room<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<RoomUpdate>,
@@ -601,8 +601,8 @@ pub async fn update_room(
     Ok(ipma_common::ok_json(room, "server.room.updated"))
 }
 
-pub async fn delete_room(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_room<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -666,8 +666,8 @@ pub async fn delete_room(
     Ok(ipma_common::ok_json((), "server.room.deleted"))
 }
 
-pub async fn get_room_networks(
-    State(state): State<Arc<AppState>>,
+pub async fn get_room_networks<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
@@ -696,8 +696,8 @@ pub async fn get_room_networks(
     ))
 }
 
-pub async fn sync_room_children(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_room_children<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<RoomChildrenSync>,
@@ -761,8 +761,8 @@ pub async fn sync_room_children(
     Ok(ipma_common::ok_json((), "server.room.children_synced"))
 }
 
-pub async fn sync_room_net_outlets(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_room_net_outlets<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<RoomNetOutletsSync>,

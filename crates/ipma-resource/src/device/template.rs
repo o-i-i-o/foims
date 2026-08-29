@@ -1,10 +1,10 @@
 //! 设备模板管理。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::{AppError, msg};
 use ipma_models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use serde_json::json;
@@ -13,8 +13,8 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// 获取所有设备模板
-pub async fn get_device_templates(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_templates<P: DbProvider>(
+    State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
     let templates = sqlx::query_as::<_, DeviceTemplateSummary>(
         "SELECT id, name, device_type, brand, model FROM device_templates ORDER BY created_at ASC",
@@ -29,8 +29,8 @@ pub async fn get_device_templates(
 }
 
 /// 获取单个设备模板
-pub async fn get_device_template(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let template = sqlx::query_as::<_, DeviceTemplate>(
@@ -49,8 +49,8 @@ pub async fn get_device_template(
 }
 
 /// 删除设备模板
-pub async fn delete_device_template(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_device_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -98,8 +98,8 @@ pub async fn delete_device_template(
 }
 
 /// 更新设备模板
-pub async fn update_device_template(
-    State(state): State<Arc<AppState>>,
+pub async fn update_device_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<UpdateDeviceTemplateRequest>,

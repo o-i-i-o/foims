@@ -1,22 +1,22 @@
 //! 信息点（net_outlets）资源管理。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::msg;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-pub async fn get_net_outlets(
-    State(state): State<Arc<AppState>>,
+pub async fn get_net_outlets<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -33,7 +33,7 @@ pub async fn get_net_outlets(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = ipma_common::net::escape_like(&search);
     let parsed_room_id = room_id
         .as_ref()
         .map(|id| {
@@ -109,8 +109,8 @@ pub async fn get_net_outlets(
     ))
 }
 
-pub async fn create_net_outlet(
-    State(state): State<Arc<AppState>>,
+pub async fn create_net_outlet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetOutletCreate>,
 ) -> Result<Response, AppError> {
@@ -173,8 +173,8 @@ pub async fn create_net_outlet(
     ))
 }
 
-pub async fn get_net_outlet(
-    State(state): State<Arc<AppState>>,
+pub async fn get_net_outlet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let net_outlet = sqlx::query_as::<_, NetOutletWithDetails>(
@@ -193,8 +193,8 @@ pub async fn get_net_outlet(
     ))
 }
 
-pub async fn update_net_outlet(
-    State(state): State<Arc<AppState>>,
+pub async fn update_net_outlet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetOutletUpdate>,
@@ -276,8 +276,8 @@ pub async fn update_net_outlet(
     ))
 }
 
-pub async fn delete_net_outlet(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_net_outlet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

@@ -1,13 +1,13 @@
 //! 设备 CRUD 与跨设备列表查询。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::crypto::encrypt_password_async;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use sqlx::Row;
@@ -18,8 +18,8 @@ use validator::Validate;
 
 use super::validate_device_type;
 
-pub async fn get_devices(
-    State(state): State<Arc<AppState>>,
+pub async fn get_devices<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -103,7 +103,7 @@ pub async fn get_devices(
         format!("WHERE {}", where_parts.join(" AND "))
     };
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = ipma_common::net::escape_like(&search);
 
     let count_sql = sqlx::AssertSqlSafe(format!(
         "SELECT COUNT(*) FROM devices_with_details d {where_clause}"
@@ -187,8 +187,8 @@ pub async fn get_devices(
     ))
 }
 
-pub async fn create_device(
-    State(state): State<Arc<AppState>>,
+pub async fn create_device<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<DeviceCreate>,
 ) -> Result<Response, AppError> {
@@ -425,8 +425,8 @@ pub async fn create_device(
     Ok(ipma_common::ok_json(device, "server.device.created"))
 }
 
-pub async fn get_device(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -479,8 +479,8 @@ pub async fn get_device(
     Ok(ipma_common::ok_json(result, "server.device.fetched"))
 }
 
-pub async fn update_device(
-    State(state): State<Arc<AppState>>,
+pub async fn update_device<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<DeviceUpdate>,
@@ -744,8 +744,8 @@ pub async fn update_device(
     Ok(ipma_common::ok_json(result, "server.device.updated"))
 }
 
-pub async fn delete_device(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_device<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

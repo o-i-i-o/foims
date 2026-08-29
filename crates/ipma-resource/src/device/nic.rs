@@ -10,10 +10,10 @@ use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::resource::ip::detect_ip_version;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
+use crate::ip::detect_ip_version;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::{AppError, msg};
 use ipma_models::{
     DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
@@ -100,8 +100,8 @@ pub async fn get_or_create_auto_nic(
 }
 
 /// 同步设备的网卡配置（网卡 → 网口 → IP），整体替换
-pub async fn sync_device_network_config(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_device_network_config<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<DeviceNetworkConfigSync>,
@@ -310,7 +310,7 @@ pub async fn apply_network_config(
 
                 let network_id: Option<Uuid> = if ip.network_id.is_some() {
                     // 显式指定网段时校验其必须属于设备所在房间，确保数据一致性
-                    crate::utils::validate_network_in_room(&mut *tx, room_id, ip.network_id)
+                    crate::helpers::validate_network_in_room(&mut *tx, room_id, ip.network_id)
                         .await?;
                     ip.network_id
                 } else {
@@ -446,8 +446,8 @@ pub async fn fetch_device_network_config(
 }
 
 /// 获取设备的网卡配置（含嵌套网口、IP）—— GET /api/resources/devices/{id}/nics
-pub async fn get_device_nics(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_nics<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let device_type: String = sqlx::query_scalar("SELECT device_type FROM devices WHERE id = $1")

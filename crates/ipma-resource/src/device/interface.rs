@@ -26,10 +26,10 @@ use super::nic::{
     get_or_create_auto_nic, port_group_prefix, validate_interface_role, validate_physical_type,
 };
 use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
@@ -66,8 +66,8 @@ fn validate_port_status(status: &str) -> Result<(), AppError> {
 }
 
 /// 分页获取指定设备的接口列表。
-pub async fn get_device_interfaces(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_interfaces<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -95,13 +95,13 @@ pub async fn get_device_interfaces(
 }
 
 /// 分页获取全部设备接口（跨设备视图，支持关键字模糊匹配）。
-pub async fn get_all_device_interfaces(
-    State(state): State<Arc<AppState>>,
+pub async fn get_all_device_interfaces<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let search = query.get("search").cloned().unwrap_or_default();
-    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
+    let search_pattern = (!search.is_empty()).then(|| ipma_common::net::escape_like(&search));
 
     let mut count_builder = QueryBuilder::<Postgres>::new(
         "SELECT COUNT(*) FROM device_interfaces di JOIN devices d ON di.device_id = d.id",
@@ -171,8 +171,8 @@ async fn resolve_nic_id(
 ///
 /// 端口模态框/SNMP 同步创建的接口默认 `device_managed = false`
 /// （不在设备模态框展示）；设备模态框整体同步走 `nic::apply_network_config`。
-pub async fn create_device_interface(
-    State(state): State<Arc<AppState>>,
+pub async fn create_device_interface<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<DeviceInterfaceCreate>,
@@ -286,8 +286,8 @@ pub async fn create_device_interface(
 }
 
 /// 获取单个接口详情（含所属设备名）。
-pub async fn get_device_interface(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_interface<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(interface_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(sqlx::AssertSqlSafe(format!(
@@ -313,8 +313,8 @@ pub async fn get_device_interface(
 /// （MAC/描述/速率）为 `Option<Option<T>>`，
 /// `Some(None)` 显式置空、外层 `None` 不修改；`device_managed`
 /// 缺失不修改（SNMP 覆盖同步时保留托管状态）。
-pub async fn update_device_interface(
-    State(state): State<Arc<AppState>>,
+pub async fn update_device_interface<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(interface_id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<DeviceInterfaceUpdate>,
@@ -424,8 +424,8 @@ pub async fn update_device_interface(
 /// 接口可能被 IP 地址与物理链路引用，在同一事务内先清理关联数据
 /// 再删除接口，避免外键约束与防删触发器（cable_links 侧）报错；
 /// 随后清理不再被引用的空网卡（自动板卡随之消失）。
-pub async fn delete_device_interface(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_device_interface<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(interface_id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -519,8 +519,8 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
 /// DO NOTHING`：已存在的接口跳过，未知的入库，单次往返完成。
 /// 网卡按端口名前缀自动生成板卡；同步来源接口一律不托管
 /// （`device_managed = false`，不进设备模态框）。
-pub async fn sync_ports_from_snmp(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_ports_from_snmp<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let switch_data = sqlx::query_as::<_, DeviceForSnmp>(

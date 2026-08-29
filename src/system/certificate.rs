@@ -26,7 +26,7 @@ use ipma_x509_manager::{
 
 use crate::app_state::AppState;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
+use crate::utils::{RequestMeta, log_op_best_effort};
 use ipma_auth::extractor::AdminUser;
 use ipma_common::AppError;
 

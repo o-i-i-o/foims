@@ -1,14 +1,14 @@
 //! 网络区域与网段管理。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
-use crate::utils::parse_network_from_row;
+use crate::helpers::parse_network_from_row;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{log_error, log_info, msg};
 use ipma_models::{
     Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate, NetworkUpdate,
@@ -36,8 +36,8 @@ fn map_network_unique_violation(e: sqlx::Error, name: &str) -> AppError {
     AppError::from(e)
 }
 
-pub async fn get_networks(
-    State(state): State<Arc<AppState>>,
+pub async fn get_networks<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -123,7 +123,7 @@ pub async fn get_networks(
         let mut count_sql = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query));
 
         if !search.is_empty() {
-            let pattern = crate::utils::escape_like(&search);
+            let pattern = ipma_common::net::escape_like(&search);
             count_sql = count_sql.bind(pattern);
         }
 
@@ -132,22 +132,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&name_filter);
+            let pattern = ipma_common::net::escape_like(&name_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&network_region_filter);
+            let pattern = ipma_common::net::escape_like(&network_region_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&ipv4_filter);
+            let pattern = ipma_common::net::escape_like(&ipv4_filter);
             count_sql = count_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&ipv6_filter);
+            let pattern = ipma_common::net::escape_like(&ipv6_filter);
             count_sql = count_sql.bind(pattern);
         }
 
@@ -216,7 +216,7 @@ pub async fn get_networks(
         let mut data_sql = sqlx::query(sqlx::AssertSqlSafe(data_query));
 
         if !search.is_empty() {
-            let pattern = crate::utils::escape_like(&search);
+            let pattern = ipma_common::net::escape_like(&search);
             data_sql = data_sql.bind(pattern);
         }
 
@@ -225,22 +225,22 @@ pub async fn get_networks(
         }
 
         if !name_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&name_filter);
+            let pattern = ipma_common::net::escape_like(&name_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !network_region_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&network_region_filter);
+            let pattern = ipma_common::net::escape_like(&network_region_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv4_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&ipv4_filter);
+            let pattern = ipma_common::net::escape_like(&ipv4_filter);
             data_sql = data_sql.bind(pattern);
         }
 
         if !ipv6_filter.is_empty() {
-            let pattern = crate::utils::escape_like(&ipv6_filter);
+            let pattern = ipma_common::net::escape_like(&ipv6_filter);
             data_sql = data_sql.bind(pattern);
         }
 
@@ -280,8 +280,8 @@ pub async fn get_networks(
     ))
 }
 
-pub async fn create_network(
-    State(state): State<Arc<AppState>>,
+pub async fn create_network<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkCreate>,
 ) -> Result<Response, AppError> {
@@ -315,8 +315,8 @@ pub async fn create_network(
     let mut has_valid_cidr = false;
 
     if let Some(ipv4_cidr) = &req.ipv4_cidr {
-        if crate::utils::validate_cidr(ipv4_cidr)
-            && crate::utils::get_cidr_type(ipv4_cidr) == Some("ipv4")
+        if ipma_common::net::validate_cidr(ipv4_cidr)
+            && ipma_common::net::get_cidr_type(ipv4_cidr) == Some("ipv4")
         {
             ipv4_cidr_val = Some(ipv4_cidr.clone());
             has_valid_cidr = true;
@@ -328,8 +328,8 @@ pub async fn create_network(
     }
 
     if let Some(ipv6_cidr) = &req.ipv6_cidr {
-        if crate::utils::validate_cidr(ipv6_cidr)
-            && crate::utils::get_cidr_type(ipv6_cidr) == Some("ipv6")
+        if ipma_common::net::validate_cidr(ipv6_cidr)
+            && ipma_common::net::get_cidr_type(ipv6_cidr) == Some("ipv6")
         {
             ipv6_cidr_val = Some(ipv6_cidr.clone());
             has_valid_cidr = true;
@@ -345,12 +345,12 @@ pub async fn create_network(
     }
 
     // 校验网关格式及其是否落在对应 CIDR 网段内
-    crate::utils::validate_gateway_in_cidr(
+    ipma_common::net::validate_gateway_in_cidr(
         req.ipv4_gateway.as_deref(),
         ipv4_cidr_val.as_deref(),
         "ipv4",
     )?;
-    crate::utils::validate_gateway_in_cidr(
+    ipma_common::net::validate_gateway_in_cidr(
         req.ipv6_gateway.as_deref(),
         ipv6_cidr_val.as_deref(),
         "ipv6",
@@ -358,7 +358,7 @@ pub async fn create_network(
 
     // 校验网段 CIDR 是否属于所在区域的 CIDR 范围
     if let Some(ref ipv4) = ipv4_cidr_val
-        && !crate::utils::cidr_belongs_to_region(
+        && !ipma_common::net::cidr_belongs_to_region(
             ipv4,
             network_region.ipv4_cidrs.as_deref().unwrap_or_default(),
         )
@@ -369,7 +369,7 @@ pub async fn create_network(
     }
 
     if let Some(ref ipv6) = ipv6_cidr_val
-        && !crate::utils::cidr_belongs_to_region(
+        && !ipma_common::net::cidr_belongs_to_region(
             ipv6,
             network_region.ipv6_cidrs.as_deref().unwrap_or_default(),
         )
@@ -471,8 +471,8 @@ pub async fn create_network(
     Ok(ipma_common::ok_json(network, "server.network.created"))
 }
 
-pub async fn get_network(
-    State(state): State<Arc<AppState>>,
+pub async fn get_network<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let row = sqlx::query(
@@ -497,8 +497,8 @@ pub async fn get_network(
     Ok(ipma_common::ok_json(network, "server.network.fetched"))
 }
 
-pub async fn update_network(
-    State(state): State<Arc<AppState>>,
+pub async fn update_network<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkUpdate>,
@@ -581,7 +581,9 @@ pub async fn update_network(
 
     // 校验 CIDR 格式并检查重复
     if let Some(ref ipv4) = req.ipv4_cidr {
-        if !crate::utils::validate_cidr(ipv4) || crate::utils::get_cidr_type(ipv4) != Some("ipv4") {
+        if !ipma_common::net::validate_cidr(ipv4)
+            || ipma_common::net::get_cidr_type(ipv4) != Some("ipv4")
+        {
             return Err(AppError::Validation(msg(
                 "server.network.ipv4_cidr_invalid",
             )));
@@ -604,7 +606,7 @@ pub async fn update_network(
         }
 
         // 校验 IPv4 CIDR 是否属于所在区域的 CIDR 范围
-        if !crate::utils::cidr_belongs_to_region(
+        if !ipma_common::net::cidr_belongs_to_region(
             ipv4,
             target_network_region
                 .ipv4_cidrs
@@ -618,7 +620,9 @@ pub async fn update_network(
     }
 
     if let Some(ref ipv6) = req.ipv6_cidr {
-        if !crate::utils::validate_cidr(ipv6) || crate::utils::get_cidr_type(ipv6) != Some("ipv6") {
+        if !ipma_common::net::validate_cidr(ipv6)
+            || ipma_common::net::get_cidr_type(ipv6) != Some("ipv6")
+        {
             return Err(AppError::Validation(msg(
                 "server.network.ipv6_cidr_invalid",
             )));
@@ -641,7 +645,7 @@ pub async fn update_network(
         }
 
         // 校验 IPv6 CIDR 是否属于所在区域的 CIDR 范围
-        if !crate::utils::cidr_belongs_to_region(
+        if !ipma_common::net::cidr_belongs_to_region(
             ipv6,
             target_network_region
                 .ipv6_cidrs
@@ -666,7 +670,11 @@ pub async fn update_network(
         .as_ref()
         .or(current_network.ipv4_gateway.as_ref())
         .map(String::as_str);
-    crate::utils::validate_gateway_in_cidr(effective_ipv4_gateway, effective_ipv4_cidr, "ipv4")?;
+    ipma_common::net::validate_gateway_in_cidr(
+        effective_ipv4_gateway,
+        effective_ipv4_cidr,
+        "ipv4",
+    )?;
     let effective_ipv6_cidr = req
         .ipv6_cidr
         .as_ref()
@@ -677,7 +685,11 @@ pub async fn update_network(
         .as_ref()
         .or(current_network.ipv6_gateway.as_ref())
         .map(String::as_str);
-    crate::utils::validate_gateway_in_cidr(effective_ipv6_gateway, effective_ipv6_cidr, "ipv6")?;
+    ipma_common::net::validate_gateway_in_cidr(
+        effective_ipv6_gateway,
+        effective_ipv6_cidr,
+        "ipv6",
+    )?;
 
     sqlx::query(
         "UPDATE network_cidrs SET 
@@ -741,8 +753,8 @@ pub async fn update_network(
     Ok(ipma_common::ok_json(network, "server.network.updated"))
 }
 
-pub async fn delete_network(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_network<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -811,8 +823,8 @@ pub async fn delete_network(
     Ok(ipma_common::ok_json((), "server.network.deleted"))
 }
 
-pub async fn get_network_regions(
-    State(state): State<Arc<AppState>>,
+pub async fn get_network_regions<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -841,7 +853,7 @@ pub async fn get_network_regions(
             .fetch_one(&state.pool()?.get_conn())
             .await?
     } else {
-        let pattern = crate::utils::escape_like(&search);
+        let pattern = ipma_common::net::escape_like(&search);
         sqlx::query_scalar(
             "SELECT COUNT(*) FROM network_regions WHERE name ILIKE $1 OR description ILIKE $1",
         )
@@ -863,7 +875,7 @@ pub async fn get_network_regions(
             .fetch_all(&state.pool()?.get_conn())
             .await?
     } else {
-        let pattern = crate::utils::escape_like(&search);
+        let pattern = ipma_common::net::escape_like(&search);
         let sql = format!(
             "{base_select} WHERE name ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         );
@@ -881,8 +893,8 @@ pub async fn get_network_regions(
     ))
 }
 
-pub async fn create_network_region(
-    State(state): State<Arc<AppState>>,
+pub async fn create_network_region<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkRegionCreate>,
 ) -> Result<Response, AppError> {
@@ -945,8 +957,8 @@ pub async fn create_network_region(
     ))
 }
 
-pub async fn get_network_region(
-    State(state): State<Arc<AppState>>,
+pub async fn get_network_region<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let network_region = sqlx::query_as::<_, NetworkRegion>(
@@ -964,8 +976,8 @@ pub async fn get_network_region(
     ))
 }
 
-pub async fn update_network_region(
-    State(state): State<Arc<AppState>>,
+pub async fn update_network_region<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkRegionUpdate>,
@@ -1044,8 +1056,8 @@ pub async fn update_network_region(
     ))
 }
 
-pub async fn delete_network_region(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_network_region<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -1096,10 +1108,10 @@ mod tests {
     //! 本模块覆盖 network.rs 处理器所依赖的纯校验链
     //!（CIDR 格式/类型、网关归属、区域包含），不触及数据库。
 
-    use crate::utils::{
+    use ipma_common::AppError;
+    use ipma_common::net::{
         cidr_belongs_to_region, get_cidr_type, validate_cidr, validate_gateway_in_cidr,
     };
-    use ipma_common::AppError;
 
     // ==================== CIDR 格式校验（IPv4） ====================
 

@@ -1,20 +1,68 @@
-//! 业务侧通用工具（网络业务查询、站内通知与 MAC 变更告警）。
+//! 资源域内部辅助：网络查询、房间校验、站内通知与 MAC 变更告警。
 //!
-//! 请求元信息、令牌黑名单与操作日志已迁至 ipma-auth；纯网络/HTTP 工具
-//! 已下沉至 `ipma_common::net`（经 `utils::mod` 再导出保持路径稳定）。
+//! 仅由本 crate 的各资源模块使用；不对外再导出。
 
 use uuid::Uuid;
 
-use ipma_common::{log_error, log_info, log_warn};
-
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_common::{log_error, log_info, log_warn};
+
+// ==================== 网络业务查询 ====================
+
+pub const NETWORK_QUERY: &str = r"
+    SELECT n.id, n.name, n.network_region_id, nt.name as network_region,
+           n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT,
+           host(n.ipv4_gateway), host(n.ipv6_gateway),
+           (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
+           (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
+           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
+    FROM network_cidrs n
+    JOIN network_regions nt ON n.network_region_id = nt.id
+    WHERE n.id = $1
+";
+
+pub fn parse_network_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<ipma_models::Network, AppError> {
+    use sqlx::Row;
+
+    Ok(ipma_models::Network {
+        id: row.get(0),
+        name: row.get(1),
+        network_region_id: row.get(2),
+        network_region: row.get(3),
+        ipv4_cidr: row.get(4),
+        ipv6_cidr: row.get(5),
+        ipv4_gateway: row.get(6),
+        ipv6_gateway: row.get(7),
+        ipv4_dns: row
+            .get::<Option<serde_json::Value>, _>(8)
+            .map(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    AppError::Internal(msg("server.common.deserialize_failed").with("error", e))
+                })
+            })
+            .transpose()?,
+        ipv6_dns: row
+            .get::<Option<serde_json::Value>, _>(9)
+            .map(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    AppError::Internal(msg("server.common.deserialize_failed").with("error", e))
+                })
+            })
+            .transpose()?,
+        description: row.get(10),
+        created_at: row.get(11),
+        updated_at: row.get(12),
+    })
+}
 
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
     network_id: Option<Uuid>,
-) -> Result<(), ipma_common::AppError>
+) -> Result<(), AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -31,9 +79,7 @@ where
     .await?;
 
     if !network_in_room {
-        return Err(ipma_common::AppError::Validation(msg(
-            "server.network.not_in_room",
-        )));
+        return Err(AppError::Validation(msg("server.network.not_in_room")));
     }
 
     Ok(())
@@ -42,7 +88,7 @@ where
 pub async fn get_room_id_by_workstation<'e, E>(
     executor: E,
     workstation_id: Uuid,
-) -> Result<Option<Uuid>, ipma_common::AppError>
+) -> Result<Option<Uuid>, AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -59,7 +105,7 @@ where
 pub async fn get_room_id_by_position<'e, E>(
     executor: E,
     position_id: Uuid,
-) -> Result<Option<Uuid>, ipma_common::AppError>
+) -> Result<Option<Uuid>, AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -74,16 +120,7 @@ where
     Ok(room_id)
 }
 
-// ==================== 令牌黑名单 / 请求元信息 / 操作日志（已迁至 ipma-auth） ====================
-
-pub use ipma_auth::meta::{
-    OperationLogParams, RequestMeta, log_op_best_effort, log_system_operation,
-};
-pub use ipma_auth::utils::{
-    cleanup_expired_revoked_tokens, cleanup_old_token_usage, is_token_revoked, revoke_token,
-};
-
-// ==================== 通知与告警 ====================
+// ==================== 站内通知与 MAC 变更告警 ====================
 
 /// 组装站内通知内容：以 JSON 形式存储「消息 key + 动态参数」，
 /// 前端展示时解析并按用户语言翻译；历史遗留的纯文本内容原样展示。
@@ -95,6 +132,29 @@ fn encode_notification_content(key: &str, params: &[(&str, &str)]) -> String {
     serde_json::json!({ "key": key, "params": params }).to_string()
 }
 
+/// 写入一条站内通知（user_id 为 None 时为广播占位历史行）。
+pub async fn create_notification(
+    pool: &sqlx::PgPool,
+    title: &str,
+    content: &str,
+    notification_type: &str,
+    user_id: Option<&Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        .bind(Uuid::new_v4())
+        .bind(user_id)
+        .bind(title)
+        .bind(content)
+        .bind(notification_type)
+        .bind(false)
+        .bind(chrono::Utc::now())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// 工作站 MAC 变更告警：站内通知全部管理员并发送邮件（SMTP 未配置时降级）。
 pub async fn send_mac_change_notification(
     pool: &sqlx::PgPool,
     workstation_id: &Uuid,
@@ -138,7 +198,7 @@ pub async fn send_mac_change_notification(
     .await?;
 
     for admin_id in &admin_ids {
-        crate::log::notification::create_notification(
+        create_notification(
             pool,
             "server.notification.mac_change.title",
             &content,
@@ -184,60 +244,6 @@ pub async fn send_mac_change_notification(
     }
 
     Ok(())
-}
-
-// ==================== 网络查询工具 ====================
-
-pub const NETWORK_QUERY: &str = r"
-    SELECT n.id, n.name, n.network_region_id, nt.name as network_region,
-           n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT,
-           host(n.ipv4_gateway), host(n.ipv6_gateway),
-           (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
-           (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
-    FROM network_cidrs n
-    JOIN network_regions nt ON n.network_region_id = nt.id
-    WHERE n.id = $1
-";
-
-pub fn parse_network_from_row(
-    row: &sqlx::postgres::PgRow,
-) -> Result<ipma_models::Network, ipma_common::AppError> {
-    use sqlx::Row;
-
-    Ok(ipma_models::Network {
-        id: row.get(0),
-        name: row.get(1),
-        network_region_id: row.get(2),
-        network_region: row.get(3),
-        ipv4_cidr: row.get(4),
-        ipv6_cidr: row.get(5),
-        ipv4_gateway: row.get(6),
-        ipv6_gateway: row.get(7),
-        ipv4_dns: row
-            .get::<Option<serde_json::Value>, _>(8)
-            .map(|v| {
-                serde_json::from_value(v).map_err(|e| {
-                    ipma_common::AppError::Internal(
-                        msg("server.common.deserialize_failed").with("error", e),
-                    )
-                })
-            })
-            .transpose()?,
-        ipv6_dns: row
-            .get::<Option<serde_json::Value>, _>(9)
-            .map(|v| {
-                serde_json::from_value(v).map_err(|e| {
-                    ipma_common::AppError::Internal(
-                        msg("server.common.deserialize_failed").with("error", e),
-                    )
-                })
-            })
-            .transpose()?,
-        description: row.get(10),
-        created_at: row.get(11),
-        updated_at: row.get(12),
-    })
 }
 
 // ==================== 单元测试 ====================

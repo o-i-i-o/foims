@@ -14,10 +14,10 @@ use sqlx::{PgExecutor, Postgres, QueryBuilder};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{
     IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
@@ -55,8 +55,8 @@ fn push_workstation_filters(
 }
 
 /// 分页获取工位列表（支持关键字、机房过滤与白名单排序）。
-pub async fn get_workstations(
-    State(state): State<Arc<AppState>>,
+pub async fn get_workstations<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -71,7 +71,7 @@ pub async fn get_workstations(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
+    let search_pattern = (!search.is_empty()).then(|| ipma_common::net::escape_like(&search));
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
 
     // ORDER BY 白名单，未匹配时回落默认序，避免注入
@@ -124,8 +124,8 @@ pub async fn get_workstations(
 }
 
 /// 创建工位（同房间内名称唯一，检查与写入在同一事务内）。
-pub async fn create_workstation(
-    State(state): State<Arc<AppState>>,
+pub async fn create_workstation<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<WorkstationCreate>,
 ) -> Result<Response, AppError> {
@@ -243,8 +243,8 @@ async fn fetch_workstation_ips(
 }
 
 /// 获取工位详情（含设备 IP 明细）。
-pub async fn get_workstation(
-    State(state): State<Arc<AppState>>,
+pub async fn get_workstation<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -261,8 +261,8 @@ pub async fn get_workstation(
 
 /// 更新工位（名称/房间/描述缺省保留旧值；管理人固定以员工 id 赋值，
 /// 组织人员是该字段唯一来源，`manager_employee_id = NULL` 表示清空）。
-pub async fn update_workstation(
-    State(state): State<Arc<AppState>>,
+pub async fn update_workstation<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<WorkstationUpdate>,
@@ -327,8 +327,8 @@ pub async fn update_workstation(
 }
 
 /// 删除工位（连同布局数据一并清理，同一事务内完成）。
-pub async fn delete_workstation(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_workstation<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

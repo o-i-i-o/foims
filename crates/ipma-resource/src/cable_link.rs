@@ -16,11 +16,11 @@ use sqlx::{PgExecutor, Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 
 /// 合法的端点资源类型。
@@ -113,8 +113,8 @@ async fn fetch_link_by_id(
 }
 
 /// 分页获取物理链路列表，支持端点（A/B 双向）、链路类型过滤与白名单排序。
-pub async fn get_cable_links(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cable_links<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -205,8 +205,8 @@ async fn ensure_interfaces_on_different_devices(
 }
 
 /// 创建物理链路（端点校验后按规范序写入）。
-pub async fn create_cable_link(
-    State(state): State<Arc<AppState>>,
+pub async fn create_cable_link<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<CableLinkCreate>,
 ) -> Result<Response, AppError> {
@@ -287,8 +287,8 @@ pub async fn create_cable_link(
 }
 
 /// 获取单条物理链路详情。
-pub async fn get_cable_link(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cable_link<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let link = fetch_link_by_id(&state.pool()?.get_conn(), id)
@@ -302,8 +302,8 @@ pub async fn get_cable_link(
 ///
 /// 端点四字段（A/B 类型与 id）必须同时提供才会更新；可空字段
 /// （标签/长度）以 `Some(None)` 表示清除、字段缺失表示不修改。
-pub async fn update_cable_link(
-    State(state): State<Arc<AppState>>,
+pub async fn update_cable_link<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<CableLinkUpdate>,
@@ -419,8 +419,8 @@ pub async fn update_cable_link(
 }
 
 /// 删除物理链路。
-pub async fn delete_cable_link(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_cable_link<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -464,8 +464,8 @@ pub struct CablePathQuery {
 }
 
 /// 查询两端点之间的线缆路径（调用数据库 `find_cable_path` 函数逐跳返回）。
-pub async fn get_cable_path(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cable_path<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(q): Query<CablePathQuery>,
 ) -> Result<Response, AppError> {
     validate_endpoint_type(&q.from_type)?;

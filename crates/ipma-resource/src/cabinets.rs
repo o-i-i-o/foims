@@ -5,13 +5,13 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::msg;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_models::{
     Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
     PatchPanelBrief, PositionBrief, PositionSyncItem,
@@ -21,8 +21,8 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-pub async fn get_cabinets(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cabinets<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -39,7 +39,7 @@ pub async fn get_cabinets(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = ipma_common::net::escape_like(&search);
     let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -160,8 +160,8 @@ pub async fn get_cabinets(
     ))
 }
 
-pub async fn get_cabinets_by_network_region(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cabinets_by_network_region<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(region_id_str): Path<String>,
     Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -205,8 +205,8 @@ pub async fn get_cabinets_by_network_region(
     Ok(ipma_common::ok_json(cabinets, "server.cabinet.fetched"))
 }
 
-pub async fn create_cabinet(
-    State(state): State<Arc<AppState>>,
+pub async fn create_cabinet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetCreate>,
 ) -> Result<Response, AppError> {
@@ -269,8 +269,8 @@ pub async fn create_cabinet(
     Ok(ipma_common::ok_json(cabinet, "server.cabinet.created"))
 }
 
-pub async fn get_cabinet(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cabinet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let cabinet = sqlx::query_as::<_, Cabinet>(
@@ -341,8 +341,8 @@ pub async fn get_cabinet(
     ))
 }
 
-pub async fn update_cabinet(
-    State(state): State<Arc<AppState>>,
+pub async fn update_cabinet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetUpdate>,
@@ -402,8 +402,8 @@ pub async fn update_cabinet(
     Ok(ipma_common::ok_json(cabinet, "server.cabinet.updated"))
 }
 
-pub async fn delete_cabinet(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_cabinet<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -466,8 +466,8 @@ pub async fn delete_cabinet(
     Ok(ipma_common::ok_json((), "server.cabinet.deleted"))
 }
 
-pub async fn get_cabinet_networks(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cabinet_networks<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
@@ -499,8 +499,8 @@ pub async fn get_cabinet_networks(
     ))
 }
 
-pub async fn sync_cabinet_positions(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_cabinet_positions<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetPositionsSync>,

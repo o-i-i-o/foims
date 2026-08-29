@@ -1,12 +1,12 @@
 //! 配线架资源管理。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{CabinetPatchPanelsSync, PatchPanelWithDetails};
 use std::collections::HashMap;
@@ -15,8 +15,8 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// 配线架列表（供线路端点选择等场景使用），按机柜过滤
-pub async fn get_patch_panels(
-    State(state): State<Arc<AppState>>,
+pub async fn get_patch_panels<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -33,7 +33,7 @@ pub async fn get_patch_panels(
         .cloned()
         .unwrap_or_else(|| "asc".to_string());
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = ipma_common::net::escape_like(&search);
     let parsed_cabinet_id = cabinet_id
         .as_ref()
         .map(|id| {
@@ -111,8 +111,8 @@ pub async fn get_patch_panels(
 }
 
 /// 同步机柜下的配线架（独立表，隶属机柜）
-pub async fn sync_cabinet_patch_panels(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_cabinet_patch_panels<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetPatchPanelsSync>,

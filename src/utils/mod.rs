@@ -1,11 +1,15 @@
-//! 工具模块（业务侧通用函数）。
+//! 工具模块。
 //!
-//! 纯网络/HTTP 工具、分页与限流已下沉至 ipma-common，此处经模块再导出
-//! 保持 `crate::utils::...` 调用路径稳定；业务耦合部分见 [`common`]。
+//! 纯网络/HTTP 工具、分页与限流下沉至 ipma-common；请求元信息、令牌黑
+//! 名单与操作日志迁至 ipma-auth；资源域业务辅助迁至 ipma-resource。
+//! 此处经再导出保持 `crate::utils::...` 调用路径稳定。
 
-pub mod common;
-
-pub use common::*;
+pub use ipma_auth::meta::{
+    OperationLogParams, RequestMeta, log_op_best_effort, log_system_operation,
+};
+pub use ipma_auth::utils::{
+    cleanup_expired_revoked_tokens, cleanup_old_token_usage, is_token_revoked, revoke_token,
+};
 pub use ipma_common::net::*;
 pub use ipma_common::pagination;
 pub use ipma_common::rate_limit;

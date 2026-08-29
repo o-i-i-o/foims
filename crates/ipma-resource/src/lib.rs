@@ -3,6 +3,7 @@
 pub mod cabinets;
 pub mod cable_link;
 pub mod device;
+pub mod helpers;
 pub mod ip;
 pub mod net_outlet;
 pub mod network;

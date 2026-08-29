@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.89"
+version = "0.15.90"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -2106,6 +2106,7 @@ dependencies = [
  "ipma-init",
  "ipma-models",
  "ipma-organization",
+ "ipma-resource",
  "ipma-scheduler",
  "ipma-visualization",
  "ipma-x509-manager",
@@ -2249,6 +2250,28 @@ dependencies = [
  "ipma-models",
  "serde_json",
  "sqlx",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "ipma-resource"
+version = "0.1.0"
+dependencies = [
+ "async-snmp",
+ "axum",
+ "chrono",
+ "dashmap",
+ "ipma-auth",
+ "ipma-common",
+ "ipma-models",
+ "ipnetwork",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
  "uuid",
  "validator",
 ]

@@ -22,27 +22,6 @@ use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
 use crate::log::{get_login_logs, get_operation_logs};
-use crate::resource::{
-    auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, create_cabinet,
-    create_cabinet_position, create_cable_link, create_device, create_device_interface,
-    create_device_ip, create_net_outlet, create_network, create_network_region, create_room,
-    create_workstation, delete_cabinet, delete_cabinet_position, delete_cable_link, delete_device,
-    delete_device_interface, delete_device_template, delete_net_outlet, delete_network,
-    delete_network_region, delete_room, delete_workstation, get_all_device_interfaces,
-    get_available_ips, get_cabinet, get_cabinet_networks, get_cabinet_position, get_cabinets,
-    get_cabinets_by_network_region, get_cable_link, get_cable_links, get_cable_path, get_device,
-    get_device_info_snmp, get_device_interface, get_device_interfaces, get_device_ips,
-    get_device_lldp_neighbors, get_device_mac_table, get_device_macs_from_db, get_device_nics,
-    get_device_ports_snmp, get_device_template, get_device_templates, get_devices, get_ip_managers,
-    get_net_outlet, get_net_outlets, get_network, get_network_region, get_network_regions,
-    get_networks, get_patch_panels, get_positions, get_room, get_room_brief, get_room_networks,
-    get_rooms, get_workstation, get_workstations, pull_ip_managers, sync_cabinet_patch_panels,
-    sync_cabinet_positions, sync_device_network_config, sync_lldp_from_snmp, sync_ports_from_snmp,
-    sync_room_children, sync_room_net_outlets, test_snmp_connection, test_snmp_connection_by_id,
-    update_cabinet, update_cabinet_position, update_cable_link, update_device,
-    update_device_interface, update_device_template, update_net_outlet, update_network,
-    update_network_region, update_room, update_workstation,
-};
 use crate::routes::static_files::AppJson;
 use crate::system::certificate;
 use crate::system::config::{
@@ -316,100 +295,132 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 下拉专用精简选项端点（id+name，仅登录即可读）
         .route(
             "/api/resources/options/{resource}",
-            get(crate::resource::options::get_resource_options),
+            get(ipma_resource::options::get_resource_options::<AppState>),
         )
         // 网络管理
         .route(
             "/api/resources/networks",
-            get(get_networks).post(create_network),
+            get(ipma_resource::get_networks::<AppState>)
+                .post(ipma_resource::create_network::<AppState>),
         )
         .route(
             "/api/resources/networks/{id}",
-            get(get_network).put(update_network).delete(delete_network),
+            get(ipma_resource::get_network::<AppState>)
+                .put(ipma_resource::update_network::<AppState>)
+                .delete(ipma_resource::delete_network::<AppState>),
         )
         // 网络区域管理
         .route(
             "/api/resources/network-regions",
-            get(get_network_regions).post(create_network_region),
+            get(ipma_resource::get_network_regions::<AppState>)
+                .post(ipma_resource::create_network_region::<AppState>),
         )
         .route(
             "/api/resources/network-regions/{id}",
-            get(get_network_region)
-                .put(update_network_region)
-                .delete(delete_network_region),
+            get(ipma_resource::get_network_region::<AppState>)
+                .put(ipma_resource::update_network_region::<AppState>)
+                .delete(ipma_resource::delete_network_region::<AppState>),
         )
         .route(
             "/api/resources/network-regions/{id}/cabinets",
-            get(get_cabinets_by_network_region),
+            get(ipma_resource::get_cabinets_by_network_region::<AppState>),
         )
         // 房间管理
-        .route("/api/resources/rooms", get(get_rooms).post(create_room))
+        .route(
+            "/api/resources/rooms",
+            get(ipma_resource::get_rooms::<AppState>).post(ipma_resource::create_room::<AppState>),
+        )
         .route(
             "/api/resources/rooms/{id}",
-            get(get_room).put(update_room).delete(delete_room),
+            get(ipma_resource::get_room::<AppState>)
+                .put(ipma_resource::update_room::<AppState>)
+                .delete(ipma_resource::delete_room::<AppState>),
         )
-        .route("/api/resources/rooms/{id}/brief", get(get_room_brief))
-        .route("/api/resources/rooms/{id}/networks", get(get_room_networks))
+        .route(
+            "/api/resources/rooms/{id}/brief",
+            get(ipma_resource::get_room_brief::<AppState>),
+        )
+        .route(
+            "/api/resources/rooms/{id}/networks",
+            get(ipma_resource::get_room_networks::<AppState>),
+        )
         .route(
             "/api/resources/rooms/{id}/children",
-            put(sync_room_children),
+            put(ipma_resource::sync_room_children::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}/net-outlets",
-            put(sync_room_net_outlets),
+            put(ipma_resource::sync_room_net_outlets::<AppState>),
         )
         // 机柜管理
         .route(
             "/api/resources/cabinets",
-            get(get_cabinets).post(create_cabinet),
+            get(ipma_resource::get_cabinets::<AppState>)
+                .post(ipma_resource::create_cabinet::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}",
-            get(get_cabinet).put(update_cabinet).delete(delete_cabinet),
+            get(ipma_resource::get_cabinet::<AppState>)
+                .put(ipma_resource::update_cabinet::<AppState>)
+                .delete(ipma_resource::delete_cabinet::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/networks",
-            get(get_cabinet_networks),
+            get(ipma_resource::get_cabinet_networks::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/positions",
-            put(sync_cabinet_positions),
+            put(ipma_resource::sync_cabinet_positions::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/patch-panels",
-            put(sync_cabinet_patch_panels),
+            put(ipma_resource::sync_cabinet_patch_panels::<AppState>),
         )
         // 工位管理
         .route(
             "/api/resources/workstations",
-            get(get_workstations).post(create_workstation),
+            get(ipma_resource::get_workstations::<AppState>)
+                .post(ipma_resource::create_workstation::<AppState>),
         )
         .route(
             "/api/resources/workstations/{id}",
-            get(get_workstation)
-                .put(update_workstation)
-                .delete(delete_workstation),
+            get(ipma_resource::get_workstation::<AppState>)
+                .put(ipma_resource::update_workstation::<AppState>)
+                .delete(ipma_resource::delete_workstation::<AppState>),
         )
         // 机位管理
         .route(
             "/api/resources/positions",
-            get(get_positions).post(create_cabinet_position),
+            get(ipma_resource::get_positions::<AppState>)
+                .post(ipma_resource::create_cabinet_position::<AppState>),
         )
         .route(
             "/api/resources/positions/{id}",
-            get(get_cabinet_position)
-                .put(update_cabinet_position)
-                .delete(delete_cabinet_position),
+            get(ipma_resource::get_cabinet_position::<AppState>)
+                .put(ipma_resource::update_cabinet_position::<AppState>)
+                .delete(ipma_resource::delete_cabinet_position::<AppState>),
         )
         // IP查询
-        .route("/api/resources/ip", get(get_ip_managers))
-        .route("/api/resources/ip/pull", post(pull_ip_managers))
+        .route(
+            "/api/resources/ip",
+            get(ipma_resource::get_ip_managers::<AppState>),
+        )
+        .route(
+            "/api/resources/ip/pull",
+            post(ipma_resource::pull_ip_managers::<AppState>),
+        )
         .route(
             "/api/resources/ip/available/{network_id}",
-            get(get_available_ips),
+            get(ipma_resource::get_available_ips::<AppState>),
         )
-        .route("/api/resources/ip/auto-assign", post(auto_assign_ip))
-        .route("/api/resources/ip/batch", post(batch_create_ip_managers))
+        .route(
+            "/api/resources/ip/auto-assign",
+            post(ipma_resource::auto_assign_ip::<AppState>),
+        )
+        .route(
+            "/api/resources/ip/batch",
+            post(ipma_resource::batch_create_ip_managers::<AppState>),
+        )
         // 布局管理
         .route("/api/resources/layouts", post(save_layout))
         .route(
@@ -504,105 +515,129 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 信息点管理
         .route(
             "/api/resources/net-outlets",
-            get(get_net_outlets).post(create_net_outlet),
+            get(ipma_resource::get_net_outlets::<AppState>)
+                .post(ipma_resource::create_net_outlet::<AppState>),
         )
         .route(
             "/api/resources/net-outlets/{id}",
-            get(get_net_outlet)
-                .put(update_net_outlet)
-                .delete(delete_net_outlet),
+            get(ipma_resource::get_net_outlet::<AppState>)
+                .put(ipma_resource::update_net_outlet::<AppState>)
+                .delete(ipma_resource::delete_net_outlet::<AppState>),
         )
         // 配线架管理（隶属机柜，列表供线路端点选择）
-        .route("/api/resources/patch-panels", get(get_patch_panels))
+        .route(
+            "/api/resources/patch-panels",
+            get(ipma_resource::get_patch_panels::<AppState>),
+        )
         // 物理链路管理
         .route(
             "/api/resources/cable-links",
-            get(get_cable_links).post(create_cable_link),
+            get(ipma_resource::get_cable_links::<AppState>)
+                .post(ipma_resource::create_cable_link::<AppState>),
         )
-        .route("/api/resources/cable-links/path", get(get_cable_path))
+        .route(
+            "/api/resources/cable-links/path",
+            get(ipma_resource::get_cable_path::<AppState>),
+        )
         .route(
             "/api/resources/cable-links/{id}",
-            get(get_cable_link)
-                .put(update_cable_link)
-                .delete(delete_cable_link),
+            get(ipma_resource::get_cable_link::<AppState>)
+                .put(ipma_resource::update_cable_link::<AppState>)
+                .delete(ipma_resource::delete_cable_link::<AppState>),
         )
         // 设备模板管理
-        .route("/api/resources/device-templates", get(get_device_templates))
+        .route(
+            "/api/resources/device-templates",
+            get(ipma_resource::get_device_templates::<AppState>),
+        )
         .route(
             "/api/resources/device-templates/{id}",
-            get(get_device_template)
-                .put(update_device_template)
-                .delete(delete_device_template),
+            get(ipma_resource::get_device_template::<AppState>)
+                .put(ipma_resource::update_device_template::<AppState>)
+                .delete(ipma_resource::delete_device_template::<AppState>),
         )
         // 设备管理（含统一端口接口/MAC/LLDP/SNMP 功能）
         .route(
             "/api/resources/devices",
-            get(get_devices).post(create_device),
+            get(ipma_resource::get_devices::<AppState>)
+                .post(ipma_resource::create_device::<AppState>),
         )
         .route(
             "/api/resources/devices/interfaces",
-            get(get_all_device_interfaces),
+            get(ipma_resource::get_all_device_interfaces::<AppState>),
         )
         .route(
             "/api/resources/devices/test-snmp",
-            post(test_snmp_connection),
+            post(ipma_resource::test_snmp_connection::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}",
-            get(get_device).put(update_device).delete(delete_device),
+            get(ipma_resource::get_device::<AppState>)
+                .put(ipma_resource::update_device::<AppState>)
+                .delete(ipma_resource::delete_device::<AppState>),
         )
-        .route("/api/resources/devices/{id}/nics", get(get_device_nics))
-        .route("/api/resources/devices/{id}/ips", get(get_device_ips))
-        .route("/api/resources/devices/{id}/ips", post(create_device_ip))
+        .route(
+            "/api/resources/devices/{id}/nics",
+            get(ipma_resource::get_device_nics::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/ips",
+            get(ipma_resource::get_device_ips::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/ips",
+            post(ipma_resource::create_device_ip::<AppState>),
+        )
         .route(
             "/api/resources/devices/{id}/auto-assign-ip",
-            post(auto_assign_device_ip),
+            post(ipma_resource::auto_assign_device_ip::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/test-snmp",
-            post(test_snmp_connection_by_id),
+            post(ipma_resource::test_snmp_connection_by_id::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs",
-            get(get_device_macs_from_db),
+            get(ipma_resource::get_device_macs_from_db::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs/sync",
-            post(get_device_mac_table),
+            post(ipma_resource::get_device_mac_table::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/lldp-neighbors",
-            get(get_device_lldp_neighbors),
+            get(ipma_resource::get_device_lldp_neighbors::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/lldp/sync",
-            post(sync_lldp_from_snmp),
+            post(ipma_resource::sync_lldp_from_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/snmp-info",
-            get(get_device_info_snmp),
+            get(ipma_resource::get_device_info_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/snmp-ports",
-            get(get_device_ports_snmp),
+            get(ipma_resource::get_device_ports_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/interfaces",
-            get(get_device_interfaces).post(create_device_interface),
+            get(ipma_resource::get_device_interfaces::<AppState>)
+                .post(ipma_resource::create_device_interface::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/interfaces/sync-snmp",
-            post(sync_ports_from_snmp),
+            post(ipma_resource::sync_ports_from_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/network-config",
-            put(sync_device_network_config),
+            put(ipma_resource::sync_device_network_config::<AppState>),
         )
         .route(
             "/api/resources/devices/interfaces/{interface_id}",
-            get(get_device_interface)
-                .put(update_device_interface)
-                .delete(delete_device_interface),
+            get(ipma_resource::get_device_interface::<AppState>)
+                .put(ipma_resource::update_device_interface::<AppState>)
+                .delete(ipma_resource::delete_device_interface::<AppState>),
         )
         // 日志管理路由
         .route("/api/logs/operation", get(get_operation_logs))

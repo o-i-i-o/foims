@@ -12,7 +12,7 @@ use axum::response::Response;
 
 use crate::app_state::AppState;
 use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
+use crate::utils::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
 use ipma_models::LayoutSaveRequest;
 use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};

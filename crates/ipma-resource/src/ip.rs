@@ -7,13 +7,13 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
-use crate::utils::validate_network_in_room;
+use crate::helpers::validate_network_in_room;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppMessage, log_error, log_info, log_warn, msg};
 use ipma_models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use std::net::IpAddr;
@@ -120,8 +120,8 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
     }
 }
 
-pub async fn get_ip_managers(
-    State(state): State<Arc<AppState>>,
+pub async fn get_ip_managers<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let search = query.get("search").map_or("", std::string::String::as_str);
@@ -139,12 +139,12 @@ pub async fn get_ip_managers(
     let pagination = Pagination::from_query(&query);
 
     let filters = IpListFilters {
-        search: (!search.is_empty()).then(|| crate::utils::escape_like(search)),
+        search: (!search.is_empty()).then(|| ipma_common::net::escape_like(search)),
         status: (!status.is_empty()).then(|| status.to_string()),
-        device_name: (!device_name.is_empty()).then(|| crate::utils::escape_like(device_name)),
-        device_type: (!device_type.is_empty()).then(|| crate::utils::escape_like(device_type)),
-        network: (!network.is_empty()).then(|| crate::utils::escape_like(network)),
-        ip_address: (!ip_address.is_empty()).then(|| crate::utils::escape_like(ip_address)),
+        device_name: (!device_name.is_empty()).then(|| ipma_common::net::escape_like(device_name)),
+        device_type: (!device_type.is_empty()).then(|| ipma_common::net::escape_like(device_type)),
+        network: (!network.is_empty()).then(|| ipma_common::net::escape_like(network)),
+        ip_address: (!ip_address.is_empty()).then(|| ipma_common::net::escape_like(ip_address)),
         network_id: query
             .get("network_id")
             .and_then(|s| uuid::Uuid::parse_str(s).ok()),
@@ -218,8 +218,8 @@ pub async fn get_ip_managers(
     ))
 }
 
-pub async fn get_device_ips(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_ips<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM devices WHERE id = $1)")
@@ -259,8 +259,8 @@ pub async fn get_device_ips(
     ))
 }
 
-pub async fn create_device_ip(
-    State(state): State<Arc<AppState>>,
+pub async fn create_device_ip<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<IpManagerCreate>,
@@ -623,7 +623,7 @@ async fn sync_switch_macs(
     tx.commit().await?;
 
     for (ws_id, ip, old_mac, new_mac) in pending_notifications {
-        match crate::utils::send_mac_change_notification(pool, &ws_id, &ip, &old_mac, &new_mac)
+        match crate::helpers::send_mac_change_notification(pool, &ws_id, &ip, &old_mac, &new_mac)
             .await
         {
             Ok(()) => log_info!("log.ip.mac_change_notification_sent", ip = ip),
@@ -642,8 +642,8 @@ async fn sync_switch_macs(
     })
 }
 
-pub async fn pull_ip_managers(
-    State(state): State<Arc<AppState>>,
+pub async fn pull_ip_managers<P: DbProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<ipma_models::PullIpManagersRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -777,16 +777,16 @@ pub fn find_available_ips_in_cidr(
     available
 }
 
-pub async fn get_available_ips(
-    State(state): State<Arc<AppState>>,
+pub async fn get_available_ips<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(network_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let network = sqlx::query(crate::utils::NETWORK_QUERY)
+    let network = sqlx::query(crate::helpers::NETWORK_QUERY)
         .bind(network_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
-        .and_then(|row| crate::utils::parse_network_from_row(&row))?;
+        .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
@@ -828,8 +828,8 @@ pub async fn get_available_ips(
     ))
 }
 
-pub async fn auto_assign_ip(
-    State(state): State<Arc<AppState>>,
+pub async fn auto_assign_ip<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<ipma_models::AutoAssignIpRequest>,
 ) -> Result<Response, AppError> {
@@ -850,12 +850,12 @@ pub async fn auto_assign_ip(
 
     validate_network_in_room(&mut *tx, room_id, Some(req_network_id)).await?;
 
-    let network = sqlx::query(crate::utils::NETWORK_QUERY)
+    let network = sqlx::query(crate::helpers::NETWORK_QUERY)
         .bind(req_network_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
-        .and_then(|row| crate::utils::parse_network_from_row(&row))?;
+        .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
         sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
@@ -982,8 +982,8 @@ pub async fn auto_assign_ip(
     Ok(ipma_common::ok_json(mapping, "server.ip.auto_assigned"))
 }
 
-pub async fn auto_assign_device_ip(
-    State(state): State<Arc<AppState>>,
+pub async fn auto_assign_device_ip<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<ipma_models::AutoAssignIpRequest>,
@@ -993,8 +993,8 @@ pub async fn auto_assign_device_ip(
     auto_assign_ip(State(state), meta, AppJson(req)).await
 }
 
-pub async fn batch_create_ip_managers(
-    State(state): State<Arc<AppState>>,
+pub async fn batch_create_ip_managers<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<Vec<IpManagerCreate>>,
 ) -> Result<Response, AppError> {

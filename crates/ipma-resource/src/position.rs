@@ -14,10 +14,10 @@ use sqlx::{PgExecutor, Postgres, QueryBuilder};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{
     CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
@@ -57,8 +57,8 @@ fn push_position_filters(
 }
 
 /// 分页获取机位列表（支持关键字、机柜、机房过滤与白名单排序）。
-pub async fn get_positions(
-    State(state): State<Arc<AppState>>,
+pub async fn get_positions<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -88,7 +88,7 @@ pub async fn get_positions(
         _ => "ORDER BY name ASC",
     };
 
-    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
+    let search_pattern = (!search.is_empty()).then(|| ipma_common::net::escape_like(&search));
 
     let mut count_builder = QueryBuilder::<Postgres>::new(
         "SELECT COUNT(*) FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id",
@@ -138,8 +138,8 @@ pub async fn get_positions(
 }
 
 /// 创建机位（同机柜内名称唯一，检查与写入在同一事务内）。
-pub async fn create_cabinet_position(
-    State(state): State<Arc<AppState>>,
+pub async fn create_cabinet_position<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetPositionCreate>,
 ) -> Result<Response, AppError> {
@@ -271,8 +271,8 @@ async fn fetch_position_ips(
 }
 
 /// 获取机位详情（含占用设备的 IP 明细）。
-pub async fn get_cabinet_position(
-    State(state): State<Arc<AppState>>,
+pub async fn get_cabinet_position<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -285,8 +285,8 @@ pub async fn get_cabinet_position(
 }
 
 /// 更新机位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
-pub async fn update_cabinet_position(
-    State(state): State<Arc<AppState>>,
+pub async fn update_cabinet_position<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<CabinetPositionUpdate>,
@@ -352,8 +352,8 @@ pub async fn update_cabinet_position(
 }
 
 /// 删除机位（被设备占用时拒绝删除）。
-pub async fn delete_cabinet_position(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_cabinet_position<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

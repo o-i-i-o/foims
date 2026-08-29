@@ -13,8 +13,8 @@ use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::crypto::decrypt_credential_async;
 use ipma_common::{AppError, msg};
 use ipma_common::{AppMessage, log_info, log_warn};
@@ -548,8 +548,8 @@ pub async fn get_device_ports_via_snmp(
     Ok(ports)
 }
 
-pub async fn test_snmp_connection_by_id(
-    State(state): State<Arc<AppState>>,
+pub async fn test_snmp_connection_by_id<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
     AppJson(req): AppJson<SnmpTestRequest>,
 ) -> Result<Response, AppError> {
@@ -558,8 +558,8 @@ pub async fn test_snmp_connection_by_id(
     test_snmp_connection(State(state), AppJson(test_req)).await
 }
 
-pub async fn test_snmp_connection(
-    State(state): State<Arc<AppState>>,
+pub async fn test_snmp_connection<P: DbProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<SnmpTestRequest>,
 ) -> Result<Response, AppError> {
     // 记录测试请求概要（Option 值先转为字符串以便日志参数化）
@@ -690,8 +690,8 @@ pub async fn test_snmp_connection(
     }
 }
 
-pub async fn get_device_info_snmp(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_info_snmp<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let (switch, ip_address) =
@@ -717,8 +717,8 @@ pub async fn get_device_info_snmp(
     }
 }
 
-pub async fn get_device_ports_snmp(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_ports_snmp<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let (switch, ip_address) =
@@ -1084,52 +1084,24 @@ mod tests {
 
     // ==================== SSRF 地址分类（不发起真实网络请求的拒绝分支） ====================
 
-    /// 构造不依赖数据库的 AppState（连接池为 None，SNMP 测试走直接 IP 输入路径）
-    fn make_state() -> Arc<AppState> {
-        use ipma_common::config::{
-            Config, DatabaseConfig, InitConfig, JwtConfig, ListenConfig, RateLimitConfig,
-            ServerConfig, SnmpConfig,
-        };
-        use ipma_scheduler::TaskRegistry;
-        let config = Config {
-            database: DatabaseConfig {
-                host: "127.0.0.1".to_string(),
-                port: 5432,
-                database: "ipma_test".to_string(),
-                username: "ipma".to_string(),
-                password: String::new(),
-                max_connections: 1,
-                min_connections: 1,
-                acquire_timeout_secs: 1,
-                idle_timeout_secs: 1,
-                max_lifetime_secs: 1,
-                query_timeout_secs: 1,
-                health_check_interval_secs: 1,
-            },
-            server: ServerConfig {
-                host: "127.0.0.1".to_string(),
-                host_ipv6: None,
-                public_url: "http://127.0.0.1".to_string(),
-                session_timeout: None,
-                page_timeout: None,
-                cors_allowed_origins: Vec::new(),
-                allow_localhost_cors: false,
-                listen: ListenConfig::default(),
-            },
-            jwt: JwtConfig {
-                // 满足 32 字符强度要求即可，SNMP 测试不使用 JWT
-                secret: "snmp-unit-test-secret-0123456789".to_string(),
-                access_token_expiry: "15m".to_string(),
-                refresh_token_expiry: "7d".to_string(),
-            },
-            init: InitConfig { enabled: false },
-            i18n: None,
-            rate_limit: RateLimitConfig::default(),
-            snmp: SnmpConfig::default(),
-        };
-        let state = AppState::new(config, None, Arc::new(TaskRegistry::new()));
-        let state = state.unwrap_or_else(|e| panic!("测试 AppState 构造失败: {e}"));
-        Arc::new(state)
+    /// 测试桩：不依赖数据库的 DbProvider 实现（连接池为 None，
+    /// SNMP 测试走直接 IP 输入路径，不触及数据库分支）
+    #[derive(Clone)]
+    struct TestState {
+        pool: Option<ipma_common::db::DbPool>,
+    }
+
+    impl ipma_common::DbProvider for TestState {
+        fn pool(&self) -> Result<&ipma_common::db::DbPool, ipma_common::AppError> {
+            self.pool.as_ref().ok_or_else(|| {
+                ipma_common::AppError::Internal(ipma_common::msg("server.db.not_initialized"))
+            })
+        }
+    }
+
+    /// 构造不依赖数据库的测试状态
+    fn make_state() -> Arc<TestState> {
+        Arc::new(TestState { pool: None })
     }
 
     /// 发起 SNMP 连接测试并断言返回的错误消息 key

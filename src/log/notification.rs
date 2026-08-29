@@ -121,24 +121,3 @@ pub async fn mark_all_notifications_read(
         "server.notification.all_marked_read",
     ))
 }
-
-pub async fn create_notification(
-    pool: &sqlx::PgPool,
-    title: &str,
-    content: &str,
-    notification_type: &str,
-    user_id: Option<&Uuid>,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)")
-        .bind(Uuid::new_v4())
-        .bind(user_id)
-        .bind(title)
-        .bind(content)
-        .bind(notification_type)
-        .bind(false)
-        .bind(chrono::Utc::now())
-        .execute(pool)
-        .await?;
-    Ok(())
-}

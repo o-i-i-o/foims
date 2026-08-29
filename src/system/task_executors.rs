@@ -164,7 +164,7 @@ impl TaskExecutor for MacSyncTaskExecutor {
 
         match (device_id, network_id) {
             (Some(device_id), Some(network_id)) => {
-                crate::resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
+                ipma_resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
                     .await
                     .map(|()| "server.task.mac_sync_completed".to_string())
                     .map_err(|e| SchedulerError::Execution(ipma_common::AppMessage::new(e)))

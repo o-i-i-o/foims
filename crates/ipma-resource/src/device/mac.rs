@@ -10,7 +10,7 @@ use chrono::Utc;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
+use ipma_common::DbProvider;
 use ipma_common::{AppError, msg};
 use ipma_common::{log_error, log_warn};
 use ipma_models::{ArpEntry, DeviceMac};
@@ -263,8 +263,8 @@ fn simplify_ipv6(ip: &str) -> String {
         .unwrap_or_else(|_| ip.to_string())
 }
 
-pub async fn get_device_mac_table(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_mac_table<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -359,8 +359,8 @@ pub async fn get_device_mac_table(
     Ok(ipma_common::ok_json(saved_macs, message))
 }
 
-pub async fn get_device_macs_from_db(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_macs_from_db<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();

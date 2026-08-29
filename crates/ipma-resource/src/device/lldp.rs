@@ -9,7 +9,7 @@ use axum::response::Response;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
+use ipma_common::DbProvider;
 use ipma_common::log_error;
 use ipma_common::{AppError, msg};
 use ipma_models::{DeviceLldp, LldpNeighbor};
@@ -387,8 +387,8 @@ fn format_mac_address(bytes: &[u8]) -> String {
     }
 }
 
-pub async fn get_device_lldp_neighbors(
-    State(state): State<Arc<AppState>>,
+pub async fn get_device_lldp_neighbors<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -412,8 +412,8 @@ pub async fn get_device_lldp_neighbors(
     Ok(ipma_common::ok_json(lldps, "server.device.lldp.fetched"))
 }
 
-pub async fn sync_lldp_from_snmp(
-    State(state): State<Arc<AppState>>,
+pub async fn sync_lldp_from_snmp<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();

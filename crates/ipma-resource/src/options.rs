@@ -8,7 +8,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
+use ipma_common::DbProvider;
 use ipma_common::{AppError, msg};
 
 /// 单个选项（id + 名称）
@@ -38,8 +38,8 @@ const OPTION_QUERIES: &[(&str, &str)] = &[
 /// - `room_id`：cabinets / workstations / net-outlets / devices
 /// - `region_id`：networks
 /// - `cabinet_id` / `workstation_id`：devices（cabinet_id 经机位关联）
-pub async fn get_resource_options(
-    State(state): State<Arc<AppState>>,
+pub async fn get_resource_options<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(resource): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
